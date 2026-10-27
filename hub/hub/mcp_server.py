@@ -471,7 +471,8 @@ def mend_task_branch(task_id: str, commit: str = "") -> Dict[str, Any]:
 
     Args:
         task_id: The approved task whose merge is stuck.
-        commit: Your resolution, committed in your own workspace: a branch cut from the task's
+        commit: Your resolution, committed in the mend's scratch checkout (the one your brief
+            names, never your own workspace): a branch cut from the task's
             work (its `agentweave/task/<task_id>` branch, or the commit its merge names) with the
             main branch merged in and the conflict resolved. It must contain that work. The Hub
             runs the project's checks on it and merges it. Omit it to only retry the merge, once
@@ -544,8 +545,10 @@ def ask_user(
               answer comes back as a list. False when exactly one applies.
         blocking: Leave this alone to wait for the answers, which is almost always what you
             want. Set it False only to ask something you genuinely do not need answered before
-            continuing — you must then poll `get_answer` yourself, and a turn that ends first
-            loses the questions.
+            continuing. The questions stay with the operator as a note and the call returns at
+            once; the answer arrives later as a message in this conversation, so there is no need
+            to poll `get_answer` (though you may). The Hub can also record your questions as a
+            note whatever you pass, and the result then says so.
 
     Returns a list under "answers", one entry per question, in the order you asked them. Each entry
     says which of three things happened, and they mean different things:
@@ -573,6 +576,23 @@ def ask_user(
     }
     if not blocking:
         return {"success": True, "question_ids": question_ids, "answered": False}
+    if rows and all(row.get("blocking") is False for row in rows):
+        # The Hub's record decides, not this argument: it recorded every question as a note (the
+        # mender's always are -- the operator is usually away when it asks, and a wait on a sleeping
+        # person only ends in "nobody responded"). Nobody is waiting on a note, so polling for its
+        # answer would only hold this turn open until the deadline. A Hub that predates `blocking`
+        # in this response omits it, and keeps the wait below.
+        return {
+            "success": True,
+            "question_ids": question_ids,
+            "answered": False,
+            "note": (
+                f"Your {len(question_ids)} question(s) were recorded as a note for the operator, "
+                "not a wait. Do not poll for the answer: it arrives later as a message in this "
+                "conversation, whenever the operator gives it. Carry on without it, and do not "
+                "take any action that needed the answer."
+            ),
+        }
 
     answers: Dict[str, Dict[str, Any]] = {}
 

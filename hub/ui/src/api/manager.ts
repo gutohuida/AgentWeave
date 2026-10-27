@@ -16,6 +16,9 @@ export interface ManagerJob {
   runner_id: string | null
   /** Null: the runner's own model. */
   model: string | null
+  /** The mender only: the model its turns run on while `model` is null -- the catalog's default for
+   *  its runner's CLI -- or null with no runner. Absent on a Hub that predates it. */
+  default_model?: { id: string; label: string } | null
   /** The chapters job only: fire on its triggers, or only when 'Weave the thread' is pressed. */
   mode?: 'automatic' | 'button'
   /** The chapters job only: what all its firings in this project recorded, summed. */

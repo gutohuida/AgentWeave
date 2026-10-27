@@ -40528,10 +40528,10 @@ The night of 10-26/27 (AgentWeave project): 40 stalls, 42 mender runs, all Opus,
 
 ## F1049 (B) -- `loop_stalled` fires in the seconds between a task finishing and the flow handing it on
 
-**Status:** open 2026-10-27. Same read of `:8000`.
+**Status:** fixed 2026-10-27 (Tier 1, slice `the-mender-wakes-only-for-real-stalls`): `decide_firing`'s fresh-review arm records a completed task whose author's turn is still running as in flight, not deferred, so the firing is not a stall; the end of that turn requests the firing that offers the review, and a turn that never ends stays the sweep's (`dead_run`, `no_progress`). Not a timer or a second sighting. Tests: `hub/tests/test_the_mender_wakes_only_for_real_stalls.py`, `test_review_waits_for_the_authors_turn.py`. Same read of `:8000`; the night-after check (no `loop_stalled` within 10 s after a `completed` transition) is the operator's.
 **Source:** drive
 **Theme:** Mender
-**Ready:** no -- a grace period, or asking after the hand-off, is a design choice
+**Ready:** yes
 **Tier:** 1
 
 All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's last claimable task reached `completed`, and the firing in the next ~3 seconds found "no claimable task" or "awaiting a prerequisite's approval" (`scheduler.py:4405-4412`) before the flow moved the task to `under_review` and started the review. The mender then read the situation, found the review running, changed nothing and ended `fixed` (23:42, 23:53, 00:15, 04:20, 04:53, 05:24). Each is one Opus turn spent finding nothing. A completed task that is about to be handed to review is the flow working. Either a stall should need to be seen on a second firing before it wakes the mender, or a just-completed task awaiting its review dispatch should not count as a stall.

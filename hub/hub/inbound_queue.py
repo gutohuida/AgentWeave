@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
 from .codex_appserver import DEFAULT_TURN_TIMEOUT_SECONDS, TURN_TIMEOUT_ERROR_KIND
-from .conversations import get_conversation_by_id
+from .conversations import get_conversation_by_id, set_provider_session
 from .db.models import InboundQueueEntry, Project, Run
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
 from .utils import short_id
@@ -499,7 +499,7 @@ async def return_run_entries(
             # delivery a fresh start, and the turn after that re-binds whatever session it gets.
             conversation = await get_conversation_by_id(db, entry.conversation_id)
             if conversation is not None and conversation.provider_session_id is not None:
-                conversation.provider_session_id = None
+                set_provider_session(conversation, None, None)
 
         if entry.delivery_attempts >= DELIVERY_ATTEMPT_LIMIT:
             entry.state = "withdrawn"

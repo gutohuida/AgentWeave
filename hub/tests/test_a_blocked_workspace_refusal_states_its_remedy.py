@@ -21,6 +21,7 @@ which ref failed, since another commit on the orphan branch would not help. Neit
 the agent or the task: unlike the three above, the caller's prefix already does.
 """
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -104,40 +105,48 @@ def test_a_symlinked_agent_workspace_asks_for_the_link_and_nothing_else(repo, tm
     assert (elsewhere / "keep.txt").read_text() == "this must survive\n"
 
 
-def test_a_foreign_registered_worktree_asks_for_the_directory_and_the_prune_is_real(repo):
+def test_a_foreign_registered_worktree_names_its_branch_and_the_stated_remedy_works(repo):
     """The other half of `ensure_worktree`'s split, and the harder version of it.
 
     The blocking path is a *registered* worktree for another ref rather than a plain directory
-    (which `test_a_blocked_agent_workspace_holds_its_input.py` covers), so removing it leaves
-    `.git/worktrees/<name>` metadata behind -- exactly the state the remedy's second clause
-    promises the next turn handles. Without the prune `ensure_worktree` already runs, the
-    reprovision below fails, so the sentence is measured rather than trusted.
+    (which `test_a_blocked_agent_workspace_holds_its_input.py` covers). Since slice A of
+    `worktrees-never-destroy-or-strand-anything` such a directory is no longer called "not the
+    registered git worktree": a checkout holding nothing the other branch would lose is switched
+    back, and one that would lose something is refused naming both branches and saying how to
+    switch it, which is carried out below and followed by a real preparation.
     """
     path = worktrees.worktree_path(repo, AGENT)
     path.parent.mkdir(parents=True, exist_ok=True)
     _git(repo, "worktree", "add", "-b", "someone-else", str(path), "HEAD")
+    (path / "theirs.txt").write_text("work the other branch carries\n")
+    _git(path, "add", "theirs.txt")
+    _git(path, "commit", "-q", "-m", "theirs")
 
     with pytest.raises(worktrees.IsolationUnavailableError) as caught:
         worktrees.ensure_worktree(repo, AGENT)
 
     message = str(caught.value)
-    assert "not the registered git worktree" in message
-    assert f"rm -r {path}" in message
-    assert "prune" in message
+    assert "someone-else" in message and f"agentweave/{AGENT}" in message
+    assert "not the registered git worktree" not in message
     # Not the link remedy: this directory is real, and "remove the link itself" would read as a
     # no-op to an operator standing in front of it.
     assert "symlink" not in message
 
-    shutil.rmtree(path)
-    # Stale metadata, as promised -- git still lists the gone directory, flagged `prunable`.
-    # Matched on git's own flag rather than on the path, which git prints with forward slashes
-    # even on Windows.
-    listed = _git(repo, "worktree", "list").stdout
-    assert "prunable" in listed and path.name in listed
+    # The remedy, performed as stated: the command the message gives, run in that checkout. The
+    # agent's own branch does not exist here, so the command has to create it -- a bare `switch`
+    # would fail with `invalid reference`. The sentence is measured rather than trusted.
+    assert "not the registered git worktree" not in message
+    stated = re.search(r"`git -C .+? (switch [^`]+)`", message)
+    assert stated, message
+    carried_out = subprocess.run(
+        ["git", *stated.group(1).split()], cwd=path, capture_output=True, text=True, timeout=30
+    )
+    assert carried_out.returncode == 0, carried_out.stderr
 
     provisioned = worktrees.ensure_worktree(repo, AGENT)
     assert provisioned == path
     assert worktrees.existing_worktree(repo, AGENT) == path
+    assert (path / "theirs.txt").read_text() == "work the other branch carries\n"
 
 
 # --- A task's checkout, where all three obstructions share one path --------------------------

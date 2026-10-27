@@ -27,6 +27,7 @@ from .conversations import (
     inherit_runtime_overrides,
     name_conversation,
     new_conversation,
+    set_provider_session,
 )
 from .db.engine import async_session_factory
 from .db.models import (
@@ -2558,15 +2559,19 @@ async def decide_firing(
         # fired 23:00:00, the author's snapshot landed 23:00:08 -- and the reviewer was handed the
         # branch's base commit, master's previous integrate, and reviewed nothing. Deferred, so the
         # next firing offers it once the work is on the branch.
+        #
+        # **In flight, not deferred** (F1049, `the-mender-wakes-only-for-real-stalls`). The turn
+        # really is on the task -- `task_attribution` reads it as `working` -- so the task is being
+        # attended, and a firing that finds nothing else claimable must not call that a stall.
+        # `deferred` is "not an event, and not a stall", but the stall path never consulted it:
+        # on :8000's night of 2026-10-26/27 six `loop_stalled` stalls, each woken to an Opus mender,
+        # were this three-second gap (the flow fires 3 s after `completed`, while the turn runs).
+        # The end of that turn requests the firing that offers the review (`flow_advance.after_run`);
+        # a turn that never ends is the stall sweep's (`dead_run`, `no_progress`), which does not
+        # read this decision.
         still_running = await facts.agent_running_on(loop.project_id, task.id)
         if still_running is not None and not wedged_review:
-            deferred.append(
-                (
-                    task.id,
-                    f"{still_running}'s turn on it is still running; its work is committed to the "
-                    f"task branch when that turn ends, and only then is there something to review",
-                )
-            )
+            in_flight.append((task.id, still_running))
             continue
 
         # **Can a review turn be provisioned for this at all?** Asked before a reviewer is
@@ -4505,7 +4510,8 @@ class JobScheduler:
                     project_id=job.project_id, agent=acting_agent, origin="job"
                 )
                 if resume_session_id:
-                    conversation.provider_session_id = resume_session_id
+                    # A job's stored last_session_id: nothing recorded which CLI made it.
+                    set_provider_session(conversation, resume_session_id, None)
                 session.add(conversation)
                 await inherit_runtime_overrides(session, conversation)
             # Named from the job, not its message: a schedule fires the same message repeatedly,

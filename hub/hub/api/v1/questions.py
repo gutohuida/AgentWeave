@@ -11,6 +11,7 @@ from ... import project_workspace, refused_capability, run_waits
 from ...auth import get_project
 from ...conversations import (
     conversation_id_for_run,
+    get_conversation_by_id,
     latest_open_conversation,
     name_conversation,
     new_conversation,
@@ -161,7 +162,26 @@ async def deliver_batch_if_complete(
         return None
 
     from_agent = question.from_agent
-    conversation = await latest_open_conversation(session, project_id=project_id, agent=from_agent)
+    # **The thread the question was asked in, while it is open** (F804 recorded it; delivery now
+    # honours it). The asker's latest open conversation is another thread for an agent that holds
+    # several, and the mender holds one per stall: a note answered the next morning woke it inside
+    # whichever stall was touched last. A conversation that is archived, or is not the asker's, falls
+    # back to the latest open one as before.
+    conversation = None
+    asked_in = batch[0].conversation_id
+    if asked_in:
+        asked_thread = await get_conversation_by_id(session, asked_in)
+        if (
+            asked_thread is not None
+            and asked_thread.project_id == project_id
+            and asked_thread.agent == from_agent
+            and asked_thread.lifecycle == "open"
+        ):
+            conversation = asked_thread
+    if conversation is None:
+        conversation = await latest_open_conversation(
+            session, project_id=project_id, agent=from_agent
+        )
     if conversation is None:
         # The operator answering is what opens this thread.
         conversation = new_conversation(project_id=project_id, agent=from_agent, origin="operator")

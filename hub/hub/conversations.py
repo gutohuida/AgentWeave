@@ -136,6 +136,58 @@ def new_conversation(*, project_id: str, agent: str, origin: str) -> Conversatio
     )
 
 
+def set_provider_session(
+    conversation: Conversation, session_id: Optional[str], cli: Optional[str]
+) -> None:
+    """The one place a conversation's provider session is set or cleared.
+
+    A session is resumed only by the CLI that created it, so the CLI is recorded beside the id and
+    the two are never written apart (`rebinding-an-agents-runner-starts-clean`, D2). *cli* is the
+    CLI that created the session, or None when that is not known: a session the operator typed, a
+    job's stored id, one an agent reported about itself. A cleared session has no CLI. Not
+    committing: the caller's transaction decides when the write lands.
+
+    `test_rebinding_an_agents_runner_starts_clean.py` refuses an assignment of either column
+    anywhere else in the package.
+    """
+    conversation.provider_session_id = session_id
+    conversation.provider_session_cli = cli if session_id is not None else None
+
+
+def foreign_session_cli(conversation: Conversation, runner_cli: str) -> Optional[str]:
+    """The CLI whose session *conversation* holds, when it is known and is not *runner_cli*.
+
+    None when the conversation holds no session, when its CLI is not known (that session is
+    resumed as it always was), or when the session is *runner_cli*'s own.
+    """
+    held = conversation.provider_session_cli
+    if conversation.provider_session_id and held and held != runner_cli:
+        return held
+    return None
+
+
+def session_not_carried_sentence(agent: str, from_cli: str, to_cli: str) -> str:
+    """What the operator reads in the conversation and the agent reads at the head of its prompt
+    when its runner's CLI changed under a conversation that had a session: one sentence, so the
+    two cannot disagree (`the-crossing-is-said`)."""
+    return (
+        f"{agent} now runs on {to_cli}; this conversation's earlier turns ran on {from_cli}, and "
+        f"{to_cli} cannot continue a {from_cli} session, so they are not in this session. "
+        f"This turn starts a new one."
+    )
+
+
+def model_withheld_sentence(agent: str, model: str, cli: str, ran: Optional[str]) -> str:
+    """What the conversation says when a stored model is not passed to the CLI that does not offer
+    it (`a-withheld-model-is-said`). The stored model stays on the conversation."""
+    runs_on = ran or f"{cli}'s default model"
+    return (
+        f"{model}, this conversation's model, is not offered by {cli}: {agent}'s turn runs on "
+        f"{runs_on}. {model} is kept, and applies again if {agent} is bound back to a runner "
+        f"that offers it."
+    )
+
+
 def name_conversation(conversation: Conversation, text: str) -> None:
     """Name an unnamed conversation from the message being queued into it.
 
