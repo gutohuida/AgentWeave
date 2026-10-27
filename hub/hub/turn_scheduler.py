@@ -21,6 +21,7 @@ from .db.models import Conversation, InboundQueueEntry, Run, Task
 from .inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
     can_start,
+    closed_conversations,
     continue_sentence,
     entry_kind,
     format_turn_prompt,
@@ -444,6 +445,23 @@ async def _attempt_turn(
     entries = await queued_entries(db, project_id, agent)
     if not entries:
         return _Attempt(ScheduleResult(waiting_reason="queue is empty"), nothing_queued=True)
+    # Input in a conversation no turn can start in is held, with its reason and repair, and left
+    # out of the turn, so it waits for the operator's Unarchive or withdrawal without holding the
+    # agent's other conversations behind it. As the queue's head it used to end every pass with
+    # "conversation is unavailable", recorded nowhere, and nothing behind it ever ran (F1046).
+    closed = await closed_conversations(db, project_id, agent, entries)
+    if closed:
+        recorded = False
+        for entry in entries:
+            reason = closed.get(entry.conversation_id)
+            if reason is not None and entry.waiting_reason != reason:
+                entry.waiting_reason = reason
+                recorded = True
+        if recorded:
+            await db.commit()
+        entries = [entry for entry in entries if entry.conversation_id not in closed]
+        if not entries:
+            return _Attempt(ScheduleResult(waiting_reason=next(iter(closed.values()))))
     # Not a failure: the input is kept, and the operator's Continue starts it (F598).
     held = held_conversations(entries)
     if all(entry.conversation_id in held for entry in entries):

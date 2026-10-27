@@ -40505,3 +40505,13 @@ Recorded in the operator's words only. Before any work, ask what is to be ordere
 **Tier:** ?
 
 Seen on the operator's `:8000` Hub. Not yet looked at: which notices they are, what raises them, and whether each should carry an action, clear itself when its cause ends, or be dismissable. Start by asking the operator for a screenshot or by reading the Overview's notice sources read-only.
+
+## F1046 (A) -- input queued into an archived conversation wedges the agent's whole queue
+
+**Status:** fixed 2026-10-27 (Tier 0): the scheduler holds input whose conversation no turn can start in, records why and the repair on it ("conversation … is archived. Unarchive it to deliver this input, or withdraw it"), and runs the agent's other conversations; Unarchive now schedules the agent, so the named repair delivers; a roadmap's next-slice turn opens a new conversation when the one it was asked from is no longer open. Tests: `hub/tests/test_input_in_a_closed_conversation_holds_nothing_else.py`, `test_spec_roadmaps.py::test_a_slice_whose_conversation_was_archived_is_drafted_in_a_new_one`. Raised by the operator ("I've written a checkpoint for architect but it seems stuck … Never started a turn"); confirmed on `:8000` read-only.
+**Source:** drive
+**Theme:** Queue
+**Ready:** yes
+**Tier:** 0
+
+On `:8000`, 2026-10-27: approving slice B of the "Flows that do not stall" roadmap with `draft_next_slice` (22:57 on 10-26) recorded the slice author's conversation `conv-a2c7eee14525`, which the operator had archived at 22:14. When the slice's last task was approved (05:44:45) `slice_drafting._queue_if_built` queued the drafting turn into it, unchecked. The entry was the Architect's queue head, and `turn_scheduler._attempt_turn`'s "conversation is unavailable" early return ended every pass on it without recording a reason, counting an attempt or giving up -- so the checkpoint successor (06:40, auto-continue on) and the operator's own message (06:46), in open conversations, sat `queued` with 0 attempts and no reason, and nothing told anyone why. The archive route's own refusal ("nothing delivers into an archived conversation") guards only input queued *before* the archive. The repair the reason would have named, Unarchive, did not re-schedule the agent either. The other early return of the same shape ("queued entry has no conversation") is held the same way.

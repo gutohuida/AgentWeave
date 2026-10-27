@@ -7,8 +7,9 @@ still open: in the approval request itself when it has no task, otherwise from
 `rejected`. A `next_slice_queued` event naming the request makes that happen once per request.
 
 The turn is queued as the operator, because the operator asked for it in the approval request, to
-the agent that created the slice document, in the conversation where it created it. Its spec
-document is the roadmap, so it is a specification turn with no file-write tools.
+the agent that created the slice document, in the conversation where it created it while that is
+still open, otherwise in a new one (F1046). Its spec document is the roadmap, so it is a
+specification turn with no file-write tools.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from . import spec_lifecycle, spec_service
+from .conversations import get_open_conversation, name_conversation, new_conversation
 from .db.models import Run, SpecDocument, SpecDocumentEvent, Task
 from .inbound_queue import new_entry
 from .task_transitions import TERMINAL_STATUSES
@@ -195,19 +197,38 @@ async def _queue_if_built(session: AsyncSession, document: SpecDocument) -> Opti
 
     detail = request.detail or {}
     agent = str(detail["agent"])
+    content = next_slice_message(
+        detail,
+        approved_path=document.path,
+        tasks=tasks,
+        outcomes=await _task_outcomes(session, tasks),
+    )
+    # The conversation the slice was written in, while it is still open. The operator may have
+    # archived it since (or before) asking, and input queued into an archived conversation is
+    # never delivered (F1046), so the turn then opens a conversation of its own.
+    conversation_id = str(detail["conversation_id"])
+    if (
+        await get_open_conversation(
+            session, project_id=document.project_id, agent=agent, conversation_id=conversation_id
+        )
+        is None
+    ):
+        conversation = new_conversation(
+            project_id=document.project_id, agent=agent, origin="operator"
+        )
+        name_conversation(
+            conversation, f"Draft {detail['next_slice'].get('title') or 'the next slice'}"
+        )
+        session.add(conversation)
+        conversation_id = conversation.id
     session.add(
         new_entry(
             project_id=document.project_id,
             agent=agent,
             origin_type="operator",
-            content=next_slice_message(
-                detail,
-                approved_path=document.path,
-                tasks=tasks,
-                outcomes=await _task_outcomes(session, tasks),
-            ),
+            content=content,
             hop_depth=0,
-            conversation_id=detail["conversation_id"],
+            conversation_id=conversation_id,
             spec_document=detail["roadmap"],
         )
     )

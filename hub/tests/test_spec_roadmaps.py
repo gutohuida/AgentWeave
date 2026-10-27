@@ -656,6 +656,39 @@ async def test_the_next_slice_goes_to_the_slice_author_in_its_creating_conversat
 
 
 @pytest.mark.asyncio
+async def test_a_slice_whose_conversation_was_archived_is_drafted_in_a_new_one(
+    app, auth_headers, planner, scheduled
+):
+    """F1046. The operator archived the slice author's conversation before the slice was built;
+    the drafting turn queued into it anyway and wedged the author's whole queue."""
+    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
+    slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
+    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
+    (task_id,) = approved.json()["tasks_created"]
+    async with async_session_factory() as session:
+        conversation = (
+            await session.execute(select(Conversation).where(Conversation.id == CONVERSATION))
+        ).scalar_one()
+        conversation.lifecycle = "archived"
+        await session.commit()
+
+    await _move(app, auth_headers, task_id, "rejected")
+    await _settle()
+
+    (entry,) = await _queued()
+    assert entry.conversation_id not in (None, CONVERSATION)
+    async with async_session_factory() as session:
+        fresh = (
+            await session.execute(
+                select(Conversation).where(Conversation.id == entry.conversation_id)
+            )
+        ).scalar_one()
+    assert (fresh.agent, fresh.lifecycle, fresh.project_id) == ("planner", "open", "proj-test")
+    assert fresh.title
+    assert scheduled == [("proj-test", "planner")]
+
+
+@pytest.mark.asyncio
 async def test_the_last_slice_queues_nothing(app, auth_headers, planner, scheduled):
     roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
     slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path, key="s2")

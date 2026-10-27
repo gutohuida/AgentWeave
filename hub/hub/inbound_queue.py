@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -143,6 +143,38 @@ def held_conversations(entries: Iterable[InboundQueueEntry]) -> Set[str]:
     }
     released = {entry.conversation_id for entry in entries if entry.origin_type == "operator"}
     return awaiting - released
+
+
+async def closed_conversations(
+    db: AsyncSession, project_id: str, agent: str, entries: Iterable[InboundQueueEntry]
+) -> Dict[Optional[str], str]:
+    """The conversations among *entries* no turn can start in, each with why and its repair (F1046).
+
+    Input can reach a conversation after it was archived (a roadmap's next-slice turn names the
+    conversation it was asked from), so this is asked of the queue as it stands, not prevented at
+    the archive. Keyed by conversation id; an entry with none is keyed `None`.
+    """
+    reasons: Dict[Optional[str], str] = {}
+    for conversation_id in dict.fromkeys(entry.conversation_id for entry in entries):
+        if conversation_id is None:
+            reasons[None] = "queued entry has no conversation"
+            continue
+        conversation = await get_conversation_by_id(db, conversation_id)
+        if (
+            conversation is None
+            or conversation.project_id != project_id
+            or conversation.agent != agent
+        ):
+            reasons[conversation_id] = (
+                f"conversation {conversation_id} is not {agent}'s in this project, so this "
+                "input cannot be delivered; withdraw it"
+            )
+        elif conversation.lifecycle != "open":
+            reasons[conversation_id] = (
+                f"conversation {conversation_id} is {conversation.lifecycle}. Unarchive it to "
+                "deliver this input, or withdraw it"
+            )
+    return reasons
 
 
 def continue_sentence(conversation_ids: Iterable[str]) -> str:
