@@ -220,15 +220,52 @@ def kick(project_id: str) -> None:
     _start(project_id, _process(project_id), f"land the queue of {project_id}")
 
 
-async def settle(project_id: str) -> None:
-    """Wait for what a commit just started for *project_id*: its releases, and without checks its
-    landings, so the request that queued them answers with their outcome. With checks this returns
-    once the queue has looked (a batch waits for its gather window)."""
+#: Projects with a batch running now, and the requests waiting on their queue's jobs: a batch is
+#: never waited for (it runs minutes), only enqueued behind.
+_batching: Set[str] = set()
+_batch_waiters: Dict[str, List["asyncio.Future[None]"]] = {}
+
+
+def _batch_began(project_id: str) -> None:
+    _batching.add(project_id)
+    for waiter in _batch_waiters.pop(project_id, []):
+        if not waiter.done():
+            waiter.set_result(None)
+
+
+def _batch_ended(project_id: str) -> None:
+    _batching.discard(project_id)
+
+
+async def _wait_for_jobs(project_id: str) -> None:
     for _ in range(1000):
         jobs = [job for job in _jobs.get(project_id, ()) if not job.done()]
         if not jobs:
             return
         await asyncio.gather(*jobs, return_exceptions=True)
+
+
+async def settle(project_id: str) -> None:
+    """Wait for what a commit just started for *project_id*: its releases, and without checks its
+    landings, so the request that queued them answers with their outcome. A batch is never waited
+    for: with checks this returns once the queue has looked, or at once while a batch is running
+    (the approval is queued behind it and answers now)."""
+    for _ in range(1000):
+        jobs = [job for job in _jobs.get(project_id, ()) if not job.done()]
+        if not jobs or project_id in _batching:
+            return
+        waiter: "asyncio.Future[None]" = asyncio.get_running_loop().create_future()
+        _batch_waiters.setdefault(project_id, []).append(waiter)
+        try:
+            await asyncio.wait([*jobs, waiter], return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            waiters = _batch_waiters.get(project_id)
+            if waiters is not None and waiter in waiters:
+                waiters.remove(waiter)
+            if not waiter.done():
+                waiter.cancel()
+        if waiter.done() and not waiter.cancelled():
+            return
 
 
 async def drain(project_id: Optional[str] = None) -> None:
@@ -238,7 +275,7 @@ async def drain(project_id: Optional[str] = None) -> None:
     for _ in range(1000):
         projects = [project_id] if project_id else list(_jobs)
         for pid in projects:
-            await settle(pid)
+            await _wait_for_jobs(pid)
         async with async_session_factory() as session:
             query = select(TaskLanding.project_id).where(TaskLanding.state == QUEUED)
             if project_id:
@@ -326,11 +363,41 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
             if not ignore_window and waited < BATCH_GATHER_SECONDS:
                 _arm_timer(project_id, BATCH_GATHER_SECONDS - waited)
                 return False
-            if not await _run_one_batch(project_id, checks, queued):
+            _batch_began(project_id)
+            try:
+                ran = await _run_one_batch(project_id, checks, queued)
+            except Exception as exc:  # noqa: BLE001 -- the batch ends recorded, never left checking
+                logger.warning("a landing batch of %s failed", project_id, exc_info=True)
+                await _settle_failed_batch(project_id, f"{type(exc).__name__}: {exc}")
+                ran = False
+            finally:
+                _batch_ended(project_id)
+            if not ran:
                 # The Hub could not produce a result: tried again after a gather window.
                 _arm_timer(project_id, BATCH_GATHER_SECONDS)
                 return False
         return True
+
+
+async def _settle_failed_batch(project_id: str, error: str) -> None:
+    """A batch whose run raised: settled as a restart would settle it -- recorded landed where main
+    already holds its checked commit, else failed and its tasks queued again."""
+    try:
+        async with async_session_factory() as session:
+            open_batches = list(
+                (
+                    await session.execute(
+                        select(LandingBatch).where(
+                            LandingBatch.project_id == project_id,
+                            LandingBatch.state.in_(("checking", "landing")),
+                        )
+                    )
+                ).scalars()
+            )
+        for batch in open_batches:
+            await _settle_open_batch(batch, error=error)
+    except Exception:  # noqa: BLE001 -- the next restart's reconcile finishes the job
+        logger.warning("could not settle the failed batch of %s", project_id, exc_info=True)
 
 
 async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding]) -> Set[str]:
@@ -392,6 +459,23 @@ async def latest_landing(session: AsyncSession, task_id: str) -> Optional[TaskLa
     )
 
 
+async def open_landing(session: AsyncSession, task_id: str) -> Optional[TaskLanding]:
+    """The task's landing that still waits for the queue, if it has one (never more than one)."""
+    return (
+        (
+            await session.execute(
+                select(TaskLanding)
+                .where(TaskLanding.task_id == task_id, TaskLanding.state.in_(OPEN))
+                .order_by(TaskLanding.created_at.desc(), TaskLanding.id.desc())
+                .limit(1)
+                .execution_options(populate_existing=True)
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
 async def _claim(landing_ids: Sequence[str], to_state: str, batch_id: Optional[str]) -> List[str]:
     """Move each still-queued landing to *to_state* (compare-and-set) and commit; the ids moved."""
     moved: List[str] = []
@@ -413,6 +497,45 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+WITHDRAWN = "the task is no longer approved, so its work does not land"
+
+
+async def withdraw(session: AsyncSession, task: Task) -> None:
+    """Cancel *task*'s landings that have not moved main, in the caller's transaction: the task left
+    `approved` (the operator sent it back), so what it queued, or what a batch is checking for it,
+    must not land. A batch that was checking it finds the landing no longer its own and is built
+    again without it (`_land_batch`)."""
+    rows = (
+        await session.execute(
+            select(TaskLanding).where(
+                TaskLanding.task_id == task.id,
+                TaskLanding.state.in_((QUEUED, CHECKING, HELD)),
+            )
+        )
+    ).scalars()
+    for row in rows:
+        row.state, row.reason, row.ended_at = SENT_BACK, WITHDRAWN, _now()
+        row.waits_on = None
+
+
+async def _drop_unapproved(landings: List[TaskLanding]) -> List[TaskLanding]:
+    """*landings* less those whose task is not approved now (cancelled where it was not already)."""
+    if not landings:
+        return landings
+    kept: List[TaskLanding] = []
+    async with async_session_factory() as session:
+        for landing in landings:
+            task = await session.get(Task, landing.task_id)
+            if task is not None and task.status == "approved":
+                kept.append(landing)
+                continue
+            row = await session.get(TaskLanding, landing.id)
+            if row is not None and row.state in (QUEUED, CHECKING, HELD):
+                row.state, row.reason, row.ended_at = SENT_BACK, WITHDRAWN, _now()
+        await session.commit()
+    return kept
+
+
 # --- landing by merge (no checks, an unchecked override, nothing to check) -----------------------
 
 
@@ -431,6 +554,10 @@ async def land_by_merge(landing_id: str) -> List[task_integration.IntegrationRes
         task = await session.get(Task, landing.task_id) if landing is not None else None
         project = await session.get(Project, landing.project_id) if landing is not None else None
         if landing is None or task is None or project is None:
+            return []
+        if task.status != "approved":
+            landing.state, landing.reason, landing.ended_at = SENT_BACK, WITHDRAWN, _now()
+            await session.commit()
             return []
         resolution = landing.kind == "resolution"
         results: List[task_integration.IntegrationResult] = []
@@ -542,7 +669,7 @@ async def _record_merge(
             and (previous.outcome, previous.reason) == (ti.SKIPPED, already)
         ):
             continue  # F715: the newest record already says so
-        _record(session, task, result, landing)
+        _record(session, task, result, landing, override_reason=landing.override_reason)
     landed = all(
         result.outcome == ti.MERGED
         or (
@@ -863,6 +990,7 @@ async def _run_one_batch(
         await session.commit()
     claimed = set(await _claim([landing.id for landing in chosen], CHECKING, batch_id))
     chosen = [landing for landing in chosen if landing.id in claimed]
+    chosen = await _drop_unapproved(chosen)
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)
         batch.task_ids = [landing.task_id for landing in chosen]
@@ -1127,9 +1255,10 @@ async def _decide(
         return False  # the Hub could not produce a result: tried again at the next kick
     if outcome.state == "passed":
         override = await _flake_override(project_id, landings, outcome)
-        return await _land_batch(
+        await _land_batch(
             root, main_branch, batch_id, base, landings, prefixes, len(prefixes), chain, override
         )
+        return True  # whether it landed or was queued again, the loop looks at the queue next
     own = [
         r for r in outcome.results if project_checks.failed(r) and not project_checks.preexisting(r)
     ]
@@ -1233,7 +1362,7 @@ async def _main_shares_the_failure(
 
         await flaky_tests.file_fix_task(outcome.run_id or "")
         reason = await _hub_override_reason(project_id, outcome, found)
-        return await _land_batch(
+        await _land_batch(
             root,
             main_branch,
             batch_id,
@@ -1244,6 +1373,7 @@ async def _main_shares_the_failure(
             chain,
             (reason, OVERRIDE_BY_HUB),
         )
+        return True
     why = (
         "the batch's checks fail, and they fail on main too, so the failure is not this work's; "
         "land the batch with one reason, or fix main first"
@@ -1318,11 +1448,19 @@ async def _land_batch(
 ) -> bool:
     """Fast-forward main from *base* to `prefixes[upto - 1]` -- the checked commit -- and record
     the first *upto* landings landed. Main no longer at *base*: the batch is superseded and its
-    tasks queued again, to be built on the new tip."""
+    tasks queued again, to be built on the new tip. `True` only where main moved and the landings
+    were recorded; a task no longer approved (sent back while the batch was checked) takes the batch
+    back to the queue, built again without it."""
     ti = task_integration
 
     landing_set = list(landings)[:upto]
     target = prefixes[upto - 1]
+    if len(await _drop_unapproved(landing_set)) != len(landing_set):
+        await _requeue([landing.id for landing in landings])
+        await _end_batch(
+            batch_id, "superseded", error="a task in the batch is no longer approved: built again"
+        )
+        return False
     async with async_session_factory() as session:
         project_id = (await session.get(LandingBatch, batch_id)).project_id
         hub_written = await _hub_written(session, project_id)
@@ -1342,21 +1480,40 @@ async def _land_batch(
             "superseded",
             error=f"the main branch moved from {base[:12]} to {(tip or '?')[:12]} before it landed",
         )
-        return True
+        return False
     if obstacle is not None:
         await _not_landed(batch_id, landing_set, main_branch, obstacle)
         await _requeue([landing.id for landing in list(landings)[upto:]])
-        return True
-    # Recorded as landing before main moves, so a restart in between finds it (`reconcile`).
+        return False
+    # Recorded as landing before main moves, so a restart in between finds it (`reconcile`). In the
+    # same transaction the prefixes are cut to what lands and the landings beyond them go back to
+    # the queue, so a restart never finds a batch whose landings and prefixes disagree.
     async with async_session_factory() as session:
+        rows = [await session.get(TaskLanding, landing.id) for landing in landing_set]
+        tasks = [await session.get(Task, landing.task_id) for landing in landing_set]
+        if any(
+            row is None or row.state != CHECKING or task is None or task.status != "approved"
+            for row, task in zip(rows, tasks, strict=True)
+        ):
+            await session.rollback()
+            await _requeue([landing.id for landing in landings])
+            await _end_batch(
+                batch_id,
+                "superseded",
+                error="a task in the batch is no longer approved: built again",
+            )
+            return False
         batch = await session.get(LandingBatch, batch_id)
         batch.state, batch.merged_sha = "landing", target
         batch.prefixes = list(prefixes)[:upto]
         if override is not None:
             batch.override_reason, batch.override_by = override
-        for landing in landing_set:
-            row = await session.get(TaskLanding, landing.id)
+        for row in rows:
             row.state = LANDING
+        for landing in list(landings)[upto:]:
+            rest = await session.get(TaskLanding, landing.id)
+            if rest is not None and rest.state in (CHECKING, HELD):
+                rest.state, rest.batch_id = QUEUED, None
         await session.commit()
 
     def _fast_forward():
@@ -1370,12 +1527,10 @@ async def _land_batch(
         if now != base:
             await _requeue([landing.id for landing in landings])
             await _end_batch(batch_id, "superseded", error=why)
-            return True
+            return False
         await _not_landed(batch_id, landing_set, main_branch, why, outcome=ti.FAILED)
-        await _requeue([landing.id for landing in list(landings)[upto:]])
-        return True
+        return False
     await _record_landed(root, main_branch, batch_id, base, list(prefixes)[:upto], landing_set)
-    await _requeue([landing.id for landing in list(landings)[upto:]])
     return True
 
 
@@ -1571,7 +1726,10 @@ async def _narrow(
     rest = [landing.id for landing in after if landing.task_id not in dependents]
     if culprit > 1 and await _passed_on(project_id, root, prefixes[culprit - 2], checks):
         await _end_batch(batch_id, "failed", error=f"{tasks[culprit - 1]} broke its checks")
-        landed = await _land_batch(
+        # The rest go back to the queue before main moves, so a restart in between finds no
+        # landing that the cut prefixes do not cover.
+        await _requeue(rest)
+        await _land_batch(
             root,
             main_branch,
             batch_id,
@@ -1582,8 +1740,7 @@ async def _narrow(
             chain,
             None,
         )
-        await _requeue(rest)
-        return landed
+        return True
     await _requeue([landing.id for landing in landings[: culprit - 1]] + rest)
     await _end_batch(batch_id, "failed", error=f"{tasks[culprit - 1]} broke its checks")
     return True
@@ -1757,6 +1914,64 @@ def _aware(moment: datetime) -> datetime:
 # --- the startup reconcile -----------------------------------------------------------------------
 
 
+async def _settle_open_batch(
+    batch: LandingBatch,
+    *,
+    root: Optional[Path] = None,
+    main_branch: Optional[str] = None,
+    error: str = "the Hub stopped while this batch was in progress",
+) -> bool:
+    """Settle a batch left `checking` or `landing`: recorded landed where main already holds its
+    checked commit -- for the landings that were landing, which the prefixes cover (a partial land
+    cut them, and the landings beyond them are queued again) -- else interrupted and its tasks
+    queued again. `True` where it was recorded landed."""
+    from . import project_workspace
+
+    if root is None or main_branch is None:
+        async with async_session_factory() as session:
+            project = await session.get(Project, batch.project_id)
+            try:
+                root = (
+                    await project_workspace.resolve_project_workspace(session, batch.project_id)
+                ).root
+            except Exception:  # noqa: BLE001
+                root = None
+            main_branch = project.main_branch if project is not None else None
+            await session.commit()
+    async with async_session_factory() as session:
+        landings = list(
+            (
+                await session.execute(
+                    select(TaskLanding).where(
+                        TaskLanding.batch_id == batch.id,
+                        TaskLanding.state.in_((CHECKING, LANDING)),
+                    )
+                )
+            ).scalars()
+        )
+    order = {task_id: n for n, task_id in enumerate(batch.task_ids or [])}
+    landings.sort(key=lambda landing: order.get(landing.task_id, 0))
+    reached = False
+    if batch.state == "landing" and batch.merged_sha and root and main_branch:
+        tip = await blocking.run(project_checks.main_tip, root, main_branch)
+        reached = bool(tip) and (
+            tip == batch.merged_sha or await blocking.run(_is_ancestor, root, batch.merged_sha, tip)
+        )
+    prefixes = list(batch.prefixes or [])
+    # The landings the prefixes cover are the first ones of the batch, in its order.
+    covered = [landing for landing in landings if landing.state == LANDING][: len(prefixes)]
+    leading = [landing.task_id for landing in covered] == list(batch.task_ids or [])[: len(covered)]
+    if reached and root and main_branch and covered and leading:
+        await _record_landed(
+            root, main_branch, batch.id, batch.base_sha, prefixes[: len(covered)], covered
+        )
+        await _requeue([landing.id for landing in landings if landing not in covered])
+        return True
+    await _requeue([landing.id for landing in landings])
+    await _end_batch(batch.id, "interrupted", error=error)
+    return False
+
+
 async def reconcile_at_startup() -> Dict[str, int]:
     """After a restart, lose and repeat nothing (FR a-restart-loses-and-repeats-nothing).
 
@@ -1794,37 +2009,8 @@ async def reconcile_at_startup() -> Dict[str, int]:
         await session.commit()
     for batch in open_batches:
         root, main_branch = roots.get(batch.project_id, (None, None))
-        async with async_session_factory() as session:
-            landings = list(
-                (
-                    await session.execute(
-                        select(TaskLanding).where(
-                            TaskLanding.batch_id == batch.id,
-                            TaskLanding.state.in_((CHECKING, LANDING)),
-                        )
-                    )
-                ).scalars()
-            )
-        order = {task_id: n for n, task_id in enumerate(batch.task_ids or [])}
-        landings.sort(key=lambda landing: order.get(landing.task_id, 0))
-        reached = False
-        if batch.state == "landing" and batch.merged_sha and root and main_branch:
-            tip = await blocking.run(project_checks.main_tip, root, main_branch)
-            reached = bool(tip) and (
-                tip == batch.merged_sha
-                or await blocking.run(_is_ancestor, root, batch.merged_sha, tip)
-            )
-        if reached and root and main_branch:
-            await _record_landed(
-                root, main_branch, batch.id, batch.base_sha, list(batch.prefixes), landings
-            )
-            counts["landed"] += 1
-        else:
-            await _requeue([landing.id for landing in landings])
-            await _end_batch(
-                batch.id, "interrupted", error="the Hub stopped while this batch was in progress"
-            )
-            counts["interrupted"] += 1
+        landed = await _settle_open_batch(batch, root=root, main_branch=main_branch)
+        counts["landed" if landed else "interrupted"] += 1
     for landing in stray:
         if landing.batch_id and landing.batch_id in {b.id for b in open_batches}:
             continue

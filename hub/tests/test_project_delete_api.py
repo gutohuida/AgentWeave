@@ -137,7 +137,6 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "ai_jobs",
     "agent_heartbeats",
     "agent_job_deletions",
-    "builds",
 ]
 
 
@@ -498,17 +497,6 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(LandingBatch(id=f"batch-{tag}", project_id=project_id, base_sha="0" * 40))
-    session.add(
-        Build(
-            id=f"build-{tag}",
-            project_id=project_id,
-            document_id=f"doc-{tag}",
-            driver="hand",
-            level="reviewed",
-            builders=[],
-            reviewers=[],
-        )
-    )
     session.add(
         TaskTransition(
             id=f"transition-{tag}",

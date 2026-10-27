@@ -1222,6 +1222,13 @@ async def apply_transition(
                 {"task": task.id, "document": task.spec_document_id},
             )
 
+    # Work that leaves `approved` before it landed (the operator sends it back) leaves the queue, in
+    # this same transaction: no batch lands it.
+    if from_status == "approved" and to_status != "approved":
+        from . import landing_queue
+
+        await landing_queue.withdraw(session, task)
+
     # A task completed outside a turn has its work committed already, so its checks can start now
     # (approval-runs-the-projects-checks D4). One completed by a run is checked at that run's end,
     # after the snapshot that commits its work (`project_checks.after_run`). Never raises.
@@ -1439,6 +1446,14 @@ async def retry_integration(
         )
     from . import landing_queue
 
+    # One open landing per task: a second would be a second claim on the same work, and the first
+    # to land would leave the other's record behind it.
+    open_landing = await landing_queue.open_landing(session, task.id)
+    if open_landing is not None:
+        raise IntegrationRetryRefusedError(
+            f"Task {task.id} already has an open landing ({open_landing.id}, "
+            f"{open_landing.state}): it lands without being asked again."
+        )
     targets = await landing_queue.resolve_targets(session, task)
     return landing_queue.stage(
         session,
@@ -1502,6 +1517,12 @@ async def land_resolution(session: AsyncSession, task: Task, actor: Actor, commi
     caller commits and settles. Raises `ResolutionRefusedError`."""
     from . import landing_queue, task_integration
 
+    open_landing = await landing_queue.open_landing(session, task.id)
+    if open_landing is not None:
+        raise ResolutionRefusedError(
+            f"Task {task.id} already has an open landing ({open_landing.id}, "
+            f"{open_landing.state}); a resolution lands once it has ended."
+        )
     targets = await landing_queue.resolve_targets(session, task)
     if targets:
         from . import project_workspace
