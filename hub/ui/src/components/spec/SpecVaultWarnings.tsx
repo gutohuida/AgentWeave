@@ -8,7 +8,7 @@ import { useCheckVaultWarnings, useVaultWarnings } from '@/api/vault'
  * disputed, superseded, reported or missing, and the conflicts the spec-vault-check job kept.
  *
  * These are warnings, never a refusal, and the same ones appear as gaps when the document is
- * proposed or approved. A Hub without the route (404) renders nothing. A document with nothing
+ * approved. A Hub without the route (404) renders nothing. A document with nothing
  * against it gets one quiet line that still offers Check now, since a check is how a conflict is
  * found in the first place (F658).
  */

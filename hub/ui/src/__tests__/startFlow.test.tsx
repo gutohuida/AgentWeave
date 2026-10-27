@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { useConfigStore } from '@/store/configStore'
+import { openMoreActions } from './testUtils/menus'
 
 const posts: Array<{ path: string; body: unknown }> = []
 let loops: unknown[] = []
@@ -101,9 +102,11 @@ describe('the phase bar and the flow', () => {
     expect(screen.queryByTestId('spec-start-flow')).not.toBeInTheDocument()
   })
 
-  it('(e) offers Start a flow… when no loop declares the document', async () => {
+  it('(e) offers Build…, and Start a flow… in the menu, when no loop declares the document', async () => {
     loops = [loop({ id: 'loop-0', spec_document_id: 'spdoc-other' })]
     renderBar(vi.fn())
+    expect(await screen.findByTestId('spec-build')).toHaveTextContent('Build…')
+    openMoreActions()
     expect(await screen.findByTestId('spec-start-flow')).toHaveTextContent('Start a flow…')
     expect(screen.queryByTestId('spec-flow-link')).not.toBeInTheDocument()
   })
@@ -117,7 +120,6 @@ describe('the phase bar and the flow', () => {
 
   it.each([
     ['exploring', 'change-spec'],
-    ['proposed', 'change-spec'],
     ['archived', 'change-spec'],
     ['approved', 'baseline'],
   ])('offers no flow on a %s %s', async (phase, kind) => {
@@ -125,6 +127,7 @@ describe('the phase bar and the flow', () => {
     renderBar(vi.fn())
     await screen.findByTestId('spec-phase')
     expect(screen.queryByTestId('spec-start-flow')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('spec-build')).not.toBeInTheDocument()
     expect(screen.queryByTestId('spec-flow-link')).not.toBeInTheDocument()
   })
 })
@@ -132,6 +135,8 @@ describe('the phase bar and the flow', () => {
 describe('StartFlowDialog', () => {
   async function openDialog() {
     renderBar(vi.fn())
+    await screen.findByTestId('spec-build')
+    openMoreActions()
     fireEvent.click(await screen.findByTestId('spec-start-flow'))
     return screen.findByRole('dialog')
   }

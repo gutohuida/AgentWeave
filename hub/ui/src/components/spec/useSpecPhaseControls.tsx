@@ -7,6 +7,7 @@ import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
 import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDialog'
 import { RetireCapabilityDialog } from '@/components/spec/RetireCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
+import { BuildDialog } from '@/components/spec/BuildDialog'
 import { ReconcileSummary } from '@/components/spec/ReconcileSummary'
 import { CloseAlreadyBuilt } from '@/components/spec/CloseAlreadyBuilt'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
@@ -14,7 +15,7 @@ import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { MenuItem, MenuSelect, MenuSeparator } from '@/components/ui/menu'
+import { MenuItem, MenuSeparator } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
 import { formatAgoLong, formatDateTime } from '@/lib/format'
@@ -22,8 +23,10 @@ import { toast } from '@/lib/toast'
 import type { SpecPrimaryAction } from './SpecDocumentHeader'
 import { GapLines, ReviewerLine } from './SpecPhaseParts'
 import {
+  useApproveAndBuildSpecDocument,
+  useBuildSpecDocument,
+  useCheckSpecDocument,
   useDeleteSpecDocument,
-  useProposeSpecDocument,
   useSetSpecJourney,
   useSetSpecPhase,
   useSetSpecRigor,
@@ -43,10 +46,6 @@ type Rigor = SpecDocumentRecord['rigor']
 const RIGOR_ORDER: Rigor[] = ['sketch', 'contract', 'gate']
 const RIGOR_LABEL: Record<Rigor, string> = { sketch: 'Sketch', contract: 'Contract', gate: 'Gate' }
 
-/** No choice made yet — distinct from `''`, which is a real choice ("No flow", design D5b). */
-const NO_CHOICE = '__unset__'
-/** "No flow" as a menu value (a menu item cannot carry `''`); sent to the Hub as `''`. */
-const NO_FLOW = '__no_flow__'
 
 /** What an approval asked to draft the next slice did (`a-spec-is-written-one-slice-at-a-time` D4, D4a). */
 function nextSliceMessage(outcome: SpecNextSliceOutcome): string {
@@ -77,11 +76,19 @@ interface Refusal {
   gaps: SpecBlockingFinding[]
   /** `approval_warnings`: the only refusal Approve anyway answers. */
   overridable: boolean
+  /** `document_changed`: the document changed since it was loaded (`approve-what-was-seen`). */
+  stale?: boolean
+}
+
+/** The approval the operator asked for, kept so Approve anyway resends the same one. */
+interface PendingApproval {
+  build: boolean
+  deliveryAgent?: string
 }
 
 /**
  * What a refused phase move says. The Hub answers an incomplete document with `detail.blocking`
- * (the same list `propose` returns with a 200) and the gaps beside it as `detail.warnings`; an
+ * (the same list Check returns with a 200) and the gaps beside it as `detail.warnings`; an
  * approval stopped only by gaps answers `approval_warnings` with `detail.warnings`; any other
  * refusal is one message. `ApiError.message` is the response body verbatim, so the detail is parsed
  * back out of it.
@@ -91,9 +98,22 @@ function readRefusal(error: unknown, fallback: string): Refusal {
     const raw = error instanceof Error ? error.message : String(error)
     const detail = (
       JSON.parse(raw) as {
-        detail?: { code?: string; blocking?: SpecBlockingFinding[]; warnings?: SpecBlockingFinding[] }
+        detail?: {
+          code?: string
+          message?: string
+          blocking?: SpecBlockingFinding[]
+          warnings?: SpecBlockingFinding[]
+        }
       }
     ).detail
+    if (detail?.code === 'document_changed') {
+      return {
+        blocking: [{ code: 'document_changed', where: '', message: detail.message ?? 'The document changed since it was loaded.' }],
+        gaps: [],
+        overridable: false,
+        stale: true,
+      }
+    }
     const gaps = detail?.warnings ?? []
     if (detail?.code === 'approval_warnings' && gaps.length) {
       return { blocking: [], gaps, overridable: true }
@@ -134,7 +154,7 @@ export interface SpecPhaseControls {
  * menu, and the messages those actions produce. Null when the Hub tracks no record for the path.
  *
  * Every control here is deliberately absent from the agent's tool surface. An agent can write the
- * document and can see what is blocking it; it cannot propose, approve, or reopen. That asymmetry
+ * document and can see what is blocking it; it cannot approve, build, or reopen. That asymmetry
  * is the feature — the gate it replaced was a skill instructing the agent to read the document's
  * own status and stop, which is the agent checking its own permission slip.
  */
@@ -147,15 +167,17 @@ export function useSpecPhaseControls(
   const { data } = useSpecDocuments()
   // `delivery_status` (design D5) rides the same `spec/<path>` query `SpecDocumentPanel` and
   // `SpecApprovalReport` already hold — one cache entry, not a second fetch.
-  const { data: specDoc, isError: specDocError } = useSpec(path)
+  const { data: specDoc, isError: specDocError, refetch: reloadSpec } = useSpec(path)
   const { data: openAgentsData, isError: agentsError } = useAgents()
   const setJourney = useSetSpecJourney()
   const [journeyRefusal, setJourneyRefusal] = useState<string | null>(null)
-  const propose = useProposeSpecDocument()
+  const check = useCheckSpecDocument()
+  const build = useBuildSpecDocument()
+  const approveAndBuild = useApproveAndBuildSpecDocument()
   const setPhase = useSetSpecPhase()
   const setRigor = useSetSpecRigor()
   const [blocking, setBlocking] = useState<SpecBlockingFinding[]>([])
-  // Gaps the Hub listed at propose or approve (`approve-lists-what-is-missing-and-can-approve-
+  // Gaps the Hub listed at Check or approve (`approve-lists-what-is-missing-and-can-approve-
   // anyway`). Only an `approval_warnings` refusal makes them overridable: the one Approve anyway answers.
   const [gaps, setGaps] = useState<SpecBlockingFinding[]>([])
   const [gapsOverridable, setGapsOverridable] = useState(false)
@@ -171,7 +193,13 @@ export function useSpecPhaseControls(
   const [retireRefusal, setRetireRefusal] = useState<string | null>(null)
   const [deleteRefusal, setDeleteRefusal] = useState<string | null>(null)
   const deleteDocument = useDeleteSpecDocument()
-  const [deliveryAgentChoice, setDeliveryAgentChoice] = useState(NO_CHOICE)
+  // Check's answer when nothing blocks (FR-1): said, so a clean check is not silence.
+  const [checkedClean, setCheckedClean] = useState(false)
+  // The Build dialog, for Build (an approved document) or Approve and build (FR-6, FR-7).
+  const [building, setBuilding] = useState<null | 'build' | 'approve'>(null)
+  const [buildRefusal, setBuildRefusal] = useState<string | null>(null)
+  const [buildMessages, setBuildMessages] = useState<string[]>([])
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval>({ build: false })
   // On by default (C1a D4): approving a slice usually means "and now the next one".
   const [draftNextSlice, setDraftNextSlice] = useState(true)
   const [nextSliceOutcome, setNextSliceOutcome] = useState<SpecNextSliceOutcome | null>(null)
@@ -207,7 +235,12 @@ export function useSpecPhaseControls(
     foldState.state !== 'folded'
   const openAgents = agentsError ? [] : (openAgentsData ?? [])
 
-  const busy = setJourney.isPending || propose.isPending || setPhase.isPending
+  const busy =
+    setJourney.isPending ||
+    check.isPending ||
+    setPhase.isPending ||
+    build.isPending ||
+    approveAndBuild.isPending
 
   // A change being explored is written one step at a time; the operator can move it to any step and
   // change its size, each taking effect from the next turn (FR-10).
@@ -228,6 +261,8 @@ export function useSpecPhaseControls(
     setBlocking(refusal.blocking)
     setGaps(refusal.gaps)
     setGapsOverridable(refusal.overridable)
+    // The page then shows what the document holds now; the operator reads it and approves again.
+    if (refusal.stale) void reloadSpec()
   }
 
   function clearFindings() {
@@ -235,35 +270,38 @@ export function useSpecPhaseControls(
     setGaps([])
     setGapsOverridable(false)
     setApprovalNotes([])
+    setCheckedClean(false)
+    setBuildMessages([])
   }
 
-  async function onPropose() {
+  async function onCheck() {
     clearFindings()
     try {
-      const result = await propose.mutateAsync({ path })
-      // A blocked proposal is the normal case while a document is being written,
-      // so it reports rather than throws. Showing every finding at once matters:
-      // one per attempt turns five problems into five round trips.
+      const result = await check.mutateAsync({ path })
+      // Exactly what the agent's own save reported, and nothing moved: the agent keeps writing
+      // while the operator looks (`check-never-moves`). Every finding at once: one per attempt
+      // turns five problems into five round trips.
       setBlocking(result.blocking ?? [])
-      // Gaps do not stop proposal; they are said now so approval's list is no surprise.
       setGaps(result.warnings ?? [])
+      setCheckedClean((result.blocking ?? []).length === 0 && (result.warnings ?? []).length === 0)
     } catch (error) {
-      // 422 (no payload / payload invalid) used to reject unhandled and show nothing.
-      showRefusal(readRefusal(error, 'The Hub refused to propose this document.'))
+      // 422 (no payload / payload invalid) is said, not swallowed.
+      showRefusal(readRefusal(error, 'The Hub could not check this document.'))
     }
   }
+
+  /** The version of what the page shows: an approval names it (`approve-what-was-seen`). */
+  const loadedVersion = specDoc?.content_version ?? ''
 
   function onApprove(anyway = false) {
     clearFindings()
     setNextSliceOutcome(null)
+    setPendingApproval({ build: false })
     setPhase.mutate(
       {
         path,
         to: 'approved',
-        // Sent only when the operator picked something in the stale-delivery strip (design D5b);
-        // otherwise omitted, so an un-restarted `:8000` (which has no `delivery_status` to show a
-        // strip from in the first place) never receives a field it would 422.
-        ...(deliveryAgentChoice !== NO_CHOICE ? { delivery_agent: deliveryAgentChoice } : {}),
+        content_version: loadedVersion,
         // Only for a slice document: the Hub that named `roadmap_slice` is the one that accepts it.
         ...(roadmapSlice ? { draft_next_slice: draftNextSlice } : {}),
         // Only on the resend from the gap list, never on a plain Approve (FR-1).
@@ -275,11 +313,61 @@ export function useSpecPhaseControls(
           setApprovalNotes(result.approval_notes ?? [])
         },
         // F207: approval runs the completeness checks again. Gaps alone answer `approval_warnings`,
-        // which Approve anyway gets past; a refusal answers `document_incomplete`.
+        // which Approve anyway gets past; a refusal answers `document_incomplete`; a document that
+        // changed since it was loaded answers `document_changed`.
         onError: (error: unknown) =>
           showRefusal(readRefusal(error, 'The Hub refused to approve this document.')),
       },
     )
+  }
+
+  function onApproveAndBuild(deliveryAgent: string | undefined, anyway = false) {
+    clearFindings()
+    setNextSliceOutcome(null)
+    setBuildRefusal(null)
+    setPendingApproval({ build: true, deliveryAgent })
+    approveAndBuild.mutate(
+      {
+        path,
+        content_version: loadedVersion,
+        ...(deliveryAgent !== undefined ? { delivery_agent: deliveryAgent } : {}),
+        ...(roadmapSlice ? { draft_next_slice: draftNextSlice } : {}),
+        ...(anyway ? { approve_anyway: true } : {}),
+      },
+      {
+        onSuccess: (result) => {
+          setBuilding(null)
+          setNextSliceOutcome(result.next_slice ?? null)
+          setApprovalNotes(result.approval_notes ?? [])
+          setBuildMessages(result.build_outcome?.flow?.messages ?? [])
+        },
+        // Refused exactly as Approve is (FR-7): the gaps and Approve anyway show in the header.
+        onError: (error: unknown) => {
+          setBuilding(null)
+          showRefusal(readRefusal(error, 'The Hub refused to approve this document.'))
+        },
+      },
+    )
+  }
+
+  function onBuild(deliveryAgent: string | undefined) {
+    setBuildRefusal(null)
+    build.mutate(
+      { path, ...(deliveryAgent !== undefined ? { delivery_agent: deliveryAgent } : {}) },
+      {
+        onSuccess: (result) => {
+          setBuilding(null)
+          setBuildMessages(result.build_outcome?.flow?.messages ?? [])
+        },
+        onError: (error: unknown) =>
+          setBuildRefusal(readableApiError(error, 'The Hub refused to build this document.')),
+      },
+    )
+  }
+
+  function onApproveAnyway() {
+    if (pendingApproval.build) onApproveAndBuild(pendingApproval.deliveryAgent, true)
+    else onApprove(true)
   }
 
   function onReopen() {
@@ -314,9 +402,8 @@ export function useSpecPhaseControls(
         : { path, to: 'archived' },
       {
         onSuccess: () => setConfirmingArchive(false),
-        // It used to drop this, and the dialog simply stayed open. Archiving from `exploring` or
-        // `proposed` is refused once the document has produced work, and the refusal says what to
-        // do instead.
+        // It used to drop this, and the dialog simply stayed open. Archiving from `exploring` is
+        // refused once the document has produced work, and the refusal says what to do instead.
         onError: (error: unknown) =>
           setArchiveRefusal(readableApiError(error, 'The Hub refused to archive this document.')),
       },
@@ -405,20 +492,17 @@ export function useSpecPhaseControls(
   // A flow is offered on an approved change-spec only: earlier there are no tasks to work, other
   // kinds are not decomposed into flows, and an archived document is finished.
   const canStartFlow = document.kind === 'change-spec' && document.phase === 'approved' && !flow
+  // Building is a separate action, possibly taken later than approval (`build-is-separate`).
+  const canBuild = canStartFlow
+  const isChange = document.kind === 'change-spec'
   let primary: SpecPrimaryAction | null = null
   if (document.phase === 'exploring') {
     primary = {
-      label: 'Propose',
-      reason: 'Propose it once it says what to build; the Hub lists anything missing first.',
-      onClick: () => void onPropose(),
-      disabled: busy,
-    }
-  } else if (document.phase === 'proposed') {
-    primary = {
       label: 'Approve',
-      reason: 'Approving creates its tasks and, if it names one, starts its flow.',
+      reason: 'Approving lays its tasks out as a plan; nothing starts until you build it.',
       onClick: () => onApprove(),
-      disabled: busy,
+      disabled: busy || !specDoc,
+      testId: 'spec-approve',
     }
   } else if (foldReady) {
     primary = {
@@ -429,30 +513,64 @@ export function useSpecPhaseControls(
       reasonTestId: 'fold-state',
       reasonState: 'ready',
     }
-  } else if (canStartFlow) {
+  } else if (canBuild) {
     primary = {
-      label: 'Start a flow…',
-      reason: 'Approved, with no flow working its tasks yet.',
-      onClick: () => setStartingFlow(true),
-      testId: 'spec-start-flow',
+      label: 'Build…',
+      reason: 'Approved: its tasks are on the board. Build starts them as the document recommends.',
+      onClick: () => {
+        setBuildRefusal(null)
+        setBuilding('build')
+      },
+      disabled: busy,
+      testId: 'spec-build',
     }
   }
 
+  // Check and Approve and build beside Approve while the document is written (FR-1, FR-7).
   const beforePrimary =
-    document.phase === 'proposed' && roadmapSlice ? (
-      <label
-        className="aw-spec-inline-switch"
-        title={`This document specifies slice ${roadmapSlice.slice} of a roadmap. Approving it asks the agent that wrote it to draft the next slice once this one's tasks are approved or rejected.`}
-      >
-        <Switch
+    document.phase === 'exploring' ? (
+      <>
+        {roadmapSlice ? (
+          <label
+            className="aw-spec-inline-switch"
+            title={`This document specifies slice ${roadmapSlice.slice} of a roadmap. Approving it asks the agent that wrote it to draft the next slice once this one's tasks are approved or rejected.`}
+          >
+            <Switch
+              size="sm"
+              checked={draftNextSlice}
+              disabled={busy}
+              aria-label="Draft the next slice"
+              onCheckedChange={setDraftNextSlice}
+            />
+            Draft the next slice
+          </label>
+        ) : null}
+        <Button
+          variant="ghost"
           size="sm"
-          checked={draftNextSlice}
+          data-testid="spec-check"
           disabled={busy}
-          aria-label="Draft the next slice"
-          onCheckedChange={setDraftNextSlice}
-        />
-        Draft the next slice
-      </label>
+          title="Show what still blocks approval, as the agent's save reports it. Nothing moves."
+          onClick={() => void onCheck()}
+        >
+          Check
+        </Button>
+        {isChange ? (
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="spec-approve-and-build"
+            disabled={busy || !specDoc}
+            title="Approve the version you read and start building it, in one action"
+            onClick={() => {
+              setBuildRefusal(null)
+              setBuilding('approve')
+            }}
+          >
+            Approve and build…
+          </Button>
+        ) : null}
+      </>
     ) : null
 
   // ── The overflow menu ──────────────────────────────────────────────────────────────────────
@@ -487,17 +605,17 @@ export function useSpecPhaseControls(
     </>
   )
 
-  // F205: `spec_lifecycle` has archive edges from `exploring` and `proposed` too, added for F37 (a
-  // mistaken, empty document nothing could retire). The Hub refuses them once the document has
-  // produced requirements or tasks, and the dialog shows that refusal.
+  // F205: `spec_lifecycle` has an archive edge from `exploring` too, added for F37 (a mistaken,
+  // empty document nothing could retire). The Hub refuses it once the document has produced
+  // requirements or tasks, and the dialog shows that refusal.
   const archive =
-    document.phase === 'approved' || document.phase === 'exploring' || document.phase === 'proposed'
+    document.phase === 'approved' || document.phase === 'exploring'
       ? () => {
           setArchiveRefusal(null)
           setConfirmingArchive(true)
         }
       : undefined
-  const reopen = document.phase === 'proposed' || document.phase === 'approved' ? onReopen : undefined
+  const reopen = document.phase === 'approved' ? onReopen : undefined
   const remove = deletable
     ? () => {
         setDeleteRefusal(null)
@@ -536,29 +654,33 @@ export function useSpecPhaseControls(
         </p>
       )}
 
-      {/* A stale delivery, above Approve (design D5/D5b): the declared agent is archived or
-          unknown, so approving as written would not start a flow. The choice made here — another
-          open agent, or "No flow" — travels with Approve; it is used for this flow only and never
-          rewrites the document. */}
+      {/* A stale recommendation (design D5/D5b): the recommended agent is archived or unknown,
+          so building as written would start no flow. The Build dialog chooses another agent, for
+          that build only; the document is never rewritten. */}
       {deliveryStatus?.state === 'stale' && (
         <div className="aw-spec-message" data-tone="warn" data-testid="delivery-stale-strip">
           <Icon name="warning" size={13} />
           <span className="aw-spec-message-text">
-            Delivery names {deliveryStatus.agent}, which is{' '}
+            The recommended build names {deliveryStatus.agent || 'no agent'}, which is{' '}
             {deliveryStatus.reason === 'archived' ? 'archived' : 'not an agent on this project'}.
-            {' '}Approving will not start a flow unless you choose another agent.
+            {' '}Building will not start a flow unless you choose another agent in the Build dialog.
           </span>
-          <MenuSelect
-            testId="delivery-agent-choice"
-            label="Agent for this flow"
-            value={deliveryAgentChoice === '' ? NO_FLOW : deliveryAgentChoice}
-            disabled={busy}
-            onChange={(value) => setDeliveryAgentChoice(value === NO_FLOW ? '' : value)}
-            options={[
-              ...openAgents.map((agent) => ({ value: agent.name, label: `@${agent.name}` })),
-              { value: NO_FLOW, label: 'No flow' },
-            ]}
-          />
+        </div>
+      )}
+
+      {checkedClean && (
+        <p className="aw-spec-message" data-testid="spec-check-clean">
+          <span className="aw-spec-message-text">Checked: nothing blocks approval, and nothing moved.</span>
+        </p>
+      )}
+
+      {buildMessages.length > 0 && (
+        <div className="aw-spec-message" data-testid="spec-build-outcome">
+          {buildMessages.map((message, i) => (
+            <span key={i} className="aw-spec-message-text">
+              {message}
+            </span>
+          ))}
         </div>
       )}
 
@@ -570,7 +692,11 @@ export function useSpecPhaseControls(
       {/* every-task-can-always-be-moved-on FR-5: an approved change whose work already shipped
           closes its open tasks in one step, checked through its evidence rather than rebuilt. */}
       {document.kind === 'change-spec' && document.phase === 'approved' && (
-        <CloseAlreadyBuilt path={document.path} documentId={document.id} />
+        <CloseAlreadyBuilt
+          path={document.path}
+          documentId={document.id}
+          offer={specDocError ? undefined : specDoc?.approval_outcome?.already_built}
+        />
       )}
       {foldState?.state === 'folded' && (
         <p className="aw-spec-message" data-testid="fold-state" data-state="folded">
@@ -705,9 +831,15 @@ export function useSpecPhaseControls(
               ? 'Not approved: the Hub found these gaps. Approve anyway records them on the document.'
               : 'Gaps approval will list:'}
           </span>
-          {gapsOverridable && document.phase === 'proposed' && (
-            <Button variant="primary" size="xs" disabled={busy} onClick={() => onApprove(true)}>
-              Approve anyway
+          {gapsOverridable && document.phase === 'exploring' && (
+            <Button
+              variant="primary"
+              size="xs"
+              data-testid="spec-approve-anyway"
+              disabled={busy}
+              onClick={onApproveAnyway}
+            >
+              {pendingApproval.build ? 'Approve and build anyway' : 'Approve anyway'}
             </Button>
           )}
           <GapLines gaps={gaps} />
@@ -760,6 +892,21 @@ export function useSpecPhaseControls(
     <>
       {startingFlow && (
         <StartFlowDialog document={{ id: document.id, title: document.title }} onClose={() => setStartingFlow(false)} />
+      )}
+
+      {building && (
+        <BuildDialog
+          title={document.title}
+          approve={building === 'approve'}
+          recommended={specDocError ? undefined : specDoc?.recommended_build}
+          openAgents={openAgents.map((agent) => agent.name)}
+          isPending={build.isPending || approveAndBuild.isPending}
+          error={buildRefusal}
+          onCancel={() => setBuilding(null)}
+          onConfirm={(deliveryAgent) =>
+            building === 'approve' ? onApproveAndBuild(deliveryAgent) : onBuild(deliveryAgent)
+          }
+        />
       )}
 
       {confirmingDelete && (

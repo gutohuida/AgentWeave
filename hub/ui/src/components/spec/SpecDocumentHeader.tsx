@@ -5,11 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
 import '@/styles/spec-header.css'
 
-export type SpecPhase = 'exploring' | 'proposed' | 'approved' | 'archived' | 'current'
+export type SpecPhase = 'exploring' | 'approved' | 'archived' | 'current'
 
 const PHASE_LABEL: Record<SpecPhase, string> = {
   exploring: 'Exploring',
-  proposed: 'Proposed',
   approved: 'Approved',
   archived: 'Archived',
   current: 'Current',
@@ -49,8 +48,10 @@ const RIGOR_OPTIONS: Array<{ value: Rigor; label: string; detail: string }> = [
  *  Replaces eight stacked strips (a banner, an action row mixing a pill with plain-text actions, a
  *  "Created …" log, vault warnings, coverage, drift, a tasks link and a manifest-drift row), each
  *  in its own style, that pushed the document 380px down. Now: a breadcrumb and the actions on
- *  one row, the title with its phase and rigor, and `health` (SpecHealthLine) for every fact. Only
- *  one action is a button; the rest are in the overflow menu, named for what they do.
+ *  one row, the title with its phase and rigor, and `health` (SpecHealthLine) for every fact. One
+ *  action is the primary button (Approve, Build…, Fold…); `beforePrimary` carries the controls that
+ *  sit beside it (Check, Approve and build…); the rest are in the overflow menu, named for what
+ *  they do.
  *
  *  Hosts with more to say pass it in: `menu` (more overflow items), `badges` (beside the phase, such
  *  as the flow the document runs), `tools` (icon buttons after the menu), `beforePrimary` (a control

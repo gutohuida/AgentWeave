@@ -22,7 +22,7 @@ vi.mock('@/api/spec', async (importOriginal) => {
     ...actual,
     useSpecDocuments: () => ({ data: { documents: [doc()] } }),
     useSpec: () => ({ data: { path: CHANGE, content: '', fold_state: foldState }, isError: false }),
-    useProposeSpecDocument: () => ({ mutateAsync: vi.fn(), isPending: false }),
+    useCheckSpecDocument: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSetSpecPhase: () => ({ mutate: vi.fn(), isPending: false }),
     useSetSpecRigor: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSpecRigorHistory: () => ({ data: { events: [] }, error: null }),

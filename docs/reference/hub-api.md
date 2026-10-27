@@ -94,8 +94,10 @@ All paths below are relative to `/api/v1/projects/{project_id}` unless they star
 | Route | Purpose |
 |---|---|
 | `GET /project/spec` · `GET /project/documents` · `POST /project/documents` | Read the corpus. Create a document. |
-| `POST /project/documents/propose?path=` | Propose. Returns `blocking` and `warnings`, plus `proposed: true` when it moved. |
-| `POST /project/documents/phase?path=&to=` | Approve or reopen. Body: `reason`, `approve_anyway`, `delivery_agent`, `draft_next_slice`. |
+| `POST /project/documents/check?path=` | Check. Returns the `blocking` and `warnings` the agent's save returns, `ready`, and `content_version`; moves nothing. |
+| `POST /project/documents/phase?path=&to=` | Approve, reopen or archive. Body: `reason`, `content_version` (required to approve: the `GET /project/spec` read you approved; 409 `document_changed` when it moved since), `approve_anyway`, `draft_next_slice`. Approval starts nothing. |
+| `POST /project/documents/build?path=` | Build an approved document as it recommends. Body: `delivery_agent` (optional). Returns `build_outcome`. |
+| `POST /project/documents/approve-and-build?path=` | Approve and build in one action, refused as approving is. Body: approval's fields and `delivery_agent`. |
 | `POST /project/documents/{path}/rigor` · `GET …/rigor-history` | Rigor. |
 | `GET …/proposals` · `POST …/proposals/{id}/accept|reject|withdraw` | Agent proposals at contract or gate rigor. |
 | `GET …/amendments` · `POST …/amendments/review` | Tester amendments. |
