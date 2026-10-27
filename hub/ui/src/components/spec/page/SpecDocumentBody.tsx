@@ -42,6 +42,8 @@ export interface SpecDocumentBodyProps {
   hideFilterBar?: boolean
   onJump: (anchor: string) => void
   onCopyLink: (anchor: string) => void
+  /** Open another document (a slice's change document). */
+  onOpenDocument?: (path: string) => void
 }
 
 /** The document, drawn by the app from its structure rather than a frame of rendered HTML (FR-3),
@@ -81,6 +83,41 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
               <ScopeList title="Not in this change" icon="remove_circle" items={doc.nonGoals} />
             </div>
           </Section>
+          {doc.slices?.length ? (
+            <Section id="slices" title="Slices" count={String(doc.slices.length)} onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'slices')}>
+              <ol className="aw-sp-slices">
+                {doc.slices.map((slice, i) => (
+                  <li key={slice.key} className="aw-sp-slice" id={`slice-${slice.key}`} data-anchor={`slice-${slice.key}`} data-flash={props.flash === `slice-${slice.key}` ? 'true' : undefined}>
+                    <div className="aw-sp-slice-head">
+                      <span className="aw-sp-list-pos">{i + 1}</span>
+                      <strong className="aw-sp-slice-title">{slice.title}</strong>
+                    </div>
+                    {slice.intent ? <p className="aw-sp-prose">{slice.intent}</p> : null}
+                    {slice.done ? (
+                      <p className="aw-sp-slice-done">
+                        <span className="aw-sp-slice-label">Done when</span> {slice.done}
+                      </p>
+                    ) : null}
+                    {slice.buildsAfter.length ? (
+                      <p className="aw-sp-slice-after">
+                        <span className="aw-sp-slice-label">Builds after</span> {slice.buildsAfter.map((k) => doc.slices?.find((s) => s.key === k)?.title ?? k).join(', ')}
+                      </p>
+                    ) : null}
+                    {slice.document ? (
+                      <button data-slot="link-button" type="button" className="aw-sp-textbutton" onClick={() => props.onOpenDocument?.(slice.document!.path)}>
+                        <Icon name="article" size={12} />
+                        {slice.document.title}
+                        <Icon name="arrow_forward" size={11} />
+                      </button>
+                    ) : (
+                      <span className="aw-sp-slice-after">Not specified yet.</span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </Section>
+          ) : null}
+          {doc.requirements.length || !doc.slices?.length ? (
           <Section
             id="requirements"
             title="Requirements"
@@ -108,6 +145,21 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
               <EmptyFilter onClear={() => props.onFiltersChange({ ...filters, evidence: 'any', task: 'any' })} what="requirements" />
             )}
           </Section>
+          ) : null}
+          {doc.algorithms?.length ? (
+            <Section id="algorithms" title="Algorithms" count={String(doc.algorithms.length)} onCopyLink={props.onCopyLink} flash={props.flash} findings={findingsFor('section', 'algorithms')}>
+              {doc.algorithms.map((algorithm) => (
+                <div key={algorithm.name} className="aw-sp-algorithm">
+                  <h3 className="aw-sp-algorithm-name">{algorithm.name}</h3>
+                  <ol className="aw-sp-algorithm-steps">
+                    {algorithm.steps.map((step, i) => (
+                      <li key={i}>{step}</li>
+                    ))}
+                  </ol>
+                </div>
+              ))}
+            </Section>
+          ) : null}
         </>
       ) : null}
 
@@ -484,7 +536,7 @@ export function DocumentFilterBar({
   const evidenceCounts = (state: EvidenceState) => doc.requirements.filter((r) => r.evidence === state).length
   const evidenceOptions: SelectOption<EvidenceState | 'any'>[] = [
     { value: 'any', label: 'Any evidence' },
-    ...(['verified', 'awaiting', 'in_progress', 'rejected', 'not_started'] as EvidenceState[])
+    ...(['verified', 'awaiting', 'in_progress', 'held', 'rejected', 'not_started'] as EvidenceState[])
       .filter((s) => evidenceCounts(s) > 0)
       .map((s) => ({ value: s, label: `${EVIDENCE_LABEL[s]} · ${evidenceCounts(s)}` })),
   ]

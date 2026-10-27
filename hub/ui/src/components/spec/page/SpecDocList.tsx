@@ -11,7 +11,7 @@ import '@/styles/spec-page.css'
 const ORDERS: Array<{ value: ListOrder; label: string; detail: string }> = [
   { value: 'roadmap', label: 'Roadmap order', detail: 'Slices under their roadmap, in build order.' },
   { value: 'changed', label: 'Last change', detail: 'Most recently changed first.' },
-  { value: 'phase', label: 'Phase', detail: 'Building, being written, approved, archived.' },
+  { value: 'phase', label: 'Phase', detail: 'Building, writing, approved, archived.' },
   { value: 'title', label: 'Title', detail: 'A to Z.' },
 ]
 
@@ -28,6 +28,8 @@ export function SpecDocList({
   variant = 'column',
   hideSearch = false,
   hideHead = false,
+  footer,
+  rowAction,
 }: {
   entries: SpecListEntry[]
   active: string | null
@@ -42,6 +44,10 @@ export function SpecDocList({
   hideSearch?: boolean
   /** The picker titles itself; the list then leaves its heading out and its order menu joins the filters. */
   hideHead?: boolean
+  /** Pinned under the list: the evidence view's entry and the defects report. */
+  footer?: React.ReactNode
+  /** Beside a row (Adopt, on a document the Hub keeps no record of). */
+  rowAction?: (entry: SpecListEntry) => React.ReactNode
 }) {
   const groups = arrangeList(entries, prefs)
   const shown = groups.reduce((n, g) => n + g.entries.length + (g.roadmap ? 1 : 0), 0)
@@ -94,7 +100,7 @@ export function SpecDocList({
             maxWidth={150}
             options={[
               { value: 'any', label: 'Any phase' },
-              { value: 'writing', label: 'Being written' },
+              { value: 'writing', label: 'Writing' },
               { value: 'approved', label: 'Approved' },
               { value: 'archived', label: 'Archived' },
             ]}
@@ -106,12 +112,12 @@ export function SpecDocList({
         {groups.map((g, gi) => (
           <div key={g.roadmap?.path ?? g.label ?? `run-${gi}`} className="aw-sp-list-group" data-roadmap={g.roadmap ? 'true' : 'false'}>
             {g.label ? <div className="aw-sp-list-label">{g.label}</div> : null}
-            {g.roadmap ? <Row entry={g.roadmap} active={active} onOpen={onOpen} now={now} roadmap slices={g.entries.length} /> : null}
+            {g.roadmap ? <Row entry={g.roadmap} active={active} onOpen={onOpen} now={now} roadmap slices={g.entries.length} action={rowAction} /> : null}
             {g.entries.length ? (
               <ol className="aw-sp-list-rows" data-slices={g.roadmap ? 'true' : 'false'}>
                 {g.entries.map((e, i) => (
                   <li key={e.path}>
-                    <Row entry={e} active={active} onOpen={onOpen} now={now} position={g.roadmap ? i + 1 : undefined} />
+                    <Row entry={e} active={active} onOpen={onOpen} now={now} position={g.roadmap ? i + 1 : undefined} action={rowAction} />
                   </li>
                 ))}
               </ol>
@@ -129,6 +135,7 @@ export function SpecDocList({
           </div>
         ) : null}
       </div>
+      {footer ? <div className="aw-sp-list-footer">{footer}</div> : null}
     </aside>
   )
 }
@@ -141,6 +148,7 @@ function Row({
   roadmap,
   slices,
   position,
+  action,
 }: {
   entry: SpecListEntry
   active: string | null
@@ -149,8 +157,10 @@ function Row({
   roadmap?: boolean
   slices?: number
   position?: number
+  action?: (entry: SpecListEntry) => React.ReactNode
 }) {
-  return (
+  const extra = action?.(e)
+  const row = (
     <button
       data-slot="spec-row"
       type="button"
@@ -171,6 +181,14 @@ function Row({
       {e.building ? <span className="aw-sp-live" title="A build is running" aria-label="A build is running" /> : null}
       {roadmap && slices !== undefined ? <span className="aw-sp-list-meta">{slices}</span> : <span className="aw-sp-list-meta">{formatAgo(e.updatedAt, now)}</span>}
     </button>
+  )
+  return extra ? (
+    <div className="aw-sp-list-rowwrap">
+      {row}
+      <span className="aw-sp-list-rowaction">{extra}</span>
+    </div>
+  ) : (
+    row
   )
 }
 

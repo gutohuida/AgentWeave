@@ -1,0 +1,1462 @@
+{
+  "builds": {
+    "b-a1": {
+      "ai_nano_aiu": null,
+      "beside_failing": {
+        "cost_micros": null,
+        "count": 0,
+        "run_seconds": 0
+      },
+      "checks": {
+        "failed": 0,
+        "passed": 1,
+        "runs": 1,
+        "seconds": 60
+      },
+      "cost_micros": {
+        "building": 3000000,
+        "leading": null,
+        "mending": 500000,
+        "other": null,
+        "reviewing": 1000000,
+        "total": 4500000
+      },
+      "pieces": {
+        "accepted": 0,
+        "awaiting": 0,
+        "held": 0,
+        "rejected": 0
+      },
+      "premium_requests": null,
+      "run_seconds": {
+        "building": 420,
+        "leading": 0,
+        "mending": 240,
+        "other": 0,
+        "reviewing": 180,
+        "total": 840
+      },
+      "runs": {
+        "building": 1,
+        "leading": 0,
+        "mending": 1,
+        "other": 0,
+        "reviewing": 1,
+        "total": 3
+      },
+      "send_backs": {
+        "made": 0,
+        "received": 0
+      },
+      "tokens": 450,
+      "turns": 3,
+      "unpriced": 0,
+      "wall": {
+        "building": 420,
+        "checks": 60,
+        "held": 0,
+        "review": 0,
+        "reviewing": 180,
+        "total": 660,
+        "waiting": 0
+      }
+    },
+    "b-a2": {
+      "ai_nano_aiu": null,
+      "beside_failing": {
+        "cost_micros": null,
+        "count": 0,
+        "run_seconds": 0
+      },
+      "checks": {
+        "failed": 0,
+        "passed": 0,
+        "runs": 0,
+        "seconds": 0
+      },
+      "cost_micros": {
+        "building": 2000000,
+        "leading": null,
+        "mending": null,
+        "other": null,
+        "reviewing": null,
+        "total": 2000000
+      },
+      "pieces": {
+        "accepted": 0,
+        "awaiting": 0,
+        "held": 0,
+        "rejected": 0
+      },
+      "premium_requests": null,
+      "run_seconds": {
+        "building": 240,
+        "leading": 0,
+        "mending": 0,
+        "other": 0,
+        "reviewing": 0,
+        "total": 240
+      },
+      "runs": {
+        "building": 1,
+        "leading": 0,
+        "mending": 0,
+        "other": 0,
+        "reviewing": 0,
+        "total": 1
+      },
+      "send_backs": {
+        "made": 0,
+        "received": 0
+      },
+      "tokens": 200,
+      "turns": 1,
+      "unpriced": 0,
+      "wall": {
+        "building": 240,
+        "checks": 0,
+        "held": 0,
+        "review": 0,
+        "reviewing": 0,
+        "total": 1140,
+        "waiting": 900
+      }
+    }
+  },
+  "groups": {
+    "agent": [
+      {
+        "key": "dev",
+        "label": "dev",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": 5900000,
+            "leading": null,
+            "mending": null,
+            "other": 250000,
+            "reviewing": null,
+            "total": 6150000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 1380,
+            "leading": 0,
+            "mending": 0,
+            "other": 60,
+            "reviewing": 0,
+            "total": 1440
+          },
+          "runs": {
+            "building": 4,
+            "leading": 0,
+            "mending": 0,
+            "other": 1,
+            "reviewing": 0,
+            "total": 5
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 645,
+          "turns": 5,
+          "unpriced": 1,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      },
+      {
+        "key": "qa",
+        "label": "qa",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": null,
+            "leading": null,
+            "mending": null,
+            "other": null,
+            "reviewing": 1000000,
+            "total": 1000000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 180,
+            "total": 180
+          },
+          "runs": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 1,
+            "total": 1
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 100,
+          "turns": 1,
+          "unpriced": 0,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      },
+      {
+        "key": "mender",
+        "label": "mender",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": null,
+            "leading": null,
+            "mending": 500000,
+            "other": null,
+            "reviewing": null,
+            "total": 500000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 0,
+            "leading": 0,
+            "mending": 240,
+            "other": 0,
+            "reviewing": 0,
+            "total": 240
+          },
+          "runs": {
+            "building": 0,
+            "leading": 0,
+            "mending": 1,
+            "other": 0,
+            "reviewing": 0,
+            "total": 1
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 50,
+          "turns": 1,
+          "unpriced": 0,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      },
+      {
+        "key": "copilot-agent",
+        "label": "copilot-agent",
+        "row": {
+          "ai_nano_aiu": 4000000000,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": null,
+            "leading": null,
+            "mending": null,
+            "other": null,
+            "reviewing": null,
+            "total": null
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": 1.0,
+          "run_seconds": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 60,
+            "reviewing": 0,
+            "total": 60
+          },
+          "runs": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 1,
+            "reviewing": 0,
+            "total": 1
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": null,
+          "turns": 1,
+          "unpriced": 0,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      },
+      {
+        "key": null,
+        "label": "checks and wall time",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 1,
+            "runs": 1,
+            "seconds": 60
+          },
+          "cost_micros": {
+            "building": null,
+            "leading": null,
+            "mending": null,
+            "other": null,
+            "reviewing": null,
+            "total": null
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 0,
+            "total": 0
+          },
+          "runs": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 0,
+            "total": 0
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": null,
+          "turns": 0,
+          "unpriced": 0,
+          "wall": {
+            "building": 660,
+            "checks": 60,
+            "held": 0,
+            "review": 0,
+            "reviewing": 180,
+            "total": 1800,
+            "waiting": 900
+          }
+        }
+      }
+    ],
+    "level": [
+      {
+        "key": "reviewed",
+        "label": "reviewed",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 1,
+            "runs": 1,
+            "seconds": 60
+          },
+          "cost_micros": {
+            "building": 5000000,
+            "leading": null,
+            "mending": 500000,
+            "other": null,
+            "reviewing": 1000000,
+            "total": 6500000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 660,
+            "leading": 0,
+            "mending": 240,
+            "other": 0,
+            "reviewing": 180,
+            "total": 1080
+          },
+          "runs": {
+            "building": 2,
+            "leading": 0,
+            "mending": 1,
+            "other": 0,
+            "reviewing": 1,
+            "total": 4
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 650,
+          "turns": 4,
+          "unpriced": 0,
+          "wall": {
+            "building": 660,
+            "checks": 60,
+            "held": 0,
+            "review": 0,
+            "reviewing": 180,
+            "total": 1800,
+            "waiting": 900
+          }
+        }
+      },
+      {
+        "key": null,
+        "label": "no level recorded",
+        "row": {
+          "ai_nano_aiu": 4000000000,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": 900000,
+            "leading": null,
+            "mending": null,
+            "other": 250000,
+            "reviewing": null,
+            "total": 1150000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": 1.0,
+          "run_seconds": {
+            "building": 720,
+            "leading": 0,
+            "mending": 0,
+            "other": 120,
+            "reviewing": 0,
+            "total": 840
+          },
+          "runs": {
+            "building": 2,
+            "leading": 0,
+            "mending": 0,
+            "other": 2,
+            "reviewing": 0,
+            "total": 4
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 145,
+          "turns": 4,
+          "unpriced": 1,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      }
+    ],
+    "model": [
+      {
+        "key": "sonnet",
+        "label": "sonnet",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": 5900000,
+            "leading": null,
+            "mending": null,
+            "other": 250000,
+            "reviewing": null,
+            "total": 6150000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 1380,
+            "leading": 0,
+            "mending": 0,
+            "other": 60,
+            "reviewing": 0,
+            "total": 1440
+          },
+          "runs": {
+            "building": 4,
+            "leading": 0,
+            "mending": 0,
+            "other": 1,
+            "reviewing": 0,
+            "total": 5
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 645,
+          "turns": 5,
+          "unpriced": 1,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      },
+      {
+        "key": "opus",
+        "label": "opus",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": null,
+            "leading": null,
+            "mending": 500000,
+            "other": null,
+            "reviewing": 1000000,
+            "total": 1500000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 0,
+            "leading": 0,
+            "mending": 240,
+            "other": 0,
+            "reviewing": 180,
+            "total": 420
+          },
+          "runs": {
+            "building": 0,
+            "leading": 0,
+            "mending": 1,
+            "other": 0,
+            "reviewing": 1,
+            "total": 2
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 150,
+          "turns": 2,
+          "unpriced": 0,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      },
+      {
+        "key": "gpt",
+        "label": "gpt",
+        "row": {
+          "ai_nano_aiu": 4000000000,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": null,
+            "leading": null,
+            "mending": null,
+            "other": null,
+            "reviewing": null,
+            "total": null
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": 1.0,
+          "run_seconds": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 60,
+            "reviewing": 0,
+            "total": 60
+          },
+          "runs": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 1,
+            "reviewing": 0,
+            "total": 1
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": null,
+          "turns": 1,
+          "unpriced": 0,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      },
+      {
+        "key": null,
+        "label": "no model recorded",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 1,
+            "runs": 1,
+            "seconds": 60
+          },
+          "cost_micros": {
+            "building": null,
+            "leading": null,
+            "mending": null,
+            "other": null,
+            "reviewing": null,
+            "total": null
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 0,
+            "total": 0
+          },
+          "runs": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 0,
+            "total": 0
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": null,
+          "turns": 0,
+          "unpriced": 0,
+          "wall": {
+            "building": 660,
+            "checks": 60,
+            "held": 0,
+            "review": 0,
+            "reviewing": 180,
+            "total": 1800,
+            "waiting": 900
+          }
+        }
+      }
+    ],
+    "spec": [
+      {
+        "before_builds": null,
+        "builds": [
+          {
+            "created_at": "2026-10-26T22:00:00+00:00",
+            "driver": "hand",
+            "id": "b-a1",
+            "level": "reviewed",
+            "row": {
+              "ai_nano_aiu": null,
+              "beside_failing": {
+                "cost_micros": null,
+                "count": 0,
+                "run_seconds": 0
+              },
+              "checks": {
+                "failed": 0,
+                "passed": 1,
+                "runs": 1,
+                "seconds": 60
+              },
+              "cost_micros": {
+                "building": 3000000,
+                "leading": null,
+                "mending": 500000,
+                "other": null,
+                "reviewing": 1000000,
+                "total": 4500000
+              },
+              "pieces": {
+                "accepted": 0,
+                "awaiting": 0,
+                "held": 0,
+                "rejected": 0
+              },
+              "premium_requests": null,
+              "run_seconds": {
+                "building": 420,
+                "leading": 0,
+                "mending": 240,
+                "other": 0,
+                "reviewing": 180,
+                "total": 840
+              },
+              "runs": {
+                "building": 1,
+                "leading": 0,
+                "mending": 1,
+                "other": 0,
+                "reviewing": 1,
+                "total": 3
+              },
+              "send_backs": {
+                "made": 0,
+                "received": 0
+              },
+              "tokens": 450,
+              "turns": 3,
+              "unpriced": 0,
+              "wall": {
+                "building": 420,
+                "checks": 60,
+                "held": 0,
+                "review": 0,
+                "reviewing": 180,
+                "total": 660,
+                "waiting": 0
+              }
+            },
+            "state": "finished"
+          },
+          {
+            "created_at": "2026-10-26T22:40:00+00:00",
+            "driver": "hand",
+            "id": "b-a2",
+            "level": "reviewed",
+            "row": {
+              "ai_nano_aiu": null,
+              "beside_failing": {
+                "cost_micros": null,
+                "count": 0,
+                "run_seconds": 0
+              },
+              "checks": {
+                "failed": 0,
+                "passed": 0,
+                "runs": 0,
+                "seconds": 0
+              },
+              "cost_micros": {
+                "building": 2000000,
+                "leading": null,
+                "mending": null,
+                "other": null,
+                "reviewing": null,
+                "total": 2000000
+              },
+              "pieces": {
+                "accepted": 0,
+                "awaiting": 0,
+                "held": 0,
+                "rejected": 0
+              },
+              "premium_requests": null,
+              "run_seconds": {
+                "building": 240,
+                "leading": 0,
+                "mending": 0,
+                "other": 0,
+                "reviewing": 0,
+                "total": 240
+              },
+              "runs": {
+                "building": 1,
+                "leading": 0,
+                "mending": 0,
+                "other": 0,
+                "reviewing": 0,
+                "total": 1
+              },
+              "send_backs": {
+                "made": 0,
+                "received": 0
+              },
+              "tokens": 200,
+              "turns": 1,
+              "unpriced": 0,
+              "wall": {
+                "building": 240,
+                "checks": 0,
+                "held": 0,
+                "review": 0,
+                "reviewing": 0,
+                "total": 1140,
+                "waiting": 900
+              }
+            },
+            "state": "finished"
+          }
+        ],
+        "key": "doc-a",
+        "label": "Spec A",
+        "path": "spec/changes/doc-a/spec.json",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 1,
+            "runs": 1,
+            "seconds": 60
+          },
+          "cost_micros": {
+            "building": 5000000,
+            "leading": null,
+            "mending": 500000,
+            "other": null,
+            "reviewing": 1000000,
+            "total": 6500000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 660,
+            "leading": 0,
+            "mending": 240,
+            "other": 0,
+            "reviewing": 180,
+            "total": 1080
+          },
+          "runs": {
+            "building": 2,
+            "leading": 0,
+            "mending": 1,
+            "other": 0,
+            "reviewing": 1,
+            "total": 4
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 650,
+          "turns": 4,
+          "unpriced": 0,
+          "wall": {
+            "building": 660,
+            "checks": 60,
+            "held": 0,
+            "review": 0,
+            "reviewing": 180,
+            "total": 1800,
+            "waiting": 900
+          }
+        }
+      },
+      {
+        "before_builds": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": 900000,
+            "leading": null,
+            "mending": null,
+            "other": null,
+            "reviewing": null,
+            "total": 900000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 720,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 0,
+            "total": 720
+          },
+          "runs": {
+            "building": 2,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 0,
+            "total": 2
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 120,
+          "turns": 2,
+          "unpriced": 1,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        },
+        "builds": [],
+        "key": "doc-b",
+        "label": "Spec B",
+        "path": "spec/changes/doc-b/spec.json",
+        "row": {
+          "ai_nano_aiu": null,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": 900000,
+            "leading": null,
+            "mending": null,
+            "other": null,
+            "reviewing": null,
+            "total": 900000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": null,
+          "run_seconds": {
+            "building": 720,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 0,
+            "total": 720
+          },
+          "runs": {
+            "building": 2,
+            "leading": 0,
+            "mending": 0,
+            "other": 0,
+            "reviewing": 0,
+            "total": 2
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 120,
+          "turns": 2,
+          "unpriced": 1,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      },
+      {
+        "before_builds": null,
+        "builds": [],
+        "key": null,
+        "label": "not from a spec",
+        "path": null,
+        "row": {
+          "ai_nano_aiu": 4000000000,
+          "beside_failing": {
+            "cost_micros": null,
+            "count": 0,
+            "run_seconds": 0
+          },
+          "checks": {
+            "failed": 0,
+            "passed": 0,
+            "runs": 0,
+            "seconds": 0
+          },
+          "cost_micros": {
+            "building": null,
+            "leading": null,
+            "mending": null,
+            "other": 250000,
+            "reviewing": null,
+            "total": 250000
+          },
+          "pieces": {
+            "accepted": 0,
+            "awaiting": 0,
+            "held": 0,
+            "rejected": 0
+          },
+          "premium_requests": 1.0,
+          "run_seconds": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 120,
+            "reviewing": 0,
+            "total": 120
+          },
+          "runs": {
+            "building": 0,
+            "leading": 0,
+            "mending": 0,
+            "other": 2,
+            "reviewing": 0,
+            "total": 2
+          },
+          "send_backs": {
+            "made": 0,
+            "received": 0
+          },
+          "tokens": 25,
+          "turns": 2,
+          "unpriced": 0,
+          "wall": {
+            "building": 0,
+            "checks": 0,
+            "held": 0,
+            "review": 0,
+            "reviewing": 0,
+            "total": 0,
+            "waiting": 0
+          }
+        }
+      }
+    ]
+  },
+  "project": {
+    "ai_nano_aiu": 5000000000,
+    "beside_failing": {
+      "cost_micros": null,
+      "count": 0,
+      "run_seconds": 0
+    },
+    "checks": {
+      "failed": 0,
+      "passed": 1,
+      "runs": 1,
+      "seconds": 60
+    },
+    "cost_micros": {
+      "building": 5900000,
+      "leading": null,
+      "mending": 500000,
+      "other": 250000,
+      "reviewing": 1000000,
+      "total": 7750000
+    },
+    "pieces": {
+      "accepted": 0,
+      "awaiting": 0,
+      "held": 0,
+      "rejected": 0
+    },
+    "premium_requests": 1.5,
+    "run_seconds": {
+      "building": 1380,
+      "leading": 0,
+      "mending": 240,
+      "other": 120,
+      "reviewing": 180,
+      "total": 1920
+    },
+    "runs": {
+      "building": 4,
+      "leading": 0,
+      "mending": 1,
+      "other": 2,
+      "reviewing": 1,
+      "total": 8
+    },
+    "send_backs": {
+      "made": 0,
+      "received": 0
+    },
+    "tokens": 845,
+    "turns": 8,
+    "unpriced": 1,
+    "wall": {
+      "building": 660,
+      "checks": 60,
+      "held": 0,
+      "review": 0,
+      "reviewing": 180,
+      "total": 1800,
+      "waiting": 900
+    }
+  },
+  "since": null,
+  "spend": {
+    "by_day": {
+      "2026-10-26": {
+        "tokens": 845,
+        "usd": 7750000,
+        "worker_usd": 100000
+      }
+    },
+    "by_task": {
+      "t-a1": {
+        "tokens": 400,
+        "turns": 2,
+        "usd": 4000000
+      },
+      "t-a2": {
+        "tokens": 200,
+        "turns": 1,
+        "usd": 2000000
+      },
+      "t-b": {
+        "tokens": 120,
+        "turns": 2,
+        "usd": 900000
+      }
+    }
+  },
+  "total": {
+    "ai_nano_aiu": 4000000000,
+    "beside_failing": {
+      "cost_micros": null,
+      "count": 0,
+      "run_seconds": 0
+    },
+    "checks": {
+      "failed": 0,
+      "passed": 1,
+      "runs": 1,
+      "seconds": 60
+    },
+    "cost_micros": {
+      "building": 5900000,
+      "leading": null,
+      "mending": 500000,
+      "other": 250000,
+      "reviewing": 1000000,
+      "total": 7650000
+    },
+    "pieces": {
+      "accepted": 0,
+      "awaiting": 0,
+      "held": 0,
+      "rejected": 0
+    },
+    "premium_requests": 1.0,
+    "run_seconds": {
+      "building": 1380,
+      "leading": 0,
+      "mending": 240,
+      "other": 120,
+      "reviewing": 180,
+      "total": 1920
+    },
+    "runs": {
+      "building": 4,
+      "leading": 0,
+      "mending": 1,
+      "other": 2,
+      "reviewing": 1,
+      "total": 8
+    },
+    "send_backs": {
+      "made": 0,
+      "received": 0
+    },
+    "tokens": 795,
+    "turns": 8,
+    "unpriced": 1,
+    "wall": {
+      "building": 660,
+      "checks": 60,
+      "held": 0,
+      "review": 0,
+      "reviewing": 180,
+      "total": 1800,
+      "waiting": 900
+    }
+  },
+  "workers": {
+    "ai_nano_aiu": 1000000000,
+    "beside_failing": {
+      "cost_micros": null,
+      "count": 0,
+      "run_seconds": 0
+    },
+    "checks": {
+      "failed": 0,
+      "passed": 0,
+      "runs": 0,
+      "seconds": 0
+    },
+    "cost_micros": {
+      "building": null,
+      "leading": null,
+      "mending": null,
+      "other": null,
+      "reviewing": null,
+      "total": 100000
+    },
+    "pieces": {
+      "accepted": 0,
+      "awaiting": 0,
+      "held": 0,
+      "rejected": 0
+    },
+    "premium_requests": 0.5,
+    "run_seconds": {
+      "building": 0,
+      "leading": 0,
+      "mending": 0,
+      "other": 0,
+      "reviewing": 0,
+      "total": 0
+    },
+    "runs": {
+      "building": 0,
+      "leading": 0,
+      "mending": 0,
+      "other": 0,
+      "reviewing": 0,
+      "total": 0
+    },
+    "send_backs": {
+      "made": 0,
+      "received": 0
+    },
+    "tokens": 50,
+    "turns": 0,
+    "unpriced": 0,
+    "wall": {
+      "building": 0,
+      "checks": 0,
+      "held": 0,
+      "review": 0,
+      "reviewing": 0,
+      "total": 0,
+      "waiting": 0
+    }
+  }
+}

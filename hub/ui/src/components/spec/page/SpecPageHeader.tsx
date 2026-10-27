@@ -18,7 +18,19 @@ import {
 } from './model'
 import '@/styles/spec-page.css'
 
+/** What a container adds to the header from the document's phase controls: every decision the Hub's
+ *  document offers that the page's own buttons do not draw. One source, so none can be dropped. */
+export interface HeaderChrome {
+  /** Menu items for the More menu (Start a flow, Retire, Refresh). */
+  moreItems?: React.ReactNode
+  /** Beside the phase: the flow the document runs, an archived marker, Place under. */
+  badges?: React.ReactNode
+  /** Before the actions: the Draft the next slice switch. */
+  draftNext?: React.ReactNode
+}
+
 export interface SpecPageHeaderProps {
+  chrome?: HeaderChrome
   doc: SpecDocumentView
   check: CheckState
   /** The running build's number, when there is one: the "open the build" action names it. */
@@ -39,17 +51,19 @@ export interface SpecPageHeaderProps {
   onOpenDocument: (path: string) => void
   onCopyLink: () => void
   onCopyPath: () => void
-  onArchive: () => void
-  onDelete: () => void
+  /** Left out when the document cannot be archived (a capability, a document already archived). */
+  onArchive?: () => void
+  /** Left out when the document must not be deleted (the corpus depends on it). */
+  onDelete?: () => void
 }
 
 /** The document's header: where it sits (roadmap › slice, previous and next slice), its title and
  *  phase, the journey ribbon, and the actions open to it as buttons, one primary (FR-1). */
 export function SpecPageHeader(props: SpecPageHeaderProps) {
   const { doc, check, compact, now } = props
-  const actions = actionsFor(doc.state)
+  const actions = actionsFor(doc.state, doc.kind, doc.foldReady === true)
   return (
-    <header className="aw-sp-head" data-compact={compact ? 'true' : 'false'}>
+    <header className="aw-sp-head" data-testid="spec-document-header" data-compact={compact ? 'true' : 'false'}>
       <div className="aw-sp-head-bar">
         {props.leading}
         <div className="aw-sp-history" role="group" aria-label="History">
@@ -111,6 +125,7 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
               {STATE_LABEL[doc.state === 'ready' ? 'writing' : doc.state]}
             </span>
             <span className="aw-sp-meta-fact">{kindLabel(doc.kind)}</span>
+            {props.chrome?.badges}
             <span className="aw-sp-meta-fact" title={doc.updatedAt}>
               Changed {formatAgo(doc.updatedAt, now)}
             </span>
@@ -118,13 +133,13 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
           </div>
         </div>
         <div className="aw-sp-actions">
+          {props.chrome?.draftNext}
           {actions.secondary.includes('check') ? <CheckButton check={check} onCheck={() => props.onAction('check')} /> : null}
           <PrimaryAction
             action={actions.primary}
             check={check}
             runningBuild={props.runningBuild ?? null}
             offersApproveAndBuild={actions.secondary.includes('approve-and-build')}
-            offersAnotherBuild={doc.state === 'building'}
             onAction={props.onAction}
           />
           <Menu>
@@ -140,20 +155,23 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
               <MenuItem icon="content_copy" onSelect={props.onCopyPath}>
                 Copy its path
               </MenuItem>
-              {doc.state === 'approved' || doc.state === 'building' ? (
+              {props.chrome?.moreItems}
+              {(doc.state === 'approved' || doc.state === 'building') && doc.phase !== 'current' ? (
                 <MenuItem icon="edit" onSelect={() => props.onAction('reopen')}>
                   Reopen for changes
                 </MenuItem>
               ) : null}
-              <MenuSeparator />
-              {doc.state !== 'archived' ? (
+              {props.onArchive || props.onDelete ? <MenuSeparator /> : null}
+              {props.onArchive ? (
                 <MenuItem icon="archive" onSelect={props.onArchive}>
                   Archive
                 </MenuItem>
               ) : null}
-              <MenuItem icon="delete" destructive onSelect={props.onDelete}>
-                Delete…
-              </MenuItem>
+              {props.onDelete ? (
+                <MenuItem icon="delete" destructive onSelect={props.onDelete}>
+                  Delete…
+                </MenuItem>
+              ) : null}
             </MenuContent>
           </Menu>
           {props.trailing}
@@ -228,14 +246,12 @@ function PrimaryAction({
   check,
   runningBuild,
   offersApproveAndBuild,
-  offersAnotherBuild,
   onAction,
 }: {
   action: SpecAction | null
   check: CheckState
   runningBuild: number | null
   offersApproveAndBuild: boolean
-  offersAnotherBuild: boolean
   onAction: (action: SpecAction) => void
 }) {
   switch (action) {
@@ -258,7 +274,7 @@ function PrimaryAction({
           label="Build…"
           title="Choose who builds it, at which level, and start."
           onClick={() => onAction('build')}
-          menu={[{ icon: 'restart_alt', label: 'Build with the last settings', detail: 'Lead agent, Fast, Builder and QA2.', onSelect: () => onAction('build') }]}
+          menu={[]}
         />
       )
     case 'open-build':
@@ -268,8 +284,15 @@ function PrimaryAction({
           label={runningBuild ? `Build ${runningBuild} running` : 'Build running'}
           title="Show the running build"
           onClick={() => onAction('open-build')}
-          menu={offersAnotherBuild ? [{ icon: 'add', label: 'Start another build…', detail: 'Builds run side by side on their own branches.', onSelect: () => onAction('build') }] : []}
+          menu={[]}
         />
+      )
+    case 'fold':
+      return (
+        <Button variant="primary" size="sm" data-testid="fold-open" onClick={() => onAction('fold')} title="Shipped, not yet in a capability: fold its requirements into the capability they change.">
+          <Icon name="git_merge" size={14} />
+          Fold into capability…
+        </Button>
       )
     case 'reopen':
       return (

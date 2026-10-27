@@ -25,7 +25,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import spec_rigor
-from .db.models import AIJob, Build, InboundQueueEntry, Loop, Run, Task, TurnUsage
+from .db.models import AIJob, Build, InboundQueueEntry, Loop, Run, SpecDocument, Task, TurnUsage
+from .sse import defer_broadcast
 from .task_transitions import CLAIMABLE_STATUSES, TERMINAL_STATUSES
 from .utils import short_id
 
@@ -494,6 +495,10 @@ async def finish_if_done(session: AsyncSession, task: Task) -> None:
         build.state = FINISHED
         build.stopped_at = datetime.now(timezone.utc)
         await end_loop_of(session, build)
+        # The page that shows this build reads it again and stops polling its figures.
+        document = await session.get(SpecDocument, build.document_id)
+        if document is not None:
+            defer_broadcast(session, build.project_id, "spec_updated", {"path": document.path})
 
 
 async def end_loop_of(session: AsyncSession, build: Build) -> Optional[AIJob]:

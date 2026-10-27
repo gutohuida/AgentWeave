@@ -1,35 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
-import {
-  useProjectEvidence,
-  useSpecDocumentRename,
-  useSpecDocuments,
-  useSpecEvents,
-  useSpecList,
-  type SpecDocumentRecord,
-} from '@/api/spec'
-import { SpecDocumentPanel } from './SpecDocumentPanel'
-import { SpecDocumentPicker } from './SpecDocumentPicker'
-import { SpecDocumentList, type SpecListDocument } from './SpecDocumentList'
-import { SpecDefectsReport } from './SpecDefectsReport'
-import { buildInventory, resolveSelection, type SpecInventory } from './specNavigation'
-import type { LoopSummary } from '@/api/loops'
-import '@/styles/spec-header.css'
+import { Icon } from '@/components/common/Icon'
 import { LoadingThread } from '@/components/common/LoadingThread'
+import { toast } from '@/lib/toast'
+import { useProjectEvidence, useSpecDocumentRename, useSpecEvents } from '@/api/spec'
+import type { LoopSummary } from '@/api/loops'
+import { SpecDocList } from './page/SpecDocList'
+import { SpecPlainDocument } from './page/SpecPlainDocument'
+import { SpecWorkspace } from './page/SpecWorkspace'
+import { useSpecListData, useSpecSurface } from './page/useSpecSurface'
+import { SpecDocumentPicker } from './SpecDocumentPicker'
+import { SpecDefectsReport } from './SpecDefectsReport'
+import { buildInventory, resolveSelection } from './specNavigation'
+import '@/styles/spec-header.css'
 
 interface SpecPageProps {
-  /** The document open, from the destination — so this screen is linkable and survives a reload
-   *  exactly as the conversation's document panel does. */
+  /** The document open, from the destination, so this screen is linkable and survives a reload. */
   document: string | null
-  /** The requirement fragment a cross-tab click (a task's requirement chip) arrived with, from the
-   *  destination. Read once by `SpecDocumentPanel`, the same as an in-frame `pendingFragment`. */
+  /** The position a link named (a requirement, a task, a section, a build). */
   anchor?: string | null
   onOpenDocument: (path: string | null) => void
   /** Switches to the Tasks tab, filtered to a coverage row's linked tasks. */
   onOpenTasks?: (taskIds: string[]) => void
   /** Opens a flow's loop tab; the Spec screen has no panel shell, so the host navigates too. */
   onOpenLoop?: (loop: LoopSummary) => void
-  /** Opens the Spec tab's evidence view (slice evidence-browser), from the document list. */
+  /** Opens the Spec tab's evidence view. */
   onOpenEvidence?: () => void
   /** Which entry of the list is current when `children` replace the document (evidence). */
   evidenceOpen?: boolean
@@ -37,67 +32,29 @@ interface SpecPageProps {
   children?: ReactNode
 }
 
-/** The document list's rows: every document the inventory holds, with the kind and phase the
- *  Hub's records give (a capability is told by its record, or by living under spec/capabilities/). */
-function listDocuments(inventory: SpecInventory, records: SpecDocumentRecord[] | undefined): SpecListDocument[] {
-  const byPath = new Map((records ?? []).map((record) => [record.path, record]))
-  return inventory.nodes.map((node) => {
-    const record = byPath.get(node.path)
-    const kind = record?.kind ?? node.kind ?? (node.path.startsWith('spec/capabilities/') ? 'capability' : 'other')
-    return {
-      path: node.path,
-      title: record?.title ?? node.title,
-      kind,
-      phase: record?.phase ?? node.status ?? (kind === 'capability' ? 'current' : ''),
-      archived: node.archived || record?.phase === 'archived',
-      missing: node.missing,
-    }
-  })
-}
+const NEW_CHANGE_HINT = { title: 'Start a change from a conversation', description: "Open one and press the composer's Spec pill." }
 
 /**
- * The specification, on its own.
- *
- * This is not the page that was deleted. That one put a navigator, a document and a chat in three
- * columns, collapsed the Hub rail to make room, and crushed the conversation into 360px. The
- * conversation is not here at all: working on a specification *with an agent* is the conversation
- * view's job, reached from the composer's Spec pill. This is the other half — the specification as
- * the thing you are working on rather than the thing you are working beside.
- *
- * Documents are chosen from the list beside the document (`SpecDocumentList`, ui-finesse). The
- * rail used to stand in for it (`SpecRailNav`), which made the agents disappear whenever a
- * document was open; now the rail stays and the list, with Evidence and the defects report the
- * rail carried, lives in the tab. The evidence view and one requirement's story render beside the
- * same list (`children`), so moving between them never loses it.
+ * The specification, on its own (spec `the-spec-page-redesigned`): the document list as a left
+ * column, and the open document drawn natively with its header, outline, filters and builds. The
+ * conversation is not here; working on a specification with an agent is the conversation view's job.
  */
-export function SpecPage({
-  document: openDocument,
-  anchor,
-  onOpenDocument,
-  onOpenTasks,
-  onOpenLoop,
-  onOpenEvidence,
-  evidenceOpen = false,
-  children,
-}: SpecPageProps) {
-  const { data: specList, isLoading, refetch } = useSpecList()
-  const { data: records } = useSpecDocuments()
+export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpenTasks, onOpenLoop, onOpenEvidence, evidenceOpen = false, children }: SpecPageProps) {
+  const list = useSpecListData()
   const { data: evidence, isError: evidenceError } = useProjectEvidence(!!onOpenEvidence)
   useSpecEvents()
   /* The agent renames the document it is exploring, so the open path can move under this screen. */
   useSpecDocumentRename(openDocument, onOpenDocument)
-  const inventory = useMemo(() => buildInventory(specList), [specList])
+  const inventory = useMemo(() => buildInventory(list.specList), [list.specList])
 
-  /* Arriving with no document named opens the manifest home, then `spec/spec.json`, then the first
-   * readable current document — `resolveSelection`'s existing order. Written back to the
-   * destination with `replace`, because resolving "the specification" to a document is not a
-   * navigation the operator performed. */
+  /* Arriving with no document named opens the manifest home, then the first readable current one.
+   * Written back with `replace`: resolving "the specification" to a document is not a navigation. */
   useEffect(() => {
     if (openDocument || children) return
     if (inventory.nodes.length === 0) return
-    const resolved = resolveSelection(inventory, null, specList?.home)
+    const resolved = resolveSelection(inventory, null, list.specList?.home)
     if (resolved) onOpenDocument(resolved)
-  }, [openDocument, children, inventory, specList?.home, onOpenDocument])
+  }, [openDocument, children, inventory, list.specList?.home, onOpenDocument])
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const searchOriginRef = useRef<HTMLElement | null>(null)
@@ -105,19 +62,7 @@ export function SpecPage({
     searchOriginRef.current = window.document.activeElement as HTMLElement | null
     setPickerOpen(true)
   }, [])
-
-  /* Document search is Ctrl/Cmd+Shift+K. Ctrl/Cmd+K is the command palette's.
-   *
-   * `2026-08-10-conversation-first-spec-workspace` gave the plain chord to document search;
-   * `2026-08-18-2026-08-16-conversation-formatting-and-quick-nav` then specified a global command
-   * palette on that same chord, naming "no global command palette for cross-cutting navigation"
-   * as the problem it solved. The palette shipped and these listeners did not go — and being
-   * mounted, they won, so Ctrl+K opened the spec from anywhere and the palette was unreachable
-   * (operator, 2026-08-21: "ctrl + k is always opening the spec directly").
-   *
-   * Moved rather than deleted. The picker does have buttons, but not in every state — a
-   * conversation that does not exist yet omits the reopen control entirely — so deleting the
-   * keyboard route would strand document search exactly where there is nothing else to click. */
+  /* Document search is Ctrl/Cmd+Shift+K; Ctrl/Cmd+K is the command palette's. */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'k') {
@@ -129,85 +74,122 @@ export function SpecPage({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [openPicker])
 
-  const list = (
-    <SpecDocumentList
-      documents={listDocuments(inventory, records?.documents)}
-      active={children ? null : openDocument}
-      evidenceCount={evidenceError ? 'error' : (evidence?.evidence?.length ?? null)}
-      evidenceActive={evidenceOpen}
+  const footer = (
+    <>
+      {onOpenEvidence ? (
+        <button
+          type="button"
+          data-slot="spec-row"
+          className="aw-sp-list-row"
+          data-testid="spec-list-evidence"
+          data-active={evidenceOpen ? 'true' : 'false'}
+          aria-current={evidenceOpen ? 'page' : undefined}
+          onClick={onOpenEvidence}
+        >
+          <Icon name="fact_check" size={13} className="aw-sp-list-icon" />
+          <span className="aw-sp-list-name">Evidence</span>
+          <span className="aw-sp-list-meta" title={evidenceError ? 'The evidence count could not be read' : undefined}>
+            {evidenceError ? '—' : (evidence?.evidence?.length ?? '')}
+          </span>
+        </button>
+      ) : null}
+      <SpecDefectsReport currentPath={openDocument} onSelect={(path) => onOpenDocument(path)} />
+    </>
+  )
+
+  const now = useMemo(() => new Date(), [])
+  const column = (active: string | null) => (
+    <SpecDocList
+      entries={list.entries}
+      active={active}
+      prefs={list.prefs}
+      onPrefsChange={list.setPrefs}
       onOpen={(path) => onOpenDocument(path)}
-      onOpenEvidence={onOpenEvidence}
-      footer={<SpecDefectsReport currentPath={openDocument} onSelect={(path) => onOpenDocument(path)} />}
+      onNew={() => toast(NEW_CHANGE_HINT)}
+      now={now}
+      footer={footer}
     />
   )
 
   let main: ReactNode
   if (children) {
-    main = <div className="aw-spec-main min-h-0 overflow-auto">{children}</div>
-  } else if (!isLoading && inventory.nodes.length === 0) {
     main = (
-      <div className="aw-spec-main items-center justify-center">
-        <EmptyState
-          icon="article"
-          title="No specification yet"
-          description="Open a conversation and ask an agent to write one — the composer's Spec pill opens it beside the chat."
-        />
+      <div className="aw-sp" data-layout="column">
+        {column(null)}
+        <div className="aw-sp-main aw-sp-override">{children}</div>
       </div>
     )
-  } else if (!isLoading && !openDocument && resolveSelection(inventory, null, specList?.home) === null) {
-    // Every document present is archived (or missing) — resolveSelection above has nothing to hand
-    // to onOpenDocument and the effect never fires, so without this branch the screen sits on
-    // "Loading…" forever with no visible way out.
+  } else if (!list.loading && inventory.nodes.length === 0) {
     main = (
-      <div className="aw-spec-main items-center justify-center">
-        <EmptyState
-          icon="archive"
-          title="Everything here is archived"
-          description="Open one from Archived in the list, or press Ctrl/Cmd+Shift+K to search."
-        />
+      <div className="aw-sp-empty-page">
+        <EmptyState icon="article" title="No specification yet" description="Open a conversation and ask an agent to write one; the composer's Spec pill opens it beside the chat." />
+      </div>
+    )
+  } else if (!list.loading && !openDocument && resolveSelection(inventory, null, list.specList?.home) === null) {
+    main = (
+      <div className="aw-sp-empty-page">
+        <EmptyState icon="archive" title="Everything here is archived" description="Open one from the list, or press Ctrl/Cmd+Shift+K to search." />
       </div>
     )
   } else if (openDocument) {
-    main = (
-      <SpecDocumentPanel
-        path={openDocument}
-        inventory={inventory}
-        specList={specList}
-        listLoading={isLoading}
-        onSelectPath={onOpenDocument}
-        onOpenPicker={openPicker}
-        onRefresh={() => void refetch()}
-        // No close control: there is nothing behind this panel to reveal. Closing a document is
-        // what the conversation view offers, because there the conversation is underneath.
-        initialAnchor={anchor}
-        onOpenTasks={onOpenTasks}
-        onOpenLoop={onOpenLoop}
-        // F829: back to the home document, which the inventory resolves.
-        onDeleted={() => onOpenDocument(null)}
-      />
-    )
+    main = <OpenDocument key={`${openDocument}:${anchor ?? ''}`} path={openDocument} anchor={anchor ?? null} column={column(openDocument)} footer={footer} onOpenDocument={onOpenDocument} onOpenTasks={onOpenTasks} onOpenLoop={onOpenLoop} />
   } else {
-    main = (
-      <div className="aw-spec-main">
-        <LoadingThread label="Loading specification" minHeight={240} />
-      </div>
-    )
+    main = <LoadingThread label="Loading specification" minHeight={240} />
   }
 
   return (
-    <div className="aw-spec" data-testid="spec-page">
-      {inventory.nodes.length > 0 || children ? list : null}
+    <div className="aw-sp-page" data-testid="spec-page">
       {main}
-
       <SpecDocumentPicker
         open={pickerOpen}
         onOpenChange={setPickerOpen}
-        inventory={inventory}
         restoreFocusTo={() => searchOriginRef.current}
         currentPath={openDocument}
-        specList={specList}
-        onSelect={(node) => onOpenDocument(node.path)}
+        onSelect={(path) => onOpenDocument(path)}
+        onNew={() => toast(NEW_CHANGE_HINT)}
       />
+    </div>
+  )
+}
+
+function OpenDocument({
+  path,
+  anchor,
+  column,
+  footer,
+  onOpenDocument,
+  onOpenTasks,
+  onOpenLoop,
+}: {
+  path: string
+  anchor: string | null
+  column: ReactNode
+  footer: ReactNode
+  onOpenDocument: (path: string | null) => void
+  onOpenTasks?: (taskIds: string[]) => void
+  onOpenLoop?: (loop: LoopSummary) => void
+}) {
+  const list = useSpecListData()
+  const result = useSpecSurface(path, {
+    onOpenDocument: (next) => onOpenDocument(next),
+    onOpenTasks,
+    onOpenLoop,
+    onDeleted: () => onOpenDocument(null),
+    initialAnchor: anchor,
+  })
+  if (result.status === 'ready') {
+    return <SpecWorkspace {...result.surface} entries={list.entries} listPrefs={list.prefs} onListPrefsChange={list.setPrefs} onNew={() => toast(NEW_CHANGE_HINT)} layout="column" listFooter={footer} />
+  }
+  return (
+    <div className="aw-sp" data-layout="column">
+      {column}
+      <div className="aw-sp-main">
+        {result.status === 'loading' ? (
+          <LoadingThread label="Loading specification document" minHeight={240} />
+        ) : (
+          <SpecPlainDocument plain={result.plain} message={result.message} />
+        )}
+      </div>
     </div>
   )
 }
