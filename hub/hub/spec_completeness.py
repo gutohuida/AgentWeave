@@ -1,4 +1,4 @@
-"""The checks that decide whether a document may be proposed.
+"""The checks that decide whether a document may be approved, reported on every save and Check.
 
 Every one of these was a bullet in `aw-spec-propose.md`'s step 7b, where the
 model was asked to run them on itself and report the result:
@@ -356,7 +356,7 @@ def split(findings: List[Finding]) -> Tuple[List[Finding], List[Finding]]:
 
 
 def approval_gaps(payload: SpecPayload) -> List[Finding]:
-    """The gaps reported at proposal and approval only, never in an agent's save result.
+    """The gaps reported at approval only, never in an agent's save result or a Check.
 
     A criterion nobody is named to check, and a change whose first task is not its acceptance
     drive (FR-2). Kept out of `check` because the save result is unchanged by this change; the
@@ -432,7 +432,7 @@ def paths_overlap(a: str, b: str) -> Optional[str]:
 def overlap_warnings(payload: SpecPayload) -> List[Finding]:
     """Pairs of tasks that declare overlapping `files` with no `depends_on` path between them.
 
-    Advisory only: these never enter `check`, so `ready_to_propose` is unaffected. Imported entries
+    Advisory only: these never enter `check`, so `ready_to_approve` is unaffected. Imported entries
     and tasks declaring no `files` are never named.
     """
     declared = [t for t in payload.tasks if t.from_ is None and t.files]
@@ -616,10 +616,10 @@ def _unknown_field_findings(payload: SpecPayload) -> List[Finding]:
 def _roadmap_link_findings(
     payload: SpecPayload, roadmaps: Mapping[str, RoadmapState]
 ) -> List[Finding]:
-    """A slice document is proposable only once its roadmap is approved and holds its slice.
+    """A slice document is approvable only once its roadmap is approved and holds its slice.
 
-    Both block at proposed **and** at approved, unlike `import_not_approved`: a slice of a roadmap
-    that has been reopened waits for it to be approved again.
+    Both block at approval, unlike `import_not_approved`: a slice of a roadmap that has been
+    reopened waits for it to be approved again.
     """
     assert payload.roadmap is not None
     path, key = payload.roadmap.document, payload.roadmap.slice
@@ -630,7 +630,7 @@ def _roadmap_link_findings(
             Finding(
                 "roadmap_not_approved",
                 "roadmap",
-                f"names roadmap {path!r}, which {where_it_is}; a slice is proposed only once "
+                f"names roadmap {path!r}, which {where_it_is}; a slice is approved only once "
                 "its roadmap is approved",
             )
         ]

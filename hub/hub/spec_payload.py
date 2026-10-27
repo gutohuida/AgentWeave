@@ -12,8 +12,8 @@ Two distinctions run through this file and are easy to lose:
 payload?" — types, enums, referential integrity. It does *not* answer "is this
 document finished?" A document being written is incomplete by definition, and
 refusing to store it would make the explore phase impossible. Completeness is
-checked at the transition to `proposed`, where being incomplete is what the
-check is for.
+reported on every save and by the operator's Check, and decided at approval,
+where being incomplete is what the check is for.
 
 **Keys versus identifiers.** The agent supplies a `key` per requirement: a
 stable handle, scoped to this document, that never appears in a link. The Hub
@@ -107,7 +107,7 @@ class Requirement(_Part):
 class AcceptanceCriterion(_Part):
     key: str = Field(description="Stable handle for this criterion, unique within the document.")
     requirement: str = Field(
-        description="The key of the requirement this criterion demonstrates. Every requirement needs at least one before the document can be proposed."
+        description="The key of the requirement this criterion demonstrates. Every requirement needs at least one before the document is ready to approve."
     )
     given: str = Field(description="The starting state.")
     when: str = Field(description="The event or action.")
@@ -193,22 +193,30 @@ class Evidence(_Part):
     )
 
 
+#: The choices of a recommended build a reason may be given for (`recommend-a-build`).
+BUILD_CHOICES = ("mode", "agent", "reviewer", "tester", "stop", "cron")
+
+
 class Delivery(_Part):
-    """How a change-spec document's tasks get worked, once approved.
+    """The recommended build: how a change-spec document's tasks get worked once it is built.
+
+    The spec recommends; the operator decides when they press Build or Approve and build, which
+    open with this filled in (`exploring-ends-at-an-approved-plan`, FR-10). Approval itself starts
+    nothing.
 
     Optional, and deliberately not required by this schema (D1): a required field would make
     every document stored before this change, and every read of one, fail validation. Whether a
-    document *must* answer this before it can be proposed is a completeness question, checked at
-    the transition instead (`spec_completeness.py`).
+    document *must* answer this before it is approved is a completeness question, checked at the
+    transition instead (`spec_completeness.py`).
     """
 
     mode: Literal["flow", "none"] = Field(
-        description="'flow' to have the Hub keep working this document's tasks after approval, one at a time as their prerequisites clear; 'none' to leave them on the board only."
+        description="'flow' to have the Hub keep working this document's tasks once it is built, one at a time as their prerequisites clear; 'none' to leave them on the board only."
     )
     agent: Optional[str] = Field(
         default=None,
         max_length=32,
-        description="Default agent for the flow, by name. The operator can also choose one at approval, or replace a stale name.",
+        description="Recommended agent for the flow, by name. The operator can choose another when they build it, or replace a stale name.",
     )
     reviewer: Optional[str] = Field(
         default=None,
@@ -232,13 +240,42 @@ class Delivery(_Part):
         max_length=128,
         description="How often the flow checks its queue for work, as a five-field cron expression.",
     )
+    reasons: Dict[str, Annotated[str, StringConstraints(max_length=500)]] = Field(
+        default_factory=dict,
+        description="Why each choice is recommended, one sentence per choice, keyed by the choice: "
+        + ", ".join(BUILD_CHOICES)
+        + ". The operator reads them when they build it.",
+    )
+
+    @field_validator("reasons")
+    @classmethod
+    def _reasons_name_choices(cls, value: Dict[str, str]) -> Dict[str, str]:
+        unknown = sorted(set(value) - set(BUILD_CHOICES))
+        if unknown:
+            raise ValueError(
+                f"reasons are given for the build's choices ({', '.join(BUILD_CHOICES)}); "
+                f"{', '.join(unknown)} is not one"
+            )
+        return value
+
+
+class AlreadyBuilt(_Part):
+    """Intake's answer to "is this work already built?" (`already-built-at-intake`)."""
+
+    built: bool = Field(description="True when the work this document describes already exists.")
+    commits: List[Annotated[str, StringConstraints(max_length=64)]] = Field(
+        default_factory=list,
+        max_length=20,
+        description="The commits on the main branch that hold it, when it is built. Approval then offers to close the document's tasks as already built against them.",
+    )
+    note: str = Field(default="", max_length=2000, description="Anything the answer needs said.")
 
 
 class OpenQuestion(_Part):
     question: str = Field(description="Something genuinely undecided.")
     resolved: bool = Field(
         default=False,
-        description="Whether it has been answered. Proposing or approving with an unresolved question is allowed but warns (`unresolved_question`) — a guess written in the voice of a requirement is indistinguishable from a decision, so answer it first where you can.",
+        description="Whether it has been answered. Approving with an unresolved question is allowed but warns (`unresolved_question`) — a guess written in the voice of a requirement is indistinguishable from a decision, so answer it first where you can.",
     )
     slice: Optional[str] = Field(
         default=None,
@@ -311,7 +348,11 @@ class SpecPayload(_Part):
     open_questions: List[OpenQuestion] = Field(default_factory=list)
     delivery: Optional[Delivery] = Field(
         default=None,
-        description="How this document's tasks get worked once approved. Only meaningful on a change-spec document; asked for in the interview, not required by this schema.",
+        description="The recommended build: how this document's tasks get worked once the operator builds it. Only meaningful on a change-spec document; asked for at the build step, not required by this schema.",
+    )
+    already_built: Optional[AlreadyBuilt] = Field(
+        default=None,
+        description="Whether the work is already built, and at which commits. Asked at intake, on a change-spec document.",
     )
     slices: List[Slice] = Field(
         default_factory=list,
@@ -631,13 +672,16 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     and a slice document carry them.
     """
     data = payload.model_dump(mode="json", by_alias=True)
-    for key in ("delivery", "roadmap"):
+    for key in ("delivery", "roadmap", "already_built"):
         if data.get(key) is None:
             data.pop(key, None)
     # An unset tester (on by default, tester-amends D4) must not change the bytes of every stored
-    # delivery either.
-    if isinstance(data.get("delivery"), dict) and data["delivery"].get("tester") is None:
-        data["delivery"].pop("tester", None)
+    # delivery either, nor may a recommendation written without reasons.
+    if isinstance(data.get("delivery"), dict):
+        if data["delivery"].get("tester") is None:
+            data["delivery"].pop("tester", None)
+        if not data["delivery"].get("reasons"):
+            data["delivery"].pop("reasons", None)
     # An open question's slice (F573) is set only on a roadmap's deferred questions: an unset one
     # must not change the bytes of every stored question.
     for question in data.get("open_questions") or []:

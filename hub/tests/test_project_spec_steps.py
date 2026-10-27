@@ -28,7 +28,7 @@ BUILTINS = list(spec_journey.STEP_ORDER)
 SENTINEL = "SENTINEL-ORCHID-7731"
 THREAT_MD = "List what could go wrong if someone abused the new route. Write it under Threats."
 THREAT = {"key": "threat-model", "title": "Threat model", "instructions": THREAT_MD}
-LARGE = ["intake", "requirements", "threat-model", "acceptance", "approach", "tasks", "delivery"]
+LARGE = ["intake", "requirements", "threat-model", "acceptance", "approach", "tasks", "build"]
 
 
 def _steps(custom=None, after="requirements", append=None):
@@ -80,7 +80,7 @@ def test_a_custom_step_listing_no_sizes_joins_small_and_large_and_not_fix(tmp_pa
         "requirements-and-acceptance",
         "threat-model",
         "tasks",
-        "delivery",
+        "build",
     ]
     assert "threat-model" in spec_journey.journey("large", steps)
     assert spec_journey.journey(None, steps) == spec_journey.journey("large", steps)

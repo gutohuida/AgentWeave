@@ -174,7 +174,7 @@ async def test_check_reports_the_save_and_moves_nothing(app, auth_headers, autho
     saved = await _written(app, auth_headers, author_headers, one_gap)
     assert [b["code"] for b in saved["blocking"]] == ["depends_on_unresolved"]
 
-    checked = await app.get(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
+    checked = await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
 
     assert checked.status_code == 200, checked.text
     body = checked.json()
@@ -194,8 +194,10 @@ async def test_check_reports_the_save_and_moves_nothing(app, auth_headers, autho
 
 @pytest.mark.asyncio
 async def test_asking_for_proposed_is_refused(app, auth_headers, author_headers):
-    """The old propose route and a phase move to proposed are both refused, and the document stays
-    in exploring. On master the propose route moves it."""
+    """The old propose route is gone and a phase move to proposed is refused naming the retirement;
+    the document stays in exploring. On master the propose route moves it. (The route was removed
+    rather than kept answering 410: nothing calls it, and `test_surface_ceilings` holds the number
+    of routes no client reaches.)"""
     await _written(app, auth_headers, author_headers, _document())
 
     proposed = await app.post(
@@ -208,8 +210,7 @@ async def test_asking_for_proposed_is_refused(app, auth_headers, author_headers)
         headers=auth_headers,
     )
 
-    assert proposed.status_code == 410, proposed.text
-    assert proposed.json()["detail"]["code"] == "proposed_retired"
+    assert proposed.status_code in (404, 405), proposed.text
     assert moved.status_code == 409, moved.text
     assert moved.json()["detail"]["code"] == "proposed_retired"
     assert (await _document_row()).phase == "exploring"
@@ -356,7 +357,9 @@ async def test_approval_starts_nothing(app, auth_headers, author_headers):
     await _written(app, auth_headers, author_headers, _document(delivery=FLOW))
     runs_before = len(await _rows(Run))
 
-    approved = await _approve(app, auth_headers, (await _loaded(app, auth_headers))["content_version"])
+    approved = await _approve(
+        app, auth_headers, (await _loaded(app, auth_headers))["content_version"]
+    )
 
     assert approved.status_code == 200, approved.text
     row = await _document_row()
@@ -378,7 +381,9 @@ async def test_build_later_starts_the_delivery_flow(app, auth_headers, author_he
     agent, reviewer and cron, and fires; approval and build are two events."""
     await _roster(app, auth_headers, bind_runner, "dev", "qa")
     await _written(app, auth_headers, author_headers, _document(delivery=FLOW))
-    approved = await _approve(app, auth_headers, (await _loaded(app, auth_headers))["content_version"])
+    approved = await _approve(
+        app, auth_headers, (await _loaded(app, auth_headers))["content_version"]
+    )
     assert approved.status_code == 200, approved.text
     # An hour passes: the approval is moved back an hour rather than the clock forward.
     async with async_session_factory() as db:
@@ -521,7 +526,9 @@ async def test_intake_already_built_offers_close_as_built(
         _document(already_built={"built": True, "commits": [work[:12]]}),
     )
 
-    approved = await _approve(app, auth_headers, (await _loaded(app, auth_headers))["content_version"])
+    approved = await _approve(
+        app, auth_headers, (await _loaded(app, auth_headers))["content_version"]
+    )
 
     assert approved.status_code == 200, approved.text
     offer = approved.json()["approval_outcome"]["already_built"]

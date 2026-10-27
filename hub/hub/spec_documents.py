@@ -18,6 +18,7 @@ written.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import threading
@@ -200,6 +201,20 @@ def parse_stored(content: Optional[str]) -> Optional[Dict[str, Any]]:
         return None
     stored.pop(HUB_FIELD, None)
     return stored
+
+
+def content_version(content: Optional[str]) -> str:
+    """The version of a stored document's content an operator approves (`approve-what-was-seen`).
+
+    A digest of the payload alone, in a canonical form: the Hub block is left out, because moving
+    the phase, rigor, step or size rewrites it without changing anything anyone reads, and an
+    approval refused for that would be refused for nothing. "" when the file holds no payload.
+    """
+    payload = parse_stored(content)
+    if payload is None:
+        return ""
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def parse_hub(content: Optional[str]) -> Dict[str, Any]:

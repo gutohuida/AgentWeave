@@ -3,8 +3,8 @@
 
 The turn notice said interview in this reply and stop; the canonical context said ending without
 `ask_user` is not a way to finish and that reply text reaches nobody; every journey step asked
-through `ask_user`. Prose wins while exploring, and only while exploring: proposed and approved
-turns keep F38's exit condition word for word.
+through `ask_user`. Prose wins while exploring, and only while exploring: approved turns keep
+F38's exit condition word for word.
 """
 
 import pytest
@@ -42,7 +42,7 @@ BUILT_IN = [
     "requirements-and-acceptance",
     "approach",
     "tasks",
-    "delivery",
+    "build",
 ]
 
 
@@ -103,7 +103,7 @@ def test_every_step_asks_its_choices_in_the_reply(step):
     text = spec_journey.duty(step)
 
     assert "ask_user" not in text
-    if step == "delivery":
+    if step == "build":
         assert "Continue here" not in text
         return
     for choice in ("Continue here", "Continue in a fresh conversation", "Stop here"):
@@ -131,7 +131,7 @@ def test_a_removed_step_asks_where_to_resume_in_the_reply():
 
 # other-phases (FR-3)
 @pytest.mark.asyncio
-@pytest.mark.parametrize("phase", ["proposed", "approved"])
+@pytest.mark.parametrize("phase", ["approved"])
 async def test_other_phases_keep_the_exit_condition_word_for_word(
     app, auth_headers, run_headers, tmp_path, phase  # noqa: F811
 ):

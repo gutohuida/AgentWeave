@@ -1246,7 +1246,7 @@ def _operations() -> List[_Operation]:
                 "`slices` are a `roadmap`'s slices in build order (`key`, `title`, `intent`, "
                 "`done`, `builds_after`); a roadmap carries no requirements or tasks. `roadmap` "
                 '(`{"document": <roadmap path>, "slice": <key>}`) names the roadmap slice a '
-                "change document specifies; it is proposable once that roadmap is approved. Each "
+                "change document specifies; it can be approved once that roadmap is. Each "
                 "entry in `tasks` lists the repo-relative paths it will edit in `files`, and "
                 "names sibling task keys in `depends_on`: chain any two tasks that share a path."
             ),
@@ -1977,10 +1977,6 @@ SPEC_PHASE_DUTIES = {
         "free agent. Set `delivery.reviewer` for who reviews the document's work, and a task's "
         "`reviewer` only where it differs; saying who reviews in the design text sets nothing."
     ),
-    "proposed": (
-        "- This document is proposed and awaiting the operator's decision. Do not implement it, "
-        "and do not treat it as approved."
-    ),
     "approved": (
         "- This document is approved. Implement against it; a material change to what was approved "
         "needs the operator to reopen it, not a rewrite."
@@ -2489,30 +2485,31 @@ async def _render_hub_agent_context(
                     )
                 else:
                     lines.append(_phase_duty(phase, row.kind if row is not None else None))
-                if is_change_spec and phase in ("exploring", "proposed"):
+                if is_change_spec and phase == "exploring":
                     open_names = ", ".join(peer.name for peer in roster)
                     lines.append(f"- Open agents on this project: {open_names}.")
                 if is_change_spec and phase == "exploring" and not on_journey:
                     lines.append(
-                        "- Before the document is ready to propose, ask how it will be built. "
-                        "Recommend a flow when the work splits into tasks: a flow starts every "
-                        "task whose prerequisites are met, has finished work reviewed by another "
-                        "agent when there is another agent, and can stop when its queue empties. "
-                        "If the operator wants a flow, ask which agent works it by default (from "
-                        "the open agents listed here), when it stops, and how often it fires "
-                        "(every 5 minutes unless they say otherwise). Record the answer as "
-                        "`delivery`, and include `delivery` in every later submission of this "
-                        "document: a submission replaces the whole document, so one without it "
-                        "drops the answer. 'No flow' is a valid answer: the tasks still go on the "
-                        "board."
+                        "- Before the document is ready to approve, recommend how it will be "
+                        "built; the operator decides when they build it. Recommend a flow when "
+                        "the work splits into tasks: a flow starts every task whose prerequisites "
+                        "are met, has finished work reviewed by another agent when there is "
+                        "another agent, and can stop when its queue empties. Recommend which "
+                        "agent works it (from the open agents listed here), who reviews, when it "
+                        "stops, and how often it fires (every 5 minutes unless the operator says "
+                        "otherwise), with a reason for each. Record the recommendation as "
+                        "`delivery` with its `reasons`, and include `delivery` in every later "
+                        "submission of this document: a submission replaces the whole document, "
+                        "so one without it drops the answer. 'No flow' is a valid recommendation: "
+                        "the tasks still go on the board."
                     )
                 lines.append(
                     "- Write the document with `submit_spec_document`. Never write specification "
                     "HTML yourself; the Hub renders it and assigns requirement identifiers."
                 )
                 lines.append(
-                    "- You cannot propose or approve. Those are the operator's, and there is no "
-                    "argument that does either."
+                    "- You cannot approve or build a document. Those are the operator's, and "
+                    "there is no argument that does either."
                 )
                 # The exit condition, stated as one (F38). Measured 2026-08-25: the author
                 # diagnosed the bug correctly and unprompted, then asked four well-judged questions
@@ -2523,7 +2520,7 @@ async def _render_hub_agent_context(
                 #
                 # Not while exploring (F545, `overhaul-exploring-interview`): an exploring turn
                 # interviews in its reply and stops, as its turn notice says, and a turn told both
-                # obeys one by disobeying the other. Proposed and approved keep it word for word.
+                # obeys one by disobeying the other. Approved keeps it word for word.
                 if phase == "exploring":
                     lines.append(f"- {EXPLORING_ASKS_IN_REPLY}")
                 else:

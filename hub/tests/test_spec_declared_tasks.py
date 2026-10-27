@@ -18,6 +18,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
@@ -101,14 +103,17 @@ async def approve(app, auth_headers):
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     assert closed.status_code in (200, 409), closed.text
-    for phase in ("proposed", "approved"):
-        moved = await app.post(
-            f"{BASE}/documents/phase",
-            params={"path": PATH, "to": phase},
-            json={"reason": "looks right", "approve_anyway": phase == "approved"},
-            headers=auth_headers,
-        )
-        assert moved.status_code == 200, moved.text
+    moved = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "approved"},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "looks right",
+            "approve_anyway": True,
+        },
+        headers=auth_headers,
+    )
+    assert moved.status_code == 200, moved.text
     return moved
 
 
@@ -237,18 +242,17 @@ async def test_a_document_that_declares_no_tasks_creates_none_and_is_not_approve
     app, auth_headers, author
 ):
     """F207: requirements alone used to be enough to approve; a requirement nothing implements is
-    now a gap, listed at proposal and stopping approval until the operator approves anyway, so no
+    now a gap, listed by Check and stopping approval until the operator approves anyway, so no
     approval and no board rows follow."""
     await make_document(app, auth_headers, author, tasks=None)
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
-    moved = await app.post(
-        f"{BASE}/documents/phase", params={"path": PATH, "to": "proposed"}, headers=auth_headers
-    )
-    assert moved.status_code == 200, moved.text
     refused = await app.post(
-        f"{BASE}/documents/phase", params={"path": PATH, "to": "approved"}, headers=auth_headers
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "approved"},
+        json={"content_version": await content_version(app, auth_headers, PATH)},
+        headers=auth_headers,
     )
     assert refused.status_code == 409, refused.text
     detail = refused.json()["detail"]

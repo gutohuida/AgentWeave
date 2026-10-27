@@ -108,16 +108,14 @@ a:hover { color: color-mix(in srgb, var(--aw-accent) 80%, var(--fg)); }
 .aw-chip-rigor-gate { color: var(--aw-accent); border: 1px solid var(--aw-accent); }
 .aw-chip-rigor-contract { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
 /* Phase is a lifecycle, and the question it answers is "can I rely on this?". `approved` and a
-   capability's `current` are settled and take the done tone; `proposed` is waiting on an operator
-   decision and takes warn; `exploring` and `archived` are quiet for opposite reasons — one has not
-   arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
+   capability's `current` are settled and take the done tone; `exploring` and `archived` are quiet
+   for opposite reasons — one has not arrived yet, the other has been superseded. Deliberately NOT the accent: this document already
    spends accent on links and on MUST, and a third meaning would empty it of any. `kind` keeps the
    plain chip on purpose — it is a category, not a state, and hue there ranks nothing. */
 .aw-chip-phase-done { color: var(--aw-ok); border: 1px solid var(--aw-ok); }
-.aw-chip-phase-waiting { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
 .aw-chip-phase-quiet { color: var(--muted); }
 .aw-chip-phase-archived { color: var(--muted); text-decoration: line-through; }
-/* An unresolved question blocks `propose`, so it is a real state and not a label. Resolved stays
+/* An unresolved question warns at approval, so it is a real state and not a label. Resolved stays
    the plain chip — the reader needs to find what is still open, not celebrate what is closed. */
 .aw-chip-open { color: var(--aw-warn); border: 1px solid var(--aw-warn); }
 /* Limits is where a reader is most likely to be misled, and it read identically to Checked. */
@@ -244,7 +242,6 @@ _RIGOR_TONE = {"gate": "gate", "contract": "contract"}
 _PHASE_TONE = {
     "approved": "done",
     "current": "done",
-    "proposed": "waiting",
     "exploring": "quiet",
     "archived": "archived",
 }
@@ -390,14 +387,29 @@ def _algorithms(payload: SpecPayload) -> str:
     return "".join(parts)
 
 
+def _build_reasons(delivery: Any) -> str:
+    """Why each choice of the recommended build was made (`recommend-a-build`), one line per
+    choice; empty when none is given, so a delivery written without reasons renders as before."""
+    if not delivery.reasons:
+        return ""
+    items = "".join(
+        f"<li><strong>{_e(choice)}</strong>: {_e(reason)}</li>"
+        for choice, reason in delivery.reasons.items()
+    )
+    return f'<ul class="aw-build-reasons">{items}</ul>'
+
+
 def _delivery(payload: SpecPayload) -> str:
-    """How the document's tasks get worked once approved. Empty when the payload does not say, so a
-    document written without `delivery` renders byte-identically (design D5)."""
+    """The recommended build: how the document's tasks get worked once it is built. Empty when the
+    payload does not say, so a document written without `delivery` renders byte-identically (design
+    D5)."""
     delivery = payload.delivery
     if delivery is None:
         return ""
     if delivery.mode != "flow":
-        return _paragraphs("No flow. The tasks go on the board and are started by hand.")
+        return _paragraphs(
+            "No flow. The tasks go on the board and are started by hand."
+        ) + _build_reasons(delivery)
     sentences = ["Built by a flow."]
     sentences.append(
         f"Default agent: {delivery.agent}." if delivery.agent else "No default agent is named."
@@ -414,7 +426,7 @@ def _delivery(payload: SpecPayload) -> str:
         sentences.append(f"Fires every {minutes} minute{'s' if minutes != 1 else ''}.")
     else:
         sentences.append(f"Fires on the schedule {delivery.cron}.")
-    return _paragraphs(" ".join(sentences))
+    return _paragraphs(" ".join(sentences)) + _build_reasons(delivery)
 
 
 @dataclass(frozen=True)
