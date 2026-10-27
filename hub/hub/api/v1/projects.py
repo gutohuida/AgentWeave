@@ -417,6 +417,11 @@ async def _adopt_detected_main_branch(session: AsyncSession, project: Project) -
     which is the ordinary way a project is reached after the first time — must not overwrite that
     with whatever `detect_main_branch` currently prefers.
 
+    **And only a null nobody put there** (F1016). An operator who emptied the field meant "nothing
+    merges", and an empty value alone cannot say that from "never chosen"; the settings events do:
+    a project whose main branch any event ever set or cleared is left alone. Adoption is recorded
+    as an event of its own below, so a later clearing is told apart from it the same way.
+
     Then drains what was waiting on a branch, for the same reason
     `update_project_settings` does: approved work that skipped for want of one cannot be re-approved
     into a merge, because restating a status is a no-op.
@@ -426,6 +431,8 @@ async def _adopt_detected_main_branch(session: AsyncSession, project: Project) -
     an unopenable project.
     """
     if project.main_branch:
+        return
+    if await _main_branch_was_decided(session, project.id):
         return
 
     from ... import project_workspace, task_integration
@@ -444,7 +451,32 @@ async def _adopt_detected_main_branch(session: AsyncSession, project: Project) -
 
     project.main_branch = detected
     await session.commit()
+    # Recorded the way an operator's change is (`update_project_settings`), so the history shows
+    # who set the branch and a later clearing is told apart from "never chosen".
+    await persist_event(
+        session,
+        project.id,
+        "project_settings_updated",
+        {"changed": {"main_branch": {"was": None, "now": detected}}, "by": "hub"},
+    )
     await _integrate_what_was_waiting_for_a_branch(session, project.id)
+
+
+async def _main_branch_was_decided(session: AsyncSession, project_id: str) -> bool:
+    """Whether a settings event ever set or cleared this project's main branch."""
+    from ...db.models import EventLog
+
+    events = (
+        await session.execute(
+            select(EventLog.data).where(
+                EventLog.project_id == project_id,
+                EventLog.event_type == "project_settings_updated",
+            )
+        )
+    ).scalars()
+    return any(
+        isinstance(data, dict) and "main_branch" in (data.get("changed") or {}) for data in events
+    )
 
 
 @router.post("/create", response_model=ProjectSummary, status_code=status.HTTP_201_CREATED)
