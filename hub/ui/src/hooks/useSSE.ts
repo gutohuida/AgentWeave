@@ -54,6 +54,7 @@ const SSE_EVENT_TYPES = [
   'loop_edit_staged',
   'loop_edit_applied',
   'task_checks_finished',
+  'task_landing_changed',
   'run_started',
   'run_completed',
   'run_failed',
@@ -560,8 +561,10 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv(agentListFilter(pid))
           inv({ queryKey: ['projects'] })
           break
-        case 'task_checks_finished': {
-          // The drawer's Land wait clears on this, without a reload, and the board's cards follow.
+        case 'task_checks_finished':
+        case 'task_landing_changed': {
+          // The drawer's Land wait clears on this, without a reload, and the board's cards follow;
+          // a landing's state beside Land follows its batch the same way.
           const data = event.data as { task_id?: string } | null
           inv({
             queryKey: data?.task_id

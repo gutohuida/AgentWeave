@@ -26,6 +26,7 @@ import { useSpecDocuments } from '@/api/spec'
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
 import { LandingRemedies, LandWait } from '@/components/tasks/LandingRefusal'
+import { TaskLanding } from '@/components/tasks/TaskLanding'
 import { gateBodyOf, overrideOffered, type GateBody } from '@/components/tasks/gateRefusal'
 import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { TaskStory } from '@/components/tasks/TaskStory'
@@ -680,6 +681,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               )}
               {/* Beside Land, in the first viewport: what the landing is waiting for. */}
               {task.status === 'completed' && <LandWait taskId={task.id} />}
+              {/* Approved work's way to main: queued, checking in its batch, held, landed or sent
+                  back (`approved-work-merges-in-batches`). */}
+              {task.status === 'approved' && <TaskLanding taskId={task.id} />}
               {/* F532: the operator's way to take a task off the board for good, rather than
                   rejecting it and leaving it counted. Refused by the Hub while a run is on it. */}
               <button

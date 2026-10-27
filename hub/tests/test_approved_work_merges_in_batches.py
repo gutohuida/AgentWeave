@@ -441,6 +441,44 @@ async def test_a_restart_mid_batch_loses_and_repeats_nothing(
     assert int(count) == 4
 
 
+@pytest.mark.asyncio
+async def test_every_landing_change_is_broadcast_and_the_checks_route_shows_it(
+    app, auth_headers, tmp_path, tmp_path_factory
+):
+    """drawer-shows-landing, the Hub's half: the checks route carries the landing and its batch,
+    and each state change is a `task_landing_changed` event the drawer refreshes on."""
+    import json
+
+    from hub.sse import sse_manager
+
+    check, _ = counting_check(tmp_path_factory)
+    ids, works = await tasks_under_review(tmp_path, 2)
+    await set_checks([check])
+    queue_ = sse_manager.subscribe("proj-test")
+    try:
+        for task_id in ids:
+            assert (await approve(app, auth_headers, task_id)).status_code == 200
+        read = await app.get(f"{TASKS}/{ids[1]}/checks", headers=auth_headers)
+        assert read.json()["landing"]["state"] == "queued"
+        assert read.json()["landing"]["position"] == 2
+        await queue().drain()
+        seen = []
+        while not queue_.empty():
+            event = queue_.get_nowait()
+            if event.event == "task_landing_changed":
+                seen.append(json.loads(event.data))
+    finally:
+        sse_manager.unsubscribe("proj-test", queue_)
+    states = [(entry["task_id"], entry["state"]) for entry in seen]
+    for task_id in ids:
+        assert (task_id, "checking") in states and (task_id, "landed") in states, states
+    read = await app.get(f"{TASKS}/{ids[1]}/checks", headers=auth_headers)
+    landing = read.json()["landing"]
+    assert landing["state"] == "landed"
+    assert landing["landed_sha"] == git(tmp_path, "rev-parse", "main").stdout.strip()
+    assert landing["batch"]["task_ids"] == ids and landing["batch"]["seconds"] >= 0
+
+
 def test_the_hubs_lifespan_reconciles_the_landing_queue():
     import inspect
 
