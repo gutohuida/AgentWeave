@@ -1,0 +1,1 @@
+import{r as s,j as n}from"./index-D6xGorbs.js";function d({open:e,id:a,children:i}){const t=s.useRef(null);return s.useLayoutEffect(()=>{const r=t.current;r&&(e?r.removeAttribute("inert"):r.setAttribute("inert",""))},[e]),n.jsx("div",{className:"aw-expander","data-open":e?"true":"false",id:a,"aria-hidden":!e,children:n.jsx("div",{ref:t,children:i})})}export{d as E};
