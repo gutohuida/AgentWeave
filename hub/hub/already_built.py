@@ -141,8 +141,14 @@ async def close(
     commits: Sequence[str],
     *,
     workspace,
+    level: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Close *document*'s open tasks against *commits*; stages everything, the caller commits.
+
+    *level* `fast` approves each task at once once its evidence is recorded, accepting that
+    evidence in the approval (`a-build-has-a-driver-a-level-and-its-people`, D4: slice B's resolved
+    question). At any other level, or none, each task waits under review for its evidence to be
+    decided, as before. The approval still runs every gate; a refusal leaves the task under review.
 
     Refuses (`AlreadyBuiltRefused`) before changing anything: a document that is not an approved
     change, no commit named or one the repository lacks or that is not on the main branch, no open
@@ -259,6 +265,18 @@ async def close(
                     code=exc.code or "evidence_refused",
                 ) from exc
             recorded.append(evidence.id)
+        if level == "fast" and task.status == "under_review":
+            approval = (
+                f"Approved as already built at {', '.join(short(sha) for sha in resolved)}: "
+                "closed at level fast, its evidence accepted with it"
+            )
+            try:
+                async with session.begin_nested():
+                    await apply_transition(
+                        session, task, "approved", operator, note=approval, verdict_reason=approval
+                    )
+            except TransitionRefusedError as exc:
+                logger.info("Task %s closed at fast was not approved: %s", task.id, exc)
         closed.append(
             ClosedTask(
                 id=task.id,

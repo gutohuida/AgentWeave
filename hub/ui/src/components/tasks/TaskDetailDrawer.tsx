@@ -741,6 +741,17 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               <code className="text-[11.5px]">{task.spec_task_key}</code>
             </Field>
           )}
+
+          {/* The build covering it (`a-build-has-a-driver-a-level-and-its-people`): the level its
+              approval is governed at, and the builder it was declared with. */}
+          {task.build_id && (
+            <Field label="Build">
+              <span className="truncate block" data-testid={`task-build-${task.id}`}>
+                {task.level ? `${task.level[0]!.toUpperCase()}${task.level.slice(1)}` : 'In a build'}
+                {task.builder ? ` · builder @${task.builder}` : ''}
+              </span>
+            </Field>
+          )}
         </div>
         {/* Inline rather than a second modal: the drawer closes on a click outside its panel
             and on Escape, and a nested dialog would take both with it. */}

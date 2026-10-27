@@ -1145,6 +1145,19 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="hand_out_task",
+            args="task_id, agent, review=False",
+            method="POST",
+            path="/tasks/{task_id}/hand-out",
+            fields=("agent", "review"),
+            required=("agent",),
+            text=(
+                "a build's lead only (others are refused): hand one of its tasks to `agent`, one "
+                "of its builders, or with `review` true hand completed work to one of its "
+                "reviewer pool; that agent's turn on the task starts."
+            ),
+        ),
+        _Operation(
             tool="ask_user",
             args="questions, blocking=True",
             method="POST",

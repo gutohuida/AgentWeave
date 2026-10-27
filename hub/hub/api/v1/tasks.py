@@ -2230,6 +2230,8 @@ def _transition_view(
         # requirements held. Written on every gated transition and, until this route, readable by
         # nobody (F203).
         "policy_digest": row.policy_digest,
+        # The build level that governed the move, or null outside a build (slice D).
+        "level": row.level,
         # Why the operator approved over failing checks (`approval-runs-the-projects-checks`).
         "override_reason": row.override_reason,
         # Who overrode: the operator, or the Hub over failures not the task's (slice M).
@@ -2282,7 +2284,11 @@ async def task_moves(
         raise HTTPException(status_code=404, detail="Task not found")
     actor = Actor(kind=ACTOR_OPERATOR)
     moves = []
-    for target in sorted(allowed_targets(task.status, ACTOR_OPERATOR)):
+    targets = set(allowed_targets(task.status, ACTOR_OPERATOR))
+    if task.status == "completed" and task.build_id:
+        # A level's own edge (slice D): at Fast, completed work is approved without a review.
+        targets.add("approved")
+    for target in sorted(targets):
         if (await decide_move(session, task, target, actor)).allowed:
             moves.append(target)
     reviewers: List[str] = []

@@ -39,6 +39,16 @@ const RECOMMENDED: SpecRecommendedBuild = {
   cron: '*/10 * * * *',
   stop_when_queue_empties: true,
   stop_at: null,
+  // The build's settings, as `_recommended_build` resolves them for a flow delivery that names
+  // none, on a sketch-rigor document (slice D).
+  driver: 'flow',
+  level: 'reviewed',
+  builders: [],
+  reviewers: [],
+  lead: null,
+  budget_cap_usd: null,
+  landing: 'main',
+  task_builders: {},
   reasons: {
     mode: 'The work splits into three tasks.',
     agent: 'dev built the module it changes.',
@@ -274,7 +284,15 @@ describe('Approve, Approve and build, and Build (recommendation-prefills)', () =
 
     await waitFor(() => expect(posts).toHaveLength(1))
     expect(posts[0].path).toContain('/documents/build?')
-    expect(posts[0].body).toEqual({})
+    // Exactly the settings the dialog showed, the recommendation's; the agent kept is not sent.
+    expect(posts[0].body).toEqual({
+      driver: 'flow',
+      level: 'reviewed',
+      builders: [],
+      reviewers: [],
+      landing: 'main',
+      task_builders: {},
+    })
   })
 
   it('says when the document recommends no build', async () => {

@@ -873,6 +873,10 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
         ).scalar_one()
         if not open_work:
             continue
+        # A build's loop waiting for its window, or a lead's brief still waiting to be read, is
+        # attended rather than stalled (slice D): nothing is wrong, and the mender has nothing to do.
+        if await _build_waits(db, loop.id, now):
+            continue
         last_run = (
             await db.execute(
                 select(func.max(Run.started_at)).where(Run.project_id == loop.project_id)
@@ -907,6 +911,22 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
         )
         reported += 1
     return reported
+
+
+async def _build_waits(db: AsyncSession, loop_id: str, now: datetime) -> bool:
+    """Whether *loop_id* belongs to a build that is waiting by design: not running, before its
+    window opens, or a lead-driven build whose brief is queued and unread (`builds.py`)."""
+    from . import builds
+    from .db.models import Build
+
+    build = (await db.execute(select(Build).where(Build.loop_id == loop_id))).scalars().first()
+    if build is None:
+        return False
+    if build.state != builds.RUNNING:
+        return True
+    if (await builds.may_hand_out(db, build, now)).wait_reason:
+        return True
+    return build.driver == builds.DRIVER_LEAD and await builds.unread_brief(db, build)
 
 
 async def _end_dead_run_stalls_that_recovered(db: AsyncSession, live: set) -> None:

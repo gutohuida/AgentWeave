@@ -98,6 +98,8 @@ DOCUMENT_REFERENCES: List[Reference] = [
     ("spec_rigor_events", "document_id", DELETE),
     ("spec_requirement_revisions", "document_id", DELETE),
     ("spec_requirements", "document_id", DELETE),
+    # The document's builds: how it was built goes with it (slice D).
+    ("builds", "document_id", DELETE),
 ]
 
 LOOP_REFERENCES: List[Reference] = [
@@ -105,6 +107,8 @@ LOOP_REFERENCES: List[Reference] = [
     ("event_logs", "loop_id", CLEAR),
     ("checkpoints", "loop_id", CLEAR),
     ("stalls", "loop_id", CLEAR),
+    # A build whose loop is gone keeps its record and drives nothing more (slice D).
+    ("builds", "loop_id", CLEAR),
 ]
 
 JOB_REFERENCES: List[Reference] = [

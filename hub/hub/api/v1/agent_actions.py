@@ -371,6 +371,51 @@ async def update_shared_task(
     )
 
 
+class HandOutRequest(RequestModel):
+    """The lead handing a task of its build to an agent (`a-build-has-a-driver-a-level-and-its-
+    people`, FR-5)."""
+
+    agent: str = Field(min_length=1, max_length=32)
+    review: bool = False
+
+
+@router.post("/tasks/{task_id}/hand-out")
+async def hand_out_shared_task(
+    task_id: str,
+    body: HandOutRequest,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Hand *task_id* to `agent` to build it, or (`review`) to review it, and queue that agent's
+    turn bound to the task. Answered only for the lead of the task's running lead-driven build
+    (403 otherwise), and only for an agent in the build's builders or reviewer pool (409)."""
+    from ... import builds
+    from ...turn_scheduler import schedule_accepted
+
+    try:
+        task, build, entry_id = await builds.hand_out(
+            session,
+            caller=actor.agent,
+            project_id=actor.project_id,
+            task_id=task_id,
+            agent=body.agent,
+            review=body.review,
+        )
+    except builds.HandOutRefused as exc:
+        await session.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    result = {
+        "task_id": task.id,
+        "agent": body.agent,
+        "review": body.review,
+        "build_id": build.id,
+        "queue_entry_id": entry_id,
+    }
+    await session.commit()
+    await schedule_accepted(actor.project_id, body.agent)
+    return result
+
+
 @router.get("/tasks/{task_id}/integrations")
 async def read_shared_task_integrations(
     task_id: str,

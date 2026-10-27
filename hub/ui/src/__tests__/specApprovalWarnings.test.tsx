@@ -145,10 +145,19 @@ describe('SpecPhaseBar approval warnings', () => {
     })
     renderBar()
     await userEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
-    // No recommendation to fill in: confirming approves and builds as the document stands.
+    // No recommendation to fill in: confirming approves and builds with the settings the dialog
+    // showed, by hand at Reviewed (`a-build-has-a-driver-a-level-and-its-people`).
     await userEvent.click(await screen.findByTestId('build-confirm'))
+    const shown = {
+      driver: 'hand',
+      level: 'reviewed',
+      builders: [],
+      reviewers: [],
+      landing: 'main',
+      task_builders: {},
+    }
     expect(approveAndBuild).toHaveBeenLastCalledWith(
-      { path: PATH, content_version: 'v1' },
+      { path: PATH, content_version: 'v1', ...shown },
       expect.anything(),
     )
     await screen.findByTestId('approval-warnings')
@@ -156,7 +165,7 @@ describe('SpecPhaseBar approval warnings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Approve and build anyway' }))
 
     expect(approveAndBuild).toHaveBeenLastCalledWith(
-      { path: PATH, content_version: 'v1', approve_anyway: true },
+      { path: PATH, content_version: 'v1', approve_anyway: true, ...shown },
       expect.anything(),
     )
     expect(setPhase).not.toHaveBeenCalled()

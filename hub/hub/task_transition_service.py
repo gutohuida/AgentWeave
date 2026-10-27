@@ -478,6 +478,18 @@ async def decide_move(
     """
     if to_status == task.status:
         return MoveVerdict(allowed=True)
+    if task.status == "completed" and to_status == "approved" and task.build_id:
+        # The one edge a level adds (`a-build-has-a-driver-a-level-and-its-people`, D4): at Fast,
+        # the task's builder, its build's lead and the operator approve completed work without a
+        # review. Not a map edge -- the map is the same for every task -- and so no author ever
+        # holds its own task under review at any level. Refused elsewhere naming the level.
+        from .builds import fast_approval_refusal
+
+        refused = await fast_approval_refusal(session, task, actor)
+        if refused is None:
+            return MoveVerdict(allowed=True)
+        error = ActorNotPermittedError if task.level == "fast" else IllegalTransitionError
+        return MoveVerdict(allowed=False, refusal=error(refused))
     if not is_allowed(task.status, to_status, actor.kind):
         return MoveVerdict(
             allowed=False,
@@ -1133,6 +1145,8 @@ async def apply_transition(
         override_reason=overridden,
         override_by=override_by,
         note=note,
+        # The build level that governed this move; none outside a build (slice D, FR-2).
+        level=task.level if task.build_id else None,
     )
     # Not a column — see the comment where `reported` is built. `TaskResponse` reads this off the
     # object this same call returns; nothing else looks for it, and nothing persists it.
@@ -1203,6 +1217,10 @@ async def apply_transition(
         from .slice_drafting import on_task_closed
 
         await on_task_closed(session, task)
+        # A build whose every task is closed has finished (slice D).
+        from .builds import finish_if_done
+
+        await finish_if_done(session, task)
 
     return transition
 
@@ -1466,6 +1484,7 @@ async def _integrate_task(
     world moved in between. That is rare, recorded, and not fatal.
     """
     from . import project_workspace, task_integration
+    from .builds import LANDS_NOWHERE
     from .db.models import Project
 
     project = await session.get(Project, task.project_id)
@@ -1492,11 +1511,14 @@ async def _integrate_task(
 
         if result.outcome == task_integration.MERGED:
             stalls.resolve_task_after_commit(session, task.project_id, task.id, by=by)
-        elif result.outcome in (task_integration.SKIPPED, task_integration.FAILED) and (
-            result.reason
+        elif (
+            result.outcome in (task_integration.SKIPPED, task_integration.FAILED)
+            and result.reason
             != task_integration.ALREADY_INTEGRATED.format(
                 commit=(result.commit_sha or "")[:12], target=result.target_branch
             )
+            # Landing nowhere is what the operator chose, not work that failed to arrive.
+            and result.reason != LANDS_NOWHERE
         ):
             cause = (
                 "integration_failed"
@@ -1514,6 +1536,20 @@ async def _integrate_task(
                     f"{(result.reason or '').strip()[:1500]}"
                 ),
                 task_id=task.id,
+            )
+
+    # A build that lands nowhere (slice D, `landing`): approved, recorded, and nothing merged --
+    # before any git call, so no repository is touched for it.
+    if task.build_id and resolution is None:
+        from .builds import LANDING_NOWHERE
+        from .db.models import Build
+
+        build = await session.get(Build, task.build_id)
+        if build is not None and build.landing == LANDING_NOWHERE:
+            return _record(
+                task_integration.IntegrationResult(
+                    outcome=task_integration.SKIPPED, reason=LANDS_NOWHERE
+                )
             )
 
     if not project.main_branch:

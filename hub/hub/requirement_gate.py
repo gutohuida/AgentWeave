@@ -664,12 +664,20 @@ async def _enforced_requirements(
     """
     if rows is None:
         rows = await _linked_requirements(session, task)
+    # A task in a build is governed by its level's rule, not its documents' rigor
+    # (`a-build-has-a-driver-a-level-and-its-people`, D1): Fast as `sketch`, Reviewed as `contract`,
+    # Gated as `gate`. A task outside any build keeps its documents' rigor, exactly as before.
+    from .builds import rigor_for_level
+
+    by_level = rigor_for_level(task.level) if task.build_id else None
+
+    def rule(document) -> str:
+        return by_level or document.rigor or spec_rigor.SKETCH
+
     enforced = [
-        requirement
-        for requirement, document in rows
-        if (document.rigor or spec_rigor.SKETCH) != spec_rigor.SKETCH
+        requirement for requirement, document in rows if rule(document) != spec_rigor.SKETCH
     ]
-    rigors = {document.id: (document.rigor or spec_rigor.SKETCH) for _, document in rows}
+    rigors = {document.id: rule(document) for _, document in rows}
     return enforced, rigors
 
 
@@ -1203,8 +1211,13 @@ async def automatic_override_allowed(session: AsyncSession, task: Task) -> bool:
     (`a-red-main-does-not-hold-the-night`, FR-5): the project's `checks_auto_override`, on by
     default. **The one place this policy is asked**: slice D adds its per-level rule here
     (`builds.allows_automatic_override(level)`, never at Gated). Never raises."""
+    from .builds import allows_automatic_override
     from .db.models import Project
 
+    # A task in a Gated build is never landed over its checks by the Hub: the operator chose Gated
+    # to judge every landing (`a-build-has-a-driver-a-level-and-its-people`, D5).
+    if task.build_id and not allows_automatic_override(task.level):
+        return False
     try:
         project = await session.get(Project, task.project_id)
     except Exception:  # noqa: BLE001 -- no answer is no override

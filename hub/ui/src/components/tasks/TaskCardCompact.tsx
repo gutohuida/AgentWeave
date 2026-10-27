@@ -115,6 +115,15 @@ export function TaskCardCompact({
           ) : (
             <span className="aw-task-card-unassigned">Unassigned</span>
           )}
+          {task.level ? (
+            <span
+              className="aw-task-card-age"
+              data-testid={`task-level-${task.id}`}
+              title={`Built at level ${task.level}${task.builder ? `, builder @${task.builder}` : ''}`}
+            >
+              {task.level}
+            </span>
+          ) : null}
           {task.priority === 'high' || task.priority === 'critical' ? (
             <span className="aw-task-card-priority" title={`${task.priority} priority`}>
               <Icon name="flag" size={11} />

@@ -165,6 +165,11 @@ class Task(_Part):
         default=None,
         description="Agent name this task's completion should be reviewed by, resolved against the roster when the task is claimed for review. Optional: an author writing a document has no way to know which agents exist on the machine that will run it, so an unresolvable name is kept rather than refused — resolution falls back to whatever the reviewing mechanism does when none is named or none resolves.",
     )
+    builder: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="Agent name that should build this task (F1046). Applied when a build starts, not at approval: an open agent of that name becomes the task's assignee unless the operator chose another in the Build dialog. Optional, and kept rather than refused when it names no agent, for the reason `reviewer` is: the start's response names it as unresolved and the task waits for the driver to hand it out.",
+    )
 
 
 class Algorithm(_Part):
@@ -194,7 +199,22 @@ class Evidence(_Part):
 
 
 #: The choices of a recommended build a reason may be given for (`recommend-a-build`).
-BUILD_CHOICES = ("mode", "agent", "reviewer", "tester", "stop", "cron")
+BUILD_CHOICES = (
+    "mode",
+    "agent",
+    "reviewer",
+    "tester",
+    "stop",
+    "cron",
+    # `a-build-has-a-driver-a-level-and-its-people`: the build's own settings.
+    "driver",
+    "level",
+    "builders",
+    "reviewers",
+    "lead",
+    "cap",
+    "landing",
+)
 
 
 class Delivery(_Part):
@@ -239,6 +259,37 @@ class Delivery(_Part):
         default="*/5 * * * *",
         max_length=128,
         description="How often the flow checks its queue for work, as a five-field cron expression.",
+    )
+    # --- the build's settings (`a-build-has-a-driver-a-level-and-its-people`) ---
+    driver: Optional[Literal["flow", "lead", "hand"]] = Field(
+        default=None,
+        description="Who hands out the work: 'flow' (the Hub's flow), 'lead' (a lead agent), or 'hand' (nobody; the tasks wait on the board). Empty: 'flow' when mode is flow, else 'hand'.",
+    )
+    level: Optional[Literal["fast", "reviewed", "gated"]] = Field(
+        default=None,
+        description="The gate level: 'fast' (the builder or the lead approves, no reviewer), 'reviewed' (anyone but the builder approves; missing evidence is reported), 'gated' (approval waits for accepted evidence per requirement). Checks hold at every level.",
+    )
+    builders: List[Annotated[str, StringConstraints(max_length=32)]] = Field(
+        default_factory=list,
+        description="The agents fresh work may go to, by name. Empty: any free agent.",
+    )
+    reviewers: List[Annotated[str, StringConstraints(max_length=32)]] = Field(
+        default_factory=list,
+        description="The agents reviews may go to, by name. Empty: any free agent but the builder.",
+    )
+    lead: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="With driver 'lead': the agent that hands out the work and is briefed as it moves.",
+    )
+    budget_cap_usd: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="The most this build may spend, in API-equivalent US dollars; no new turn is handed out once it is reached.",
+    )
+    landing: Optional[Literal["main", "nowhere"]] = Field(
+        default=None,
+        description="Where approved work lands: 'main' (the project's main branch, the default) or 'nowhere'.",
     )
     reasons: Dict[str, Annotated[str, StringConstraints(max_length=500)]] = Field(
         default_factory=dict,
@@ -682,6 +733,18 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
             data["delivery"].pop("tester", None)
         if not data["delivery"].get("reasons"):
             data["delivery"].pop("reasons", None)
+        # Nor may the build's settings a recommendation does not name (slice D).
+        for key in (
+            "driver",
+            "level",
+            "builders",
+            "reviewers",
+            "lead",
+            "budget_cap_usd",
+            "landing",
+        ):
+            if data["delivery"].get(key) in (None, []):
+                data["delivery"].pop(key, None)
     # An open question's slice (F573) is set only on a roadmap's deferred questions: an unset one
     # must not change the bytes of every stored question.
     for question in data.get("open_questions") or []:
@@ -694,6 +757,9 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     for task in data.get("tasks") or []:
         if not task.get("files"):
             task.pop("files", None)
+        # A task naming no builder (slice D) stores as it did before the field existed.
+        if task.get("builder") is None:
+            task.pop("builder", None)
     # An uncited requirement stores as before, with no facts key.
     for requirement in data.get("requirements") or []:
         if requirement.get("facts") is None:
