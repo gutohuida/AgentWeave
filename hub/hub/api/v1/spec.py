@@ -1718,6 +1718,7 @@ _REVIEW_STATES = (
     requirement_evidence.AWAITING,
     requirement_evidence.ACCEPTED,
     requirement_evidence.REJECTED,
+    requirement_evidence.HELD,
 )
 
 

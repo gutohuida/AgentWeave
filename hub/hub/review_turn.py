@@ -370,9 +370,12 @@ async def verdict_evidence_sentence(
     if own:
         parts.append(
             f"**Your verdict decides this task's evidence** ({'; '.join(named(r) for r in own)}). "
-            "Approving accepts it and merges the work; sending the task back with "
-            "`revision_needed` rejects it. Judge what each piece claims as part of the review, and "
-            "say in `notes` what you checked: your notes are the reason recorded on each piece."
+            "Approving accepts it and merges the work. Sending the task back with "
+            "`revision_needed` rejects only the pieces you name in `failing_pieces`, each with its "
+            'own reason (`[{"piece": "FR-3", "reason": "..."}]`); every piece you do not name is '
+            "held, not rejected, and its author records it again at the next commit. Judge what "
+            "each piece claims as part of the review, and say in `notes` what you checked: your "
+            "notes are the reason recorded on each piece you approve or hold."
         )
     if foreign:
         recorded = "; ".join(

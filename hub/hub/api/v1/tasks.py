@@ -1564,6 +1564,95 @@ def _verdict_text(notes) -> Optional[str]:
     return json.dumps(notes, ensure_ascii=False)[:2000]
 
 
+#: The verdicts that send work back, and so decide its evidence piece by piece.
+_SEND_BACK_STATUSES = ("revision_needed", "rejected")
+
+
+async def _failing_pieces_for(
+    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
+) -> Optional[Dict[str, str]]:
+    """The evidence a send-back names as failing, as `{evidence_id: reason}`; None for any other move.
+
+    `each-piece-of-evidence-is-judged-on-its-own`. Refused, with nothing written: naming failing
+    pieces while approving (approval accepts every awaiting piece, so the two contradict), naming
+    them with any move but a send-back, a name that matches none of the pieces the verdict decides,
+    and an agent's send-back that names none and gives no reason while it would hold evidence --
+    a held piece then says nothing about why, and its author has nothing to fix. The operator is not
+    refused that last: the app's status menu sends a status alone, and the hold records that the
+    operator sent it back. The reason checks wait until the move is legal, so an impossible move is
+    answered by the transition map rather than by a request for a reason (F201).
+    """
+    from ... import requirement_evidence
+    from ...task_transition_service import evidence_actor
+
+    named = [(piece.piece, piece.reason) for piece in body.failing_pieces or []]
+    if named and body.status == "approved":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Approving {task.id} accepts every piece of its evidence awaiting a decision, "
+                    f"so naming {', '.join(piece for piece, _ in named)} as failing contradicts "
+                    "it. Send it back with revision_needed to reject those pieces, or approve "
+                    "without failing_pieces."
+                ),
+                "code": "approval_names_failing_pieces",
+            },
+        )
+    sending_back = (
+        body.status in _SEND_BACK_STATUSES
+        and body.status != task.status
+        and body.status in allowed_targets(task.status, actor.kind)
+    )
+    if named and body.status not in _SEND_BACK_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    "failing_pieces goes with a send-back (status revision_needed or rejected): "
+                    "it names the evidence that verdict rejects."
+                ),
+                "code": "failing_pieces_without_send_back",
+            },
+        )
+    if not sending_back:
+        return None
+    deciding = evidence_actor(actor)
+    failing: Dict[str, str] = {}
+    if named:
+        try:
+            failing = await requirement_evidence.failing_pieces_of(
+                session, task, actor=deciding, named=named
+            )
+        except requirement_evidence.EvidenceRefusedError as exc:
+            raise HTTPException(
+                status_code=exc.http_status or 422,
+                detail={"message": str(exc), "code": exc.code},
+            ) from exc
+    if (
+        body.status == "revision_needed"
+        and not failing
+        and not actor.is_operator
+        and not _verdict_text(body.notes)
+        and await requirement_evidence.verdict_pieces(
+            session, task, actor=deciding, decision=requirement_evidence.REJECTED
+        )
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Sending {task.id} back names no failing piece and gives no reason, so its "
+                    "evidence would be held with nothing to say why. Name the pieces that fail in "
+                    "failing_pieces, each with its reason, or say in notes what must change (a "
+                    "defect outside any requirement, a failing check)."
+                ),
+                "code": "send_back_needs_a_reason",
+            },
+        )
+    return failing
+
+
 async def _run_may_write_notes(
     session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
 ) -> bool:
@@ -1659,6 +1748,9 @@ async def update_task_for_actor(
                     f"notes on the task it holds; to tell the holder something, send it a message."
                 ),
             )
+    # The verdict's failing pieces, resolved and refused before any write
+    # (`each-piece-of-evidence-is-judged-on-its-own`).
+    failing_pieces = await _failing_pieces_for(session, task, body, actor)
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
@@ -1768,8 +1860,10 @@ async def update_task_for_actor(
             body.status,
             actor,
             override_checks_reason=body.override_checks_reason,
-            # The verdict's notes are the reason its evidence decision records (vis-D4).
+            # The verdict's notes are the reason its evidence decision records (vis-D4); a
+            # send-back rejects only its failing pieces, each with its own reason, and holds the rest.
             verdict_reason=_verdict_text(body.notes),
+            failing_pieces=failing_pieces,
             # An assignee the operator wrote in this same PATCH is who holds the rework (F743).
             holder_named="assignee" in body.model_fields_set,
         )

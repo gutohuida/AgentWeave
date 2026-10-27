@@ -130,6 +130,19 @@ OPERATOR_ON_FAILING_CHECKS = (
 CHECK_TAIL_IN_MESSAGE = 1500
 NEWLINE = chr(10)
 
+#: K: what a `blocking` entry says of a requirement whose only current evidence a send-back held.
+#: Not a coverage state (coverage reads it `in_progress`, reason `HELD_ONLY`); named here so the
+#: refusal says what happened rather than "no evidence".
+HELD = "held"
+REMEDY_HELD = (
+    "its evidence was held when the task was sent back, and a held piece is not accepted -- the "
+    "author records it again at the new commit, for the next verdict to judge"
+)
+REVIEWER_SENDS_BACK_HELD = (
+    "If you are reviewing this task, recording held evidence again is its author's work, not "
+    "yours: move the task to revision_needed with notes naming the requirement."
+)
+
 #: The rejected refusal's remedy is the author's; a reviewer who meets it has its own move (F497).
 REVIEWER_SENDS_BACK_REJECTED = (
     "If you are reviewing this task, replacing rejected evidence is its author's work, not yours: "
@@ -250,10 +263,12 @@ class GateRefusal:
         if not parts:
             return ""
         rejected = any(entry["state"] == requirement_coverage.REJECTED for entry in self.blocking)
+        held = any(entry["state"] == HELD for entry in self.blocking)
         # F701: lowering the rigor relieves only what a gate enforces. A rejection blocks at every
         # rigor (D2), `sketch` included, so where every entry is a rejection the offer cannot work.
+        # So does held evidence (K).
         relievable = self.diagnostics or any(
-            entry["state"] != requirement_coverage.REJECTED for entry in self.blocking
+            entry["state"] not in (requirement_coverage.REJECTED, HELD) for entry in self.blocking
         )
         if relievable:
             sentence = (
@@ -263,18 +278,27 @@ class GateRefusal:
                 + (
                     ", though a rejected requirement blocks approval at every rigor."
                     if rejected
-                    else "."
+                    else ", though held evidence blocks approval at every rigor." if held else "."
                 )
             )
-        else:
+        elif not held:
             sentence = (
                 "This task serves requirements that were rejected: "
                 + "; ".join(parts)
                 + ". A rejected requirement blocks approval at every rigor, so lowering the "
                 "document's rigor does not clear it."
             )
+        else:
+            sentence = (
+                "This task serves requirements whose evidence was rejected or held: "
+                + "; ".join(parts)
+                + ". Both block approval at every rigor, so lowering the document's rigor does "
+                "not clear them."
+            )
         if rejected:
             sentence += " " + REVIEWER_SENDS_BACK_REJECTED
+        if held:
+            sentence += " " + REVIEWER_SENDS_BACK_HELD
         return sentence
 
     def _merge_detail(self) -> str:
@@ -1054,15 +1078,24 @@ async def _coverage_by_document(
 def _rejected_entries(
     by_document: Dict[str, List[SpecRequirement]],
     reports: Dict[str, requirement_coverage.CoverageReport],
+    *,
+    held: bool = False,
 ) -> List[Any]:
-    """The coverage entries of the task's requirements that are `rejected` -- D2's refusal."""
+    """The coverage entries of the task's requirements that are `rejected` -- D2's refusal -- or,
+    with *held*, whose only current evidence was held by a send-back (K)."""
+
+    def refused(entry) -> bool:
+        if held:
+            return entry.reason == requirement_coverage.HELD_ONLY
+        return entry.state == requirement_coverage.REJECTED
+
     rejected: List[Any] = []
     for document_id, requirements in by_document.items():
         wanted_ids = {requirement.id for requirement in requirements}
         rejected.extend(
             entry
             for entry in reports[document_id].requirements
-            if entry.requirement_id in wanted_ids and entry.state == requirement_coverage.REJECTED
+            if entry.requirement_id in wanted_ids and refused(entry)
         )
     return rejected
 
@@ -1204,6 +1237,19 @@ async def evaluate(
                 "requirement_id": entry.requirement_id,
                 "state": entry.state,
                 "remedy": REMEDY[requirement_coverage.REJECTED],
+            }
+        )
+        rejected_requirement_ids.add(entry.requirement_id)
+    # K (`each-piece-of-evidence-is-judged-on-its-own`): a requirement whose only current evidence a
+    # send-back held is refused at every rigor too. Before K that send-back rejected the piece, and
+    # this step refused it; a held piece counts for no more, and needs a new one at the next commit.
+    for entry in _rejected_entries(by_all_document, reports_by_document, held=True):
+        refusal.blocking.append(
+            {
+                "identifier": entry.identifier,
+                "requirement_id": entry.requirement_id,
+                "state": HELD,
+                "remedy": REMEDY_HELD,
             }
         )
         rejected_requirement_ids.add(entry.requirement_id)
