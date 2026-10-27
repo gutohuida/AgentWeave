@@ -5,6 +5,24 @@ import type { Stall } from '@/api/stalls'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
+// The Overview reads main notices and next-slice offers (`amendments-main-watch-and-the-next-slice`).
+const mainNotices: unknown[] = []
+const nextSliceOffers: unknown[] = []
+const markSeenMutate = vi.fn()
+const takeOfferMutate = vi.fn()
+const declineOfferMutate = vi.fn()
+vi.mock('@/api/mainNotices', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/mainNotices')>()),
+  useOpenMainNotices: () => ({ data: mainNotices, error: null }),
+  useMarkMainNoticeSeen: () => ({ mutate: markSeenMutate }),
+}))
+vi.mock('@/api/nextSlice', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/nextSlice')>()),
+  useNextSliceOffers: () => ({ data: nextSliceOffers, error: null }),
+  useTakeNextSliceOffer: () => ({ mutate: takeOfferMutate }),
+  useDeclineNextSliceOffer: () => ({ mutate: declineOfferMutate }),
+}))
+
 /** What the wired Overview lists as needing the operator, running, and finished — each from the
  *  hook that owns it, in the order those routes return. */
 

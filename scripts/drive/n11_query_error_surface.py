@@ -151,7 +151,6 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/spec/SpecCoverageBar.tsx', 'useSpecCoverage', 1, 'BLANK', '', '`if (!data …) return null` (:87)'),
     ('components/spec/SpecDocumentPanel.tsx', 'useSpec', 1, 'MISREPORT', '', 'the `specDoc ? … : ` else branch is a second skeleton (:329-334), terminal after an error'),
     ('components/spec/SpecPage.tsx', 'useSpecList', 1, 'MISREPORT', '', "EmptyState 'Everything here is archived' (:98-107) — a failed spec-list fetch tells the operator their documents are archived"),
-    ('components/spec/SpecProposalsPanel.tsx', 'useSpecProposals', 1, 'SUPPRESSED', '', '`if (proposals.length === 0) return null` (:30) — pending edit proposals waiting on the operator do not render'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useTaskIntegrationPreview', 1, 'SUPPRESSED', '', "`if (!canApprove || !data) return null` (:36) drops the 'Approving will not merge anything' warning"),
     ('components/tasks/TaskDetailDrawer.tsx', 'useAllowedTransitions', 1, 'SUPPRESSED', '', '`moves = allowed?.transitions?.[status] ?? []` (:191) — every status button disappears'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useAgents', 1, 'BLANK', '', 'assignee name list (:153)'),

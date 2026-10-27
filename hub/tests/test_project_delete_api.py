@@ -24,6 +24,7 @@ from hub.db.models import (
     AIJob,
     ApiKey,
     Base,
+    Build,
     ChapterVersion,
     Charter,
     Checkpoint,
@@ -35,6 +36,7 @@ from hub.db.models import (
     InboundQueueEntry,
     JobRun,
     Loop,
+    MainNotice,
     ManagerJob,
     Message,
     PermissionRequest,
@@ -131,6 +133,8 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "ai_jobs",
     "agent_heartbeats",
     "agent_job_deletions",
+    "builds",
+    "main_notices",
 ]
 
 
@@ -455,6 +459,29 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             task_id=f"task-{tag}",
             outcome="merged",
             actor_kind="operator",
+        )
+    )
+    session.add(
+        Build(
+            id=f"build-{tag}",
+            project_id=project_id,
+            document_id=f"doc-{tag}",
+            state="finished",
+            driver="hand",
+            level="reviewed",
+            builders=[],
+            reviewers=[],
+            landing="main",
+        )
+    )
+    session.add(
+        MainNotice(
+            id=f"mnot-{tag}",
+            project_id=project_id,
+            branch="main",
+            old_tip="0" * 40,
+            new_tip="1" * 40,
+            commits=[],
         )
     )
     session.add(

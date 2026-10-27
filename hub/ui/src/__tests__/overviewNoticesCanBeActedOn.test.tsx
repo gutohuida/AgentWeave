@@ -5,6 +5,24 @@ import type { Question } from '@/api/questions'
 import type { Stall } from '@/api/stalls'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 
+// The Overview reads main notices and next-slice offers (`amendments-main-watch-and-the-next-slice`).
+let mainNotices: unknown[] = []
+let nextSliceOffers: unknown[] = []
+const markSeenMutate = vi.fn()
+const takeOfferMutate = vi.fn()
+const declineOfferMutate = vi.fn()
+vi.mock('@/api/mainNotices', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/mainNotices')>()),
+  useOpenMainNotices: () => ({ data: mainNotices, error: null }),
+  useMarkMainNoticeSeen: () => ({ mutate: markSeenMutate }),
+}))
+vi.mock('@/api/nextSlice', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/nextSlice')>()),
+  useNextSliceOffers: () => ({ data: nextSliceOffers, error: null }),
+  useTakeNextSliceOffer: () => ({ mutate: takeOfferMutate }),
+  useDeclineNextSliceOffer: () => ({ mutate: declineOfferMutate }),
+}))
+
 /** Every row under "Needs you" carries a control that ends it (slice I, `every-need-can-be-cleared`).
  *
  *  Fed the way the routes feed the Overview, with the shapes read from the operator's own Hub on
@@ -129,9 +147,86 @@ beforeEach(() => {
   tasks = []
   for (const fn of [answerMutate, declineMutate, declineMutateAsync, updateTaskMutate, endStallMutate, retryMutate, handleFlakyMutate, toastSpy]) fn.mockReset()
   declineMutateAsync.mockResolvedValue({})
+  mainNotices = []
+  nextSliceOffers = []
+  for (const fn of [markSeenMutate, takeOfferMutate, declineOfferMutate]) fn.mockReset()
 })
 
 const rowOf = (text: string | RegExp) => screen.getByText(text).closest('li') as HTMLElement
+
+/** `GET /projects/{id}/main-notices` as `main_watch.view` answers it: commits newest first. */
+function mainNotice(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'mnot-1',
+    project_id: 'proj-1',
+    branch: 'master',
+    old_tip: 'aaaaaaaaaaaa1111',
+    new_tip: 'bbbbbbbbbbbb2222',
+    rewrite: false,
+    commits: [
+      { sha: 'bbbbbbbbbbbb', subject: 'Merge slice D', author: 'Operator' },
+      { sha: 'cccccccccccc', subject: 'A change made by hand', author: 'Hand Person' },
+    ],
+    created_at: '2026-10-27T10:00:00+00:00',
+    updated_at: '2026-10-27T10:01:00+00:00',
+    seen_at: null,
+    seen_by: null,
+    ...overrides,
+  }
+}
+
+/** `GET /project/next-slice-offers` as `slice_drafting.offer_for` answers it. */
+function offer() {
+  return {
+    document: 'spec/changes/slice-one/spec.json',
+    document_id: 'spdoc-1',
+    title: 'Slice one',
+    roadmap: 'spec/changes/the-plan/spec.json',
+    roadmap_title: 'The plan',
+    approved_slice: { key: 's1', title: 'Slice one' },
+    next_slice: { key: 's2', title: 'Slice two', intent: 'Second', done: 'S2 built' },
+    agent: 'architect',
+    conversation_id: 'conv-1',
+    requested: false,
+    tasks: ['task-1'],
+  }
+}
+
+describe('main moving outside the Hub, and a next slice offered', () => {
+  it('names the commits and the tips, and Seen closes the notice', () => {
+    mainNotices = [mainNotice()]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+
+    const row = rowOf('master moved outside the Hub')
+    expect(row).toHaveTextContent('from aaaaaaa to bbbbbbb')
+    expect(row).toHaveTextContent('ccccccc A change made by hand (Hand Person)')
+    fireEvent.click(within(row).getByRole('button', { name: 'Seen' }))
+    expect(markSeenMutate).toHaveBeenCalledWith('mnot-1', expect.anything())
+  })
+
+  it('says a rewrite is a rewrite', () => {
+    mainNotices = [mainNotice({ rewrite: true })]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(rowOf('The history of master was rewritten outside the Hub')).toHaveTextContent('rewriting its history')
+  })
+
+  it('offers the next slice with the author preselected, Draft to the chosen agent, and Not now', () => {
+    nextSliceOffers = [offer()]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+
+    const row = rowOf('Slice s1 is built: draft Slice two?')
+    const picker = within(row).getByLabelText('Agent that drafts the next slice') as HTMLSelectElement
+    expect(picker.value).toBe('architect')
+    fireEvent.change(picker, { target: { value: 'builder' } })
+    fireEvent.click(within(row).getByRole('button', { name: 'Draft' }))
+    expect(takeOfferMutate).toHaveBeenCalledWith(
+      { path: 'spec/changes/slice-one/spec.json', agent: 'builder' },
+      expect.anything(),
+    )
+    fireEvent.click(within(row).getByRole('button', { name: 'Not now' }))
+    expect(declineOfferMutate).toHaveBeenCalledWith({ path: 'spec/changes/slice-one/spec.json' }, expect.anything())
+  })
+})
 
 describe('a question on the Overview can be declined', () => {
   it('declines one question by its id, and the row goes once the questions come back without it', () => {

@@ -739,6 +739,9 @@ class IntegrationResult:
     # Commits that landed alongside `commit_sha` because `merge --no-ff` merges a commit's whole
     # ancestry (F58). Populated only when `outcome` is `merged`; empty means nothing rode along.
     rode_along: List[str] = field(default_factory=list)
+    # The merge commit `merge --no-ff` made (HEAD after it), for a `merged` outcome: how the main
+    # watch knows this move of main was the Hub's own (`main_watch`).
+    merged_sha: Optional[str] = None
 
 
 def checkout_obstacle(
@@ -828,6 +831,14 @@ def integrate(
     base.outcome = MERGED
     base.reason = ""
     base.rode_along = rode_along
+    head = _git(root, "rev-parse", "HEAD")
+    if head.returncode == 0 and head.stdout.strip():
+        base.merged_sha = head.stdout.strip()
+        # Known to the watch at once, before the record that carries it commits: a look between
+        # the merge and that commit must not raise the Hub's own merge.
+        from . import main_watch
+
+        main_watch.note_own_merge(base.merged_sha)
     return base
 
 
@@ -850,6 +861,7 @@ def record(
         outcome=result.outcome,
         reason=result.reason,
         rode_along_commits=",".join(result.rode_along),
+        merged_sha=result.merged_sha,
         mechanism="local",
         actor_kind=actor_kind,
         actor=actor,

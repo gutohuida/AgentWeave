@@ -238,23 +238,6 @@ export interface SpecRoadmapSlice {
   slice: string
 }
 
-/** What an approval asked with `draft_next_slice` did about the next slice (D4, D4a). `waiting` means
- *  the turn is queued once the slice's `open_tasks` close; `queued` means it was queued now (no
- *  linked task was open); the other states say why nothing will be queued. */
-export interface SpecNextSliceOutcome {
-  state:
-    | 'waiting'
-    | 'queued'
-    | 'last_slice'
-    | 'no_author'
-    | 'no_conversation'
-    | 'not_a_slice'
-    | 'not_queued'
-  slice: string | null
-  agent: string | null
-  open_tasks?: number
-}
-
 /** Where an approved or archived change stands on its way into the corpus, computed per read
  *  (`a-finished-change-is-folded-into-its-capability`). `ready`: every task is approved or
  *  rejected and no merge names it yet. Absent for other kinds and phases, and from a Hub that
@@ -993,20 +976,17 @@ export function useApproveAndBuildSpecDocument() {
       path,
       content_version,
       delivery_agent,
-      draft_next_slice,
       approve_anyway,
       ...choices
     }: {
       path: string
       content_version: string
-      draft_next_slice?: boolean
       approve_anyway?: boolean
     } & BuildChoices) =>
       postJson<
         SpecDocumentRecord & {
           approval_outcome?: SpecApprovalOutcome
           build_outcome: SpecBuildOutcome
-          next_slice?: SpecNextSliceOutcome
           approval_notes?: SpecBlockingFinding[]
         }
       >(
@@ -1015,7 +995,6 @@ export function useApproveAndBuildSpecDocument() {
           reason: '',
           content_version,
           ...(delivery_agent !== undefined ? { delivery_agent } : {}),
-          ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
           ...(approve_anyway ? { approve_anyway } : {}),
           ...choices,
         },
@@ -1241,7 +1220,6 @@ export function useSetSpecPhase() {
       to,
       reason,
       content_version,
-      draft_next_slice,
       no_capability_change,
       absorbed_by,
       approve_anyway,
@@ -1255,9 +1233,6 @@ export function useSetSpecPhase() {
       /** Retiring a capability (to `archived`): the current capability that absorbed it. Sent only
        *  when chosen, so a Hub without retirement never receives it (F536). */
       absorbed_by?: string
-      /** Sent only for a document whose `GET /spec` named a `roadmap_slice`: a Hub that returns
-       *  that field also accepts this one, and no other Hub is ever sent it (it would 422). */
-      draft_next_slice?: boolean
       /** With `to: 'approved'` only: the version of the document read the operator approved. */
       content_version?: string
       /** Approve over the gaps a refused approval listed (409 `approval_warnings`). Sent only on
@@ -1267,7 +1242,6 @@ export function useSetSpecPhase() {
       postJson<
         SpecDocumentRecord & {
           approval_outcome?: SpecApprovalOutcome
-          next_slice?: SpecNextSliceOutcome
           /** F704: what approval told and did not gate on (an unclaimed roadmap slice). */
           approval_notes?: SpecBlockingFinding[]
         }
@@ -1276,7 +1250,6 @@ export function useSetSpecPhase() {
         {
           reason: reason ?? '',
           ...(content_version !== undefined ? { content_version } : {}),
-          ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
           ...(no_capability_change ? { no_capability_change } : {}),
           ...(absorbed_by ? { absorbed_by } : {}),
           ...(approve_anyway ? { approve_anyway } : {}),

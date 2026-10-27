@@ -8,6 +8,8 @@ import { readableApiError } from '@/api/client'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
 import { useFlakyTests, useHandleFlakyTests } from '@/api/flakyTests'
+import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
+import { offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
 import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useRetryIntegration, useTasks, useUpdateTask, type Task } from '@/api/tasks'
 import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
@@ -67,6 +69,12 @@ export function OverviewScreen({
   const endStall = useEndStall()
   const { data: flakyReport, error: flakyError, refetch: refetchFlaky } = useFlakyTests()
   const handleFlaky = useHandleFlakyTests()
+  const { data: mainNotices = [], error: mainNoticesError, refetch: refetchMainNotices } = useOpenMainNotices()
+  const markSeen = useMarkMainNoticeSeen()
+  const { data: offers = [], error: offersError, refetch: refetchOffers } = useNextSliceOffers()
+  const takeOffer = useTakeNextSliceOffer()
+  const declineOffer = useDeclineNextSliceOffer()
+  const [offerAgent, setOfferAgent] = React.useState<Record<string, string>>({})
   const flaky = flakyReport?.flaky ?? []
   const { data: taskPage, error: tasksError, refetch: refetchTasks } = useTasks()
   const { data: conversationPage, error: conversationsError, refetch: refetchConversations } = useProjectConversations(projectId || null)
@@ -81,6 +89,8 @@ export function OverviewScreen({
     ['the conversations', conversationsError, refetchConversations],
     ['the ledger', ledgerError, refetchLedger],
     ['the budget', accountingError, refetchAccounting],
+    ['the main branch notices', mainNoticesError, refetchMainNotices],
+    ['the next-slice offers', offersError, refetchOffers],
   ]
   // Turns the budget is holding: the queue's own reason, per agent, never inferred from the total.
   const queueStatuses = useQueueStatuses(agents.map((a) => a.name))
@@ -213,6 +223,58 @@ export function OverviewScreen({
         // Ended by hand: what the operator says when they have dealt with it themselves.
         secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id, { onError: refusal('The notice was not dismissed') }) },
       })),
+    // A built roadmap slice whose next slice's drafting is offered (`hub/hub/slice_drafting.py`):
+    // Draft queues it to the chosen agent (the author preselected), Not now hides it.
+    ...offers.map<NeedItem>((offer) => {
+      const names = agents.map((a) => a.name)
+      const options = offer.agent && !names.includes(offer.agent) ? [offer.agent, ...names] : names
+      const agent = offerAgent[offer.document] ?? offer.agent ?? options[0] ?? ''
+      return {
+        id: `offer-${offer.document_id}`,
+        kind: 'offer',
+        agent: null,
+        title: offerTitle(offer),
+        detail: sentence(`${offer.title} (${offer.document}) has no open task, and no document claims ${offer.next_slice.key} yet`),
+        at: new Date().toISOString(),
+        picker: {
+          label: 'Agent that drafts the next slice',
+          options,
+          value: agent,
+          onChange: (value: string) => setOfferAgent((current) => ({ ...current, [offer.document]: value })),
+        },
+        primary: {
+          label: 'Draft',
+          onClick: () =>
+            takeOffer.mutate(
+              { path: offer.document, agent },
+              {
+                onSuccess: () => toast({ title: `Asked ${agent} to draft ${offer.next_slice.title || offer.next_slice.key}`, tone: 'success' }),
+                onError: refusal('The drafting turn was not queued'),
+              },
+            ),
+        },
+        secondary: {
+          label: 'Not now',
+          onClick: () => declineOffer.mutate({ path: offer.document }, { onError: refusal('The offer was not dismissed') }),
+        },
+      }
+    }),
+    // Main moved outside the Hub's own integration (`hub/hub/main_watch.py`): one row per open
+    // notice, naming the commits so the operator recognises their own merges at a glance.
+    ...mainNotices.map<NeedItem>((notice) => ({
+      id: `main-${notice.id}`,
+      kind: 'main',
+      agent: null,
+      title: notice.rewrite
+        ? `The history of ${notice.branch} was rewritten outside the Hub`
+        : `${notice.branch} moved outside the Hub`,
+      detail: describeMainNotice(notice),
+      at: notice.updated_at,
+      primary: {
+        label: 'Seen',
+        onClick: () => markSeen.mutate(notice.id, { onError: refusal('The notice was not marked seen') }),
+      },
+    })),
     // Tests the approval checks saw fail and then pass when re-run (`hub/hub/flaky_tests.py`):
     // approval went on, so nothing else asks anyone to fix them. One row for the whole list,
     // handed to a task as a round of fixing.

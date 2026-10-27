@@ -31,6 +31,12 @@ const SSE_EVENT_TYPES = [
   'question_answered',
   'stall_recorded',
   'stall_ended',
+  // Main moved outside the Hub (`main_watch`), and the operator marking it seen.
+  'main_moved',
+  'main_notice_seen',
+  // A built slice's next slice offered, taken or declined (`slice_drafting`).
+  'next_slice_offered',
+  'next_slice_answered',
   'checks_flaky',
   'agent_heartbeat',
   'agent_created',
@@ -537,6 +543,14 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'stall_recorded':
         case 'stall_ended':
           inv({ queryKey: ['project', pid, 'stalls'] })
+          break
+        case 'main_moved':
+        case 'main_notice_seen':
+          inv({ queryKey: ['project', pid, 'mainNotices'] })
+          break
+        case 'next_slice_offered':
+        case 'next_slice_answered':
+          inv({ queryKey: ['project', pid, 'nextSliceOffers'] })
           break
         case 'checks_flaky':
           inv({ queryKey: ['project', pid, 'checks', 'flaky'] })

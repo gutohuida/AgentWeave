@@ -809,6 +809,45 @@ async def update_project_settings(
     )
 
 
+@router.get("/{project_id}/main-notices")
+async def list_main_notices(
+    include_seen: bool = Query(False),
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The project's main notices (`main_watch`): the open one, if any, or every one newest first
+    with `include_seen`. A notice names each commit that moved main outside the Hub's own
+    integration, with the old and new tip; nothing was blocked because of it."""
+    from ... import main_watch
+    from ...db.models import MainNotice
+
+    project_id = project_identity[0]
+    await _operator_project_row(project_id, session)
+    query = select(MainNotice).where(MainNotice.project_id == project_id)
+    if not include_seen:
+        query = query.where(MainNotice.seen_at.is_(None))
+    rows = (await session.execute(query.order_by(MainNotice.created_at.desc()))).scalars().all()
+    return {"notices": [main_watch.view(row) for row in rows]}
+
+
+@router.post("/{project_id}/main-notices/{notice_id}/seen")
+async def mark_main_notice_seen(
+    notice_id: str,
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The operator has seen a main notice: it closes, and the next move opens a new one."""
+    from ... import main_watch
+
+    project_id = project_identity[0]
+    notice = await main_watch.mark_seen(session, project_id, notice_id, by="operator")
+    if notice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notice not found")
+    await session.commit()
+    await sse_manager.broadcast(project_id, "main_notice_seen", {"id": notice.id})
+    return main_watch.view(notice)
+
+
 async def _settle_the_scheduled_work_question(session: AsyncSession, project_id: str) -> None:
     """Answer the open "May agents schedule work?" question now that the setting is on (F597,
     decision fix-D10), so the refused agent hears it and the question stops asking something

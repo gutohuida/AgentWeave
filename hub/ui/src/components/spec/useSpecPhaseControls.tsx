@@ -17,11 +17,11 @@ import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { MenuItem, MenuSeparator } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
-import { Switch } from '@/components/ui/switch'
 import { formatAgoLong } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import type { SpecPrimaryAction } from './SpecDocumentHeader'
 import { GapLines, ReviewerLine } from './SpecPhaseParts'
+import { NextSliceOfferNotice } from './NextSliceOfferNotice'
 import {
   useApproveAndBuildSpecDocument,
   useBuildSpecDocument,
@@ -35,7 +35,6 @@ import {
   type SpecBlockingFinding,
   type SpecBuildOutcome,
   type SpecDocumentRecord,
-  type SpecNextSliceOutcome,
   type SpecSize,
 } from '@/api/spec'
 
@@ -51,28 +50,6 @@ function buildOutcomeMessages(outcome: SpecBuildOutcome | undefined): string[] {
   }
   if (outcome?.build?.message) messages.push(outcome.build.message)
   return messages
-}
-
-/** What an approval asked to draft the next slice did (`a-spec-is-written-one-slice-at-a-time` D4, D4a). */
-function nextSliceMessage(outcome: SpecNextSliceOutcome): string {
-  switch (outcome.state) {
-    case 'waiting': {
-      const open = outcome.open_tasks ?? 0
-      return `@${outcome.agent} will be asked to draft slice ${outcome.slice} once this slice's ${open} open task${open === 1 ? '' : 's'} ${open === 1 ? 'is' : 'are'} approved or rejected.`
-    }
-    case 'queued':
-      return `Asked @${outcome.agent} to draft slice ${outcome.slice}.`
-    case 'last_slice':
-      return 'This was the roadmap’s last slice; there is no next one to draft.'
-    case 'no_author':
-      return 'No agent created this document, so nobody was asked to draft the next slice.'
-    case 'no_conversation':
-      return `@${outcome.agent} created this document outside a conversation, so the next slice was not queued.`
-    case 'not_queued':
-      return `The approval stands, but the Hub could not queue slice ${outcome.slice} to @${outcome.agent}.`
-    default:
-      return 'This document names no roadmap slice, so nothing was queued.'
-  }
 }
 
 interface Refusal {
@@ -203,9 +180,6 @@ export function useSpecPhaseControls(
   const [buildRefusal, setBuildRefusal] = useState<string | null>(null)
   const [buildMessages, setBuildMessages] = useState<string[]>([])
   const [pendingApproval, setPendingApproval] = useState<PendingApproval>({ build: false })
-  // On by default (C1a D4): approving a slice usually means "and now the next one".
-  const [draftNextSlice, setDraftNextSlice] = useState(true)
-  const [nextSliceOutcome, setNextSliceOutcome] = useState<SpecNextSliceOutcome | null>(null)
 
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
@@ -215,7 +189,6 @@ export function useSpecPhaseControls(
   // the strip simply does not appear, the same "say nothing false" rule the rest of the bar
   // follows for a document the Hub does not track.
   const deliveryStatus = specDocError ? undefined : specDoc?.delivery_status
-  const roadmapSlice = specDocError ? undefined : specDoc?.roadmap_slice
   const foldState = specDocError ? undefined : specDoc?.fold_state
   // F532: what the corpus or its history depends on is never offered for deletion. The Hub refuses
   // the rest when a run or a flow is working on it, and the confirm shows that refusal.
@@ -292,21 +265,17 @@ export function useSpecPhaseControls(
 
   function onApprove(anyway = false) {
     clearFindings()
-    setNextSliceOutcome(null)
     setPendingApproval({ build: false })
     setPhase.mutate(
       {
         path,
         to: 'approved',
         content_version: loadedVersion,
-        // Only for a slice document: the Hub that named `roadmap_slice` is the one that accepts it.
-        ...(roadmapSlice ? { draft_next_slice: draftNextSlice } : {}),
         // Only on the resend from the gap list, never on a plain Approve (FR-1).
         ...(anyway ? { approve_anyway: true } : {}),
       },
       {
         onSuccess: (result) => {
-          setNextSliceOutcome(result.next_slice ?? null)
           setApprovalNotes(result.approval_notes ?? [])
         },
         // F207: approval runs the completeness checks again. Gaps alone answer `approval_warnings`,
@@ -320,7 +289,6 @@ export function useSpecPhaseControls(
 
   function onApproveAndBuild(choices: BuildChoices, anyway = false) {
     clearFindings()
-    setNextSliceOutcome(null)
     setBuildRefusal(null)
     setPendingApproval({ build: true, choices })
     approveAndBuild.mutate(
@@ -328,13 +296,11 @@ export function useSpecPhaseControls(
         path,
         content_version: loadedVersion,
         ...choices,
-        ...(roadmapSlice ? { draft_next_slice: draftNextSlice } : {}),
         ...(anyway ? { approve_anyway: true } : {}),
       },
       {
         onSuccess: (result) => {
           setBuilding(null)
-          setNextSliceOutcome(result.next_slice ?? null)
           setApprovalNotes(result.approval_notes ?? [])
           setBuildMessages(buildOutcomeMessages(result.build_outcome))
         },
@@ -473,21 +439,6 @@ export function useSpecPhaseControls(
   const beforePrimary =
     document.phase === 'exploring' ? (
       <>
-        {roadmapSlice ? (
-          <label
-            className="aw-spec-inline-switch"
-            title={`This document specifies slice ${roadmapSlice.slice} of a roadmap. Approving it asks the agent that wrote it to draft the next slice once this one's tasks are approved or rejected.`}
-          >
-            <Switch
-              size="sm"
-              checked={draftNextSlice}
-              disabled={busy}
-              aria-label="Draft the next slice"
-              onCheckedChange={setDraftNextSlice}
-            />
-            Draft the next slice
-          </label>
-        ) : null}
         <Button
           variant="ghost"
           size="sm"
@@ -586,11 +537,7 @@ export function useSpecPhaseControls(
   // ── Messages ───────────────────────────────────────────────────────────────────────────────
   const messages = (
     <>
-      {nextSliceOutcome && (
-        <p className="aw-spec-message" data-testid="next-slice-outcome">
-          <span className="aw-spec-message-text">{nextSliceMessage(nextSliceOutcome)}</span>
-        </p>
-      )}
+      <NextSliceOfferNotice path={path} />
 
       {/* A stale recommendation (design D5/D5b): the recommended agent is archived or unknown,
           so building as written would start no flow. The Build dialog chooses another agent, for

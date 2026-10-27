@@ -1570,22 +1570,46 @@ async def _refresh_logged(project_id: str) -> None:
 
 
 async def watch_main_once() -> None:
-    """Refresh every project with checks whose main tip is not the one last seen. A first look
-    counts as a move: a Hub restarted after a merge has results to bring up to date."""
+    """Look once at every project with a main branch, checks or not: one `rev-parse` each, off the
+    loop. A tip that moved is accounted for by the main watch (`main_watch.observe`: the Hub's own
+    merges pass silently, any other move is raised), and a project with checks whose tip is not
+    the one last seen has its results refreshed. A first look counts as a move for the refresh: a
+    Hub restarted after a merge has results to bring up to date."""
+    from . import main_watch
+    from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
+
     async with async_session_factory() as session:
         projects = [
             project
             for project in (await session.execute(select(Project))).scalars()
-            if configured_checks(project) and project.main_branch
+            if project.main_branch
         ]
-        tips: Dict[str, Optional[str]] = {}
+        looks: Dict[str, Tuple[Optional[str], Optional[Path], bool, Optional[str]]] = {}
         for project in projects:
             try:
-                tips[project.id] = await _current_tip(session, project)
+                root = (await resolve_project_workspace(session, project.id)).root
+            except ProjectWorkspaceError:
+                continue
+            try:
+                tip = await asyncio.to_thread(main_tip, root, project.main_branch)
             except Exception:  # noqa: BLE001 -- one project's git does not hold the others
                 logger.warning("could not read the main tip of %s", project.id, exc_info=True)
-    for project_id, tip in tips.items():
-        if tip is not None and _seen_tips.get(project_id) != tip:
+                continue
+            looks[project.id] = (
+                tip,
+                root,
+                bool(configured_checks(project)),
+                project.main_tip_seen,
+            )
+    for project_id, (tip, root, has_checks, seen) in looks.items():
+        if tip is None or root is None:
+            continue
+        if seen != tip:
+            try:
+                await main_watch.observe(project_id, tip, root)
+            except Exception:  # noqa: BLE001 -- the next look tries again
+                logger.warning("could not account for main moving in %s", project_id, exc_info=True)
+        if has_checks and _seen_tips.get(project_id) != tip:
             await _refresh_logged(project_id)
 
 

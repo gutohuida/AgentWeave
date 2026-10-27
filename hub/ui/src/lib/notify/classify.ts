@@ -56,6 +56,20 @@ function textFor(type: string, d: Payload): { kind: NotifyKind; text: string; co
       return { kind: 'fail', text: `${str(d, 'agent') || 'An agent'}'s run failed` }
     case 'queue_chain_suspended':
       return { kind: 'fail', text: `A message chain to ${str(d, 'agent') || 'an agent'} was suspended` }
+    case 'main_moved': {
+      // `hub/hub/main_watch.py`: a move of main the Hub's own integration did not make.
+      const branch = str(d, 'branch') || 'main'
+      return {
+        kind: 'fail',
+        text: d.moved_rewrite === true ? `The history of ${branch} was rewritten outside the Hub` : `${branch} moved outside the Hub`,
+      }
+    }
+    case 'next_slice_offered': {
+      // `hub/hub/slice_drafting.py`: a slice is built and its next slice's drafting is offered.
+      const next = (d.next_slice as Payload | undefined) ?? {}
+      const title = str(next, 'title') || str(next, 'key') || 'the next slice'
+      return { kind: 'done', text: `A slice is built: draft ${title}?` }
+    }
     case 'loop_stopped': {
       const reason = str(d, 'reason')
       if (reason === QUEUE_DRAINED_REASON) return { kind: 'done', text: 'A loop finished its queue' }

@@ -494,9 +494,8 @@ class PhaseRequest(RequestModel):
     # At approval, the `content_version` of the document read the operator approved
     # (`approve-what-was-seen`): required with to=approved, refused with any other move.
     content_version: Optional[str] = Field(default=None, max_length=64)
-    # At approval of a roadmap slice, queue a turn asking the slice's author to draft the next one
-    # (C1a D4). Honoured only with to=approved; on any other document the response says why nothing
-    # was queued.
+    # Refused when true (`amendments-main-watch-and-the-next-slice`, D6): the next slice is offered
+    # once this slice is built. Kept as a field so the refusal names where it went.
     draft_next_slice: bool = False
     # Archiving an approved change that was folded into no capability, with `reason` saying why
     # (the archive guard in `spec_lifecycle.transition`).
@@ -3675,13 +3674,11 @@ async def set_phase(
             "to=approved",
         )
 
-    if body.draft_next_slice and to != "approved":
+    if body.draft_next_slice:
+        # The request is the offer now (`amendments-main-watch-and-the-next-slice`, D6).
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "draft_next_slice starts the next roadmap slice at approval; send it only with "
-                "to=approved"
-            ),
+            detail={"message": slice_drafting.REQUEST_RETIRED, "code": "draft_next_slice_retired"},
         )
 
     if body.delivery_agent is not None:
@@ -3744,13 +3741,76 @@ async def set_phase(
     _defer_phase_broadcasts(session, project_id, document, moved)
     await session.commit()
 
-    response = await _phase_response(session, project_id, document, moved)
-    if body.draft_next_slice and document.phase == "approved":
-        # After the commit: the approval stands whatever happens here, and the response says it.
-        response["next_slice"] = await slice_drafting.request_next_slice(
-            session, project_id, workspace, document, moved.payload, _operator()
-        )
-    return response
+    return await _phase_response(session, project_id, document, moved)
+
+
+@router.get("/next-slice-offers")
+async def next_slice_offers(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every roadmap slice whose drafting is offered (`slice_drafting`, D6): a built slice whose
+    next slice no document claims, not yet taken or declined. Derived on read."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    return {"offers": await slice_drafting.list_offers(session, workspace, project_id)}
+
+
+class NextSliceTake(RequestModel):
+    """The agent that drafts the next slice; left out, the slice document's author."""
+
+    agent: Optional[_AgentName] = None
+
+
+@router.post("/documents/next-slice/take")
+async def take_next_slice_offer(
+    request: Request,
+    body: Optional[NextSliceTake] = None,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Take a document's next-slice offer: one drafting turn queued to the chosen agent, carrying
+    the slice's outcomes, in the conversation the slice was written in while it is open, else a new
+    one (F1047). 409 when there is no offer (a second take queues nothing)."""
+    from ...turn_scheduler import schedule_accepted
+
+    body = body or NextSliceTake()
+    _misplaced_query(request, {"path"})
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        taken = await slice_drafting.take_offer(session, workspace, document, agent=body.agent)
+    except slice_drafting.OfferRefused as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail={"message": str(exc), "code": "no_offer"}
+        ) from exc
+    await session.commit()
+    await schedule_accepted(project_id, taken["agent"])
+    return {"state": "queued", **taken}
+
+
+@router.post("/documents/next-slice/decline")
+async def decline_next_slice_offer(
+    request: Request,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Not now: hide a document's next-slice offer for that slice. Nothing is queued."""
+    _misplaced_query(request, {"path"})
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        offer = await slice_drafting.decline_offer(session, workspace, document)
+    except slice_drafting.OfferRefused as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail={"message": str(exc), "code": "no_offer"}
+        ) from exc
+    await session.commit()
+    return {"state": "declined", **offer}
 
 
 @router.post("/documents/build")
@@ -3819,6 +3879,11 @@ async def approve_and_build(
     """
     body = body or ApproveAndBuildRequest()
     _misplaced_query(request, {"path"})
+    if body.draft_next_slice:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": slice_drafting.REQUEST_RETIRED, "code": "draft_next_slice_retired"},
+        )
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
@@ -3877,10 +3942,6 @@ async def approve_and_build(
 
     response = await _phase_response(session, project_id, document, moved)
     response["build_outcome"] = build
-    if body.draft_next_slice:
-        response["next_slice"] = await slice_drafting.request_next_slice(
-            session, project_id, workspace, document, moved.payload, _operator()
-        )
     return response
 
 

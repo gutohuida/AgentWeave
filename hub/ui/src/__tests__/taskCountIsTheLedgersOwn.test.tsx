@@ -6,6 +6,24 @@ import type { Task } from '@/api/tasks'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { TasksScreen } from '@/components/tasks/TasksScreen'
 
+// The Overview reads main notices and next-slice offers (`amendments-main-watch-and-the-next-slice`).
+const mainNotices: unknown[] = []
+const nextSliceOffers: unknown[] = []
+const markSeenMutate = vi.fn()
+const takeOfferMutate = vi.fn()
+const declineOfferMutate = vi.fn()
+vi.mock('@/api/mainNotices', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/mainNotices')>()),
+  useOpenMainNotices: () => ({ data: mainNotices, error: null }),
+  useMarkMainNoticeSeen: () => ({ mutate: markSeenMutate }),
+}))
+vi.mock('@/api/nextSlice', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/nextSlice')>()),
+  useNextSliceOffers: () => ({ data: nextSliceOffers, error: null }),
+  useTakeNextSliceOffer: () => ({ mutate: takeOfferMutate }),
+  useDeclineNextSliceOffer: () => ({ mutate: declineOfferMutate }),
+}))
+
 /**
  * F202: the Overview read `tasks.length` off a page the Hub had cut at `limit=100`, so a project
  * with 241 tasks was told it had 100 — a wrong number presented as a fact, pinned at the page size

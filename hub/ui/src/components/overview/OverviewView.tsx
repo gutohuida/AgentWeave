@@ -14,7 +14,16 @@ import { LoadingThread } from '@/components/common/LoadingThread'
  *  and a "Navigate" block repeating the tabs. Spend is one line linking to the Ledger; the
  *  collaboration settings live in Settings. No page title: the active tab is the title. */
 
-export type NeedKind = 'question' | 'merge' | 'review' | 'permission' | 'stall' | 'flaky' | 'blocked'
+export type NeedKind =
+  | 'question'
+  | 'merge'
+  | 'review'
+  | 'permission'
+  | 'stall'
+  | 'flaky'
+  | 'blocked'
+  | 'main'
+  | 'offer'
 
 export interface NeedItem {
   id: string
@@ -33,6 +42,8 @@ export interface NeedItem {
    *  dismisses it (slice I), never only a way to go and look. */
   primary: { label: string; onClick: () => void }
   secondary?: { label: string; onClick: () => void }
+  /** A choice the primary control acts on (the agent a next slice's drafting goes to). */
+  picker?: { label: string; options: string[]; value: string; onChange: (value: string) => void }
   /** Further controls, shown first (a way to open the task or the mender's thread). */
   more?: { label: string; onClick: () => void }[]
 }
@@ -82,6 +93,8 @@ const NEED_ICON: Record<NeedKind, { icon: string; tone: 'amber' | 'red' | 'blue'
   stall: { icon: 'build', tone: 'red' },
   flaky: { icon: 'bug_report', tone: 'amber' },
   blocked: { icon: 'hourglass_top', tone: 'amber' },
+  main: { icon: 'call_split', tone: 'amber' },
+  offer: { icon: 'edit_note', tone: 'blue' },
 }
 
 export function OverviewView({
@@ -261,6 +274,20 @@ export function OverviewView({
                       <Button variant="ghost" size="sm" onClick={need.secondary.onClick}>
                         {need.secondary.label}
                       </Button>
+                    ) : null}
+                    {need.picker ? (
+                      <select
+                        aria-label={need.picker.label}
+                        className="aw-ov-picker"
+                        value={need.picker.value}
+                        onChange={(event) => need.picker!.onChange(event.target.value)}
+                      >
+                        {need.picker.options.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
                     ) : null}
                     <Button variant={need.options?.length ? 'outline' : 'primary'} size="sm" onClick={need.primary.onClick}>
                       {need.primary.label}

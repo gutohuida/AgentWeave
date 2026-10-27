@@ -113,6 +113,10 @@ class Project(Base):
     # where a wrong guess puts work in a branch the operator never chose. The guess survives as a
     # suggestion offered at setup, and takes effect only once someone accepts it.
     main_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # The main tip the main watch last accounted for (`main_watch`, migration 0154). Persisted so a
+    # restart neither loses a move made while the Hub was down nor raises one twice; null until the
+    # first look, which records the tip and raises nothing.
+    main_tip_seen: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     # --- Evidence retention (UNUSED) ---
     # Nothing reads or writes this column. It held a retention policy that no cleaner ever applied;
@@ -3202,6 +3206,10 @@ class TaskIntegration(Base):
     # or for an outcome that never merged. Not the fix — the fix is an unmade design choice between
     # three shapes — just the truth about what a merge actually wrote, told rather than assumed.
     rode_along_commits: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # The merge commit this integration made (HEAD after `git merge --no-ff`), for a `merged`
+    # outcome only (migration 0154). The main watch recognises the Hub's own moves of main by it,
+    # never by author or message (`main_watch`, D4).
+    merged_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     mechanism: Mapped[str] = mapped_column(String(16), nullable=False, default="local")
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
@@ -3215,6 +3223,34 @@ class TaskIntegration(Base):
         Index("ix_task_integrations_task", "task_id", "created_at"),
         Index("ix_task_integrations_project", "project_id", "created_at"),
     )
+
+
+class MainNotice(Base):
+    """Main moved outside the Hub's own integration (`amendments-main-watch-and-the-next-slice`,
+    migration 0154).
+
+    One open notice per project gathers every raised move until the operator marks it seen
+    (`seen_at`): `old_tip` is the tip last accounted for when it opened, `new_tip` the latest one
+    raised into it, and `commits` lists each commit raised (`{"sha", "subject", "author"}`, newest
+    first per move). `rewrite` is set once any gathered move rewrote history (the old tip no longer
+    an ancestor). Nothing is blocked or reverted because of a notice.
+    """
+
+    __tablename__ = "main_notices"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    branch: Mapped[str] = mapped_column(String(255), nullable=False)
+    old_tip: Mapped[str] = mapped_column(String(64), nullable=False)
+    new_tip: Mapped[str] = mapped_column(String(64), nullable=False)
+    commits: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    rewrite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    seen_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    seen_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+
+    __table_args__ = (Index("ix_main_notices_project", "project_id", "seen_at"),)
 
 
 class TaskCheckRun(Base):
