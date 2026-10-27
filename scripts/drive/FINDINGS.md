@@ -40505,3 +40505,39 @@ Recorded in the operator's words only. Before any work, ask what is to be ordere
 **Tier:** ?
 
 Seen on the operator's `:8000` Hub. Not yet looked at: which notices they are, what raises them, and whether each should carry an action, clear itself when its cause ends, or be dismissable. Start by asking the operator for a screenshot or by reading the Overview's notice sources read-only.
+
+## F1046 (A) -- a Copilot root that starts a background sub-agent keeps the ACP prompt open until the sub-agent ends: its work runs on the root's 600 s turn clock, and the deadline cancels root and sub-agents together, discarding the work
+
+**Status:** open 2026-10-27. Found diagnosing the operator's FinOpsProRataIngestion Architect failures (`:8000`, read-only `mode=ro`), then driven live (`scripts/drive/d1027_copilot_bg_ctx_probe.py bg`, Copilot CLI 1.0.102, `claude-sonnet-5.5`).
+**Source:** drive
+**Theme:** Runs
+**Ready:** yes -- repro below.
+**Tier:** 1 (Tier 2 if the fix adds a per-agent limit column, F782 expectation 2)
+
+Probe: the root was told to start one background `task` agent running `Start-Sleep -Seconds 60` and to reply LAUNCHED without waiting. It wrote `LAUNCHED` at t=6.8 s and did nothing more, but `session/prompt` returned only at t=73.5 s (69.4 s after the send): `subagent.completed` at 72.4 s, then Copilot resumed the root inside the same prompt (`read_agent`, "The background agent finished... `bg-done`"). So one Hub turn (`copilot_acp._send_and_wait`) spans the root's work, every background agent's work and the root's follow-up, and `state["deadline"]` (600 s, `codex_appserver.DEFAULT_TURN_TIMEOUT_SECONDS`) bounds the total. Only `run_waits.paused` (operator waits) moves it.
+
+In production: `run-e7327f0e14e9` (FinOps Architect, `claude-opus-5.5`) started `dbt-port` at 16:03:12 and `loader-port` at 16:04:56, wrote its final reply at 16:11:02 ("both background agents porting the code are still running"), and stayed open until the deadline cancelled at 16:12:22. Both sub-agents ended `cancelled: true` (62 and 54 tool calls, 7.0M and 4.4M tokens), and the run failed "Copilot did not finish the turn within 600 s". Its entry was withdrawn as unretryable (F782 fix), so nobody picked the work up. `run-045e3d545d3c` had started the first `dbt-port` at 16:01:41, about 6 s before its own deadline. It was cancelled after 3 s with no tool calls, and the root's retry turn (above) found "nothing from the port was saved". Nothing tells the agent that background agents share its turn clock. Copilot's own system prompt tells it "you will be notified when background agents complete", which is true only inside the same prompt.
+
+Expected: background work started by a root does not silently share and exhaust the root's turn budget. Options, in order of cost: (1) the Copilot turn context says that background agents keep the turn open and count against its limit, and that work longer than a few minutes goes to an AgentWeave task or peer instead; (2) while the root is idle (its last activity is earlier than the newest `subagent.*` activity) and any sub-agent it started is still running, the deadline is extended, up to a separate cap, in the same way `run_waits` extends it, and a cut names the sub-agents it cancelled; (3) the limit is per agent (F782 expectation 2). Failing test: in `hub/tests/test_copilot_acp*.py`, a fake ACP session sends `subagent.started`, then a root `agent_message_chunk`, then subagent `tool.execution_start` events past `turn_timeout`, then `subagent.completed` and the prompt result. With (2), the turn completes; today it fails with `turn_timeout`. Seam: Runs (Copilot deadline) x Copilot sub-agents. Related: F782, F783, F1047, F1048.
+
+## F1047 (B) -- Copilot sub-agents' context samples drive the root's context meter: `usage_update` from a sub-agent is unattributed, so the meter jumps between the root's and the sub-agents' windows
+
+**Status:** open 2026-10-27. Same diagnosis and probe as F1046.
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes -- repro below.
+**Tier:** 0
+
+Probe log (`bg` mode): `usage_update` used 10,095 (root), then 8,247 at the same t=6.0 s (the sub-agent's own session, just started), then 8,554 and 8,636 (sub-agent), then 10,306 (root). In `copilot_acp.on_notification`, every `session/update` `usage_update` is turned into a meter sample (`usage_sample(...)`, then `on_usage`) with no sub-agent check, unlike raw events (`_is_subagent`). In production, `run-e7327f0e14e9` logged `context_warning` 82.36% -> 74.5% -> 54.5% -> 26.29% -> 79.3% within seconds (16:09-16:10), which is three agents' windows interleaved. A `context_warning` and any checkpoint-threshold decision that reads them act on whichever agent reported last. Expected: only the root's samples reach the meter. ACP's `usage_update` carries no agent id, so the root's sample has to be identified another way, for example the latest root `assistant.usage` raw event, or by ignoring `usage_update` while a sub-agent is the last to have emitted. Failing test: a fake session interleaves root and sub-agent usage while a sub-agent is running, and the meter's last sample is the root's. Seam: Copilot ACP mapper x context meter. Related: F1046.
+
+## F1048 (B) -- a Copilot agent cannot get the 1M context window it is entitled to: ACP `session/new` never passes `contextTier` (re-verified on CLI 1.0.102)
+
+**Status:** open 2026-10-27 (upstream). F780 removed the context control on 2026-10-19 (CLI 1.0.99); re-driven and traced to source today.
+**Source:** drive
+**Theme:** Runners & models
+**Ready:** yes -- blocked on Copilot CLI or on a transport change.
+**Tier:** 2 if taken as a transport change; 0 to re-add the control once upstream ships
+
+Entitlement is not the cause: the CLI's own CAPI `/models` fetch (`copilot -p ... --log-level debug`) reports `claude-opus-5.5` `max_context_window_tokens` 1,000,000 and `max_prompt_tokens` 1,000,000, and `claude-sonnet-5.5` 1,000,000 / 936,000, each with `token_prices.long_context`. Over ACP the window stays 200,000: `ctx` probe, `claude-opus-5.5` default and `--context long_context` both `usage_update.size` 200,000, and `claude-sonnet-5.5 --context long_context` gives 200,000. `session/new` `configOptions` are `mode, model, reasoning_effort, agent, allow_all`, and `models.availableModels[]._meta` mentions no tier. Source (`node_modules/@github/copilot-win32-x64/app.js`, 1.0.102): every non-ACP session-creation path passes `contextTier: mo.initialContextTier` (from `--context` or settings `contextTier`). The ACP agent's `newSession` and `loadSession` build their options with `reasoningEffort` but no `contextTier`, `applySessionModel` calls `session.model.switchTo({modelId, source:"sdk"})` with no tier, and the ACP module contains no `contextTier` reference at all. There is no environment variable either. The SDK/headless server's `createSession` does accept `contextTier` (`sdkServerValidateSessionTuningParams`), and the `task` tool accepts `context_tier` per sub-agent. Effect in production: FinOps Architect auto-compacted at 80% of 200k in both failed runs (161,175 -> 53,962; 163,899 -> 52,592).
+
+Ways forward: (a) report upstream (ACP `session/new` / `set_config_option` `context_tier`), then re-add the F780 control and probe with `d1027_copilot_bg_ctx_probe.py ctx <model> long_context`; (b) move the Copilot runner to the SDK server protocol (large, Tier 2); (c) run agents that need 1M on the Claude runner, whose catalog declares 1M natively. Related: F780.
