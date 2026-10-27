@@ -8,6 +8,7 @@ import { conversationLabel, type AgentConversation } from '@/api/agentChat'
 import type { SpecDocumentRecord } from '@/api/spec'
 import type { Task } from '@/api/tasks'
 import { agentColorVars } from '@/lib/agentColors'
+import { useModalLayer } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
 import type { AppSettingsSection } from '@/lib/navigation'
 
@@ -71,6 +72,8 @@ export function CommandPalette({
   // remembered here and restored on every close, Escape and a chosen item alike.
   const openerRef = useRef<HTMLElement | null>(null)
   const wasOpen = useRef(false)
+  // Opened over a dialog, it is the newest layer: the dialog beneath must not take its Tab (F1028).
+  useModalLayer(open)
 
   useEffect(() => {
     if (open) {

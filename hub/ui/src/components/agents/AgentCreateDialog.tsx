@@ -4,7 +4,8 @@ import { useCharters } from '@/api/charters'
 import { useProviderLaunchability, type RunnerLaunchability } from '@/api/runners'
 import { useModelCatalog, catalogModelLabel, type ProviderDescriptor } from '@/api/modelCatalog'
 import { Button } from '@/components/ui/button'
-import { Icon, ProviderMark } from '@/components/common/Icon'
+import { ProviderMark } from '@/components/common/Icon'
+import { MenuSelect } from '@/components/ui/menu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 
 function errorDetail(error: unknown): string {
@@ -18,10 +19,10 @@ function errorDetail(error: unknown): string {
 }
 
 /**
- * Replaces a bare `<select>` for provider choice (composer/chrome refinement §4/task
- * 4.4) — a native `<option>` cannot host an SVG mark in any browser, so showing a mark
- * "beside each provider" requires a real listbox rather than the platform control. The
- * provider name stays the primary label; the mark is decoration, not a replacement for it.
+ * Provider choice. A native `<option>` cannot host an SVG mark in any browser, so the list is a
+ * themed menu (`MenuSelect`) whose rows carry the mark. The provider name stays the primary label;
+ * the mark is decoration. Being a menu, it takes the arrow keys and Enter, and Escape closes only
+ * the list, not the dialog under it (F1027).
  */
 function ProviderPicker({
   providers,
@@ -34,84 +35,25 @@ function ProviderPicker({
   value: string
   onChange: (provider: string) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const closeOnOutsidePointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', closeOnOutsidePointer)
-    return () => document.removeEventListener('mousedown', closeOnOutsidePointer)
-  }, [open])
-
-  const current = providers.find((p) => p.provider === value)
-
   return (
-    <div ref={rootRef} className="relative mt-1">
-      <button
-        type="button"
-        aria-label="Provider"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs"
-        style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }}
-      >
-        {current ? (
-          <>
-            <ProviderMark provider={current.provider} label={current.label} />
-            <span className="flex-1">{current.label}</span>
-          </>
-        ) : (
-          <span className="flex-1" style={{ color: 'var(--text-3)' }}>Select a provider</span>
-        )}
-        <Icon name="expand_more" size={16} style={{ color: 'var(--text-3)' }} />
-      </button>
-      {open && (
-        <div
-          role="listbox"
-          aria-label="Provider"
-          className="absolute left-0 top-full mt-1 w-full max-h-56 overflow-y-auto p-1 rounded border z-50"
-          style={{
-            background: 'var(--surface)',
-            borderColor: 'var(--border)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-          }}
-        >
-          {providers.map((entry) => {
-            const verdict = launchability?.[entry.provider]
-            const disabled = verdict?.runnable !== true
-            return (
-              <button
-                key={entry.provider}
-                type="button"
-                role="option"
-                aria-selected={entry.provider === value}
-                disabled={disabled}
-                data-active={entry.provider === value ? 'true' : 'false'}
-                onClick={() => {
-                  onChange(entry.provider)
-                  setOpen(false)
-                }}
-                className="row-item w-full items-start justify-between gap-3 text-left disabled:pointer-events-none disabled:opacity-50"
-                style={{ color: 'var(--text)' }}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <ProviderMark provider={entry.provider} label={entry.label} />
-                  <span className="truncate text-xs font-medium">{entry.label}</span>
-                </span>
-                {verdict && !verdict.runnable && verdict.reason && (
-                  <span className="shrink-0 text-[10px] text-right" style={{ color: 'var(--amber)' }}>
-                    {verdict.reason}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
-      )}
+    <div className="mt-1 [&_.aw-select-trigger]:w-full">
+      <MenuSelect
+        label="Provider"
+        value={value}
+        onChange={onChange}
+        maxWidth={9999}
+        placeholder="Select a provider"
+        options={providers.map((entry) => {
+          const verdict = launchability?.[entry.provider]
+          return {
+            value: entry.provider,
+            label: entry.label,
+            icon: <ProviderMark provider={entry.provider} label={entry.label} />,
+            disabled: verdict?.runnable !== true,
+            detail: verdict && !verdict.runnable && verdict.reason ? verdict.reason : undefined,
+          }
+        })}
+      />
     </div>
   )
 }

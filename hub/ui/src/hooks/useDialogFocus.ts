@@ -15,6 +15,20 @@ const FOCUSABLE = [
  *  dialog — and pull it back behind that dialog (F307's fix makes that reachable). */
 const openDialogs: object[] = []
 
+/** A modal layer that does not use `useDialogFocus` (the command palette, a Radix dialog) says it
+ *  is open, so the dialogs beneath it stop claiming Tab and Escape: "newest" is true again (F1028).
+ *  Takes no focus and binds no keys; it only takes a place in the stack. */
+export function useModalLayer(active: boolean) {
+  useEffect(() => {
+    if (!active) return
+    const token = {}
+    openDialogs.push(token)
+    return () => {
+      openDialogs.splice(openDialogs.indexOf(token), 1)
+    }
+  }, [active])
+}
+
 export function useDialogFocus(
   active: boolean,
   panelRef: RefObject<HTMLElement | null>,
@@ -71,6 +85,11 @@ export function useDialogFocus(
       // separate question, D13's; this only keeps the cycle closed from the first press.)
       const active = document.activeElement
       if (!panelRef.current?.contains(active)) {
+        // Focus is inside another dialog that does not contain this panel (the command palette over
+        // a dialog, a Radix dialog this hook does not know): that layer holds the keyboard, and
+        // pulling focus out of it types into a field the operator cannot see (F1028).
+        const otherLayer = active instanceof Element ? active.closest('[role="dialog"],[role="alertdialog"]') : null
+        if (otherLayer && !otherLayer.contains(panelRef.current)) return
         event.preventDefault()
         ;(event.shiftKey ? last : first).focus()
         return

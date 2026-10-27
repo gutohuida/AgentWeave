@@ -153,10 +153,9 @@ export function PaneResizer({
       {/* The 1px line. Only its colour changes, so aiming at it shifts nothing. */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-[5px] w-px
+        className="pointer-events-none absolute inset-y-0 left-[5px] w-px bg-[var(--border-region)]
                    transition-colors duration-base ease-smooth
                    group-hover:bg-[var(--ring)] group-focus-visible:bg-[var(--ring)]"
-        style={{ background: 'var(--border-region)' }}
       />
     </div>
   )
