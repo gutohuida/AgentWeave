@@ -40515,3 +40515,33 @@ Seen on the operator's `:8000` Hub. Not yet looked at: which notices they are, w
 **Tier:** 0
 
 On `:8000`, 2026-10-27: approving slice B of the "Flows that do not stall" roadmap with `draft_next_slice` (22:57 on 10-26) recorded the slice author's conversation `conv-a2c7eee14525`, which the operator had archived at 22:14. When the slice's last task was approved (05:44:45) `slice_drafting._queue_if_built` queued the drafting turn into it, unchecked. The entry was the Architect's queue head, and `turn_scheduler._attempt_turn`'s "conversation is unavailable" early return ended every pass on it without recording a reason, counting an attempt or giving up -- so the checkpoint successor (06:40, auto-continue on) and the operator's own message (06:46), in open conversations, sat `queued` with 0 attempts and no reason, and nothing told anyone why. The archive route's own refusal ("nothing delivers into an archived conversation") guards only input queued *before* the archive. The repair the reason would have named, Unarchive, did not re-schedule the agent either. The other early return of the same shape ("queued entry has no conversation") is held the same way.
+
+## F1047 (A) -- a stall the mender gave up on is raised again on the next firing, and the mender is woken again: 30 turns overnight on one unchanged situation
+
+**Status:** open 2026-10-27. Found reading `:8000` read-only after the operator said "it seems that the mender had a lot of problems this night".
+**Source:** drive
+**Theme:** Mender
+**Ready:** yes
+**Tier:** 0
+
+The night of 10-26/27 (AgentWeave project): 40 stalls, 42 mender runs, all Opus, 15.2M tokens, about $15.9 API-equivalent. 30 of the 40 were `review_unstaffed:task-8618731d065d`, one every 5 minutes from 00:44 to 03:16, all with the same reason text ("Approval of task-8618731d065d … waits on you: its checks fail on main too …"), and every one ended `gave_up` with the same diagnosis: the operator has to land it with an override, or master has to be fixed first. Each also asked the operator the same blocking question, 27 in all, none answered (4-minute waits while the operator slept). The cause: `stalls.record` (`hub/hub/stalls.py:190-224`) counts again only an *open* stall with the key. A stall ended `gave_up` matches nothing, so the next firing's `stalls.report` (`scheduler.py:4331`, every tick of the loop's job) opens a new one and `wake` sends the mender again, though nothing has changed. `gave_up` means "this is the operator's now", so the same key with the same reason should be counted on the stall that gave up (`seen_count`, `last_seen_at`) and not wake anyone. A changed reason is a new situation and should open a new stall; at 03:25 the text changed and the mender fixed it in one turn. **Test:** in the stall tests: record → end `gave_up` → record with the same key and text creates no stall and wakes nothing; with a different text, it does.
+
+## F1048 (B) -- `loop_stalled` fires in the seconds between a task finishing and the flow handing it on
+
+**Status:** open 2026-10-27. Same read of `:8000`.
+**Source:** drive
+**Theme:** Mender
+**Ready:** no -- a grace period, or asking after the hand-off, is a design choice
+**Tier:** 1
+
+All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's last claimable task reached `completed`, and the firing in the next ~3 seconds found "no claimable task" or "awaiting a prerequisite's approval" (`scheduler.py:4405-4412`) before the flow moved the task to `under_review` and started the review. The mender then read the situation, found the review running, changed nothing and ended `fixed` (23:42, 23:53, 00:15, 04:20, 04:53, 05:24). Each is one Opus turn spent finding nothing. A completed task that is about to be handed to review is the flow working. Either a stall should need to be seen on a second firing before it wakes the mender, or a just-completed task awaiting its review dispatch should not count as a stall.
+
+## F1049 (C) -- a `stuck_task` stall for a task that no longer exists stays open forever
+
+**Status:** open 2026-10-27. Same read of `:8000`.
+**Source:** drive
+**Theme:** Mender
+**Ready:** yes
+**Tier:** 0
+
+`stall-119d728f8da6` (`stuck_task:task-ca661c1265b8`, "Flaky: test_the_continuation_uses_the_remaining_deadline …") has been open since 10-25 21:32, was seen 211 times, and was last seen 10-26 18:35. The task row no longer exists, so the sweep has stopped seeing it (`stalls.py:701-716` reads only existing `in_progress` tasks), but nothing ends the stall: `resolve_task` runs on transitions, and deleting a task goes through none. The stall shows as open, with an open mender conversation, about nothing. Like the `dead_run` fix in F1043, the sweep should end an open `stuck_task` stall whose task is gone or no longer `in_progress`.
