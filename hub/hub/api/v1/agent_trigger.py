@@ -1757,7 +1757,13 @@ async def _trigger_agent_directly(
     # remedy, rather than found by the agent as a build that fails for no reason it can see.
     setup_events: List[Any] = []
     if isolated_workspace is not None:
-        link_failures = worktrees.shared_dependency_link_failures(repo_root, isolated_workspace)
+        # Off the loop: it asks git which `package.json` files are tracked, like every other git
+        # call of a turn start (`turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+        # Off the loop: it asks git which `package.json` files are tracked, like every other git
+        # call of a turn start (`turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+        link_failures = await blocking.run(
+            worktrees.shared_dependency_link_failures, repo_root, isolated_workspace
+        )
         if link_failures:
             link_sentence = worktrees.dependency_link_failure_sentence(link_failures)
             notices.append(f"[AgentWeave] {link_sentence}")

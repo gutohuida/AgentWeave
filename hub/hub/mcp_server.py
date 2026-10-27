@@ -492,7 +492,8 @@ def mend_task_branch(task_id: str, commit: str = "") -> Dict[str, Any]:
 
     Args:
         task_id: The approved task whose merge is stuck.
-        commit: Your resolution, committed in your own workspace: a branch cut from the task's
+        commit: Your resolution, committed in the mend's scratch checkout (the one your brief
+            names, never your own workspace): a branch cut from the task's
             work (its `agentweave/task/<task_id>` branch, or the commit its merge names) with the
             main branch merged in and the conflict resolved. It must contain that work. The Hub
             runs the project's checks on it and merges it. Omit it to only retry the merge, once

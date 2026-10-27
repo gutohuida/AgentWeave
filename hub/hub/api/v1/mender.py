@@ -144,7 +144,7 @@ async def mender_land_task(
     checks they run first on the commit merged onto the main branch, and a failure refuses with
     their results for the mender to take to the operator. Without, it retries the merge.
     """
-    from ... import project_checks, project_workspace
+    from ... import project_checks, project_workspace, task_integration
     from ...task_transition_service import (
         ResolutionRefusedError,
         land_resolution,
@@ -188,6 +188,11 @@ async def mender_land_task(
     else:
         results = await retry_integration(session, task, who)
     await session.commit()
+    if any(r.outcome == task_integration.MERGED for r in results):
+        # The mend landed: its scratch checkout has done its work. A refusal above, or a merge that
+        # failed again, keeps it for the mender's next attempt; a stall that ends removes it too
+        # (`stalls.end`), so an abandoned mend leaves nothing either.
+        await stalls.release_mend_checkout(session, actor.project_id, task.id)
     payload = {"task_id": task.id, "agent": actor.agent, "commit": body.commit}
     await persist_event(session, actor.project_id, "mender_landed", payload, agent=actor.agent)
     await sse_manager.broadcast(actor.project_id, "task_integration_retried", payload)

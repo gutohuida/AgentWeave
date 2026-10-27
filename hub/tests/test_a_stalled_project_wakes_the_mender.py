@@ -761,3 +761,142 @@ async def test_the_manager_names_the_mender_its_default_model_and_no_other_job(a
         "label": "Sonnet 5.5",
     }
     assert all(job.get("default_model") is None for key, job in by_key.items() if key != "mender")
+
+
+# Review of slice N, defect 2: a runner with its own provider or flags is a choice about how the
+# mender runs, not only which model. An entry with no model keeps the runner's own model; a model
+# chosen for it is run on a runner that carries the same provider and flags.
+
+PROVIDER = {"type": "openai", "base_url": "http://localhost:1234/v1", "api_key_var": "LOCAL_KEY"}
+
+
+async def provider_runner_entry(*, model):
+    async with async_session_factory() as session:
+        session.add(
+            Runner(
+                id="runner-prov",
+                project_id="proj-test",
+                name="Local",
+                cli="copilot",
+                model="local-model",
+                flags=["--allow-all-tools"],
+                provider_config=PROVIDER,
+            )
+        )
+        session.add(
+            ManagerJob(
+                project_id="proj-test",
+                job=manager.MENDER,
+                enabled=True,
+                runner_id="runner-prov",
+                model=model,
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_provider_runner_with_no_model_chosen_keeps_its_runner_and_model(app, auth_headers):
+    await provider_runner_entry(model=None)
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    assert agent.runner_id == "runner-prov"
+    listed = (await app.get("/api/v1/projects/proj-test/manager/jobs", headers=auth_headers)).json()
+    assert next(j for j in listed["jobs"] if j["key"] == "mender")["default_model"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_model_chosen_for_a_provider_runner_runs_on_a_runner_with_its_provider(app):
+    await provider_runner_entry(model="other-model")
+
+    await _wake_the_mender()
+    first = await mender_agent()
+    await _wake_the_mender()  # a second wake reuses the derived runner
+
+    async with async_session_factory() as session:
+        runner = await session.get(Runner, first.runner_id)
+        derived = (
+            (await session.execute(select(Runner).where(Runner.model == "other-model")))
+            .scalars()
+            .all()
+        )
+    assert runner.id != "runner-prov" and len(derived) == 1
+    assert (runner.cli, runner.model) == ("copilot", "other-model")
+    assert runner.flags == ["--allow-all-tools"] and runner.provider_config == PROVIDER
+
+
+@pytest.mark.asyncio
+async def test_a_runner_with_other_flags_is_not_reused_for_a_chosen_model(app):
+    await mender_entry(runner_model="claude-sonnet-5-5", model="claude-opus-5-5")
+    async with async_session_factory() as session:
+        runner = await session.get(Runner, "runner-pick")
+        runner.flags = ["--effort", "high"]
+        session.add(
+            Runner(
+                id="runner-plain-opus",
+                project_id="proj-test",
+                name="Plain Opus",
+                cli="claude",
+                model="claude-opus-5-5",
+            )
+        )
+        await session.commit()
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    async with async_session_factory() as session:
+        runner = await session.get(Runner, agent.runner_id)
+    assert runner.id != "runner-plain-opus"
+    assert (runner.model, runner.flags) == ("claude-opus-5-5", ["--effort", "high"])
+
+
+# Review of slice N, defect 1: an operator's answer to a note is queued into the mender's thread; a
+# stall ending (the brief tells it to leave the note and end gave_up) must withdraw only the brief.
+
+
+@pytest.mark.asyncio
+async def test_ending_a_stall_withdraws_the_brief_but_not_the_operators_answer(app, auth_headers):
+    from hub.db.models import Conversation, Question
+
+    await mender_entry(runner_model="claude-sonnet-5-5", model=None)
+    await _wake_the_mender()
+    async with async_session_factory() as session:
+        [stall] = (await session.execute(select(Stall))).scalars().all()
+        conversation_id = stall.conversation_id
+        session.add(
+            Question(
+                id="q-note-asked",
+                project_id="proj-test",
+                from_agent=stalls.MENDER,
+                question="Touch notes.txt?",
+                header="Dirty checkout",
+                options=[{"label": "Leave it"}, {"label": "Stash it"}],
+                multi_select=False,
+                blocking=False,
+                conversation_id=conversation_id,
+            )
+        )
+        await session.commit()
+    with patch("hub.turn_scheduler.schedule_accepted", new=AsyncMock()):
+        answered = await app.patch(
+            "/api/v1/projects/proj-test/questions/q-note-asked",
+            headers=auth_headers,
+            json={"answer": "Leave it", "labels": ["Leave it"]},
+        )
+    assert answered.status_code == 200, answered.text
+
+    async with async_session_factory() as session:
+        stall = await session.get(Stall, stall.id)
+        await stalls.end(session, stall, "gave_up", "Left a note about notes.txt.")
+
+    entries = {(e.origin_type, e.state) for e in await _queued_for_the_mender()}
+    assert entries == {("mender", "withdrawn"), ("operator", "queued")}
+    async with async_session_factory() as session:
+        thread = (
+            await session.execute(select(Conversation).where(Conversation.id == conversation_id))
+        ).scalar_one()
+    # Still open, so the queued answer is delivered when the mender's run ends and its turn starts.
+    assert thread.lifecycle == "open"

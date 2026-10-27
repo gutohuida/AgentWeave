@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .db.models import EventLog, ManagerJob, Runner
 from .model_catalog import default_model, get_provider
 from .runner_adapters.one_shot import WorkerUsage
+from .runner_provider import has_provider
 from .utils import persist_event
 
 logger = logging.getLogger(__name__)
@@ -161,6 +162,8 @@ async def _mender_default(
     runner = await db.get(Runner, row.runner_id) if row is not None and row.runner_id else None
     if runner is None or runner.project_id != project_id:
         return None
+    if has_provider(runner.provider_config):
+        return None  # a provider runner keeps its own model (`stalls.ensure_mender`)
     model_id = default_model(runner.cli)
     if model_id is None:
         return None
