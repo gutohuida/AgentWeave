@@ -40565,3 +40565,13 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 **Tier:** 0
 
 `spec_tasks.materialise` (`hub/hub/spec_tasks.py:398-405`) skips a declared task when every requirement it names is already served by a hand-made task, and approval reports it as `already_served`. Slice F declares two tasks, `mock` and `wire`, over the same twelve requirements; the mock was done on 2026-10-26 as hand-made task-dadec899cc91 linked to all twelve, so approving F on 2026-10-27 created nothing (`approval_report`: `created: []`, `already_served: [mock, wire]`). The wiring work is not on the board, and nothing but the report says so. The rule is right for the task a hand-made task *is* (the mock), wrong for a different declared task that happens to serve the same requirements. **Expected:** a declared task is treated as served only when a hand-made task is matched to it (the same key, or a link the operator made), not when the requirement sets merely overlap; the report says which hand-made task served which entry. **Test:** a document with two declared tasks over the same requirements and one hand-made task linked to all of them: approval creates the second.
+
+## F1053 (C) -- every press of Check starts the vault's spec check, a model run, even for unchanged or blocked content
+
+**Status:** open 2026-10-27. Found by the review of slice C (`exploring-ends-at-an-approved-plan`).
+**Source:** code
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+`POST /documents/check` (`hub/hub/api/v1/spec.py:3182-3187`) schedules `vault_spec_check.check_in_background` on every call. The old propose started it only after a successful move. Check is meant to be pressed freely while an agent edits, and on `:8000` the `spec-vault-check` Manager job is enabled (Sonnet), so each press spawns a model run, including presses on a document with blocking gaps and repeated presses on content that was already checked (nothing in `vault_spec_check.py` compares the content to the newest firing's). **Expected:** the check starts only for a document with no blocking gaps, and not again for a content version whose newest firing already checked it. **Test:** Check twice on unchanged ready content starts one check; Check on a document with a blocking gap starts none; Check after an edit starts one.
