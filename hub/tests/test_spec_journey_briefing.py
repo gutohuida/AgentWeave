@@ -13,6 +13,7 @@ from hub.api.v1.agents import _render_hub_agent_context
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentEvent
 
+from ._spec_versions import content_version
 from .test_spec_documents_api import (
     PATH,
     _create,
@@ -30,7 +31,7 @@ ALL_STEPS = [
     "requirements-and-acceptance",
     "approach",
     "tasks",
-    "delivery",
+    "build",
 ]
 
 
@@ -78,7 +79,7 @@ async def test_a_briefing_holds_its_own_step_and_no_other(app, auth_headers, tmp
 
     assert _markers(text) == [step]
     (line,) = [ln for ln in text.splitlines() if ln.startswith("- Journey")]
-    assert "intake → requirements-and-acceptance → tasks → delivery" in line.replace("**", "")
+    assert "intake → requirements-and-acceptance → tasks → build" in line.replace("**", "")
 
 
 @pytest.mark.asyncio
@@ -93,25 +94,30 @@ async def test_an_unsized_document_is_briefed_with_the_large_journey(app, auth_h
 
 
 @pytest.mark.asyncio
-async def test_a_proposed_document_is_briefed_by_its_phase_not_its_step(
+async def test_an_approved_document_is_briefed_by_its_phase_not_its_step(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document())
-    await app.post(
-        "/api/v1/projects/proj-test/project/documents/propose",
-        params={"path": PATH},
+    approved = await app.post(
+        "/api/v1/projects/proj-test/project/documents/phase",
+        params={"path": PATH, "to": "approved"},
+        json={
+            "approve_anyway": True,
+            "content_version": await content_version(app, auth_headers, PATH),
+        },
         headers=auth_headers,
     )
+    assert approved.status_code == 200, approved.text
 
     text = await _briefing(app, auth_headers)
 
     assert _markers(text) == []
-    assert "proposed and awaiting the operator" in text
+    assert "This document is approved" in text
 
 
 # asks / size-told / acceptance-duty (FR-4, FR-7, FR-8)
-@pytest.mark.parametrize("step", [s for s in ALL_STEPS if s != "delivery"])
+@pytest.mark.parametrize("step", [s for s in ALL_STEPS if s != "build"])
 def test_every_step_says_what_it_writes_and_asks_to_advance(step):
     text = spec_journey.duty(step)
 
@@ -176,10 +182,10 @@ async def test_advancing_to_a_named_step_and_past_the_end(
     assert named.status_code == 200, named.text
     assert named.json()["step"] == "tasks"
 
-    await _place(step="delivery", size="fix")
+    await _place(step="build", size="fix")
     end = await app.post(f"{ACTIONS}/advance", json={"path": PATH}, headers=run_headers)
     assert end.status_code == 200, end.text
-    assert end.json()["step"] == "delivery"
+    assert end.json()["step"] == "build"
     assert "last step" in end.json()["message"]
 
 
@@ -200,7 +206,7 @@ async def test_the_agent_records_the_size_with_its_reason(
         "intake",
         "requirements-and-acceptance",
         "tasks",
-        "delivery",
+        "build",
     ]
     assert (await _row()).size == "small"
     refused = await app.post(

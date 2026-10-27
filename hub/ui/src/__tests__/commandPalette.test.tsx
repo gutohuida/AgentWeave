@@ -176,3 +176,49 @@ describe('command palette — the four action kinds', () => {
     expect(screen.getByText(/conversation · updated/i)).toBeInTheDocument()
   })
 })
+
+describe('command palette — settings', () => {
+  const settings = () => ({
+    onOpenAppSettings: vi.fn(),
+    onOpenProjectSettings: vi.fn(),
+    onOpenAgentSettings: vi.fn(),
+  })
+
+  it.each(['notif', 'sound', 'settings'])('opens App settings at Sound and notifications on Enter after typing %s', async (typed) => {
+    const callbacks = settings()
+    renderPalette(callbacks)
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    const input = await screen.findByPlaceholderText(PLACEHOLDER)
+    await userEvent.type(input, typed)
+    await userEvent.keyboard('{Enter}')
+    expect(callbacks.onOpenAppSettings).toHaveBeenCalledWith('notifications')
+    expect(callbacks.onOpenProjectSettings).not.toHaveBeenCalled()
+  })
+
+  it('lists Project settings and each open agent’s settings under "settings"', async () => {
+    const callbacks = settings()
+    renderPalette({ ...callbacks, agents: [{ name: 'claude' }, { name: 'codex' }] })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER), 'settings')
+    expect(screen.getByRole('option', { name: /Project settings/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('option', { name: /codex settings/ }))
+    expect(callbacks.onOpenAgentSettings).toHaveBeenCalledWith('codex')
+  })
+
+  it('offers App settings but no project or agent settings with no project open', async () => {
+    const callbacks = settings()
+    renderPalette({ onOpenAppSettings: callbacks.onOpenAppSettings })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER), 'settings')
+    expect(screen.getByRole('option', { name: /Sound and notifications/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Project settings/ })).toBeNull()
+    expect(screen.queryByRole('option', { name: /claude settings/ })).toBeNull()
+  })
+
+  it('adds nothing to the list before anything is typed', async () => {
+    renderPalette(settings())
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await screen.findByPlaceholderText(PLACEHOLDER)
+    expect(screen.queryByRole('option', { name: /claude settings/ })).toBeNull()
+  })
+})

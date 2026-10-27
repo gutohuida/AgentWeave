@@ -72,7 +72,7 @@ class TestPhase:
         assert identity.phase_source == spec_adoption.READ
         assert identity.unrecognised_phase is None
 
-    @pytest.mark.parametrize("status", ["exploring", "proposed", "approved", "archived"])
+    @pytest.mark.parametrize("status", ["exploring", "approved", "archived"])
     def test_every_phase_a_change_spec_can_hold_is_readable_from_a_file(self, status):
         """Including `approved` and `archived`, which `transition()` cannot reach
         from a fresh document — the file is the only account of a phase the row
@@ -96,6 +96,15 @@ class TestPhase:
             assert identity.phase_source == spec_adoption.DEFAULTED
             # Absent, not unrecognised: there was no value to report back.
             assert identity.unrecognised_phase is None
+
+    def test_a_file_still_saying_proposed_is_adopted_exploring_and_says_so(self):
+        """`proposed` was retired (migration 0149): a file written before then names a phase no
+        row may hold, so it is read as the kind's default, and the value is reported."""
+        identity = _read(kind="change-spec", status="proposed")
+        assert isinstance(identity, spec_adoption.AdoptableIdentity)
+        assert identity.phase == spec_lifecycle.EXPLORING
+        assert identity.phase_source == spec_adoption.DEFAULTED
+        assert identity.unrecognised_phase == "proposed"
 
     def test_an_unrecognised_status_defaults_and_reports_the_value(self):
         identity = _read(kind="capability", status="halfway-done")
@@ -134,9 +143,9 @@ class TestPhase:
         assert spec_adoption.phase_is_holdable("capability", "capability") is False
         assert spec_adoption.phase_is_holdable("current", "capability") is True
         assert spec_adoption.phase_is_holdable("current", "system-map") is False
-        for phase in ("exploring", "proposed", "approved", "archived"):
+        for phase in ("exploring", "approved", "archived"):
             assert spec_adoption.phase_is_holdable(phase, "change-spec") is True
-        for phase in ("exploring", "proposed", "approved"):
+        for phase in ("exploring", "approved"):
             assert spec_adoption.phase_is_holdable(phase, "capability") is False
         # A retired capability (F536) is archived, and so is its file.
         assert spec_adoption.phase_is_holdable("archived", "capability") is True

@@ -63,9 +63,7 @@ say **how to check** it and **who checks** it (an agent or you).
 stateDiagram-v2
     direction LR
     [*] --> exploring
-    exploring --> proposed : Propose
-    proposed --> approved : Approve
-    proposed --> exploring : Reopen
+    exploring --> approved : Approve
     approved --> exploring : Reopen for changes
     approved --> archived : Archive (after folding)
     archived --> [*]
@@ -73,11 +71,16 @@ stateDiagram-v2
 
 The document's primary button follows its phase:
 
-- **Propose** (from draft). The Hub checks the document and lists anything missing.
-- **Approve** (from proposed). **Approval creates the document's tasks**, unassigned, with their
-  dependencies, acceptance criteria and requirement links. If the document names a flow as its
-  delivery, approval also starts the flow.
-- **Start a flow…** (approved, no flow yet). Have a flow work the tasks for you. See
+- **Check** (while it is written). Lists what still blocks approval, exactly as the agent's own
+  save reports it, and moves nothing: the agent keeps writing while you look.
+- **Approve** (from draft). Names the version you read, and is refused if the document changed
+  since. **Approval creates the document's tasks**, unassigned, with their dependencies, acceptance
+  criteria and requirement links, and starts nothing. If intake recorded the work as already built,
+  approval offers to close the tasks as built at the commits it named.
+- **Build…** (approved, no flow yet). Starts building it as the document recommends: the flow its
+  recommended build describes, or the tasks left on the board. It opens with the recommendation and
+  its reasons filled in. **Approve and build…** does both in one action.
+- **Start a flow…** (in the menu, approved, no flow yet). Configure a flow by hand. See
   [Jobs, loops and flows](jobs-loops-flows.md).
 - **Fold into capability…** (approved, every task decided). Merge what shipped into the capability
   it changed.

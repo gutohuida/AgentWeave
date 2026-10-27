@@ -1924,7 +1924,7 @@ async def read_spec_document(
     agent-supplied path then cannot be reinterpreted as extra routing.
 
     Readable in **every phase**. Reading is not authoring, and every gate in this area governs
-    writing or approving. A reviewer needs a proposed document and a builder needs an approved one;
+    writing or approving. A reviewer needs a document being written and a builder needs an approved one;
     a refusal that depends on state is one an agent concludes it does not have at all.
 
     **Bounded** (`a-specification-is-read-in-results-that-fit`, F363): the whole response is fitted
@@ -2326,7 +2326,7 @@ async def advance_spec_step(
                 "missing": gaps,
                 "instructions": "",
                 "message": f"{left} is the last step of this journey; the document is ready for "
-                "the operator to propose.",
+                "the operator to approve.",
             }
         await spec_journey.set_step(
             session,
@@ -2400,8 +2400,8 @@ class SpecDocumentSubmission(RequestModel):
 
     The document must already exist — call `create_spec_document` first if you
     don't have one yet. There is deliberately no phase or approval field here:
-    "propose" and "approve" are the operator's, and the tool surface offers no
-    way to express either.
+    checking and approving are the operator's, and the tool surface offers no
+    way to approve.
     """
 
     path: str = Field(max_length=255)
@@ -2564,10 +2564,11 @@ async def submit_spec_document(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    """Store a submitted specification payload and return what still blocks a proposal.
+    """Store a submitted specification payload and return what still blocks its approval.
 
     Saving an incomplete document is not an error — a document under discussion is incomplete,
-    and refusing it would make exploring impossible. `blocking` says what a proposal would refuse.
+    and refusing it would make exploring impossible. `blocking` says what approval would refuse,
+    exactly as the operator's Check reports it.
     """
     from ... import project_workspace, spec_lifecycle, spec_service
     from ...spec_manifest import SpecPathError, validate_spec_path
@@ -2628,7 +2629,7 @@ async def submit_spec_document(
         "identifiers": result.identifiers,
         "blocking": result.blocking,
         # F502: an agent read the call's success beside eight blocking findings as "ready".
-        "ready_to_propose": not result.blocking,
+        "ready_to_approve": not result.blocking,
         "divergence": result.divergence,
         "warnings": result.warnings,
     }

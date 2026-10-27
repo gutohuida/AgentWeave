@@ -23,6 +23,7 @@ vi.mock('@/api/agents', () => ({
 vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: questionsError ? undefined : questions, error: questionsError }),
   useAnswerQuestion: () => ({ mutate: answerMutate }),
+  useDeclineQuestion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }))
 vi.mock('@/api/tasks', () => ({
   useTasks: () => ({
@@ -50,6 +51,7 @@ vi.mock('@/api/tasks', () => ({
     },
   }),
   useUpdateTask: () => ({ mutate: updateTaskMutate }),
+  useRetryIntegration: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
@@ -76,9 +78,11 @@ vi.mock('@/api/queue', () => ({ useQueueStatuses: () => queueStatuses }))
 const endStallMutate = vi.fn()
 vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
 let flakyReport: Record<string, unknown> | null = null
+let flakyError: Error | null = null
+const flakyRefetch = vi.fn()
 const handleFlakyMutate = vi.fn()
 vi.mock('@/api/flakyTests', () => ({
-  useFlakyTests: () => ({ data: flakyReport }),
+  useFlakyTests: () => ({ data: flakyReport, error: flakyError, refetch: flakyRefetch }),
   useHandleFlakyTests: () => ({ mutate: handleFlakyMutate }),
 }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
@@ -109,6 +113,8 @@ beforeEach(() => {
   queueStatuses = []
   openStalls = []
   flakyReport = null
+  flakyError = null
+  flakyRefetch.mockClear()
   handleFlakyMutate.mockClear()
   answerMutate.mockClear()
 })
@@ -193,6 +199,8 @@ describe('the wired Overview', () => {
   })
 
   it('lists an approved task that did not merge, and opens it on the board', () => {
+    // The Hub's own stall says it did not merge (`merge-row-follows-its-stall`): no stall, no row.
+    openStalls = [stall({ id: 'stall-9', key: 'integration_failed:task-9', cause: 'integration_failed', task_id: 'task-9', reason: 'the project folder has uncommitted changes' })]
     const onNavigate = vi.fn()
     render(<OverviewScreen onNavigate={onNavigate} />)
     expect(screen.getByText('“Rename the parser” was approved but not merged')).toBeInTheDocument()
@@ -207,7 +215,7 @@ describe('the wired Overview', () => {
     const row = screen.getByText('“Wire the exporter” is waiting on you').closest('li') as HTMLElement
     expect(within(row).getByText(/needs the staging credentials/)).toBeInTheDocument()
     fireEvent.click(within(row).getByRole('button', { name: 'Resume work' }))
-    expect(updateTaskMutate).toHaveBeenCalledWith({ id: 'task-11', status: 'in_progress' })
+    expect(updateTaskMutate).toHaveBeenCalledWith({ id: 'task-11', status: 'in_progress' }, expect.objectContaining({ onError: expect.any(Function) }))
   })
 
   it('shows a running conversation and opens that conversation', () => {
@@ -255,7 +263,7 @@ describe('a stalled project under Needs you', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Open task' }))
     expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-4')
     fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' }))
-    expect(endStallMutate).toHaveBeenCalledWith('stall-1')
+    expect(endStallMutate).toHaveBeenCalledWith('stall-1', expect.objectContaining({ onError: expect.any(Function) }))
   })
 
   it('says the mender is on a stall it holds, and opens its thread', () => {
@@ -287,6 +295,18 @@ describe('a query the Hub did not answer', () => {
     const notice = screen.getByTestId('query-error-notice')
     expect(notice).toHaveAttribute('role', 'alert')
     expect(notice).toHaveTextContent('Couldn’t read the questions and the ledger from the Hub')
+  })
+
+  it('offers Retry, which asks the failed read again, and the line goes once it answers', () => {
+    flakyError = new Error('500')
+    const { rerender } = render(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.getByTestId('query-error-notice')).toHaveTextContent('Couldn’t read the flaky tests from the Hub')
+    fireEvent.click(within(screen.getByTestId('query-error-notice')).getByRole('button', { name: 'Retry' }))
+    expect(flakyRefetch).toHaveBeenCalledTimes(1)
+
+    flakyError = null
+    rerender(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.queryByTestId('query-error-notice')).toBeNull()
   })
 
   it('says nothing while every query has answered', () => {

@@ -15,6 +15,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 PATH = "spec/changes/recorded-after-the-fact/spec.json"
@@ -90,16 +92,14 @@ async def record(app, auth_headers, **extra):
     assert recorded.json()["review_state"] == "accepted"
 
 
-async def propose(app, auth_headers):
+async def check(app, auth_headers):
     closed = await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     assert closed.status_code == 200, closed.text
-    proposed = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
-    )
-    assert proposed.status_code == 200, proposed.text
-    return proposed.json()
+    checked = await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
+    assert checked.status_code == 200, checked.text
+    return checked.json()
 
 
 def codes(findings):
@@ -107,10 +107,13 @@ def codes(findings):
 
 
 async def phase(app, auth_headers, to):
+    body = {"reason": "recording where it stands"}
+    if to == "approved":
+        body["content_version"] = await content_version(app, auth_headers, PATH)
     return await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": to},
-        json={"reason": "recording where it stands"},
+        json=body,
         headers=auth_headers,
     )
 
@@ -120,12 +123,10 @@ async def test_accepted_evidence_serves_a_requirement_no_task_names(app, auth_he
     await make_document(app, auth_headers, author)
     await record(app, auth_headers)
 
-    body = await propose(app, auth_headers)
+    body = await check(app, auth_headers)
 
-    assert body["phase"] == "proposed"
+    assert body["blocking"] == []
     assert "requirement_without_task" not in codes(body["warnings"]), body["warnings"]
-    # Written in one go, the document is still at its first journey step: the only other gap.
-    assert codes(body["warnings"]) == {"steps_skipped"}, body["warnings"]
 
 
 @pytest.mark.asyncio
@@ -133,32 +134,31 @@ async def test_already_built_work_is_approved_without_approve_anyway(app, auth_h
     """The record-only path end to end, each step the one the previous answer named."""
     await make_document(app, auth_headers, author)
     await record(app, auth_headers)
-    await propose(app, auth_headers)
+    await check(app, auth_headers)
 
     refused = await phase(app, auth_headers, "approved")
 
     assert refused.status_code == 409, refused.text
     [gap] = refused.json()["detail"]["warnings"]
     assert gap["code"] == "steps_skipped"
-    # Proposed, the journey cannot move (409 `no_journey`), so the way out says so first.
-    assert "to=exploring" in gap["message"], gap["message"]
-    assert (await phase(app, auth_headers, "exploring")).status_code == 200
+    # Still exploring, so the journey moves directly: no send-it-back first.
+    assert "to=exploring" not in gap["message"], gap["message"]
     journeyed = await app.post(
         f"{BASE}/documents/journey",
         params={"path": PATH},
-        json={"step": "delivery"},
+        json={"step": "build"},
         headers=auth_headers,
     )
     assert journeyed.status_code == 200, journeyed.text
-    assert (await propose(app, auth_headers))["warnings"] == []
+    assert (await check(app, auth_headers))["warnings"] == []
     approved = await phase(app, auth_headers, "approved")
     assert approved.status_code == 200, approved.text
     assert approved.json()["phase"] == "approved"
 
 
 @pytest.mark.asyncio
-async def test_a_save_reports_the_same_as_a_proposal(app, auth_headers, author):
-    """F703's rule: a write and a propose of the same payload agree on what they report."""
+async def test_a_save_reports_the_same_as_a_check(app, auth_headers, author):
+    """F703's rule: a write and a check of the same payload agree on what they report."""
     await make_document(app, auth_headers, author)
     await record(app, auth_headers)
 
@@ -175,7 +175,7 @@ async def test_evidence_for_an_earlier_wording_does_not_serve(app, auth_headers,
     saved = await submit(app, author, statement="It lists what is due this week")
 
     assert "requirement_without_task" in codes(saved["warnings"]), saved["warnings"]
-    body = await propose(app, auth_headers)
+    body = await check(app, auth_headers)
     assert "requirement_without_task" in codes(body["warnings"]), body["warnings"]
 
 
@@ -184,7 +184,7 @@ async def test_partial_evidence_does_not_serve(app, auth_headers, author):
     await make_document(app, auth_headers, author)
     await record(app, auth_headers, covers="partial")
 
-    body = await propose(app, auth_headers)
+    body = await check(app, auth_headers)
 
     assert "requirement_without_task" in codes(body["warnings"]), body["warnings"]
 
@@ -193,7 +193,7 @@ async def test_partial_evidence_does_not_serve(app, auth_headers, author):
 async def test_the_gap_names_evidence_as_a_way_to_serve_it(app, auth_headers, author):
     await make_document(app, auth_headers, author)
 
-    body = await propose(app, auth_headers)
+    body = await check(app, auth_headers)
 
     [gap] = [w for w in body["warnings"] if w["code"] == "requirement_without_task"]
     assert "evidence" in gap["message"], gap["message"]

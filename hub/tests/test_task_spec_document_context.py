@@ -25,6 +25,8 @@ from hub.db.models import Agent, Run, SpecDocument, Task
 from hub.run_task_binding import spec_document_for_task
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
@@ -160,14 +162,17 @@ async def test_the_declared_task_link_still_holds(app, auth_headers, author):
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     assert closed.status_code in (200, 409), closed.text
-    for phase in ("proposed", "approved"):
-        moved = await app.post(
-            f"{BASE}/documents/phase",
-            params={"path": PATH, "to": phase},
-            json={"reason": "looks right", "approve_anyway": phase == "approved"},
-            headers=auth_headers,
-        )
-        assert moved.status_code == 200, moved.text
+    moved = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "approved"},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "looks right",
+            "approve_anyway": True,
+        },
+        headers=auth_headers,
+    )
+    assert moved.status_code == 200, moved.text
 
     listed = await app.get(TASKS, headers=auth_headers)
     task = listed.json()["tasks"][0]

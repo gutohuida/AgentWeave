@@ -69,8 +69,8 @@ that merged.
 
     ---
 
-    Agents draft a change with requirements and scenarios. You propose it and approve it, and
-    approving creates the tasks.
+    Agents draft a change with requirements and scenarios. You check it and approve it, and
+    approving creates the tasks; you build it when you choose.
 
     [:octicons-arrow-right-24: Specifications](guides/specifications.md)
 

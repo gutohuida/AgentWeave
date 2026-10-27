@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from hub.api.v1.spec import _approval_flow
+from hub.api.v1.spec import _build_flow
 from hub.db.engine import async_session_factory
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -40,7 +40,7 @@ async def test_a_no_flow_approval_says_whether_there_are_tasks(app, tasks, expec
     document = SimpleNamespace(id="spdoc-f657", kind="change-spec", path="spec/changes/x/spec.json")
     payload = {"delivery": {"mode": "none"}, "tasks": tasks}
     async with async_session_factory() as session:
-        entry, job = await _approval_flow(session, "proj-test", document, payload, None)
+        entry, job = await _build_flow(session, "proj-test", document, payload, None)
     assert job is None
     text = " ".join(entry["messages"])
     assert expected in text and absent not in text

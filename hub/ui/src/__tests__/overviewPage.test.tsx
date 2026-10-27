@@ -20,8 +20,13 @@ vi.mock('@/api/agents', () => ({
 vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: [] }),
   useAnswerQuestion: () => ({ mutate: vi.fn() }),
+  useDeclineQuestion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }))
-vi.mock('@/api/tasks', () => ({ useTasks: () => ({ data: { tasks: [], total: 0, has_more: false } }), useUpdateTask: () => ({ mutate: vi.fn() }) }))
+vi.mock('@/api/tasks', () => ({
+  useTasks: () => ({ data: { tasks: [], total: 0, has_more: false } }),
+  useUpdateTask: () => ({ mutate: vi.fn() }),
+  useRetryIntegration: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
   return { ...actual, useProjectConversations: () => ({ data: { conversations: [] } }) }

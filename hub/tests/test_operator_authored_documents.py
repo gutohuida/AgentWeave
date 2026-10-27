@@ -21,6 +21,8 @@ from hub.db.models import Run, SpecDocumentEvent
 from hub.spec_documents import parse_hub, parse_stored
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
 CAP_PATH = "spec/capabilities/demo/spec.json"
@@ -221,14 +223,10 @@ class TestNoRuleIsRelaxedForTheOperator:
         await _create(app, auth_headers, CHANGE_PATH, "change-spec")
         await _write(app, auth_headers, CHANGE_PATH, _complete_payload("change-spec"))
 
-        # The real sequence, learned the hard way: a document cannot be proposed while its
-        # exploration is open, so `close-exploration` comes first and `propose` is its own route
-        # rather than a phase transition. Only `approved` goes through `/documents/phase`.
-        #
-        # `propose` also answers 200 with a list of *blocking findings* when the document is
-        # incomplete, rather than erroring — so the status code alone proves nothing, and the empty
-        # body is the real assertion.
-        for route in ("close-exploration", "propose"):
+        # `check` answers 200 with a list of *blocking findings* when the document is incomplete,
+        # rather than erroring — so the status code alone proves nothing, and the empty body is
+        # the real assertion. Approval then goes straight from exploring.
+        for route in ("close-exploration", "check"):
             stepped = await app.post(
                 f"{BASE}/documents/{route}", params={"path": CHANGE_PATH}, headers=auth_headers
             )
@@ -237,7 +235,11 @@ class TestNoRuleIsRelaxedForTheOperator:
         moved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": CHANGE_PATH, "to": "approved"},
-            json={"reason": "test", "approve_anyway": True},
+            json={
+                "content_version": await content_version(app, auth_headers, CHANGE_PATH),
+                "reason": "test",
+                "approve_anyway": True,
+            },
             headers=auth_headers,
         )
         assert moved.status_code == 200, moved.text

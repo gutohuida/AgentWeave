@@ -35,6 +35,8 @@ from hub.scheduler import _compose_loop_briefing
 from hub.spec_lifecycle import Actor
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 PROJECT = "proj-test"
 ACTOR = Actor(kind="operator", name="operator")
 DIGEST = "d" * 64
@@ -218,14 +220,17 @@ async def test_3_1_a_tasks_criteria_follow_its_requirements(app, auth_headers, a
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     assert closed.status_code in (200, 409), closed.text
-    for phase in ("proposed", "approved"):
-        moved = await app.post(
-            f"{BASE}/documents/phase",
-            params={"path": PATH, "to": phase},
-            json={"reason": "looks right", "approve_anyway": phase == "approved"},
-            headers=auth_headers,
-        )
-        assert moved.status_code == 200, moved.text
+    moved = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "approved"},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "looks right",
+            "approve_anyway": True,
+        },
+        headers=auth_headers,
+    )
+    assert moved.status_code == 200, moved.text
 
     listed = await app.get(TASKS, headers=auth_headers)
     assert listed.status_code == 200, listed.text

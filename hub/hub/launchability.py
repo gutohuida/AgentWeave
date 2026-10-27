@@ -419,9 +419,9 @@ def spec_turn_notice(
         ]
         if kind == "change-spec":
             lines.append(
-                "Ask how it will be built (a flow, recommended, or no flow) before it is ready "
-                "to propose; record the answer as `delivery`, and include it in every later "
-                "submission."
+                "Recommend how it will be built (a flow, or no flow), with a reason for each "
+                "choice, before it is ready to approve; record it as `delivery`, and include it "
+                "in every later submission."
             )
         if path and is_unwritten:
             # F409 D9: the path is derived from the operator's document subject, and this notice

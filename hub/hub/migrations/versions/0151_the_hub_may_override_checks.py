@@ -1,7 +1,7 @@
 """the Hub may override checks -- task_transitions.override_by, projects.checks_auto_override
 
 Revision ID: 0151
-Revises: 0148
+Revises: 0149
 Create Date: 2026-10-27 00:00:00.000000
 
 `a-red-main-does-not-hold-the-night` (slice M, Tier 2). An approval over check failures that are
@@ -12,8 +12,8 @@ operator could make one), so rows with a reason are backfilled `operator`; every
 NULL. And one project setting, on by default for new and existing projects, turns the automatic
 override and fix-task filing off.
 
-Numbered 0151 with `down_revision` 0148, the highest revision on this branch's base: slices C
-(0149) and K (0150) add migrations in parallel, and the chain is relinked when they merge.
+Numbered 0151 with `down_revision` 0149 (slice C, the highest revision on this branch): slice K
+takes 0150 in parallel, and the chain is relinked to 0150 when it merges.
 
 Runs on the operator's :8000 data at its next restart. A downgrade drops both columns (plain `DROP
 COLUMN`, SQLite 3.35+, as 0145/0147 do); automatic overrides then read as operator overrides whose
@@ -30,7 +30,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0151"
-down_revision = "0148"
+down_revision = "0149"
 branch_labels = None
 depends_on = None
 

@@ -27,6 +27,7 @@ vi.mock('@/api/client', async (importOriginal) => {
           path: PATH,
           content: '<html></html>',
           updated_at: '2026-10-05T00:00:00Z',
+          content_version: 'v1',
           ...(roadmapSlice ? { roadmap_slice: roadmapSlice } : {}),
         }
       }
@@ -38,7 +39,7 @@ vi.mock('@/api/client', async (importOriginal) => {
               path: PATH,
               title: 'Slice one',
               kind: 'change-spec',
-              phase: 'proposed',
+              phase: 'exploring',
               rigor: 'sketch',
               content_digest: null,
               explore_closed: true,
@@ -108,7 +109,9 @@ describe('Draft the next slice', () => {
   it('is absent, and never sent, for a document that names no roadmap slice', async () => {
     renderPhaseBar()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+    // Enabled once the document read (and the version an approval names) has loaded.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     await waitFor(() => expect(approvals()).toHaveLength(1))
     expect(screen.queryByLabelText('Draft the next slice')).toBeNull()
@@ -120,7 +123,8 @@ describe('Draft the next slice', () => {
     approveResponse = { next_slice: { state: 'queued', slice: 's2', agent: 'planner' } }
     renderPhaseBar()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+    await screen.findByRole('switch', { name: 'Draft the next slice' })
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     expect(await screen.findByTestId('next-slice-outcome')).toHaveTextContent(
       'Asked @planner to draft slice s2.',
@@ -134,7 +138,8 @@ describe('Draft the next slice', () => {
     }
     renderPhaseBar()
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
+    await screen.findByRole('switch', { name: 'Draft the next slice' })
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     expect(await screen.findByTestId('next-slice-outcome')).toHaveTextContent(
       "@planner will be asked to draft slice s2 once this slice's 2 open tasks are approved or rejected.",

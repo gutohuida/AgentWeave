@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { useDialogFocus } from '@/hooks/useDialogFocus'
+import { useDialogFocus, useModalLayer } from '@/hooks/useDialogFocus'
 
 // F309/F310: a panel opened over another panel must dismiss only itself. The hook's Escape branch
 // is a bubble-phase listener on `document`, so it is structurally the last handler to see the key;
@@ -133,6 +133,46 @@ describe('useDialogFocus — the first Tab (F307)', () => {
     // which sees focus outside its panel, must not claim it.
     expect(tab().defaultPrevented).toBe(false)
     expect(document.activeElement).toBe(inner.cancel)
+  })
+
+  // F1028: the command palette is a Radix dialog that this hook does not know. Opened over a
+  // dialog, focus sits in the palette's input, which is outside this panel, and the first Tab was
+  // pulled into the dialog behind it.
+  it('leaves Tab to a layer that is not its own, with focus inside it (F1028)', () => {
+    const { panelRef } = mountDialog()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+    const palette = document.createElement('div')
+    palette.setAttribute('role', 'dialog')
+    const input = document.createElement('input')
+    palette.appendChild(input)
+    document.body.appendChild(palette)
+    mounted.push(palette)
+    input.focus()
+
+    expect(tab().defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(input)
+  })
+
+  it('leaves Tab to a registered modal layer, whatever it renders (F1028)', () => {
+    const { panelRef } = mountDialog()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+    renderHook(() => useModalLayer(true))
+    const stray = document.createElement('input')
+    document.body.appendChild(stray)
+    mounted.push(stray)
+    stray.focus()
+
+    expect(tab().defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(stray)
+  })
+
+  it('still takes a Tab from the control that opened it, when no other layer holds focus', () => {
+    const { trigger, cancel, panelRef } = mountDialog()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+    trigger.focus()
+
+    expect(tab().defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(cancel)
   })
 })
 

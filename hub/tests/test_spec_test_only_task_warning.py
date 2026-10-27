@@ -57,7 +57,7 @@ async def test_the_f510_shape_is_warned(app, planner):  # noqa: F811
     assert warning["where"] == "tasks"
     assert "'red'" in warning["message"] and "'fix'" in warning["message"]
     assert "one task" in warning["message"]
-    assert body["ready_to_propose"] is True
+    assert body["ready_to_approve"] is True
 
 
 @pytest.mark.asyncio

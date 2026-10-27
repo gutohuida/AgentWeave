@@ -43,13 +43,13 @@ def _add_project(conn, project_id: str) -> None:
 def test_0151_backfills_operator_overrides_defaults_the_setting_on_and_round_trips(tmp_path):
     db_file = tmp_path / "override.db"
     db_url = f"sqlite+aiosqlite:///{db_file}"
-    # The schema as the models build it, stamped at 0151, then walked down: that is 0148's tables.
+    # The schema as the models build it, stamped at 0151, then walked down: that is 0149's tables.
     _run(_create_all_at(db_url))
     with sqlite3.connect(db_file) as conn:
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0151')")
         conn.commit()
-    _downgrade_to(db_url, "0148")
+    _downgrade_to(db_url, "0149")
     with sqlite3.connect(db_file) as conn:
         assert "override_by" not in _columns(conn, "task_transitions")
         assert "checks_auto_override" not in _columns(conn, "projects")
@@ -78,7 +78,7 @@ def test_0151_backfills_operator_overrides_defaults_the_setting_on_and_round_tri
     ]
     assert setting == (1,) and created == (1,)
 
-    _downgrade_to(db_url, "0148")
+    _downgrade_to(db_url, "0149")
 
     with sqlite3.connect(db_file) as conn:
         assert "override_by" not in _columns(conn, "task_transitions")

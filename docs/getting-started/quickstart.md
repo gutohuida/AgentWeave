@@ -68,11 +68,14 @@ conversation from the side panel's **Specs** tab, or on the **Spec** tab:
 If the agent needs a decision from you, it asks with a question card above the composer, and its
 turn waits for your answer. Agents never guess at what you meant.
 
-## 4. Propose and approve
+## 4. Check, approve and build
 
-On the **Spec** tab, the document's primary button follows its phase. **Propose** moves it out of
-draft and lists anything missing. **Approve** then creates its tasks. If the Hub found gaps, for
-example a scenario with nobody named to check it, it lists them first. You can fix them, or press
+On the **Spec** tab, **Check** lists anything still missing, exactly as the agent sees it, and
+moves nothing: the agent keeps writing while you read. **Approve** approves the version you read
+(if the agent changed it since, the Hub says so and you reload) and lays the tasks out as a plan;
+nothing starts. **Build…** then starts building it the way the document recommends, now or later,
+and **Approve and build…** does both at once. If the Hub found gaps, for example a scenario with
+nobody named to check it, approving lists them first. You can fix them, or press
 **Approve anyway**. The gaps you overrode are recorded on the document.
 
 <figure class="aw-shot" markdown>

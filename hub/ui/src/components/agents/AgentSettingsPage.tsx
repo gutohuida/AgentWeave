@@ -48,6 +48,8 @@ interface AgentSettingsPageProps {
   onSelectSection: (section: AgentSettingsSection) => void
   /** Where the back control goes: the agent's conversations (the caller decides which). */
   onBack: () => void
+  /** The operator's own settings (sound, appearance, the Hub), linked from the section list. */
+  onOpenAppSettings?: () => void
 }
 
 const SECTIONS: ReadonlyArray<{ id: AgentSettingsSection; label: string; icon: string }> = [
@@ -67,7 +69,7 @@ const SECTIONS: ReadonlyArray<{ id: AgentSettingsSection; label: string; icon: s
  * Identity, Execution and Access are on the settings grid and apply on change with a toast;
  * Charter, Interaction, Context and Workspace keep their controls, framed the same way.
  */
-export function AgentSettingsPage({ agent, section, onSelectSection, onBack }: AgentSettingsPageProps) {
+export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onOpenAppSettings }: AgentSettingsPageProps) {
   // `all`, not the default open roster: an archived agent must still resolve here, because this
   // is the only surface that can unarchive it.
   const { data: roster = [], isLoading } = useAgents('all')
@@ -101,6 +103,7 @@ export function AgentSettingsPage({ agent, section, onSelectSection, onBack }: A
         items={SECTIONS}
         active={section}
         onSelect={onSelectSection}
+        footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
       >
         {body}
       </SettingsNavLayout>

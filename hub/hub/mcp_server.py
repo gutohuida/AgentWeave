@@ -5102,8 +5102,8 @@ def create_spec_document(
     returns for everything after, including `submit_spec_document`.
 
     There is no `path` argument: the Hub always mints the path. `kind` is `change-spec` (the
-    default) or `roadmap` — the two kinds whose lifecycle (exploring, proposed, approved,
-    archived) is meant to be filled in by you and then gated by the operator. `title` is optional
+    default) or `roadmap` — the two kinds whose lifecycle (exploring, approved, archived) is
+    meant to be filled in by you and then gated by the operator. `title` is optional
     and only cosmetic — it shows in the operator's list before the rename lands, and does not
     affect the path.
 
@@ -5114,7 +5114,7 @@ def create_spec_document(
     built.
 
     A roadmap carries `slices` and no requirements or tasks. Each slice's change document names it
-    with `roadmap: {"document": <roadmap path>, "slice": <key>}`, and can be proposed only once
+    with `roadmap: {"document": <roadmap path>, "slice": <key>}`, and can be approved only once
     the operator has approved the roadmap.
 
     Returns the minted `path` and the `phase` it starts in (`exploring`).
@@ -5162,6 +5162,7 @@ def submit_spec_document(
     delivery: Optional[Dict[str, Any]] = None,
     slices: Optional[List[Dict[str, Any]]] = None,
     roadmap: Optional[Dict[str, Any]] = None,
+    already_built: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Write a specification document. You supply structure; the Hub renders the document.
 
@@ -5176,10 +5177,10 @@ def submit_spec_document(
 
     The document must already exist — call `create_spec_document` first if you don't have one yet.
     Submitting repeatedly is normal and expected — a document under discussion is incomplete, and
-    saving an incomplete one is not an error. The response lists what still blocks it from being
-    proposed.
+    saving an incomplete one is not an error. The response lists what still blocks its approval,
+    exactly as the operator's Check shows it; the operator may check while you keep writing.
 
-    You cannot approve a document, propose it, or set its phase. There is no argument here that
+    You cannot approve a document, build it, or set its phase. There is no argument here that
     does so. Approval is the operator's decision and is taken elsewhere.
 
     At `sketch` rigor (the default) this writes the document immediately, as above. At `contract`
@@ -5188,7 +5189,7 @@ def submit_spec_document(
     accept or reject. The response then carries `proposals`/`unchanged`/`already_pending` instead
     of `identifiers`/`divergence` — check which shape came back rather than assuming a write
     happened. A unit you submit again unchanged is recorded once: it is named in `already_pending`,
-    not proposed twice. A different edit to a unit replaces your earlier pending proposal for it,
+    not recorded twice. A different edit to a unit replaces your earlier pending proposal for it,
     and a unit you put back as stored withdraws yours.
 
     `requirements` — objects with:
@@ -5219,7 +5220,7 @@ def submit_spec_document(
       in order rather than in parallel. `files` optionally lists the repo-relative paths (never
       empty or absolute; a directory covers what is beneath it) a task expects to edit; two tasks
       with overlapping `files` and no `depends_on` path between them draw a `warnings` entry in
-      the response, which never blocks a proposal. A test and its fix are one task: approval runs
+      the response, which never blocks approval. A test and its fix are one task: approval runs
       the project's checks, so a task whose work is a test left red for a later task can never
       pass them, and draws a `warnings` entry too.
 
@@ -5227,7 +5228,7 @@ def submit_spec_document(
       rather than in a paragraph, where the order has to be guessed at.
 
     `scope` — `{"in_scope": [...], "non_goals": [...]}`. Non-goals are required before a document
-      can be proposed: omission is silence, not a non-goal.
+      is ready to approve: omission is silence, not a non-goal.
 
     `evidence` — `{"checked": [...], "limits": [...]}`. What you inspected and what it validates,
       and what remains untested or inferred. A green suite says the code satisfies the tests that
@@ -5237,16 +5238,23 @@ def submit_spec_document(
       document: a guess written in the voice of a requirement is built on as though it were a
       decision.
 
-    `delivery` — how the work gets built, for a change-spec document only. Either
+    `delivery` — the build you recommend, for a change-spec document only; the operator decides
+      when they build it, and Build opens with it filled in. Either
       `{"mode": "flow", "agent": "<name>", "reviewer": "<name>", "stop_when_queue_empties": true,
       "stop_at": None, "cron": "*/5 * * * *"}` (a flow: at least one of
       `stop_when_queue_empties`/`stop_at` must be set, `agent` is the default agent's name from the
       open roster, `reviewer` is the agent that reviews every task whose own `reviewer` is empty --
       leave it out and any free agent reviews -- and `stop_at` is an ISO-8601 timestamp carrying a
       timezone) or `{"mode": "none"}` (no flow: the tasks go on the board and
-      are started by hand). **Include `delivery` in every later submission of this document**, not
-      only the first one that answers it: a submission replaces the whole document, so one without
-      it drops the answer and proposing is refused again.
+      are started by hand). Add `reasons`, one sentence per choice keyed `mode`, `agent`,
+      `reviewer`, `tester`, `stop` or `cron`, saying why you recommend it. **Include `delivery`
+      in every later submission of this document**, not only the first one that answers it: a
+      submission replaces the whole document, so one without it drops the answer.
+
+    `already_built` — intake's answer to whether the work is already built:
+      `{"built": true, "commits": ["<sha>", ...]}` naming the commits on the main branch that hold
+      it, or `{"built": false}`. Approving a document recorded as built offers the operator to
+      close its tasks as already built instead of building them.
 
     `slices` — a `roadmap` document's slices, in the order they are built: objects with `key`
       (lowercase, hyphenated, unique), `title`, `intent` (the outcome the operator could see
@@ -5256,12 +5264,13 @@ def submit_spec_document(
       `tasks` — those go in each slice's change document.
 
     `roadmap` — on a change document that specifies a roadmap slice:
-      `{"document": "<roadmap path>", "slice": "<slice key>"}`. Proposing it is refused until that
+      `{"document": "<roadmap path>", "slice": "<slice key>"}`. Approving it is refused until that
       roadmap is approved and holds that slice. Include it in every later submission.
 
     Returns the path, the phase, the identifier assigned to each requirement key, `blocking` —
-    what would refuse a proposal right now — and `ready_to_propose`, which is false while anything
-    blocks. A saved document is not a ready one: say it is ready only when that field is true.
+    what would refuse its approval right now — and `ready_to_approve`, which is false while
+    anything blocks. A saved document is not a ready one: say it is ready only when that field is
+    true.
     """
     document: Dict[str, Any] = {
         "schema_version": schema_version,
@@ -5285,6 +5294,7 @@ def submit_spec_document(
         "delivery": delivery,
         "slices": slices,
         "roadmap": roadmap,
+        "already_built": already_built,
     }
     # Before anything is sent. These are annotated `Any` so that a wrong shape reaches this check
     # rather than being refused by the framework's own validator, whose message was the finding

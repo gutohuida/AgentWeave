@@ -1,1 +1,0 @@
-import{j as l}from"./index-CHLjSFpt.js";function r({tone:t,children:a,live:e=!1,title:s,testId:i}){return l.jsx("span",{className:`aw-pill tone-${t}`,"data-live":e?"true":void 0,title:s,"data-testid":i,children:a})}export{r as S};
