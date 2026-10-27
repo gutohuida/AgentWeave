@@ -1,0 +1,493 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an approved two-task document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k recorded -v",
+      "key": "build-recorded",
+      "requirement": "start-a-build",
+      "then": "reading the document's builds returns one running build with exactly those settings, and the second start is refused 409 naming the running build",
+      "when": "the operator starts a build with driver flow, level gated, builders [dev], reviewers [qa], a $5 cap, a window ending tomorrow and landing main, and then starts a second build of it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two copies of the same two-task spec on the trial Hub :8010, Haiku agents dev, qa and lead",
+      "how_to_check": "Drive on :8010 started from the branch (DATABASE_URL naming the trial profile): POST each build, wait, GET each document's builds and tasks; paste the reads.",
+      "key": "slice-done-drive",
+      "requirement": "start-a-build",
+      "then": "both builds read back with their driver and level, every task of the first records fast and of the second gated, and the first's tasks were approved with no reviewer turn",
+      "when": "one copy is built at Fast with driver lead and the other at Gated with driver flow, and both run to their end"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose recommended build names driver lead, level fast, builders and a cap",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/buildDialog.test.tsx (fed the document read's real payload)",
+      "key": "build-dialog-prefilled",
+      "requirement": "start-a-build",
+      "then": "each setting is filled in from the recommendation, each task shows its declared builder, and submitting sends exactly the shown settings",
+      "when": "the operator opens Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running Fast build and a task created with create_task outside any build",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k level -v",
+      "key": "level-on-task-and-transition",
+      "requirement": "task-records-its-level",
+      "then": "the build's task reads build id and level fast and each of its transitions carries fast; the outside task reads no build and no level and its approval behaves as on master",
+      "when": "a task of the build is completed and approved, and the outside task is completed and approved by another agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose task t1 declares builder dev (an open agent) and t2 declares builder ghost (no such agent)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k builder -v",
+      "key": "builder-assigned-at-start",
+      "requirement": "a-task-names-its-builder",
+      "then": "t1's assignee is dev, t2 has no assignee and keeps builder ghost, and the start response names ghost as unresolved; no run is started",
+      "when": "a hand-driven build starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow-driven Gated build with builders [dev] and reviewers [qa], and a free agent architect with a runner",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k staffs -v, red on master, green on the branch; paste both",
+      "key": "flow-staffs-only-builders",
+      "requirement": "the-flow-staffs-the-builds-people",
+      "then": "architect is never selected; the task waits while dev is busy and goes to dev when free; its review goes to qa; on master the same document's flow selects architect",
+      "when": "the flow fires with dev busy, then with dev free, and a task is completed by dev"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a lead-driven build with lead L and builders [dev]",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_lead_hands_out_the_work.py -v",
+      "key": "lead-briefed-and-hands-out",
+      "requirement": "a-lead-hands-out-the-work",
+      "then": "L received one brief at start and one after the completion (none stacked while unread), dev's turn is bound to t1, and qa's call is refused 403",
+      "when": "it starts, L calls hand_out_task for t1 to dev, dev completes t1, and qa (not the lead) calls hand_out_task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k hand -v",
+      "key": "hand-starts-nothing",
+      "requirement": "a-lead-hands-out-the-work",
+      "then": "no loop, run or queued entry is created for it",
+      "when": "a hand-driven build starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task of a hand-driven Fast build, built by dev, with passing checks",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k fast -v",
+      "key": "fast-builder-approves",
+      "requirement": "fast-approves-without-a-reviewer",
+      "then": "the Fast task is approved with no review turn and its transition records fast; the Gated call is refused naming the level; on master the Fast call is refused (no completed->approved edge)",
+      "when": "dev calls update_task(status='approved'), and on a Gated build's task the same call is made"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow-driven Fast build whose task dev completed, with a check run in progress",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k flow_fast -v",
+      "key": "fast-flow-approves-after-checks",
+      "requirement": "fast-approves-without-a-reviewer",
+      "then": "the flow approves the task (origin job, level fast) without staging any review turn",
+      "when": "the check run passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with open tasks whose work is on main",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k already_built -v",
+      "key": "fast-close-as-built",
+      "requirement": "fast-approves-without-a-reviewer",
+      "then": "every task is approved at once, with its evidence recorded and accepted and its history naming the action and commit",
+      "when": "the operator closes them as already built at level fast"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task of a Reviewed build serving FR-1 and FR-2, with evidence recorded only for FR-1",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k reviewed -v",
+      "key": "reviewed-reports-gaps",
+      "requirement": "reviewed-is-anyone-but-the-builder",
+      "then": "the builder is refused; qa's approval succeeds and its response lists FR-2 under reported",
+      "when": "the builder tries to approve it, and then qa approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same task in a Gated build of a sketch-rigor document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k gated -v",
+      "key": "gated-needs-evidence",
+      "requirement": "gated-is-todays-gate",
+      "then": "the approval is refused naming FR-2 as unverified; once FR-2's evidence is recorded and accepted the approval succeeds",
+      "when": "qa approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed Fast task whose project check fails on its merged result",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k checks -v",
+      "key": "red-checks-at-fast",
+      "requirement": "checks-hold-at-every-level",
+      "then": "both are refused by the checks and nothing merges; `builds.allows_automatic_override` answers true for fast and reviewed and false for gated",
+      "when": "its builder approves it, and the flow's firing runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow-driven build with a $1 cap whose bound runs' turn_usage sums to $1.20, one of them still running",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_lead_hands_out_the_work.py -k budget -v",
+      "key": "cap-stops-new-turns",
+      "requirement": "budget-and-window",
+      "then": "nothing new is staged, the running turn is untouched, the build is stopped with a reason naming $1.20 of $1.00 and the operator is notified; after the cap is raised to $5 the next firing stages work",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a lead-driven build whose window opens in an hour",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_lead_hands_out_the_work.py -k window -v",
+      "key": "window-closed",
+      "requirement": "budget-and-window",
+      "then": "the first firing briefs nobody; the second briefs the lead",
+      "when": "its loop fires now and again after the window opens (frozen clock)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build landing nowhere in a git fixture with main set, and an approvable task on it",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k lands -v",
+      "key": "lands-nowhere",
+      "requirement": "landing",
+      "then": "the task is approved, main's tip is unchanged, and its integration record is skipped with the reason that the build lands nowhere",
+      "when": "the task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "slice B's invariant test",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_every_task_state_has_a_mover.py -v",
+      "key": "invariant-over-levels",
+      "requirement": "no-level-strands-a-task",
+      "then": "every pair other than blocked has a mover at every level",
+      "when": "it is parametrised over fast, reviewed, gated and no build, with the lead added to the holders"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "f9869f35bff2b1cf43094eff6aec1d3e2418750e51b83ae4dc0dd6fdcef27df8",
+      "FR-10": "5c1d1edf1a313bace9371387133d5c0f1be16d112d91973cc43639506e409e95",
+      "FR-11": "e52be1cf3553987eafde55cd184d25209912d906611a8c72f41b783694c2665b",
+      "FR-12": "9b6b8d760ef3bd95d52af8fa2b628efbf654082e1a50c862b6728b07e9cf1474",
+      "FR-2": "38ab6f3788d6e9a1425e0941fb07702e6e0aee11f1a6aa421d3a4ad648c6fc55",
+      "FR-3": "d7c40de879c3c9eef028d9dbfb3fe8dc6086a26a56cd102588cfaa53beaa03f0",
+      "FR-4": "0510d750f5e409d1f88ae2f9705adaf3d2afa96fa0eec58819408aa75f17396f",
+      "FR-5": "ee4597d7c9842699be248bdd0c68f8d3575aae50147073042b8985da1c373c74",
+      "FR-6": "dcbeeaac2eba46291148ea6c2d3d9ad2f3b6f1c3369c3ad63dd548612ba9f389",
+      "FR-7": "51d7b65a9c60ceaee9937b1b424e4ae6796b56b0333d49861ea5d46ea7fa8e1c",
+      "FR-8": "d5756a46723c8efcba6a27e60ae3d08bde40908843e7fc098bdea25713123d24",
+      "FR-9": "b76488cb43f79c15b4f5a9ba89f786afb1fd0e40ec0fd0f35eb4d44e6a76391e"
+    },
+    "high_water": 12,
+    "requirements": {
+      "a-lead-hands-out-the-work": "FR-5",
+      "a-task-names-its-builder": "FR-3",
+      "budget-and-window": "FR-10",
+      "checks-hold-at-every-level": "FR-9",
+      "fast-approves-without-a-reviewer": "FR-6",
+      "gated-is-todays-gate": "FR-8",
+      "landing": "FR-11",
+      "no-level-strands-a-task": "FR-12",
+      "reviewed-is-anyone-but-the-builder": "FR-7",
+      "start-a-build": "FR-1",
+      "task-records-its-level": "FR-2",
+      "the-flow-staffs-the-builds-people": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Owner. A new module, hub/hub/builds.py, owns the build record and the level policy: LEVELS, who may approve at a level, the evidence rule a level implies, and allows_automatic_override(level). It decides nothing about moves: slice B's decide_move (task_transition_service.py:467) stays the one decision and reads the level as an input, and requirement_gate keeps the evidence decision, reading builds' rule where it reads document rigor today (requirement_gate.py:1217-1228). Fast maps to sketch's rule, Reviewed to contract's (reported, never refused), Gated to gate's. A task with no build keeps its document's rigor, so nothing built before this change, and no task created outside a build, behaves differently.\n\nD2 Record and engine. The build row holds the settings; the flow and lead drivers each own one Loop, the row the scheduler already fires, advances after commit (flow_advance.py:39, called from task_transition_service.py:979) and stops, so no second scheduling mechanism appears. The hand driver owns no loop. One running build per document: a partial unique index on (document_id) where state is running, the precedent ux_loops_spec_document_live (models.py:2001-2007). A Loop created before this change has no build and runs as today. Slice C's Build route and 'Approve and build' create the build; the recommended build slice C records gains these settings, and C's delivery mode flow/none reads as driver flow/hand.\n\nD3 People. builders narrows _agents_a_loop_may_staff (scheduler.py:1696) and the job's default agent is the first builder; reviewers narrows rung 2 of resolve_reviewer (scheduler.py:1888). A task's declared reviewer (rung 1) and declared builder win over the pools. The declared builder becomes the assignee at build start, not at approval (slice C: approval is a plan): the flow already resumes an assigned task only on its assignee (scheduler.py:2375-2377), which is the mechanism F1046 points at. Empty lists mean today's behaviour.\n\nD4 Levels. Fast adds one edge, completed -> approved, which decide_move allows only at Fast and only to the task's builder, the build's lead and the operator; in a flow-driven Fast build no review is staged, and the flow approves (origin job, as the operator's job authority, task_transition_service.py:827-830) once the task's check run passes, asked from project_checks._announce_finished (project_checks.py:854) through flow_advance. The edge, rather than letting the builder take its own task into review, keeps 'an author holds its task under review' false at every level (slice B's _guard_reviewer_is_not_the_author). Reviewed and Gated keep slice B's anyone-but-the-builder rule. Close-as-built (already_built.py:138) takes a level; at Fast its evidence is recorded accepted and the tasks approved at once (slice B's resolved question). tasks.level is written at build start and task_transitions.level on every move of a task in a build.\n\nD5 Checks at every level. Approval still calls evaluate_approval with start_checks (task_transition_service.py:918-929) whatever the level, and slice L's ordering applies unchanged. Slice M's automatic override asks builds.allows_automatic_override: true at Fast and Reviewed (subject to M's project setting), false at Gated. The operator picks Gated to judge every landing; at Gated, M's fix task still heads the flow and the approval lands when its checks pass.\n\nD6 Lead. A lead-driven build's firing does not select work: it queues one brief to the lead's build conversation, listing open tasks, holders, free builders, level, spend and window, unless the previous brief is still unread. hand_out_task assigns and queues the chosen agent's turn bound to the task the way the operator's trigger does (task_id / review_task_id, agent_trigger.py:487-501), and refuses any caller that is not the lead of the task's running build and any agent outside the build's pools. The lead approves through update_task under D4's rules. It gets no general assignee power (slice B's non-goal stands).\n\nD7 Budget and window. Spend is the sum of turn_usage.api_equivalent_usd_micros over runs bound to the build's tasks and runs in the lead's build conversation; a turn with no figure counts zero and the build view counts it as unpriced. USD rather than tokens because that is the unit the operator measured the nights in, and it is recorded on 428 of 436 turns on :8000. Each flow or lead firing asks builds.may_hand_out first; at the cap the loop stops with stop_reason naming spend and cap, a stall-free operator notification is sent, and Raise cap / a later window restarts the loop. Running turns are never stopped.\n\nD8 Landing. main merges as today. nowhere makes _integrate_task (task_transition_service.py:1276) record a skip with the reason before any git call. A named branch is not offered (non-goals).\n\nHazard (Tier 2). Migration: a builds table; tasks.build_id (indexed, no foreign key, the precedent Task.loop_id, models.py:760-764) and tasks.level; task_transitions.level. No backfill: null means built outside a build and governed as today. Rollback: downgrade drops the index, the three columns and the table; nothing existing is rewritten. Live data on :8000 (read-only, 2026-10-27): 0 open spec tasks, 1 live flow loop, which has no build and keeps running as today. Back up :8000 with the sqlite backup API before its first start on this code. Cross-cutting: decide_move and requirement_gate are consulted by every path that moves or approves a task; slice B's invariant test, extended over levels and the lead, is what stops a level from adding a dead end.\n\nSplit. Amendments, retiring rigor, the main watch and the next-slice offer are slice D2 (split accepted 2026-10-27).",
+  "evidence": {
+    "checked": [
+      "hub/hub/task_transition_service.py:467-501 decide_move (slice B's one decision) and :504-633 the two author guards it calls; :840-845 apply_transition consults it",
+      "hub/hub/task_transitions.py:101-157 TRANSITIONS: completed has no edge to approved; under_review -> approved is open to both actor kinds",
+      "hub/hub/task_transition_service.py:903-930 approval runs evaluate_approval with start_checks; only the operator may override (:909-913)",
+      "hub/hub/task_transition_service.py:979-980 flow_advance after hand-off; :1027-1034 terminal hook (release, slice_drafting.on_task_closed)",
+      "hub/hub/scheduler.py:1696-1747 _agents_a_loop_may_staff and _agents_withheld_from_fresh_work; :2375-2377 an assigned task resumes on its assignee; :2444-2478 default agent then first free agent; :1888-1990 resolve_reviewer's ladder",
+      "hub/hub/api/v1/spec.py:3317-3360 approval materialises tasks then _approval_flow; :3490-3620 the flow built from delivery via build_flow_rows (api/v1/jobs.py:710)",
+      "hub/hub/spec_payload.py:136-167 Task has reviewer, no builder; :196-234 Delivery fields",
+      "hub/hub/spec_tasks.py:408-425 materialised tasks get assignee None",
+      "hub/hub/requirement_gate.py:1192-1245 and :611-644 rigor read per linked document",
+      "hub/hub/db/models.py:1893-2008 Loop columns; :724-830 Task; :832-880 TaskTransition; :2400-2405 SpecDocument.rigor; :1572-1590 turn_usage.api_equivalent_usd_micros",
+      "hub/hub/task_transition_service.py:1276-1345 _integrate_task skips without a main branch; hub/hub/task_integration.py:732-746 checkout must be on the target branch",
+      "hub/hub/project_checks.py:854 _announce_finished; :713-722 preexisting/own_failure (what slice M builds on)",
+      "hub/hub/already_built.py:1-25 and :138 close-as-built walks to under_review and approves on acceptance",
+      "hub/hub/api/v1/agent_trigger.py:459-501 TriggerAgentRequest task_id and review_task_id",
+      "hub/tests/test_every_task_state_has_a_mover.py:35-36 NON_TERMINAL and HOLDERS, the invariant extended here",
+      "F1046: git show agentweave/Architect:scripts/drive/FINDINGS.md, line 40509 (master renumbered its own F1046-F1049, commit bbf3f10)",
+      ":8000 read-only (mode=ro), 2026-10-27: alembic 0147; all 180 spec documents sketch; 0 spec_edit_proposals; 1 live flow loop; spec tasks 40 approved, 2 rejected, none open; turn_usage 436 claude turns, 8 without api_equivalent_usd_micros",
+      "Validated with hub.spec_payload.validate_payload"
+    ],
+    "limits": [
+      "Slice C is not built: its Build route, recommendation shape and header are read from its document (spec/changes/exploring-ends-at-an-approved-plan/spec.json), so file paths for them are where C plans them",
+      "Slice M is not built: allows_automatic_override has no caller until it is; the red-checks criterion checks the policy and the refusal only",
+      "Whether a lead-driven loop reads as stalled to the stall sweep (stalls.py) between briefs was not checked; task 3 must make the board and the sweep read a pending brief as work, as F23 did for flows",
+      "The lead's brief wording and charter are not specified; task 3 writes them",
+      "Migration number is the next free one at build time (master is at 0147; slices A, C and K may add migrations first)",
+      "Every how_to_check is proposed coverage written from the criteria, not tests that exist yet"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2 (hazard): a migration on the operator's live database (a builds table and level/build columns on tasks and task_transitions) and a cross-cutting contract, slice B's mover decision and the evidence gate that every path consults. Records a one-off change; the capability documents for task lifecycle and agent flows are reconciled after it is built.",
+  "open_questions": [
+    {
+      "question": "Split roadmap slice D in two: split accepted 2026-10-27; D2 is amendments-main-watch-and-the-next-slice (slice key amendments-main-watch-next-slice), building after this one.",
+      "resolved": true
+    },
+    {
+      "question": "Slice M's automatic override: allowed at Fast and Reviewed, never at Gated (decided; reasoning in design D5).",
+      "resolved": true
+    },
+    {
+      "question": "Budget unit: API-equivalent US dollars from turn_usage, unpriced turns counted as zero and shown as unpriced (decided; design D7).",
+      "resolved": true
+    },
+    {
+      "question": "Where work lands: the main branch or nowhere; a named other branch waits for slice E (decided; design D8).",
+      "resolved": true
+    },
+    {
+      "question": "A task outside any build: governed as today by its document's rigor, recording no level (decided; design D1).",
+      "resolved": true
+    }
+  ],
+  "problem": "Every spec is built with the same ceremony whatever its risk, and nobody chooses who builds it.\n- 2026-10-26/27, slice B's flow (operator's :8000): T3 was built by the Architect (Opus, 41 min, ~$6) because a flow hands fresh work to whichever agent is free: `decide_firing` takes the first free agent (hub/hub/scheduler.py:2444-2478) from `_agents_a_loop_may_staff` (scheduler.py:1696-1720), which knows no list of builders. The night cost ~$44 API-equivalent over 6 h 47 min, $11.2 of it Opus QA, and three reviews found only what the failing check had already found.\n- 2026-10-25 (F1046, branch agentweave/Architect, scripts/drive/FINDINGS.md:40509): a spec task can name its reviewer but not who builds it (`spec_payload.Task`, hub/hub/spec_payload.py:136-167); approval creates every task with `assignee=None` (hub/hub/spec_tasks.py:416), so routing a task to the stronger model means setting assignees by hand after approval.\n- The rule that the builder never approves is unconditional (`_guard_author_is_not_reviewer`, hub/hub/task_transition_service.py:504-552), so there is no way to say 'this one is low risk, let the builder land it'.\n- How strictly evidence is enforced is a property of the document (`SpecDocument.rigor`, hub/hub/db/models.py:2400-2405, read by requirement_gate.py:1217-1228), not of how it is built; on :8000 every one of 180 documents is `sketch` (read-only query, 2026-10-27).\n- Nothing records how a spec was built: approval creates one flow from `delivery` (hub/hub/api/v1/spec.py:3490-3620) with an agent, a cron and a stop condition, and `Loop` has no builders, reviewers, budget or level (models.py:1893-2008). The only cost limit is the project-wide token budget (models.py:84, usage_accounting.py:508-535), so a build cannot be capped.",
+  "requirements": [
+    {
+      "key": "start-a-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: how a spec is built is chosen when building starts, not inside the spec; the record is what slices F and G read.",
+      "statement": "Starting a build of an approved document records a build with its driver (flow, lead or hand), level (fast, reviewed or gated), builders, reviewer pool, lead, budget cap, window and landing, readable afterwards from the document; Build and 'Approve and build' open with the recommended build filled in; a second build of the same document is refused while one is running, naming it."
+    },
+    {
+      "key": "task-records-its-level",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "'Every task records the level it was built under' (roadmap); a null level keeps every flow and task created before this change behaving as it does now.",
+      "statement": "Every task a build covers records that build and its level when the build starts (or when it joins a running build), and every transition of that task records the level that governed it; a task outside any build records none and is governed exactly as today."
+    },
+    {
+      "key": "a-task-names-its-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1046. Kept rather than refused for the reason `reviewer` is (spec_payload.py:164-167): an author cannot know which agents the running machine has. Applied at build start, not approval, because slice C makes approval a plan.",
+      "statement": "A spec task may declare a builder by agent name; when a build starts, a declared builder that is an open agent becomes the task's assignee unless the operator changed it in the Build dialog, and one that is not is kept on the task, reported in the start's response, and the task left for the driver to hand out."
+    },
+    {
+      "key": "the-flow-staffs-the-builds-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-27: T3 went to the Architect (Opus) only because it was free.",
+      "statement": "A flow-driven build hands fresh work only to its builders and staffs reviews only from its reviewer pool (each list, when empty, meaning any free agent as today); a task's own declared builder or reviewer still takes precedence; no other agent is given a turn on the build's tasks."
+    },
+    {
+      "key": "a-lead-hands-out-the-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The lead exercises the judgement the 2026-10-25 retrospective found missing in the middle; its authority is scoped to one build (roadmap non-goal: no project-wide god agent).",
+      "statement": "A lead-driven build gives its lead a turn when it starts and whenever one of its tasks is completed, sent back, approved or rejected, without stacking a second brief on an unread one; the lead hands a task to one of the build's builders, or a review to one of its reviewer pool, with a tool answered only for the lead of that task's running build; a hand-driven build starts no turn at all."
+    },
+    {
+      "key": "fast-approves-without-a-reviewer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice B's non-goal names Fast as where author-may-not-approve becomes a choice; slice B's resolved question says already-built tasks close at once at Fast.",
+      "statement": "At Fast, a completed task is approved without a reviewer turn: by its builder or its build's lead directly from completed, or, in a flow-driven build, by the flow once the task's check run has passed; and closing a document's tasks as already built (slice B) at Fast approves them at once."
+    },
+    {
+      "key": "reviewed-is-anyone-but-the-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "At Reviewed, any agent other than the task's builder (the lead included) or the operator approves it, and requirements the task serves that lack accepted evidence are reported in the approval's response, never refused."
+    },
+    {
+      "key": "gated-is-todays-gate",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "At Gated, the builder cannot approve, and approval is refused until every requirement the task serves has evidence accepted, as a `gate`-rigor document's tasks are today."
+    },
+    {
+      "key": "checks-hold-at-every-level",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap non-goal: at every level red checks mean no merge. Fast removes the reviewer, not the checks. Gated is chosen to judge every landing, so a Hub judgement that a failure is not the task's does not land it there.",
+      "statement": "At every level, approval lands work only on passing project checks or an override: the operator's with a reason at any level, or slice M's automatic override at Fast and Reviewed only, never at Gated."
+    },
+    {
+      "key": "budget-and-window",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The night of 2026-10-26/27 cost ~$44 with nothing to stop it; turn_usage carries api_equivalent_usd_micros on 428 of 436 turns on :8000 (read-only query, 2026-10-27).",
+      "statement": "A flow- or lead-driven build hands out no new turn before its window opens, after it closes, or once the API-equivalent cost of its runs reaches its cap; turns already running finish; reaching the cap stops the build with the spend and the cap in its reason and notifies the operator, and raising the cap or extending the window resumes it."
+    },
+    {
+      "key": "landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A build lands its approved work on the project's main branch as today, or nowhere: a task of a build that lands nowhere is approved with nothing merged and its integration record says the build lands nowhere."
+    },
+    {
+      "key": "no-level-strands-a-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice B's invariant, extended: levels and a lead are new inputs to its one decision, and must not add a dead end.",
+      "statement": "For every level, every non-terminal status and every holder (none, the builder, another agent, the mender, the build's lead), at least one actor can move the task on with the tools it is offered, blocked excepted (its mover is the operator)."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "builds-driver-level-people"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A build record created by slice C's Build action (and 'Approve and build'), holding driver, level, builders, reviewer pool, lead, budget cap, window and landing; one running build per document",
+      "The flow driver drawing fresh work only from the build's builders and reviews only from its reviewer pool",
+      "The lead driver: a lead agent briefed when the build starts and when its work is handed on, handing tasks to builders and reviews to the pool with a tool scoped to its build",
+      "The hand driver: nothing is started; tasks wait on the board with their builders assigned",
+      "Fast, Reviewed and Gated as inputs to slice B's mover decision and to the evidence gate; slice B's close-as-built approving at once at Fast (B's open question)",
+      "A per-task builder in the spec payload (F1046) and the recommended build's new settings beside slice C's recommendation",
+      "Each task recording its build and level, and each transition the level that governed it",
+      "A budget cap in API-equivalent dollars and a window, both stopping new turns, never running ones",
+      "Landing on the project's main branch or nowhere",
+      "Which levels allow slice M's automatic check override",
+      "The Build dialog's settings and the build's state on today's spec header and task drawer"
+    ],
+    "non_goals": [
+      "Amendments after approval proposed by the author and the lead and accepted by the operator, retiring document rigor, raising main moving outside the Hub's integration, and offering the next slice's drafting when a build finishes: roadmap slice D2, spec/changes/amendments-main-watch-and-the-next-slice/",
+      "Retiring `SpecDocument.rigor`: a task in a build is governed by its level; a task outside any build keeps today's rigor behaviour until slice D2 retires the setting",
+      "Landing on a named branch other than the main branch: integration merges in the project's checkout and refuses one on another branch (task_integration.py:742-745); merging elsewhere belongs to slice E",
+      "The order of checks around completion and review: slice L, which applies unchanged at every level",
+      "Detecting a check failure that is not the task's and filing its fix task: slice M; this document only says at which levels its override may land work",
+      "The mender's waking rules: slice N",
+      "Per-level statistics: slice G reads what this records",
+      "A redesigned build view: slice F; this document extends today's header and drawer",
+      "Giving agents an assignee field on update_task: only the lead's scoped hand-out tool assigns, as slice B's non-goal keeps it",
+      "Killing a running turn when a budget or window ends"
+    ]
+  },
+  "summary": "Building an approved spec becomes a recorded build with settings the operator chooses when they press Build (slice C's action): a driver that hands out the work (the Hub's flow, a lead agent, or nobody: by hand), a gate level (Fast: the builder or the lead approves; Reviewed: anyone but the builder; Gated: as today, evidence accepted per requirement), the builders the work may go to, a reviewer pool, a lead, a budget cap, a window and where the work lands. A spec task may name its builder (F1046), and every task records the build and the level it was built under. Levels are new inputs to slice B's one mover decision and to the evidence gate, not new scattered checks; at every level red checks still mean no merge. Amendments after approval, raising main moving outside the Hub's integration, and offering the next slice's drafting are roadmap slice D2 (amendments-main-watch-and-the-next-slice), split off on 2026-10-27 because the whole slice did not fit four reviewable tasks.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "The acceptance drive first: write hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py (recorded, level, builder, staffs, hand, lands) and see `-k staffs` fail on master because a document's flow selects a free agent outside any builders list. Then: hub/hub/builds.py owning the build record; the migration (builds table, tasks.build_id and tasks.level, task_transitions.level) with a downgrade test; slice C's Build route taking the settings and creating the build (one running per document); `Task.builder` and the recommended build's settings in the payload; the declared builder applied at start; the flow driver's staffing narrowed to builders and reviewers; the level written on tasks and transitions; landing nowhere in `_integrate_task`. Back up :8000 before its first start on this code.",
+      "files": [
+        "hub/hub/builds.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/spec_payload.py",
+        "hub/hub/spec_tasks.py",
+        "hub/hub/scheduler.py",
+        "hub/hub/task_transition_service.py",
+        "hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py",
+        "hub/tests/test_migration_builds.py"
+      ],
+      "from": null,
+      "key": "build-record",
+      "requirements": [
+        "start-a-build",
+        "task-records-its-level",
+        "a-task-names-its-builder",
+        "the-flow-staffs-the-builds-people",
+        "landing"
+      ],
+      "reviewer": null,
+      "title": "The build record, the flow's people and landing"
+    },
+    {
+      "depends_on": [
+        "build-record"
+      ],
+      "description": "Red tests first in hub/tests/test_build_levels.py. `decide_move` reads the task's level from builds.py: at Fast the builder and the lead may move completed -> approved (a new edge, refused at other levels naming the level); Reviewed is slice B's rule; Gated likewise. requirement_gate reads the evidence rule from the level for a task in a build (fast as sketch, reviewed as contract, gated as gate) and the document's rigor otherwise. In a flow-driven Fast build the flow stages no review and approves once the task's check run passes, asked when the run finishes. Close-as-built takes a level and approves at once at Fast. `builds.allows_automatic_override(level)` for slice M. Extend test_every_task_state_has_a_mover.py over the levels and the lead.",
+      "files": [
+        "hub/hub/builds.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/task_transitions.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/scheduler.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/flow_advance.py",
+        "hub/hub/already_built.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_build_levels.py",
+        "hub/tests/test_every_task_state_has_a_mover.py"
+      ],
+      "from": null,
+      "key": "levels",
+      "requirements": [
+        "fast-approves-without-a-reviewer",
+        "reviewed-is-anyone-but-the-builder",
+        "gated-is-todays-gate",
+        "checks-hold-at-every-level",
+        "no-level-strands-a-task"
+      ],
+      "reviewer": null,
+      "title": "Fast, Reviewed and Gated in the mover decision and the gate"
+    },
+    {
+      "depends_on": [
+        "levels"
+      ],
+      "description": "Red tests first in hub/tests/test_a_lead_hands_out_the_work.py. A lead-driven build's loop briefs its lead instead of selecting work (at start, on each hand-off through flow_advance, cron as backstop, never a second brief over an unread one); `hand_out_task(task_id, agent, review=False)` in the MCP surface and its agent-plane route, answered only for the lead of the task's running build, assigning a builder (or a reviewer from the pool) and queueing that agent's turn bound to the task. Every flow and lead firing first asks builds.py whether the window is open and the spend under the cap; at the cap the build stops with its reason and the operator is notified; raising the cap or extending the window resumes it.",
+      "files": [
+        "hub/hub/builds.py",
+        "hub/hub/scheduler.py",
+        "hub/hub/flow_advance.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/test_a_lead_hands_out_the_work.py"
+      ],
+      "from": null,
+      "key": "lead-budget-window",
+      "requirements": [
+        "a-lead-hands-out-the-work",
+        "budget-and-window"
+      ],
+      "reviewer": null,
+      "title": "The lead driver, the budget cap and the window"
+    },
+    {
+      "depends_on": [
+        "lead-budget-window"
+      ],
+      "description": "Slice C's Build dialog gains driver, level, builders, reviewer pool, lead, cap, window and landing, prefilled from the recommendation, with each task's builder editable; today's spec header shows the running build (driver, level, spend of cap, window) with Stop and Raise cap; the task drawer and card show the task's level and builder. Every new route gets its client here (test_surface_ceilings). Vitest first, then rebuild the bundle (commit hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/ui/src/components/spec",
+        "hub/ui/src/components/tasks",
+        "hub/ui/src/api",
+        "hub/ui/src/__tests__/buildDialog.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "build-ui",
+      "requirements": [
+        "start-a-build",
+        "task-records-its-level",
+        "budget-and-window"
+      ],
+      "reviewer": null,
+      "title": "Build settings and build state in the app"
+    }
+  ],
+  "title": "A build has a driver, a level and its people"
+}

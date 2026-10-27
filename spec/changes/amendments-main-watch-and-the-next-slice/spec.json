@@ -1,0 +1,439 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an approved document with a running flow-driven build whose lead is L, in a git fixture",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_amendments_main_watch_and_the_next_slice.py -k lead_amendment -v, red on master and green on the branch; paste both",
+      "key": "lead-amendment-joins-running-build",
+      "requirement": "accepted-task-joins-a-build",
+      "then": "before acceptance the document and board are unchanged; after it the new task exists with the build's id and level and the flow's next firing stages it; on master L's call is refused 403 ('only a run testing a task of this document may amend it')",
+      "when": "L proposes add_task with a reason, the board is read, and then the operator accepts it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with no running build",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_after_approval.py -k next_build -v",
+      "key": "task-waits-for-next-build",
+      "requirement": "accepted-task-joins-a-build",
+      "then": "the task is pending with no build until the start, then carries the new build and its level",
+      "when": "its author's add_task amendment is accepted, and later a build is started"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document written by Architect before approval, a running build led by L, and agent qa that neither wrote it nor leads",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_after_approval.py -k who -v",
+      "key": "only-author-and-lead",
+      "requirement": "author-and-lead-propose",
+      "then": "Architect's and L's are recorded as proposed with the document unchanged; qa's is refused 403 naming the author and the lead",
+      "when": "Architect, L and qa each propose add_criterion"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two proposals adding a criterion with the same key, and a third proposal",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_after_approval.py -k decide -v",
+      "key": "accept-stale-decline",
+      "requirement": "operator-accepts-or-declines",
+      "then": "the first is applied and listed accepted; the second is refused as stale naming the existing key and the document is unchanged by it; the third is listed declined with the reason; each proposer has an input entry carrying its decision",
+      "when": "the operator accepts the first, accepts the second, and declines the third with a reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose amendments route returns one proposed and one accepted amendment",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/specAmendmentsPanel.test.tsx (fed the route's real payload)",
+      "key": "panel-shows-proposals",
+      "requirement": "operator-accepts-or-declines",
+      "then": "the proposed one shows author, reason, how to check, the change and Accept and Decline (Decline asks for a reason); the accepted one shows who accepted it",
+      "when": "the amendments panel renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an exploring document whose row still says rigor gate",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rigor_retires.py -k save -v",
+      "key": "gate-document-save-applies",
+      "requirement": "exploring-saves-apply",
+      "then": "the save is applied (the stored content changes) and no spec_edit_proposals row is created; on master a proposal is created instead",
+      "when": "an agent submits a change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at the previous head holding an open task of a gate document, an open task of a contract document, a pending edit proposal, and a task outside any build of a sketch document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rigor_retires.py -v; plus the hazard check: a sqlite backup copy of :8000 (mode=ro) migrated on a branch Hub at :8010, counting rows changed (expected 0)",
+      "key": "rigor-gone-and-backfilled",
+      "requirement": "rigor-retires",
+      "then": "the first two tasks record gated and reviewed, the proposal is stale with the retirement reason, the routes answer 404, and approving the sketch task behaves as on master; a downgrade restores the nulls and the pending status",
+      "when": "the migration runs and the rigor and proposals routes are called"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a main branch in a git fixture, its tip already seen",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_main_watch_and_the_next_slice.py -k hand_commit -v",
+      "key": "hand-commit-raised",
+      "requirement": "main-move-raised",
+      "then": "an open main notice names that commit's sha, subject and author with the old and new tip, a notification event is broadcast, and the watch interval is at most 60 seconds; on master nothing is recorded",
+      "when": "a commit is made on main by hand and the watch looks once"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same fixture",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_main_watch.py -k rewrite -v",
+      "key": "rewrite-raised",
+      "requirement": "main-move-raised",
+      "then": "the notice says the history was rewritten, naming both tips; no task, check or integration is touched",
+      "when": "main is reset to an earlier commit and the watch looks"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub :8010 started from the branch, on a throwaway project with a main branch",
+      "how_to_check": "Drive: commit with git, time the notice appearing in the app (screenshot with clock), or poll the notices route; paste the timing",
+      "key": "drive-within-a-minute",
+      "requirement": "main-move-raised",
+      "then": "within 60 seconds the Overview shows the notice and a notification arrives",
+      "when": "a commit is made to its main by hand"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approvable task in a git fixture",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_main_watch.py -k own_merge -v",
+      "key": "own-merge-silent",
+      "requirement": "hub-merges-are-not-raised",
+      "then": "the integration record carries the merge commit's sha and no main notice exists",
+      "when": "the operator approves it (the Hub merges it) and the watch looks"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an unseen main notice for one commit",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_main_watch.py -k coalesce -v",
+      "key": "coalesced-and-persisted",
+      "requirement": "one-notice-until-seen",
+      "then": "there is one notice listing four commits, then none open; a fresh project's first look raises nothing",
+      "when": "two more commits land, the watch looks, the watch's in-memory state is cleared as by a restart, another commit lands and it looks again, then the operator marks it seen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved slice document whose roadmap's next slice no document claims, with one open task",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_main_watch_and_the_next_slice.py -k offer -v",
+      "key": "offer-not-queued",
+      "requirement": "next-slice-offered",
+      "then": "the offer is listed for the document and a notification sent, and no inbound entry exists for any agent; on master, with draft_next_slice requested, the turn is queued instead",
+      "when": "that task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same document, but another document already names the next slice in its roadmap link",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_next_slice_offer.py -k claimed -v",
+      "key": "no-offer-when-claimed",
+      "requirement": "next-slice-offered",
+      "then": "no offer is listed",
+      "when": "its last task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an offer whose document's writing conversation has been archived",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_next_slice_offer.py -k take -v",
+      "key": "take-offer-new-conversation",
+      "requirement": "taking-the-offer",
+      "then": "one entry is queued to Architect in a new conversation named for the next slice, carrying each task's outcome; the second take queues nothing",
+      "when": "the operator takes it choosing agent Architect, then takes it again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approvable slice document, and a database holding a next_slice_requested event with no queued event for a built document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_next_slice_offer.py -k request -v",
+      "key": "approval-refuses-request",
+      "requirement": "taking-the-offer",
+      "then": "the approval is refused 400 naming the offer; the earlier request is listed as an offer",
+      "when": "approval is sent with draft_next_slice true, and the offers are read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8d15b94c9246a230e51ae9c928ba6a30f5fb2eff677d6c7874fd623c0b4dcab0",
+      "FR-10": "337f1ea3bf7b638dbc598abd40783e4f24a77e06e7f5bc4302c8b1e43f8b36d2",
+      "FR-2": "1311af763a1308b09476ff1c6342eb9d1defa0701d39d066ee304c0bf26a3ec9",
+      "FR-3": "30f946cc4b5a72ede43c5a02e3217dbb47b0f9ba7ed8c5ec43a8fe3ebe419a0b",
+      "FR-4": "8209b48f3b6404545df69a4293f28afb6f45fc2e5e21403e7d83542e88ad9e73",
+      "FR-5": "83a0b4555a919830c8ce0db46468c620aab233e70b121859051dfb9707e934f2",
+      "FR-6": "e746d1141c974086ad0e89ec92969698b69f182cf577fe35abad05fab5ea33b3",
+      "FR-7": "cdd6569024eac63388157cc8ccd4be92310d4da6e9a866f407b595d9c0e3e94b",
+      "FR-8": "5d514c5a8d5c43e44bc659a326a71a526f537df0b69d743b910ec2a48ea278b7",
+      "FR-9": "bc208c137a0216ed797b655d425fad2124202bdcc70e631a78fec420604cffb9"
+    },
+    "high_water": 10,
+    "requirements": {
+      "accepted-task-joins-a-build": "FR-3",
+      "author-and-lead-propose": "FR-1",
+      "exploring-saves-apply": "FR-4",
+      "hub-merges-are-not-raised": "FR-7",
+      "main-move-raised": "FR-6",
+      "next-slice-offered": "FR-9",
+      "one-notice-until-seen": "FR-8",
+      "operator-accepts-or-declines": "FR-2",
+      "rigor-retires": "FR-5",
+      "taking-the-offer": "FR-10"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Amendments live in spec_amendments. It already owns the only post-approval change path, as Hub-owned append-only events with the structural operations (spec_amendments.py:223 apply, :348 amend). A proposal is an `amendment_proposed` event carrying the operation; acceptance runs `apply` on the document as it stands and writes through `spec_service._apply_and_write`, recording the existing `amendment` event (with `proposal` naming the proposal) and its review in one step, so every reader of amendments (counts, unreviewed_relaxing, the panel) keeps working; decline is an `amendment_declined` event. SpecEditProposal (whole-unit payload diffs, D1-D3 of the 2026 rigor change) is not reused: it diffs whole requirements against a digest, and two accepted proposals would overwrite each other where operations do not. New op `add_requirement` (key, statement, modal, rationale), since an added task must trace to a requirement. Who proposes: agents with a `content` event before `first_approved_at`, and the lead of the document's running build (builds.py); the tester keeps `amend` (non-goals). The operator decides; the proposer is told through queue_note_to_reporter (spec_amendments.py:868).\n\nD2 An accepted task joins a build through spec_tasks.materialise, which already attaches a new task to the document's live loop (spec_tasks.py:281, :420); slice D's builds.join_running_build adds the build, its level and the declared builder, and flow_advance wakes the driver.\n\nD3 Rigor retires in whole. Its proposals half is redundant once slice C keeps exploring documents editable and refuses a stale approval; its evidence half is slice D's level. Removed: the propose branch (spec_service.py:231-234), the routes (api/v1/spec.py:768 rigor, :938 rigor-history, :1261-1388 proposals), the app's control and proposals panels, rigor in the stored hub block and the rendered document. requirement_gate's per-document rule becomes the task's level, sketch's rule when there is none. Kept: the rigor column, spec_rigor_events and spec_edit_proposals, unread. spec_rigor keeps policy_digest, which requirement_gate uses.\n\nD4 The main watch is a new module, main_watch.py, called from project_checks.watch_main_once (one 30-second poll, project_checks.py:75, :1282) for every project with a main branch; the check refresh stays project_checks'. Own merges are recognised by sha, not by author or message: integrate records `merged_sha` (HEAD after `git merge --no-ff`, task_integration.py:793-816) on the TaskIntegration row, and a move is the Hub's when every first-parent commit from the seen tip is a recorded merged_sha. Identity cannot do it: the Hub's snapshots on task branches carry the same committer identity (worktrees.py:60), so a fast-forward of an agent's branch would pass. The seen tip is persisted on the project (`main_tip_seen`) so a restart neither loses nor re-raises a move; a null seen tip records without raising.\n\nD5 Hand merges are raised. The operator's interactive commits and the orchestrator's merges of this roadmap's work go to master by hand, and nothing reliable tells them from an agent's commit made in the main checkout: an exemption a commit can carry (a trailer, an author) is one an agent can write. So they are raised, and made cheap: one open notice per project gathers every move until marked seen, listing each commit's sha, subject and author, so the operator recognises their own merges at a glance. Not a stall: stalls wake the mender (stalls.py:168-177), which cannot act on this.\n\nD6 The offer is derived, not stored: a slice document is offered when it has no open task, the roadmap's next slice is claimed by no document, and no `next_slice_queued` or `next_slice_declined` event answers it. Deriving needs no data migration, and an earlier unanswered `next_slice_requested` (one on :8000) shows as an offer by the same rule. on_task_closed (slice_drafting.py:135) notifies instead of queueing. Taking reuses _queue_if_built's body (the turn text with outcomes, F501; the open-or-new conversation, F1047, slice_drafting.py:203-218; the queued event as the once guard), with the agent chosen by the operator.\n\nHazard (Tier 2). Two migrations on the live database. Rigor migration: open tasks of contract/gate documents outside a build get level reviewed/gated; pending edit proposals become stale with a reason; downgrade sets those levels back to null and the proposals back to pending (rows identified by the reason). Main-watch migration: task_integrations.merged_sha, projects.main_tip_seen, a main_notices table; downgrade drops them. On :8000 (read-only, 2026-10-27): all documents sketch, 0 proposals, 2 projects with a main branch, so the rigor backfill changes no row and the first look raises nothing. Back up :8000 with the sqlite backup API first. The watch now runs git every 30 s for each project with a main branch, not only those with checks: two on :8000.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_amendments.py:1-19 (tester amendments, applied at once), :223 apply, :348-452 amend and the tester-only refusal at :381-388, :551-660 listing, review and counts, :868 queue_note_to_reporter",
+      "hub/hub/api/v1/spec.py:1124-1200 the amendments routes; :768 and :938 the rigor routes; :1261-1388 the proposals routes; :438, :3244-3251, :3403-3407 draft_next_slice",
+      "hub/hub/spec_service.py:218-234 the approved refusal and the contract/gate proposal branch; :443 propose_edit, :738 accept_proposal",
+      "hub/hub/requirement_gate.py:611-644 and :1192-1245 rigor read per document",
+      "hub/hub/project_checks.py:75 WATCH_SECONDS 30, :884 _seen_tips in memory, :1218-1299 the tip read and watch_main_once (projects with checks only)",
+      "hub/hub/task_integration.py:749-818 integrate: merge --no-ff, outcome merged, no merge sha recorded; hub/hub/db/models.py TaskIntegration has commit_sha and no merge sha",
+      "hub/hub/worktrees.py:60 COMMIT_IDENTITY, shared with snapshots",
+      "hub/hub/stalls.py:168-177 recording a stall wakes the mender",
+      "hub/hub/slice_drafting.py:54-132 request at approval, :135-152 on_task_closed queues, :159-242 _queue_if_built with F1047's open-or-new conversation (commit 5b40da0)",
+      "hub/hub/spec_tasks.py:281 and :420 materialise attaches new tasks to the live loop",
+      ":8000 read-only (mode=ro), 2026-10-27: 180 documents all sketch; 0 spec_edit_proposals; amendment events 6 (all reviewed); 'created' by operator 159, by agent 21; 'content' by agent 99; next_slice_requested 4, queued 3 (the-app-stays-responsive-while-agents-run unanswered since 2026-10-25); 2 projects, both with a main branch, 1 with checks",
+      "grep: 10 test files set a non-sketch rigor or call the rigor route; 6 use edit proposals",
+      "Validated with hub.spec_payload.validate_payload"
+    ],
+    "limits": [
+      "Slice D is not built: builds.py, the running build, its lead and join_running_build are as that document plans them",
+      "Slice C is not built: whether its approval route still carries draft_next_slice is read from today's code",
+      "Whether the app's notification channel can carry a main notice and an offer was not checked; both are broadcast as events regardless",
+      "Which UI files the rigor control lives in was found by grep (SpecDocumentHeader, SpecPhaseBar, useSpecPhaseControls, SpecProposalsPanel, SpecResolvedProposals); the builder confirms",
+      "Every how_to_check is proposed coverage written from the criteria, not tests that exist yet"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2 (hazard): two migrations on the operator's live database (a level backfill and stale-marking for retired rigor; a merge sha, a persisted main tip and a notices table for the watch) and the retirement of a setting that the evidence gate and the save path read. Records a one-off change; the spec-document capability is reconciled after it is built.",
+  "open_questions": [
+    {
+      "question": "Hand merges by the operator and the orchestrator are raised like any other move and gathered into one notice until seen; no exemption is offered, because any mark a commit can carry an agent can write too (decided; design D5).",
+      "resolved": true
+    },
+    {
+      "question": "The tester's amendments stay applied at once and reviewed afterwards; only the author and the lead propose (decided; non-goals).",
+      "resolved": true
+    },
+    {
+      "question": "Next-slice offers are derived from the record, so the one unanswered request on :8000 becomes an offer with no data migration (decided; design D6).",
+      "resolved": true
+    }
+  ],
+  "problem": "- After approval only a tester can change a document (`spec_amendments.amend` refuses everyone else: 'only a run testing a task of this document may amend it', hub/hub/spec_amendments.py:381-388), and its change applies at once. A lead or the author that finds a missing task mid-build has no way to add it except asking the operator to reopen the document. Operator, 2026-10-26: after approval the author and the lead propose amendments and the operator accepts them.\n- Document rigor mixes two things: at contract/gate an agent's save becomes an edit proposal (`spec_service.save_document`, hub/hub/spec_service.py:231-234), and at gate approval needs accepted evidence (requirement_gate.py:1217-1228). Slice C makes exploring documents freely editable and refuses a stale approval, and slice D moves the evidence rule into the build's level, so the setting no longer decides anything a build does not. On :8000 every one of 180 documents is sketch and there are 0 edit proposals (read-only query, 2026-10-27): the machinery is unused.\n- Main moving outside the Hub is noticed only to refresh check results: `watch_main_once` polls every 30 s (project_checks.py:75, :1282-1299), only for projects with checks, keeps the last tip in memory (`_seen_tips`, :884) and tells nobody. 23-25 October recorded agents touching the main checkout; the roadmap's answer is that the Hub notices and raises it, never blocks it (operator, 2026-10-26).\n- The next slice's drafting is requested at approval (`draft_next_slice`, hub/hub/api/v1/spec.py:3244-3251, :3403-3407) and queued automatically when the last task closes (slice_drafting.py:135-152). On 2026-10-27 at 05:44 slice B's drafting turn was queued to the Architect while the operator was asleep and the roadmap was being reworked by hand; one request from 2026-10-25 (the-app-stays-responsive-while-agents-run) is still unanswered on :8000. The operator wants to decide when, and by whom, the next slice is drafted.",
+  "requirements": [
+    {
+      "key": "author-and-lead-propose",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26. 'Author' is every agent with a content save before first approval, not the creator: 159 of 180 documents on :8000 were created by the operator and written by an agent (read-only query of spec_document_events, 2026-10-27).",
+      "statement": "After a document is approved, an agent that wrote its content before approval, or the lead of its running build, can propose an amendment to it (add a task, add a requirement, add, change or remove a criterion) with a reason and how to check it; the proposal changes neither the document nor the board until the operator accepts it; any other agent's proposal is refused, naming who may propose."
+    },
+    {
+      "key": "operator-accepts-or-declines",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Re-applying the structural operation at acceptance, rather than a stored whole-document diff, keeps two accepted amendments from overwriting each other.",
+      "statement": "The operator sees each proposed amendment on its document with its author, reason, how to check it and the change it makes; accepting applies it to the document as it stands then and records it as accepted by the operator, or is refused as stale, naming why, when the change no longer applies; declining records the operator's reason; the proposer receives the decision as input in either case."
+    },
+    {
+      "key": "accepted-task-joins-a-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task added by an accepted amendment joins the document's running build at once, carrying that build and its level and its declared builder, and its driver hands it out like any other task of the build; with no build running it waits on the board and joins the next build started on the document."
+    },
+    {
+      "key": "exploring-saves-apply",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Before approval, every save of a document by an agent or the operator is applied directly, whatever rigor the document carried; no edit proposal is created."
+    },
+    {
+      "key": "rigor-retires",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The backfill keeps a stricter document's open work from loosening silently on another install; on :8000 it touches no row.",
+      "statement": "No route, tool or control in the app sets or shows a document's rigor; approval's evidence rule comes from the task's level (slice D), and a task outside any build is judged by sketch's rule unless it records a level; when this ships, each open task of a contract or gate document outside a build records reviewed or gated respectively, and each pending edit proposal is marked stale with a reason naming the retirement."
+    },
+    {
+      "key": "main-move-raised",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: notice and raise, never block. Hand merges by the operator and the orchestrator are raised too (design D5).",
+      "statement": "Within 60 seconds of a project's main branch tip moving by any commit other than a merge the Hub's own integration made, the operator receives a notification and sees an Overview notice naming the commits (short sha, subject, author) and the old and new tip; a move that rewrote history (the old tip no longer an ancestor) is raised as a rewrite; nothing is blocked, reverted or retried because of it."
+    },
+    {
+      "key": "hub-merges-are-not-raised",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A move made only of merge commits the Hub recorded making when it integrated approved work raises nothing."
+    },
+    {
+      "key": "one-notice-until-seen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator commits to master by hand most days; one notice per unseen stretch keeps that from becoming a pile.",
+      "statement": "Moves raised while a main notice is still unseen are added to it rather than raising another; marking it seen closes it; the tip last accounted for survives a Hub restart, so a move made while the Hub was down is raised at its first look, and the very first look after this ships records the tip without raising anything."
+    },
+    {
+      "key": "next-slice-offered",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the last open task of a document that specifies a roadmap slice closes and the roadmap's following slice is claimed by no document, the operator is notified and offered that slice's drafting on the Overview and the document's page; no drafting turn is queued until the operator takes the offer."
+    },
+    {
+      "key": "taking-the-offer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Keeps 5b40da0's behaviour (slice_drafting.py:203-218).",
+      "statement": "Taking the offer queues one drafting turn, carrying the slice's outcomes as today's turn does, to the agent the operator chooses (by default the document's author), in the conversation where the document was written while it is open and otherwise in a new one (F1047); declining it hides it for that slice; approval no longer accepts a request to draft the next slice, refusing it by name, and a request recorded before this ships shows as an offer."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "amendments-main-watch-next-slice"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Amendment proposals after approval by the document's authors and the lead of its running build: add a task, add a requirement, add, change or remove a criterion",
+      "The operator accepting (applied then, or refused as stale) or declining with a reason, the proposer told either way",
+      "An accepted task joining the running build, or waiting for the next one",
+      "Retiring the rigor setting: exploring saves always apply, edit proposals end, the routes and the app's rigor control and proposals panel go",
+      "A main watch over every project with a main branch, persisting the tip it last saw, raising moves that are not the Hub's own merges within a minute, coalesced into one notice until the operator marks it seen",
+      "The next slice's drafting offered when a slice's work is built, taken by the operator with the agent of their choice, F1047's new-conversation behaviour kept"
+    ],
+    "non_goals": [
+      "The tester's amendments (applied at once, reviewed afterwards, spec_amendments.py:1-19): unchanged; a tester that finds a gap while testing keeps the build moving, and its relaxing amendments already hold their requirement unverifiable until the operator reviews them",
+      "Amending a requirement's statement after approval: that is a reopen, as today",
+      "Blocking or reverting a move of main: the Hub raises it and nothing else (roadmap non-goal)",
+      "Telling the operator's or the orchestrator's own hand merges apart from an agent's: they are raised too, and recognised by the commits listed in the notice (design D5)",
+      "Dropping the rigor column or the spec_edit_proposals table: both stay, unread; dropping is an SQLite table rebuild for no behaviour",
+      "Drafting the next slice automatically: the offer replaces it",
+      "The mender: a main move or an offer is not a stall and wakes nobody (slice N owns the mender)",
+      "The redesigned spec page: slice F; amendments and offers appear on today's header and panel"
+    ]
+  },
+  "summary": "Three things that follow a build (slice D) and finish roadmap slice D. After approval, the document's author and the lead of its running build propose amendments, which change nothing until the operator accepts them; an accepted one that adds a task puts it in the running build, or on the board for the next one. Document rigor retires: before approval edits apply directly, after approval they are amendments, and how strictly evidence is judged is the build's level. The Hub watches the main branch and raises, within a minute, any move that is not its own integration merge, without blocking anything. And when a roadmap slice's work is built, drafting the next slice is offered to the operator rather than queued, and starts only when they take the offer.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "The acceptance drive first: write hub/tests/test_amendments_main_watch_and_the_next_slice.py (lead_amendment, hand_commit, offer) and see all three fail on master: the lead's amend is refused 403, a hand commit records nothing, and draft_next_slice queues the turn. This task makes lead_amendment pass. spec_amendments gains proposals from authors (agents with a content save before first approval) and the lead of the running build (slice D's builds.py), held as events until the operator accepts (the operation applied to the current document, or refused as stale) or declines with a reason; the proposer is told through queue_note_to_reporter; an accepted task joins the running build or waits for the next. amend_spec_document's description and the agent route say who proposes and who amends at once; the operator's accept and decline routes; today's amendments panel shows proposals with Accept and Decline; rebuild the bundle.",
+      "files": [
+        "hub/hub/spec_amendments.py",
+        "hub/hub/builds.py",
+        "hub/hub/spec_tasks.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/ui/src/components/spec/SpecAmendmentsPanel.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/ui/src/__tests__/specAmendmentsPanel.test.tsx",
+        "hub/hub/static/ui",
+        "hub/tests/test_amendments_main_watch_and_the_next_slice.py",
+        "hub/tests/test_amendments_after_approval.py"
+      ],
+      "from": null,
+      "key": "amendments",
+      "requirements": [
+        "author-and-lead-propose",
+        "operator-accepts-or-declines",
+        "accepted-task-joins-a-build"
+      ],
+      "reviewer": null,
+      "title": "The author and the lead propose; the operator decides"
+    },
+    {
+      "depends_on": [
+        "amendments"
+      ],
+      "description": "Red tests first in hub/tests/test_rigor_retires.py. save_document applies every save before approval (drop the proposal branch); remove the rigor, rigor-history and proposals routes and their UI (rigor control, SpecProposalsPanel, SpecResolvedProposals) and stop writing rigor into the stored hub block and rendered document; requirement_gate takes sketch's rule for a task with no level. A migration backfills the level of open tasks of contract/gate documents outside a build and marks pending edit proposals stale, with a downgrade. Update the tests that set rigor (about ten files, by grep) to set a level or drop the case.",
+      "files": [
+        "hub/hub/spec_service.py",
+        "hub/hub/spec_rigor.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/spec_render.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/ui/src/components/spec",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "rigor-retires",
+      "requirements": [
+        "exploring-saves-apply",
+        "rigor-retires"
+      ],
+      "reviewer": null,
+      "title": "Rigor retires"
+    },
+    {
+      "depends_on": [
+        "rigor-retires"
+      ],
+      "description": "Red tests first in hub/tests/test_main_watch.py; this task makes the drive's hand_commit pass. integrate records the merge commit it made on the integration record; a migration adds that column, the project's last-seen main tip and a main-notice table (open until seen, with the commits it lists). hub/hub/main_watch.py classifies a move (first-parent commits from the seen tip, less the Hub's recorded merges; a non-ancestor old tip is a rewrite), coalesces into the open notice, notifies and broadcasts; project_checks' 30-second watch calls it for every project with a main branch, checks or not, and still refreshes checks as now. Overview lists the open notice with Seen; rebuild the bundle.",
+      "files": [
+        "hub/hub/main_watch.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/task_integration.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/hub/api/v1/projects.py",
+        "hub/ui/src/components/overview",
+        "hub/ui/src/api",
+        "hub/hub/static/ui",
+        "hub/tests/test_main_watch.py"
+      ],
+      "from": null,
+      "key": "main-watch",
+      "requirements": [
+        "main-move-raised",
+        "hub-merges-are-not-raised",
+        "one-notice-until-seen"
+      ],
+      "reviewer": null,
+      "title": "Main is watched and its moves raised"
+    },
+    {
+      "depends_on": [
+        "main-watch"
+      ],
+      "description": "Red tests first in hub/tests/test_next_slice_offer.py; this task makes the drive's offer pass. slice_drafting derives offers (a slice document with no open task, a following slice no document claims, no queued or declined event), notifies when the last task closes instead of queueing, and queues on the operator's take to the chosen agent, keeping _queue_if_built's open-or-new conversation rule (F1047) and its once-per-offer guard; a decline event hides it. Approval refuses draft_next_slice naming the offer. Offer routes; the Overview and today's spec header show the offer with Draft (agent picker, the author preselected) and Not now; rebuild the bundle.",
+      "files": [
+        "hub/hub/slice_drafting.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/ui/src/components/overview",
+        "hub/ui/src/components/spec",
+        "hub/ui/src/api",
+        "hub/hub/static/ui",
+        "hub/tests/test_next_slice_offer.py"
+      ],
+      "from": null,
+      "key": "next-slice-offer",
+      "requirements": [
+        "next-slice-offered",
+        "taking-the-offer"
+      ],
+      "reviewer": null,
+      "title": "The next slice is offered, not queued"
+    }
+  ],
+  "title": "Amendments after approval, main watched, the next slice offered"
+}
