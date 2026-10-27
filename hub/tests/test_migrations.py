@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0147"
+HEAD_REVISION = "0149"
 
 
 # ---------------------------------------------------------------------------
@@ -2202,9 +2202,17 @@ def test_migration_0074_kinds_do_not_drift_from_spec_payload(tmp_path) -> None:
         "migration 0074's _KINDS has drifted from the model's SPEC_KINDS — the database CHECK and "
         "the Python vocabulary must name the same set"
     )
-    assert set(module._PHASES) == set(
+    # 0149 retired `proposed`: its own restatement is the one the model must match now, and 0074's
+    # is the model's plus the retired phase.
+    assert set(module._PHASES) == set(SPEC_PHASES) | {"proposed"}
+    later_path = migration_path.with_name("0149_retire_the_proposed_phase.py")
+    later_spec = importlib.util.spec_from_file_location("_migration_0149", later_path)
+    assert later_spec is not None and later_spec.loader is not None
+    later = importlib.util.module_from_spec(later_spec)
+    later_spec.loader.exec_module(later)
+    assert set(later._PHASES) == set(
         SPEC_PHASES
-    ), "migration 0074's _PHASES has drifted from the model's SPEC_PHASES"
+    ), "migration 0149's _PHASES has drifted from the model's SPEC_PHASES"
     # The third restatement: the Python-layer validator that decides what a caller may submit.
     assert set(PAYLOAD_KINDS) == set(SPEC_KINDS), (
         "spec_payload.KINDS has drifted from the model's SPEC_KINDS — a kind accepted by the "
@@ -5893,3 +5901,149 @@ def test_migration_stalls_adds_the_table_and_the_mender_origin_and_downgrades_cl
         conn.execute("UPDATE stalls SET ended_at = '2026-01-01T01:00:00Z'")
         conn.execute(row, ("stall-2",))  # an ended one leaves the key free
         conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# 0148 -- conversations.provider_session_cli, backfilled from the run that bound the session
+#         (rebinding-an-agents-runner-starts-clean, FR-9)
+# ---------------------------------------------------------------------------
+
+
+def _seed_0147_sessions(db_file: Path) -> None:
+    """A database at 0147: the models' tables without the new column, one project, and five
+    conversations whose sessions the backfill must attribute (or leave unknown) differently."""
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("ALTER TABLE conversations DROP COLUMN provider_session_cli")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0147')")
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('p', 'p', '2026-01-01T00:00:00Z')"
+        )
+
+        def conversation(name: str, session) -> None:
+            conn.execute(
+                "INSERT INTO conversations (id, project_id, agent, provider_session_id, lifecycle, "
+                "title_set_by_operator, origin, created_at, updated_at) VALUES "
+                "(?, 'p', 'a', ?, 'open', 0, 'operator', '2026-01-01T00:00:00Z', "
+                "'2026-01-01T00:00:00Z')",
+                (name, session),
+            )
+
+        def run(run_id: str, conv: str, status: str, session, hour: int, runner) -> None:
+            conn.execute(
+                "INSERT INTO runs (id, project_id, agent, session_id, conversation_id, status, "
+                "started_at) VALUES (?, 'p', 'a', ?, ?, ?, ?)",
+                (run_id, session, conv, status, f"2026-01-01T{hour:02d}:00:00Z"),
+            )
+            if runner is not None:
+                conn.execute(
+                    "INSERT INTO turn_usage (id, run_id, project_id, agent, status, runner, "
+                    "observed_at) VALUES (?, ?, 'p', 'a', 'unavailable', ?, '2026-01-01T00:00:00Z')",
+                    (f"usage-{run_id}", run_id, runner),
+                )
+
+        # The session was bound by a Copilot turn, after an earlier Claude session was given up;
+        # a later failed Claude run named the same session id and must not be believed.
+        conversation("conv-copilot", "S-A")
+        run("r-a1", "conv-copilot", "completed", "S-OLD", 10, "claude")
+        run("r-a2", "conv-copilot", "completed", "S-A", 11, "copilot")
+        run("r-a3", "conv-copilot", "failed", "S-A", 12, "claude")
+        # Only failed runs named the session; the one completed run is of another session.
+        conversation("conv-failed", "S-B")
+        run("r-b1", "conv-failed", "failed", "S-B", 10, "claude")
+        run("r-b2", "conv-failed", "completed", "S-OTHER", 11, "claude")
+        # No session at all.
+        conversation("conv-none", None)
+        run("r-c1", "conv-none", "completed", None, 10, "claude")
+        # The latest completed run that bound the session has no accounting row: unknown, not the
+        # earlier run's answer.
+        conversation("conv-unaccounted", "S-D")
+        run("r-d1", "conv-unaccounted", "completed", "S-D", 10, "claude")
+        run("r-d2", "conv-unaccounted", "completed", "S-D", 11, None)
+        # The latest of two completed runs of the same session wins.
+        conversation("conv-latest", "S-E")
+        run("r-e1", "conv-latest", "completed", "S-E", 10, "claude")
+        run("r-e2", "conv-latest", "completed", "S-E", 11, "codex")
+        conn.commit()
+
+
+def _session_state(db_file: Path, with_cli: bool) -> dict:
+    columns = "id, provider_session_id" + (", provider_session_cli" if with_cli else "")
+    with sqlite3.connect(db_file) as conn:
+        rows = conn.execute(f"SELECT {columns} FROM conversations ORDER BY id").fetchall()
+    return {row[0]: row[1:] for row in rows}
+
+
+def _conversation_columns(db_file: Path) -> set:
+    with sqlite3.connect(db_file) as conn:
+        return {r[1] for r in conn.execute("PRAGMA table_info(conversations)")}
+
+
+def test_migration_0148_backfills_session_clis_and_downgrades_cleanly(tmp_path) -> None:
+    db_file = tmp_path / "session-cli.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _seed_0147_sessions(db_file)
+    before = _session_state(db_file, with_cli=False)
+    assert "provider_session_cli" not in _conversation_columns(db_file)
+
+    _upgrade_to(db_url, "0148")
+
+    after = _session_state(db_file, with_cli=True)
+    assert after == {
+        "conv-copilot": ("S-A", "copilot"),
+        "conv-failed": ("S-B", None),
+        "conv-none": (None, None),
+        "conv-unaccounted": ("S-D", None),
+        "conv-latest": ("S-E", "codex"),
+    }, after
+    with sqlite3.connect(db_file) as conn:
+        info = {r[1]: r for r in conn.execute("PRAGMA table_info(conversations)")}
+    assert info["provider_session_cli"][3] == 0  # nullable
+
+    _downgrade_to(db_url, "0147")
+
+    with sqlite3.connect(db_file) as conn:
+        runs = conn.execute("SELECT count(*) FROM runs").fetchone()
+    assert "provider_session_cli" not in _conversation_columns(db_file)
+    assert _session_state(db_file, with_cli=False) == before  # nothing else changed
+    assert runs == (10,)
+
+    # And it goes up again to the same answers: the backfill reads, it does not consume.
+    _upgrade_to(db_url, "0148")
+    assert _session_state(db_file, with_cli=True) == after
+
+
+def test_migration_0148_skips_the_backfill_without_the_run_tables(tmp_path) -> None:
+    """An upgrade from an early revision reaches it with only that revision's tables."""
+    db_file = tmp_path / "bare.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("ALTER TABLE conversations DROP COLUMN provider_session_cli")
+        conn.execute("DROP TABLE turn_usage")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0147')")
+        conn.commit()
+
+    _upgrade_to(db_url, "0148")
+    assert "provider_session_cli" in _conversation_columns(db_file)
+    _downgrade_to(db_url, "0147")
+    assert "provider_session_cli" not in _conversation_columns(db_file)
+
+
+def test_migration_0148_is_a_no_op_without_the_table(tmp_path) -> None:
+    db_file = tmp_path / "no-conversations.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DROP TABLE conversations")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0147')")
+        conn.commit()
+
+    _upgrade_to(db_url, "0148")
+    _downgrade_to(db_url, "0147")

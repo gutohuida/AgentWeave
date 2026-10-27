@@ -34,6 +34,9 @@ function toStored(mode: ThresholdMode, entry: string): number | null {
 
 const UNIT_WORD: Record<ThresholdMode, string> = { percent: '%', tokens: 'K tokens' }
 
+/** The longest time limit a fast check may have (`project_checks.FAST_CHECK_MAX_SECONDS`). */
+const FAST_CHECK_MAX_SECONDS = 120
+
 const CHECKPOINT_MODE_LABEL: Record<ProjectSettings['checkpoint_mode'], string> = {
   off: 'Off',
   offered: 'Offer me one',
@@ -256,6 +259,7 @@ export function GeneralSettings({
                         {check.paths.length > 1 ? ` +${check.paths.length - 1}` : ''} ·{' '}
                       </span>
                     ) : null}
+                    {check.fast ? <span data-testid={`project-check-fast-${i}`}>fast · </span> : null}
                     {check.timeout_seconds}s
                   </span>
                   <span className="aw-reveal">
@@ -516,7 +520,10 @@ function CheckDialog({
   const [command, setCommand] = React.useState(initial?.command ?? '')
   const [timeout, setTimeoutValue] = React.useState(String(initial?.timeout_seconds ?? 900))
   const [paths, setPaths] = React.useState((initial?.paths ?? []).join('\n'))
-  const timeoutError = wholeNumber(10, 3600, 'seconds')(timeout)
+  const [fast, setFast] = React.useState(Boolean(initial?.fast))
+  // A completion waits for the fast checks, so none may run longer than that wait (FR-1); the Hub
+  // refuses it too, and this says so before the save.
+  const timeoutError = wholeNumber(10, fast ? FAST_CHECK_MAX_SECONDS : 3600, 'seconds')(timeout)
   const patterns = [...new Set(paths.split(/[\n,]/).map((p) => p.trim()).filter(Boolean))]
   const ready = name.trim() && command.trim() && !timeoutError
   return (
@@ -529,6 +536,7 @@ function CheckDialog({
           setCommand(initial?.command ?? '')
           setTimeoutValue(String(initial?.timeout_seconds ?? 900))
           setPaths((initial?.paths ?? []).join('\n'))
+          setFast(Boolean(initial?.fast))
         }
       }}
     >
@@ -551,6 +559,7 @@ function CheckDialog({
                   command: command.trim(),
                   timeout_seconds: Number(timeout),
                   ...(patterns.length ? { paths: patterns } : {}),
+                  ...(fast ? { fast: true } : {}),
                 })
                 setOpen(false)
               }}
@@ -584,6 +593,13 @@ function CheckDialog({
               placeholder="hub/**"
               onChange={(e) => setPaths(e.target.value)}
             />
+          </Field>
+          <Field
+            label="Fast"
+            htmlFor="c-fast"
+            hint={`Run when an agent completes its task, before anyone reviews it: a failure refuses the completion with the check's output, so the agent fixes it in the same turn. For quick checks like lint and format, at most ${FAST_CHECK_MAX_SECONDS} seconds.`}
+          >
+            <Switch id="c-fast" aria-label="Fast" checked={fast} onCheckedChange={setFast} />
           </Field>
         </div>
       </DialogContent>

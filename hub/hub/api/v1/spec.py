@@ -226,8 +226,13 @@ async def _divergence_fields(
 #: API field is `approval_outcome`, because tasks already answer an unrelated `approval_report`.
 APPROVAL_REPORT = "approval_report"
 
-#: Where a document is read for its delivery's agent: while it is being written and decided.
-_DELIVERY_PHASES = ("exploring", "proposed")
+#: `SpecDocumentEvent.kind` of the record Build leaves (`exploring-ends-at-an-approved-plan`, FR-6):
+#: an event of its own, so approval and build are two entries in the document's history.
+BUILD_REPORT = "build"
+
+#: Where a document is read for its delivery's agent: while it is being written, and once approved,
+#: where Build starts what it recommends.
+_DELIVERY_PHASES = ("exploring", "approved")
 
 
 async def delivery_agent_state(session: AsyncSession, project_id: str, name: str) -> str:
@@ -294,8 +299,11 @@ async def _delivery_status(
     return status
 
 
-async def _approval_outcome(session: AsyncSession, document) -> Optional[Dict[str, Any]]:
-    """The newest approval report, chosen by the Hub so the UI never picks (design D7).
+async def _approval_outcome(
+    session: AsyncSession, document, kind: str = APPROVAL_REPORT
+) -> Optional[Dict[str, Any]]:
+    """The newest approval report (or, with `kind=BUILD_REPORT`, build report), chosen by the Hub
+    so the UI never picks (design D7).
 
     `created_at` alone ties on this machine (a 15.625 ms wall clock), so insertion order breaks
     the tie: `spec_document_events` has a `String` primary key, so it is a rowid table.
@@ -305,7 +313,7 @@ async def _approval_outcome(session: AsyncSession, document) -> Optional[Dict[st
             select(SpecDocumentEvent.detail)
             .where(
                 SpecDocumentEvent.document_id == document.id,
-                SpecDocumentEvent.kind == APPROVAL_REPORT,
+                SpecDocumentEvent.kind == kind,
             )
             .order_by(
                 SpecDocumentEvent.created_at.desc(),
@@ -380,14 +388,19 @@ async def get_spec(
         "path": path,
         "content": page,
         "updated_at": spec_documents.document_updated_at(workspace, path),
+        # The version of what this read shows: an approval names it, and is refused when the
+        # document has changed since (`approve-what-was-seen`).
+        "content_version": spec_documents.content_version(content),
     }
     payload.update(await _divergence_fields(session, project_id, path, content))
     if document is not None:
-        status_now = await _delivery_status(
-            session, project_id, document, spec_documents.parse_stored(content)
-        )
+        stored_payload = spec_documents.parse_stored(content)
+        status_now = await _delivery_status(session, project_id, document, stored_payload)
         if status_now is not None:
             payload["delivery_status"] = status_now
+        recommended = _recommended_build(document, stored_payload)
+        if recommended is not None:
+            payload["recommended_build"] = recommended
         fold_state = await _fold_state(session, document)
         if fold_state is not None:
             payload["fold_state"] = fold_state
@@ -405,7 +418,30 @@ async def get_spec(
             outcome = await _approval_outcome(session, document)
             if outcome is not None:
                 payload["approval_outcome"] = outcome
+            built = await _approval_outcome(session, document, BUILD_REPORT)
+            if built is not None:
+                payload["build_outcome"] = built
     return payload
+
+
+def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """What Build and Approve and build open with (`recommend-a-build`): the delivery the document
+    recommends, with the reason given for each choice, or None on a document that declares none."""
+    if document.kind != "change-spec":
+        return None
+    delivery = _delivery_of(payload)
+    if delivery is None:
+        return None
+    return {
+        "mode": delivery.mode,
+        "agent": delivery.agent,
+        "reviewer": delivery.reviewer,
+        "tester": delivery.tester,
+        "cron": delivery.cron,
+        "stop_when_queue_empties": delivery.stop_when_queue_empties,
+        "stop_at": delivery.stop_at,
+        "reasons": dict(delivery.reasons),
+    }
 
 
 class DocumentCreate(RequestModel):
@@ -429,9 +465,12 @@ class DocumentCreate(RequestModel):
 
 class PhaseRequest(RequestModel):
     reason: str = Field(default="", max_length=2000)
-    # At approval, the operator's choice of agent for a flow delivery whose agent is stale (design
-    # D5b): a name, or "" for no flow. Used for this flow only; the document is never edited.
+    # Refused when sent (FR-5, approval starts nothing): the agent of a build's flow is chosen at
+    # Build or Approve and build. Kept as a field so the refusal names where it goes now.
     delivery_agent: Optional[str] = Field(default=None, max_length=32)
+    # At approval, the `content_version` of the document read the operator approved
+    # (`approve-what-was-seen`): required with to=approved, refused with any other move.
+    content_version: Optional[str] = Field(default=None, max_length=64)
     # At approval of a roadmap slice, queue a turn asking the slice's author to draft the next one
     # (C1a D4). Honoured only with to=approved; on any other document the response says why nothing
     # was queued.
@@ -445,6 +484,24 @@ class PhaseRequest(RequestModel):
     # Approving over the gaps the first attempt listed (409 `approval_warnings`). Refused on any
     # other move; a refusal (`document_incomplete`) is not a gap and is not approved over.
     approve_anyway: bool = False
+
+
+class BuildRequest(RequestModel):
+    """Building an approved document as its recommended build says (FR-6)."""
+
+    # The operator's choice of agent for a flow delivery (design D5b, moved here from approval): a
+    # name, or "" for no flow. Used for this build only; the document is never edited.
+    delivery_agent: Optional[str] = Field(default=None, max_length=32)
+
+
+class ApproveAndBuildRequest(RequestModel):
+    """Approving and building in one action (FR-7): approval's fields, then Build's."""
+
+    reason: str = Field(default="", max_length=2000)
+    content_version: Optional[str] = Field(default=None, max_length=64)
+    approve_anyway: bool = False
+    draft_next_slice: bool = False
+    delivery_agent: Optional[str] = Field(default=None, max_length=32)
 
 
 class MergeRequest(RequestModel):
@@ -3079,7 +3136,7 @@ async def close_exploration(
 ):
     """The operator declaring exploration finished.
 
-    Whether an exploration is complete enough to propose from is a judgement,
+    Whether an exploration is complete enough to approve is a judgement,
     not a computation. Making it an operator action keeps every model out of the
     path of a gate.
     """
@@ -3096,61 +3153,51 @@ async def close_exploration(
     return await _project_document_view(session, project_id, document)
 
 
-@router.post("/documents/propose")
-async def propose_document(
+@router.post("/documents/check")
+async def check_document(
     background: BackgroundTasks,
     path: str = Query(...),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Move a document to `proposed`, or report every check that refuses it.
+    """Report a document's readiness and move nothing (`exploring-ends-at-an-approved-plan`, FR-1).
 
-    "Not yet" is a 200 whose `blocking` list names what is missing (F113), so the status code
-    cannot say whether the document moved. `proposed` does, in one field (F528): true only when
-    the phase is now `proposed`.
+    `blocking` and `warnings` are exactly what the agent's save of the stored payload returns
+    (`spec_service.check`), so the operator and the agent read one answer. The phase, the file and
+    the history are untouched, so an agent keeps saving while the operator looks;
+    `content_version` is the version that was checked. Starts the vault's spec check after the
+    answer is sent, a no-op while that job is off (`vault_spec_check`).
     """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
-
     try:
-        blocking, warnings = await spec_service.propose(
-            session, workspace, document, actor=_operator()
-        )
+        found_blocking, warnings = await spec_service.check(session, workspace, document)
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
-    except spec_lifecycle.PhaseError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-
-    await session.commit()
-    if blocking:
-        return {
-            **await _project_document_view(session, project_id, document),
-            "proposed": False,
-            "blocking": blocking,
-            "warnings": warnings,
-        }
-    await sse_manager.broadcast(
-        project_id, "spec_updated", {"path": document.path, "phase": document.phase}
-    )
-    # After the answer is sent; a no-op while the spec-vault-check job is off (`vault_spec_check`).
-    background.add_task(
-        vault_spec_check.check_in_background,
-        project_id,
-        document.path,
-        trigger=vault_spec_check.TRIGGER,
-    )
+    content = spec_documents.read_document(workspace, document.path)
+    version = spec_documents.content_version(content)
+    # A model run per press would be a cost the operator cannot see (F1053): only a document with
+    # no blocking gap, and only a content version the newest firing has not already checked.
+    if not found_blocking and not await vault_spec_check.already_checked(
+        session, project_id, document.path, version
+    ):
+        background.add_task(
+            vault_spec_check.check_in_background,
+            project_id,
+            document.path,
+            trigger=vault_spec_check.TRIGGER,
+            content_version=version,
+        )
     return {
         **await _project_document_view(session, project_id, document),
-        "proposed": True,
-        "blocking": [],
+        "blocking": found_blocking,
         "warnings": warnings,
+        "ready": not found_blocking,
+        "content_version": version,
     }
 
 
@@ -3176,6 +3223,251 @@ async def _refresh_index_entry(
     return diagnostics
 
 
+def _misplaced_query(request: Request, allowed: set) -> None:
+    """F580: FastAPI drops a query parameter it does not declare without a word, so a body field
+    sent in the query string (`approve_anyway`) was ignored. Name what was misplaced instead."""
+    misplaced = sorted(set(request.query_params) - allowed)
+    if misplaced:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"{', '.join(misplaced)} sent as a query parameter; only "
+                f"{' and '.join(sorted(allowed))} go in the query string, the rest go in the JSON "
+                "request body"
+            ),
+        )
+
+
+def _require_loaded_version(workspace, document, version: Optional[str]) -> None:
+    """An approval names the content version the operator loaded, and is refused when the stored
+    content differs (`approve-what-was-seen`, FR-4): with the document editable while the operator
+    reads, an approval could otherwise accept text nobody read."""
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "an approval names the version of the document you read: send content_version, "
+                f"the value GET /project/spec?path={document.path} returned, in the request body"
+            ),
+        )
+    current = spec_documents.content_version(spec_documents.read_document(workspace, document.path))
+    if version != current:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    "the document changed since it was loaded; reload it, read what changed, "
+                    "and approve again"
+                ),
+                "code": "document_changed",
+                "loaded": version,
+                "current": current,
+            },
+        )
+
+
+def _check_delivery_agent(workspace, document, delivery_agent: Optional[str]) -> None:
+    """D5b: `delivery_agent` is honoured only where it can be, and refused before anything moves
+    rather than ignored (`RequestModel`'s rule: honour a field or name it)."""
+    if delivery_agent is None:
+        return
+    chosen_for = _delivery_of(_read_payload(workspace, document.path))
+    if chosen_for is None or chosen_for.mode != "flow":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "delivery_agent replaces a flow delivery's agent, and this document declares no flow"
+            ),
+        )
+
+
+@dataclasses.dataclass
+class _Moved:
+    """What a phase move did, read before the commit expires the rows it touched."""
+
+    report: Optional[Dict[str, Any]] = None
+    payload: Optional[Dict[str, Any]] = None
+    created_count: int = 0
+    notes: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
+
+
+def _already_built_offer(
+    project_id: str, document, payload: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """Intake recorded the work as already built: approval offers slice B's close-as-built at the
+    commits it named, instead of the tasks waiting to be built (`already-built-at-intake`)."""
+    raw = (payload or {}).get("already_built")
+    if not isinstance(raw, dict) or raw.get("built") is not True:
+        return None
+    commits = [str(commit) for commit in raw.get("commits") or []]
+    route = (
+        f"POST /api/v1/projects/{project_id}/project/documents/{document.path}/close-already-built"
+    )
+    at = f" at {', '.join(commits)}" if commits else ", naming no commit"
+    named = "against those commits" if commits else "naming the commits on main that hold it"
+    return {
+        "commits": commits,
+        "route": route,
+        "message": (
+            f"Intake recorded this work as already built{at}. Close its tasks as already built "
+            f"{named} instead of building them."
+        ),
+    }
+
+
+async def _move_phase(
+    session: AsyncSession,
+    workspace,
+    project_id: str,
+    document,
+    *,
+    to: str,
+    reason: str = "",
+    no_capability_change: bool = False,
+    absorbed_by: Optional[str] = None,
+    approve_anyway: bool = False,
+) -> _Moved:
+    """Move the document, and at approval lay its tasks out as a plan with nothing started (FR-5).
+
+    Approval is what turns a decomposition from a description into work: the board is
+    materialised and what that did is recorded. It cannot undo the approval: the board runs in its
+    own savepoint and reports a failure instead of raising. No flow is created and no run begins,
+    whatever the delivery says: that is Build's (`_build`).
+    """
+    try:
+        phase_event = await spec_lifecycle.transition(
+            session,
+            document,
+            to_phase=to,
+            actor=_operator(),
+            workspace=workspace,
+            reason=reason,
+            no_capability_change=no_capability_change,
+            absorbed_by=absorbed_by,
+            approve_anyway=approve_anyway,
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+    except spec_lifecycle.PhaseError as exc:
+        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
+        if exc.blocking:
+            detail["blocking"] = exc.blocking
+        if exc.warnings:
+            detail["warnings"] = exc.warnings
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+
+    moved = _Moved(notes=list((phase_event.detail or {}).get("notes") or []))
+    if document.phase != "approved":
+        return moved
+    payload = _read_payload(workspace, document.path)
+    outcome = await spec_tasks.materialise_quietly(session, document, payload, actor=_operator())
+    report: Dict[str, Any] = {
+        "created": [dataclasses.asdict(task) for task in outcome.created],
+        "already_served": [
+            {"key": entry.key, "requirements": list(entry.requirements)}
+            for entry in outcome.already_served
+        ],
+        "failed": outcome.failed,
+        # F535: what re-approval did to tasks that already existed. Empty on a failed board,
+        # which rolled any refresh back with it.
+        "refreshed": [dataclasses.asdict(task) for task in outcome.board.refreshed],
+        "closed_linking_retired": [
+            dataclasses.asdict(task) for task in outcome.board.closed_linking_retired
+        ],
+        "no_longer_declared": [
+            dataclasses.asdict(task) for task in outcome.board.no_longer_declared
+        ],
+        # When the board failed, `_materialise_edges` did not run, and the rows there are the
+        # previous approval's (design D7, R3).
+        "dependencies_not_honoured": (
+            []
+            if outcome.failed
+            else await spec_tasks.dependencies_not_honoured(session, document, payload)
+        ),
+    }
+    offer = _already_built_offer(project_id, document, payload)
+    if offer is not None:
+        report["already_built"] = offer
+    await spec_lifecycle.record_event(
+        session, document, kind=APPROVAL_REPORT, actor=_operator(), detail=report
+    )
+    moved.report = report
+    moved.payload = payload
+    moved.created_count = len(outcome.created)
+    return moved
+
+
+def _defer_phase_broadcasts(
+    session: AsyncSession, project_id: str, document, moved: _Moved
+) -> None:
+    """Staged, not sent (design D6 step 5): every frame waits for the route's one commit."""
+    defer_broadcast(
+        session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    refreshed_count = len((moved.report or {}).get("refreshed", []))
+    if moved.created_count or refreshed_count:
+        defer_broadcast(
+            session,
+            project_id,
+            "task_updated",
+            {"created": moved.created_count, "refreshed": refreshed_count},
+        )
+
+
+async def _phase_response(
+    session: AsyncSession, project_id: str, document, moved: _Moved
+) -> Dict[str, Any]:
+    """The document, the tasks approval created and its report. Read from the values captured
+    before the commit's expiry, as every other field here is."""
+    response: Dict[str, Any] = {
+        **await _project_document_view(session, project_id, document),
+        "tasks_created": [task["id"] for task in (moved.report or {}).get("created", [])],
+    }
+    if moved.report is not None:
+        response["approval_outcome"] = moved.report
+    # F704: what approval told and did not gate on (an unclaimed roadmap slice).
+    if moved.notes:
+        response["approval_notes"] = moved.notes
+    return response
+
+
+async def _build(
+    session: AsyncSession,
+    project_id: str,
+    document,
+    payload: Optional[Dict[str, Any]],
+    delivery_agent: Optional[str],
+) -> Tuple[Dict[str, Any], Optional[AIJob]]:
+    """Start building an approved document as its recommended build says (FR-6), and record it.
+
+    In this slice a build is what delivery does: create and start the flow it describes
+    (`_build_flow`), or leave the tasks on the board. The record is an event of its own
+    (`BUILD_REPORT`), so approval and build are two entries in the document's history.
+    """
+    flow, created_job = await _build_flow(session, project_id, document, payload, delivery_agent)
+    delivery = _delivery_of(payload)
+    outcome: Dict[str, Any] = {
+        "flow": flow,
+        "delivery_agent": delivery_agent,
+        "reviewer": delivery.reviewer if delivery is not None else None,
+    }
+    await spec_lifecycle.record_event(
+        session, document, kind=BUILD_REPORT, actor=_operator(), detail=outcome
+    )
+    return outcome, created_job
+
+
+async def _finish_build(session: AsyncSession, project_id: str, created_job) -> None:
+    """After the commit: the flow's first firing is at its next cron tick, nothing fires now
+    (operator). A registration failure is logged, and the committed flow fires from the next
+    restart."""
+    if created_job is not None:
+        await _hand_job_to_scheduler(session, created_job.id, created_job)
+
+
 @router.post("/documents/phase")
 async def set_phase(
     request: Request,
@@ -3185,34 +3477,30 @@ async def set_phase(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """An operator phase decision — approving a document, or reopening one.
+    """An operator phase decision — approving a document, reopening one, or archiving one.
 
     This route requires the project credential, so an agent run cannot reach it:
     a run's token authenticates against `/agent-actions`, which has no phase
     route at all.
+
+    Approval goes from `exploring`, names the `content_version` the operator read and is refused
+    when the document changed since (FR-3, FR-4), and lays the tasks out with nothing started
+    (FR-5). Building is `POST /documents/build`, or both at once `POST /documents/approve-and-build`.
     """
     # F204/F210: every field of the body is optional, so a call with no body at all is a complete
     # request; without the default FastAPI refused it as malformed before the route could run.
     body = body or PhaseRequest()
+    _misplaced_query(request, {"path", "to"})
 
-    # F580: only `path` and `to` are query parameters. FastAPI drops any other one without a word,
-    # so a body field sent in the query string (`approve_anyway`) was ignored and the caller got the
-    # same 409 back. Name what was misplaced rather than ignore it.
-    misplaced = sorted(set(request.query_params) - {"path", "to"})
-    if misplaced:
+    if to == spec_lifecycle.PROPOSED:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"{', '.join(misplaced)} sent as a query parameter; only path and to go in the "
-                "query string, the rest go in the JSON request body"
-            ),
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": spec_lifecycle.PROPOSED_RETIRED, "code": "proposed_retired"},
         )
-
     # F730: a phase that does not exist is a malformed request (422), as an unknown rigor is (F657),
     # not a conflict with the document's state (409).
     phases = (
         spec_lifecycle.EXPLORING,
-        spec_lifecycle.PROPOSED,
         spec_lifecycle.APPROVED,
         spec_lifecycle.ARCHIVED,
     )
@@ -3250,26 +3538,27 @@ async def set_phase(
             ),
         )
 
-    # D5b: `delivery_agent` is honoured only where it can be, and refused before anything moves
-    # rather than ignored (`RequestModel`'s rule: honour a field or name it).
     if body.delivery_agent is not None:
-        if to != "approved":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "delivery_agent chooses the agent of an approval's flow; send it only with "
-                    "to=approved"
-                ),
-            )
-        chosen_for = _delivery_of(_read_payload(workspace, document.path))
-        if chosen_for is None or chosen_for.mode != "flow":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "delivery_agent replaces a flow delivery's agent, and this document declares "
-                    "no flow"
-                ),
-            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "delivery_agent chooses the agent of a build's flow, and approval starts nothing: "
+                f"send it to POST /api/v1/projects/{project_id}/project/documents/build?path="
+                f"{document.path}, or approve and build at once with "
+                "/documents/approve-and-build"
+            ),
+        )
+
+    if body.content_version is not None and to != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "content_version names the version an approval approves; send it only with "
+                "to=approved"
+            ),
+        )
+    if to == "approved":
+        _require_loaded_version(workspace, document, body.content_version)
 
     retiring = document.kind == "capability" and to == spec_lifecycle.ARCHIVED
     absorbed_by = body.absorbed_by
@@ -3287,78 +3576,17 @@ async def set_phase(
         except SpecPathError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    try:
-        phase_event = await spec_lifecycle.transition(
-            session,
-            document,
-            to_phase=to,
-            actor=_operator(),
-            workspace=workspace,
-            reason=body.reason,
-            no_capability_change=body.no_capability_change,
-            absorbed_by=absorbed_by,
-            approve_anyway=body.approve_anyway,
-        )
-    except spec_service.SaveRefusedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-    except spec_lifecycle.PhaseError as exc:
-        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
-        if exc.blocking:
-            detail["blocking"] = exc.blocking
-        if exc.warnings:
-            detail["warnings"] = exc.warnings
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
-
-    phase_notes = list((phase_event.detail or {}).get("notes") or [])
-
-    # Approval is what turns a decomposition from a description into work: the board is
-    # materialised, the delivery's flow is created, and what both did is recorded. Neither can undo
-    # the approval: each runs in its own savepoint and reports a failure instead of raising.
-    report: Optional[Dict[str, Any]] = None
-    created_job: Optional[AIJob] = None
-    created_count = 0
-    payload: Optional[Dict[str, Any]] = None
-    if document.phase == "approved":
-        payload = _read_payload(workspace, document.path)
-        outcome = await spec_tasks.materialise_quietly(
-            session, document, payload, actor=_operator()
-        )
-        created_count = len(outcome.created)
-        flow, created_job = await _approval_flow(
-            session, project_id, document, payload, body.delivery_agent
-        )
-        report = {
-            "created": [dataclasses.asdict(task) for task in outcome.created],
-            "already_served": [
-                {"key": entry.key, "requirements": list(entry.requirements)}
-                for entry in outcome.already_served
-            ],
-            "failed": outcome.failed,
-            # F535: what re-approval did to tasks that already existed. Empty on a failed board,
-            # which rolled any refresh back with it.
-            "refreshed": [dataclasses.asdict(task) for task in outcome.board.refreshed],
-            "closed_linking_retired": [
-                dataclasses.asdict(task) for task in outcome.board.closed_linking_retired
-            ],
-            "no_longer_declared": [
-                dataclasses.asdict(task) for task in outcome.board.no_longer_declared
-            ],
-            # When the board failed, `_materialise_edges` did not run, and the rows there are the
-            # previous approval's (design D7, R3).
-            "dependencies_not_honoured": (
-                []
-                if outcome.failed
-                else await spec_tasks.dependencies_not_honoured(session, document, payload)
-            ),
-            "flow": flow,
-            "delivery_agent": body.delivery_agent,
-        }
-        await spec_lifecycle.record_event(
-            session, document, kind=APPROVAL_REPORT, actor=_operator(), detail=report
-        )
+    moved = await _move_phase(
+        session,
+        workspace,
+        project_id,
+        document,
+        to=to,
+        reason=body.reason,
+        no_capability_change=body.no_capability_change,
+        absorbed_by=absorbed_by,
+        approve_anyway=body.approve_anyway,
+    )
 
     await spec_service.rerender_phase(session, workspace, document)
     if retiring:
@@ -3367,43 +3595,126 @@ async def set_phase(
             session, workspace, document, actor=_operator(), source=spec_index.SOURCE_HUB
         )
         await _refresh_index_entry(session, workspace, project_id, document.path)
-    # Staged, not sent (design D6 step 5): `job_created` is persisted uncommitted inside the flow's
-    # savepoint, so every frame here waits for the one commit below, in today's order.
+    _defer_phase_broadcasts(session, project_id, document, moved)
+    await session.commit()
+
+    response = await _phase_response(session, project_id, document, moved)
+    if body.draft_next_slice and document.phase == "approved":
+        # After the commit: the approval stands whatever happens here, and the response says it.
+        response["next_slice"] = await slice_drafting.request_next_slice(
+            session, project_id, workspace, document, moved.payload, _operator()
+        )
+    return response
+
+
+@router.post("/documents/build")
+async def build_document(
+    request: Request,
+    body: Optional[BuildRequest] = None,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Build an approved document as its recommended build says (FR-6), at any time after approval.
+
+    In this slice: create and start the flow its delivery describes, or leave the tasks on the
+    board, and say which in `build_outcome`. A flow already declaring the document is reported, not
+    duplicated. 409 `not_approved` before approval; nothing changes on a refusal.
+    """
+    body = body or BuildRequest()
+    _misplaced_query(request, {"path"})
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    if document.phase != spec_lifecycle.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"this document is {document.phase}; only an approved document is built. "
+                    "Approve it, or approve and build it at once"
+                ),
+                "code": "not_approved",
+            },
+        )
+    _check_delivery_agent(workspace, document, body.delivery_agent)
+    payload = _read_payload(workspace, document.path)
+    build, created_job = await _build(session, project_id, document, payload, body.delivery_agent)
     defer_broadcast(
         session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    refreshed_count = len((report or {}).get("refreshed", []))
-    if created_count or refreshed_count:
-        defer_broadcast(
-            session,
-            project_id,
-            "task_updated",
-            {"created": created_count, "refreshed": refreshed_count},
-        )
     if created_job is not None:
         defer_broadcast(
             session, project_id, "job_created", {"id": created_job.id, "name": created_job.name}
         )
     await session.commit()
-    if created_job is not None:
-        # First firing at the next cron tick; nothing fires now (operator). A registration failure
-        # is logged, and the committed flow fires from the next restart.
-        await _hand_job_to_scheduler(session, created_job.id, created_job)
+    await _finish_build(session, project_id, created_job)
+    return {**await _project_document_view(session, project_id, document), "build_outcome": build}
 
-    response = {
-        **await _project_document_view(session, project_id, document),
-        "tasks_created": [task["id"] for task in (report or {}).get("created", [])],
-    }
-    if report is not None:
-        response["approval_outcome"] = report
-    # F704: what approval told and did not gate on (an unclaimed roadmap slice). Read from the
-    # values captured before the commit's expiry, as every other field here is.
-    if phase_notes:
-        response["approval_notes"] = phase_notes
-    if body.draft_next_slice and document.phase == "approved":
-        # After the commit: the approval stands whatever happens here, and the response says it.
+
+@router.post("/documents/approve-and-build")
+async def approve_and_build(
+    request: Request,
+    body: Optional[ApproveAndBuildRequest] = None,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Approve and start the build in one operator action (FR-7), with approval's refusal rules.
+
+    Refused exactly as approving alone is (a changed document, gaps without approve_anyway, a
+    refusal), with nothing created. A document intake recorded as already built is approved and
+    offered close-as-built instead of being built (`already-built-at-intake`); Build still builds
+    it if the operator wants it built anyway.
+    """
+    body = body or ApproveAndBuildRequest()
+    _misplaced_query(request, {"path"})
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    _require_loaded_version(workspace, document, body.content_version)
+    _check_delivery_agent(workspace, document, body.delivery_agent)
+
+    moved = await _move_phase(
+        session,
+        workspace,
+        project_id,
+        document,
+        to=spec_lifecycle.APPROVED,
+        reason=body.reason,
+        approve_anyway=body.approve_anyway,
+    )
+    created_job: Optional[AIJob] = None
+    offer = (moved.report or {}).get("already_built")
+    if offer is not None:
+        build: Dict[str, Any] = {
+            "flow": {
+                "state": "already_built",
+                "messages": [
+                    offer["message"] + " Nothing was built; Build builds it anyway.",
+                ],
+            },
+            "delivery_agent": body.delivery_agent,
+            "reviewer": None,
+        }
+    else:
+        build, created_job = await _build(
+            session, project_id, document, moved.payload, body.delivery_agent
+        )
+    await spec_service.rerender_phase(session, workspace, document)
+    _defer_phase_broadcasts(session, project_id, document, moved)
+    if created_job is not None:
+        defer_broadcast(
+            session, project_id, "job_created", {"id": created_job.id, "name": created_job.name}
+        )
+    await session.commit()
+    await _finish_build(session, project_id, created_job)
+
+    response = await _phase_response(session, project_id, document, moved)
+    response["build_outcome"] = build
+    if body.draft_next_slice:
         response["next_slice"] = await slice_drafting.request_next_slice(
-            session, project_id, workspace, document, payload, _operator()
+            session, project_id, workspace, document, moved.payload, _operator()
         )
     return response
 
@@ -3412,7 +3723,7 @@ class _FlowWouldBeEmptyError(Exception):
     """A flow approval would create owning no open task: an outcome, not a fault (design D6 3a)."""
 
 
-_NO_TASKS = "No flow was started: the approval gave it no tasks. Start a flow… once there is work."
+_NO_TASKS = "No flow was started: it has no open tasks to work. Start a flow… once there is work."
 
 
 def _not_created(message: str, agent: Optional[str] = None) -> Dict[str, Any]:
@@ -3488,7 +3799,7 @@ async def _existing_flow_entry(
     }
 
 
-async def _approval_flow(
+async def _build_flow(
     session: AsyncSession,
     project_id: str,
     document,
@@ -3529,7 +3840,7 @@ async def _approval_flow(
             ],
         }, None
     if delivery_agent == "":
-        return _not_created("You chose no flow at approval."), None
+        return _not_created("You chose no flow for this build."), None
 
     agent = delivery_agent if delivery_agent is not None else delivery.agent
     if not agent:

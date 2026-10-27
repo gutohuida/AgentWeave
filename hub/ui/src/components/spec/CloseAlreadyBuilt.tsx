@@ -3,7 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { readableApiError } from '@/api/client'
-import { useCloseAlreadyBuilt, type AlreadyBuiltResult } from '@/api/spec'
+import { useCloseAlreadyBuilt, type AlreadyBuiltResult, type SpecAlreadyBuiltOffer } from '@/api/spec'
 import { useDocumentTasks } from '@/api/tasks'
 import { parseCommits } from '@/lib/commits'
 
@@ -23,13 +23,24 @@ const OPEN = new Set([
  * FR-5/FR-6): the operator names the commit or commits on the main branch that hold the work, and
  * every open task moves to under review, with evidence pointing at those commits awaiting a
  * decision. No agent run starts. A task is approved once its evidence is accepted.
+ *
+ * `offer` is approval's (`already-built-at-intake`): intake recorded the work as already built, so
+ * the form opens with the commits it named and the reason it is offered.
  */
-export function CloseAlreadyBuilt({ path, documentId }: { path: string; documentId: string }) {
+export function CloseAlreadyBuilt({
+  path,
+  documentId,
+  offer,
+}: {
+  path: string
+  documentId: string
+  offer?: SpecAlreadyBuiltOffer
+}) {
   const close = useCloseAlreadyBuilt()
   const { data: tasks, isError: tasksUnreadable } = useDocumentTasks(documentId)
   const openCount = (tasks ?? []).filter((task) => OPEN.has(task.status)).length
-  const [open, setOpen] = useState(false)
-  const [text, setText] = useState('')
+  const [open, setOpen] = useState(!!offer)
+  const [text, setText] = useState(offer?.commits.join(' ') ?? '')
   const [refusal, setRefusal] = useState<string | null>(null)
   const [result, setResult] = useState<AlreadyBuiltResult | null>(null)
   const commits = parseCommits(text)
@@ -90,6 +101,11 @@ export function CloseAlreadyBuilt({ path, documentId }: { path: string; document
 
   return (
     <div className="aw-spec-message flex-col items-start" data-testid="already-built-form">
+      {offer ? (
+        <span className="aw-spec-message-text" data-testid="already-built-offer">
+          {offer.message}
+        </span>
+      ) : null}
       <span className="aw-spec-message-text">
         Name the commit or commits on the main branch that already hold this change's work. Every
         open task moves to under review, no agent runs, and evidence naming the commits waits for a

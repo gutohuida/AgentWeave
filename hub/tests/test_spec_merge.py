@@ -13,6 +13,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Run, SpecDocumentEvent, SpecDocumentMerge, SpecEditProposal
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
 CAP_PATH = "spec/capabilities/demo/spec.json"
@@ -76,11 +78,15 @@ async def _approve(app, auth_headers, run_headers, path):
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": path}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/check", params={"path": path}, headers=auth_headers)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
-        json={"reason": "", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, path),
+            "reason": "",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
 

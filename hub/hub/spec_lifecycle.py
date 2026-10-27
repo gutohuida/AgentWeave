@@ -29,7 +29,15 @@ if TYPE_CHECKING:
     from .project_workspace import ProjectWorkspace
 
 EXPLORING = "exploring"
+#: Retired 2026-10-27 (`exploring-ends-at-an-approved-plan`, migration 0149): no document enters it.
+#: Named only so a request for it is refused with its own code (`proposed_retired`) instead of
+#: reading as an unknown phase. Check reports readiness without moving anything, and approval goes
+#: straight from `exploring`.
 PROPOSED = "proposed"
+PROPOSED_RETIRED = (
+    "the proposed phase was retired: Check reports a document's readiness without moving it, and "
+    "Approve approves it from exploring"
+)
 APPROVED = "approved"
 ARCHIVED = "archived"
 # A capability document's phase, and the only phase `transition()` never accepts as a `to_phase` —
@@ -42,12 +50,12 @@ INTAKE_STEP = "intake"
 # Every legal move. A transition not in this table does not happen, including
 # any that would move a document backwards without an explicit decision.
 TRANSITIONS = {
-    (EXPLORING, PROPOSED),
-    (PROPOSED, APPROVED),
-    # Sending an approved or proposed document back for more work is the
-    # operator's call, and it is a decision worth recording rather than a
-    # silent edit.
-    (PROPOSED, EXPLORING),
+    # Approval straight from exploring (`exploring-ends-at-an-approved-plan`, FR-3): Check reports
+    # readiness at any time without moving the document, so the agent keeps writing while the
+    # operator reads, and the approval names the content version the operator loaded (FR-4).
+    (EXPLORING, APPROVED),
+    # Sending an approved document back for more work is the operator's call, and it is a
+    # decision worth recording rather than a silent edit.
     (APPROVED, EXPLORING),
     # A finished, shipped change becomes history. There is no transition out of `archived`.
     (APPROVED, ARCHIVED),
@@ -55,12 +63,11 @@ TRANSITIONS = {
     #
     # This was previously `approved`-only, on the reasoning that "the existing reopen transitions
     # already give the operator a way to walk a document backwards without inventing a second kind
-    # of 'done'." That holds for undoing a proposal — but walking backwards ends at `exploring`,
-    # and `exploring` had no exit at all. Confirmed live 2026-08-25: an agent created a second
-    # document by mistake and the empty original was unreachable in every direction. `archived`
-    # needs `approved`, `approved` needs `proposed`, `proposed` needs requirements the orphan does
-    # not have, and there is no `DELETE`. It is not inert either — it leaves a standing spec
-    # manifest drift warning that nobody can clear.
+    # of 'done'." But walking backwards ends at `exploring`, and `exploring` had no exit at all.
+    # Confirmed live 2026-08-25: an agent created a second document by mistake and the empty
+    # original was unreachable in every direction: `archived` needs `approved`, approval needs
+    # requirements the orphan does not have, and there is no `DELETE`. It is not inert either — it
+    # leaves a standing spec manifest drift warning that nobody can clear.
     #
     # The concern about a second meaning of "done" is answered by the guard below rather than by
     # the phase map: these two edges are refused for any document that has produced requirements or
@@ -68,7 +75,6 @@ TRANSITIONS = {
     # "this work was abandoned" — which really would be a different thing, and still is not
     # expressible.
     (EXPLORING, ARCHIVED),
-    (PROPOSED, ARCHIVED),
     # Retiring a capability that no longer describes the product (F536): operator-only, with a
     # reason, never while open work serves it. Its requirements are retired by the index
     # (`spec_index.reindex_document`); like any archived document it has no way back.
@@ -186,9 +192,9 @@ async def create_document(
 
     Explore is the one phase that would otherwise precede its own document,
     which is why the entry point creates the document rather than setting a mode
-    on the conversation: without it, "propose" and "approve" have no subject.
+    on the conversation: without it, "check" and "approve" have no subject.
 
-    A capability document has no exploration to close and nothing to propose — it describes
+    A capability document has no exploration to close and nothing to approve — it describes
     current, shipped behaviour and is written directly by the operator (`spec_service.py`), either
     by merging an approved change into it or by writing its content outright. It is created at
     `current` and this is the only place a document's phase is ever set there.
@@ -199,8 +205,8 @@ async def create_document(
 
     **This is not a way to promote a document.** It is reachable only where no row exists, which
     is the one moment there is nothing to promote: the alternative for an adopted `approved`
-    document is `transition()`, and that would require walking it through `proposed` and calling
-    `approve` — inventing a history that did not happen in order to record one that did. A row
+    document is `transition()`, and that would require calling `approve` — inventing a history
+    that did not happen in order to record one that did. A row
     that already exists is refused above, before this argument is reached.
     """
     # Same reason the `phase` check below exists, for the column beside it: `kind` carries a CHECK
@@ -215,7 +221,9 @@ async def create_document(
             code="unknown_kind",
         )
     if phase is not None:
-        if phase not in (EXPLORING, PROPOSED, APPROVED, ARCHIVED, CURRENT):
+        if phase == PROPOSED:
+            raise PhaseError(PROPOSED_RETIRED, code="proposed_retired")
+        if phase not in (EXPLORING, APPROVED, ARCHIVED, CURRENT):
             raise PhaseError(f"unknown phase {phase!r}", code="unknown_phase")
         # `current` and `capability` imply each other, and the database says so in
         # a cross-column check. Stated here too so the refusal names the problem
@@ -308,9 +316,11 @@ async def transition(
 
     **Refusals and gaps** (approve-lists-what-is-missing-and-can-approve-anyway). A refusal makes
     approval's own work wrong and nothing passes it (`document_incomplete`). A gap describes
-    completeness: proposal passes it and returns it on the event's `warnings`, approval stops on it
-    with `approval_warnings` unless `approve_anyway`, and then records what it approved over as
-    `warnings_overridden` on the phase event.
+    completeness: approval stops on it with `approval_warnings` unless `approve_anyway`, and then
+    records what it approved over as `warnings_overridden` on the phase event.
+
+    **There is no `proposed` phase** (retired 2026-10-27): a request for it is refused with
+    `proposed_retired`, and approval goes from `exploring`.
 
     **Archiving an approved change is a close-out.** It is refused while a task the document
     declared is still open, and until a merge names the change or the operator states, with a
@@ -326,7 +336,9 @@ async def transition(
     from the phases this function accepts as a `to_phase` at all — a capability document is created
     at `current` (`create_document`) and never moves there, or anywhere, through this function.
     """
-    if to_phase not in (EXPLORING, PROPOSED, APPROVED, ARCHIVED):
+    if to_phase == PROPOSED:
+        raise PhaseError(PROPOSED_RETIRED, code="proposed_retired")
+    if to_phase not in (EXPLORING, APPROVED, ARCHIVED):
         raise PhaseError(f"unknown phase {to_phase!r}", code="unknown_phase")
 
     if document.phase == to_phase:
@@ -350,7 +362,7 @@ async def transition(
             code="archive_is_the_operators",
         )
 
-    if to_phase == ARCHIVED and document.phase in (EXPLORING, PROPOSED):
+    if to_phase == ARCHIVED and document.phase == EXPLORING:
         # What keeps the two edges added for F37 meaning "this document was a mistake" rather than
         # becoming a way to bury work that exists. Imported here rather than at module scope: this
         # module is the one every phase write passes through, and `Task` reaches back into it.
@@ -391,7 +403,7 @@ async def transition(
 
     gaps: List[Dict[str, Any]] = []
     notes: List[Dict[str, Any]] = []
-    if to_phase in (PROPOSED, APPROVED):
+    if to_phase == APPROVED:
         # Required `workspace`: a caller with none cannot move a document at all, rather than
         # moving it unchecked (F207). Imported here because `spec_service` imports this module.
         from . import spec_service
@@ -405,7 +417,7 @@ async def transition(
                 blocking=found.refusals,
                 warnings=found.gaps + found.notes,
             )
-        if to_phase == APPROVED and found.gaps and not approve_anyway:
+        if found.gaps and not approve_anyway:
             raise PhaseError(
                 "this document has gaps: "
                 + ", ".join(dict.fromkeys(g["code"] for g in found.gaps))
@@ -436,8 +448,7 @@ async def transition(
             {"document": document.path},
         )
     if to_phase == EXPLORING:
-        # Reopening genuinely reopens: the next proposal needs the operator to
-        # say again that exploration is done.
+        # Reopening genuinely reopens: exploration is open again until the operator closes it.
         document.explore_closed_at = None
     if to_phase == APPROVED and document.first_approved_at is None:
         # Set once, never reset. `explore_closed_at` above answers "is exploration closed right
@@ -451,9 +462,6 @@ async def transition(
         detail["warnings_overridden"] = gaps
         if notes:
             detail["notes"] = notes
-    elif to_phase == PROPOSED and (gaps or notes):
-        # A proposal passes gaps and notes alike; the author reads both as warnings.
-        detail["warnings"] = gaps + notes
     if previous == CURRENT:
         detail["absorbed_by"] = absorbed_by
     return await record_event(session, document, kind="phase", actor=actor, detail=detail)
@@ -540,7 +548,7 @@ async def merged_into(session: AsyncSession, document: SpecDocument) -> List[str
 async def close_exploration(session: AsyncSession, document: SpecDocument, *, actor: Actor) -> None:
     """The operator declaring exploration finished.
 
-    Whether an exploration is "complete enough to propose from" is not
+    Whether an exploration is "complete enough to approve" is not
     mechanically checkable, and pretending otherwise would put a model in the
     path of a gate. So this is a decision, made by a person, recorded. The
     mechanical half — does the document validate — is checked separately.

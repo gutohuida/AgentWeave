@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import run_secrets, traces
 from .context_readings import IS_CONTEXT_READING
-from .conversations import latest_open_conversation, new_conversation
+from .conversations import latest_open_conversation, new_conversation, set_provider_session
 from .db.engine import async_session_factory
 from .db.models import AgentOutput, Conversation, EventLog, Run
 from .model_catalog import context_window_for_model
@@ -111,7 +111,8 @@ async def record_agent_output(
             # a self-reporting agent's session the Hub did not open. `operator` is the floor:
             # the thread it reconstructs is the one the operator sees the agent working in.
             conversation = new_conversation(project_id=project_id, agent=agent, origin="operator")
-            conversation.provider_session_id = session_id
+            # Self-reported: the Hub did not open it, so which CLI made it is not known.
+            set_provider_session(conversation, session_id, None)
             db.add(conversation)
             await db.flush()
         conversation_id = conversation.id

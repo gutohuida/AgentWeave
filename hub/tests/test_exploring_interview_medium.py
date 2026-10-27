@@ -162,23 +162,21 @@ async def _render_at(agent_name, path):
 async def test_change_spec_exploring_is_asked_how_it_will_be_built(app, auth_headers, add_agent):
     """D2, Opus notes 5 and 7: the interview line, and the two phrases the review added.
 
-    Since step-journey the question is the delivery step's, so the document is placed there."""
+    Since step-journey the question is the build step's, so the document is placed there."""
     await add_agent("solo")
     await _create_document(app, auth_headers)
     async with async_session_factory() as db:
-        await db.execute(
-            update(SpecDocument).where(SpecDocument.path == PATH).values(step="delivery")
-        )
+        await db.execute(update(SpecDocument).where(SpecDocument.path == PATH).values(step="build"))
         await db.commit()
 
     context = await _render("solo")
     block = context.split("### Open specification document", 1)[1]
 
-    assert "[step: delivery]" in block
-    assert "say how it will be built" in block
+    assert "[step: build]" in block
+    assert "recommend how it will be built" in block
     assert "when there is another agent" in block
     assert "every later submission" in block
-    assert "'No flow' is a valid answer" in block
+    assert "'No flow' is a valid recommendation" in block
 
 
 @pytest.mark.asyncio

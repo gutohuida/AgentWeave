@@ -12,8 +12,9 @@ import { ApiError } from '@/api/client'
  * warnings: [{code, where, message}]}}`, the gaps in the order `phase_findings` lists them — the
  * completeness findings first, `steps_skipped` last.
  */
-const propose = vi.fn()
+const check = vi.fn()
 const setPhase = vi.fn()
+const approveAndBuild = vi.fn()
 let documents: unknown[] = []
 
 vi.mock('@/api/spec', async (importOriginal) => {
@@ -22,8 +23,10 @@ vi.mock('@/api/spec', async (importOriginal) => {
     ...actual,
     useSpecDocuments: () => ({ data: { documents } }),
     useSetSpecJourney: () => ({ mutate: vi.fn(), isPending: false }),
-    useProposeSpecDocument: () => ({ mutateAsync: propose, isPending: false }),
+    useSpec: () => ({ data: { path: PATH, content: '', content_version: 'v1' }, isError: false, refetch: vi.fn() }),
+    useCheckSpecDocument: () => ({ mutateAsync: check, isPending: false }),
     useSetSpecPhase: () => ({ mutate: setPhase, isPending: false }),
+    useApproveAndBuildSpecDocument: () => ({ mutate: approveAndBuild, isPending: false }),
     useSetSpecRigor: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSpecRigorHistory: () => ({ data: { events: [] }, error: null }),
   }
@@ -46,7 +49,7 @@ function doc(overrides: Record<string, unknown> = {}) {
     path: PATH,
     title: 'Demo',
     kind: 'change-spec',
-    phase: 'proposed',
+    phase: 'exploring',
     rigor: 'contract',
     content_digest: null,
     explore_closed: true,
@@ -123,16 +126,49 @@ describe('SpecPhaseBar approval warnings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Approve anyway' }))
 
     expect(setPhase).toHaveBeenLastCalledWith(
-      { path: PATH, to: 'approved', approve_anyway: true },
+      { path: PATH, to: 'approved', content_version: 'v1', approve_anyway: true },
       expect.anything(),
     )
     expect(screen.queryByTestId('approval-warnings')).not.toBeInTheDocument()
   })
 
+  it('Approve and build is refused like approving, and its Approve anyway resends it', async () => {
+    approveAndBuild.mockImplementationOnce((_vars: unknown, options: { onError: (e: unknown) => void }) => {
+      options.onError(
+        new ApiError(
+          409,
+          JSON.stringify({
+            detail: { code: 'approval_warnings', message: 'gaps', warnings: [skipped] },
+          }),
+        ),
+      )
+    })
+    renderBar()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
+    // No recommendation to fill in: confirming approves and builds as the document stands.
+    await userEvent.click(await screen.findByTestId('build-confirm'))
+    expect(approveAndBuild).toHaveBeenLastCalledWith(
+      { path: PATH, content_version: 'v1' },
+      expect.anything(),
+    )
+    await screen.findByTestId('approval-warnings')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Approve and build anyway' }))
+
+    expect(approveAndBuild).toHaveBeenLastCalledWith(
+      { path: PATH, content_version: 'v1', approve_anyway: true },
+      expect.anything(),
+    )
+    expect(setPhase).not.toHaveBeenCalled()
+  })
+
   it('a plain Approve never sends approve_anyway', async () => {
     renderBar()
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    expect(setPhase).toHaveBeenCalledWith({ path: PATH, to: 'approved' }, expect.anything())
+    expect(setPhase).toHaveBeenCalledWith(
+      { path: PATH, to: 'approved', content_version: 'v1' },
+      expect.anything(),
+    )
   })
 
   it("an incomplete refusal still lists its findings and offers no Approve anyway", async () => {
@@ -158,12 +194,11 @@ describe('SpecPhaseBar approval warnings', () => {
     expect(screen.queryByRole('button', { name: 'Approve anyway' })).not.toBeInTheDocument()
   })
 
-  it("shows propose's warnings once the document is proposed", async () => {
-    documents = [doc({ phase: 'exploring' })]
-    propose.mockResolvedValue({ ...doc(), proposed: true, blocking: [], warnings: [skipped] })
+  it("shows Check's warnings, and Check offers no Approve anyway", async () => {
+    check.mockResolvedValue({ ...doc(), ready: true, blocking: [], warnings: [skipped] })
     renderBar()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Propose' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }))
 
     const list = await screen.findByTestId('approval-warnings')
     expect(within(list).getByTestId('approval-warning-steps_skipped')).toBeInTheDocument()

@@ -4,7 +4,7 @@ import { useSpec, useSpecDocuments } from '@/api/spec'
 
 /**
  * What approving this document did (`a-document-says-how-it-will-be-built-and-approval-starts-it`,
- * design D7). Mounted in `SpecDocumentPanel` under `SpecPhaseBar`. A record, not an alert — it has
+ * design D7), and what building it did since (`exploring-ends-at-an-approved-plan`). Mounted in `SpecDocumentPanel` under `SpecPhaseBar`. A record, not an alert — it has
  * no dismiss, and stays visible for as long as the document is approved. Renders nothing when the
  * Hub has not returned `approval_outcome`: a document with no report yet, or a bundle talking to
  * an un-restarted `:8000` that predates it entirely (the `:8000` skew).
@@ -23,7 +23,11 @@ export function SpecApprovalReport({ path }: { path: string }) {
 
   // On a failed fetch there is nothing accepted to show, and no false claim in showing nothing.
   const outcome = specError || docsError ? undefined : specDoc?.approval_outcome
+  // What the newest Build did (`build-is-separate`); an approval made before approval stopped
+  // starting the flow carries its flow on the approval report instead.
+  const built = specError || docsError ? undefined : specDoc?.build_outcome
   if (!outcome) return null
+  const flowMessages = (built?.flow ?? outcome.flow)?.messages ?? []
 
   // Only a change-spec document ever gets a flow (D4), so the pointer at Start a flow… — the
   // control `SpecPhaseBar` offers only there — means nothing anywhere else.
@@ -128,7 +132,7 @@ export function SpecApprovalReport({ path }: { path: string }) {
         </div>
       ))}
 
-      {outcome.flow.messages.map((message, i) => (
+      {flowMessages.map((message, i) => (
         <div key={i} data-testid="approval-flow-message">
           {message}
         </div>
@@ -136,7 +140,7 @@ export function SpecApprovalReport({ path }: { path: string }) {
 
       {pointToStartFlow && (
         <div data-testid="approval-start-flow-pointer" style={{ color: 'var(--text-3)' }}>
-          … use Start a flow… above.
+          {built ? '… use Start a flow… above.' : 'Nothing is building it yet: use Build… above.'}
         </div>
       )}
     </div>

@@ -27,6 +27,7 @@ from .conversations import (
     inherit_runtime_overrides,
     name_conversation,
     new_conversation,
+    set_provider_session,
 )
 from .db.engine import async_session_factory
 from .db.models import (
@@ -2081,6 +2082,12 @@ class FiringDecision:
     #: burying `loop-notices-and-reacts` design D6 exists to stop. Nothing is wrong here and the
     #: next tick resolves it, so this is carried for tests and the log and no further.
     deferred: "tuple[tuple[str, str], ...]" = ()
+    #: `(task_id, wait)` for every completed task whose review waits for its check run
+    #: (`project_checks.ReviewWait`, `checks-run-before-anyone-reviews` D6). Each is also in
+    #: `deferred`, with the wait's sentence. The decision writes nothing, so the *firing* acts on
+    #: these: a run is requested where none is current, and a task its own failure failed is
+    #: returned to its builder (D7's backstop). A firing waiting only on these is not a stall.
+    checks_waits: "tuple[tuple[str, Any], ...]" = ()
 
 
 async def decide_firing(
@@ -2135,6 +2142,7 @@ async def decide_firing(
     unstaffed: "list[tuple[str, str]]" = []
     deferred: "list[tuple[str, str]]" = []
     in_flight: "list[tuple[str, str]]" = []
+    checks_waits: "list[tuple[str, Any]]" = []
     selections: "list[LoopSelection]" = []
     # The tasks a documentless loop finished and will not review (design D5). Not `unstaffed`:
     # nothing here failed to be staffed, and the walk did not try. It is carried out of the walk
@@ -2601,6 +2609,27 @@ async def decide_firing(
             )
             continue
 
+        # **Not while the task's check run is undecided** (`checks-run-before-anyone-reviews`, D6).
+        # On :8000's night of 2026-10-26/27 three reviews ran beside a failing suite and found what
+        # the checks found (about 52 min of Opus). Deferred, naming the run and how long it has run,
+        # and the walk goes on; a run is requested by the firing where none is current, a pass asks
+        # for this firing again (`project_checks._after_decided`), and a failure of the task's own
+        # returns it to its builder instead of to a reviewer. A wedged review is already
+        # `under_review`: its reviewer is replaced as before, and briefed with the checks as today.
+        #
+        # **Not a stall**, the same way the author's turn above is in flight and not one (F1049,
+        # slice N): the checks are the Hub attending the task, and a wait of the suite's 8-16 min
+        # must not wake the mender. Kept in `deferred` -- what it says is "not yet, and why" -- and
+        # in `checks_waits`, which the end of the walk reads instead of the stall path.
+        if not wedged_review:
+            from . import project_checks
+
+            wait = await project_checks.review_wait(session, task)
+            if wait is not None:
+                deferred.append((task.id, wait.reason))
+                checks_waits.append((task.id, wait))
+                continue
+
         if attribution.agent is not None:
             # **An agent completed it.** Byte-identical to what shipped, and deliberately so
             # (design D6): where the product has a *decided* answer to who the author is, the whole
@@ -2661,9 +2690,12 @@ async def decide_firing(
             _cannot_staff=tuple(in_flight),
             unstaffed=tuple(unstaffed),
             deferred=tuple(deferred),
+            checks_waits=tuple(checks_waits),
         )
 
-    if in_flight and any(task_id not in surfaced_rows for task_id, _ in in_flight):
+    if checks_waits or (
+        in_flight and any(task_id not in surfaced_rows for task_id, _ in in_flight)
+    ):
         # **Checked before the stall, and that order is the fix** (finding F23). A queue whose work
         # is being done is not waiting on anything; asking `_stall_reason_from_walk` here would
         # count those very tasks as "open" and report the flow stalled at its busiest.
@@ -2679,11 +2711,17 @@ async def decide_firing(
         # teeth: the ordinary-work arm records in flight from `agent in running` as well as from
         # `held`, so a run bound to no task at all is still work being done. A decision that
         # re-asked a per-task question here would report three agents mid-turn as a stall.
+        #
+        # **A review waiting for its task's check run is the same case** (`checks-run-before-
+        # anyone-reviews`, D6): the Hub is checking that work right now, and its end asks for this
+        # firing. Not `in_flight` -- no agent holds it, and `task_attribution` must not say one
+        # does -- but the firing has nothing to start and nothing wrong to report.
         return FiringDecision(
             kind=DECISION_IN_FLIGHT,
             _cannot_staff=tuple(in_flight),
             unstaffed=tuple(unstaffed),
             deferred=tuple(deferred),
+            checks_waits=tuple(checks_waits),
         )
 
     stall_reason = await _stall_reason_from_walk(session, loop, gated, facts)
@@ -4345,6 +4383,17 @@ class JobScheduler:
                     # defers on every tick by design, and an event for that would bury
                     # `review_unstaffed` under the healthy case. See `FiringDecision.deferred`.
                     logger.debug(f"Job {job.id} deferred {deferred_task_id}: {deferred_reason}")
+                if decision.checks_waits:
+                    # What the decision could not do itself, since it writes nothing (D6): a run
+                    # where none is current, and the return of work its own failure failed (D7's
+                    # backstop, for a run that decided while its task could not yet be returned).
+                    from . import project_checks
+
+                    for waiting_task_id, wait in decision.checks_waits:
+                        if wait.needs_a_run:
+                            project_checks.schedule(job.project_id, waiting_task_id)
+                        elif wait.state == "failed":
+                            project_checks.schedule_return(waiting_task_id)
                 # The firing's own selection is the first; `extra_selections` are staged after this
                 # one is fully away, each with its own `JobRun` and conversation (design D13). The
                 # split keeps every path below -- stall, skip, resume, briefing -- exactly the shape
@@ -4509,7 +4558,8 @@ class JobScheduler:
                     project_id=job.project_id, agent=acting_agent, origin="job"
                 )
                 if resume_session_id:
-                    conversation.provider_session_id = resume_session_id
+                    # A job's stored last_session_id: nothing recorded which CLI made it.
+                    set_provider_session(conversation, resume_session_id, None)
                 session.add(conversation)
                 await inherit_runtime_overrides(session, conversation)
             # Named from the job, not its message: a schedule fires the same message repeatedly,

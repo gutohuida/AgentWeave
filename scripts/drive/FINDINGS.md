@@ -40098,7 +40098,7 @@ Cause (verified): `GapLines` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:20-
 
 ## F1016 (B) -- an operator's "nothing merges" (Main branch cleared) is silently undone the next time the folder is opened: the Hub re-adopts `master`, records no settings change, and drains the approved work that was waiting
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, inline probe after `scripts/drive/s1023_pj_api.py branch`).
+**Status:** fixed 2026-10-27 (slice A: a cleared main branch survives reopen and the Hub's own adoption is a settings event; test_project_main_branch_reopen); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, inline probe after `scripts/drive/s1023_pj_api.py branch`).
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes
@@ -40233,7 +40233,7 @@ Settings -> Delete project... -> type the name -> Enter. `DELETE` 204, the priva
 
 ## F1023 (C) -- rebinding an agent to a runner of another CLI resumes the conversation's old provider session on the new CLI: Copilot starts over with a notice, Claude fails the turn twice ("No conversation found with session ID") before the queue drops the session and silently starts a fresh one
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_rebind.py`, Chromium `scripts/drive/s1023_rm_ui2.py`, shot `testbed/ui-judge/s1023-rm/140238/13_conversation_after_cli_rebind.png`).
+**Status:** fixed 2026-10-27 (slice J, rebinding-an-agents-runner-starts-clean: a session is resumed only by the CLI that created it (migration 0148); test_rebinding_an_agents_runner_starts_clean); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_rebind.py`, Chromium `scripts/drive/s1023_rm_ui2.py`, shot `testbed/ui-judge/s1023-rm/140238/13_conversation_after_cli_rebind.png`).
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
@@ -40261,7 +40261,7 @@ Cause (verified): the agent PATCH changes `runner_id` and leaves every conversat
 
 ## F1024 (C) -- a conversation's per-run model survives the agent's rebind to another CLI and is handed to it as is: Copilot was launched with `--model haiku`, ran `claude-sonnet-5` on a premium request, and the Hub recorded the run as model `haiku`
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_turn.py` then `scripts/drive/s1023_rm_rebind.py`).
+**Status:** fixed 2026-10-27 (slice J: a foreign stored model is withheld and the recorded model is what ran; same test file); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_turn.py` then `scripts/drive/s1023_rm_rebind.py`).
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
@@ -40428,7 +40428,7 @@ Cause (verified): `hub/ui/src/components/layout/PaneResizer.tsx:139-160` sets `f
 
 ## F1038 (B) -- removing a task worktree that holds a `node_modules` junction empties the main checkout's `node_modules`: `git worktree remove --force` follows the junction
 
-**Status:** open 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks. **Recurred 2026-10-27 05:44** on `:8000`: the main checkout's `hub/ui/node_modules` was found empty with that mtime (T4's merge and worktree removal); restored with `npm ci`. Slice A (`worktrees-never-destroy-or-strand-anything`) is being built in Wave 0.
+**Status:** fixed 2026-10-27 (slice A, worktrees-never-destroy-or-strand-anything: every removal unlinks links first, the Hub links nested node_modules itself with a junction fallback; tests test_worktree_removal_links, test_dependency_links_fall_back_to_junctions); opened 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks. **Recurred 2026-10-27 05:44** on `:8000`: the main checkout's `hub/ui/node_modules` was found empty with that mtime (T4's merge and worktree removal); restored with `npm ci`. Slice A (`worktrees-never-destroy-or-strand-anything`) is being built in Wave 0.
 **Source:** drive
 **Theme:** Worktrees
 **Ready:** yes
@@ -40555,3 +40555,23 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 **Tier:** 0
 
 `_latest_integrations_by_task` (`hub/hub/api/v1/tasks.py:557-578`) orders by `(task_id, created_at desc)` and keeps the first row per task. One approval can write more than one `task_integrations` row in the same transaction with an identical `created_at`: on `:8000`, task-8618731d065d has `merged` and `skipped` ("09617d3b6920 is already in master") both at `2026-10-27 03:39:29.548442`, and 26 task/timestamp pairs tie. Which row wins is then up to SQLite, so a task that merged can read "approved but not merged" on the Overview and in its drawer (part of what F1045 shows). **Expected:** the newest is decided by an order that cannot tie (the row's insertion sequence, or the outcome that matters for the approval: a `merged` row in the same approval wins over a `skipped` one). **Test:** two rows for one task with the same `created_at`, `merged` inserted before `skipped`: the route reports `merged`.
+
+## F1052 (C) -- approval drops a declared task whose requirements a hand-made task already serves, even when it is different work
+
+**Status:** open 2026-10-27. Found approving slice F (`the-spec-page-redesigned`) on `:8000`.
+**Source:** drive
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+`spec_tasks.materialise` (`hub/hub/spec_tasks.py:398-405`) skips a declared task when every requirement it names is already served by a hand-made task, and approval reports it as `already_served`. Slice F declares two tasks, `mock` and `wire`, over the same twelve requirements; the mock was done on 2026-10-26 as hand-made task-dadec899cc91 linked to all twelve, so approving F on 2026-10-27 created nothing (`approval_report`: `created: []`, `already_served: [mock, wire]`). The wiring work is not on the board, and nothing but the report says so. The rule is right for the task a hand-made task *is* (the mock), wrong for a different declared task that happens to serve the same requirements. **Expected:** a declared task is treated as served only when a hand-made task is matched to it (the same key, or a link the operator made), not when the requirement sets merely overlap; the report says which hand-made task served which entry. **Test:** a document with two declared tasks over the same requirements and one hand-made task linked to all of them: approval creates the second.
+
+## F1053 (C) -- every press of Check starts the vault's spec check, a model run, even for unchanged or blocked content
+
+**Status:** fixed 2026-10-27 (Tier 0): the route starts the check only for a document with no blocking gap whose content version the newest firing (not a failed one) has not recorded in its subject; the firing now records `content_version` (`hub/tests/test_check_starts_the_vault_check_once_per_version.py`).
+**Source:** code
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+`POST /documents/check` (`hub/hub/api/v1/spec.py:3182-3187`) schedules `vault_spec_check.check_in_background` on every call. The old propose started it only after a successful move. Check is meant to be pressed freely while an agent edits, and on `:8000` the `spec-vault-check` Manager job is enabled (Sonnet), so each press spawns a model run, including presses on a document with blocking gaps and repeated presses on content that was already checked (nothing in `vault_spec_check.py` compares the content to the newest firing's). **Expected:** the check starts only for a document with no blocking gaps, and not again for a content version whose newest firing already checked it. **Test:** Check twice on unchanged ready content starts one check; Check on a document with a blocking gap starts none; Check after an edit starts one.

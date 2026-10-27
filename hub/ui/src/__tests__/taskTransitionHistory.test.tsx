@@ -110,6 +110,25 @@ describe('a task’s transition history', () => {
     }
   })
 
+  it('names the project’s checks for a task they returned, not the operator', () => {
+    // `checks-run-before-anyone-reviews` D7: the move is the operator's authority (actor_kind)
+    // with the checks as its cause (origin), which must not read as "You".
+    rows = [
+      {
+        ...ROWS[0],
+        id: 'ttr-c',
+        from_status: 'completed',
+        to_status: 'revision_needed',
+        origin: 'checks',
+      },
+    ]
+    render(<TaskTransitionHistory taskId="task-1" open />)
+    const text = screen.getByTestId('task-transitions-task-1').textContent ?? ''
+
+    expect(text).toContain('The project’s checks moved completed → revision_needed')
+    expect(text).not.toContain('You')
+  })
+
   it('renders nothing for a task whose history predates the table', () => {
     rows = []
     render(<TaskTransitionHistory taskId="task-1" open />)

@@ -1,26 +1,50 @@
 /**
- * The stale-delivery strip, sending the operator's choice with Approve, and the approval report
- * (`a-document-says-how-it-will-be-built-and-approval-starts-it`, tasks 3.2/3.3, task 3.4).
+ * The stale-recommendation strip, Build and Approve and build opening with the recommended build,
+ * and the approval report (`a-document-says-how-it-will-be-built-and-approval-starts-it`, tasks
+ * 3.2-3.4; `exploring-ends-at-an-approved-plan`, criterion `recommendation-prefills`).
  *
- * Fed through the real `useSpec`/`useSpecDocuments`/`useDocumentFlow`/`useSetSpecPhase` hooks with
- * `getJson`/`postJson` mocked by path, the same pattern `startFlow.test.tsx` uses for the sibling
- * change — so the report's `useDocumentFlow` lookup runs over a `GET /loops`-shaped array, not a
- * hand-shaped fixture the route never returns (F190).
+ * Fed through the real `useSpec`/`useSpecDocuments`/`useDocumentFlow` and mutation hooks with
+ * `getJson`/`postJson` mocked by path, the same pattern `startFlow.test.tsx` uses — so the report's
+ * `useDocumentFlow` lookup runs over a `GET /loops`-shaped array, and the Build dialog is fed the
+ * document read's real payload (`recommended_build`, `content_version`), not a hand-shaped prop
+ * (F190).
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { chooseMenuOption, openMenu } from './testUtils/menus'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { SpecApprovalReport } from '@/components/spec/SpecApprovalReport'
 import { useConfigStore } from '@/store/configStore'
-import type { SpecApprovalOutcome, SpecDeliveryStatus } from '@/api/spec'
+import type {
+  SpecApprovalOutcome,
+  SpecBuildOutcome,
+  SpecDeliveryStatus,
+  SpecRecommendedBuild,
+} from '@/api/spec'
 
 const posts: Array<{ path: string; body: unknown }> = []
 let loops: unknown[] = []
 let documents: unknown[] = []
 let specDelivery: SpecDeliveryStatus | undefined
 let specOutcome: SpecApprovalOutcome | undefined
+let specBuilt: SpecBuildOutcome | undefined
+let recommended: SpecRecommendedBuild | undefined
+
+/** What `GET /project/spec` returns for a document that recommends a flow (`_recommended_build`). */
+const RECOMMENDED: SpecRecommendedBuild = {
+  mode: 'flow',
+  agent: 'dev',
+  reviewer: 'qa',
+  tester: null,
+  cron: '*/10 * * * *',
+  stop_when_queue_empties: true,
+  stop_at: null,
+  reasons: {
+    mode: 'The work splits into three tasks.',
+    agent: 'dev built the module it changes.',
+    reviewer: 'qa reviewed the last slice.',
+  },
+}
 
 vi.mock('@/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/client')>()
@@ -33,8 +57,11 @@ vi.mock('@/api/client', async (importOriginal) => {
           path: 'spec/changes/demo/spec.json',
           content: '<html></html>',
           updated_at: '2026-09-27T00:00:00Z',
+          content_version: 'v1',
           ...(specDelivery ? { delivery_status: specDelivery } : {}),
           ...(specOutcome ? { approval_outcome: specOutcome } : {}),
+          ...(specBuilt ? { build_outcome: specBuilt } : {}),
+          ...(recommended ? { recommended_build: recommended } : {}),
         }
       }
       if (path.includes('/documents')) return { documents }
@@ -42,7 +69,7 @@ vi.mock('@/api/client', async (importOriginal) => {
     }),
     postJson: vi.fn(async (path: string, body: unknown) => {
       posts.push({ path, body })
-      return { id: 'job-new' }
+      return { id: 'job-new', build_outcome: { flow: { state: 'created', messages: ['started'] } } }
     }),
   }
 })
@@ -56,7 +83,7 @@ function doc(overrides: Record<string, unknown> = {}) {
     path: 'spec/changes/demo/spec.json',
     title: 'Demo',
     kind: 'change-spec',
-    phase: 'proposed',
+    phase: 'exploring',
     rigor: 'sketch',
     content_digest: null,
     explore_closed: true,
@@ -106,9 +133,7 @@ function renderReport() {
   )
 }
 
-/** Both mounted together, the shape `SpecDocumentPanel` mounts them in — enough to check there is
- *  exactly one Start a flow… control between the two, without pulling in `SpecFrame`'s iframe
- *  bridge and the panel's other unrelated children. */
+/** Both mounted together, the shape `SpecDocumentPanel` mounts them in. */
 function renderPanelPair() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -125,6 +150,8 @@ beforeEach(() => {
   documents = [doc()]
   specDelivery = undefined
   specOutcome = undefined
+  specBuilt = undefined
+  recommended = undefined
   useConfigStore.setState({
     apiKey: 'aw_live_TESTKEY',
     hubUrl: 'http://hub.test',
@@ -135,7 +162,12 @@ beforeEach(() => {
 })
 afterEach(() => cleanup())
 
-describe('the stale-delivery strip', () => {
+/** The page has loaded the document read once Approve is enabled: it names that read's version. */
+async function loaded() {
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled())
+}
+
+describe('the stale-recommendation strip', () => {
   it.each<[SpecDeliveryStatus['state'], SpecDeliveryStatus['reason'] | undefined]>([
     ['ok', undefined],
     ['none', undefined],
@@ -151,80 +183,105 @@ describe('the stale-delivery strip', () => {
     specDelivery = { state: 'stale', agent: 'dev2', reason: 'archived' }
     renderPhaseBar()
     const strip = await screen.findByTestId('delivery-stale-strip')
-    expect(strip).toHaveTextContent('Delivery names dev2, which is archived')
-    expect(strip).toHaveTextContent('Approving will not start a flow unless you choose another agent')
+    expect(strip).toHaveTextContent('The recommended build names dev2, which is archived')
+    expect(strip).toHaveTextContent('Building will not start a flow unless you choose another agent')
   })
 
   it('names an unknown agent differently from an archived one', async () => {
     specDelivery = { state: 'stale', agent: 'ghost', reason: 'unknown' }
     renderPhaseBar()
     const strip = await screen.findByTestId('delivery-stale-strip')
-    expect(strip).toHaveTextContent('Delivery names ghost, which is not an agent on this project')
-  })
-
-  it('offers the open agents and "No flow" in the select', async () => {
-    specDelivery = { state: 'stale', agent: 'dev2', reason: 'archived' }
-    renderPhaseBar()
-    await screen.findByTestId('delivery-stale-strip')
-    // A themed menu (MenuSelect) since ui-finesse, not a native select.
-    openMenu(screen.getByTestId('delivery-agent-choice'))
-    const optionLabels = screen.getAllByRole('menuitemradio').map((o) => o.textContent)
-    expect(optionLabels).toContain('@dev')
-    expect(optionLabels).toContain('@qa')
-    expect(optionLabels).toContain('No flow')
+    expect(strip).toHaveTextContent('names ghost, which is not an agent on this project')
   })
 })
 
-describe('Approve and the chosen delivery agent', () => {
-  it('sends no delivery_agent when the operator made no choice', async () => {
-    documents = [doc({ phase: 'proposed' })]
-    specDelivery = { state: 'stale', agent: 'dev2', reason: 'archived' }
+describe('Approve, Approve and build, and Build (recommendation-prefills)', () => {
+  it('approves naming the loaded version, with no delivery_agent: approval starts nothing', async () => {
+    recommended = RECOMMENDED
     renderPhaseBar()
-    await screen.findByTestId('delivery-stale-strip')
+    await loaded()
 
-    fireEvent.click(screen.getByText('Approve'))
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     await waitFor(() => expect(posts).toHaveLength(1))
-    expect(posts[0].body).not.toHaveProperty('delivery_agent')
-  })
-
-  it('sends the chosen agent name when the operator picked one', async () => {
-    documents = [doc({ phase: 'proposed' })]
-    specDelivery = { state: 'stale', agent: 'dev2', reason: 'archived' }
-    renderPhaseBar()
-    await screen.findByTestId('delivery-stale-strip')
-
-    chooseMenuOption(screen.getByTestId('delivery-agent-choice'), '@qa')
-    fireEvent.click(screen.getByText('Approve'))
-
-    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].path).toContain('/documents/phase?')
     expect(posts[0].path).toContain('to=approved')
-    expect(posts[0].body).toMatchObject({ delivery_agent: 'qa' })
-  })
-
-  it('sends delivery_agent: "" when the operator chose "No flow"', async () => {
-    documents = [doc({ phase: 'proposed' })]
-    specDelivery = { state: 'stale', agent: 'dev2', reason: 'archived' }
-    renderPhaseBar()
-    await screen.findByTestId('delivery-stale-strip')
-
-    chooseMenuOption(screen.getByTestId('delivery-agent-choice'), 'No flow')
-    fireEvent.click(screen.getByText('Approve'))
-
-    await waitFor(() => expect(posts).toHaveLength(1))
-    expect(posts[0].body).toMatchObject({ delivery_agent: '' })
-  })
-
-  it('sends no delivery_agent at all on an ordinary (non-stale) approval', async () => {
-    documents = [doc({ phase: 'proposed' })]
-    specDelivery = { state: 'ok', agent: 'dev' }
-    renderPhaseBar()
-    await screen.findByTestId('spec-phase')
-
-    fireEvent.click(screen.getByText('Approve'))
-
-    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].body).toMatchObject({ content_version: 'v1' })
     expect(posts[0].body).not.toHaveProperty('delivery_agent')
+  })
+
+  it('opens Approve and build with the recommended agent, reviewer and reasons filled in', async () => {
+    recommended = RECOMMENDED
+    renderPhaseBar()
+    await loaded()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
+
+    const dialog = await screen.findByTestId('build-dialog')
+    expect(within(dialog).getByTestId('build-agent')).toHaveValue('dev')
+    expect(within(dialog).getByTestId('build-reason-agent')).toHaveTextContent(
+      'dev built the module it changes.',
+    )
+    expect(within(dialog).getByTestId('build-reviewer')).toHaveTextContent('@qa')
+    expect(within(dialog).getByTestId('build-reason-reviewer')).toHaveTextContent(
+      'qa reviewed the last slice.',
+    )
+    expect(within(dialog).getByTestId('build-reason-mode')).toHaveTextContent('three tasks')
+    expect(within(dialog).getByTestId('build-cron')).toHaveTextContent('*/10 * * * *')
+  })
+
+  it('approves and builds in one request, keeping the recommendation', async () => {
+    recommended = RECOMMENDED
+    renderPhaseBar()
+    await loaded()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
+    fireEvent.click(await screen.findByTestId('build-confirm'))
+
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].path).toContain('/documents/approve-and-build?')
+    expect(posts[0].body).toMatchObject({ content_version: 'v1' })
+    expect(posts[0].body).not.toHaveProperty('delivery_agent')
+  })
+
+  it('sends the agent the operator chose instead, or "" for no flow', async () => {
+    recommended = RECOMMENDED
+    renderPhaseBar()
+    await loaded()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
+    fireEvent.change(await screen.findByTestId('build-agent'), { target: { value: 'qa' } })
+    fireEvent.click(screen.getByTestId('build-confirm'))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].body).toMatchObject({ delivery_agent: 'qa' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
+    fireEvent.change(await screen.findByTestId('build-agent'), { target: { value: '__no_flow__' } })
+    fireEvent.click(screen.getByTestId('build-confirm'))
+    await waitFor(() => expect(posts).toHaveLength(2))
+    expect(posts[1].body).toMatchObject({ delivery_agent: '' })
+  })
+
+  it('offers Build on an approved document, opening with the recommendation, later than approval', async () => {
+    documents = [doc({ phase: 'approved' })]
+    recommended = RECOMMENDED
+    renderPhaseBar()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Build…' }))
+    const dialog = await screen.findByTestId('build-dialog')
+    expect(within(dialog).getByTestId('build-agent')).toHaveValue('dev')
+    fireEvent.click(within(dialog).getByTestId('build-confirm'))
+
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0].path).toContain('/documents/build?')
+    expect(posts[0].body).toEqual({})
+  })
+
+  it('says when the document recommends no build', async () => {
+    renderPhaseBar()
+    await loaded()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
+    expect(await screen.findByTestId('build-no-recommendation')).toBeInTheDocument()
   })
 })
 
@@ -310,13 +367,24 @@ describe('SpecApprovalReport', () => {
     expect(screen.queryByTestId('approval-refreshed')).toBeNull()
   })
 
-  it('shows the "use Start a flow… above" pointer when no unarchived loop declares the document', async () => {
+  it('points at Build… when nothing builds the approved document yet', async () => {
     documents = [doc({ phase: 'approved' })]
     loops = []
-    specOutcome = outcome({ flow: { state: 'not_created', messages: ['No flow was started: the approval gave it no tasks. Start a flow… once there is work.'] } })
+    specOutcome = outcome({ flow: undefined })
     renderReport()
 
     await screen.findByTestId('spec-approval-report')
+    expect(screen.getByTestId('approval-start-flow-pointer')).toHaveTextContent('use Build… above')
+  })
+
+  it('shows what the newest build did, and points at Start a flow… when it started none', async () => {
+    documents = [doc({ phase: 'approved' })]
+    loops = []
+    specOutcome = outcome({ flow: undefined })
+    specBuilt = { flow: { state: 'not_created', messages: ['No flow was started: it has no open tasks to work.'] } }
+    renderReport()
+
+    expect(await screen.findByTestId('approval-flow-message')).toHaveTextContent('no open tasks to work')
     expect(screen.getByTestId('approval-start-flow-pointer')).toHaveTextContent('use Start a flow… above')
   })
 
@@ -341,15 +409,15 @@ describe('SpecApprovalReport', () => {
   })
 })
 
-describe('the panel has exactly one Start a flow… control', () => {
+describe('the panel has exactly one Build… control', () => {
   it('when the phase bar and the report are mounted side by side', async () => {
     documents = [doc({ phase: 'approved' })]
     loops = []
-    specOutcome = outcome({ flow: { state: 'not_created', messages: ['No flow was started: the approval gave it no tasks. Start a flow… once there is work.'] } })
+    specOutcome = outcome({ flow: undefined })
     renderPanelPair()
 
-    await screen.findByTestId('spec-start-flow')
-    const buttons = screen.getAllByText(/Start a flow…/, { selector: 'button' })
+    await screen.findByTestId('spec-build')
+    const buttons = screen.getAllByText(/Build…/, { selector: 'button' })
     expect(buttons).toHaveLength(1)
     // The report's own mention is text, not a second control.
     expect(screen.getByTestId('approval-start-flow-pointer').querySelector('button')).toBeNull()

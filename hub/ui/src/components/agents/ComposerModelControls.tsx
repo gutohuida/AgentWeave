@@ -3,7 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { ModelPicker } from './ModelPicker'
 import { useModelCatalog, providerForRunner, type ControlDescriptor } from '@/api/modelCatalog'
-import { providerRunnerModelLabel } from '@/lib/runnerProvider'
+import { providerRunnerModelLabel, withheldStoredModel } from '@/lib/runnerProvider'
 
 /** The AgentWeave counterpart of t3code's `composerControlClassName` (design.md Decision
  * 1) — every composer trigger (model, effort, conversation routing, target agent) renders
@@ -33,6 +33,10 @@ interface ComposerModelControlsProps {
   modelIsRunners?: boolean
   /** Bumped by the composer when the operator accepts `/model`; opens the model picker. */
   modelPickerRequest?: number
+  /** The bound runner's own model: what the next turn runs on when `effectiveModel` is a model
+   * the bound CLI does not offer (`rebinding-an-agents-runner-starts-clean`, FR-10). Omitted, the
+   * stored model is shown as it always was. */
+  runnerModel?: string | null
 }
 
 /** A compact "Label: Value ▾" trigger + popover listbox — the one interaction shape every
@@ -196,11 +200,18 @@ export function ComposerModelControls({
   onChangeControl,
   modelIsRunners = false,
   modelPickerRequest = 0,
+  runnerModel,
 }: ComposerModelControlsProps) {
   const { data: catalog } = useModelCatalog()
   const providerId = providerForRunner(runner)
   const provider = catalog?.providers.find((p) => p.provider === providerId)
   if (!provider) return null
+
+  // A model the conversation stores that this CLI does not offer is not what the next turn runs
+  // (the Hub withholds it): the pill reads the runner's model, and a line names the stored one.
+  // The stored model stays in the overrides the composer sends back.
+  const withheld = modelIsRunners ? null : withheldStoredModel(catalog, runner, effectiveModel)
+  const pillModel = withheld ? (runnerModel ?? null) : effectiveModel
 
   return (
     <>
@@ -209,10 +220,20 @@ export function ComposerModelControls({
       ) : (
         <ModelPicker
           provider={provider}
-          effectiveModel={effectiveModel}
+          effectiveModel={pillModel}
           onChangeModel={onChangeModel}
           openRequest={modelPickerRequest}
         />
+      )}
+      {withheld && (
+        <span
+          data-testid="composer-withheld-model"
+          className="min-w-0 truncate text-[11px]"
+          style={{ color: 'var(--text-3)' }}
+          title={`${withheld} is this conversation's model. ${provider.label} does not offer it, so the next turn runs on the runner's model. It is kept, and applies again if the agent is bound back to a runner that offers it.`}
+        >
+          {withheld} is not offered by {provider.label}
+        </span>
       )}
       {provider.controls
         .filter((control) => control.kind === 'enum')
