@@ -24,6 +24,7 @@ from hub.db.models import (
     AIJob,
     ApiKey,
     Base,
+    Build,
     ChapterVersion,
     Charter,
     Checkpoint,
@@ -131,6 +132,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "ai_jobs",
     "agent_heartbeats",
     "agent_job_deletions",
+    "builds",
 ]
 
 
@@ -154,6 +156,19 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     session.add(Runner(id=f"runner-{tag}", project_id=project_id, name="Runner", cli="claude"))
     session.add(Agent(id=f"agent-{tag}", project_id=project_id, name=f"agent-{tag}"))
     session.add(Task(id=f"task-{tag}", project_id=project_id, title="Task"))
+    session.add(
+        Build(
+            id=f"build-{tag}",
+            project_id=project_id,
+            document_id=f"doc-{tag}",
+            state="running",
+            driver="hand",
+            level="reviewed",
+            builders=[],
+            reviewers=[],
+            landing="main",
+        )
+    )
     session.add(
         Stall(
             id=f"stall-{tag}",
