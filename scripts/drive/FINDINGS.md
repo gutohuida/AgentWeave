@@ -40575,3 +40575,13 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 **Tier:** 0
 
 `POST /documents/check` (`hub/hub/api/v1/spec.py:3182-3187`) schedules `vault_spec_check.check_in_background` on every call. The old propose started it only after a successful move. Check is meant to be pressed freely while an agent edits, and on `:8000` the `spec-vault-check` Manager job is enabled (Sonnet), so each press spawns a model run, including presses on a document with blocking gaps and repeated presses on content that was already checked (nothing in `vault_spec_check.py` compares the content to the newest firing's). **Expected:** the check starts only for a document with no blocking gaps, and not again for a content version whose newest firing already checked it. **Test:** Check twice on unchanged ready content starts one check; Check on a document with a blocking gap starts none; Check after an edit starts one.
+
+## F1054 (C) -- a flake the task itself introduces lands with the Hub's automatic override
+
+**Status:** open 2026-10-27. Found by the review of slice M (`a-red-main-does-not-hold-the-night`), adversarial run.
+**Source:** code
+**Theme:** Checks
+**Ready:** no -- needs a decision on how much evidence of flakiness on main is required
+**Tier:** 1
+
+Slice M treats a failed test id that passes when rerun on its own as a flake, lands the approval with the Hub's recorded override, and files a fix task, without asking main (its FR-2). The reviewer changed `lib.py` (not a test file, so the touched-file rule does not fire) so that `test_lib.py::test_ok` failed once and then passed on the serial rerun: approval returned 200 with "passed when rerun on its own" and a fix task blamed the flake. A flake the task introduced through code it changed is the task's own defect. **Options:** require the id to have flaked before on main (the flaky-test records already kept, `flaky_tests.py`), or rerun the id on main's tree as well and count it a flake only when it is unstable there too; or treat a flake as the task's own when any file the task changed is imported by the test (costlier to compute). Not fixed in M: the operator decides.
