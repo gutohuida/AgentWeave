@@ -473,7 +473,7 @@ async def test_the_documents_view_counts_the_amendments_not_reviewed(
     listed = await app.get(f"{BASE}/documents", headers=auth_headers)
 
     (view,) = [d for d in listed.json()["documents"] if d["path"] == PATH]
-    assert view["amendments"] == {"total": 2, "unreviewed": 1}
+    assert view["amendments"] == {"total": 2, "unreviewed": 1, "proposed": 0}
 
 
 # ---------------------------------------------------------------------------

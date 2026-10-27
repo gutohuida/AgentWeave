@@ -2454,8 +2454,9 @@ class SpecDocumentSubmission(RequestModel):
 
 
 class SpecAmendment(RequestModel):
-    """One amendment to an approved document, from a run testing one of its tasks
-    (`a-tester-drives-the-built-product-and-keeps-the-spec-true`)."""
+    """One amendment to an approved document: applied by a run testing one of its tasks
+    (`a-tester-drives-the-built-product-and-keeps-the-spec-true`), proposed by an author or the
+    running build's lead (`amendments-main-watch-and-the-next-slice`)."""
 
     path: str = Field(max_length=255)
     op: str = Field(max_length=32)
@@ -2547,7 +2548,9 @@ async def amend_spec_document(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    """Amend an approved document from a test turn. Applied at once, recorded not reviewed."""
+    """Amend an approved document. A test turn's amendment is applied at once, recorded not
+    reviewed; an author's (a content save before approval) or the running build's lead's is
+    proposed, and waits for the operator to accept or decline it. Anyone else is refused 403."""
     from ... import spec_amendments, spec_lifecycle
 
     workspace, document = await _amendable_document(session, actor, body.path)

@@ -26,6 +26,7 @@ from .test_a_lead_hands_out_the_work import (
     _build,
     _rows,
     _run_headers,
+    _scheduling,
     _tasks,
     _tick,
 )
@@ -94,19 +95,20 @@ async def test_lead_amendment_waits_for_the_operator_then_joins_the_running_buil
     assert proposed.json()["state"] == "proposed"
     # Proposed changes neither the document nor the board.
     assert set(await _tasks()) == before
-    assert (
-        await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
-    ).json()["content_version"] == document_before
-    listed = (
-        await app.get(f"{BASE}/documents/{PATH}/amendments", headers=auth_headers)
-    ).json()["amendments"]
+    assert (await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)).json()[
+        "content_version"
+    ] == document_before
+    listed = (await app.get(f"{BASE}/documents/{PATH}/amendments", headers=auth_headers)).json()[
+        "amendments"
+    ]
     (row,) = [a for a in listed if a["id"] == amendment_id]
     assert (row["state"], row["author"], row["op"]) == ("proposed", "lead", "add_task")
     assert row["how_to_check"] == "pytest -k gamma"
 
-    accepted = await app.post(
-        f"{BASE}/documents/{PATH}/amendments/{amendment_id}/accept", headers=auth_headers
-    )
+    with _scheduling():
+        accepted = await app.post(
+            f"{BASE}/documents/{PATH}/amendments/{amendment_id}/accept", headers=auth_headers
+        )
     assert accepted.status_code == 200, accepted.text
 
     tasks = await _tasks()
@@ -182,7 +184,9 @@ async def test_a_hand_commit_on_main_is_raised(app, auth_headers, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_the_next_slice_is_offered_not_queued(app, auth_headers, planner, scheduled):
+async def test_the_next_slice_is_offered_not_queued(
+    app, auth_headers, planner, scheduled  # noqa: F811
+):
     roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
     slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
     approved = await _approve(app, auth_headers, slice_path)

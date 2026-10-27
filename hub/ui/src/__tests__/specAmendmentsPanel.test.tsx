@@ -13,6 +13,8 @@ import { SpecAmendmentsPanel } from '@/components/spec/SpecAmendmentsPanel'
  */
 const review = vi.fn()
 const respond = vi.fn()
+const accept = vi.fn()
+const decline = vi.fn()
 let amendments: unknown[] = []
 let documents: unknown[] = []
 
@@ -24,6 +26,8 @@ vi.mock('@/api/spec', async (importOriginal) => {
     useSpecAmendments: () => ({ data: { amendments }, error: null }),
     useReviewSpecAmendments: () => ({ mutate: review, isPending: false }),
     useRespondToReport: () => ({ mutate: respond, isPending: false, isError: false }),
+    useAcceptSpecAmendment: () => ({ mutate: accept, isPending: false, error: null }),
+    useDeclineSpecAmendment: () => ({ mutate: decline, isPending: false, error: null }),
   }
 })
 
@@ -184,6 +188,95 @@ describe('SpecAmendmentsPanel', () => {
     const row = screen.getByTestId('spec-amendment-amd-3')
     expect(row).toHaveTextContent('Answered: report rejected by operator')
     expect(row).toHaveTextContent('Answer: cache it')
+  })
+
+  it('shows a proposal with Accept and Decline, and an accepted one with who accepted it', async () => {
+    // The route's payload for one accepted and one open proposal (`Amendment.to_dict`): a proposal
+    // is listed when it was made; an accepted one is listed as the amendment its acceptance recorded,
+    // later, so the open proposal (made after the accepted one was accepted) comes last.
+    documents = [
+      { id: 'spdoc-1', path: PATH, phase: 'approved', amendments: { total: 1, unreviewed: 0, proposed: 1 } },
+    ]
+    amendments = [
+      amendment({
+        id: 'amd-4',
+        op: 'add_criterion',
+        target: 'c-edge',
+        author: 'architect',
+        run_id: 'run-arch',
+        reviewed: true,
+        reviewed_by: 'operator',
+        reviewed_at: '2026-10-27T10:01:00Z',
+        change: { key: 'c-edge', requirement: 'adds', given: 'an edge', when: 'it runs', then: 'it holds' },
+        response: null,
+        response_reason: null,
+        answered_by: null,
+        responds_to: null,
+        state: 'accepted',
+        decided_by: 'operator',
+        decided_at: '2026-10-27T10:01:00Z',
+        decided_reason: null,
+      }),
+      amendment({
+        id: 'amd-5',
+        op: 'add_task',
+        target: 't3',
+        identifier: null,
+        author: 'lead',
+        run_id: 'run-lead',
+        reason: 'gamma is needed before beta can be checked',
+        how_to_check: 'pytest -k gamma',
+        change: { key: 't3', title: 'Build gamma', description: '', requirements: ['adds'], depends_on: [], files: [], from: null, reviewer: null },
+        response: null,
+        response_reason: null,
+        answered_by: null,
+        responds_to: null,
+        state: 'proposed',
+        decided_by: null,
+        decided_at: null,
+        decided_reason: null,
+      }),
+    ]
+    renderPanel()
+
+    const accepted = screen.getByTestId('spec-amendment-amd-4')
+    expect(accepted).toHaveTextContent('Accepted by operator')
+    expect(within(accepted).queryByRole('button', { name: 'Mark reviewed' })).not.toBeInTheDocument()
+
+    const proposal = screen.getByTestId('spec-amendment-amd-5')
+    expect(proposal).toHaveTextContent('lead')
+    expect(proposal).toHaveTextContent('gamma is needed before beta can be checked')
+    expect(proposal).toHaveTextContent('pytest -k gamma')
+    expect(proposal).toHaveTextContent('Build gamma')
+    expect(screen.getByText(/1 proposed, waiting for you/)).toBeInTheDocument()
+
+    await userEvent.click(within(proposal).getByRole('button', { name: 'Accept' }))
+    expect(accept).toHaveBeenCalledWith({ path: PATH, id: 'amd-5' })
+
+    await userEvent.click(within(proposal).getByRole('button', { name: 'Decline…' }))
+    const send = within(proposal).getByRole('button', { name: 'Decline and tell the proposer' })
+    expect(send).toBeDisabled()
+    await userEvent.type(within(proposal).getByLabelText('Reason for declining the amendment'), 'not now')
+    await userEvent.click(send)
+    expect(decline).toHaveBeenCalledWith({ path: PATH, id: 'amd-5', reason: 'not now' }, expect.anything())
+  })
+
+  it('names why a declined proposal was declined', () => {
+    amendments = [
+      amendment({
+        id: 'amd-6',
+        op: 'add_criterion',
+        target: 'c-x',
+        state: 'declined',
+        decided_by: 'operator',
+        decided_reason: 'covered already',
+      }),
+    ]
+    renderPanel()
+    const row = screen.getByTestId('spec-amendment-amd-6')
+    expect(row).toHaveTextContent('Declined by operator')
+    expect(row).toHaveTextContent('Why: covered already')
+    expect(within(row).queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
   })
 
   it('renders nothing for a document with no amendments', () => {

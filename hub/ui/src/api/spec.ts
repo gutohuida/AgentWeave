@@ -823,8 +823,9 @@ export interface SpecDocumentRecord {
    *  that predates it. */
   approval_warnings_overridden?: SpecBlockingFinding[]
   /** A tester's amendments to the approved document, and how many the operator has not reviewed
-   *  (`a-tester-drives-the-built-product-and-keeps-the-spec-true`). Absent when there are none. */
-  amendments?: { total: number; unreviewed: number }
+   *  (`a-tester-drives-the-built-product-and-keeps-the-spec-true`), and how many proposals wait
+   *  for the operator (`proposed`, absent from an older Hub). Absent when there are none. */
+  amendments?: { total: number; unreviewed: number; proposed?: number }
   updated_at: string
 }
 
@@ -1105,10 +1106,17 @@ export function useSpecRigorHistory(path: string | null) {
   })
 }
 
-/** One amendment a tester made to an approved document, oldest first from the route. */
+/** One amendment to an approved document, oldest first from the route: a tester's, applied at
+ *  once, or an author's or the lead's proposal, which the operator accepts or declines. */
 export interface SpecAmendment {
   id: string
-  op: 'add_task' | 'add_criterion' | 'change_criterion' | 'remove_criterion' | 'cannot_satisfy'
+  op:
+    | 'add_task'
+    | 'add_requirement'
+    | 'add_criterion'
+    | 'change_criterion'
+    | 'remove_criterion'
+    | 'cannot_satisfy'
   target: string
   requirement: string | null
   identifier: string | null
@@ -1132,6 +1140,31 @@ export interface SpecAmendment {
   answered_by?: string | null
   /** The report an operator's amendment answers. */
   responds_to?: string | null
+  /** `applied` at once (a tester's), `proposed` and waiting for the operator, `accepted`,
+   *  `declined`, or `stale` (no longer applied when accepted). Absent from an older Hub. */
+  state?: 'applied' | 'proposed' | 'accepted' | 'declined' | 'stale'
+  decided_by?: string | null
+  decided_at?: string | null
+  decided_reason?: string | null
+}
+
+/** The operator accepts a proposed amendment: applied to the document as it stands, or refused
+ *  409 `amendment_stale` naming why. The proposer is told either way. */
+export function useAcceptSpecAmendment() {
+  return useSpecMutation<{ path: string; id: string }, { state: string; task_created: string | null }>(
+    (projectId, { path, id }) =>
+      postJson(`/api/v1/projects/${projectId}/project/documents/${path}/amendments/${id}/accept`, {}),
+  )
+}
+
+/** The operator declines a proposed amendment with a reason the proposer reads. */
+export function useDeclineSpecAmendment() {
+  return useSpecMutation<{ path: string; id: string; reason: string }, { state: string }>(
+    (projectId, { path, id, reason }) =>
+      postJson(`/api/v1/projects/${projectId}/project/documents/${path}/amendments/${id}/decline`, {
+        reason,
+      }),
+  )
 }
 
 export function useSpecAmendments(path: string | null, enabled = true) {

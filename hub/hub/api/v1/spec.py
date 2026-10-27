@@ -1334,6 +1334,101 @@ async def respond_to_report(
     }
 
 
+class AmendmentDecline(RequestModel):
+    """Why the operator declines a proposed amendment; the proposer reads it."""
+
+    reason: str = Field(max_length=2000)
+
+
+async def _told_of_decision(session: AsyncSession, project_id: str, document, decision) -> None:
+    """Queue the decision to its proposer, commit, tell every view, and start the proposer's turn
+    (a failed start is retried by the Hub, never this decision's failure)."""
+    from ... import spec_amendments
+    from ...turn_scheduler import schedule_accepted
+
+    if decision.proposer:
+        await spec_amendments.queue_note_to_reporter(
+            session, project_id, decision.proposer, decision.note
+        )
+    document_path, phase = document.path, document.phase
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document_path, "phase": phase})
+    if decision.task_created:
+        await sse_manager.broadcast(project_id, "task_created", {"id": decision.task_created})
+    if decision.proposer:
+        await schedule_accepted(project_id, decision.proposer)
+
+
+@router.post("/documents/{path:path}/amendments/{amendment_id}/accept")
+async def accept_amendment(
+    path: str,
+    amendment_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator accepts a proposed amendment (`amendments-main-watch-and-the-next-slice`, D1):
+    applied to the document as it stands now, or refused 409 `amendment_stale` naming why when it
+    no longer applies (recorded, and the proposer told). An added task joins the running build."""
+    from ... import spec_amendments
+
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        decision = await spec_amendments.accept_proposal(
+            session, workspace, document, amendment_id, actor=_operator()
+        )
+    except spec_amendments.AmendmentRefused as exc:
+        raise HTTPException(
+            status_code=exc.status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await _told_of_decision(session, project_id, document, decision)
+    if decision.state == spec_amendments.STALE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": decision.message, "code": "amendment_stale"},
+        )
+    return {
+        **decision.to_dict(),
+        "amendments": [
+            amendment.to_dict()
+            for amendment in await spec_amendments.list_amendments(session, document)
+        ],
+    }
+
+
+@router.post("/documents/{path:path}/amendments/{amendment_id}/decline")
+async def decline_amendment(
+    path: str,
+    amendment_id: str,
+    body: AmendmentDecline,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator declines a proposed amendment with a reason; the proposer is told."""
+    from ... import spec_amendments
+
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    try:
+        decision = await spec_amendments.decline_proposal(
+            session, document, amendment_id, reason=body.reason, actor=_operator()
+        )
+    except spec_amendments.AmendmentRefused as exc:
+        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
+        if exc.field:
+            detail["field"] = exc.field
+        raise HTTPException(status_code=exc.status, detail=detail) from exc
+    await _told_of_decision(session, project_id, document, decision)
+    return {
+        **decision.to_dict(),
+        "amendments": [
+            amendment.to_dict()
+            for amendment in await spec_amendments.list_amendments(session, document)
+        ],
+    }
+
+
 def _proposal_view(proposal: SpecEditProposal) -> dict:
     return {
         "id": proposal.id,

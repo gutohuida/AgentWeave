@@ -5533,34 +5533,37 @@ def amend_spec_document(
     task: Optional[Dict[str, Any]] = None,
     change: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Amend an approved specification document with what testing it found. Test turns only.
+    """Amend an approved specification document: a tester at once, an author or the lead by proposal.
 
-    Only a turn testing a task of this document may call this: the builder never amends, because it
-    is the work being judged. The amendment is applied at once, recorded with you as its author and
-    this run, and stays **not reviewed** until the operator reviews it.
+    A turn testing a task of this document amends it at once: recorded with you as its author and
+    this run, **not reviewed** until the operator reviews it. The builder never amends.
+    An agent that wrote the document before approval, or the lead of its running build, **proposes**
+    instead: nothing changes until the operator accepts (applied then, or refused as stale) or
+    declines it with a reason, and you are told either way. Anyone else is refused.
 
-    Stay within the document's stated requirements and criteria. A defect the work under review
-    introduces sends that task back (`revision_needed`), never into the spec. A problem that was
-    there before it is a side finding: `create_task` with no loop, naming the requirement it bears
-    on with `requirement_ids` and `spec_document`.
+    Stay within the document's requirements. A defect the work under review introduces sends that
+    task back (`revision_needed`), never into the spec; an older problem is a side finding
+    (`create_task` with no loop, naming `requirement_ids` and `spec_document`).
 
     Args:
         path: The document, e.g. `spec/changes/<name>/spec.json`.
         op: One of
-            `add_task` — a fix the product needs to meet a criterion; `task` is
-              `{key, title, description, requirements: [<requirement key>], depends_on?, files?}`.
-              It joins the flow at once and the implementer picks it up.
+            `add_task` — work the document lacks; `task` is `{key, title, description,
+              requirements: [<requirement key>], depends_on?, files?, builder?}`. Once in, it
+              joins the running build (or waits for the next) and is handed out like any other.
+            `add_requirement` — proposals only; `requirement` its key, `change` is
+              `{statement, modal, rationale?}`.
             `add_criterion` — a check the document lacks; `requirement` is its requirement key,
               `criterion` its new key, `change` is `{given, when, then, how_to_check?, checked_by?}`.
             `change_criterion` — `criterion` and the fields to change in `change`.
             `remove_criterion` — `criterion`.
-          A change or removal of a criterion means its requirement cannot be verified until the
-          operator has reviewed it. Do not use it to make work pass.
+          A change or removal of a criterion holds its requirement unverifiable until reviewed.
         reason: What you found and how — what you ran and what it showed.
         how_to_check: How somebody else checks the amendment holds (a command, a click path).
         criterion, requirement, task, change: As the op needs them.
 
-    Returns the amendment's `id`, `op`, `target` and, for `add_task`, `task_created`.
+    Returns the amendment's `id`, `op`, `target`, and `task_created` for an applied `add_task`
+    or `state: proposed` for a proposal.
     """
     return _hub_request(
         "POST",

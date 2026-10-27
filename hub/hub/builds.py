@@ -286,8 +286,9 @@ async def cover_tasks(
 
 async def join_running_build(session: AsyncSession, task: Task) -> None:
     """A task a document declares while a build of it runs joins that build (FR-2): re-approving a
-    reopened document whose build still runs adds its new tasks to that build's flow
-    (`spec_tasks`), and so to the build, at its level."""
+    reopened document whose build still runs, or the operator accepting an amendment that adds a
+    task (`spec_amendments.accept_proposal`), adds it to that build's flow (`spec_tasks`), and so to
+    the build, at its level, with its declared builder applied as `cover_tasks` applies one."""
     if task.build_id or not task.spec_document_id:
         return
     build = await running_build(session, task.spec_document_id)
@@ -295,6 +296,13 @@ async def join_running_build(session: AsyncSession, task: Task) -> None:
         return
     task.build_id = build.id
     task.level = build.level
+    if (
+        task.builder
+        and task.assignee is None
+        and task.status in ("pending", "assigned")
+        and task.builder in await open_agents(session, build.project_id)
+    ):
+        task.assignee = task.builder
 
 
 async def retire_previous_loops(session: AsyncSession, document_id: str, by_build: str) -> None:
