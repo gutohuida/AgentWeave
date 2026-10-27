@@ -1551,7 +1551,7 @@ async def _find_document(session, project_id: str, ref: str):
     from ... import spec_lifecycle
     from ...db.models import SpecDocument
 
-    if re.fullmatch(r"spdoc-[0-9a-f]+", ref):
+    if _DOCUMENT_ID_RE.fullmatch(ref):
         return (
             await session.execute(
                 select(SpecDocument).where(
@@ -1565,7 +1565,7 @@ async def _find_document(session, project_id: str, ref: str):
 async def _resolve_requirement(
     session, project_id: str, identifier: str, document: str, task_id: Optional[str] = None
 ):
-    from ... import spec_index, spec_lifecycle
+    from ... import spec_index
 
     document_row = None
     if document:
@@ -1697,7 +1697,6 @@ async def list_evidence_for_agent(
     **Who produced each row is part of the answer.** An agent may not decide evidence it produced
     itself, so one that cannot see the producer learns that rule by being refused once per row.
     """
-    from ... import spec_lifecycle
     from ...db.models import RequirementEvidence, SpecRequirement
     from .spec import _evidence_views
 
