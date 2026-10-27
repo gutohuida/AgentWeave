@@ -127,8 +127,8 @@ export function ManagerSettings({
                     label={`${job.title} model`}
                     value={job.model ?? ''}
                     disabled={!runner && !job.model}
-                    onChange={(v) => onChange(job.key, { model: v || null }, `${job.title} uses ${modelsFor(runner).find((m) => m.id === v)?.label ?? (v || 'the runner’s model')}`)}
-                    options={catalogModelOptions(modelsFor(runner), { unsetLabel: 'The runner’s model', stored: job.model, aliases: false })}
+                    onChange={(v) => onChange(job.key, { model: v || null }, `${job.title} uses ${modelsFor(runner).find((m) => m.id === v)?.label ?? (v || job.default_model?.label || 'the runner’s model')}`)}
+                    options={catalogModelOptions(modelsFor(runner), { unsetLabel: job.default_model ? `${job.default_model.label} (the ${job.key}’s default)` : 'The runner’s model', stored: job.model, aliases: false })}
                   />
                 }
               />

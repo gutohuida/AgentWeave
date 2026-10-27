@@ -75,6 +75,7 @@ from ...task_transition_service import (
     history_for,
     hub_written_documents,
     retry_integration,
+    run_fast_checks_before_completion,
 )
 from ...task_transitions import (
     ACTOR_OPERATOR,
@@ -1756,6 +1757,8 @@ async def update_task_for_actor(
     # carries no advisories the same way it carries no new transition row.
     approval_report: List[Any] = []
     withdrawn_reviews: List[Dict[str, str]] = []
+    # What an agent's completion found when it waited for the fast checks, or `None`.
+    completion_checks: Any = None
     # **Before the transition, not after it** (finding F70). `_guard_reviewer_is_not_the_author`
     # refuses `-> under_review` while the task still names the agent that completed it, and
     # reassigning to a different reviewer in the same PATCH is the most natural way past it.
@@ -1848,6 +1851,13 @@ async def update_task_for_actor(
                     "asking to."
                 ),
             )
+        if body.status == "completed":
+            # The project's fast checks, on the work this completion hands to review, before the
+            # completion is recorded (`checks-run-before-anyone-reviews`, D4). Here, with nothing
+            # staged for a run actor (the operator-only fields are refused above, notes are written
+            # below), so a wait of up to two minutes never holds the database's write lock. Raises
+            # `ChecksFailedError` (409, with the checks' output) when one fails.
+            completion_checks = await run_fast_checks_before_completion(session, task, actor)
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
         # exception handler turns into 409/403. A refusal cannot leave a half-applied update behind:
         # the assignee written above is *staged*, not committed, and `get_session` closes the session
@@ -1944,13 +1954,22 @@ async def update_task_for_actor(
     # Kept as the materialised latest writer (D4 of the proposal's impact notes). The rules read the
     # append-only history instead; this stays for existing consumers and is not what governs.
     task.updated_by_run_id = actor.run_id
-    return await _commit_and_render(
+    rendered = await _commit_and_render(
         session,
         task,
         project_id=project_id,
         approval_report=approval_report,
         withdrawn_reviews=withdrawn_reviews,
     )
+    if completion_checks is not None:
+        # A run that decided a failure of the task's own while this completion committed -- past
+        # the budget (D5), or a slow check failing between the fast prefix and this commit -- found
+        # the task not yet `completed` and could not return it. Asked again now that it is;
+        # `return_failed_work` acts only on the latest run, on this work, failed by the task.
+        from ...project_checks import schedule_return
+
+        schedule_return(task.id)
+    return rendered
 
 
 async def _commit_and_render(

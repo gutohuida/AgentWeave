@@ -23,6 +23,8 @@ from hub.spec_payload import (
     validate_payload,
 )
 
+from ._spec_versions import content_version
+
 ROADMAP_PATH = "spec/changes/the-plan/spec.json"
 
 
@@ -283,7 +285,7 @@ async def _propose(app, auth_headers, path):
     """The propose route answers 200 either way; a refusal leaves the phase and lists `blocking`."""
     closed = await app.post(f"{BASE}/documents/close-exploration?path={path}", headers=auth_headers)
     assert closed.status_code == 200, closed.text
-    response = await app.post(f"{BASE}/documents/propose?path={path}", headers=auth_headers)
+    response = await app.post(f"{BASE}/documents/check?path={path}", headers=auth_headers)
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -291,7 +293,11 @@ async def _propose(app, auth_headers, path):
 async def _approve(app, auth_headers, path, **body):
     return await app.post(
         f"{BASE}/documents/phase?path={path}&to=approved",
-        json={"approve_anyway": True, **body},
+        json={
+            "content_version": await content_version(app, auth_headers, path),
+            "approve_anyway": True,
+            **body,
+        },
         headers=auth_headers,
     )
 
@@ -300,7 +306,7 @@ async def _approved_roadmap_doc(app, auth_headers, planner):
     path = await _agent_create(app, planner, kind="roadmap", title="The plan")
     saved = await _agent_submit(app, planner, path, _roadmap())
     assert saved.status_code == 200, saved.text
-    assert (await _propose(app, auth_headers, path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, path))["blocking"] == []
     approved = await _approve(app, auth_headers, path)
     assert approved.status_code == 200, approved.text
     return path, approved.json()
@@ -313,7 +319,7 @@ async def _proposed_slice(app, auth_headers, headers, roadmap_path, key="s1"):
     )
     assert saved.status_code == 200, saved.text
     proposed = await _propose(app, auth_headers, path)
-    assert proposed["phase"] == "proposed", proposed
+    assert proposed["blocking"] == [], proposed
     return path
 
 
@@ -474,7 +480,7 @@ async def _proposed_slice_with(app, auth_headers, headers, roadmap_path, **overr
         _slice_doc(roadmap={"document": roadmap_path, "slice": "s1"}, **overrides),
     )
     assert saved.status_code == 200, saved.text
-    assert (await _propose(app, auth_headers, path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, path))["blocking"] == []
     return path
 
 
@@ -491,7 +497,7 @@ async def _closed_slice(app, auth_headers, planner, roadmap_path):
         headers=auth_headers,
     )
     assert reopened.status_code == 200, reopened.text
-    assert (await _propose(app, auth_headers, slice_path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, slice_path))["blocking"] == []
     return slice_path, task_id
 
 
@@ -718,7 +724,7 @@ async def test_a_slice_the_operator_created_has_no_author_to_ask(
         app, planner, slice_path, _slice_doc(roadmap={"document": roadmap_path, "slice": "s1"})
     )
     assert saved.status_code == 200, saved.text
-    assert (await _propose(app, auth_headers, slice_path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, slice_path))["blocking"] == []
 
     approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
 
@@ -750,7 +756,7 @@ async def test_not_asking_queues_nothing(app, auth_headers, planner, scheduled):
 async def test_a_document_that_is_not_a_slice_is_unaffected(app, auth_headers, planner, scheduled):
     path = await _agent_create(app, planner)
     assert (await _agent_submit(app, planner, path, _slice_doc(roadmap=None))).status_code == 200
-    assert (await _propose(app, auth_headers, path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, path))["blocking"] == []
 
     approved = await _approve(app, auth_headers, path, draft_next_slice=True)
 
@@ -895,7 +901,7 @@ async def test_an_approved_change_document_keeps_its_duty(app, auth_headers, pla
 
     path = await _agent_create(app, planner)
     assert (await _agent_submit(app, planner, path, _slice_doc(roadmap=None))).status_code == 200
-    assert (await _propose(app, auth_headers, path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, path))["blocking"] == []
     assert (await _approve(app, auth_headers, path)).status_code == 200
 
     assert SPEC_PHASE_DUTIES["approved"] in await _context_with_open(path)
@@ -950,21 +956,21 @@ async def test_the_spec_read_names_the_roadmap_slice_for_the_app(app, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_a_submission_says_whether_it_is_ready_to_propose(app, auth_headers, planner):
+async def test_a_submission_says_whether_it_is_ready_to_approve(app, auth_headers, planner):
     """F502. A real agent read `ok: true` beside eight blocking findings and told the operator the
     document was ready. The answer to that question is now a field, not an inference."""
     path = await _agent_create(app, planner, title="Slice one")
     saved = await _agent_submit(app, planner, path, _slice_doc(acceptance_criteria=[]))
     assert saved.status_code == 200, saved.text
     assert saved.json()["blocking"]
-    assert saved.json()["ready_to_propose"] is False
+    assert saved.json()["ready_to_approve"] is False
 
 
 @pytest.mark.asyncio
 async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     app, auth_headers, planner
 ):
-    """The warning rides the submit response; `ready_to_propose` is decided by `blocking` alone."""
+    """The warning rides the submit response; `ready_to_approve` is decided by `blocking` alone."""
     path = await _agent_create(app, planner, title="Slice one")
     tasks = [
         {
@@ -978,7 +984,7 @@ async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
     assert saved.status_code == 200, saved.text
     body = saved.json()
-    assert body["ready_to_propose"] is True
+    assert body["ready_to_approve"] is True
     assert len(body["warnings"]) == 1
     assert "t1" in body["warnings"][0]["message"]
     assert "hub/hub/x.py" in body["warnings"][0]["message"]

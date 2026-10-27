@@ -15,6 +15,8 @@ from hub.db.models import SpecDocument, SpecDocumentEvent, SpecDocumentMerge, Ta
 from hub.spec_documents import parse_hub
 from hub.spec_payload import KEY_RE, SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 CAP = "spec/capabilities/widgets/spec.json"
 CAP2 = "spec/capabilities/gadgets/spec.json"
@@ -105,11 +107,14 @@ async def _approved_change(app, auth_headers, path=CHANGE, payload=None):
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": path}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/check", params={"path": path}, headers=auth_headers)
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": "approved"},
-        json={"approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, path),
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
     assert approved.json()["phase"] == "approved", approved.text
@@ -355,23 +360,14 @@ async def test_a_change_that_is_not_approved_is_not_folded(app, auth_headers, tm
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("phase", ["exploring", "proposed"])
 async def test_the_draft_is_not_served_for_a_change_that_is_not_approved(
-    app, auth_headers, tmp_path, phase
+    app, auth_headers, tmp_path
 ):
     await _create_capability(app, auth_headers)
     await app.post(f"{BASE}/documents", json={"path": CHANGE, "title": "W"}, headers=auth_headers)
     await app.put(
         f"{BASE}/documents/{CHANGE}/content", json={"document": _change()}, headers=auth_headers
     )
-    if phase == "proposed":
-        moved = await app.post(
-            f"{BASE}/documents/phase",
-            params={"path": CHANGE, "to": "proposed"},
-            json={},
-            headers=auth_headers,
-        )
-        assert moved.status_code == 200, moved.text
     before = await _digest()
 
     response = await app.get(

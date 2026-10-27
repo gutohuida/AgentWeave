@@ -22,6 +22,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
@@ -81,7 +83,7 @@ async def close_and_propose(app, auth_headers):
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
     assert closed.status_code == 200, closed.text
-    return await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+    return await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
 
 
 async def board(app, auth_headers):
@@ -110,7 +112,7 @@ async def test_a_hand_made_task_satisfies_propose_without_a_declared_task(
     assert proposed.status_code == 200, proposed.text
     body = proposed.json()
     assert body["blocking"] == [], body["blocking"]
-    assert body["phase"] == "proposed"
+    assert body["blocking"] == []
 
 
 @pytest.mark.asyncio
@@ -155,7 +157,11 @@ async def test_approving_does_not_duplicate_a_requirement_a_hand_made_task_alrea
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "the hand-made task already covers this", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "the hand-made task already covers this",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text

@@ -917,6 +917,28 @@ async def _record_the_wait_and_park(
         await announce_block(session, run, task, parked_on)
 
 
+async def _asks_only_notes(session: AsyncSession, actor: AgentActor) -> bool:
+    """Is *actor* the Hub's own mender, whose every question is a note?
+
+    The mender is woken by a stall, usually while the operator is away, and a four-minute wait on a
+    sleeping person only ends in "nobody responded": on 2026-10-26/27 :8000's mender asked 27
+    blocking questions and all 27 waits ran out. So whatever `blocking` it passes, the Hub records
+    its question as a note -- nobody waits on it, no deadline is stamped, no task is parked
+    (`_record_the_wait_and_park` skips a non-blocking question) -- and its answer is delivered as a
+    later message. Decided here, in the Hub, so a model that passes `blocking: true` cannot override
+    it. No operator-presence signal exists to decide it any more finely
+    (`the-mender-wakes-only-for-real-stalls`, D3).
+    """
+    from ... import stalls
+
+    agent = (
+        await session.execute(
+            select(Agent).where(Agent.project_id == actor.project_id, Agent.name == actor.agent)
+        )
+    ).scalar_one_or_none()
+    return stalls.is_mender(agent)
+
+
 @router.post("/questions", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
 async def ask_operator_question(
     body: AgentQuestionCreate,
@@ -926,7 +948,7 @@ async def ask_operator_question(
     question = QuestionCreate(
         from_agent=actor.agent,
         question=body.question,
-        blocking=body.blocking,
+        blocking=body.blocking and not await _asks_only_notes(session, actor),
         options=list(body.options or []),
         header=body.header,
         multi_select=body.multi_select,
@@ -961,11 +983,12 @@ async def ask_operator_question_batch(
     batch_id = f"qbatch-{short_id()}"
     total = len(body.questions)
     created = []
+    blocking = body.blocking and not await _asks_only_notes(session, actor)
     for index, entry in enumerate(body.questions):
         question = QuestionCreate(
             from_agent=actor.agent,
             question=entry.question,
-            blocking=body.blocking,
+            blocking=blocking,
             options=list(entry.options or []),
             header=entry.header,
             multi_select=entry.multi_select,
@@ -1901,7 +1924,7 @@ async def read_spec_document(
     agent-supplied path then cannot be reinterpreted as extra routing.
 
     Readable in **every phase**. Reading is not authoring, and every gate in this area governs
-    writing or approving. A reviewer needs a proposed document and a builder needs an approved one;
+    writing or approving. A reviewer needs a document being written and a builder needs an approved one;
     a refusal that depends on state is one an agent concludes it does not have at all.
 
     **Bounded** (`a-specification-is-read-in-results-that-fit`, F363): the whole response is fitted
@@ -2303,7 +2326,7 @@ async def advance_spec_step(
                 "missing": gaps,
                 "instructions": "",
                 "message": f"{left} is the last step of this journey; the document is ready for "
-                "the operator to propose.",
+                "the operator to approve.",
             }
         await spec_journey.set_step(
             session,
@@ -2377,8 +2400,8 @@ class SpecDocumentSubmission(RequestModel):
 
     The document must already exist — call `create_spec_document` first if you
     don't have one yet. There is deliberately no phase or approval field here:
-    "propose" and "approve" are the operator's, and the tool surface offers no
-    way to express either.
+    checking and approving are the operator's, and the tool surface offers no
+    way to approve.
     """
 
     path: str = Field(max_length=255)
@@ -2541,10 +2564,11 @@ async def submit_spec_document(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    """Store a submitted specification payload and return what still blocks a proposal.
+    """Store a submitted specification payload and return what still blocks its approval.
 
     Saving an incomplete document is not an error — a document under discussion is incomplete,
-    and refusing it would make exploring impossible. `blocking` says what a proposal would refuse.
+    and refusing it would make exploring impossible. `blocking` says what approval would refuse,
+    exactly as the operator's Check reports it.
     """
     from ... import project_workspace, spec_lifecycle, spec_service
     from ...spec_manifest import SpecPathError, validate_spec_path
@@ -2605,7 +2629,7 @@ async def submit_spec_document(
         "identifiers": result.identifiers,
         "blocking": result.blocking,
         # F502: an agent read the call's success beside eight blocking findings as "ready".
-        "ready_to_propose": not result.blocking,
+        "ready_to_approve": not result.blocking,
         "divergence": result.divergence,
         "warnings": result.warnings,
     }

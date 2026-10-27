@@ -11,8 +11,9 @@ CHECKS = [
     {"name": "lint", "command": "ruff check .", "timeout_seconds": 120},
     {"name": "tests", "command": "py -3.11 -m pytest -q", "timeout_seconds": 900},
 ]
-#: What is stored and read back: a check names no paths unless the operator gives some.
-SAVED = [{**check, "paths": []} for check in CHECKS]
+#: What is stored and read back: a check names no paths unless the operator gives some, and is not
+#: fast unless the operator marks it (`checks-run-before-anyone-reviews`, FR-1).
+SAVED = [{**check, "paths": [], "fast": False} for check in CHECKS]
 
 
 @pytest.mark.asyncio
@@ -35,7 +36,7 @@ async def test_a_timeout_defaults_and_other_settings_are_untouched(app, auth_hea
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["checks"] == [
-        {"name": "t", "command": "pytest", "timeout_seconds": 900, "paths": []}
+        {"name": "t", "command": "pytest", "timeout_seconds": 900, "paths": [], "fast": False}
     ]
     assert saved.json()["hop_budget"] == before["hop_budget"]
 
@@ -119,3 +120,32 @@ async def test_the_operator_scopes_a_check_to_paths_and_a_run_cannot(app, auth_h
     assert refused.status_code in (401, 403), refused.text
     after = await app.get(URL, headers=auth_headers)
     assert after.json()["checks"][0]["paths"] == ["hub/**", "constraints-dev.txt"]
+
+
+@pytest.mark.asyncio
+async def test_a_fast_check_is_at_most_two_minutes_and_fast_defaults_off(app, auth_headers):
+    """fast-flag-validated (`checks-run-before-anyone-reviews`, FR-1)."""
+    refused = await app.put(
+        URL,
+        json={
+            "checks": [{"name": "lint", "command": "ruff", "timeout_seconds": 300, "fast": True}]
+        },
+        headers=auth_headers,
+    )
+    assert refused.status_code == 422, refused.text
+    assert "120" in refused.text
+    assert (await app.get(URL, headers=auth_headers)).json()["checks"] is None
+
+    saved = await app.put(
+        URL,
+        json={"checks": [{"name": "lint", "command": "ruff", "timeout_seconds": 60, "fast": True}]},
+        headers=auth_headers,
+    )
+    assert saved.status_code == 200, saved.text
+    assert (await app.get(URL, headers=auth_headers)).json()["checks"][0]["fast"] is True
+
+    plain = await app.put(
+        URL, json={"checks": [{"name": "lint", "command": "ruff"}]}, headers=auth_headers
+    )
+    assert plain.status_code == 200, plain.text
+    assert (await app.get(URL, headers=auth_headers)).json()["checks"][0]["fast"] is False

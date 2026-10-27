@@ -779,7 +779,124 @@ ORIGIN_RUNTIME = "runtime"
 #: cause, recorded with the job's id (`a-flows-own-moves-are-recorded-as-the-flows`). The operator
 #: created the job, so it acts as them, as `runtime` acts as the run.
 ORIGIN_JOB = "job"
-ORIGINS = frozenset({ORIGIN_ACTOR, ORIGIN_RUNTIME, ORIGIN_JOB})
+#: The project's checks made the move: a completed task whose check run failed with its own failure
+#: went back to its builder (`checks-run-before-anyone-reviews`, D7). The operator's authority, as
+#: a job's is -- the operator configured the checks -- so the actor stays the operator.
+ORIGIN_CHECKS = "checks"
+ORIGINS = frozenset({ORIGIN_ACTOR, ORIGIN_RUNTIME, ORIGIN_JOB, ORIGIN_CHECKS})
+
+
+class _ChecksRefusal:
+    """The structured body of a refusal over the project's checks (main.py's handler sends
+    `to_dict()`; the MCP adapter returns its `message`)."""
+
+    def __init__(self, code: str, message: str, **fields) -> None:
+        self.code, self.message, self.fields = code, message, fields
+
+    def detail(self) -> str:
+        return self.message
+
+    def to_dict(self) -> dict:
+        return {"code": self.code, "message": self.message, **self.fields}
+
+
+class ChecksFailedError(TransitionRefusedError):
+    """An agent's completion whose fast checks failed with the task's own failure (FR-3, D4).
+
+    409: the asker may complete the task, the *work* is what forbids it. Carries each failing
+    check's output, the merged commit and the run, so the agent fixes it in the same turn.
+    """
+
+    http_status = 409
+
+    def __init__(self, task: Task, outcome) -> None:
+        from .project_checks import failure_report
+
+        report = failure_report(
+            outcome.failing, run_id=outcome.run_id, merged_sha=outcome.merged_sha
+        )
+        message = (
+            f"Task {task.id} was not completed. {report}\n\nFix what the check reports and move "
+            f"the task to completed again; the fast checks run again on the new work."
+        )
+        self.refusal = _ChecksRefusal(
+            "checks_failed",
+            message,
+            task_id=task.id,
+            run_id=outcome.run_id,
+            merged_sha=outcome.merged_sha,
+            checks=[
+                {
+                    key: result.get(key)
+                    for key in (
+                        "name",
+                        "exit_code",
+                        "timed_out",
+                        "output_tail",
+                        "failure_excerpt",
+                    )
+                }
+                for result in outcome.failing
+            ],
+        )
+        super().__init__(message)
+
+
+class ChecksPendingError(TransitionRefusedError):
+    """An agent taking completed work into review while its checks are undecided or have failed
+    with the task's own failure (FR-9, D8). 409: the work's state forbids it, not the asker."""
+
+    http_status = 409
+
+    def __init__(self, task: Task, wait) -> None:
+        message = (
+            f"Task {task.id} cannot be taken into review yet: {wait.reason}. The review waits for "
+            f"the project's checks."
+        )
+        self.refusal = _ChecksRefusal(
+            "checks_pending", message, task_id=task.id, run_id=wait.run_id, state=wait.state
+        )
+        super().__init__(message)
+
+
+async def completion_refusal(
+    session: AsyncSession, task: Task, actor: Actor
+) -> Optional[TransitionRefusedError]:
+    """What `apply_transition` would refuse *actor* completing *task* for, before anything about the
+    work: the map, author/reviewer separation, and that the run holds the task. Reads only."""
+    verdict = await decide_move(session, task, "completed", actor)
+    if verdict.refusal is not None:
+        return verdict.refusal
+    try:
+        await _guard_run_holds_the_task(session, task, "completed", actor)
+    except TransitionRefusedError as refusal:
+        return refusal
+    return None
+
+
+async def run_fast_checks_before_completion(session: AsyncSession, task: Task, actor: Actor):
+    """An agent's move to `completed` waits for the project's fast checks on the work its review
+    would be given, and is refused with their output when one fails (FR-2..FR-4, D4).
+
+    Called by the route before `apply_transition`, with nothing staged, so the wait never holds the
+    database's write lock. Not inside `apply_transition`, which stages and runs inside other
+    transactions; not in `decide_move`, which answers only who may move. A move this actor may not
+    make is left for `apply_transition` to refuse, so nothing runs for it. Returns what the wait
+    found (`None` where no fast check applies), for the caller to act on once it commits."""
+    if actor.is_operator or task.status == "completed":
+        return None
+    if await completion_refusal(session, task, actor) is not None:
+        return None
+    from . import project_checks
+
+    outcome = await project_checks.fast_checks_at_completion(session, task, actor.agent)
+    if outcome is None:
+        return None
+    if outcome.failing:
+        raise ChecksFailedError(task, outcome)
+    # The wait may have been long: what is applied is the task as it stands now.
+    await session.refresh(task)
+    return outcome
 
 
 async def apply_transition(
@@ -893,6 +1010,22 @@ async def apply_transition(
             ]
         if dependency_refusal.refuses:
             raise DependencyUnmetError(dependency_refusal)
+
+    # The work-state gate on taking finished work into review (`checks-run-before-anyone-reviews`,
+    # D8): an agent waits for the project's checks, as the flow does, and a failure of the task's
+    # own sends it back to its builder rather than to a reviewer. Beside the dependency gate, for
+    # the same reason: it asks about the state of the work, not who is asking. The operator's own
+    # dispatch is not gated (warn, don't gate); its reviewer is briefed as today.
+    if from_status == "completed" and to_status == "under_review" and not actor.is_operator:
+        from . import project_checks
+
+        wait = await project_checks.review_wait(session, task)
+        if wait is not None:
+            if wait.needs_a_run:
+                project_checks.schedule(task.project_id, task.id)
+            elif wait.state == "failed":
+                project_checks.schedule_return(task.id)
+            raise ChecksPendingError(task, wait)
 
     # The gate, on this one edge. Inside the service and before the history row, so it cannot be
     # bypassed by a caller reaching the row a different way — which is also why every surface

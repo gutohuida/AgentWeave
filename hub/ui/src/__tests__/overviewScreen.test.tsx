@@ -163,6 +163,29 @@ describe('the wired Overview', () => {
     expect(who('Dead ask?')).toHaveTextContent('builder is asking')
   })
 
+  it('reads the mender’s note as a note, opening the thread it was asked in', () => {
+    // A note: non-blocking, its asking turn over. The Hub delivers its answer as a later message,
+    // so nobody-is-waiting would be false. A blocking ask whose turn ended still reads as before.
+    questions = [
+      question({
+        id: 'q-note', from_agent: 'mender', question: 'Touch the operator’s notes.txt?', header: 'Dirty checkout',
+        blocking: false, asker_waiting: false, conversation_id: 'conv-stall-1',
+      }),
+      question({ id: 'q-gone', question: 'Dead ask?', blocking: true, asker_waiting: false }),
+    ]
+    const onOpenConversation = vi.fn()
+    render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={onOpenConversation} />)
+
+    const note = screen.getByText('Touch the operator’s notes.txt?').closest('li') as HTMLElement
+    expect(note).toHaveTextContent('Dirty checkout')
+    expect(note).not.toHaveTextContent(/nobody is waiting/)
+    fireEvent.click(within(note).getByRole('button', { name: 'Open conversation' }))
+    expect(onOpenConversation).toHaveBeenCalledWith('mender', 'conv-stall-1')
+
+    const gone = screen.getByText('Dead ask?').closest('li') as HTMLElement
+    expect(gone).toHaveTextContent('nobody is waiting on this answer any more')
+  })
+
   it('does not offer inline options for a multi-select question', () => {
     questions = [question({ multi_select: true })]
     render(<OverviewScreen onNavigate={vi.fn()} />)

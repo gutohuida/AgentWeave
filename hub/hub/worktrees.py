@@ -34,8 +34,10 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import re
 import shutil
+import stat
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -280,12 +282,14 @@ def shared_dependency_link_failures(
         return []
     remembered = {f.name: f.reason for f in _link_failures.get(str(workspace), ())}
     failures: List[DependencyLinkFailure] = []
-    for name in SHARED_DEPENDENCY_DIRS:
+    for name in shared_dependency_directories(repo_root):
         source = repo_root / name
         if not source.is_dir() or source.is_symlink():
             continue
         target = workspace / name
-        if target.exists() or target.is_symlink():
+        if not target.parent.is_dir():
+            continue  # the checkout has no such directory, so it has nowhere to want one
+        if os.path.lexists(target):
             continue
         failures.append(
             DependencyLinkFailure(
@@ -308,31 +312,195 @@ def dependency_link_failure_sentence(failures: Sequence[DependencyLinkFailure]) 
     )
 
 
+_NESTED_DEPENDENCY_DEPTH = 3
+
+
+def shared_dependency_directories(repo_root: Path) -> List[str]:
+    """The dependency directories worth linking, relative to the project root, POSIX-spelled.
+
+    `SHARED_DEPENDENCY_DIRS` at the root, and `node_modules` beside each tracked `package.json` up
+    to three directories deep (`hub/ui/node_modules`): the root list alone never linked a nested
+    one, and agents made their own links by hand. Whether a directory exists is for the caller.
+    """
+    names = list(SHARED_DEPENDENCY_DIRS)
+    try:
+        listed = _run_git(repo_root, "ls-files", "-z", "--", "*package.json", check=False)
+    except (OSError, subprocess.SubprocessError):
+        return names
+    if listed.returncode != 0:
+        return names
+    for tracked in sorted(listed.stdout.split("\0")):
+        parts = tracked.split("/")
+        if parts[-1] != "package.json" or not 1 < len(parts) <= _NESTED_DEPENDENCY_DEPTH + 1:
+            continue
+        if "node_modules" in parts:
+            continue
+        names.append("/".join([*parts[:-1], "node_modules"]))
+    return names
+
+
+def _make_junction(source: Path, link: Path) -> None:
+    """A directory junction at *link* to *source*. Needs no privilege on NTFS; Windows only.
+
+    Raises `OSError` where it cannot be made, including everywhere that is not Windows.
+    """
+    if os.name != "nt":
+        raise OSError("directory junctions exist only on Windows")
+    try:
+        import _winapi
+
+        _winapi.CreateJunction(str(source), str(link))
+        return
+    except (ImportError, AttributeError, OSError) as exc:
+        failure = exc
+    result = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(source)],
+        capture_output=True,
+        text=True,
+        timeout=_GIT_TIMEOUT_SECONDS,
+        **no_console_kwargs(),
+    )
+    if result.returncode != 0:
+        raise OSError(f"{failure}; mklink /J: {(result.stdout + result.stderr).strip()}")
+
+
+#: Windows reparse tags that name a directory link: a symbolic link and a junction (mount point).
+_LINK_REPARSE_TAGS = frozenset({0xA000000C, 0xA0000003})
+
+
+def is_link(path: Path | str) -> bool:
+    """Whether *path* is itself a symbolic link or a Windows junction, without following it.
+
+    `os.path.islink` is false for a junction on Python 3.11, which is how `shutil.rmtree` and git
+    both walked into one (F1038).
+    """
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return False
+    return stat.S_ISLNK(info.st_mode) or getattr(info, "st_reparse_tag", 0) in _LINK_REPARSE_TAGS
+
+
+def _unlink(path: Path | str) -> None:
+    """Remove a link and nothing it points at: `rmdir` for a directory link on Windows."""
+    try:
+        os.unlink(path)
+    except OSError:
+        os.rmdir(path)
+
+
+def _entry_is_link(entry: "os.DirEntry[str]") -> bool:
+    """`is_link` for a directory entry, answered from what the listing already read: a worktree
+    that holds a real `node_modules` has tens of thousands of entries, and a `stat` apiece would
+    be the cost of every release."""
+    if entry.is_symlink():
+        return True
+    if os.name != "nt":
+        return False
+    try:
+        return getattr(entry.stat(follow_symlinks=False), "st_reparse_tag", 0) in _LINK_REPARSE_TAGS
+    except OSError:
+        return False
+
+
+def remove_links_in(root: Path) -> List[Path]:
+    """Remove every symbolic link and junction in the tree at *root*, following none of them.
+
+    Run before any removal of a worktree: git (and `shutil.rmtree` on a junction) delete through a
+    link, so a link an agent made to a shared `node_modules`, a `.venv` or anything else empties
+    what it points at (F1038). A link may point anywhere, whoever made it. If *root* is itself a
+    link it is the one thing removed. Returns the links that **could not** be removed -- the caller
+    must not remove the tree while any remain.
+    """
+    stuck: List[Path] = []
+    if is_link(root):
+        try:
+            _unlink(root)
+        except OSError:
+            stuck.append(Path(root))
+        return stuck
+    pending = [os.fspath(root)]
+    while pending:
+        directory = pending.pop()
+        try:
+            with os.scandir(directory) as scanned:
+                entries = list(scanned)
+        except OSError:
+            continue
+        for entry in entries:
+            if _entry_is_link(entry):
+                try:
+                    _unlink(entry.path)
+                except OSError:
+                    logger.warning("could not remove the link %s", entry.path, exc_info=True)
+                    stuck.append(Path(entry.path))
+            elif entry.is_dir(follow_symlinks=False):
+                pending.append(entry.path)
+    return stuck
+
+
+class LinkRemovalError(OSError):
+    """A link inside a worktree could not be removed, so the worktree was not."""
+
+
+def remove_worktree(
+    repo_root: Path, path: Path, *, check: bool = True, fallback: bool = False
+) -> subprocess.CompletedProcess:
+    """Remove a worktree the Hub created, leaving whatever its links point at untouched (D1).
+
+    Links first, then `git worktree remove --force`; with *fallback*, a directory git left behind
+    is deleted by hand, after the links are gone again (a link can appear while git works). With
+    *check*, git's failure raises `GitCommandError`, as the callers always did. A link that cannot
+    be removed stops the removal with `LinkRemovalError`: leaving the worktree is the safe outcome.
+    """
+    stuck = remove_links_in(path)
+    if stuck:
+        raise LinkRemovalError(
+            f"not removing {path}: the link {stuck[0]} inside it could not be removed, and "
+            "removing the worktree would follow it"
+        )
+    result = _run_git(repo_root, "worktree", "remove", "--force", str(path), check=check)
+    if fallback and path.exists():
+        if remove_links_in(path):
+            raise LinkRemovalError(f"not deleting {path}: a link inside it could not be removed")
+        shutil.rmtree(path, ignore_errors=True)
+    return result
+
+
 def _symlink_shared_dependencies(repo_root: Path, worktree: Path) -> List[DependencyLinkFailure]:
     """Link the project's expensive dependency directories into *worktree*.
 
     A failed link does not fail provisioning (a Windows account without Developer Mode or
     administrator rights cannot create symlinks, and refusing every turn there was a total outage),
-    but it is returned, so the run and the agent can be told (F567).
+    but it is returned, so the run and the agent can be told (F567). Where a symbolic link is
+    refused a directory junction is made instead, which needs no privilege; only a failure of both
+    is reported.
     """
     failures: List[DependencyLinkFailure] = []
-    for name in SHARED_DEPENDENCY_DIRS:
+    for name in shared_dependency_directories(repo_root):
         source = repo_root / name
         if not source.is_dir() or source.is_symlink():
             continue
         target = worktree / name
-        if target.exists() or target.is_symlink():
+        if not target.parent.is_dir() or os.path.lexists(target):
             continue
         try:
             target.symlink_to(source, target_is_directory=True)
         except OSError as exc:
-            logger.info(
-                "Could not symlink %s into %s's worktree: %s",
-                name,
-                worktree,
-                exc,
-            )
-            failures.append(DependencyLinkFailure(name=name, reason=str(exc)))
+            # An account without the symlink privilege (F567) can still make a directory junction.
+            # The Hub makes the link itself so it is a link the Hub knows to remove without
+            # following (`remove_links_in`); an agent left to make its own is how F1038 happened.
+            try:
+                _make_junction(source, target)
+            except OSError as junction_exc:
+                logger.info(
+                    "Could not link %s into %s's worktree: %s (junction: %s)",
+                    name,
+                    worktree,
+                    exc,
+                    junction_exc,
+                )
+                failures.append(DependencyLinkFailure(name=name, reason=str(exc)))
     if failures:
         _link_failures[str(worktree)] = failures
     else:
@@ -425,6 +593,75 @@ def _clear_empty_leftover(repo_root: Path, path: Path) -> None:
         logger.warning("could not clear the empty leftover directory %s", path, exc_info=True)
 
 
+def _on_another_branch(record: Dict[str, str]) -> str:
+    """How a registered worktree's record says what it is on, for a sentence."""
+    current = record.get("branch")
+    if current:
+        return current[len("refs/heads/") :] if current.startswith("refs/heads/") else current
+    return f"a detached HEAD at {record.get('HEAD', '')[:12] or 'an unknown commit'}"
+
+
+def _unsafe_to_switch(repo_root: Path, path: Path, record: Dict[str, str]) -> Optional[str]:
+    """Why moving the checkout at *path* off the branch *record* names could lose something, or
+    `None` when it could not: a clean tree, no merge under way, and nothing on the branch (or at
+    the detached commit) that the main checkout's HEAD does not already have."""
+    if _is_mid_merge(path):
+        return "a merge is unfinished in it"
+    if _has_uncommitted_changes(path):
+        return "it has uncommitted changes"
+    current = record.get("branch")
+    if current:
+        ahead = _commits_not_on_head(repo_root, current)
+        if ahead:
+            return (
+                f"{len(ahead)} commit(s) on {_on_another_branch(record)} are not in the main branch"
+            )
+        return None
+    tip = record.get("HEAD", "")
+    if tip and (
+        _run_git(repo_root, "merge-base", "--is-ancestor", tip, "HEAD", check=False).returncode == 0
+    ):
+        return None
+    return "its detached commit is not in the main branch"
+
+
+def _switch_back_or_refuse(
+    repo_root: Path, path: Path, branch: str, record: Dict[str, str]
+) -> None:
+    """Put the registered worktree at *path* back on *branch* when that loses nothing; otherwise
+    refuse by naming both branches (`wrong-branch-refusal-names-the-branch`).
+
+    The refusal used to say the directory "is not the registered git worktree", which sent the
+    operator to delete a directory that only needed switching.
+    """
+    why = _unsafe_to_switch(repo_root, path, record)
+    exists = _resolves(repo_root, f"refs/heads/{branch}")
+    if why is None:
+        if exists:
+            switched = _run_git(path, "checkout", branch, check=False)
+        else:
+            # The agent's own branch is not there yet (nothing provisioned it): cut it from the
+            # main checkout's HEAD, as `ensure_worktree` does for a new checkout.
+            tip = _run_git(repo_root, "rev-parse", "HEAD", check=False).stdout.strip()
+            switched = _run_git(path, "checkout", "-b", branch, tip, check=False)
+        if switched.returncode == 0:
+            return
+        why = f"git said: {switched.stderr.strip()[:300]}"
+    raise IsolationUnavailableError(
+        f"refusing existing path {path}: it is a registered worktree, but it is on "
+        f"{_on_another_branch(record)} and the workspace has to be on {branch}. The Hub did not "
+        f"switch it back because {why}. Keep what is there (merge or commit it elsewhere), then "
+        f"switch it back in that checkout ({_switch_command(path, branch, exists)}); do not "
+        "delete the directory. The next turn uses it as it is."
+    )
+
+
+def _switch_command(path: Path, branch: str, exists: bool) -> str:
+    """The command that puts the checkout on *branch*: with `-c` when the branch is not there yet,
+    because a bare `switch` of a branch that does not exist is `fatal: invalid reference`."""
+    return f"`git -C {path} switch {'' if exists else '-c '}{branch}`"
+
+
 def ensure_worktree(repo_root: Path, agent: str) -> Path:
     """Provision *agent*'s isolated checkout, creating it if absent. Idempotent.
 
@@ -453,13 +690,18 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
                 f"the link itself (`rm {path}`), which leaves whatever it points at untouched, "
                 "and the next turn will provision the checkout."
             )
-        if _registered_worktree_branch(repo_root, path) != expected_ref:
+        record = _registered_worktree_record(repo_root, path)
+        if record is None:
             raise IsolationUnavailableError(
                 f"refusing existing path {path}: it is not the registered git worktree "
                 f"for {expected_ref}. Move or delete that directory (`rm -r {path}`) once you "
                 "have salvaged anything in it; the next turn runs `git worktree prune` and "
                 "provisions the checkout itself."
             )
+        if record.get("branch") != expected_ref:
+            # The directory is registered, just on another branch (a mend left it on `mend/<id>`):
+            # switched back where that loses nothing, named in the refusal where it might.
+            _switch_back_or_refuse(repo_root, path, branch_name(agent), record)
         return path
 
     # A worktree directory can be gone (manually deleted, or removed by something
@@ -1029,7 +1271,10 @@ def _unwind_task_worktree(repo_root: Path, path: Path, branch: str) -> None:
     if path.is_dir():
         with contextlib.suppress(OSError, subprocess.SubprocessError):
             _run_git(path, "merge", "--abort", check=False)
-    _run_git(repo_root, "worktree", "remove", "--force", str(path), check=False)
+    try:
+        remove_worktree(repo_root, path, check=False)
+    except LinkRemovalError:
+        logger.warning("left %s in place: a link inside it could not be removed", path)
     _run_git(repo_root, "branch", "-D", branch, check=False)
     _run_git(repo_root, "worktree", "prune", check=False)
 
@@ -1074,7 +1319,18 @@ def ensure_task_worktree(
                 f"Remove the link itself (`rm {path}`), which leaves whatever it points at "
                 "untouched, and the next turn will provision the checkout."
             )
-        if _registered_worktree_branch(repo_root, path) != expected_ref:
+        record = _registered_worktree_record(repo_root, path)
+        if record is not None and record.get("branch") != expected_ref:
+            # Registered, on another branch: a task's checkout holds the task's work, so it is
+            # never switched on the Hub's own initiative -- but the refusal says what it is on.
+            raise IsolationUnavailableError(
+                f"refusing existing path {path}: it is a registered worktree, but it is on "
+                f"{_on_another_branch(record)} and the checkout for {task_id} has to be on "
+                f"{branch}. Switch it back in that checkout "
+                f"({_switch_command(path, branch, _resolves(repo_root, f'refs/heads/{branch}'))}) "
+                "once nothing on the other branch is lost; do not delete the directory."
+            )
+        if record is None:
             raise IsolationUnavailableError(
                 f"refusing existing path {path}: it is not the registered git worktree "
                 f"for {expected_ref}. Move or delete that directory (`rm -r {path}`) once you "
@@ -1234,9 +1490,7 @@ def release_review_checkout(repo_root: Path, agent: str) -> bool:
         return False
     if not path.exists():
         return False
-    _run_git(repo_root, "worktree", "remove", "--force", str(path), check=False)
-    if path.exists():
-        shutil.rmtree(path, ignore_errors=True)
+    remove_worktree(repo_root, path, check=False, fallback=True)
     _run_git(repo_root, "worktree", "prune", check=False)
     return True
 
@@ -1530,6 +1784,37 @@ class ReleaseResult:
         return bool(self.unmerged_commits)
 
 
+def _release_nested_mends(repo_root: Path, path: Path) -> Optional[str]:
+    """Remove the mend checkouts nested in the worktree at *path*, each properly, before it goes.
+
+    `git worktree remove --force` of the outer worktree would delete a nested mend checkout with
+    whatever edits are in it and leave its registration behind. So each is removed on its own:
+    its links first, then `git worktree remove` **without** force, which refuses a checkout with
+    uncommitted edits. Returns why the outer worktree must stay (naming what is held), or `None`
+    when no mend is left in it.
+    """
+    mends = path / ".agentweave" / "mends"
+    if not mends.is_dir() or is_link(mends):
+        return None
+    held: List[str] = []
+    for entry in sorted(mends.iterdir()):
+        if remove_links_in(entry):
+            held.append(f"{entry.name} (a link in it could not be removed)")
+            continue
+        removed = _run_git(repo_root, "worktree", "remove", str(entry), check=False)
+        if removed.returncode != 0:
+            held.append(f"{entry.name} ({removed.stderr.strip()[:200] or 'not removed'})")
+            continue
+        _run_git(repo_root, "worktree", "prune", check=False)
+        if entry.name.startswith("task-") and _resolves(repo_root, f"refs/heads/mend/{entry.name}"):
+            _run_git(repo_root, "branch", "-d", f"mend/{entry.name}", check=False)
+    if not held:
+        return None
+    return "its mender's mend checkout(s) still hold work and were left in place: " + "; ".join(
+        held
+    )
+
+
 def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
     """Release *agent*'s worktree (task 5.4): remove the checkout directory, but
     never the branch, and never silently — any uncommitted change is snapshotted
@@ -1551,10 +1836,19 @@ def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
             released=False, branch=branch, review_checkout_released=review_released
         )
 
+    held = _release_nested_mends(repo_root, path)
+    if held:
+        return ReleaseResult(
+            released=False,
+            branch=branch,
+            review_checkout_released=review_released,
+            kept_reason=held,
+        )
+
     had_uncommitted = _has_uncommitted_changes(path)
     snapshot_commit = snapshot_worktree(path, agent) if had_uncommitted else None
 
-    _run_git(repo_root, "worktree", "remove", "--force", str(path))
+    remove_worktree(repo_root, path)
 
     unmerged = _commits_not_on_head(repo_root, branch)
     return ReleaseResult(
@@ -1608,7 +1902,7 @@ def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
         else None
     )
 
-    _run_git(repo_root, "worktree", "remove", "--force", str(path))
+    remove_worktree(repo_root, path)
 
     return ReleaseResult(
         released=True,
@@ -1668,10 +1962,99 @@ def discard_task_checkout(repo_root: Path, task_id: str) -> DiscardResult:
             ),
         )
     if path.exists():
-        _run_git(repo_root, "worktree", "remove", "--force", str(path))
+        remove_worktree(repo_root, path)
     if _resolves(repo_root, branch):
         _run_git(repo_root, "branch", "-D", branch)
     return DiscardResult(task_id=task_id, branch=branch, discarded=True)
+
+
+#: The branch a mend is built on, named in the mender's brief (`stalls.brief`) and used by the Hub
+#: when it lands the resolution (`task_transition_service._integrate_task`).
+MEND_BRANCH_PREFIX = "mend/"
+
+
+def mend_branch_name(task_id: str) -> str:
+    validate_task_id(task_id)
+    return f"{MEND_BRANCH_PREFIX}{task_id}"
+
+
+def mend_checkout_path(repo_root: Path, agent: str, task_id: str) -> Path:
+    """Where *agent* builds the mend of *task_id*: a scratch checkout **inside the agent's own
+    workspace**, not beside it. The Hub only lets an agent write inside its workspace, so a sibling
+    directory would put every edit of a mend in front of the operator; the nested one is hidden
+    from the agent's own `git status` by the Hub's exclude rules (`repo_hygiene`). Pure."""
+    validate_task_id(task_id)
+    return worktree_path(repo_root, agent) / ".agentweave" / "mends" / task_id
+
+
+def ensure_mend_checkout(repo_root: Path, agent: str, task_id: str, commit: str) -> Path:
+    """The scratch checkout *agent* mends *task_id* in, on `mend/<task-id>` cut from *commit*.
+
+    A mend used to be a `git checkout -B mend/<id>` in the mender's own checkout, which left it on
+    the mend branch: every later turn was refused until the operator switched it back by hand. Here
+    the mender's own checkout is only ever the parent of the scratch one, so it never moves, and an
+    abandoned mend leaves a directory the Hub knows how to remove (`release_mend_checkout`).
+
+    Idempotent: a mend already under way is handed back as it is. A branch left by an earlier mend
+    that carries commits *commit* lacks is resumed rather than reset.
+    """
+    seed_repo_excludes(repo_root)
+    found = _run_git(
+        repo_root, "rev-parse", "--verify", "--quiet", f"{commit}^{{commit}}", check=False
+    )
+    resolved = found.stdout.strip()
+    if found.returncode != 0 or not resolved:
+        raise IsolationUnavailableError(f"commit {commit} is not present in this repository")
+    ensure_worktree(repo_root, agent)
+    path = mend_checkout_path(repo_root, agent, task_id)
+    branch = mend_branch_name(task_id)
+    if os.path.lexists(path):
+        record = _registered_worktree_record(repo_root, path) if not is_link(path) else None
+        if record is not None and record.get("branch") == f"refs/heads/{branch}":
+            return path
+        raise IsolationUnavailableError(
+            f"refusing existing path {path}: it is not the registered git worktree for the mend "
+            f"branch {branch}. It lies inside {agent}'s own workspace; remove it once anything in "
+            "it is salvaged."
+        )
+    _run_git(repo_root, "worktree", "prune", check=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    branch_exists = _resolves(repo_root, f"refs/heads/{branch}")
+    carries_work = (
+        branch_exists
+        and _run_git(
+            repo_root, "merge-base", "--is-ancestor", branch, resolved, check=False
+        ).returncode
+        != 0
+    )
+    if carries_work:
+        _run_git(repo_root, "worktree", "add", str(path), branch)
+    else:
+        _run_git(repo_root, "worktree", "add", "-B", branch, str(path), resolved)
+    _symlink_shared_dependencies(repo_root, path)
+    return path
+
+
+def release_mend_checkout(repo_root: Path, agent: str, task_id: str) -> bool:
+    """Remove the scratch checkout of *task_id*'s mend, whether it landed or was abandoned.
+
+    Returns whether there was one. The branch goes with it where it is merged into the main
+    checkout's HEAD (`branch -d`, which refuses otherwise), so a landed mend leaves nothing, and a
+    mend abandoned with commits keeps the branch as the record of them. Nothing here touches the
+    agent's own checkout.
+    """
+    try:
+        path = mend_checkout_path(repo_root, agent, task_id)
+        branch = mend_branch_name(task_id)
+    except ValueError:
+        return False
+    existed = os.path.lexists(path)
+    if existed:
+        remove_worktree(repo_root, path, check=False, fallback=True)
+    _run_git(repo_root, "worktree", "prune", check=False)
+    if _resolves(repo_root, f"refs/heads/{branch}"):
+        _run_git(repo_root, "branch", "-d", branch, check=False)
+    return existed
 
 
 @dataclass(frozen=True)

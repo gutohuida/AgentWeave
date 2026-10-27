@@ -2,13 +2,13 @@
 
 `a-requirement-is-checked-against-what-the-vault-recorded`, the roadmap's specs-against-the-vault
 slice. Two kinds of warning, both answered by `GET /vault/warnings` and both reported as a
-`vault_warning` gap at proposal and approval -- warnings, never gates:
+`vault_warning` gap at approval -- warnings, never gates:
 
 - **Cited-fact warnings**, derived on read (D2): a requirement's `facts` list names vault facts,
   and `vault.fact_warnings` says which are disputed, superseded, reported or missing. No model,
   no storage; a contradiction recorded a moment ago shows at once.
-- **Conflicts**, judged by the manager's spec-vault-check job (D3, D4): when a document is
-  proposed, or on request, the Hub spawns its model once with every requirement and every fact,
+- **Conflicts**, judged by the manager's spec-vault-check job (D3, D4): when the operator
+  checks a document, or on request, the Hub spawns its model once with every requirement and every fact,
   and keeps the conflicts on the firing's `manager_job_fired` event. **The model names ids and the
   Hub checks them** (D5): a conflict naming a requirement key or a fact id that does not exist is
   dropped. The newest firing for a document is its current judgement, and a conflict whose
@@ -48,6 +48,8 @@ from .worker import run_worker
 logger = logging.getLogger(__name__)
 
 JOB = manager.SPEC_VAULT_CHECK
+#: The automatic trigger: the operator's Check (`POST /project/documents/check`). Named for the
+#: retired propose it replaced, and kept: it is a stored job trigger, not a word anyone reads.
 TRIGGER = "document_proposed"
 REQUESTED = "requested"
 PROMPT_VERSION = "spec-vault-check-2"
@@ -109,6 +111,8 @@ class Plan:
     runner_id: str
     cli: str
     model: Optional[str]
+    #: The content version the Check that started this run saw; None for any other trigger.
+    content_version: Optional[str] = None
 
 
 def requirements_of(stored: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -243,10 +247,22 @@ def _compared(facts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sent
 
 
-async def prepare(project_id: str, path: str) -> Plan:
+async def already_checked(
+    session: AsyncSession, project_id: str, path: str, content_version: str
+) -> bool:
+    """Whether the newest firing for *path* checked this very content version (F1053). A firing
+    recorded without a version, and one whose spawn failed, checked nothing here."""
+    firing = await newest_firing(session, project_id, path)
+    if firing is None or firing.get("outcome") == "failed":
+        return False
+    recorded = (firing.get("subject") or {}).get("content_version")
+    return recorded is not None and recorded == content_version
+
+
+async def prepare(project_id: str, path: str, *, content_version: Optional[str] = None) -> Plan:
     """Everything a check needs, read and closed before the spawn, or `CannotCheckError`: 400 for
     a path that is not a spec path, 404 for an unknown document, 409 while the job is off or has
-    no runner."""
+    no runner. *content_version* is the version a Check saw, kept on the firing."""
     try:
         safe = validate_spec_path(path)
     except SpecPathError as exc:
@@ -288,6 +304,7 @@ async def prepare(project_id: str, path: str) -> Plan:
         runner_id=runner.id,
         cli=runner.cli,
         model=model,
+        content_version=content_version,
     )
 
 
@@ -335,7 +352,7 @@ def _kept(plan: Plan, answer: CheckAnswer) -> List[Dict[str, Any]]:
 
 
 def initiator_for(trigger: str) -> str:
-    """Operator work only when the operator asked for the check; the check a proposal starts is
+    """Operator work only when the operator asked for the check; the check a Check starts is
     autonomous, and pauses on a spent budget (F240)."""
     return "operator" if trigger == REQUESTED else "autonomous"
 
@@ -369,13 +386,16 @@ async def check(plan: Plan, *, trigger: str) -> Optional[str]:
             f"{len(kept)} {noun} kept, {dropped} dropped (naming a requirement or fact that is "
             f"not there, or repeated); {compared}"
         )
+    subject: Dict[str, Any] = {"document": plan.path}
+    if plan.content_version is not None:
+        subject["content_version"] = plan.content_version
     async with async_session_factory() as db:
         await manager.record_firing(
             db,
             plan.project_id,
             job=JOB,
             trigger=trigger,
-            subject={"document": plan.path},
+            subject=subject,
             runner_id=plan.runner_id,
             cli=plan.cli,
             model=plan.model,
@@ -392,11 +412,13 @@ async def check(plan: Plan, *, trigger: str) -> Optional[str]:
 @traces.traced_work(
     "spec_vault_check", attributes={"aw.spec.path": "path", "aw.work.trigger": "trigger"}
 )
-async def check_in_background(project_id: str, path: str, *, trigger: str) -> None:
+async def check_in_background(
+    project_id: str, path: str, *, trigger: str, content_version: Optional[str] = None
+) -> None:
     """The background entry point: a document that is not checked now is simply not checked, and
     nothing here raises into the event loop."""
     try:
-        plan = await prepare(project_id, path)
+        plan = await prepare(project_id, path, content_version=content_version)
     except CannotCheckError as refusal:
         if refusal.no_runner:
             await manager.record_no_runner(

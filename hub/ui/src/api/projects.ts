@@ -140,6 +140,9 @@ export interface ProjectCheck {
   /** Globs over repository paths (`hub/**`). Empty or absent: it runs for every task. Otherwise it
    *  is skipped, and passes, when the work changes no file matching one. */
   paths?: string[]
+  /** Run when an agent completes its task, which is refused with the check's output when it fails
+   *  (`checks-run-before-anyone-reviews`). At most 120 s. Absent on a check saved before it. */
+  fast?: boolean
 }
 
 /** The server merges a partial body onto what is stored (`projects.py`), so a caller sends only

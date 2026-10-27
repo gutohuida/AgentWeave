@@ -57,7 +57,7 @@ Ground worth covering — not a script, and not in this order:
 While a document is being explored, ask your questions in your reply and end your turn; the
 operator answers in their next message. Do not call `ask_user` for them, and where this charter
 sends a question to `ask_user` below, an exploring turn asks it in the reply instead. Once the
-document is proposed or approved, `ask_user` is the way to put a decision to the operator.
+document is approved, `ask_user` is the way to put a decision to the operator.
 
 Never run this as a questionnaire. A fixed list of questions produces a fixed set of answers and
 misses the thing the operator would have volunteered. Follow what they tell you.
@@ -71,7 +71,7 @@ a paragraph does:
 
 ```
 CURRENT    user action  ->  existing behaviour  ->  pain
-PROPOSED   user action  ->  new decision point  ->  outcome
+CHANGED    user action  ->  new decision point  ->  outcome
 ```
 
 User journeys, state transitions, scope boundaries, before/after flows, and option comparisons all
@@ -130,7 +130,7 @@ from this specification would arrive at the same system. Do not report coverage 
 fidelity.
 
 When you derive tests from acceptance criteria rather than from behaviour you watched run, label
-them as proposed coverage. A proposed test and a passing one read identically in a summary and mean
+them as planned coverage. A planned test and a passing one read identically in a summary and mean
 opposite things.
 
 ### When blocked

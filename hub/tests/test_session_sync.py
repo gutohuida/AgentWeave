@@ -511,3 +511,29 @@ async def test_sync_that_deletes_an_agent_archives_its_open_conversations(
     assert rows["conv-f849-g"].archived_at is not None
     # The agent that stayed keeps its thread.
     assert rows["conv-f849-a"].lifecycle == "open"
+
+
+@pytest.mark.asyncio
+async def test_a_link_that_cannot_be_removed_does_not_fail_the_roster_sync(
+    app, auth_headers, bind_project_workspace, tmp_path, monkeypatch
+):
+    """The release is best-effort and after the roster's commit: a worktree left in place because a
+    link inside it could not be removed (`LinkRemovalError`, an `OSError`) is logged, not a 500."""
+    repo_root = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo_root)
+    path = worktrees.ensure_worktree(repo_root, "stuck-agent")
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"stuck-agent": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    monkeypatch.setattr(worktrees, "remove_links_in", lambda root: [Path(root) / "linked"])
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {}}},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert path.is_dir()

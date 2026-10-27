@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ManagerSection } from '@/components/settings/sections/ManagerSection'
 import { chooseMenuOption, menuSelect, openMenuSelect } from './support/menuSelect'
 import { useConfigStore } from '@/store/configStore'
+import { toast } from '@/lib/toast'
+
+vi.mock('@/lib/toast', () => ({ toast: vi.fn() }))
 
 /** `the-hubs-background-jobs-are-configured-on-a-manager-page`, task manager-section. The routes are
  *  stubbed at `fetch`, so the hooks, their 404 handling and the PATCH bodies are the real ones. */
@@ -211,6 +214,45 @@ describe('Project settings → Manager', () => {
     const distil = screen.getByTestId('manager-job-vault-distillation')
     expect(within(distil).getByText(/does nothing until a runner is chosen/i)).toBeInTheDocument()
     expect(within(distil).getByText(/On, but it has no runner, so it will not run/)).toBeInTheDocument()
+  })
+
+  it('names the model the mender runs on when none is chosen, and no other job’s', async () => {
+    const mender = {
+      ...JOB, key: 'mender', title: 'Mender', needs_runner: true, model: null,
+      default_model: { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
+    }
+    const titles = { ...JOB, model: null }
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [titles, mender] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
+      return undefined
+    }
+    render(<ManagerSection />, { wrapper })
+
+    await screen.findByTestId('manager-job-mender')
+    await waitFor(() => expect(menuSelect('Mender model')).toHaveTextContent('Sonnet 5.5 (the mender’s default)'))
+    expect(menuSelect('Mender model')).not.toHaveTextContent('The runner’s model')
+    expect(menuSelect('Conversation titles model')).toHaveTextContent('The runner’s model')
+  })
+
+  it('says the mender uses its default model, not the runner’s, when its model is cleared', async () => {
+    const user = userEvent.setup()
+    const mender = {
+      ...JOB, key: 'mender', title: 'Mender', needs_runner: true, model: 'claude-opus-5-5',
+      default_model: { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
+    }
+    manager = (url, init) => {
+      if (url.includes('/manager/jobs') && init?.method === 'PATCH') return { status: 200, body: { ...mender, model: null } }
+      if (url.includes('/manager/jobs')) return { status: 200, body: { jobs: [mender] } }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
+      return undefined
+    }
+    render(<ManagerSection />, { wrapper })
+    await waitFor(() => expect(menuSelect('Mender model')).not.toBeDisabled())
+
+    await chooseMenuOption(user, 'Mender model', /Sonnet 5.5 \(the mender’s default\)/)
+
+    await waitFor(() => expect(toast).toHaveBeenCalledWith({ title: 'Mender uses Sonnet 5.5', tone: 'success' }))
   })
 
   it('sends only what changed when a control is used', async () => {

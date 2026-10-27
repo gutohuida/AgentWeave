@@ -441,12 +441,11 @@ def test_a_document_with_no_identity_block_has_no_retirements():
 
 def test_the_phase_chip_takes_a_tone_per_lifecycle_state():
     """Phase answers "can I rely on this?", so each state reads differently. `approved` and a
-    capability's `current` are settled, `proposed` waits on an operator, `exploring` has not
-    arrived and `archived` has been superseded."""
+    capability's `current` are settled, `exploring` has not arrived and `archived` has been
+    superseded."""
     for phase, expected_class in (
         ("approved", "aw-chip-phase-done"),
         ("current", "aw-chip-phase-done"),
-        ("proposed", "aw-chip-phase-waiting"),
         ("exploring", "aw-chip-phase-quiet"),
         ("archived", "aw-chip-phase-archived"),
     ):
@@ -470,7 +469,7 @@ def test_the_kind_chip_is_never_toned():
 def test_the_phase_tone_is_never_the_accent():
     """The document already spends the accent on links and on MUST. A third meaning would empty
     it of any, so the phase scheme uses the done/warn tones instead."""
-    for phase in ("approved", "current", "proposed", "exploring", "archived"):
+    for phase in ("approved", "current", "exploring", "archived"):
         html = _render(_payload(), phase=phase)
         chip = re.search(r'class="aw-chip aw-chip-phase-[a-z]+"', html)
         assert chip is not None
@@ -478,7 +477,7 @@ def test_the_phase_tone_is_never_the_accent():
 
 
 def test_an_unresolved_question_is_toned_and_a_resolved_one_is_not():
-    """An unresolved question blocks propose, so it is a state and not a label."""
+    """An unresolved question warns at approval, so it is a state and not a label."""
     payload = _payload(
         open_questions=[
             {"question": "Still deciding?", "resolved": False},
@@ -606,7 +605,10 @@ def _rich_payload():
 # `satisfies` refs as chips, link/task/nav hover states, one off-scale radius corrected) plus the
 # `data-group` attribute those bands are keyed on. No `corpus` argument was passed and the
 # None-branch still renders no region.
-_BASELINE_DIGEST = "b619291e8bad8c6a7c3a916bcccc9f57ef8c06b242e07ea0eb91414de23c428c"
+# Recaptured 2026-10-27 the same way (`exploring-ends-at-an-approved-plan`): the diff against
+# 1f02d86 is confined to the stylesheet — the retired `proposed` phase's `.aw-chip-phase-waiting`
+# rule and the two comments that named proposing. No `corpus` argument, no payload field.
+_BASELINE_DIGEST = "584db6f9ae416fdcd3635b357699c0746683b2309a897b11e09437c71b47037f"
 
 
 def test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte():

@@ -21,8 +21,7 @@ An agent may create only `change-spec` or `roadmap`. A document's kind is fixed 
 
 | Phase | Reached by | Moves on to |
 |---|---|---|
-| `exploring` | creation | `proposed` (Propose); `archived` only if it produced no requirements and no tasks |
-| `proposed` | Propose | `approved` (Approve); `exploring` (Reopen); `archived` as above |
+| `exploring` | creation | `approved` (Approve, operator only); `archived` only if it produced no requirements and no tasks |
 | `approved` | Approve, operator only | `exploring` (Reopen for changes); `archived` (Archive, operator only) |
 | `current` | creating a capability | `archived` (Retire, operator only, with a reason) |
 | `archived` | Archive or Retire | nothing: archiving is permanent |

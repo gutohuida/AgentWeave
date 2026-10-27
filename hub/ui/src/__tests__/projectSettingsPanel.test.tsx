@@ -45,7 +45,7 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[] }> | null
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean }> | null
 } {
   return {
     name: 'Website',
@@ -240,6 +240,44 @@ describe('Project settings → General, applied on change', () => {
     expect(lastPatch()).toEqual({
       checks: [{ name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900, paths: ['hub/**', 'constraints-dev.txt'] }],
     })
+  })
+
+  it('marks a check fast, within the two minutes a completion waits (checks-run-before-anyone-reviews FR-1)', async () => {
+    const user = userEvent.setup()
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: /Add check/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name'), 'lint')
+    await user.type(within(dialog).getByLabelText('Command'), 'ruff check .')
+    const fast = within(dialog).getByRole('switch', { name: 'Fast' })
+    expect(fast).toHaveAttribute('aria-checked', 'false')
+    await user.click(fast)
+    expect(fast).toHaveAttribute('aria-checked', 'true')
+    // The default 900 s is past what a fast check may take: refused before the save.
+    expect(within(dialog).getByRole('button', { name: 'Add check' })).toBeDisabled()
+    await user.clear(within(dialog).getByLabelText('Time limit'))
+    await user.type(within(dialog).getByLabelText('Time limit'), '60')
+    await user.click(within(dialog).getByRole('button', { name: 'Add check' }))
+    expect(lastPatch()).toEqual({
+      checks: [{ name: 'lint', command: 'ruff check .', timeout_seconds: 60, fast: true }],
+    })
+  })
+
+  it('shows a saved fast check as fast and can make it not fast', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'lint', command: 'ruff check .', timeout_seconds: 60, fast: true }],
+    }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-fast-0')).toHaveTextContent('fast')
+    await user.click(screen.getByRole('button', { name: 'Edit lint' }))
+    const dialog = await screen.findByRole('dialog')
+    const fast = within(dialog).getByRole('switch', { name: 'Fast' })
+    expect(fast).toHaveAttribute('aria-checked', 'true')
+    await user.click(fast)
+    await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch()).toEqual({ checks: [{ name: 'lint', command: 'ruff check .', timeout_seconds: 60 }] })
   })
 
   it('shows the paths of a saved check and keeps them through an edit', async () => {

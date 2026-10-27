@@ -92,14 +92,14 @@ async def test_the_warning_never_blocks(app, planner):
     body = await _submit(app, planner, _doc(("a", {}), ("b", {})))
     assert _undeclared(body)
     assert body["blocking"] == []
-    assert body["ready_to_propose"] is True
+    assert body["ready_to_approve"] is True
 
 
 @pytest.mark.asyncio
 async def test_the_overlap_warning_is_unchanged(app, planner):
     body = await _submit(app, planner, _doc(("a", {"files": ["x.py"]}), ("b", {"files": ["x.py"]})))
     assert [w["code"] for w in body["warnings"]] == ["unordered_file_overlap"]
-    assert body["ready_to_propose"] is True
+    assert body["ready_to_approve"] is True
 
 
 @pytest.mark.asyncio

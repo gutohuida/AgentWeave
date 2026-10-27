@@ -34,7 +34,7 @@ const BUILT_INS = [
   'acceptance',
   'approach',
   'tasks',
-  'delivery',
+  'build',
 ]
 
 beforeEach(() => {
@@ -75,7 +75,7 @@ describe('Spec steps section', () => {
       'acceptance',
       'approach',
       'tasks',
-      'delivery',
+      'build',
     ])
     expect(saved[2]).toEqual({
       key: 'accessibility-check',
