@@ -6,8 +6,8 @@ outside any flow had nothing that started it -- `create_task_for_actor` commits 
 the stall sweep looks only at `in_progress` work.
 
 **One rule, several nudges.** The rule (`start`): a task in `assigned`, in no flow (`loop_id` null),
-whose assignee is an open agent and whose prerequisites are met, with no entry bound to it queued or
-delivered for that assignee -- and no run of that assignee working it -- since it last entered
+whose assignee is an open agent and whose prerequisites are met, with no entry bound to it queued,
+delivered or withdrawn for that assignee -- and no run of that assignee working it -- since it last entered
 `assigned`, gets one entry queued for the assignee, bound to the task (`task_id`, so the runtime
 moves it to `in_progress` when the turn starts), and a turn is asked for. The nudges ask the rule
 after a commit: `apply_transition` (a move to `assigned`), `create_task_for_actor` (created
@@ -93,14 +93,20 @@ async def _entered_assigned_at(session: AsyncSession, task: Any) -> Optional[dat
 
 
 async def _already_started(session: AsyncSession, task: Any, since: Optional[datetime]) -> bool:
-    """Whether a turn for *task* is queued, delivered or running for its assignee since *since*."""
+    """Whether a turn for *task* was queued for its assignee since *since* -- in any state: queued,
+    delivered, or **withdrawn** -- or one of the assignee's runs is working it.
+
+    A withdrawn entry counts (review of slice M): the Hub withdraws an entry after
+    `DELIVERY_ATTEMPT_LIMIT` refusals or at once on an unretryable failure (F489), and the operator
+    can withdraw one from the app. Not counting it re-queued a turn and a new conversation on every
+    sweep, forever. So a task is started at most once per entry into `assigned`; moving it there
+    again (or a new assignee) is what starts it again."""
     from .db.models import InboundQueueEntry, Run
 
     query = select(InboundQueueEntry.id).where(
         InboundQueueEntry.project_id == task.project_id,
         InboundQueueEntry.agent == task.assignee,
         InboundQueueEntry.task_id == task.id,
-        InboundQueueEntry.state.in_(("queued", "delivered")),
     )
     if since is not None:
         query = query.where(InboundQueueEntry.arrived_at >= since)

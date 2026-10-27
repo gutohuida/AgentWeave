@@ -53,6 +53,7 @@ def test_0151_backfills_operator_overrides_defaults_the_setting_on_and_round_tri
     with sqlite3.connect(db_file) as conn:
         assert "override_by" not in _columns(conn, "task_transitions")
         assert "checks_auto_override" not in _columns(conn, "projects")
+        assert "merges_branch_tip" not in _columns(conn, "tasks")
         _add_project(conn, "proj-old")
         conn.execute(_TRANSITION, ("ttr-reason", "main carries the defect"))
         conn.execute(_TRANSITION, ("ttr-plain", None))
@@ -71,7 +72,10 @@ def test_0151_backfills_operator_overrides_defaults_the_setting_on_and_round_tri
         created = conn.execute(
             "SELECT checks_auto_override FROM projects WHERE id = 'proj-new'"
         ).fetchone()
+        tip = [r for r in conn.execute("PRAGMA table_info(tasks)") if r[1] == "merges_branch_tip"]
         conn.commit()
+    # Every existing task is an ordinary one: only a fix task the Hub files merges its branch tip.
+    assert [(r[3], r[4]) for r in tip] == [(1, "0")], tip
     assert rows == [
         ("ttr-plain", None, None),
         ("ttr-reason", "operator", "main carries the defect"),
@@ -83,5 +87,6 @@ def test_0151_backfills_operator_overrides_defaults_the_setting_on_and_round_tri
     with sqlite3.connect(db_file) as conn:
         assert "override_by" not in _columns(conn, "task_transitions")
         assert "checks_auto_override" not in _columns(conn, "projects")
+        assert "merges_branch_tip" not in _columns(conn, "tasks")
         assert conn.execute("SELECT count(*) FROM task_transitions").fetchone() == (2,)
         assert conn.execute("SELECT count(*) FROM projects").fetchone() == (2,)

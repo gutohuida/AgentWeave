@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -810,7 +810,12 @@ async def create_task_for_actor(
     actor: Actor,
     session: AsyncSession,
     record_addition: bool = True,
+    before_commit: Optional[Callable[[Task], Awaitable[None]]] = None,
 ) -> TaskResponse:
+    """Create a task as *actor*. *before_commit*, a Hub-internal caller's own staging (never a
+    request's), runs on the new task before the task's commit, so what it writes lands in the same
+    commit: the Hub's fix task records `merges_branch_tip` and its dedup event this way
+    (`a-red-main-does-not-hold-the-night`)."""
     # Honor a client-supplied id when present so the MCP `create_task` tool
     # can return the same id the Hub stored. Falls back to a fresh short id
     # for clients that don't supply one (e.g. direct API users).
@@ -882,6 +887,8 @@ async def create_task_for_actor(
             ),
             source=loop_history.SOURCE_CREATE_TASK,
         )
+    if before_commit is not None:
+        await before_commit(task)
     try:
         await session.commit()
     except IntegrityError as e:

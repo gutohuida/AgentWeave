@@ -76,9 +76,10 @@ def _repo(repo: Path, files=None) -> None:
     git(repo, "commit", "-q", "-m", "the ledger and its tests")
 
 
-async def _loop(*, live: bool = False, loop_id: str = LOOP) -> str:
+async def _loop(*, live: bool = False, loop_id: str = LOOP, needs_evidence=False) -> str:
     """A loop whose work needs no evidence (approval merges the task branch tip); *live* makes it a
-    live flow: a document and an enabled job (`flow_advance`'s test)."""
+    live flow: a document and an enabled job (`flow_advance`'s test). *needs_evidence* `None` is
+    the production shape of a flow: undeclared, so its document makes evidence govern."""
     async with async_session_factory() as session:
         session.add(
             AIJob(
@@ -110,7 +111,7 @@ async def _loop(*, live: bool = False, loop_id: str = LOOP) -> str:
                 project_id="proj-test",
                 job_id=f"job-{loop_id}",
                 purpose="work",
-                work_needs_evidence=False,
+                work_needs_evidence=needs_evidence,
                 spec_document_id=f"doc-{loop_id}" if live else None,
             )
         )
@@ -494,6 +495,74 @@ async def test_the_fix_task_heads_the_flows_queue(app, tmp_path):
     # The board's current pending item is the same task (the review in flight is listed too).
     pending = [t["id"] for t in current.current_tasks if t["status"] == "pending"]
     assert pending == [fix.id], current.current_tasks
+
+
+async def test_a_fix_task_filed_into_a_production_flow_is_reviewed_and_lands(app, tmp_path):
+    """A flow on the operator's Hub declares nothing (`work_needs_evidence` NULL), so its document
+    makes evidence govern -- and a fix task the Hub files has no requirement, so it could record no
+    evidence, had no review target and nothing to merge (review of slice M, 2026-10-27). A
+    Hub-filed fix task is governed by its review alone, merging its branch tip, and says so on the
+    task. Driven from filed to landed on main."""
+    from hub import task_integration
+
+    _repo(tmp_path)
+    await _loop(live=True, needs_evidence=None)
+    held = await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
+    await _configure()
+    # The held task's own evidence is not this test's subject: its check runs on its branch tip.
+    async with async_session_factory() as session:
+        (await session.get(Task, TASK)).status = "under_review"
+        await session.commit()
+    await project_checks.request_run("proj-test", TASK, targets=[held])
+    await project_checks.drain()
+
+    [fix] = await _fix_tasks()
+    assert fix.loop_id == LOOP
+    fixed = commit_on_branch(tmp_path, task_branch_name(fix.id), "ledger.py", "A = 2\nB = 2\n")
+    git(tmp_path, "checkout", "-q", "main")
+    async with async_session_factory() as session:
+        task = await session.get(Task, fix.id)
+        task.status = "completed"
+        await session.commit()
+        target = await task_integration.review_target(session, task)
+        assert target.resolved and target.commit_sha == fixed, target
+    await _checked(fix.id)
+    assert (await _latest_run(fix.id)).state == "passed"
+
+    approved = await _reviewer_approves(app, fix.id)
+    assert approved.status_code == 200, approved.text
+    assert fixed in commits_on(tmp_path, "main")
+    assert getattr(fix, "merges_branch_tip", None) is True, "recorded on the task"
+
+
+async def test_a_fix_task_and_its_dedup_record_are_one_commit(app, tmp_path, monkeypatch):
+    """Review of slice M: the fix task was committed and its dedup event written in a second
+    commit, so a failure between them left a fix task the dedup could not see (and a second one
+    filed at the next run). A failure after the task's commit now leaves both or neither."""
+    from hub.api.v1 import tasks as tasks_route
+
+    async def broken_link(*args, **kwargs):
+        raise RuntimeError("the Hub stopped here")
+
+    monkeypatch.setattr(tasks_route, "link", broken_link)
+    _repo(tmp_path)
+    await _loop()
+    await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
+    await _configure()
+    await _checked(TASK)
+
+    async with async_session_factory() as session:
+        filed = (
+            (
+                await session.execute(
+                    select(Task).where(Task.id.notin_([TASK]), Task.priority == "critical")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert [task.id for task in await _fix_tasks()] == [task.id for task in filed], filed
+    assert len(filed) == 1
 
 
 async def test_the_reviewers_briefing_says_the_failure_is_not_the_tasks(app, tmp_path):

@@ -407,6 +407,28 @@ async def file_fix_task(run_id: str) -> Optional[str]:
             title, description = fix_task_text_for(new, run=run, found_by=task.id)
             project_id, found_by, main_sha = task.project_id, task.id, run.main_sha
             started = _aware(run.started_at) or datetime.now(timezone.utc)
+
+            async def recorded(task: Task) -> None:
+                # In the task's own commit: a fix task the dedup cannot see, or one that cannot be
+                # reviewed and landed in a flow (no requirement, no evidence), never exists.
+                task.merges_branch_tip = True
+                await persist_event(
+                    session,
+                    project_id,
+                    FIX_TASK_EVENT,
+                    {
+                        "task_id": task.id,
+                        "tests": [entry["test"] for entry in new],
+                        "kinds": {entry["test"]: entry["kind"] for entry in new},
+                        "checks": sorted({entry["check"] for entry in new}),
+                        "run_id": run_id,
+                        "main_sha": main_sha,
+                        "found_by": found_by,
+                    },
+                    loop_id=loop_id,
+                    commit=False,
+                )
+
             created = await create_task_for_actor(
                 TaskCreate(
                     title=title, description=description, priority="critical", loop_id=loop_id
@@ -416,21 +438,7 @@ async def file_fix_task(run_id: str) -> Optional[str]:
                 created_by_run_id=None,
                 actor=operator(),
                 session=session,
-            )
-            await persist_event(
-                session,
-                project_id,
-                FIX_TASK_EVENT,
-                {
-                    "task_id": created.id,
-                    "tests": [entry["test"] for entry in new],
-                    "kinds": {entry["test"]: entry["kind"] for entry in new},
-                    "checks": sorted({entry["check"] for entry in new}),
-                    "run_id": run_id,
-                    "main_sha": main_sha,
-                    "found_by": found_by,
-                },
-                loop_id=loop_id,
+                before_commit=recorded,
             )
             flakes = [entry for entry in new if entry["kind"] == project_checks.FLAKY]
             if flakes:

@@ -239,3 +239,42 @@ async def test_the_sweep_starts_what_was_missed_and_not_what_was_delivered(app, 
     assert entry.agent == WORKER and entry.state == "queued"
     assert [e.id for e in await _entries("task-a55a00000003")] == ["entry-delivered"]
     assert scheduled == [WORKER]
+
+
+async def test_a_withdrawn_turn_is_not_queued_again_by_every_sweep(app, auth_headers, scheduled):
+    """Review of slice M: the Hub withdraws an entry after its delivery attempts run out (or at once
+    on an unretryable failure, F489), and the operator can withdraw one. The sweep re-queued a turn
+    and a new conversation every 300 s, forever. A task starts at most once per entry into
+    `assigned`; moving it there again starts it again."""
+    await _roster(WORKER)
+    await _pending()
+    moved = await app.patch(f"{TASKS}/{TASK}", json={"status": "assigned"}, headers=auth_headers)
+    assert moved.status_code == 200, moved.text
+    await _settle()
+    async with async_session_factory() as session:
+        [entry] = (
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.task_id == TASK)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        entry.state = "withdrawn"
+        entry.withdrawn_at = datetime.now(timezone.utc)
+        entry.abandoned_reason = "delivery attempts exhausted"
+        await session.commit()
+
+    counts = []
+    for _ in range(3):
+        await stalls.sweep()
+        await _settle()
+        counts.append(len(await _entries()))
+    assert counts == [1, 1, 1]
+
+    for status in ("pending", "assigned"):
+        again = await app.patch(f"{TASKS}/{TASK}", json={"status": status}, headers=auth_headers)
+        assert again.status_code == 200, again.text
+    await _settle()
+    assert sorted(e.state for e in await _entries()) == ["queued", "withdrawn"]

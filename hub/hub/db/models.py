@@ -776,6 +776,14 @@ class Task(Base):
     # in SQLite, and this column sits on an already-live table, so an `ADD COLUMN` migration (`0075`)
     # is the only thing that ever touches it directly.
     loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Whether this task's approved review is its whole gate and approval merges its branch tip,
+    # whatever its loop declares: set on a fix task the Hub files for failures that were not the
+    # held task's (`a-red-main-does-not-hold-the-night`, migration 0151). Such a task serves no
+    # requirement, so in a flow whose document makes evidence govern it could record no evidence,
+    # had no review target and merged nothing. Never set by an agent.
+    merges_branch_tip: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # What happens when a run bound to this task ends without the task moving.
     #
     # Per task rather than per project because the operator's stated use — a cheap model doing the
