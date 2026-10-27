@@ -243,9 +243,12 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           ? event.job
             ? `${event.job_kind === 'flow' ? 'Flow' : 'Loop'} ${event.job}`
             : 'A scheduled job'
-          : event.actor_kind === 'operator'
-            ? 'You'
-            : event.actor ?? 'A run'
+          : event.origin === 'checks'
+            ? // The project's checks returned work their run failed (operator's authority, not act).
+              'The project’s checks'
+            : event.actor_kind === 'operator'
+              ? 'You'
+              : event.actor ?? 'A run'
       return (
         <TimelineItem
           key={event.id}

@@ -41,12 +41,17 @@ export function TaskTransitionHistory({ taskId, open }: { taskId: string; open: 
           // A scheduled job's move keeps the operator's authority (`actor_kind`) and records its own
           // cause: read from `origin`, never from position (F190). `job_kind` says whether the
           // job's loop draws from a specification, which is what makes it a flow.
+          //
+          // `checks` is the project's checks returning work their run failed: the operator's
+          // authority (they configured the checks), not the operator's act, so not "You".
           const who =
             row.origin === 'job'
               ? row.job_name
                 ? `${row.job_kind === 'flow' ? 'Flow' : 'Loop'} ${row.job_name}`
                 : 'A scheduled job'
-              : row.actor_kind === 'operator'
+              : row.origin === 'checks'
+                ? 'The project’s checks'
+                : row.actor_kind === 'operator'
                 ? 'You'
                 : row.actor_agent
                   ? row.actor_agent
