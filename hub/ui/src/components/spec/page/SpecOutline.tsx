@@ -28,6 +28,7 @@ function outlineOf(doc: SpecDocumentView, findings: CheckFinding[], builds: Buil
     { anchor: anchors.section('summary'), label: 'Summary', marker: marker('section', 'summary') },
     { anchor: anchors.section('problem'), label: 'Problem', marker: marker('section', 'problem') },
     { anchor: anchors.section('scope'), label: 'Scope', marker: marker('section', 'scope') },
+    ...(doc.slices?.length ? [{ anchor: anchors.section('slices'), label: 'Slices', detail: String(doc.slices.length) }] : []),
     { anchor: anchors.section('requirements'), label: 'Requirements', detail: String(doc.requirements.length) },
     { anchor: anchors.section('tasks'), label: 'Tasks', detail: String(doc.tasks.length) },
     { anchor: anchors.section('builds'), label: 'Builds', detail: builds.length ? String(builds.length) : undefined },

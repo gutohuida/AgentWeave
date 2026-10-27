@@ -6,6 +6,7 @@ import { toast } from '@/lib/toast'
 import { useProjectEvidence, useSpecDocumentRename, useSpecEvents } from '@/api/spec'
 import type { LoopSummary } from '@/api/loops'
 import { SpecDocList } from './page/SpecDocList'
+import { SpecPlainDocument } from './page/SpecPlainDocument'
 import { SpecWorkspace } from './page/SpecWorkspace'
 import { useSpecListData, useSpecSurface } from './page/useSpecSurface'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
@@ -186,7 +187,7 @@ function OpenDocument({
         {result.status === 'loading' ? (
           <LoadingThread label="Loading specification document" minHeight={240} />
         ) : (
-          <EmptyState icon="article" title="This document cannot be drawn" description={result.message} />
+          <SpecPlainDocument plain={result.plain} message={result.message} />
         )}
       </div>
     </div>

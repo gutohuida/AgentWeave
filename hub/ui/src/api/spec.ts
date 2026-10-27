@@ -392,6 +392,8 @@ export interface SpecDocument {
    *  document changed since (`approve-what-was-seen`). */
   content_version?: string
   roadmap_slice?: SpecRoadmapSlice
+  /** On a roadmap: the change document that specifies each slice, by slice key. */
+  slice_documents?: Record<string, string>
   /** Set only on a retired (archived) capability: why, and the capability that absorbed it (F536). */
   retired?: SpecRetirement
 }

@@ -34,6 +34,8 @@ export interface SpecPayload {
   acceptance_criteria?: Array<{ key: string; requirement: string; given: string; when: string; then: string; how_to_check?: string | null }>
   tasks?: Array<{ key: string; title?: string; description?: string; depends_on?: string[]; requirements?: string[] }>
   open_questions?: Array<{ question: string; resolved?: boolean }>
+  slices?: Array<{ key: string; title?: string; intent?: string; done?: string; builds_after?: string[] }>
+  algorithms?: Array<{ name: string; steps?: string[] }>
   /** `{ requirements: { key: 'FR-n' } }`: the identifiers the Hub minted. */
   aw_identity?: { requirements?: Record<string, string> }
 }
@@ -118,6 +120,10 @@ export interface DocumentInputs {
   builds: SpecBuild[]
   entries: SpecListEntry[]
   checkedClean: boolean
+  /** The fold dialog is the document's next action. */
+  foldReady?: boolean
+  /** `{slice key: path}` of the change documents that name a roadmap's slices. */
+  sliceDocuments?: Record<string, string>
 }
 
 export function documentView(input: DocumentInputs): SpecDocumentView {
@@ -168,6 +174,20 @@ export function documentView(input: DocumentInputs): SpecDocumentView {
         agent: row?.assignee ?? null,
       }
     }),
+    foldReady: input.foldReady === true,
+    slices: (payload.slices ?? []).map((slice) => {
+      const at = input.sliceDocuments?.[slice.key]
+      const entry = at ? entries.find((e) => e.path === at) : undefined
+      return {
+        key: slice.key,
+        title: slice.title || slice.key,
+        intent: slice.intent ?? '',
+        done: slice.done ?? '',
+        buildsAfter: slice.builds_after ?? [],
+        document: at ? { path: at, title: entry?.title ?? at, state: entry?.state ?? 'writing' } : null,
+      }
+    }),
+    algorithms: (payload.algorithms ?? []).map((a) => ({ name: a.name, steps: a.steps ?? [] })),
     openQuestions: (payload.open_questions ?? []).map((q) => ({ question: q.question, resolved: q.resolved === true })),
     roadmap: roadmapOf(record.path, entries),
     updatedAt: input.updatedAt,
@@ -291,4 +311,15 @@ export function findingsOf(
     message: f.message,
   })
   return [...blocking.map(make('blocking')), ...warnings.map(make('warning'))]
+}
+
+/** The visible text of a rendered page: what a document with no structure says, never its markup. */
+export function textOfPage(content: string): string {
+  try {
+    const parsed = new DOMParser().parseFromString(content, 'text/html')
+    parsed.querySelectorAll('script,style').forEach((el) => el.remove())
+    return (parsed.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim()
+  } catch {
+    return ''
+  }
 }

@@ -4,6 +4,7 @@ import { LoadingThread } from '@/components/common/LoadingThread'
 import { Button } from '@/components/ui/button'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
 import { formatAgo } from '@/lib/format'
+import { RigorChip, type Rigor } from '../SpecDocumentHeader'
 import { useEnter } from './hooks'
 import {
   actionsFor,
@@ -18,7 +19,21 @@ import {
 } from './model'
 import '@/styles/spec-page.css'
 
+/** What a container adds to the header from the document's phase controls: every decision the Hub's
+ *  document offers that the page's own buttons do not draw. One source, so none can be dropped. */
+export interface HeaderChrome {
+  /** Menu items for the More menu (Start a flow, Retire, Rigor history, Refresh). */
+  moreItems?: React.ReactNode
+  /** Beside the phase: the flow the document runs, an archived marker, Place under. */
+  badges?: React.ReactNode
+  /** Before the actions: the Draft the next slice switch. */
+  draftNext?: React.ReactNode
+  /** How strictly approval checks the document, as a choice of three. */
+  rigor?: { value: Rigor; onChange: (rigor: Rigor) => void; disabled?: boolean }
+}
+
 export interface SpecPageHeaderProps {
+  chrome?: HeaderChrome
   doc: SpecDocumentView
   check: CheckState
   /** The running build's number, when there is one: the "open the build" action names it. */
@@ -49,7 +64,7 @@ export interface SpecPageHeaderProps {
  *  phase, the journey ribbon, and the actions open to it as buttons, one primary (FR-1). */
 export function SpecPageHeader(props: SpecPageHeaderProps) {
   const { doc, check, compact, now } = props
-  const actions = actionsFor(doc.state, doc.kind)
+  const actions = actionsFor(doc.state, doc.kind, doc.foldReady === true)
   return (
     <header className="aw-sp-head" data-testid="spec-document-header" data-compact={compact ? 'true' : 'false'}>
       <div className="aw-sp-head-bar">
@@ -113,6 +128,8 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
               {STATE_LABEL[doc.state === 'ready' ? 'writing' : doc.state]}
             </span>
             <span className="aw-sp-meta-fact">{kindLabel(doc.kind)}</span>
+            {props.chrome?.rigor ? <RigorChip rigor={props.chrome.rigor.value} rigorChoice={props.chrome.rigor} /> : null}
+            {props.chrome?.badges}
             <span className="aw-sp-meta-fact" title={doc.updatedAt}>
               Changed {formatAgo(doc.updatedAt, now)}
             </span>
@@ -120,6 +137,7 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
           </div>
         </div>
         <div className="aw-sp-actions">
+          {props.chrome?.draftNext}
           {actions.secondary.includes('check') ? <CheckButton check={check} onCheck={() => props.onAction('check')} /> : null}
           <PrimaryAction
             action={actions.primary}
@@ -141,6 +159,7 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
               <MenuItem icon="content_copy" onSelect={props.onCopyPath}>
                 Copy its path
               </MenuItem>
+              {props.chrome?.moreItems}
               {(doc.state === 'approved' || doc.state === 'building') && doc.phase !== 'current' ? (
                 <MenuItem icon="edit" onSelect={() => props.onAction('reopen')}>
                   Reopen for changes
@@ -271,6 +290,13 @@ function PrimaryAction({
           onClick={() => onAction('open-build')}
           menu={[]}
         />
+      )
+    case 'fold':
+      return (
+        <Button variant="primary" size="sm" data-testid="fold-open" onClick={() => onAction('fold')} title="Shipped, not yet in a capability: fold its requirements into the capability they change.">
+          <Icon name="git_merge" size={14} />
+          Fold into capability…
+        </Button>
       )
     case 'reopen':
       return (

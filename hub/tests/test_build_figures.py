@@ -154,3 +154,52 @@ async def test_the_document_list_marks_a_running_build_and_its_progress(
             .one()
         )
         assert (await db.execute(select(Task).where(Task.build_id == build_id))).scalars().all()
+
+
+@pytest.mark.asyncio
+async def test_a_build_finishing_announces_the_document_so_the_page_stops_polling(
+    app, auth_headers, author_headers, monkeypatch  # noqa: F811
+):
+    """The last task of a Fast build approved: the build reads finished and `spec_updated` goes out
+    for the document, so an open page reads it again instead of polling a finished build."""
+    from hub import sse as sse_module
+    from hub.task_transition_service import apply_transition
+    from hub.task_transitions import operator
+
+    await _roster_rows("dev")
+    await _approved(app, auth_headers, author_headers, _document())
+    assert (await _build(app, auth_headers, driver="hand", level="fast")).status_code == 200
+    frames: list = []
+    real = sse_module.sse_manager.publish
+
+    def spy(project_id, event_type, payload):
+        frames.append((event_type, payload))
+        return real(project_id, event_type, payload)
+
+    monkeypatch.setattr(sse_module.sse_manager, "publish", spy)
+    for task in (await _tasks_by_key()).values():
+        async with async_session_factory() as db:
+            row = await db.get(Task, task.id)
+            for status in ("in_progress", "completed", "approved"):
+                await apply_transition(db, row, status, operator())
+            await db.commit()
+
+    read = (await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)).json()
+    assert read["builds"][0]["state"] == "finished"
+    assert ("spec_updated", {"path": PATH}) in frames
+
+
+@pytest.mark.asyncio
+async def test_a_roadmap_read_names_the_change_document_of_each_slice(app, auth_headers):
+    """`slice_documents` maps a slice key to the change document that names it."""
+    from .test_a_roadmap_shows_which_of_its_slices_are_done import (
+        FIRST,
+        ROADMAP,
+        _roadmap_with_first_claimed,
+    )
+
+    await _roadmap_with_first_claimed(app, auth_headers)
+
+    page = (await app.get(f"{BASE}/spec", params={"path": ROADMAP}, headers=auth_headers)).json()
+
+    assert page["slice_documents"] == {"first": FIRST}

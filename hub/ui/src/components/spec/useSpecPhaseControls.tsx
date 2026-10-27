@@ -165,8 +165,12 @@ export interface SpecPhaseControls {
     approveAndBuild: () => void
     build: () => void
     reopen: () => void
+    /** Opens the fold dialog; null unless the document is a finished change not yet in a capability. */
+    fold: (() => void) | null
     busy: boolean
   }
+  /** The "Draft the next slice" switch an approval of a roadmap's slice carries; null elsewhere. */
+  draftNextSlice: React.ReactNode
   /** What the last Check or refused approval found, as the Hub reported it. `checked` is true once
    *  a Check has answered, `clean` when it found nothing to block or warn about. */
   findings: { blocking: SpecBlockingFinding[]; gaps: SpecBlockingFinding[]; checking: boolean; checked: boolean; clean: boolean }
@@ -564,25 +568,29 @@ export function useSpecPhaseControls(
     }
   }
 
+  // The choice an approval of a roadmap's slice carries: on by default, and the operator's to turn off.
+  const draftNextSliceSwitch =
+    document.phase === 'exploring' && roadmapSlice ? (
+      <label
+        className="aw-spec-inline-switch"
+        title={`This document specifies slice ${roadmapSlice.slice} of a roadmap. Approving it asks the agent that wrote it to draft the next slice once this one's tasks are approved or rejected.`}
+      >
+        <Switch
+          size="sm"
+          checked={draftNextSlice}
+          disabled={busy}
+          aria-label="Draft the next slice"
+          onCheckedChange={setDraftNextSlice}
+        />
+        Draft the next slice
+      </label>
+    ) : null
+
   // Check and Approve and build beside Approve while the document is written (FR-1, FR-7).
   const beforePrimary =
     document.phase === 'exploring' ? (
       <>
-        {roadmapSlice ? (
-          <label
-            className="aw-spec-inline-switch"
-            title={`This document specifies slice ${roadmapSlice.slice} of a roadmap. Approving it asks the agent that wrote it to draft the next slice once this one's tasks are approved or rejected.`}
-          >
-            <Switch
-              size="sm"
-              checked={draftNextSlice}
-              disabled={busy}
-              aria-label="Draft the next slice"
-              onCheckedChange={setDraftNextSlice}
-            />
-            Draft the next slice
-          </label>
-        ) : null}
+        {draftNextSliceSwitch}
         <Button
           variant="ghost"
           size="sm"
@@ -1014,8 +1022,10 @@ export function useSpecPhaseControls(
         setBuilding('build')
       },
       reopen: onReopen,
+      fold: foldReady ? () => setFolding(true) : null,
       busy,
     },
+    draftNextSlice: draftNextSliceSwitch,
     findings: { blocking, gaps, checking: check.isPending, checked: checkedOnce, clean: checkedClean },
     badges,
     messages,

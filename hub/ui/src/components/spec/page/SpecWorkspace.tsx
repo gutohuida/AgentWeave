@@ -6,7 +6,7 @@ import { SpecBuildsSection } from './SpecBuilds'
 import { SpecDocList, SpecDocSwitcher } from './SpecDocList'
 import { SpecDocumentBody, type BodyPart } from './SpecDocumentBody'
 import { SpecOutlineMenu, SpecOutlineRail } from './SpecOutline'
-import { SpecPageHeader } from './SpecPageHeader'
+import { SpecPageHeader, type HeaderChrome } from './SpecPageHeader'
 import { SpecPanelDocSwitcher, SpecPanelNav, type PanelListProps } from './SpecPanelNav'
 import { Segmented } from '@/components/ui/segmented'
 import '@/styles/spec-page.css'
@@ -32,6 +32,8 @@ export interface SpecSurfaceProps {
   onOpenRuns: (build: BuildView) => void
   onStopBuild: (build: BuildView) => void
   /** Under the header, above the document: what the operator has to decide (amendments, proposals), what the actions said (refusals, gaps) and the dialogs. */
+  /** Decisions the Hub's phase controls offer beyond the page's own buttons. */
+  chrome?: HeaderChrome
   banner?: (context: { jump: (anchor: string) => void }) => React.ReactNode
 }
 
@@ -90,6 +92,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
       {props.layout === 'column' ? list('column') : null}
       <div className="aw-sp-main">
         <SpecPageHeader
+          chrome={props.chrome}
           doc={doc}
           check={props.check}
           runningBuild={running?.number ?? null}
@@ -125,6 +128,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 flash={nav.flash}
                 onJump={nav.jump}
                 onCopyLink={props.onCopyLink}
+                onOpenDocument={props.onOpenDocument}
                 builds={
                   <SpecBuildsSection
                     builds={props.builds}
@@ -184,6 +188,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
     <div className="aw-sp aw-sp-panel" data-layout="panel">
       <div className="aw-sp-main">
         <SpecPageHeader
+          chrome={props.chrome}
           doc={doc}
           check={props.check}
           runningBuild={running?.number ?? null}
@@ -253,6 +258,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
               flash={nav.flash}
               onJump={jump}
               onCopyLink={props.onCopyLink}
+              onOpenDocument={props.onOpenDocument}
               builds={
                 <SpecBuildsSection
                   builds={props.builds}

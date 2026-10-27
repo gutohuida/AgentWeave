@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { LoadingThread } from '@/components/common/LoadingThread'
-import { EmptyState } from '@/components/common/EmptyState'
+import { SpecPlainDocument } from './SpecPlainDocument'
 import { Icon } from '@/components/common/Icon'
 import { SpecDocumentFacts } from './SpecDocumentFacts'
 import { SpecAdoptButton } from '../SpecAdoptButton'
@@ -55,7 +55,7 @@ function PanelFor(props: React.ComponentProps<typeof SpecPanelContainer>) {
           {result.status === 'loading' ? (
             <LoadingThread label="Loading specification document" minHeight={240} />
           ) : (
-            <EmptyState icon="article" title="This document cannot be drawn" description={result.message} />
+            <SpecPlainDocument plain={result.plain} message={result.message} />
           )}
           <div className="aw-sp-banner">
             <SpecDocumentFacts path={props.path} specList={list.specList} onOpenTasks={props.onOpenTasks} onOpenRequirement={() => undefined} />

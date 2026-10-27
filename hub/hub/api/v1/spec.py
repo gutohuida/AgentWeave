@@ -421,6 +421,11 @@ async def get_spec(
                 "document": link.get("document"),
                 "slice": link.get("slice"),
             }
+        if document.kind == "roadmap":
+            # Which change document specifies each slice (the slice's own page, `roadmap.slice`).
+            payload["slice_documents"] = await _slice_documents(
+                session, workspace, project_id, document
+            )
         if document.phase == "approved":
             outcome = await _approval_outcome(session, document)
             if outcome is not None:
@@ -429,6 +434,23 @@ async def get_spec(
             if built is not None:
                 payload["build_outcome"] = built
     return payload
+
+
+async def _slice_documents(
+    session: AsyncSession, workspace, project_id: str, roadmap
+) -> Dict[str, str]:
+    """`{slice key: path}` of the change documents that name a slice of this roadmap."""
+    found: Dict[str, str] = {}
+    for other in await spec_lifecycle.list_documents(session, project_id):
+        if other.kind != "change-spec" or other.id == roadmap.id:
+            continue
+        try:
+            link = (_read_payload(workspace, other.path) or {}).get("roadmap")
+        except (OSError, SpecPathError, project_workspace.ProjectPathError):
+            continue
+        if isinstance(link, dict) and link.get("document") == roadmap.path and link.get("slice"):
+            found.setdefault(str(link["slice"]), other.path)
+    return found
 
 
 def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

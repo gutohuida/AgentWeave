@@ -56,6 +56,16 @@ export interface SpecTaskView {
   agent?: string | null
 }
 
+export interface SpecSlice {
+  key: string
+  title: string
+  intent: string
+  done: string
+  buildsAfter: string[]
+  /** The change document that specifies the slice, and where it stands. */
+  document?: { path: string; title: string; state: DocState } | null
+}
+
 export interface SpecDocumentView {
   id: string
   path: string
@@ -71,6 +81,11 @@ export interface SpecDocumentView {
   requirements: SpecRequirementView[]
   tasks: SpecTaskView[]
   openQuestions: Array<{ question: string; resolved: boolean }>
+  /** A finished change not yet folded into a capability: Fold is its next action. */
+  foldReady?: boolean
+  /** A roadmap's slices and the procedures a document describes. */
+  slices?: SpecSlice[]
+  algorithms?: Array<{ name: string; steps: string[] }>
   /** The roadmap this document is a slice of, and its neighbours in build order. */
   roadmap?: {
     path: string
@@ -172,7 +187,7 @@ export interface StartBuildChoice {
 
 // ── The header's actions ────────────────────────────────────────────────
 
-export type SpecAction = 'check' | 'approve' | 'approve-and-build' | 'build' | 'open-build' | 'reopen'
+export type SpecAction = 'check' | 'approve' | 'approve-and-build' | 'build' | 'open-build' | 'reopen' | 'fold'
 
 export interface HeaderActions {
   /** The one the document is waiting for: drawn as the primary button. */
@@ -183,7 +198,7 @@ export interface HeaderActions {
 
 /** Exactly the actions open to a document in each state. Check is open while a document is being
  *  written or is approved but not yet built, and never changes the phase. */
-export function actionsFor(state: DocState, kind: SpecKind = 'change-spec'): HeaderActions {
+export function actionsFor(state: DocState, kind: SpecKind = 'change-spec', foldReady = false): HeaderActions {
   // Only a change is built: any other kind is approved and read, and has no build to start.
   const builds = kind === 'change-spec'
   switch (state) {
@@ -192,11 +207,14 @@ export function actionsFor(state: DocState, kind: SpecKind = 'change-spec'): Hea
     case 'ready':
       return { primary: 'approve', secondary: builds ? ['check', 'approve-and-build'] : ['check'] }
     case 'approved':
+      // Every task decided and in no capability yet: folding is the close-out.
+      if (foldReady && builds) return { primary: 'fold', secondary: [] }
       return builds ? { primary: 'build', secondary: ['check'] } : { primary: null, secondary: [] }
     case 'building':
       return { primary: 'open-build', secondary: [] }
     case 'archived':
-      return { primary: 'reopen', secondary: [] }
+      // The Hub has no transition out of archived: nothing is offered.
+      return { primary: null, secondary: [] }
   }
 }
 

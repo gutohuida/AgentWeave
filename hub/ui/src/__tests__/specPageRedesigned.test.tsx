@@ -50,7 +50,25 @@ const payload = {
   ],
   open_questions: [],
 }
-const html = `<html><body><script type="application/agentweave-spec+json" id="aw-spec-payload">${JSON.stringify(payload)}</script></body></html>`
+const pageOf = (p: unknown) => `<html><body><script type="application/agentweave-spec+json" id="aw-spec-payload">${JSON.stringify(p)}</script></body></html>`
+const html = pageOf(payload)
+const CAP = 'spec/capabilities/cap/spec.json'
+const capabilityPayload = { ...payload, kind: 'capability', title: 'A capability', requirements: payload.requirements.slice(0, 2), tasks: [] }
+const roadmapPayload = {
+  title: 'Demo roadmap',
+  kind: 'roadmap',
+  summary: 'A roadmap summary.',
+  problem: 'A roadmap problem.',
+  scope: { in_scope: ['Two slices'], non_goals: ['More'] },
+  requirements: [],
+  tasks: [],
+  acceptance_criteria: [],
+  slices: [
+    { key: 'first', title: 'First slice', intent: 'The first outcome.', done: 'First is visible.', builds_after: [] },
+    { key: 'second', title: 'Second slice', intent: 'The second outcome.', done: 'Second is visible.', builds_after: ['first'] },
+  ],
+  algorithms: [{ name: 'Pick the next slice', steps: ['Read the roadmap', 'Choose the first undone slice'] }],
+}
 
 interface Hub {
   phase: 'exploring' | 'approved' | 'archived'
@@ -58,6 +76,10 @@ interface Hub {
   checkResult: { blocking: unknown[]; warnings: unknown[] }
   checkCalls: number
   tasks: unknown[]
+  /** A replacement page, and extra fields, on the document read of a path. */
+  read: Record<string, { page?: string; extra?: Record<string, unknown> }>
+  loops: unknown[]
+  rigorEvents: unknown[]
 }
 
 let hub: Hub
@@ -157,8 +179,22 @@ function route(url: string, init?: RequestInit): unknown {
       ],
     }
   }
-  if (p === '/project/spec' && u.searchParams.get('path') === PATH)
-    return { path: PATH, content: html, updated_at: '2026-10-17T09:00:00Z', content_version: 'v1', builds: hub.builds, roadmap_slice: { document: ROADMAP, slice: 'demo' } }
+  if (p === '/project/spec') {
+    const at = u.searchParams.get('path') ?? ''
+    const known: Record<string, string> = { [PATH]: html, [CAP]: pageOf(capabilityPayload), [ROADMAP]: pageOf(roadmapPayload) }
+    const override = hub.read[at]
+    const page = override?.page ?? known[at]
+    if (page === undefined) return undefined
+    return {
+      path: at,
+      content: page,
+      updated_at: '2026-10-17T09:00:00Z',
+      content_version: 'v1',
+      ...(at === PATH ? { builds: hub.builds, roadmap_slice: { document: ROADMAP, slice: 'demo' } } : {}),
+      ...override?.extra,
+    }
+  }
+  if (/^\/project\/documents\/.+\/rigor-history$/.test(p)) return { events: hub.rigorEvents }
   if (p === '/project/spec/coverage')
     return {
       requirements: [
@@ -180,7 +216,7 @@ function route(url: string, init?: RequestInit): unknown {
   }
   const figures = /^\/project\/builds\/([^/]+)\/figures$/.exec(p)
   if (figures) return FIGURES[figures[1]!] ?? null
-  if (p === '/loops') return []
+  if (p === '/loops') return hub.loops
   return undefined
 }
 
@@ -218,11 +254,11 @@ function installLayout() {
 }
 
 let queryClient: QueryClient
-function renderPage(document: string | null = PATH) {
+function renderPage(document: string | null = PATH, props: Partial<React.ComponentProps<typeof SpecPage>> = {}) {
   const onOpenDocument = vi.fn()
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <SpecPage document={document} onOpenDocument={onOpenDocument} />
+      <SpecPage document={document} onOpenDocument={onOpenDocument} {...props} />
     </QueryClientProvider>,
   )
   return { ...utils, onOpenDocument }
@@ -235,7 +271,7 @@ beforeEach(() => {
   localStorage.clear()
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   useConfigStore.setState({ apiKey: 'aw_live_TESTKEY', hubUrl: 'http://hub.test', selectedProjectId: 'proj-test', isConfigured: true, bootstrapState: 'ready', mode: 'light' })
-  hub = { phase: 'exploring', builds: [], checkResult: { blocking: [], warnings: [] }, checkCalls: 0, tasks: [] }
+  hub = { phase: 'exploring', builds: [], checkResult: { blocking: [], warnings: [] }, checkCalls: 0, tasks: [], read: {}, loops: [], rigorEvents: [] }
   installHub()
   installLayout()
 })
@@ -491,5 +527,139 @@ describe('aesthetic (FR-9)', () => {
     const css = (await import('@/styles/spec-page.css?raw')).default
     const literal = css.split('\n').filter((l: string) => /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/.test(l) && !/#fff\b|#ffffff\b|rgba\(0, ?0, ?0|white/.test(l))
     expect(literal).toEqual([])
+  })
+})
+
+
+/* The decisions the header carries (`useSpecPhaseControls`): each one the old header offered must have a
+ * control in the redesigned one, or an operator decision is unreachable. */
+describe('the operator decisions stay reachable', () => {
+  const header = () => document.querySelector('.aw-sp-head') as HTMLElement
+  async function openMore(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(within(header()).getByRole('button', { name: 'More actions' }))
+    return screen.findByRole('menu')
+  }
+  const ready = async () => {
+    await waitFor(() => expect(document.querySelector('.aw-sp-title')?.textContent).toBeTruthy())
+    await waitFor(() => expect(anchor('summary') ?? anchor('section-summary')).toBeTruthy())
+  }
+
+  it('folds a finished change into a capability from the header', async () => {
+    hub.phase = 'approved'
+    hub.read[PATH] = { extra: { fold_state: { state: 'ready', open_tasks: [], capabilities: [], reconcile: { state: 'none' } } } }
+    renderPage()
+    await waitFor(() => expect(within(header()).getByRole('button', { name: /Fold into capability/ })).toBeInTheDocument())
+  })
+
+  it('retires a current capability from the More menu', async () => {
+    const user = userEvent.setup()
+    renderPage(CAP)
+    await ready()
+    const menu = await openMore(user)
+    expect(within(menu).getByRole('menuitem', { name: /Retire/ })).toBeInTheDocument()
+  })
+
+  it('starts a flow from the More menu on an approved change with none', async () => {
+    hub.phase = 'approved'
+    const user = userEvent.setup()
+    renderPage()
+    await ready()
+    expect(within(await openMore(user)).getByRole('menuitem', { name: /Start a flow/ })).toBeInTheDocument()
+  })
+
+  it('offers rigor history and a refresh from the More menu, and the rigor chip beside the phase', async () => {
+    hub.phase = 'approved'
+    hub.rigorEvents = [{ id: 'e1', from: 'sketch', to: 'contract', actor: 'operator', reason: 'why', created_at: '2026-10-17T09:00:00Z' }]
+    const user = userEvent.setup()
+    renderPage()
+    await ready()
+    expect(within(header()).getByTestId('spec-rigor')).toBeInTheDocument()
+    const menu = await openMore(user)
+    await waitFor(() => expect(within(menu).getByRole('menuitem', { name: /Rigor history/ })).toBeInTheDocument())
+    expect(within(menu).getByRole('menuitem', { name: /Refresh/ })).toBeInTheDocument()
+  })
+
+  it('offers no Reopen for an archived document, which the Hub always refuses', async () => {
+    hub.phase = 'archived'
+    const user = userEvent.setup()
+    renderPage()
+    await ready()
+    expect(within(header()).queryByRole('button', { name: /Reopen/ })).toBeNull()
+    expect(within(await openMore(user)).queryByRole('menuitem', { name: /Reopen/ })).toBeNull()
+  })
+
+  it('keeps the Draft the next slice choice on approval of a slice', async () => {
+    renderPage()
+    await waitFor(() => expect(within(header()).getByRole('switch', { name: /Draft the next slice/ })).toBeChecked())
+  })
+
+  it('links the flow working an approved change to its loop tab', async () => {
+    hub.phase = 'approved'
+    hub.loops = [{ id: 'loop-1', spec_document_id: DOC_ID, label: 'Demo flow', agent: 'Builder', purpose: '', stop_when_queue_empties: true }]
+    const onOpenLoop = vi.fn()
+    const user = userEvent.setup()
+    renderPage(PATH, { onOpenLoop })
+    const link = await screen.findByTestId('spec-flow-link')
+    await user.click(link)
+    expect(onOpenLoop).toHaveBeenCalledWith(expect.objectContaining({ id: 'loop-1' }))
+  })
+
+  it('offers to place a filed document under another', async () => {
+    renderPage()
+    await ready()
+    expect(await screen.findByTestId('spec-place-under')).toBeInTheDocument()
+  })
+})
+
+describe('documents of other shapes', () => {
+  it("draws a roadmap's slices and algorithms", async () => {
+    renderPage(ROADMAP)
+    await waitFor(() => expect(anchor('slice-first')).toBeTruthy())
+    expect(screen.getByText('The first outcome.')).toBeInTheDocument()
+    expect(screen.getByText('First is visible.')).toBeInTheDocument()
+    expect(within(anchor('slice-second')!).getByText(/builds after/i).parentElement).toHaveTextContent('Builds after First slice')
+    expect(screen.getByText('Pick the next slice')).toBeInTheDocument()
+    expect(screen.getByText('Choose the first undone slice')).toBeInTheDocument()
+  })
+
+  it('names the change document that specifies a slice, and opens it', async () => {
+    hub.read[ROADMAP] = { extra: { slice_documents: { first: PATH } } }
+    const { onOpenDocument } = renderPage(ROADMAP)
+    const user = userEvent.setup()
+    await waitFor(() => expect(anchor('slice-first')).toBeTruthy())
+    const first = anchor('slice-first')!
+    await user.click(within(first).getByRole('button', { name: /Demo change/ }))
+    expect(onOpenDocument).toHaveBeenCalledWith(PATH)
+  })
+
+  it('shows what a document with no structure says, read only, with its path', async () => {
+    hub.read[PATH] = { page: '<html><body><h1>Plain notes</h1><p>Some prose.</p></body></html>' }
+    renderPage()
+    await waitFor(() => expect(screen.getByText(/Some prose\./)).toBeInTheDocument())
+    expect(screen.getAllByText(PATH).length).toBeGreaterThan(0)
+  })
+})
+
+describe('no decision is dropped silently', () => {
+  /** Each primary action and More-menu item `useSpecPhaseControls` offers, and the test above that
+   *  drives its control in the redesigned header. A new one fails here until it has both. */
+  const COVERED: Record<string, string> = {
+    'spec-approve': 'offers Approve as the primary action once a check finds nothing',
+    'fold-open': 'folds a finished change into a capability from the header',
+    'spec-build': 'offers Build once approved',
+    'spec-start-flow': 'starts a flow from the More menu on an approved change with none',
+    'spec-rigor-history-toggle': 'offers rigor history and a refresh from the More menu',
+    'spec-retire-capability': 'retires a current capability from the More menu',
+  }
+
+  it('every primary and menu control of the phase controls has a rendered control and a test', async () => {
+    const source = (await import('@/components/spec/useSpecPhaseControls.tsx?raw')).default as string
+    const primary = Array.from(source.matchAll(/testId: '([^']+)'/g)).map((m) => m[1]!)
+    const menuStart = source.indexOf('const menu = (')
+    const menuEnd = source.indexOf('const archive =', menuStart)
+    const menu = Array.from(source.slice(menuStart, menuEnd).matchAll(/data-testid="([^"]+)"/g)).map((m) => m[1]!)
+    const offered = [...primary, ...menu]
+    expect(offered.length).toBeGreaterThan(4)
+    for (const id of offered) expect(Object.keys(COVERED), `${id} has no control and test`).toContain(id)
   })
 })

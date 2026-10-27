@@ -2,6 +2,8 @@
  *  components take (spec `the-spec-page-redesigned`, task `wire`). The Spec tab and the
  *  conversation's side panel call the same two hooks, so they cannot show different things. */
 import * as React from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { MenuItem } from '@/components/ui/menu'
 import { useBuildFigures } from '@/api/buildFigures'
 import { readableApiError } from '@/api/client'
 import {
@@ -18,14 +20,17 @@ import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { SpecAmendmentsPanel } from '../SpecAmendmentsPanel'
 import { SpecDeletedNote } from '../SpecDeletedNote'
+import { SpecPlaceUnder } from '../SpecPlaceUnder'
 import { SpecProposalsPanel } from '../SpecProposalsPanel'
 import { SpecResolvedProposals } from '../SpecResolvedProposals'
 import { SpecRetiredRequirements } from '../SpecRetiredRequirements'
 import { useSpecPhaseControls } from '../useSpecPhaseControls'
-import { buildViews, documentView, findingsOf, listEntries, parsePayload } from './adapt'
+import { buildViews, documentView, findingsOf, listEntries, parsePayload, textOfPage } from './adapt'
 import { useListPreferences } from './hooks'
 import { NO_DOCUMENT_FILTERS, type CheckState, type DocumentFilters, type ListPreferences, type SpecAction, type SpecListEntry } from './model'
 import { SpecDocumentFacts } from './SpecDocumentFacts'
+import type { PlainDocument } from './SpecPlainDocument'
+import type { HeaderChrome } from './SpecPageHeader'
 import type { SpecSurfaceProps } from './SpecWorkspace'
 import type { LoopSummary } from '@/api/loops'
 
@@ -78,7 +83,7 @@ export interface SpecSurfaceHost {
 
 export type SpecSurfaceResult =
   | { status: 'loading' }
-  | { status: 'unreadable'; message: string }
+  | { status: 'unreadable'; message: string; plain: PlainDocument | null }
   | { status: 'ready'; surface: SpecSurfaceProps }
 
 /** Ticks, so "started 3m ago" and a running build's age stay true without a refetch. */
@@ -108,6 +113,7 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   const builds = React.useMemo(() => specDoc?.builds ?? [], [specDoc?.builds])
   const figures = useBuildFigures(builds)
   const stop = useStopBuild()
+  const queryClient = useQueryClient()
   const now = useNow()
   const [filters, setFilters] = React.useState<DocumentFilters>(NO_DOCUMENT_FILTERS)
   const controls = useSpecPhaseControls(path, host.onOpenLoop, host.onDeleted, { inlineFindings: true })
@@ -122,11 +128,15 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   const payload = React.useMemo(() => (specDoc ? parsePayload(specDoc.content) : null), [specDoc])
 
   if (readFailed && !specDoc) {
-    return { status: 'unreadable', message: readableApiError(readError, 'The Hub could not read this document.') }
+    return { status: 'unreadable', message: readableApiError(readError, 'The Hub could not read this document.'), plain: null }
   }
   if (!specDoc || !records) return { status: 'loading' }
   if (!payload) {
-    return { status: 'unreadable', message: 'This document has no structure the page can draw.' }
+    return {
+      status: 'unreadable',
+      message: 'This document has no structure the page can draw.',
+      plain: { path, phase: record?.phase ?? null, text: textOfPage(specDoc.content) },
+    }
   }
 
   const entry = list.entries.find((e) => e.path === path)
@@ -151,6 +161,8 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     builds,
     entries: list.entries,
     checkedClean: clean,
+    foldReady: !!controls?.actions.fold,
+    sliceDocuments: specDoc.slice_documents,
   })
 
   const check: CheckState = checking
@@ -183,6 +195,8 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
         return controls.actions.build()
       case 'reopen':
         return controls.actions.reopen()
+      case 'fold':
+        return controls.actions.fold?.()
       case 'open-build':
         return
     }
@@ -207,7 +221,43 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     </div>
   )
 
+  const node = list.specList?.specs.find((e) => e.path === path)
+  const refresh = () => {
+    for (const key of ['specs', 'specDocuments', 'specCoverage', 'tasks', 'loops']) {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, key] })
+    }
+    void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'spec', path] })
+  }
+  // Everything the phase controls offer that the page's own buttons do not draw (one source).
+  const chrome: HeaderChrome = {
+    moreItems: (
+      <>
+        {controls?.menu}
+        <MenuItem icon="refresh" onSelect={refresh}>
+          Refresh
+        </MenuItem>
+      </>
+    ),
+    badges: (
+      <>
+        {controls?.badges}
+        {doc.state === 'archived' ? (
+          <span className="aw-sp-meta-fact" data-testid="spec-archived-marker">
+            Archived
+          </span>
+        ) : null}
+        {/* D4 (F206): a filed document, under a valid index, can be placed in the hierarchy. */}
+        {node?.state === 'filed' && list.specList?.manifest?.state === 'valid' ? (
+          <SpecPlaceUnder path={path} parent={node.parent ?? null} specList={list.specList} />
+        ) : null}
+      </>
+    ),
+    draftNext: controls?.draftNextSlice,
+    rigor: controls?.rigorChoice,
+  }
+
   const surface: SpecSurfaceProps = {
+    chrome,
     doc,
     builds: buildList,
     check,
