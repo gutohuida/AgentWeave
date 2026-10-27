@@ -19,16 +19,17 @@ import contextlib
 import dataclasses
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from pydantic import Field
+from pydantic import Field, StringConstraints
 from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
     already_built,
     blocking,
+    builds,
     deletion,
     loop_history,
     project_workspace,
@@ -401,6 +402,10 @@ async def get_spec(
         recommended = _recommended_build(document, stored_payload)
         if recommended is not None:
             payload["recommended_build"] = recommended
+        # Every build of this document, newest first: how it was built, by whom, within what.
+        payload["builds"] = [
+            await builds.view(session, row) for row in await builds.builds_of(session, document.id)
+        ]
         fold_state = await _fold_state(session, document)
         if fold_state is not None:
             payload["fold_state"] = fold_state
@@ -440,7 +445,26 @@ def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[
         "cron": delivery.cron,
         "stop_when_queue_empties": delivery.stop_when_queue_empties,
         "stop_at": delivery.stop_at,
+        # The build's settings (slice D), each resolved the way Build resolves it when left out:
+        # `mode` flow/none reads as driver flow/hand, and no level as the document's rigor's.
+        "driver": delivery.driver or ("flow" if delivery.mode == "flow" else "hand"),
+        "level": delivery.level or builds.level_for_rigor(document.rigor),
+        "builders": list(delivery.builders),
+        "reviewers": list(delivery.reviewers),
+        "lead": delivery.lead,
+        "budget_cap_usd": delivery.budget_cap_usd,
+        "landing": delivery.landing or builds.LANDING_MAIN,
+        "task_builders": _declared_builders(payload),
         "reasons": dict(delivery.reasons),
+    }
+
+
+def _declared_builders(payload: Optional[Dict[str, Any]]) -> Dict[str, Optional[str]]:
+    """Each declared task's builder by key (F1046), as the document names it."""
+    return {
+        str(entry.get("key")): entry.get("builder")
+        for entry in (payload or {}).get("tasks") or []
+        if isinstance(entry, dict) and entry.get("key") and not entry.get("from")
     }
 
 
@@ -486,22 +510,42 @@ class PhaseRequest(RequestModel):
     approve_anyway: bool = False
 
 
-class BuildRequest(RequestModel):
-    """Building an approved document as its recommended build says (FR-6)."""
+_AgentName = Annotated[str, StringConstraints(min_length=1, max_length=32)]
+
+
+class _BuildChoices(RequestModel):
+    """What the operator chooses when they press Build (`a-build-has-a-driver-a-level-and-its-
+    people`, FR-1). Each field left out takes the recommended build's value (`recommended_build`),
+    and where that says nothing, today's behaviour: the delivery's flow or none, any free agent,
+    no cap, no window, landing on main."""
 
     # The operator's choice of agent for a flow delivery (design D5b, moved here from approval): a
     # name, or "" for no flow. Used for this build only; the document is never edited.
     delivery_agent: Optional[str] = Field(default=None, max_length=32)
+    driver: Optional[Literal["flow", "lead", "hand"]] = None
+    level: Optional[Literal["fast", "reviewed", "gated"]] = None
+    builders: Optional[List[_AgentName]] = Field(default=None, max_length=32)
+    reviewers: Optional[List[_AgentName]] = Field(default=None, max_length=32)
+    lead: Optional[str] = Field(default=None, max_length=32)
+    budget_cap_usd: Optional[float] = Field(default=None, gt=0, le=100_000)
+    window_start: Optional[datetime] = None
+    window_end: Optional[datetime] = None
+    landing: Optional[Literal["main", "nowhere"]] = None
+    # Each task's builder as the operator left it in the dialog, by task key; "" clears it.
+    task_builders: Optional[Dict[str, Annotated[str, StringConstraints(max_length=32)]]] = None
 
 
-class ApproveAndBuildRequest(RequestModel):
+class BuildRequest(_BuildChoices):
+    """Building an approved document (FR-6), with the build's settings (slice D)."""
+
+
+class ApproveAndBuildRequest(_BuildChoices):
     """Approving and building in one action (FR-7): approval's fields, then Build's."""
 
     reason: str = Field(default="", max_length=2000)
     content_version: Optional[str] = Field(default=None, max_length=64)
     approve_anyway: bool = False
     draft_next_slice: bool = False
-    delivery_agent: Optional[str] = Field(default=None, max_length=32)
 
 
 class MergeRequest(RequestModel):
@@ -1058,6 +1102,9 @@ class AlreadyBuiltClose(RequestModel):
     """The commit or commits on the main branch that already hold a document's work."""
 
     commits: List[str] = Field(min_length=1, max_length=already_built.MAX_COMMITS)
+    # The level the tasks close at (slice D): `fast` approves them at once, their evidence
+    # accepted; any other level, or none, leaves them under review for their evidence, as before.
+    level: Optional[Literal["fast", "reviewed", "gated"]] = None
 
 
 @router.post("/documents/{path:path}/close-already-built")
@@ -1081,7 +1128,9 @@ async def close_already_built(
     document = await _require_document(session, project_id, path)
     workspace = await _workspace(session, project_id)
     try:
-        result = await already_built.close(session, document, body.commits, workspace=workspace)
+        result = await already_built.close(
+            session, document, body.commits, workspace=workspace, level=body.level
+        )
     except already_built.AlreadyBuiltRefused as exc:
         await session.rollback()
         raise HTTPException(
@@ -3259,10 +3308,13 @@ def _require_loaded_version(workspace, document, version: Optional[str]) -> None
         )
 
 
-def _check_delivery_agent(workspace, document, delivery_agent: Optional[str]) -> None:
+def _check_delivery_agent(
+    workspace, document, delivery_agent: Optional[str], driver: Optional[str] = None
+) -> None:
     """D5b: `delivery_agent` is honoured only where it can be, and refused before anything moves
-    rather than ignored (`RequestModel`'s rule: honour a field or name it)."""
-    if delivery_agent is None:
+    rather than ignored (`RequestModel`'s rule: honour a field or name it). A build the operator
+    gives a flow or a lead (slice D) has a flow for it to name, whatever the delivery says."""
+    if delivery_agent is None or driver in (builds.DRIVER_FLOW, builds.DRIVER_LEAD):
         return
     chosen_for = _delivery_of(_read_payload(workspace, document.path))
     if chosen_for is None or chosen_for.mode != "flow":
@@ -3427,38 +3479,298 @@ async def _phase_response(
     return response
 
 
+def _unprocessable(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": code, "message": message},
+    )
+
+
+def _aware(value: Optional[datetime]) -> Optional[datetime]:
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+async def _build_settings(
+    session: AsyncSession,
+    project_id: str,
+    document,
+    payload: Optional[Dict[str, Any]],
+    body: _BuildChoices,
+) -> builds.Settings:
+    """The build the operator chose, each setting left out taken from the recommended build
+    (slice D, FR-1). Refused (422) before anything moves: a lead driver naming no lead, a person
+    who is not an open agent of the project, or a window that ends before it starts or has ended.
+    """
+    delivery = _delivery_of(payload)
+
+    def recommended(name: str, default: Any = None) -> Any:
+        value = getattr(delivery, name, None) if delivery is not None else None
+        return default if value is None else value
+
+    driver = body.driver or recommended("driver")
+    if driver is None:
+        flows = delivery is not None and delivery.mode == "flow" and body.delivery_agent != ""
+        driver = builds.DRIVER_FLOW if flows else builds.DRIVER_HAND
+    level = body.level or recommended("level") or builds.level_for_rigor(document.rigor)
+    chosen_builders = body.builders if body.builders is not None else recommended("builders", [])
+    chosen_reviewers = (
+        body.reviewers if body.reviewers is not None else recommended("reviewers", [])
+    )
+    lead = (body.lead or "").strip() or recommended("lead")
+    cap = body.budget_cap_usd if body.budget_cap_usd is not None else recommended("budget_cap_usd")
+    landing = body.landing or recommended("landing") or builds.LANDING_MAIN
+    start, end = _aware(body.window_start), _aware(body.window_end)
+
+    if driver == builds.DRIVER_LEAD and not lead:
+        raise _unprocessable("lead_missing", "a lead-driven build names its lead")
+    people = [*chosen_builders, *chosen_reviewers, *([lead] if lead else [])]
+    if people:
+        known = await builds.open_agents(session, project_id)
+        unknown = sorted({name for name in people if name not in known})
+        if unknown:
+            raise _unprocessable(
+                "unknown_agent",
+                f"not an open agent of this project: {', '.join(unknown)}. A build's builders, "
+                "reviewers and lead are agents that can be given turns.",
+            )
+    if start is not None and end is not None and end <= start:
+        raise _unprocessable("window_inverted", "the build's window ends before it starts")
+    if end is not None and end <= datetime.now(timezone.utc):
+        raise _unprocessable(
+            "window_closed", f"the build's window ended at {end.isoformat()}; choose a later end"
+        )
+    return builds.Settings(
+        driver=driver,
+        level=level,
+        builders=list(dict.fromkeys(chosen_builders)),
+        reviewers=list(dict.fromkeys(chosen_reviewers)),
+        lead=lead if driver == builds.DRIVER_LEAD else (lead or None),
+        budget_cap_usd_micros=builds.micros_of(cap),
+        window_start=start,
+        window_end=end,
+        landing=landing,
+        task_builders=dict(body.task_builders or {}),
+    )
+
+
+async def _refuse_a_second_build(session: AsyncSession, document) -> None:
+    """One running build per document (FR-1): a second start is refused, naming the running one."""
+    running = await builds.running_build(session, document.id)
+    if running is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "build_running",
+                "message": (
+                    f"build {running.id} of this document is running ({running.driver}, "
+                    f"{running.level}); stop it before starting another"
+                ),
+                "build_id": running.id,
+            },
+        )
+
+
+@dataclasses.dataclass
+class _Started:
+    """What a build start leaves for after its commit."""
+
+    job: Optional[AIJob] = None
+    lead: Optional[str] = None
+
+
 async def _build(
     session: AsyncSession,
     project_id: str,
     document,
     payload: Optional[Dict[str, Any]],
     delivery_agent: Optional[str],
-) -> Tuple[Dict[str, Any], Optional[AIJob]]:
-    """Start building an approved document as its recommended build says (FR-6), and record it.
+    settings: Optional[builds.Settings] = None,
+) -> Tuple[Dict[str, Any], _Started]:
+    """Start building an approved document (FR-6), and record it.
 
-    In this slice a build is what delivery does: create and start the flow it describes
-    (`_build_flow`), or leave the tasks on the board. The record is an event of its own
-    (`BUILD_REPORT`), so approval and build are two entries in the document's history.
+    Slice D: the build is a record (`builds.Build`) of the operator's choices. Its tasks record the
+    build and its level, and each declared builder that is an open agent becomes its task's
+    assignee. A flow or lead driver gets the flow it hands out the work from (`_build_flow`); a
+    hand-driven build starts nothing. The record is also an event of its own (`BUILD_REPORT`), so
+    approval and build are two entries in the document's history.
     """
-    flow, created_job = await _build_flow(session, project_id, document, payload, delivery_agent)
+    if settings is None:
+        settings = await _build_settings(
+            session, project_id, document, payload, _BuildChoices(delivery_agent=delivery_agent)
+        )
+    started = _Started()
+    build = builds.new_build(project_id, document.id, settings)
+    session.add(build)
+    await session.flush()
+    await builds.retire_previous_loops(session, document.id, build.id)
+    open_tasks = (
+        (
+            await session.execute(
+                select(Task)
+                .where(
+                    Task.project_id == project_id,
+                    Task.spec_document_id == document.id,
+                    Task.status.not_in(TERMINAL_STATUSES),
+                )
+                .order_by(Task.created_at, Task.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    unresolved = await builds.cover_tasks(
+        session,
+        build,
+        open_tasks,
+        _declared_builders(payload),
+        settings.task_builders,
+    )
+    if settings.driver == builds.DRIVER_HAND or document.kind != "change-spec":
+        flow = (
+            _hand_flow_entry(payload, delivery_agent)
+            if document.kind == "change-spec"
+            else (await _build_flow(session, project_id, document, payload, delivery_agent))[0]
+        )
+    else:
+        flow, started.job = await _build_flow(
+            session, project_id, document, payload, delivery_agent, settings=settings
+        )
+        if flow.get("state") in ("created", "existing") and flow.get("job_id"):
+            build.loop_id = (
+                await session.execute(select(Loop.id).where(Loop.job_id == flow["job_id"]))
+            ).scalar_one_or_none()
+        # The lead's first brief, now -- unless the window has not opened (or the cap is already
+        # spent): then its loop's first firing inside the window briefs it.
+        if (
+            settings.driver == builds.DRIVER_LEAD
+            and build.loop_id
+            and flow.get("job_id")
+            and (await builds.may_hand_out(session, build)).allowed
+            and await builds.queue_brief(
+                session, build, document.title or document.path, flow["job_id"]
+            )
+        ):
+            started.lead = build.lead
     delivery = _delivery_of(payload)
+    view = await builds.view(session, build)
     outcome: Dict[str, Any] = {
         "flow": flow,
         "delivery_agent": delivery_agent,
         "reviewer": delivery.reviewer if delivery is not None else None,
+        "build": {**view, "unresolved_builders": unresolved},
     }
     await spec_lifecycle.record_event(
         session, document, kind=BUILD_REPORT, actor=_operator(), detail=outcome
     )
-    return outcome, created_job
+    return outcome, started
 
 
-async def _finish_build(session: AsyncSession, project_id: str, created_job) -> None:
+_CHOICE_FIELDS = (
+    "driver",
+    "level",
+    "builders",
+    "reviewers",
+    "lead",
+    "budget_cap_usd",
+    "window_start",
+    "window_end",
+    "landing",
+    "task_builders",
+)
+
+
+async def _joined_build(
+    session: AsyncSession,
+    project_id: str,
+    document,
+    payload: Optional[Dict[str, Any]],
+    body: _BuildChoices,
+    running,
+) -> Tuple[Dict[str, Any], _Started]:
+    """The report of an Approve and build whose document already has a running build: the tasks
+    approval laid out joined it (`builds.join_running_build`) and no second build was started. A
+    flow- or lead-driven build whose flow is gone gets its flow again, as the build it is."""
+    delivery = _delivery_of(payload)
+    started = _Started()
+    flow = await _existing_flow_entry(session, project_id, document, delivery, body.delivery_agent)
+    if flow is None and running.driver != builds.DRIVER_HAND and document.kind == "change-spec":
+        again = builds.Settings(
+            driver=running.driver,
+            level=running.level,
+            builders=list(running.builders or []),
+            reviewers=list(running.reviewers or []),
+            lead=running.lead,
+            budget_cap_usd_micros=running.budget_cap_usd_micros,
+            window_start=running.window_start,
+            window_end=running.window_end,
+            landing=running.landing,
+            task_builders={},
+        )
+        flow, started.job = await _build_flow(
+            session, project_id, document, payload, body.delivery_agent, settings=again
+        )
+        if started.job is not None:
+            running.loop_id = (
+                await session.execute(select(Loop.id).where(Loop.job_id == started.job.id))
+            ).scalar_one_or_none()
+    if flow is None:
+        flow = _hand_flow_entry(payload, body.delivery_agent)
+    view = await builds.view(session, running)
+    message = f"Build {running.id} is running; the new tasks joined it."
+    if any(getattr(body, name) is not None for name in _CHOICE_FIELDS):
+        message += " The settings chosen here were not applied: stop it to build anew."
+    outcome: Dict[str, Any] = {
+        "flow": flow,
+        "delivery_agent": body.delivery_agent,
+        "reviewer": delivery.reviewer if delivery is not None else None,
+        "build": {**view, "joined": True, "message": message, "unresolved_builders": []},
+    }
+    await spec_lifecycle.record_event(
+        session, document, kind=BUILD_REPORT, actor=_operator(), detail=outcome
+    )
+    return outcome, started
+
+
+def _hand_flow_entry(payload: Optional[Dict[str, Any]], delivery_agent: Optional[str]) -> Dict:
+    """The report's `flow` entry for a build nobody drives: nothing is started."""
+    delivery = _delivery_of(payload)
+    if delivery is None:
+        return {"state": "none", "messages": ["No delivery was declared."]}
+    if delivery.mode == "flow" and delivery_agent == "":
+        return _not_created("You chose no flow for this build.")
+    if delivery.mode == "flow":
+        return {
+            "state": "none",
+            "messages": [
+                "You chose to build it by hand: no flow was started, and the tasks wait on the "
+                "board with their builders assigned."
+            ],
+        }
+    has_tasks = bool((payload or {}).get("tasks"))
+    return {
+        "state": "none",
+        "messages": [
+            (
+                "The delivery says no flow: the tasks are on the board, started by hand."
+                if has_tasks
+                else "The delivery says no flow, and the document declares no tasks."
+            )
+        ],
+    }
+
+
+async def _finish_build(session: AsyncSession, project_id: str, started: _Started) -> None:
     """After the commit: the flow's first firing is at its next cron tick, nothing fires now
     (operator). A registration failure is logged, and the committed flow fires from the next
-    restart."""
-    if created_job is not None:
-        await _hand_job_to_scheduler(session, created_job.id, created_job)
+    restart. A lead's first brief is queued with the build, and its turn starts now."""
+    if started.job is not None:
+        await _hand_job_to_scheduler(session, started.job.id, started.job)
+    if started.lead:
+        from ...turn_scheduler import schedule_accepted
+
+        await schedule_accepted(project_id, started.lead)
 
 
 @router.post("/documents/phase")
@@ -3630,18 +3942,22 @@ async def build_document(
                 "code": "not_approved",
             },
         )
-    _check_delivery_agent(workspace, document, body.delivery_agent)
     payload = _read_payload(workspace, document.path)
-    build, created_job = await _build(session, project_id, document, payload, body.delivery_agent)
+    settings = await _build_settings(session, project_id, document, payload, body)
+    _check_delivery_agent(workspace, document, body.delivery_agent, body.driver)
+    await _refuse_a_second_build(session, document)
+    build, started = await _build(
+        session, project_id, document, payload, body.delivery_agent, settings
+    )
     defer_broadcast(
         session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    if created_job is not None:
+    if started.job is not None:
         defer_broadcast(
-            session, project_id, "job_created", {"id": created_job.id, "name": created_job.name}
+            session, project_id, "job_created", {"id": started.job.id, "name": started.job.name}
         )
     await session.commit()
-    await _finish_build(session, project_id, created_job)
+    await _finish_build(session, project_id, started)
     return {**await _project_document_view(session, project_id, document), "build_outcome": build}
 
 
@@ -3666,7 +3982,18 @@ async def approve_and_build(
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
     _require_loaded_version(workspace, document, body.content_version)
-    _check_delivery_agent(workspace, document, body.delivery_agent)
+    _check_delivery_agent(workspace, document, body.delivery_agent, body.driver)
+    # A reopened document re-approved while its build still runs: approval lays the new tasks out
+    # and they join that build and its flow (`spec_tasks`), so nothing second is started -- the
+    # response names the running build instead (one build per document at a time, FR-1).
+    running = await builds.running_build(session, document.id)
+    settings = (
+        await _build_settings(
+            session, project_id, document, _read_payload(workspace, document.path), body
+        )
+        if running is None
+        else None
+    )
 
     moved = await _move_phase(
         session,
@@ -3677,7 +4004,7 @@ async def approve_and_build(
         reason=body.reason,
         approve_anyway=body.approve_anyway,
     )
-    created_job: Optional[AIJob] = None
+    started = _Started()
     offer = (moved.report or {}).get("already_built")
     if offer is not None:
         build: Dict[str, Any] = {
@@ -3690,18 +4017,22 @@ async def approve_and_build(
             "delivery_agent": body.delivery_agent,
             "reviewer": None,
         }
+    elif running is not None:
+        build, started = await _joined_build(
+            session, project_id, document, moved.payload, body, running
+        )
     else:
-        build, created_job = await _build(
-            session, project_id, document, moved.payload, body.delivery_agent
+        build, started = await _build(
+            session, project_id, document, moved.payload, body.delivery_agent, settings
         )
     await spec_service.rerender_phase(session, workspace, document)
     _defer_phase_broadcasts(session, project_id, document, moved)
-    if created_job is not None:
+    if started.job is not None:
         defer_broadcast(
-            session, project_id, "job_created", {"id": created_job.id, "name": created_job.name}
+            session, project_id, "job_created", {"id": started.job.id, "name": started.job.name}
         )
     await session.commit()
-    await _finish_build(session, project_id, created_job)
+    await _finish_build(session, project_id, started)
 
     response = await _phase_response(session, project_id, document, moved)
     response["build_outcome"] = build
@@ -3710,6 +4041,100 @@ async def approve_and_build(
             session, project_id, workspace, document, moved.payload, _operator()
         )
     return response
+
+
+class BuildUpdate(RequestModel):
+    """Raise a build's cap or move its window (slice D, FR-10): a build these stopped resumes."""
+
+    budget_cap_usd: Optional[float] = Field(default=None, gt=0, le=100_000)
+    window_start: Optional[datetime] = None
+    window_end: Optional[datetime] = None
+
+
+async def _project_build(session: AsyncSession, project_id: str, build_id: str):
+    from ...db.models import Build
+
+    build = await session.get(Build, build_id)
+    if build is None or build.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "no_build", "message": f"there is no build {build_id!r} here"},
+        )
+    return build
+
+
+async def _after_build_change(session: AsyncSession, project_id: str, build, job) -> Dict:
+    """Commit, tell the app, hand a resumed job back to (or take a paused one out of) the live
+    scheduler, and answer with the build as it now reads."""
+    view = await builds.view(session, build)
+    defer_broadcast(session, project_id, "build_updated", {"id": build.id, "state": build.state})
+    await session.commit()
+    if job is not None:
+        await _hand_job_to_scheduler(session, job.id, job)
+    return view
+
+
+@router.patch("/builds/{build_id}")
+async def update_build(
+    build_id: str,
+    body: BuildUpdate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Raise a build's cap, or move its window. A build stopped by its cap or its window resumes
+    when the change lets it hand out work again; one the operator stopped stays stopped."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    if body.budget_cap_usd is not None:
+        build.budget_cap_usd_micros = builds.micros_of(body.budget_cap_usd)
+    if body.window_start is not None:
+        build.window_start = _aware(body.window_start)
+    if body.window_end is not None:
+        build.window_end = _aware(body.window_end)
+    start, end = _aware(build.window_start), _aware(build.window_end)
+    if start is not None and end is not None and end <= start:
+        raise _unprocessable("window_inverted", "the build's window ends before it starts")
+    job = None
+    if build.state == builds.STOPPED and build.stop_reason != builds.STOPPED_BY_OPERATOR:
+        verdict = await builds.may_hand_out(session, build)
+        if verdict.stop_reason is None:
+            other = await builds.running_build(session, build.document_id)
+            if other is not None and other.id != build.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "build_running",
+                        "message": f"build {other.id} of this document is running",
+                        "build_id": other.id,
+                    },
+                )
+            job = await builds.resume(session, build)
+    return await _after_build_change(session, project_id, build, job)
+
+
+@router.post("/builds/{build_id}/stop")
+async def stop_build(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator stops a running build: nothing new is handed out, running turns finish."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    if build.state != builds.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "not_running", "message": f"build {build.id} is {build.state}"},
+        )
+    job = await builds.stop(session, build, builds.STOPPED_BY_OPERATOR)
+    view = await _after_build_change(session, project_id, build, None)
+    if job is not None:
+        from ...scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        if scheduler is not None:
+            await scheduler.remove_job(job.id)
+    return view
 
 
 class _FlowWouldBeEmptyError(Exception):
@@ -3798,12 +4223,19 @@ async def _build_flow(
     document,
     payload: Optional[Dict[str, Any]],
     delivery_agent: Optional[str],
+    *,
+    settings: Optional[builds.Settings] = None,
 ) -> Tuple[Dict[str, Any], Optional[AIJob]]:
     """Create the flow a change document's delivery asks for, or say why none was (design D6).
 
     Returns the report's `flow` entry and the job, when one was created. Everything read after a
     savepoint rolled back is a plain value captured before it: rolling back expires what was
     touched inside, and reading that raises `MissingGreenlet` (measured, R2).
+
+    *settings* is the build this flow serves (slice D): a flow or lead driver the operator chose
+    has a flow even where the delivery declares none (stopping when its queue empties), its job's
+    agent is the lead, else the operator's `delivery_agent`, else the first builder, else the
+    delivery's agent.
     """
     if document.kind != "change-spec":
         return {
@@ -3812,6 +4244,8 @@ async def _build_flow(
         }, None
 
     delivery = _delivery_of(payload)
+    if settings is not None and (delivery is None or delivery.mode != "flow"):
+        delivery = spec_payload_module.Delivery(mode="flow", stop_when_queue_empties=True)
     existing = await _existing_flow_entry(session, project_id, document, delivery, delivery_agent)
     if existing is not None:
         return existing, None
@@ -3836,6 +4270,10 @@ async def _build_flow(
         return _not_created("You chose no flow for this build."), None
 
     agent = delivery_agent if delivery_agent is not None else delivery.agent
+    if settings is not None and settings.driver == builds.DRIVER_LEAD:
+        agent = settings.lead
+    elif settings is not None and delivery_agent is None and settings.builders:
+        agent = settings.builders[0]
     if not agent:
         return _not_created("The delivery names no agent, so no flow was started."), None
     agent_state = await delivery_agent_state(session, project_id, agent)
@@ -3870,7 +4308,11 @@ async def _build_flow(
             request = JobCreate(
                 name=title[:256],
                 agent=agent,
-                message=f'Work the next task of "{title}".',
+                message=(
+                    f'Lead the build of "{title}": hand its tasks out with hand_out_task.'
+                    if settings is not None and settings.driver == builds.DRIVER_LEAD
+                    else f'Work the next task of "{title}".'
+                ),
                 cron=delivery.cron,
                 purpose="",
                 stop_at=stop_at,

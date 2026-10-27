@@ -810,6 +810,16 @@ class Task(Base):
     workspace_scheme: Mapped[str] = mapped_column(
         String(16), default="task", server_default="task", nullable=False
     )
+    # --- Built by a build (`a-build-has-a-driver-a-level-and-its-people`, migration 0152) ---
+    # Which build covers this task, and the level it is built at (`builds.LEVELS`), written when
+    # the build starts or when the task joins a running one. Both null for a task outside any
+    # build, which is governed by its document's rigor exactly as before. Not a ForeignKey, for the
+    # SQLite column-drop reason `loop_id` above gives.
+    build_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    level: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # The agent the document (or the operator, in the Build dialog) named to build this task. Kept
+    # when it names no open agent, so the operator sees what was asked for (F1046).
+    builder: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
@@ -914,6 +924,9 @@ class TaskTransition(Base):
     # and its commits here (`every-task-can-always-be-moved-on` FR-6, migration 0147). Null on every
     # other move.
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The build level that governed this move (`builds.LEVELS`), on every move of a task in a
+    # build; null for a task outside any build (migration 0152).
+    level: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     # No CHECK on `origin`, matching `actor_kind` beside it, which has none either. Two reasons,
@@ -3215,4 +3228,54 @@ class TaskCheckRun(Base):
             name="ck_task_check_runs_state",
         ),
         Index("ix_task_check_runs_task", "task_id", "started_at"),
+    )
+
+
+class Build(Base):
+    """One build of an approved document: how it is built, by whom, within what
+    (`a-build-has-a-driver-a-level-and-its-people`, migration 0152).
+
+    The operator's choice when they press Build, recorded so it can be read back, and so the flow,
+    the lead and the mover decision can ask it. One *running* build per document (the partial index
+    below, the precedent `ux_loops_spec_document_live`); a stopped or finished one stays as the
+    record of how the document was built.
+
+    `driver` is who hands out the work: `flow` (the Hub's flow, `loop_id`), `lead` (a lead agent
+    briefed by `loop_id`'s firing) or `hand` (nobody; no loop). `level` is the gate level its tasks
+    are governed at (`builds.LEVELS`). Empty `builders`/`reviewers` mean any free agent, as before.
+    """
+
+    __tablename__ = "builds"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    # Not a ForeignKey, for the SQLite column-drop reason `Task.spec_document_id` gives.
+    document_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(16), default="running", nullable=False)
+    driver: Mapped[str] = mapped_column(String(16), nullable=False)
+    level: Mapped[str] = mapped_column(String(16), nullable=False)
+    builders: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    reviewers: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    lead: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # API-equivalent US dollars, in micros (the unit `turn_usage` records). Null: no cap.
+    budget_cap_usd_micros: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    window_start: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    window_end: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    landing: Mapped[str] = mapped_column(String(16), default="main", nullable=False)
+    loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # The lead's build conversation, where its briefs are queued (driver `lead`).
+    lead_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    stop_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    stopped_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        Index("ix_builds_project", "project_id", "created_at"),
+        Index(
+            "ux_builds_document_running",
+            "document_id",
+            unique=True,
+            sqlite_where=text("state = 'running'"),
+            postgresql_where=text("state = 'running'"),
+        ),
     )

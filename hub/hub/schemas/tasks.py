@@ -401,6 +401,11 @@ class TaskResponse(BaseModel):
     # write worked; only the reply denied it, and a caller had no way to confirm from the create
     # call that the task had joined the loop.
     loop_id: Optional[str] = Field(default=None, max_length=64)
+    # The build that covers this task and the level it is built at, and the builder it was
+    # declared with (`a-build-has-a-driver-a-level-and-its-people`). All null outside a build.
+    build_id: Optional[str] = Field(default=None, max_length=64)
+    level: Optional[str] = Field(default=None, max_length=16)
+    builder: Optional[str] = Field(default=None, max_length=64)
     # The most recent attempt to integrate this task's approved work, or null where none has ever
     # been made (every non-`approved` task, and one whose approval predates this field existing on
     # older rows the migration never touched). The full history stays at

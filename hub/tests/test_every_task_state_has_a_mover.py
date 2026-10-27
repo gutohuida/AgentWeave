@@ -10,6 +10,7 @@ rather than agreeing with a new function that does not exist there.
 """
 
 import itertools
+from typing import Optional
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from fastapi import HTTPException
 from hub.api.v1.agent_trigger import review_dispatch_refusal
 from hub.api.v1.tasks import update_task_for_actor
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, RequirementEvidence, SpecRequirement, Task
+from hub.db.models import Agent, Build, RequirementEvidence, SpecRequirement, Task
 from hub.schemas.tasks import TaskUpdate
 from hub.task_transition_service import TransitionRefusedError, apply_transition
 from hub.task_transitions import BAND_TERMINAL, STATUS_BANDS, TRANSITIONS, run_actor
@@ -30,15 +31,22 @@ pytestmark = pytest.mark.asyncio
 AUTHOR = "mv-author"
 OTHER = "mv-other"
 MENDER = "mender"
+#: A build's lead (`a-build-has-a-driver-a-level-and-its-people`, FR-12): a holder, and a mover.
+LEAD = "mv-lead"
 RESET = "/api/v1/agent-actions/mender/tasks/{}/reset"
 
 NON_TERMINAL = sorted(s for s, band in STATUS_BANDS.items() if band != BAND_TERMINAL)
 HOLDERS = ("none", "author", "other", "mender")
+#: The build levels, and no build at all (slice D): a level is an input to the one decision and
+#: must add no dead end.
+LEVELS = (None, "fast", "reviewed", "gated")
 _ids = itertools.count(1)
+_HOLDER_AGENT = {"none": None, "author": AUTHOR, "other": OTHER, "mender": MENDER, "lead": LEAD}
 
 
-async def _task(status: str, holder: str) -> str:
-    """A task in *status* whose author is AUTHOR, held as *holder* says.
+async def _task(status: str, holder: str, level: Optional[str] = None) -> str:
+    """A task in *status* whose author is AUTHOR, held as *holder* says, in a build at *level*
+    led by LEAD (none when *level* is None).
 
     Completed through the machine so the author is on the record; the mender holder is the case
     the 2026-10-25 retrospective measured -- the mender re-recorded evidence and so became an author.
@@ -49,11 +57,28 @@ async def _task(status: str, holder: str) -> str:
         task = Task(
             id=task_id, project_id="proj-test", title=task_id, status="in_progress", assignee=None
         )
+        if level is not None:
+            build_id = f"build-mv-{n}"
+            session.add(
+                Build(
+                    id=build_id,
+                    project_id="proj-test",
+                    document_id=f"doc-mv-build-{n}",
+                    state="running",
+                    driver="lead",
+                    level=level,
+                    builders=[],
+                    reviewers=[],
+                    lead=LEAD,
+                    landing="main",
+                )
+            )
+            task.build_id, task.level = build_id, level
         session.add(task)
         await session.flush()
         await apply_transition(session, task, "completed", run_actor(f"run-mv-{n}", AUTHOR))
         task.status = status
-        task.assignee = {"none": None, "author": AUTHOR, "other": OTHER, "mender": MENDER}[holder]
+        task.assignee = _HOLDER_AGENT[holder]
         if holder == "mender":
             session.add(
                 SpecRequirement(
@@ -82,9 +107,9 @@ async def _task(status: str, holder: str) -> str:
     return task_id
 
 
-async def _agents() -> None:
+async def _agents(lead: bool = False) -> None:
     async with async_session_factory() as session:
-        for name in (AUTHOR, OTHER):
+        for name in (AUTHOR, OTHER, *([LEAD] if lead else [])):
             session.add(Agent(id=f"ag-{name}", project_id="proj-test", name=name))
         await session.commit()
 
@@ -115,28 +140,53 @@ def _detail(refusal) -> str:
 # --------------------------------------------------------------------------------------
 
 
-async def test_every_unfinished_status_and_holder_has_a_mover(app):
-    """Each non-terminal status, held each way: some agent can move it to some other status.
+@pytest.mark.parametrize("level", LEVELS)
+async def test_every_unfinished_status_and_holder_has_a_mover(app, level):
+    """Each non-terminal status, held each way: some agent can move it to some other status --
+    at every build level and outside any build, with a build's lead among the holders and the
+    movers (slice D, FR-12).
 
     `blocked` is exempt by design (its mover is the operator). `approved` is left out of the
     targets because approving runs the merge gates, which this question is not about; the
     verdict half of a review is `revision_needed`, reached under the same author rule.
     """
-    await _agents()
+    await _agents(lead=level is not None)
+    holders = HOLDERS if level is None else (*HOLDERS, "lead")
+    movers = (AUTHOR, OTHER, MENDER) if level is None else (AUTHOR, OTHER, MENDER, LEAD)
     stuck = []
-    for status, holder in itertools.product(NON_TERMINAL, HOLDERS):
+    for status, holder in itertools.product(NON_TERMINAL, holders):
         if status == "blocked":
             continue
         targets = [t for t in TRANSITIONS[status] if t not in ("approved", "blocked")]
         moved = None
-        for agent, target in itertools.product((AUTHOR, OTHER, MENDER), targets):
-            refusal, _ = await _move(await _task(status, holder), target, agent)
+        for agent, target in itertools.product(movers, targets):
+            refusal, _ = await _move(await _task(status, holder, level), target, agent)
             if refusal is None:
                 moved = (agent, target)
                 break
         if moved is None:
             stuck.append(f"{status} held by {holder}")
-    assert not stuck, f"no agent can move: {stuck}"
+    assert not stuck, f"no agent can move at level {level}: {stuck}"
+
+
+@pytest.mark.parametrize("level", ["fast", "reviewed", "gated"])
+async def test_a_completed_task_in_a_build_is_approved_only_where_its_level_says(app, level):
+    """The level's own edge (D4): from `completed`, the builder and the lead approve at Fast and
+    nowhere else; another agent never does, and review stays open to it at every level."""
+    from hub.task_transition_service import decide_move
+
+    await _agents(lead=True)
+    task_id = await _task("completed", "author", level)
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        for agent in (AUTHOR, LEAD):
+            verdict = await decide_move(session, task, "approved", run_actor("run-lv", agent))
+            assert verdict.allowed == (level == "fast"), (agent, level, verdict.reason)
+            if not verdict.allowed:
+                assert level in (verdict.reason or ""), verdict.reason
+        assert not (await decide_move(session, task, "approved", run_actor("run-o", OTHER))).allowed
+    refusal, _ = await _move(task_id, "under_review", OTHER)
+    assert refusal is None, _detail(refusal)
 
 
 # --------------------------------------------------------------------------------------

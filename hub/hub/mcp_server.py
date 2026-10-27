@@ -476,6 +476,21 @@ def update_task(
     return _hub_request("PATCH", f"/tasks/{task_id}", body)
 
 
+@_tool()
+def hand_out_task(task_id: str, agent: str, review: bool = False) -> Dict[str, Any]:
+    """A build's lead only: hand one of its tasks to an agent, and start that agent's turn on it.
+
+    Answered only for the lead of the task's running lead-driven build; any other caller gets 403.
+
+    Args:
+        task_id: The task, from your brief.
+        agent: One of the build's builders (to build it), or of its reviewer pool (to review it);
+            any open agent where the build names none.
+        review: True to hand completed work to `agent` for review rather than to build.
+    """
+    return _hub_request("POST", f"/tasks/{task_id}/hand-out", {"agent": agent, "review": review})
+
+
 # The mender's tools (`a-stalled-project-wakes-a-doctor-that-unblocks-it`). Served to every run,
 # answered only for the Hub's own `mender` agent: any other caller gets 403.
 
