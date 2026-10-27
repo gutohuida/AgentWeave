@@ -169,8 +169,13 @@ async def record(
     command: Optional[str] = None,
     output: Optional[str] = None,
     covers: Optional[str] = None,
+    awaiting: bool = False,
 ) -> RequirementEvidence:
     """Store one piece of evidence against the requirement's *current* digest.
+
+    *awaiting* lands an operator's piece `awaiting` like an agent's, for a claim the operator wants
+    judged rather than an observation of their own: closing tasks as already built (`already_built`)
+    records that the work is on the main branch, and somebody checks it.
 
     *command*, *output* and *covers* are what it takes to judge the piece (vis-D5): the output is
     kept as its tail (`output_tail`), and *covers* is `full`, `partial` or absent (`check_covers`).
@@ -319,7 +324,7 @@ async def record(
         actor=actor.name or "",
         run_id=actor.run_id,
         task_id=task_id,
-        review_state=ACCEPTED if actor.kind == "operator" else AWAITING,
+        review_state=ACCEPTED if actor.kind == "operator" and not awaiting else AWAITING,
         command=command,
         output=output,
         covers=covers,
@@ -327,7 +332,7 @@ async def record(
     session.add(evidence)
     await session.flush()
 
-    if actor.kind == "operator":
+    if evidence.review_state == ACCEPTED:
         session.add(
             EvidenceReview(
                 id=f"evr-{short_id()}",

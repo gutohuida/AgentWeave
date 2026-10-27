@@ -8,6 +8,7 @@ import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDi
 import { RetireCapabilityDialog } from '@/components/spec/RetireCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
 import { ReconcileSummary } from '@/components/spec/ReconcileSummary'
+import { CloseAlreadyBuilt } from '@/components/spec/CloseAlreadyBuilt'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
@@ -565,6 +566,11 @@ export function useSpecPhaseControls(
           approved. Its full form, and the ask, are in the fold dialog. */}
       {document.phase === 'approved' && (
         <ReconcileSummary path={document.path} result={foldState?.reconcile} compact />
+      )}
+      {/* every-task-can-always-be-moved-on FR-5: an approved change whose work already shipped
+          closes its open tasks in one step, checked through its evidence rather than rebuilt. */}
+      {document.kind === 'change-spec' && document.phase === 'approved' && (
+        <CloseAlreadyBuilt path={document.path} documentId={document.id} />
       )}
       {foldState?.state === 'folded' && (
         <p className="aw-spec-message" data-testid="fold-state" data-state="folded">

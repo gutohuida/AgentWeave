@@ -27,6 +27,7 @@ from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    already_built,
     blocking,
     deletion,
     loop_history,
@@ -996,6 +997,49 @@ async def ask_reconcile(
     )
 
 
+class AlreadyBuiltClose(RequestModel):
+    """The commit or commits on the main branch that already hold a document's work."""
+
+    commits: List[str] = Field(min_length=1, max_length=already_built.MAX_COMMITS)
+
+
+@router.post("/documents/{path:path}/close-already-built")
+async def close_already_built(
+    path: str,
+    body: AlreadyBuiltClose,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Close every open task of an approved change as already built, against *commits*
+    (`every-task-can-always-be-moved-on` FR-5, FR-6).
+
+    Each open task moves to `under_review`, held by nobody, its history naming this action and the
+    commits; no run starts. Each requirement each task serves gets a piece of evidence pointing at
+    the commits, `awaiting` a decision; a task is approved once its pieces are accepted
+    (`already_built.approve_what_was_waiting_for_this_evidence`). 409 `not_approved`,
+    `no_main_branch`, `nothing_open`, `turn_running`, `move_refused`; 422 `no_commits`,
+    `commit_not_on_main`. Nothing changes on a refusal.
+    """
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    workspace = await _workspace(session, project_id)
+    try:
+        result = await already_built.close(session, document, body.commits, workspace=workspace)
+    except already_built.AlreadyBuiltRefused as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"message": str(exc), "code": exc.code, **exc.detail},
+        ) from exc
+    await session.commit()
+    for task in result["tasks"]:
+        await sse_manager.broadcast(
+            project_id, "task_updated", {"id": task["id"], "status": task["status"]}
+        )
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
+    return result
+
+
 class DefectRecord(RequestModel):
     """A defect the operator records against a change, and the step that caught it."""
 
@@ -1879,6 +1923,15 @@ async def _operator_decides(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, task_transitions.operator()
     )
+    # A task closed as already built is approved once its last piece is accepted (FR-6).
+    approved = await already_built.approve_what_was_waiting_for_this_evidence(
+        session, evidence_id, "the operator"
+    )
+    if approved is not None:
+        view["approved_task"] = approved
+        await sse_manager.broadcast(
+            project_id, "task_updated", {"id": approved, "status": "approved"}
+        )
     await run_divergence.release_held_review(session, held_review)
     # vis-D1: the operator left the evidence gate and kept the last word. Rejecting a piece whose
     # task an agent's verdict approved reopens that task (`operator-overturns`).

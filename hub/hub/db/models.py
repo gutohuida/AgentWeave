@@ -902,6 +902,11 @@ class TaskTransition(Base):
     # Why the operator approved over failing checks (`approval-runs-the-projects-checks` D7). Null
     # on every transition that overrode nothing; only the operator can set it.
     override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Which operator action made this move and against what, where one action makes moves the
+    # operator did not make one by one: closing a document's tasks as already built names itself
+    # and its commits here (`every-task-can-always-be-moved-on` FR-6, migration 0147). Null on every
+    # other move.
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     # No CHECK on `origin`, matching `actor_kind` beside it, which has none either. Two reasons,

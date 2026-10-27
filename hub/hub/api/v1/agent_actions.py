@@ -1808,6 +1808,18 @@ async def decide_evidence(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, run_actor(actor.run_id, actor.agent)
     )
+    # A task closed as already built is approved once its last piece is accepted, whoever decided
+    # it (`every-task-can-always-be-moved-on` FR-6).
+    from ... import already_built
+
+    approved = await already_built.approve_what_was_waiting_for_this_evidence(
+        session, announced["evidence"], actor.agent
+    )
+    if approved is not None:
+        answer["approved_task"] = approved
+        await sse_manager.broadcast(
+            actor.project_id, "task_updated", {"id": approved, "status": "approved"}
+        )
     await run_divergence.release_held_review(session, held_review)
     # After the integration, and from the values read before it: the operator's screen shows this
     # piece, and an agent's decision moved it exactly as the operator's own would.

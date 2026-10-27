@@ -2077,6 +2077,8 @@ def _transition_view(
         "policy_digest": row.policy_digest,
         # Why the operator approved over failing checks (`approval-runs-the-projects-checks`).
         "override_reason": row.override_reason,
+        # The operator action behind a move it made, and its commits (closing as already built).
+        "note": row.note,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
