@@ -1,0 +1,440 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the project settings route",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_settings.py -v",
+      "key": "fast-flag-validated",
+      "requirement": "fast-flag",
+      "then": "the first is refused with 422 naming the 120-second limit; the second reads back with fast true; the third reads back with fast false",
+      "when": "the operator saves a check with fast true and timeout_seconds 300, then one with fast true and 60, then one without fast"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose checks are configured as [slow, fast] in that order, in a real git fixture",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "fast-checks-run-first",
+      "requirement": "fast-flag",
+      "then": "the fast check's result is the run's first result and the slow check's the second",
+      "when": "a task's check run executes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task outside any flow, in_progress and held by a builder run, whose committed work contains a line the project's fast check rejects (a real git fixture, a real check subprocess)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v (run on master first: fails; then on the branch: passes; paste both)",
+      "key": "completion-refused-on-master-red",
+      "requirement": "completion-runs-fast-checks",
+      "then": "the response is 409 and the task is still in_progress; on master the same call returns 200 and the task is completed (the acceptance drive, red first)",
+      "when": "the builder's run calls the agent route PATCH /tasks/{id} with status completed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose review target is its branch tip, and whose checkout holds an uncommitted change the fast check rejects",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "uncommitted-work-is-checked",
+      "requirement": "completion-runs-fast-checks",
+      "then": "the completion is refused, and the task branch's tip now contains the change",
+      "when": "the builder completes it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the refused completion above",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "refusal-quotes-output",
+      "requirement": "completion-refused-with-output",
+      "then": "detail.message names the check, the merged commit and the run id and contains the check's output line; the readable detail is that message",
+      "when": "its body is read, and passed through mcp_server._readable_detail"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fast check that sleeps past the completion budget (patched to 2 s in the test)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "slow-fast-check-does-not-hold",
+      "requirement": "completion-wait-is-bounded",
+      "then": "the completion is recorded within the budget plus 5 s, the run is still running, and when the check later fails the task is returned to the builder",
+      "when": "the builder completes the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the MCP server's restated completion timeout and the Hub's completion budget",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "mcp-timeout-covers-budget",
+      "requirement": "completion-wait-is-bounded",
+      "then": "the MCP timeout for update_task with status completed exceeds the Hub's budget, and every other call keeps 10 s",
+      "when": "they are compared"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fast check that appends a line to a counter file outside the checkout, and a slow check, both passing",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "fast-check-executes-once",
+      "requirement": "one-run",
+      "then": "exactly one check run row exists for the work, it passed, and the counter file holds one line",
+      "when": "the builder completes the task, the builder's run ends, and the check run finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow whose only open task is completed, its builder's turn ended, its check run running",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "review-deferred-while-running",
+      "requirement": "review-waits-for-checks",
+      "then": "no review is queued, the decision lists the task as deferred naming the run, and no Stall row with cause loop_stalled exists; on master the review is queued (red)",
+      "when": "the flow's job fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed flow task whose slow check fails with the task's own failure (confirmed on rerun, passing on main)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "own-failure-returns",
+      "requirement": "failure-returns-to-builder",
+      "then": "the task is revision_needed, held by its builder; its latest transition has origin 'checks' and a note naming the run; its notes contain the check's output; no queue entry names it as review_task_id; on master it stays completed (red)",
+      "when": "the run finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a transition row with actor_kind operator and origin 'checks'",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/taskTransitionHistory.test.tsx",
+      "key": "history-names-the-checks",
+      "requirement": "failure-returns-to-builder",
+      "then": "it reads 'The project's checks moved completed -> revision_needed', not 'You'",
+      "when": "the task's history renders it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed flow task deferred for its running checks, with the job's cron not firing during the test",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "review-queued-on-pass",
+      "requirement": "review-starts-promptly",
+      "then": "a review queue entry for the task exists once flow_advance.settled() returns, with no cron tick",
+      "when": "the run passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a trial Hub (:8010) started from the branch, a two-task flow with Haiku builder and reviewer, ruff and black fast, hub-tests slow",
+      "how_to_check": "Drive on :8010; read task_check_runs.ended_at and task_transitions.created_at for the task; paste both",
+      "key": "drive-review-within-a-minute",
+      "requirement": "review-starts-promptly",
+      "then": "its completed -> under_review transition is recorded less than 60 s after its check run's ended_at, read from the trial database",
+      "when": "a task that passes every check is completed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task outside any flow completed by DeveloperA, its check run running",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "outside-flow-review-refused",
+      "requirement": "same-order-outside-a-flow",
+      "then": "both are refused naming the running checks; after the run passes, QA's call succeeds and QA holds the task",
+      "when": "QA calls update_task(status='under_review'), and the mender calls mend_reset_task(status='under_review', assignee='QA')"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task outside any flow, completed, whose check run fails with its own failure",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "outside-flow-return",
+      "requirement": "same-order-outside-a-flow",
+      "then": "the task is revision_needed held by its builder, as in a flow",
+      "when": "the run finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial :8010 project configured with hub-ui (paths hub/ui/) after black and before hub-tests",
+      "how_to_check": "Drive on :8010; read both runs' results from GET /api/v1/tasks/{id}/checks; paste the hub-ui entries",
+      "key": "ui-regression-fails",
+      "requirement": "ui-check",
+      "then": "the first task's run fails at hub-ui with the vitest failure in its output and the task returns to its builder; the second task's run records hub-ui as skipped",
+      "when": "one task commits a change under hub/ui/src that breaks one vitest test, and another commits a change only under hub/hub"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator's :8000 Hub after its database is backed up (sqlite backup in mode=ro, .claude/reference/hubs.md) and its project checks are saved through the app",
+      "how_to_check": "py -3.11 sqlite3 read of projects.checks with ?mode=ro; paste the JSON",
+      "key": "operator-hub-configured",
+      "requirement": "ui-check",
+      "then": "ruff and black have fast true, and hub-ui is present with paths ['hub/ui/'], ordered after black and before hub-tests",
+      "when": "projects.checks for proj-d85a82bf4216 is read in mode=ro"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the MCP server's update_task tool",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "tool-says-so",
+      "requirement": "builders-know",
+      "then": "it says that completing runs the fast checks, may take up to two minutes, and is refused with their output when one fails",
+      "when": "its description is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "d212e5cd0d57fb0094861a7acbb5da5e0fd328793c5c004f408e57a3e825a618",
+      "FR-10": "5c9a2cb8ba0cb5a9e27f37bb02c137ea54a3f33695f71044b3734a33da8a6e0a",
+      "FR-11": "1fff07c6c78f959a4357c14886ff0dab68ea3d54568431a1e504aefa7af14783",
+      "FR-2": "92fc9c7b06e33f81d4be07105a83adb681db619f3bc6bb0614a847e0c43a8986",
+      "FR-3": "14a1579b144585c567466b0605cc8479b986b6e0328b7075e9681b79b51fba0e",
+      "FR-4": "8346a8e65f930cdca72e13a8d382fa8ce516add0160baf4e36fb06ded81bf089",
+      "FR-5": "5815c2e26017ebf8185651bc81c5b7c34e6c870e3dd17a6e1995d639cbbe76ff",
+      "FR-6": "05fbf5fac6ed0ad6f7a37c1a710db624e6f1cf9a3927d4dbb2235453bdfb8c06",
+      "FR-7": "d00ff6a31b352ed90f919714b9647e085751691332a5368a750378cac94413e2",
+      "FR-8": "dc31e35c92d05b8889035f106e631b9a0523821b271d816527cc2ab7a150338b",
+      "FR-9": "324b02a56bc1c1a5204ed303818bf4cdc682c0f80a2a9dd0bc4a11d04ee0a48b"
+    },
+    "high_water": 11,
+    "requirements": {
+      "builders-know": "FR-11",
+      "completion-refused-with-output": "FR-3",
+      "completion-runs-fast-checks": "FR-2",
+      "completion-wait-is-bounded": "FR-4",
+      "failure-returns-to-builder": "FR-7",
+      "fast-flag": "FR-1",
+      "one-run": "FR-5",
+      "review-starts-promptly": "FR-8",
+      "review-waits-for-checks": "FR-6",
+      "same-order-outside-a-flow": "FR-9",
+      "ui-check": "FR-10"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1 Fast is a per-check flag. ProjectCheck (api/v1/projects.py:85-120) gains `fast: bool = False`, normalised by configured_checks (project_checks.py:93-108). A fast check's timeout_seconds must be at most 120. `fast` stays out of check_digest (project_checks.py:427-433): it changes when a check runs, not its result, so existing passes stay reusable. A run executes its fast checks first, then the rest, each group in configured order. Rejected: naming ruff/black in code (the checks are the operator's configuration); a separate 'completion commands' field (a second list of checks).\n\nD2 One run, fast prefix first. A completion starts the task's check run (request_run with the targets passed explicitly, the F680 pattern at project_checks.py:914-919, since the completing transaction has not committed) and awaits the run's fast prefix. Fast checks run before the run takes the semaphore (project_checks.py:1063, MAX_CONCURRENT_RUNS=2 at :59); the slow checks then queue for it. Otherwise a completion would wait behind two 8-16 min suites. A fast result is a result of that run, so nothing executes twice, and the turn-end request (project_checks.py:1313-1321) finds the run in flight (is_running, :921) and starts none. Rejected: running ruff in the builder's own checkout, which checks a different tree than the reviewer gets and cannot be reused.\n\nD3 What is checked. The commit task_integration.review_target resolves (task_integration.py:627-661), merged onto main. That is the evidence commit where evidence governs, else the branch tip: the same commit the full run uses (project_checks.py:945-950) and the reviewer gets. First the Hub commits the builder's uncommitted work in its task checkout with worktrees.snapshot_worktree (worktrees.py:1400-1464), as a turn's end does, so a branch-tip task is checked with its work. If there is no target, there is no gate, and the flow's existing 'no commit to review' sentence applies (scheduler.py:2586-2598).\n\nD4 Where the wait sits. In update_task_for_actor (api/v1/tasks.py:1585), the one route through which an agent completes (agent_actions.py:358-371; grep: no other path applies 'completed' for a run). It runs after the move is allowed and before apply_transition stages anything. For a run actor nothing has been staged by then (operator-only fields are refused at tasks.py:1631-1648 and notes are written at :1814), so the wait never holds SQLite's write lock. It is not in decide_move, which answers who may move (task_transition_service.py:467-478, 'Reads only'), nor inside apply_transition, which stages and is called inside other transactions. The refusal is a TransitionRefusedError subclass (409) whose refusal object's to_dict carries `message` (main.py:746-756; the MCP adapter returns detail.message, mcp_server.py:204-207), plus each failing check's name, exit code, output_tail and failure_excerpt, the merged commit and the run id.\n\nD5 The budget is 120 s, and then the completion is recorded anyway (warn, don't gate). Measured: chk-663862d5a7d6 went from creation to a recorded ruff failure in 12.5 s, including building the merged commit and the checkout. Under load a checkout has run past 60 s (F516, project_checks.py:63-65). The MCP client gives every Hub call 10 s (mcp_server.py:247), so update_task with status 'completed' gets 150 s, a constant restated in mcp_server.py with a test that it exceeds the Hub's budget (.claude/rules/mcp-server.md). A fast failure found after the budget returns the task through D7.\n\nD6 Review waits for the run. decide_firing's review arm reads project_checks.view (project_checks.py:798-837) after the still-running deferral (scheduler.py:2561-2570):\n- running, missing, stale or interrupted: the task is deferred with 'its checks have run Xm (the previous run took Ym)', and a run is requested for missing, stale or interrupted.\n- passed, or decided with no failure of the task's own (own_failure, :719-721): staffed as today.\n- error (the Hub could not produce a result): staffed, and the reviewer is told so as today (review_turn.py:568-572).\n- an own failure: not staffed, and D7 runs as the backstop.\nA firing whose open work is only waiting on checks is not a stall. Today a deferral with nothing else claimable falls to _stall_reason_from_walk (scheduler.py:2685-2689) and raises loop_stalled (:4403-4410), which is the F1049 mechanism, and this wait stretches it from seconds to the suite's 8-16 min. When a run passes, _announce_finished (project_checks.py:854-871) asks for the flow's firing (flow_advance.request), so the review is queued within the 3 s debounce (flow_advance.py:41) and not at the */5 tick.\n\nD7 A failure returns the task. When a run decides 'failed' with the task's own failure (_finish, project_checks.py:840-851), the task is still 'completed', and the run's targets are its current review target, the Hub applies revision_needed as operator() with a new origin 'checks' and a note naming the run. completed -> revision_needed is the operator's edge (task_transitions.py:134-141), and the operator configured the checks, just as a job acts as the operator (task_transition_service.py:778-781). The new origin needs no migration: task_transitions.origin has no CHECK (db/models.py:912-917). The holder becomes the builder (apply_transition, task_transition_service.py:949-950); the notes get the failing checks, the commit and the output; queued review entries are withdrawn as a verdict withdraws them (tasks.py:1802-1805). In a flow the move asks for the firing (task_transition_service.py:977-980), which re-staffs the builder. A task already under_review keeps its reviewer, briefed with the failure as today (review_turn.py:560-567). The app's history must say 'The project's checks': TaskTransitionHistory.tsx:44-52 would otherwise read 'You'.\n\nD8 Outside a flow. The completion gate and the return do not depend on a loop. An agent taking completed work into review (slice B) is refused by a work-state gate in apply_transition, beside the dependency gate, for run actors on completed -> under_review, while the run is undecided or failed with the task's own failure. The refusal states the run's state; this is where B's decision 'carries' checks, without moving into decide_move. The mender's hand-off (_hand_to_review, api/v1/mender.py:268) refuses the same way. The operator's own review dispatch (agent_trigger.py:1311-1423) is not gated; its reviewer is briefed as today.\n\nD9 UI check: name hub-ui, paths ['hub/ui/'], timeout 900, not fast. Command: cd hub/ui && npm ci --no-audit --no-fund --prefer-offline && npm run lint && npx tsc --noEmit && npx vitest run. These are CI's ui-test steps (.github/workflows/ci.yml:207-233; hub/ui/package.json scripts lint and test). It installs its own dependencies because a check checkout has no hub/ui/node_modules. The Hub links only top-level node_modules, .venv and venv (worktrees.py:65, :311-340), and linking the main checkout's is unsafe until slice A ships: git worktree remove follows a junction (F1038, DEAD-ENDS.md:2593), and check checkouts are removed with --force --force (project_checks.py:245-260). The main checkout's hub/ui/node_modules was empty on 2026-10-27 (ls: 0 entries). It is ordered after black and before hub-tests. cd hub/ui works under cmd (ran). UI lint is not fast because it needs npm ci first (about a minute, DEAD-ENDS.md:2495).\n\nD10 Measured trade-off. Replaying the night: the three wasted reviews (52 min of Opus) go, and the send-backs reach the builder 1.5-8 min sooner. Each clean review starts after the suite instead of beside it, 8-9 min later (chk-53e84b138339, -84ff31ec756e, -e3b0b5bef00c, -81316cd6ec76), and T1's third review 17 min later (its run's only failure was main's). The slice intent chooses this order; slice H measures it.\n\nD11 Hand-overs.\n- M: a failure that is not the task's own (pre-existing, project_checks.py:713-716, or flaky) neither refuses the completion nor returns the task; the review proceeds. M owns what approval then does, the reviewer's brief for it (review_turn.py:560-567 still says 'send it back'), and starting a returned task's builder outside a flow.\n- E: L does not change the approval gate (requirement_gate.py:1081-1139) or the refresh when main moves (project_checks.py:1230-1266). E's batch checks gate the merge, and L's per-task run gates review.\n- N: L makes its own wait not a stall; N owns the mender's waking rules in general (F1049's turn-still-running deferral).\n- D: the order holds at every level. At Fast, the builder's or lead's approval is the review that waits.\n- K: the checks' return is a send-back that names no failing piece and gives a reason (K's send-back-without-a-failing-piece).",
+  "evidence": {
+    "checked": [
+      ":8000 database (mode=ro), 2026-10-27: projects.checks for proj-d85a82bf4216 = ruff, black, hub-tests, all with empty paths; 11 task_check_runs since 22:00 with per-check durations (ruff 1.7-3.8 s, black 0.9-6.7 s, hub-tests 482-943 s)",
+      ":8000 task_transitions and runs for task-9ba5ed5d0597, task-8618731d065d and task-cd327515aba1: completion, check run start/end and review dispatch times quoted in problem and D10",
+      "git show --stat b907348 (T1's first snapshot): hub/ui/src/api/tasks.ts and components/overview changed, so a hub/ui/ check would have run",
+      "project_checks.py: configured_checks :93-108, check_digest :427-433, request_run :902-1003 (explicit targets :914-919, review-target fallback :945-950), _execute semaphore :1063 and own-failure break :1102-1107, _finish :840-851, _announce_finished :854-871, after_run :1313-1345, view :798-837",
+      "task_transition_service.py: completion schedules checks only outside a run :1008-1015; decide_move reads only and leaves work-state checks to apply_transition :467-478; ORIGINS :776-782; sent-back holder :949-950",
+      "task_transitions.py:134-141: completed -> revision_needed is operator-only (F832)",
+      "scheduler.py: review arm :2555-2642 reads no checks; deferral-only firing falls to the stall path :2685-2689; loop_stalled raised :4403-4410",
+      "flow_advance.py: HANDOFF_STATUSES :39, DEBOUNCE_SECONDS :41, after_run :70-80",
+      "api/v1/tasks.py update_task_for_actor :1585-1859 (nothing staged for a run actor before apply_transition at :1765); agent_actions.py:358-371 routes agents there",
+      "mcp_server.py:247 urlopen timeout=10; :204-207 returns detail.message; update_task :424-455",
+      "main.py:746-756 TransitionRefusedError handler returns refusal.to_dict()",
+      "db/models.py:886-917: task_transitions.origin String(16), no CHECK",
+      "worktrees.py:65 SHARED_DEPENDENCY_DIRS top-level only; DEAD-ENDS.md:2593 (F1038); ls hub/ui/node_modules in the main checkout: 0 entries on 2026-10-27",
+      ".github/workflows/ci.yml:207-233 ui-test steps; hub/ui/package.json scripts; cmd //c \"cd hub/ui && cd\" resolved the directory",
+      "Validated with hub.spec_payload.validate_payload"
+    ],
+    "limits": [
+      "Each runner CLI's own MCP tool-call timeout was not checked; the :8010 drive shows whether a Claude runner waits through a two-minute completion",
+      "The snapshot at completion runs while the builder's turn is live; a tool call the agent issues in parallel with update_task could race it (not observed)",
+      "npm ci plus vitest inside a check checkout on this machine was not timed; the drive measures it",
+      "Before slice K lands, the checks' return rejects the task's awaiting evidence as any send-back does today",
+      "Every how_to_check names a test or drive that does not exist yet"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2 (hazard): changes the completion and review-dispatch contract every agent meets on the operator's live :8000 Hub, which runs this checkout (the MCP server edit reaches agents at that Hub's next restart), and edits :8000's project checks; no migration (projects.checks is JSON, task_transitions.origin has no CHECK). Rollback: unset fast on every check (completion behaves as today), remove hub-ui, revert the commits and restart.",
+  "open_questions": [
+    {
+      "question": "Which checks are fast: a per-check 'fast' flag set by the operator (ruff and black on :8000), at most 120 s each; decided in D1.",
+      "resolved": true
+    },
+    {
+      "question": "How long a builder waits at completion: at most 120 s, after which the completion is recorded and a later failure returns the task (D5).",
+      "resolved": true
+    },
+    {
+      "question": "What the review dispatch does while checks run: the flow defers the review (not a stall) and queues it within 60 s of a pass; an agent's or the mender's move into review is refused; the operator's own dispatch is not (D6, D8).",
+      "resolved": true
+    },
+    {
+      "question": "The UI check's command and paths: hub-ui, paths hub/ui/, running npm ci, lint, tsc --noEmit and vitest in the check checkout, not fast (D9).",
+      "resolved": true
+    }
+  ],
+  "problem": "On the night of 2026-10-26/27 (slice B's flow on the operator's :8000 Hub, read-only from its database), reviewers were dispatched seconds after each completion and judged work the project's checks were already failing:\n- T2 (task-9ba5ed5d0597) completed 03:40:53; its check run chk-663862d5a7d6 started 03:40:58 and failed ruff (two unused imports) at 03:41:11; the flow moved it to under_review at 03:41:24, 13 s after the failure was recorded, and QA spent 03:41:24-03:46:56 finding the same thing.\n- T1 (task-8618731d065d), second completion 23:53:41: review dispatched 23:53:52; its hub-tests run chk-c542d9b41ea5 failed with the task's own failure at 00:12:17; QA sent it back at 00:13:51 after a 20-minute review. T4 (task-cd327515aba1) completed 04:53:55: review dispatched 04:54:08; run chk-5f31660b4208 failed (own failure) at 05:12:35; QA sent it back at 05:20:30 after 26 minutes. Three reviews, about 52 min of Opus QA and ~$4.4, found what the checks found.\n- The review dispatch never reads the checks: decide_firing's review arm (scheduler.py:2555-2642) asks only whether the builder's turn still runs and whether there is a commit to review. The checks of a task completed inside a turn start at that turn's end (agent_trigger.py:3743-3749, project_checks.py:1313-1345); nothing waits for them before review, and nothing returns a task whose checks failed: completed -> revision_needed is the operator's edge (task_transitions.py:134-141), so only a reviewer's verdict could.\n- The project's checks were ruff, black and hub-tests, none for the UI: T1's first check run (chk-cd85df778d96) passed while its commit b907348 (which changed hub/ui/src/api/tasks.ts and OverviewScreen.tsx) left 24 vitest tests failing; only QA found them.\nThe fast checks took seconds (ruff 1.7-3.8 s, black 0.9-6.7 s across the night's runs); the suite took 8-16 min. A builder could have been told about the unused imports while still in its turn.",
+  "requirements": [
+    {
+      "key": "fast-flag",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Which checks are cheap enough to make a builder wait for is a fact about the project's commands, so it belongs to the operator's configuration, beside paths and timeout. On :8000, ruff and black took 0.9-6.7 s and hub-tests 8-16 min on 2026-10-26/27.",
+      "statement": "Each of a project's checks has a 'fast' setting that the operator sets in the app's project settings and through the project settings route. It defaults to off for every check saved before or without it. A check marked fast with a timeout over 120 seconds is refused with a reason naming the limit. A task's check run executes its fast checks before its other checks."
+    },
+    {
+      "key": "completion-runs-fast-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On 2026-10-27 T2's ruff failure was recorded 18 s after completion; the builder could have fixed it in the same turn instead of after a 5.5-minute review.",
+      "statement": "When an agent moves its task to completed and the project has fast checks that apply to the work, the Hub first commits the agent's uncommitted work in the task's checkout to the task branch. It then runs the fast checks on the commit the task's review would be given, merged onto the main branch, before the completion is recorded."
+    },
+    {
+      "key": "completion-refused-with-output",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent's only feedback on a refusal is that message (main.py:746-756, mcp_server.py:204-207); without the output it re-runs the check itself or guesses.",
+      "statement": "When a fast check fails with a failure of the task's own, the completion is refused (409) and the task stays in_progress, held by its builder. The message the agent's update_task tool returns names each failing check, the commit checked and the check run, and quotes the check's output (its failure excerpt or the last 4000 characters)."
+    },
+    {
+      "key": "completion-wait-is-bounded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Warn, don't gate: a builder must never be held by a slow machine. Under load a check checkout has taken over 60 s (F516).",
+      "statement": "An agent's completion waits at most 120 seconds for the fast checks. When they have not decided within that time, the completion is recorded and the checks continue as part of the task's check run. A failure they find later returns the task to its builder like any other."
+    },
+    {
+      "key": "one-run",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The fast checks run at completion are the start of the task's check run for that work. The remaining checks continue in the same run, and no fast check is executed a second time for the same merged tree."
+    },
+    {
+      "key": "review-waits-for-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Three reviews on 2026-10-26/27 ran beside a failing suite and found what the checks found. A deferral with nothing else claimable is reported as a stall today (scheduler.py:2685-2689, :4403-4410), and this wait lasts the suite's 8-16 minutes.",
+      "statement": "A flow queues no review of a completed task while the task's check run for the work under review is running, has not started, or was superseded. The firing records the task as deferred, saying how long its checks have run and how long the previous run took. While that is all the flow is waiting on, the firing is not recorded as stalled and no loop_stalled stall is raised."
+    },
+    {
+      "key": "failure-returns-to-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "completed -> revision_needed is the operator's edge (task_transitions.py:134-141), so today only a reviewer's verdict returns such a task, which costs a review turn.",
+      "statement": "When a task's check run ends failed with a failure of the task's own while the task is completed, the Hub moves the task to revision_needed, held by the agent that built it, and queues and starts no review of that work. The task's notes carry the failing checks, the commit and their output. The transition is recorded with origin 'checks' and a note naming the run, and the app's history attributes it to the project's checks, not to the operator."
+    },
+    {
+      "key": "review-starts-promptly",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A flow's tick is every 5 minutes, and a hand-off left to it waited about 2.5 minutes on average (flow_advance.py:3-6). The wait for checks must not add a tick's delay on top of the suite.",
+      "statement": "When a completed flow task's check run passes, or ends with no failure of the task's own, the flow queues the task's review within 60 seconds, without waiting for its next scheduled tick."
+    },
+    {
+      "key": "same-order-outside-a-flow",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice B lets any agent but the author take completed work into review outside a flow; without this, that path would review beside a failing suite as the flow did. The operator's explicit action stays theirs (warn, don't gate).",
+      "statement": "Outside a flow, completion is gated and a failed task is returned as inside one. An agent cannot move a completed task to under_review, and the mender cannot hand it to a reviewer, while its check run is undecided or has failed with the task's own failure; the refusal states the run's state and how long it has run. The operator's own review dispatch is not refused."
+    },
+    {
+      "key": "ui-check",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "T1's first check run passed on 2026-10-26 while its commit left 24 vitest tests failing, which only QA found.",
+      "statement": "The AgentWeave project's checks, on the operator's :8000 Hub and on the trial :8010 Hub, include a check named hub-ui, scoped to hub/ui/. It installs the UI's dependencies in the check checkout and runs the UI's lint, type check (tsc --noEmit) and unit tests (vitest), as CI's ui-test job does. A change under hub/ui that fails any of them fails the task's check run with that output, and a change that touches nothing under hub/ui records hub-ui as skipped. On :8000, ruff and black are marked fast."
+    },
+    {
+      "key": "builders-know",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The update_task tool's description says that moving a task to completed runs the project's fast checks on the committed work, can take up to two minutes, and is refused with their output when one fails."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "checks-run-before-review"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A 'fast' setting on each project check, and fast checks running first in a run",
+      "Completion by an agent waits (bounded) for the fast checks on the commit its review would get, and is refused with their output when one fails",
+      "A flow's review of a completed task waits for the task's check run, and that wait is not a stall",
+      "A check run that fails with the task's own failure returns a completed task to its builder with the output, with no review turn",
+      "The same order outside a flow: the completion gate, the return, and refusing an agent's or the mender's move into review while checks are undecided or failing",
+      "A UI check (lint, types, unit tests, scoped to hub/ui/) in the AgentWeave project's checks on :8000 and :8010"
+    ],
+    "non_goals": [
+      "Failures that are not the task's own (failing on main too, or passing on a rerun), what approval does with them, and the reviewer's brief for them: slice M",
+      "Batching approved work and checking the merged batch, and the approval gate's own reading of the checks: slice E",
+      "The mender's waking rules beyond this slice's own wait (F1049's turn-still-running deferral): slice N",
+      "Gate levels; this order holds at every level slice D adds",
+      "Making the suite faster or splitting hub-tests by path",
+      "Linking the main checkout's hub/ui/node_modules into check checkouts: unsafe until slice A ships",
+      "Gating the operator's own review dispatch or the operator marking a task completed",
+      "Starting a returned task's builder outside a flow: slice M's rule for work that sits outside any flow"
+    ]
+  },
+  "summary": "The project's checks run before anyone reviews. Each check gets a 'fast' setting; when a builder marks its task completed, the Hub runs the fast checks (ruff and black here) on the commit the review would be given, merged onto main, and refuses the completion with their output if one fails, so the builder fixes it in the same turn. The rest of the checks continue in the same run, and a flow queues the task's review only once that run has passed; a run that fails with the task's own failure returns the task to its builder with the output, and no reviewer turn is spent. The same order holds outside a flow. The project's checks gain a UI check (lint, type check and unit tests, scoped to hub/ui/), so a UI regression fails the checks instead of waiting for a reviewer to find it.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "The acceptance drive first: write hub/tests/test_checks_run_before_review.py (real git fixture and real check subprocesses, reusing test_project_checks_run.py's helpers) covering every criterion that names it, and see completion-refused-on-master-red, review-deferred-while-running and own-failure-returns fail on master. Mark the review-ordering scenarios xfail(strict=True) for the next task to unmark. Then: ProjectCheck.fast with the 120 s timeout limit; configured_checks and run order (fast first); the run's fast prefix outside the semaphore with a waiter; snapshot and gate in update_task_for_actor before apply_transition; a TransitionRefusedError subclass carrying the structured output; the MCP completion timeout (restated constant, tested) and update_task's description.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/mcp_server.py",
+        "hub/tests/test_checks_run_before_review.py",
+        "hub/tests/test_project_checks_settings.py"
+      ],
+      "from": null,
+      "key": "completion-gate",
+      "requirements": [
+        "fast-flag",
+        "completion-runs-fast-checks",
+        "completion-refused-with-output",
+        "completion-wait-is-bounded",
+        "one-run",
+        "builders-know"
+      ],
+      "reviewer": null,
+      "title": "Fast checks gate completion"
+    },
+    {
+      "depends_on": [
+        "completion-gate"
+      ],
+      "description": "Unmark the review-ordering scenarios in test_checks_run_before_review.py and make them pass. decide_firing's review arm reads project_checks.view and defers while the run is undecided (requesting one when missing, stale or interrupted), and a firing waiting only on checks is not a stall. A run that fails with the task's own failure on a completed task returns it (origin 'checks', note, output in notes, review entries withdrawn); a pass asks for the flow's firing. A work-state gate in apply_transition refuses a run actor's completed -> under_review while checks are undecided or own-failed; the mender's hand-off refuses the same. The task history and story name the project's checks for origin 'checks'; rebuild the UI bundle.",
+      "files": [
+        "hub/hub/scheduler.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/api/v1/mender.py",
+        "hub/ui/src/components/tasks/TaskTransitionHistory.tsx",
+        "hub/ui/src/components/tasks/TaskStory.tsx",
+        "hub/ui/src/__tests__/taskTransitionHistory.test.tsx",
+        "hub/hub/static/ui",
+        "hub/tests/test_checks_run_before_review.py"
+      ],
+      "from": null,
+      "key": "review-after-checks",
+      "requirements": [
+        "review-waits-for-checks",
+        "failure-returns-to-builder",
+        "review-starts-promptly",
+        "same-order-outside-a-flow"
+      ],
+      "reviewer": null,
+      "title": "Review waits for the checks; a failure returns the task"
+    },
+    {
+      "depends_on": [
+        "review-after-checks"
+      ],
+      "description": "Add the fast toggle to the project checks editor (GeneralSettings.tsx) and its type (api/projects.ts), with a vitest; rebuild the bundle. Configure hub-ui (D9) and fast ruff/black on the trial :8010 project, then drive the done outcome there with Haiku agents: a ruff failure refused at completion with its output, a failing test returned without a review turn, a UI regression failing hub-ui, a clean task reviewed within a minute of its checks passing. Then back up :8000's database and set the same checks on it through the app (operator-authorised 2026-10-27).",
+      "files": [
+        "hub/ui/src/components/settings/GeneralSettings.tsx",
+        "hub/ui/src/api/projects.ts",
+        "hub/ui/src/__tests__/projectSettingsPanel.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui-check-and-drive",
+      "requirements": [
+        "ui-check",
+        "fast-flag",
+        "review-starts-promptly"
+      ],
+      "reviewer": null,
+      "title": "The UI check, the fast toggle, and the drive"
+    }
+  ],
+  "title": "Checks run before anyone reviews"
+}

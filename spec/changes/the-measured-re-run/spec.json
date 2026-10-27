@@ -1,0 +1,391 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the base commit chosen for the builds",
+      "how_to_check": "On a worktree at the base commit: py -3.11 -m pytest hub/tests/test_spec_task_files.py hub/tests/test_approval_warnings_routes.py -v and cd hub/ui && npx vitest run src/__tests__/specApprovalWarnings.test.tsx with the repro cases from the findings added; paste the failures. scripts/drive/measured_rerun_check.py --candidate checks the document's task count and files.",
+      "key": "candidate-reproduces-on-base",
+      "requirement": "candidate-is-slice-sized",
+      "then": "all three fail, and the candidate document has two to four tasks whose files include hub/hub and hub/ui paths",
+      "when": "the three repro tests named in F1013, F1014 and F1015 are run on it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the two finished builds of the candidate document",
+      "how_to_check": "py -3.11 scripts/drive/measured_rerun_check.py --hub http://127.0.0.1:8000 --document spec/changes/every-same-file-overlap-reaches-the-operator/spec.json (GET requests only)",
+      "key": "builds-match",
+      "requirement": "same-base-same-people",
+      "then": "both name the same base commit, driver, builder set and per-run models, differ only in level (fast, gated), and only Gated has a reviewer",
+      "when": "the acceptance drive scripts/drive/measured_rerun_check.py reads each build from the app's routes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the two builds' start and end times",
+      "how_to_check": "py -3.11 scripts/drive/measured_rerun_check.py --hub http://127.0.0.1:8000 --document spec/changes/every-same-file-overlap-reaches-the-operator/spec.json --windows, plus the process list saved at each start",
+      "key": "nothing-overlaps",
+      "requirement": "one-build-at-a-time",
+      "then": "the builds do not overlap, every run in each window belongs to that build or the mender, and no leftover Hub or pytest process was running",
+      "when": "the drive lists every run in the project between them and every Python process on the machine at each start"
+    },
+    {
+      "checked_by": "agent",
+      "given": "master at the base commit before the Fast build starts",
+      "how_to_check": "git log --oneline <base>..master shows no commit from either build; git merge-base --is-ancestor <base> <each landing branch> exits 0",
+      "key": "master-untouched",
+      "requirement": "lands-off-master",
+      "then": "master's tip is unchanged by either build, and each build's approved work is on its own branch descending from the base commit",
+      "when": "both builds have finished"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each build's budget cap and window as configured at its start",
+      "how_to_check": "py -3.11 scripts/drive/measured_rerun_check.py --hub http://127.0.0.1:8000 --document spec/changes/every-same-file-overlap-reaches-the-operator/spec.json --budget",
+      "key": "cap-stops-a-build",
+      "requirement": "budget-and-stop-rule",
+      "then": "the cap is $30 and the window 8 h, the build's cost is at most the cap, and a build that hit either is shown stopped and was not restarted",
+      "when": "the build is read from the app after it ends"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a measurement stopped twice by a Hub defect, or past $65 in total",
+      "how_to_check": "Operator reads the vault note's first section against the builds' stop reasons on the spec page.",
+      "key": "inconclusive-is-recorded",
+      "requirement": "budget-and-stop-rule",
+      "then": "it is marked inconclusive, names the findings filed and gives the numbers collected so far",
+      "when": "the comparison is written"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the vault note",
+      "how_to_check": "py -3.11 scripts/drive/measured_rerun_check.py --hub http://127.0.0.1:8000 --document spec/changes/every-same-file-overlap-reaches-the-operator/spec.json --note",
+      "key": "columns-complete",
+      "requirement": "four-columns",
+      "then": "it has the four named columns and every row the requirement lists, and no cell in the Fast or Gated column is empty",
+      "when": "the drive parses its comparison table"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the vault note",
+      "how_to_check": "py -3.11 scripts/drive/measured_rerun_check.py --hub http://127.0.0.1:8000 --document spec/changes/every-same-file-overlap-reaches-the-operator/spec.json --note",
+      "key": "lmn-rows-present",
+      "requirement": "lmn-effect",
+      "then": "the five L, M and N rows are present in every column and the Fast and Gated values equal what the routes answer",
+      "when": "the drive parses it and re-reads the same numbers for the Fast and Gated builds from the app's routes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the send-backs and failed check runs the app shows for the two builds",
+      "how_to_check": "py -3.11 scripts/drive/measured_rerun_check.py --hub http://127.0.0.1:8000 --document spec/changes/every-same-file-overlap-reaches-the-operator/spec.json --defects",
+      "key": "every-failure-listed",
+      "requirement": "defects-are-classified",
+      "then": "each one appears exactly once with a task link, one of the three classes and a reason, and the real-defects count equals the number classed as defects in the change",
+      "when": "they are compared with the note's defect list"
+    },
+    {
+      "checked_by": "operator",
+      "given": "each build's landed branch",
+      "how_to_check": "The operator compares the note's escaped-defect section with the attached check outputs (one per branch).",
+      "key": "escaped-run-recorded",
+      "requirement": "escaped-defects-are-checked",
+      "then": "the note gives each branch's results, and its escaped-defect count equals the number of failures",
+      "when": "the project checks and the candidate's acceptance criteria are run on it by an agent that ran no turn in either build"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the vault note and the app's project view and spec page",
+      "how_to_check": "Operator, in the app on :8000; the drive's --note check covers the match for numbers the routes return.",
+      "key": "numbers-name-their-view",
+      "requirement": "read-from-the-apps-views",
+      "then": "every Fast and Gated number in the note names its view and matches what that view shows; wall time, cost and real defects are among them; every number marked 'from a query' has a finding filed against its view",
+      "when": "the operator opens both builds in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the held pieces, their re-judgements and the review costs listed in the note",
+      "how_to_check": "py -3.11 scripts/drive/measured_rerun_check.py --hub http://127.0.0.1:8000 --document spec/changes/every-same-file-overlap-reaches-the-operator/spec.json --re-recording recomputes it from the evidence routes",
+      "key": "recommendation-follows-rule",
+      "requirement": "re-recording-is-decided",
+      "then": "the note's recommendation (carry forward, keep re-recording, or too thin) is the one the rule gives",
+      "when": "the rule is applied to them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the note added to the vault",
+      "how_to_check": "py -3.11 scripts/drive/measured_rerun_check.py --hub http://127.0.0.1:8000 --vault (GET /vault/map), and git ls-files knowledge/sources",
+      "key": "note-in-vault",
+      "requirement": "recorded-in-the-vault",
+      "then": "the source is listed as type document with its date, its distillation finished with facts citing it, and knowledge/sources/<id>.md and .json are committed",
+      "when": "the Vault tab and the repository are inspected"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8ef8f1f7a3d92127f8a5c745f5d68359ca88a2d649cdbf25838dc97d7c2895e0",
+      "FR-10": "3013a66d43adc2f68f66fcdaece29bce8d8fdda17a15bcdd2467dddb6f947beb",
+      "FR-11": "621afc30d6e0b5c58449a46b7c8939fbfe2b934795456f17ade79d685749333e",
+      "FR-12": "644173aedf532a1179642b359ad0abeef9653ee68c692216db4c59efa7e73606",
+      "FR-2": "b0a67423fdd1ccc63f644b322adb527ff0f2b9285ba1aa4861a67080dc39eb1e",
+      "FR-3": "4d29617b89196fb1f3ff58668e14ac002551609a3b5269fc63f317d1b40e1ac2",
+      "FR-4": "5b6ba765fabb796383ee6bbe3688bf83dac365b2593e5b0193d4d392384ebf32",
+      "FR-5": "3d9f4cd5953631a5fcc105c69c432e6be425d318b617237bb16edaae20d1c2af",
+      "FR-6": "e2d6317226287ab750f3cf28cad45c7cd6e2a683f6eff2fb2717c71f710ced72",
+      "FR-7": "c108f1b08168bf48d7db20047d15677889808e7173a1301ce7719fdc5ad2cc96",
+      "FR-8": "5a5a1acfcb606c858031a6567817b65fae5c29a56246dbbc5004e07c77b75064",
+      "FR-9": "e88fa139e75073411396fe2532286e0c77e13f0b44b02ba46ed74a1915195f27"
+    },
+    "high_water": 12,
+    "requirements": {
+      "budget-and-stop-rule": "FR-5",
+      "candidate-is-slice-sized": "FR-1",
+      "defects-are-classified": "FR-8",
+      "escaped-defects-are-checked": "FR-9",
+      "four-columns": "FR-6",
+      "lands-off-master": "FR-4",
+      "lmn-effect": "FR-7",
+      "one-build-at-a-time": "FR-3",
+      "re-recording-is-decided": "FR-11",
+      "read-from-the-apps-views": "FR-10",
+      "recorded-in-the-vault": "FR-12",
+      "same-base-same-people": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1. Mostly a measurement; the only code is the drive. H adds no Hub behaviour: builds, levels, budgets and landing targets are slice D's, batching E's, the views F's and G's, the check order L's, the override M's, the mender N's. The drive (scripts/drive/measured_rerun_check.py) is the acceptance check: GET requests only, so it is safe on :8000, and it fails on today's master because no build has a level and G's views do not exist.\n\nD2. The candidate is F1013+F1014+F1015, bundled as 'Every same-file overlap reaches the operator'. All three are open, Ready, Tier 0, with named repro tests, and their causes still hold on master bbf3f10: spec_completeness.py:418-429 (_normalise_path only swaps backslashes; paths_overlap compares strings), spec_payload.py:564-576 (no '..' refusal), spec_service.py:1962 (phase_findings adds overlap_warnings but not undeclared_files_warnings, which only the save carries at :420-421), SpecPhaseParts.tsx:21-32 (GapLines prints group[0].message). Three tasks across Python and UI exercise L's UI check, the reviewer and the merge queue, and are small enough to pay for twice. Slices C and F touch the same surfaces (propose becomes Check; F rewrites hub/ui/src/components/spec), so task 1 re-confirms the repros on the base commit and falls back to the next qualifying finding set if they moved.\n\nD3. Same driver at both levels (the Hub's flow). Both baselines were flows, and holding the driver fixed means the comparison isolates the level. A lead-driven build is a separate question (open question 1).\n\nD4. Sequential, Fast first, on a quiet machine. Concurrent builds would contend for CPU, and on 2026-10-25 load made check runs slow and timing tests flake (src-17aeb9aea81f:64-68). Order matters little since each starts from the same base on its own branch; Fast first gives the cheaper result early if the budget runs out.\n\nD5. Off master. Each build lands on its own branch (D's landing target). That removes the restart and live-bundle hazards and lets the two results be compared side by side. Merging the chosen result is the operator's decision, made after the note is recorded.\n\nD6. Budget and stop rule. The cap per build is $30 API-equivalent, window 8 h, $65 for the whole measurement including one re-run. Baselines: $52 for 6 tasks over 7 h 26 min (src-17aeb9aea81f:17-22); $44 for 4 tasks over 6 h 47 min (2026-10-26/27). Three tasks at the night's rate of about $11 each fit under $30 at Gated. A build that hits its cap is itself a result, so it is recorded, not rescued. A Hub defect that blocks a build for 30 min measures the defect, not the level, so the build stops, the defect is filed, and both builds are re-run once.\n\nD7. Defects are classified by hand, with reasons. The views can list send-backs and check failures (K's per-piece reasons, task_check_runs results), but whether a failure was the change's, a flake or the Hub's needs judgement. Escaped defects are measured by running every check and the candidate's criteria on each landing branch, run by an agent outside both builds.\n\nD8. Views first, queries marked. Numbers are read from G's project view and F's build panel. When a number is missing, the gap is filed against the view rather than worked around silently. The underlying records outlive the measurement: runs, outputs and events are never pruned (trace_retention.py:17), while traces are kept 14 days (:39), so nothing H reads depends on traces. The baselines are re-read from the views as soon as G ships, as a check on G's totals.\n\nD9. The re-recording rule is decided here, not left to taste. Carry forward only when at least 5 re-judged held pieces all held and their review rounds cost at least 10% of all review. One that failed means re-recording caught a regression, and carry-forward would have hidden it. The cost is an upper bound: the whole review round after a send-back that held pieces, because per-tool-call cost is not recorded (turn_usage is per run, models.py:1570-1587).\n\nD10. Vault recording. The note is a file under .agentweave/vault-notes/ (where the 2026-10-26 retrospective lives), added through the operator's POST /vault/paths (api/v1/vault.py:330-346; type 'document', the default at :264; distil true). A tracked source is written to knowledge/sources/<id>.md then <id>.json (vault.py:76, :936-937) and committed. It is not a 'decision' source, because decisions are never distilled (api/v1/vault.py:204-205).\n",
+  "evidence": {
+    "checked": [
+      "knowledge/sources/src-17aeb9aea81f.md (the 2026-10-26 retrospective): numbers at :17-22, send-back causes at :35-42, check gate at :43-48, machine load at :64-68, the call for this comparison at :156-159",
+      "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json: slice measured-re-run (builds after E and G), the non-goal deferring carry-forward to H; no roadmap open question names this slice",
+      "spec/changes/each-piece-of-evidence-is-judged-on-its-own/spec.json: held-is-recorded-again and the non-goal deferring carry-forward to H",
+      "spec/changes/the-spec-page-redesigned/spec.json: build-progress-on-the-document (wall time split and cost by role on the build panel), which H reads",
+      "scripts/drive/FINDINGS.md F1013, F1014, F1015: Status open 2026-10-23, Ready yes, Tier 0; causes re-read on master bbf3f10 at spec_completeness.py:418-429, spec_payload.py:564-576, spec_service.py:420-421 vs :1962, SpecPhaseParts.tsx:21-32; no spec/changes or openspec/changes document names them (grep); git log --grep finds only the filing commit 04da794",
+      "Their repro test files exist: hub/tests/test_spec_task_files.py, hub/tests/test_approval_warnings_routes.py, hub/ui/src/__tests__/specApprovalWarnings.test.tsx",
+      "hub/hub/vault.py:64 TYPES, :76 TRACKED_DIRECTORY='knowledge', :901-947 _store (body then .json), :950 add_source; hub/hub/api/v1/vault.py:257-265 PathsAdd (type defaults to document), :330-346 operator POST /vault/paths (added_by None), :199-205 a decision source is never distilled; api/v1/agent_actions.py:719-746 the agent route records added_by",
+      "knowledge/sources/src-17aeb9aea81f.json: the retrospective was a document source named by its .agentweave/vault-notes/ path, dated, tracked",
+      "hub/hub/db/models.py: task_transitions :849 (actor, origin, job), runs :1426, turn_usage :1570-1587 (per run, api_equivalent_usd_micros), requirement_evidence :2915 (review_state, run_id, produced_at), task_check_runs :3185-3205 (main_sha, state, results, started/ended); projects.checks :127",
+      "hub/hub/trace_retention.py:17 (runs, outputs, events not pruned) and :39 (traces kept 14 days)",
+      "grep of hub/hub/api for GET routes on stats|usage|cost|spend|metric: none today"
+    ],
+    "limits": [
+      "Slices D, E, F and G are not specified in code yet, so the drive's routes, the build record's fields and the views' names are written as outcomes, not paths; task 1 binds them when G ships",
+      "The 2026-10-26/27 numbers come from the drafting brief's read-only queries of :8000, and no vault source holds them yet; task 1 re-reads them from the views",
+      "The baselines built different changes (6 and 4 tasks) on a slower Hub, so the comparison is per task, and it is one sample at each level, not a statistic",
+      "Re-recording cost is an upper bound (whole review rounds), because cost is recorded per run, not per tool call",
+      "The $30 cap is set from two nights' rates; a Gated build with several send-backs could hit it, and that is recorded as a result",
+      "Nothing was run against a Hub for this draft; every how_to_check is proposed"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2 (hazard): two paid builds on the operator's live :8000 Hub and project, whose landing on master would put Hub and UI code into the checkout :8000 runs and the bundle its app loads. One-off: a measurement recorded in the vault, folding into no capability; its drive stays in scripts/drive/.",
+  "open_questions": [
+    {
+      "question": "Should a third build be added, Fast driven by a lead agent (the retrospective's first recommendation), under its own $30 cap? Default here: no; both builds use the Hub's flow, so the level is the only thing that differs. Decided 2026-10-27 (orchestrator, under the operator's authority): no third build; the lead driver is exercised by slice D's own acceptance drive.",
+      "resolved": true
+    },
+    {
+      "question": "Which change is measured: F1013+F1014+F1015 as 'Every same-file overlap reaches the operator', or the next qualifying open finding set if they no longer reproduce on the base commit (decided, design D2).",
+      "resolved": true
+    },
+    {
+      "question": "Which result reaches master: the operator chooses after reading the comparison; the other landing branch is deleted once the note is recorded (decided, design D5).",
+      "resolved": true
+    }
+  ],
+  "problem": "Two nights of flows produced the numbers this roadmap answers, both found by SQL. 2026-10-25: 6 tasks, 7 h 26 min and not finished, 48 runs, 16 check-gate runs (~147 min), 9 send-backs of which about half were caused by the Hub, 4 real defects caught by QA, about $52 (src-17aeb9aea81f:17-22, :35-42). 2026-10-26/27, slice B: 4 tasks, 6 h 47 min, about $44, the mender 36% of it (42 Opus runs, $15.9). Every send-back was something a check catches (24 UI test failures, a surface ceiling, ruff). Three reviews ran beside checks that had already failed (~52 min, ~$4.4). A test failing on main too held an approved task for 2 h 40 min, and 27 mender questions expired. The retrospective ends: re-run a slice-sized job and compare wall time and real defects caught; that comparison is the evidence for keeping AgentWeave (src-17aeb9aea81f:156-159). Separately, carrying held evidence forward was deferred until this measurement says what re-recording costs (roadmap non-goal; slice K non-goal). Today no view shows a flow's cost or time: a grep of hub/hub/api for GET routes on stats, usage, cost or spend finds none.",
+  "requirements": [
+    {
+      "key": "candidate-is-slice-sized",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "It must touch the UI so slice L's UI check can fire, be small enough to pay for twice, and have defects a reviewer or a check can find; three Ready Tier 0 findings on one seam fit.",
+      "statement": "The change built for the measurement is one change document of two to four tasks that edits both hub/hub and hub/ui, whose findings are open and whose repro tests fail on the base commit. The candidate is F1013, F1014 and F1015 bundled as 'Every same-file overlap reaches the operator' (spec/changes/every-same-file-overlap-reaches-the-operator/spec.json); if any of the three no longer reproduces on the base commit, the next open, Ready finding set meeting the same rule is used and the comparison says why."
+    },
+    {
+      "key": "same-base-same-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Only the level may differ, or the comparison cannot say what the level bought.",
+      "statement": "Both builds start from the same main commit and use the same driver (the Hub's flow), the same builder agents bound to the same runners and models, the same mender model and the same project checks; the reviewer exists only at Gated. Each build's record, as the app shows it, names its base commit, level, builders and the model of every run."
+    },
+    {
+      "key": "one-build-at-a-time",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "On 2026-10-25 machine load made timing tests flake and check runs slow (src-17aeb9aea81f section 2.9); concurrent builds would measure each other.",
+      "statement": "The two builds run one after the other, Fast first, while no other flow or build runs in the project, no agent is building other work, and no leftover Hub or test process from an earlier drive is running on the machine."
+    },
+    {
+      "key": "lands-off-master",
+      "modal": "MUST",
+      "party": null,
+      "rationale": ":8000 runs this checkout, so master is what it executes at its next restart, and a committed UI bundle reaches the operator's live app on its next reload (CLAUDE.md, The Hubs on this machine).",
+      "statement": "Each build lands its approved work on its own branch cut from the base commit, never on master; no commit of either build reaches master until the operator chooses, after the comparison is recorded, which result to merge."
+    },
+    {
+      "key": "budget-and-stop-rule",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The baselines cost about $52 for 6 tasks and $44 for 4; a measurement that keeps paying to rescue itself measures the rescue.",
+      "statement": "Each build runs under a budget cap of $30 API-equivalent and a window of 8 hours, and stops at either; a stopped build is recorded with its numbers as they stood and marked stopped, never restarted. If a build is blocked for over 30 minutes by a Hub defect rather than the change, it is stopped, a finding is filed, and both builds are re-run once after the fix from a common new base; a second such stop, or the measurement's total passing $65, ends it as inconclusive with what it found."
+    },
+    {
+      "key": "four-columns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The comparison has four columns: the 2026-10-25 flow (loop-df5f74816122), the night of 2026-10-26/27 (slice B's flow), the Fast build and the Gated build. For each it gives tasks; wall time in total and per task, split into building, waiting for review, checks and waiting to be handed out; API-equivalent cost in total, per task and by role (building, reviewing, mender); send-backs; real defects caught, each with where it was caught (check, reviewer, operator); escaped defects; and operator actions during the build."
+    },
+    {
+      "key": "lmn-effect",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "These are what slices L, M and N exist to remove; on 2026-10-26/27 they were three reviews and about $4.4, 2 h 40 min, 42 Opus runs and $15.9, 6 loop_stalled wakes, and 27 questions.",
+      "statement": "For each column the comparison also gives: review turns that started while the task's latest check run had failed, with their minutes and cost; hours a task's approval waited on a failure that was not the task's; mender turns, mender cost and the mender's model; mender wakes with no stalled work behind them; and mender questions that expired unanswered."
+    },
+    {
+      "key": "defects-are-classified",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On 2026-10-25 about half the send-backs were caused by the Hub (src-17aeb9aea81f section 2.3); counting them as caught defects would credit the gate for its own failures.",
+      "statement": "Every send-back and every failed check run in the Fast and Gated columns is listed with a link to its task and classified as a defect in the change, a failure that was not the task's (fails on main too, or passes on a serial rerun), or a Hub defect, with a one-line reason; only the first kind counts as a real defect caught."
+    },
+    {
+      "key": "escaped-defects-are-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Fast is only cheaper if it does not ship what Gated catches; without this the comparison rewards skipping review.",
+      "statement": "After each build ends, the candidate's acceptance criteria and every project check, the UI check included, are run on that build's landed branch by someone who took no part in the build, and each failure is counted as an escaped defect of that build."
+    },
+    {
+      "key": "read-from-the-apps-views",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done line for this slice; and on 2026-10-25 finding where the time went took SQL against the operator's database (src-17aeb9aea81f section 2.12).",
+      "statement": "Every number in the Fast and Gated columns, and in the baseline columns wherever the views cover those flows, is read from the app's own views (slice G's project view and the spec page's build panel), and the comparison names the view each number came from. Wall time, cost and real defects for Fast and Gated come from a view; any other number no view shows is filed as a finding against that view and given from a read-only query, marked as such."
+    },
+    {
+      "key": "re-recording-is-decided",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Carrying forward was deferred until this measurement (roadmap non-goal; slice K non-goal). A re-recorded piece that fails is a regression the carry-forward would have hidden.",
+      "statement": "The comparison measures re-recording held evidence over every send-back in the project since slice K shipped, the Gated build's included: held pieces recorded again, the review rounds that judged them again with their minutes and cost, and how many failed when judged again. It ends with a recommendation by this rule: carry held pieces forward when at least 5 were judged again, none failed, and those review rounds cost at least 10% of all review cost; keep re-recording when any failed; otherwise keep re-recording and say the evidence is too thin."
+    },
+    {
+      "key": "recorded-in-the-vault",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The comparison is one Markdown note added to the project's tracked vault as a 'document' source, dated the day it was written and distilled, so that it is listed in the Vault tab, its body and metadata are committed under knowledge/sources/, and its facts can be cited by the document that decides carrying forward."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "measured-re-run"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Choosing the measured change and confirming its findings reproduce on the base commit",
+      "One Fast and one Gated build of it on :8000, same base, driver, builders and models, landing off master",
+      "A budget cap, a window and a stop rule for the measurement",
+      "Checking each build's result for escaped defects",
+      "A four-column comparison (2026-10-25, 2026-10-26/27, Fast, Gated), with the L/M/N effect rows",
+      "The cost of re-recording held evidence, and a recommendation on carrying it forward",
+      "Recording the comparison in the tracked vault, with gaps in the views filed as findings",
+      "An acceptance drive that checks the comparison against the app's routes"
+    ],
+    "non_goals": [
+      "Building carry-forward of held evidence: if recommended, it becomes its own change",
+      "A Reviewed-level build, or a lead-driven build: unless the operator answers open question 1",
+      "Comparing AgentWeave with Claude Code subagents: those runs leave no turn_usage in the Hub, so no view can show them",
+      "New views or stats: slices F and G own them; H files what they lack",
+      "Merging either build to master: the operator's choice, after the note",
+      "Fixing what the builds find in the Hub: filed as findings, built by their own changes"
+    ]
+  },
+  "summary": "Closes the roadmap by measuring it. One slice-sized change, F1013-F1015 bundled as 'Every same-file overlap reaches the operator', is built twice on the operator's Hub from the same base commit, with the same builders and models: once at Fast, once at Gated, one after the other, each landing on its own branch off master, each under a $30 cap and an 8-hour window. The comparison sets them beside the 2026-10-25 responsiveness flow and slice B's flow of 2026-10-26/27 on wall time, cost, real defects caught, escaped defects, and what slices L, M and N were built to remove: reviews of already-failed checks, approvals held by failures that were not the task's, and the mender's turns. It also measures what re-recording held evidence costs and recommends whether to carry it forward. Every number is read from the app's own views, and the comparison is recorded in the vault.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "The acceptance drive first: write scripts/drive/measured_rerun_check.py, which makes GET requests only and checks what the requirements say the comparison must hold (two builds of the candidate at fast and gated with the same base, people and models, landing off master, under their caps; a vault note with the four columns, the L/M/N rows, the classified defect list and a re-recording recommendation matching the routes). Run it on today's master against :8000: it fails, because no build carries a level and slice G's views do not exist. Then read both baselines from G's views (loop-df5f74816122 and slice B's flow) and note where they differ from src-17aeb9aea81f and the 2026-10-26/27 numbers. Confirm F1013-F1015 still reproduce on the chosen base, and author the candidate document in the app with their repro tests as its acceptance drive, approved and not built.",
+      "files": [
+        "scripts/drive/measured_rerun_check.py",
+        "spec/changes/every-same-file-overlap-reaches-the-operator/spec.json"
+      ],
+      "from": null,
+      "key": "drive-baselines-candidate",
+      "requirements": [
+        "candidate-is-slice-sized",
+        "four-columns",
+        "lmn-effect",
+        "read-from-the-apps-views"
+      ],
+      "reviewer": null,
+      "title": "The acceptance drive, the baselines and the candidate"
+    },
+    {
+      "depends_on": [
+        "drive-baselines-candidate"
+      ],
+      "description": "Back up the :8000 database, then on :8000 start a Fast build of the candidate with the Hub's flow, its landing branch cut from the base commit, cap $30, window 8 h; when it ends, start the Gated build the same way with the same builders and models plus the reviewer. Do not touch either build except to answer questions, and count every operator action. Apply the stop rule. After each, have an agent that ran no turn in either build run every project check and the candidate's acceptance criteria on that landing branch and keep the outputs. The files listed are the candidate's, edited on the landing branches only.",
+      "files": [
+        "hub/hub/spec_completeness.py",
+        "hub/hub/spec_payload.py",
+        "hub/hub/spec_service.py",
+        "hub/ui/src/components/spec/SpecPhaseParts.tsx",
+        "hub/tests/test_spec_task_files.py",
+        "hub/tests/test_approval_warnings_routes.py",
+        "hub/ui/src/__tests__/specApprovalWarnings.test.tsx"
+      ],
+      "from": null,
+      "key": "two-builds",
+      "requirements": [
+        "same-base-same-people",
+        "one-build-at-a-time",
+        "lands-off-master",
+        "budget-and-stop-rule",
+        "escaped-defects-are-checked"
+      ],
+      "reviewer": null,
+      "title": "Build the candidate at Fast, then at Gated"
+    },
+    {
+      "depends_on": [
+        "two-builds"
+      ],
+      "description": "Read every number from the app's views, classify each send-back and failed check, apply the re-recording rule over every send-back since slice K shipped, and write .agentweave/vault-notes/<date>-the-measured-re-run.md. Add it through the operator's route POST /api/v1/projects/{id}/vault/paths with type document, visibility tracked, the date and distil true; commit the knowledge/sources/ files it produced. File a finding in scripts/drive/FINDINGS.md for every number no view showed. Run the drive: it passes. Hand the operator the choice of which landing branch, if either, merges to master; if one does, set F1013-F1015's Status lines.",
+      "files": [
+        "knowledge/sources",
+        "scripts/drive/FINDINGS.md",
+        "scripts/drive/measured_rerun_check.py"
+      ],
+      "from": null,
+      "key": "record-the-comparison",
+      "requirements": [
+        "four-columns",
+        "lmn-effect",
+        "defects-are-classified",
+        "read-from-the-apps-views",
+        "re-recording-is-decided",
+        "recorded-in-the-vault"
+      ],
+      "reviewer": null,
+      "title": "Write the comparison and add it to the vault"
+    }
+  ],
+  "title": "A slice-sized change built at Fast and at Gated is compared with the two slow nights, from the app's own views"
+}

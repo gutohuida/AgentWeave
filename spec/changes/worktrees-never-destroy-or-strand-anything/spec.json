@@ -1,0 +1,266 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a Hub-created worktree containing a directory junction (and, separately, a directory symlink) to a directory outside it that holds a file",
+      "key": "junction-survives-each-removal",
+      "requirement": "removal-never-follows-links",
+      "then": "the file outside still exists with its content; the test fails on master 43301a6",
+      "when": "each of the Hub's removal paths removes that worktree, including the fallback used when git's removal fails"
+    },
+    {
+      "given": "the same worktree with a junction",
+      "key": "linked-worktree-is-gone",
+      "requirement": "removal-still-completes",
+      "then": "the worktree directory no longer exists and `git worktree list` no longer shows it",
+      "when": "it is removed"
+    },
+    {
+      "given": "a task whose branch conflicts, mended through mend_task_branch with a resolution commit that is merged into main",
+      "key": "mender-runs-after-mend",
+      "requirement": "mend-leaves-mender-runnable",
+      "then": "preparation succeeds and the checkout is on agentweave/mender; the test fails on master 43301a6",
+      "when": "the mender's workspace is prepared for its next turn"
+    },
+    {
+      "given": "an agent's registered worktree switched to another branch holding commits not in main",
+      "key": "refusal-names-branches",
+      "requirement": "wrong-branch-refusal-names-the-branch",
+      "then": "the refusal text contains both the current branch name and agentweave/<agent>, and does not contain 'not the registered git worktree'",
+      "when": "its workspace is prepared"
+    },
+    {
+      "given": "a git project on master whose main_branch the operator set to empty, with one approved task that skipped merging",
+      "key": "reopen-keeps-null",
+      "requirement": "cleared-main-branch-survives-reopen",
+      "then": "GET settings returns main_branch empty and the approved task's work is not on master; fails on master 43301a6",
+      "when": "POST /projects/open is called for its folder again"
+    },
+    {
+      "given": "a newly registered git project with no main branch chosen",
+      "key": "adoption-is-an-event",
+      "requirement": "hub-setting-changes-are-recorded",
+      "then": "the project's event history holds a settings change from empty to that branch",
+      "when": "the Hub adopts the detected branch"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a repository whose main checkout has hub/ui/node_modules (beside a tracked hub/ui/package.json) and .venv, with Path.symlink_to patched to raise OSError as it does on this machine",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_dependency_links_fall_back_to_junctions.py -v (junction case skipped off Windows)",
+      "key": "junction-when-symlink-refused",
+      "requirement": "dependencies-linked-without-symlink-rights",
+      "then": "both directories are reachable inside the checkout through junctions (off Windows: through symlinks, the patch removed), no DependencyLinkFailure is returned, and removing the checkout afterwards leaves both originals intact; fails on master because nested node_modules is never linked and a refused symlink is only reported",
+      "when": "the Hub prepares an agent's task checkout"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conflicting task mended through mend_task_branch, once landing and once abandoned before its commit",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_mend_leaves_mender_runnable.py -v",
+      "key": "abandoned-mend-leaves-nothing",
+      "requirement": "mend-in-a-scratch-checkout",
+      "then": "the mender's own checkout is on agentweave/mender both times and no scratch checkout or mend worktree registration remains",
+      "when": "each mend ends"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "8c34c21adf037fd5eb4091d0cdbcd49d5e784b7e02645157351441e7dbb54746",
+      "FR-2": "da8576856b6999b4893db7ff3c8f74e29edfd664a808586f0f7b6fc402e96d3c",
+      "FR-3": "8467899749e349092e55e23799c4b212673b525b4fd80722fc08a02e65ffbb04",
+      "FR-4": "28e3cfdec34169f068eea65c97a16d7c659406e4b3dd8c54f87b8d9cd9287e5f",
+      "FR-5": "e54a4eddc0f469d53a2ac6d7b66413273163e3ea2de21c3dd3431da7c212d989",
+      "FR-6": "aa503fbd172a7b144a0072bcaf2c1ce6654e311c52fff8c82fc911e4a4c1fdd4",
+      "FR-7": "fd702dab5abf543a234c646c3ea9b3e3432770ab7dc690485c3d64718996a0e0",
+      "FR-8": "b0b042c431ab24abeb78df639b55fa993dded8b2565c0cf1fe3be81363f5b378"
+    },
+    "high_water": 8,
+    "requirements": {
+      "cleared-main-branch-survives-reopen": "FR-5",
+      "dependencies-linked-without-symlink-rights": "FR-7",
+      "hub-setting-changes-are-recorded": "FR-6",
+      "mend-in-a-scratch-checkout": "FR-8",
+      "mend-leaves-mender-runnable": "FR-3",
+      "removal-never-follows-links": "FR-1",
+      "removal-still-completes": "FR-2",
+      "wrong-branch-refusal-names-the-branch": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1. Links are removed before the worktree, never followed: every removal path in worktrees.py first walks the worktree (os.scandir, not following links) and unlinks each symlink or junction (os.path.islink, or st_file_attributes & FILE_ATTRIBUTE_REPARSE_POINT on Windows), then runs git worktree remove --force; the rmtree fallback uses the same walk. One helper, used by all five removal sites.\nD2. The Hub makes the links itself. _symlink_shared_dependencies (worktrees.py:311) covers SHARED_DEPENDENCY_DIRS at the root only (worktrees.py:65), so hub/ui/node_modules was never linked and agents made junctions by hand. It now also links node_modules beside each tracked package.json up to three levels deep, and on OSError from symlink_to creates a directory junction (junctions need no privilege on NTFS). A failure of both is still reported as today (F567).\nD3. A mend gets its own scratch checkout (operator, 2026-10-27), created for the mend and removed in a finally block, so the mender's checkout never moves and an abandoned mend leaves nothing behind.\nD4. 'Never chosen' and 'nothing merges' are told apart by a settings event: the operator clearing main_branch is recorded, and _adopt_detected_main_branch (api/v1/projects.py:374) adopts only when no settings event ever set or cleared it.",
+  "evidence": {
+    "checked": [
+      "scripts/drive/FINDINGS.md F1038 (repro with git 2.49.0.windows.1, mklink /J) and F1016 (API probe on scratch Hub :8116)",
+      "hub/hub/worktrees.py: removal paths at lines 1032, 1237, 1557, 1611, 1671 all run `git worktree remove --force`; _symlink_shared_dependencies at line 311 only creates symlinks",
+      "hub/hub/task_transition_service.py:1346 builds the mend on branch mend/{task.id}",
+      "vault src-945b5f2468b8: the manual workaround that restored the mender on 2026-10-23",
+      "hub/hub/worktrees.py:65 SHARED_DEPENDENCY_DIRS = ('node_modules', '.venv', 'venv'), root only; :311-340 symlink_to with no fallback, failures returned as DependencyLinkFailure (F567)",
+      "hub/hub/task_transition_service.py:1413 records the mend on branch mend/{task.id}"
+    ],
+    "limits": [
+      "The mend branch behaviour is read from code and the 2026-10-23 incident; not re-driven on master 43301a6",
+      "Whether a Windows directory symlink (as opposed to a junction) is also followed by git's removal is not verified; the criterion tests both"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "fix",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 1 (change). No migration: D4 reads the existing settings events.",
+  "open_questions": [
+    {
+      "question": "Should the Hub fall back to a junction when a symlink is refused? Operator 2026-10-27: yes (requirement dependencies-linked-without-symlink-rights).",
+      "resolved": true
+    },
+    {
+      "question": "Mend in a separate scratch checkout, or switch the mender's checkout back afterwards? Operator 2026-10-27: a separate scratch checkout (requirement mend-in-a-scratch-checkout).",
+      "resolved": true
+    }
+  ],
+  "problem": "F1038 (severity B): an agent linked hub/ui/node_modules into its task worktree with a junction; when the Hub removed that worktree, `git worktree remove --force` followed the junction and emptied the main checkout's hub/ui/node_modules, twice in 20 minutes on 2026-10-23. Every removal path in hub/hub/worktrees.py (lines 1032, 1237, 1557, 1611, 1671) and the rmtree fallback follow links. A link can point anywhere, so the loss is not limited to regenerable dependencies.\n\nMender (vault src-945b5f2468b8): a mend commits on `mend/<task-id>` (task_transition_service.py:1346) in the mender's own checkout and never switches it back, so the next delivery is refused with \"not the registered git worktree for refs/heads/agentweave/mender\", which misnames the cause: the directory is registered, just on another branch. The operator had to switch it back by hand.\n\nF1016 (severity B): emptying Settings -> Integration -> Main branch means \"nothing merges\", but reopening the folder runs `_adopt_detected_main_branch` (api/v1/projects.py:374), which writes the detected branch over the empty value, records no settings event, and then merges approved work that was waiting.",
+  "requirements": [
+    {
+      "key": "removal-never-follows-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents create junctions themselves (DEAD-ENDS documents `mklink /J` for running vitest in a worktree), and a link may point at a shared .venv or the vault, so the Hub cannot assume it only removes its own links or only regenerable data.",
+      "statement": "Removing any worktree the Hub created leaves unchanged the contents of every directory that a symbolic link or junction inside that worktree points to, whoever created the link."
+    },
+    {
+      "key": "removal-still-completes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Making removal safe by skipping it would leave the stranded checkouts that F693 and the mender bug already show block later turns.",
+      "statement": "A worktree that contains links is still fully removed and deregistered from git, as one without links is."
+    },
+    {
+      "key": "mend-leaves-mender-runnable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today every successful mend disables the mender until the operator switches its checkout back by hand.",
+      "statement": "After a mend has been committed and merged, the mender's next turn starts in its own checkout on `agentweave/mender` without any manual git action."
+    },
+    {
+      "key": "wrong-branch-refusal-names-the-branch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The present message sends the operator to delete a directory that only needs switching.",
+      "statement": "When an agent's own workspace is a registered worktree on a branch other than the agent's own and the Hub cannot safely switch it back, the refusal names the branch it is on and the branch expected, and does not say the directory is not a registered worktree."
+    },
+    {
+      "key": "cleared-main-branch-survives-reopen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An empty value today means both 'never chosen' and the operator's 'nothing merges'; the Hub overwrites the second as if it were the first.",
+      "statement": "A main branch the operator has explicitly cleared stays cleared when the project's folder is opened again, and no approved task merges as a result of reopening."
+    },
+    {
+      "key": "hub-setting-changes-are-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the Hub sets a project's main branch on its own (adopting a detected branch on first registration), it records a settings event naming the old and new values, as an operator change does."
+    },
+    {
+      "key": "dependencies-linked-without-symlink-rights",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On this machine every symlink is refused (F567), so no turn gets node_modules or .venv and agents create junctions by hand; a Hub-made link is one the Hub knows to remove safely, and the per-turn notice stops.",
+      "statement": "When the Hub prepares a checkout and a dependency directory exists in the main checkout (node_modules, .venv or venv at the root, or node_modules beside a tracked package.json up to three directories deep, such as hub/ui/node_modules), it links that directory into the checkout, using a directory junction where the platform refuses a symbolic link, and the turn carries no 'could not be linked' notice for it."
+    },
+    {
+      "key": "mend-in-a-scratch-checkout",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator decision 2026-10-27: a separate checkout also covers a mend abandoned half-way, which switching back afterwards does not.",
+      "statement": "A mend is built in a separate scratch checkout that is removed afterwards, whether the mend lands or is abandoned; the mender's own checkout is never switched to the mend branch."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "worktrees-never-destroy-or-strand"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Every path by which the Hub removes a worktree it created (task, review, agent and scratch checkouts), including fallbacks",
+      "The mend path and the preparation of the mender's own workspace for its next turn",
+      "The refusal message when an agent's registered worktree is on an unexpected branch",
+      "Reopening a project whose main branch the operator cleared",
+      "Linking the project's dependency directories (root and nested, e.g. hub/ui/node_modules) into a Hub-created checkout, with a junction when a symlink is refused"
+    ],
+    "non_goals": [
+      "Recovering files already lost to F1038",
+      "Changing what 'nothing merges' means or how approval skips merging while it is set",
+      "Installing dependencies into a worktree that the main checkout does not have"
+    ]
+  },
+  "summary": "Three defects where the Hub's handling of checkouts and the merge target damages or overrides something it does not own, and the gap that caused the worst of them: removing a worktree empties whatever a link inside it points to (F1038), a mend leaves the mender's own checkout on the mend branch so every later mender turn is refused, an operator's \"nothing merges\" is silently replaced by the detected branch when the folder is reopened (F1016), and on a machine that cannot create symlinks the Hub links no dependency directory at all, so agents make junctions by hand (how F1038 happened). The Hub now links dependencies itself, falling back to a junction, and removes links without following them.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Acceptance drive first: test_worktree_removal_links.py and test_dependency_links_fall_back_to_junctions.py, red on master. Before every Hub worktree removal and its fallback, remove links inside the worktree without following them (a junction is removed with os.rmdir or os.unlink, never rmtree), then remove the worktree. Extend _symlink_shared_dependencies to node_modules beside a tracked package.json (up to three levels) and fall back to a directory junction (_winapi.CreateJunction, or mklink /J) when symlink_to raises OSError.",
+      "files": [
+        "hub/hub/worktrees.py",
+        "hub/tests/test_worktree_removal_links.py",
+        "hub/tests/test_dependency_links_fall_back_to_junctions.py"
+      ],
+      "from": null,
+      "key": "safe-removal",
+      "requirements": [
+        "removal-never-follows-links",
+        "removal-still-completes",
+        "dependencies-linked-without-symlink-rights"
+      ],
+      "reviewer": null,
+      "title": "Links are made by the Hub and never followed on removal"
+    },
+    {
+      "depends_on": [
+        "safe-removal"
+      ],
+      "description": "Build each mend in a separate scratch checkout (created for the mend, removed when it lands or is abandoned) so the mender's own checkout never leaves agentweave/mender, and make the wrong-branch refusal name both branches. Test: mend (landing and abandoned) then prepare the mender's workspace, red first.",
+      "files": [
+        "hub/hub/worktrees.py",
+        "hub/hub/task_transition_service.py",
+        "hub/tests/test_mend_leaves_mender_runnable.py"
+      ],
+      "from": null,
+      "key": "mender-checkout",
+      "requirements": [
+        "mend-leaves-mender-runnable",
+        "wrong-branch-refusal-names-the-branch",
+        "mend-in-a-scratch-checkout"
+      ],
+      "reviewer": null,
+      "title": "A mend leaves the mender runnable"
+    },
+    {
+      "depends_on": [],
+      "description": "Distinguish 'never chosen' from the operator's explicit 'nothing merges' so reopening a folder adopts a detected branch only for the first; record any Hub-made main-branch change as a settings event. Test beside the existing adoption test, red first.",
+      "files": [
+        "hub/hub/api/v1/projects.py",
+        "hub/tests/test_project_main_branch_reopen.py"
+      ],
+      "from": null,
+      "key": "cleared-branch",
+      "requirements": [
+        "cleared-main-branch-survives-reopen",
+        "hub-setting-changes-are-recorded"
+      ],
+      "reviewer": null,
+      "title": "Cleared main branch survives reopen"
+    }
+  ],
+  "title": "Worktrees never destroy or strand anything"
+}

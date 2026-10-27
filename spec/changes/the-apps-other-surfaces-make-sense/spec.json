@@ -1,0 +1,476 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the Overview fed, in the order their routes return, one row of each kind it lists: a question with an asker waiting, a question whose wait ended, a blocked task, an approved task with an open integration_skipped stall, a stall nobody is mending, and an open flaky-test list",
+      "how_to_check": "The acceptance drive: cd hub/ui && npx vitest run src/__tests__/overviewNoticesCanBeActedOn.test.tsx, run on master first (fails on the question rows and the merge row) and then on the branch (passes).",
+      "key": "every-row-has-a-clearing-control",
+      "requirement": "every-need-can-be-cleared",
+      "then": "every row has a button whose click calls a mutation that answers, declines, resumes, retries, ends a stall or handles the flaky list; on master the two question rows have no such button and the test fails",
+      "when": "each row is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an unanswered question row on the Overview",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewNoticesCanBeActedOn.test.tsx (the decline mutation is called with the row's id).",
+      "key": "decline-one",
+      "requirement": "questions-can-be-declined",
+      "then": "POST /questions/{id}/decline is sent for that question and, once the questions query is refetched, the row is gone",
+      "when": "the operator presses Decline"
+    },
+    {
+      "checked_by": "agent",
+      "given": "28 unanswered questions whose asker_waiting is false, the shape GET /questions returned on :8000 on 2026-10-27, and one question an asker waits on",
+      "how_to_check": "Same vitest file; then drive: on a scratch Hub started from the branch over a read-only backup of :8000's database (sqlite3 backup, per .claude/reference/hubs.md), open proj-d85a82bf4216's Overview, decline all, and screenshot 'Needs you' before and after.",
+      "key": "decline-all-unwaited",
+      "requirement": "questions-can-be-declined",
+      "then": "the confirmation names 28, the decline route is called 28 times and never for the waited-on question, and 'Needs you' then lists one question",
+      "when": "the operator uses the section's decline-all control and confirms"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task whose latest_integration is skipped with reason '09617d3b6920 is already in master; there was nothing to merge' and no open stall, and an approved task whose latest_integration is skipped 'no accepted evidence names a commit' whose integration_skipped stall has ended",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewNoticesCanBeActedOn.test.tsx, red on master, green on the branch.",
+      "key": "already-merged-is-not-listed",
+      "requirement": "merge-row-follows-its-stall",
+      "then": "neither task is listed under 'Needs you'; on master both are listed as 'approved but not merged'",
+      "when": "the Overview renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task with an open integration_failed stall and a latest_integration whose retryable is true",
+      "how_to_check": "Same vitest file, asserting the two mutations and the row's absence once the stalls query returns the stall ended.",
+      "key": "merge-row-retry-and-dismiss",
+      "requirement": "merge-row-follows-its-stall",
+      "then": "Try again calls the task's integrations/retry route; Dismiss calls POST /stalls/{id}/end for that stall; after a stall_ended event the row is gone",
+      "when": "the operator presses Try again, and separately Dismiss"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a stall row, a blocked-task row and a flaky row",
+      "how_to_check": "Same vitest file, with each mutation's onError invoked.",
+      "key": "refusal-toasts",
+      "requirement": "a-failed-action-says-so",
+      "then": "a toast with tone error carries that detail and each row is still listed",
+      "when": "their Dismiss, Resume and Dismiss mutations fail with a 409 carrying a detail"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Overview with the flaky-tests read failed",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewScreen.test.tsx (extend 'names the parts it could not read').",
+      "key": "read-failure-retries",
+      "requirement": "other-notices-act-or-clear",
+      "then": "the failed query's refetch is called, and the line is gone once it answers",
+      "when": "the operator presses Retry on the 'Couldn't read the flaky tests from the Hub' line, and the read then succeeds"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose queue status waiting_reason is the hop-budget hold",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewNoticesCanBeActedOn.test.tsx (onNavigate called with the General section).",
+      "key": "hop-chip-opens-settings",
+      "requirement": "other-notices-act-or-clear",
+      "then": "the app navigates to Project settings > General",
+      "when": "the operator clicks its 'held by hop budget' chip"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the app with no project open (the zero destination), and again with a project open on any tab",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/appSettings.test.tsx, red on master, green on the branch.",
+      "key": "settings-from-the-rail",
+      "requirement": "app-settings-have-a-home",
+      "then": "App settings opens showing Sound and notifications, Appearance and Hub connection; on master there is no such control and the test fails",
+      "when": "the operator activates the rail footer's Settings control, expanded and compact"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the command palette open",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/commandPalette.test.tsx (new cases).",
+      "key": "settings-from-the-palette",
+      "requirement": "app-settings-have-a-home",
+      "then": "App settings opens at Sound and notifications; 'settings' also lists Project settings and, for each open agent, its settings",
+      "when": "the operator types 'notif', 'sound' or 'settings' and presses Enter on the first match"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator in the refreshed app on :8000, told only 'turn off the sound for finished work'",
+      "how_to_check": "Operator check after the bundle reaches :8000; record how long it took in the task's evidence.",
+      "key": "operator-finds-notifications",
+      "requirement": "app-settings-have-a-home",
+      "then": "they reach the 'Work finished' switch and turn it off",
+      "when": "they look for it without help"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Project settings > General, and App settings with the project-settings query pending and then failed",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/appSettings.test.tsx src/__tests__/projectSettingsPanel.test.tsx (the group list at projectSettingsPanel.test.tsx:318 drops 'Sound and notifications').",
+      "key": "notifications-moved",
+      "requirement": "notifications-are-app-settings",
+      "then": "Project settings lists no 'Sound and notifications' group; App settings shows the sound switch, volume and four kinds in both states, and toggling one writes localStorage 'agentweave-notify'",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "App settings, Project settings and an agent's settings",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/appSettings.test.tsx",
+      "key": "scopes-named-and-linked",
+      "requirement": "each-settings-page-names-its-scope",
+      "then": "each heading names its scope, and Project settings' and agent settings' section lists each end with an 'App settings' link that navigates there",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Add-agent dialog with 'kbtwo' typed and the Provider list open",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/agentCreateDialogFocusRestore.test.tsx (fails today, per F1027); browser drive: py -3.11 scripts/drive/s1023_kb_layers.py popover against a scratch Hub serving the refreshed bundle.",
+      "key": "provider-escape",
+      "requirement": "escape-closes-one-layer",
+      "then": "ArrowDown moves the active option, Enter picks it, and Escape closes only the list: the dialog is open, the name still reads 'kbtwo', focus is on Provider",
+      "when": "ArrowDown, Enter, then reopen and Escape"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the task drawer with the inline 'Delete this task?' confirm open and focus on its Cancel",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/taskDetailDrawer.test.tsx (fails today, per F1030); browser drive: py -3.11 scripts/drive/s1023_kb_tasks.py.",
+      "key": "delete-confirm-escape",
+      "requirement": "escape-closes-one-layer",
+      "then": "the first closes the confirm only, drawer mounted and focus on Delete; the second closes the drawer",
+      "when": "Escape is pressed once, then again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a useDialogFocus dialog open and the command palette opened over it with Ctrl+K",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/useDialogFocus.test.tsx src/__tests__/commandPalette.test.tsx (fails today, per F1028); browser drive: py -3.11 scripts/drive/s1023_kb_palette_over.py.",
+      "key": "palette-tab-stays",
+      "requirement": "palette-keeps-focus-over-a-dialog",
+      "then": "focus is inside the palette after the Tab, the palette's input holds 'zz', and the dialog's fields are unchanged",
+      "when": "Tab is pressed and 'zz' typed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault with one entry",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultTab.test.tsx (fails today, per F1029); browser drive: py -3.11 scripts/drive/s1023_kb_dialogs.py vault.",
+      "key": "vault-dialog-focus-returns",
+      "requirement": "focus-returns-to-the-opener",
+      "then": "document.activeElement is the Add button, then the Vault storage button, after every close",
+      "when": "Add is opened with Enter and closed with Escape, then with Cancel; and the same with Vault storage"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open task drawer",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/taskDetailDrawer.test.tsx (fails today, per F1031); browser drive: py -3.11 scripts/drive/s1023_kb_tasks.py.",
+      "key": "rename-by-keyboard",
+      "requirement": "focus-returns-to-the-opener",
+      "then": "the title is a Tab stop named 'Rename', Enter opens the input, one PATCH is sent on save, and after both save and cancel the active element is the title control",
+      "when": "the operator Tabs to the title, presses Enter, types, presses Enter; then reopens the rename and presses Escape"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the rail's pane resizer",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/PaneResizer.test.tsx (fails today, per F1032); browser drive: py -3.11 scripts/drive/s1023_kb_rings.py, screenshots in both modes.",
+      "key": "resizer-ring",
+      "requirement": "resizer-focus-is-visible",
+      "then": "its line is drawn in the --ring colour; no inline style pins its background",
+      "when": "it is focused with the keyboard in light and in dark mode"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "32ac1954cf39757565cecef3b1ade72fd6c7d0b411ca85f5355cf9cc28fc5197",
+      "FR-10": "ba382fa8b1c3e5625697a7b42cb9e091203364e880c2de6a00ef3c27849476e0",
+      "FR-11": "8ca8d43a7c70bcb4c107876109c0d5acb0025c6f5a1d64dd6908ffb7a63b9bef",
+      "FR-12": "c2e9edf17d4d07fb3ac3a76169830b6c94a5e6e64e031ddd65e626ec69e318cb",
+      "FR-2": "6d98d3e52b490b19f458fe3ae94229074e2d6ad0bdaa74797796ecffcb76f4cb",
+      "FR-3": "817d2b10e29473e712566e3790643239cb0e4cde8f598f181d484b6786b8a280",
+      "FR-4": "7fb4df20f54fff3173f1c0d5f9be1685a4586958ee82b5da7cb7e226d4e674e7",
+      "FR-5": "7d3e0adb67a0f49096e3d4622c4bb4adb1f5921f4045729a333c2f4b5d4afada",
+      "FR-6": "e7fcf075989e1e3e4da2886d59e8e5f7583a8dfadc85e130bddd261d6dd46fba",
+      "FR-7": "147631372b4b2f260420272e2d09b14bb9d28d8bc3dd1a1b8ec28aca157b6691",
+      "FR-8": "424ef3f830edad5bcfb61c5363893fda41c77ec1c8033a410c82671a6a142d76",
+      "FR-9": "593cc93b97e846d49225f3b4f4be223a70c05d07d9e5eb6d0a865ccc098db114"
+    },
+    "high_water": 12,
+    "requirements": {
+      "a-failed-action-says-so": "FR-4",
+      "app-settings-have-a-home": "FR-6",
+      "each-settings-page-names-its-scope": "FR-8",
+      "escape-closes-one-layer": "FR-9",
+      "every-need-can-be-cleared": "FR-1",
+      "focus-returns-to-the-opener": "FR-11",
+      "merge-row-follows-its-stall": "FR-3",
+      "notifications-are-app-settings": "FR-7",
+      "other-notices-act-or-clear": "FR-5",
+      "palette-keeps-focus-over-a-dialog": "FR-10",
+      "questions-can-be-declined": "FR-2",
+      "resizer-focus-is-visible": "FR-12"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1. Which notices exist, and what each one does (owner: OverviewScreen.tsx, the container; OverviewView.tsx stays presentational).\n- Question, asker waiting: inline options or Open conversation, plus Decline. Question, asker gone: Decline; section-level decline-all for these. Owner of the action: the existing decline route (questions.py:640), looped by the UI; no new route for 28 calls.\n- Blocked task: Resume work / Open task (slice B), plus an error toast.\n- Approved but not merged: driven by open integration_* stalls (see D2). Try again (existing integrations/retry route) when latest_integration.retryable; Dismiss ends the stall.\n- Other stall: Open thread/task + Dismiss (exists), plus an error toast.\n- Flaky tests: Create a fix task / Dismiss (exists), plus an error toast.\n- Couldn't-read line: Retry (refetch of the failed queries); clears itself on success.\n- Budget exhausted: link to Budgets (exists); clears itself when the budget is not exhausted.\n- Agent chips: 'no charter', 'no runner', 'can't run' already link to their fix; 'held by hop budget' becomes a link to Project settings > General; 'launch not checked' and 'queue not read' clear themselves on a successful read.\n- CheckpointStatusBanner (every screen, not the Overview's): dismissable except while a checkpoint is being written, which ends by itself (CheckpointStatusBanner.tsx:22-31). Unchanged.\n\nD2. The merge row follows the Hub's stall, not a second rule in the browser. The Hub already decides what 'approved work did not reach the product' means: task_transition_service._note_stall raises integration_skipped/failed for every skip or failure except ALREADY_INTEGRATED and stalls.resolve_task_after_commit ends it on merge. The Overview's own rule (status approved and latest_integration.outcome != merged) disagrees with it, and also reads whichever row of a multi-commit approval wins an unordered tie (api/v1/tasks.py:557-578 orders by created_at only). Reading the stall makes the row clear itself, makes Dismiss mean the same thing as for every other stall, and needs no Hub change. The stall row and the merge row stop being two renderings of one fact (OverviewScreen.tsx:157 already folds them).\n\nD3. Settings split by whose they are. App settings: the operator's, for every project on this Hub, kept where they are kept today (notification prefs and mode in localStorage per window, prefs.ts and configStore.ts; the Hub address and key in the config store). Project settings: unchanged sections (ProjectSettingsScreen.tsx:23-33), minus Sound and notifications. Agent settings: unchanged sections (AgentSettingsPage.tsx:53-61). App settings is a new destination in lib/navigation.ts so it works with no project open, rendered on SettingsNavLayout (already shared by the other two). The entry is a Settings control in the rail footer beside Add project (Sidebar.tsx:363 and :462), because the rail is the one surface present on every screen including the zero state; the TopBar gear keeps meaning Project settings. The palette gains settings entries because it has none.\n\nD4. One arbiter for Escape and Tab stays useDialogFocus (F310's defaultPrevented rule). A nested layer claims Escape with preventDefault (the delete confirm, as the blocking-reason panel at TaskDetailDrawer.tsx:796-801 does); the Provider list becomes MenuSelect, the Radix select that held in the 2026-10-23 drive; the palette registers as a layer in useDialogFocus's stack so 'newest layer' is true again. Focus return for controlled Radix dialogs is fixed once in DialogContent rather than per caller, since VaultLibrary opens Add from a file drop with no trigger at all.\n\nD5. Delivery: three tasks in order, each committing hub/ui/src with hub/hub/static/ui (the bundle reaches :8000 on its next reload), built outside the Hub's flows.\n\nTier 1: UI-only, no migration, no Hub route or contract change.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/overview/OverviewScreen.tsx:102-205: the five row sources (questions, blocked tasks, merges from latest_integration, stalls, flaky); question rows have no secondary control; Resume (:137), stall Dismiss (:172) and flaky Dismiss (:201) have no onError",
+      "hub/ui/src/components/overview/OverviewScreen.tsx:307-324 and QueryErrorNotice.tsx:14-33: the couldn't-read line has no action; BudgetExhaustionNotice links to Budgets",
+      "hub/ui/src/components/overview/OverviewView.tsx:17 and :240-249: NeedKind includes 'review' and 'permission', which OverviewScreen never produces; each row renders primary and optional secondary",
+      "hub/ui/src/components/overview/AgentPostureChips.tsx:73-97: 'no charter', 'no runner', 'can't run' are buttons to their fix; 'launch not checked', 'queue not read', 'held by hop budget' are spans",
+      "hub/hub/task_transition_service.py:1308-1337 and hub/hub/stalls.py:325-346: integration stalls are raised for every skip or failure except ALREADY_INTEGRATED and ended on merge",
+      "hub/hub/api/v1/tasks.py:557-578: newest integration chosen by created_at only; rows of one approval share created_at",
+      "hub/hub/schemas/tasks.py:287-307: TaskIntegrationSummary carries a computed retryable; hub/ui/src/api/tasks.ts:486 and :505 call integrations/retry",
+      "hub/hub/api/v1/questions.py:640-700 decline route; hub/ui/src/components/questions/QuestionsPanel.tsx:92-105 already offers Decline",
+      "Read-only sqlite read of ~/.agentweave/hub/data/agentweave.db (mode=ro), 2026-10-27: 28 unanswered undeclined questions in proj-d85a82bf4216, all blocking=1 with wait_ended_at set, from the mender; 22 of 33 approved tasks with a non-merged row in their newest integration (19 'already in master', 3 'no accepted evidence names a commit'), 12 of them with a merged row at the same timestamp; one open stall (stuck_task, no task)",
+      "hub/ui/src/components/settings/NotificationSettings.tsx:17-31, hub/ui/src/lib/notify/prefs.ts:3-19, GeneralSettings.tsx:439, sections/GeneralSection.tsx:58-81",
+      "hub/ui/src/components/settings/ProjectSettingsScreen.tsx:23-33, AgentSettingsPage.tsx:53-61, SettingsNavLayout.tsx:5-10 (shared by both)",
+      "hub/ui/src/components/layout/TopBar.tsx:94-98 (Hub connection in the project menu), :135-144 (mode toggle), :145-155 (the gear is Project settings); App.tsx:653 (TopBar only with a project) and :595 (zero state); Sidebar.tsx:363 and :462 (rail footers)",
+      "Grep: no 'settings' in hub/ui/src/components/palette/CommandPalette.tsx",
+      "Settings routes in hub/hub/api/v1: projects.py:507/604, inbound_queue.py:98, traces.py:147/156, vault.py:143/151, all project-scoped; no app-level settings route exists or is needed",
+      "F1027-F1032 in scripts/drive/FINDINGS.md:40329-40425 all 'open'; the cited code is unchanged on master bbf3f10 (AgentCreateDialog.tsx:26/74 has no onKeyDown, useDialogFocus.ts Escape/Tab branches, CommandPalette.tsx:74-87, VaultAddDialog.tsx:131, VaultStorageDialog.tsx:39, TaskDetailDrawer.tsx:368/484-495/715-760, PaneResizer.tsx:141/158-159)",
+      "Existing tests the findings name exist: agentCreateDialogFocusRestore, useDialogFocus, vaultTab, taskDetailDrawer, PaneResizer, commandPalette, overviewScreen, projectSettingsPanel (:318 lists 'Sound and notifications' in General)",
+      "Drive scripts exist: scripts/drive/s1023_kb_layers.py, s1023_kb_palette_over.py, s1023_kb_dialogs.py, s1023_kb_tasks.py, s1023_kb_rings.py, d1023_notifications.py"
+    ],
+    "limits": [
+      "That the 28 questions and the merge rows are what the operator meant by F1045 is inferred from the database and the code, not from a screenshot; how many merge rows show at once depends on which tied row the route returns",
+      "The UI-side decline-all sends one request per question; if declines prove slow at this count, a batch route is a later change",
+      "The keyboard drive scripts were written against scratch Hub :8118 and profile kb1023; the builder may need to point AW_P and AW_E2E_STATE at a fresh scratch project",
+      "Every how_to_check names tests to be written or extended, not tests that pass today",
+      "The operator criterion (finding the notification settings unaided) can only be checked by the operator"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 1 (change)",
+  "open_questions": [
+    {
+      "question": "Which notices F1045 means: decided from a read-only read of :8000 (28 mender questions nobody waits on, and approved tasks whose newest integration was skipped as already in master), since the finding asked for a screenshot or a read of the sources; the operator can correct it on review.",
+      "resolved": true
+    },
+    {
+      "question": "Questions nobody waits on stay in 'Needs you' with Decline rather than leaving the Overview: a late answer is still delivered, so they remain the operator's to answer or decline.",
+      "resolved": true
+    },
+    {
+      "question": "Where App settings is entered: a Settings control in the rail footer (present with no project open), and the palette; the TopBar gear keeps meaning Project settings.",
+      "resolved": true
+    }
+  ],
+  "problem": "On 2026-10-25 the operator reported Overview notifications that 'are not dismissable and I have no action to take on them, they are just living there' (F1045). A read-only read of :8000 on 2026-10-27 shows what they are: 28 unanswered questions in proj-d85a82bf4216, all blocking questions from the mender whose wait had ended (27 copies of one question about task-8618731d065d), each offering only 'Open conversation' (OverviewScreen.tsx:102-123); and 22 of the project's 33 approved tasks whose newest integration row is a skip, 19 of them 'already in master' and 12 of them merged by the same approval, each a candidate 'approved but not merged' row with only 'Open task' (OverviewScreen.tsx:140-154) while no integration stall is open. Settings are hard to find: sound and notifications are the operator's own, for every project (NotificationSettings.tsx:17-31), yet sit inside one project's Project settings > General (GeneralSettings.tsx:439), hidden while that project's settings load or fail (GeneralSection.tsx:58-81); with no project open there is no settings entry at all (App.tsx:653), and the palette offers none. The 2026-10-23 keyboard sweep found six focus defects (F1027-F1032), each with a verified cause and a named failing test, still present on master (AgentCreateDialog.tsx:26-115, CommandPalette.tsx:74-87, VaultAddDialog.tsx:131, TaskDetailDrawer.tsx:484-495 and :715-760, PaneResizer.tsx:139-160).",
+  "requirements": [
+    {
+      "key": "every-need-can-be-cleared",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1045: on :8000 on 2026-10-27 the Overview listed 28 questions nobody was waiting on and up to 22 'approved but not merged' rows whose only control was 'Open conversation' or 'Open task'. A row that can only be visited lives forever.",
+      "statement": "Every row under the Overview's 'Needs you' offers, on the row itself, at least one control that ends the condition that raised it or dismisses the row (answer or decline a question, resume a blocked task, try a merge again or dismiss it, dismiss a stall, make a fix task for flaky tests or dismiss them). No row offers only navigation."
+    },
+    {
+      "key": "questions-can-be-declined",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The decline route exists (hub/hub/api/v1/questions.py:640) and the Questions page offers it (QuestionsPanel.tsx:92-105); the Overview does not. 27 of the 28 open questions on :8000 are copies of one mender question whose wait ended.",
+      "statement": "Each unanswered question row on the Overview offers Decline, which closes the question through the existing decline route and removes the row. When two or more listed questions have no asker waiting, one control on the section declines all of them after a confirmation that names how many."
+    },
+    {
+      "key": "merge-row-follows-its-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub already decides which approved work did not reach the product: it records a stall for every skip or failure except 'already in the target' and ends it when the work merges (task_transition_service.py:1308-1337, stalls.py:325-346). The Overview re-derives the rule from latest_integration (OverviewScreen.tsx:140-154) and gets it wrong for 22 of 33 approved tasks on :8000.",
+      "statement": "An 'approved but not merged' row is listed only while its task has an open integration_skipped or integration_failed stall, and leaves the Overview when that stall ends (the work merged, the mender fixed it, or the operator dismissed it). A task whose skip says its commit is already in the target branch is never listed. The row offers Try again when the task's latest integration is retryable, and Dismiss, which ends the stall."
+    },
+    {
+      "key": "a-failed-action-says-so",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Resume, Dismiss (stall) and Dismiss (flaky) mutate with no error handler today (OverviewScreen.tsx:137, :172, :201), so a refusal looks like a button that does nothing.",
+      "statement": "When an Overview row's action or dismiss is refused by the Hub, the app shows a toast carrying the Hub's reason and the row stays listed."
+    },
+    {
+      "key": "other-notices-act-or-clear",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Every other notice on the Overview either offers an action or clears itself when its cause ends: the 'Couldn't read ... from the Hub' line offers Retry, which refetches the failed reads, and disappears once they answer; the budget notice keeps its link to Budgets and disappears when the budget is no longer exhausted; the 'held by hop budget' chip on an agent row opens Project settings at the hop budget; 'launch not checked' and 'queue not read' disappear once their reads answer."
+    },
+    {
+      "key": "app-settings-have-a-home",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today the only gear is 'Project settings' (TopBar.tsx:145-155), the TopBar is rendered only with a project open (App.tsx:653), Hub connection sits in the project switcher's menu (TopBar.tsx:94-98) and the palette has no settings entry at all (no match for 'settings' in CommandPalette.tsx).",
+      "statement": "An App settings page holds the settings that belong to the operator rather than to a project: Sound and notifications, Appearance (light or dark) and Hub connection. It is reachable from a Settings control in the rail's footer on every screen, including when no project is open, and from the command palette by typing 'settings', 'sound' or 'notifications'."
+    },
+    {
+      "key": "notifications-are-app-settings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "They are the operator's, kept per window for every project (NotificationSettings.tsx:17-31, prefs.ts:3-19), but live inside Project settings > General (GeneralSettings.tsx:439), which renders nothing of them while that project's settings load or after their read fails (GeneralSection.tsx:58-81).",
+      "statement": "Sound and notifications appear in App settings and nowhere in Project settings, and they render and save whether or not any project's settings have loaded."
+    },
+    {
+      "key": "each-settings-page-names-its-scope",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "An operator looking for sound in Project settings or agent settings is pointed to it from the page they are on.",
+      "statement": "App settings, Project settings and an agent's settings each say in their heading whose settings they are (yours on this Hub, this project's, this agent's), and Project settings and agent settings each carry a link to App settings in their section list."
+    },
+    {
+      "key": "escape-closes-one-layer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Escape closes only the innermost open layer and returns focus to the control that opened it: with the Add-agent dialog's Provider list open, Escape closes the list and keeps the dialog and its typed name (F1027); with the task drawer's 'Delete this task?' confirm open, Escape cancels the confirm and keeps the drawer, focus on Delete (F1030). In the Provider list, arrow keys move between providers and Enter picks one."
+    },
+    {
+      "key": "palette-keeps-focus-over-a-dialog",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With the command palette open over a dialog or the task drawer, Tab and typed text stay inside the palette; the dialog beneath does not take focus until the palette closes (F1028)."
+    },
+    {
+      "key": "focus-returns-to-the-opener",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Closing any dialog built on the shared DialogContent by Escape, Cancel or its close button returns focus to the element that was focused when it opened (the Vault's Add and Vault storage buttons, the Jobs archive confirm's opener; F1029). The task drawer's title is reachable with Tab and opened for renaming with Enter, and after the rename is saved or cancelled focus is on the title control (F1031). Focus never falls to the page body after a close."
+    },
+    {
+      "key": "resizer-focus-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A focused pane resizer (Resize navigation, Resize conversation) shows its line in the --ring colour in light and dark mode, and its hover colour applies too (F1032)."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "app-surfaces-make-sense"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Every Overview 'Needs you' row offering a control that ends or dismisses its cause, with an error toast when the Hub refuses",
+      "Decline on Overview question rows, and a confirmed decline-all for questions nobody waits on",
+      "The 'approved but not merged' row driven by the open integration stall, with Try again and Dismiss",
+      "Retry on the Overview's couldn't-read line; the hop-budget chip linking to its setting",
+      "An App settings page (sound and notifications, appearance, Hub connection) reachable from the rail on every screen and from the palette",
+      "Sound and notifications moved out of Project settings; each settings page naming whose settings it holds",
+      "F1027-F1032: the Provider list, palette over a dialog, focus return from Radix dialogs, the delete confirm's Escape, keyboard rename, the resizer's focus ring"
+    ],
+    "non_goals": [
+      "Making the mender ask fewer questions or record them as morning notes while the operator is away: slice N (the-mender-wakes-only-for-real-stalls); this slice only lets the operator clear what is already there",
+      "Grouping duplicate questions into one row: the decline-all control covers the backlog; fewer duplicates is slice N's",
+      "Fixing the unordered tie in api/v1/tasks.py:557-578 (_latest_integrations_by_task) that can show a merged multi-commit approval as skipped in the task drawer: a pre-existing defect, filed to the backlog as a finding rather than carried here, since the Overview no longer reads it for its row",
+      "Per-project or per-agent notification rules, or moving notification preferences to the Hub: they stay the operator's, per window, as today",
+      "Moving any project or agent setting between scopes, or adding new settings: D (driver, gate level, people, budget cap) adds its own",
+      "A UI check in the project's checks: slice L",
+      "The spec page's own surfaces: slice F",
+      "Other keyboard or focus findings than F1027-F1032"
+    ]
+  },
+  "summary": "The Overview stops listing things the operator cannot do anything about: every row under 'Needs you' carries a control that ends or dismisses it, questions can be declined there (one at a time or all those nobody waits on), an 'approved but not merged' row follows the Hub's own integration stall so it clears itself when the work lands and is never shown for work already in main, and every other notice either acts or clears itself. Settings get a home split by whose they are: an App settings page, reachable from the rail on every screen and from the palette, holds sound and notifications, appearance and the Hub connection, while Project and agent settings keep their sections and say whose they are. The six keyboard findings F1027-F1032 are fixed so Escape closes one layer, the palette keeps focus over a dialog, closing a dialog returns focus to its opener, a task can be renamed from the keyboard, and a focused resizer is visible.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "The acceptance drive first: write hub/ui/src/__tests__/overviewNoticesCanBeActedOn.test.tsx, fed in the routes' real order and shapes (the 28 unwaited mender questions and the already-in-master skips read from :8000 on 2026-10-27), and see it fail on master for the question rows and the 'approved but not merged' rows. Then in OverviewScreen derive merge rows from open integration stalls (title from the task, detail from the stall reason, Try again when latest_integration.retryable, Dismiss ends the stall), give every question row Decline and the section a confirmed decline-all for questions nobody waits on, add error toasts to every row mutation, a Retry to QueryErrorNotice, and make the hop-budget chip a link to Project settings > General. Extend overviewScreen.test.tsx where its merge-row case encodes the old rule. Rebuild the bundle (npm run build, then py -3.11 scripts/refresh_ui_bundle.py) and commit hub/ui/src with hub/hub/static/ui. Drive the Overview on a scratch Hub over a read-only backup of :8000's database.",
+      "files": [
+        "hub/ui/src/components/overview/OverviewScreen.tsx",
+        "hub/ui/src/components/overview/OverviewView.tsx",
+        "hub/ui/src/components/overview/AgentPostureChips.tsx",
+        "hub/ui/src/components/common/QueryErrorNotice.tsx",
+        "hub/ui/src/styles/overview.css",
+        "hub/ui/src/__tests__/overviewNoticesCanBeActedOn.test.tsx",
+        "hub/ui/src/__tests__/overviewScreen.test.tsx",
+        "hub/ui/mock/screens/Overview.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "overview-notices",
+      "requirements": [
+        "every-need-can-be-cleared",
+        "questions-can-be-declined",
+        "merge-row-follows-its-stall",
+        "a-failed-action-says-so",
+        "other-notices-act-or-clear"
+      ],
+      "reviewer": null,
+      "title": "Every Overview notice can be acted on or cleared"
+    },
+    {
+      "depends_on": [
+        "overview-notices"
+      ],
+      "description": "Write hub/ui/src/__tests__/appSettings.test.tsx first and see it fail on master (no Settings control in the rail, notifications inside Project settings). Add an app-settings destination to lib/navigation.ts (reachable from the zero destination), an AppSettingsScreen on SettingsNavLayout with Sound and notifications (NotificationSettings moved out of GeneralSettings), Appearance (the mode the TopBar toggles) and Hub connection (the SetupModal's state with a Change button that opens it). Put a Settings control in the rail footer, expanded and compact; add palette entries for App settings, Sound and notifications, Project settings and each agent's settings; name the scope in each settings heading and link App settings from the Project and agent section lists. Update projectSettingsPanel.test.tsx and the mock's Settings screen so the operator can see the page in the mock. Rebuild and commit the bundle with the source.",
+      "files": [
+        "hub/ui/src/lib/navigation.ts",
+        "hub/ui/src/App.tsx",
+        "hub/ui/src/components/layout/Sidebar.tsx",
+        "hub/ui/src/components/settings/AppSettingsScreen.tsx",
+        "hub/ui/src/components/settings/NotificationSettings.tsx",
+        "hub/ui/src/components/settings/GeneralSettings.tsx",
+        "hub/ui/src/components/settings/ProjectSettingsScreen.tsx",
+        "hub/ui/src/components/settings/SettingsNavLayout.tsx",
+        "hub/ui/src/components/agents/AgentSettingsPage.tsx",
+        "hub/ui/src/components/palette/CommandPalette.tsx",
+        "hub/ui/src/__tests__/appSettings.test.tsx",
+        "hub/ui/src/__tests__/projectSettingsPanel.test.tsx",
+        "hub/ui/src/__tests__/commandPalette.test.tsx",
+        "hub/ui/mock/screens/Settings.tsx",
+        "hub/ui/mock/routes.ts",
+        "scripts/drive/d1023_notifications.py",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "app-settings",
+      "requirements": [
+        "app-settings-have-a-home",
+        "notifications-are-app-settings",
+        "each-settings-page-names-its-scope"
+      ],
+      "reviewer": null,
+      "title": "App settings, with sound and notifications in them"
+    },
+    {
+      "depends_on": [
+        "app-settings"
+      ],
+      "description": "Write the six failing tests each finding names first (agentCreateDialogFocusRestore, useDialogFocus, vaultTab, taskDetailDrawer x2, PaneResizer) and see them fail on master. Then: replace the hand-built ProviderPicker with the MenuSelect the Vault dialogs use (F1027); let a modal layer that does not use useDialogFocus register in its stack, and register the palette, so the older dialog stops claiming Tab (F1028); make the shared DialogContent remember the element focused at open and restore it on close (F1029, also the Jobs archive confirm); claim Escape on the drawer's delete confirm with preventDefault and return focus to Delete (F1030); make the drawer title a button named Rename that gets focus back after save or cancel (F1031); move the resizer line's resting colour into a class so the ring colour wins on focus and hover (F1032). Rebuild and commit the bundle with the source, then run the s1023_kb_* drive scripts against a scratch Hub serving it and set each finding's Status line in scripts/drive/FINDINGS.md.",
+      "files": [
+        "hub/ui/src/components/agents/AgentCreateDialog.tsx",
+        "hub/ui/src/hooks/useDialogFocus.ts",
+        "hub/ui/src/components/palette/CommandPalette.tsx",
+        "hub/ui/src/components/ui/dialog.tsx",
+        "hub/ui/src/components/tasks/TaskDetailDrawer.tsx",
+        "hub/ui/src/components/layout/PaneResizer.tsx",
+        "hub/ui/src/__tests__/agentCreateDialogFocusRestore.test.tsx",
+        "hub/ui/src/__tests__/useDialogFocus.test.tsx",
+        "hub/ui/src/__tests__/commandPalette.test.tsx",
+        "hub/ui/src/__tests__/vaultTab.test.tsx",
+        "hub/ui/src/__tests__/taskDetailDrawer.test.tsx",
+        "hub/ui/src/__tests__/PaneResizer.test.tsx",
+        "scripts/drive/FINDINGS.md",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "keyboard-layers",
+      "requirements": [
+        "escape-closes-one-layer",
+        "palette-keeps-focus-over-a-dialog",
+        "focus-returns-to-the-opener",
+        "resizer-focus-is-visible"
+      ],
+      "reviewer": null,
+      "title": "Dialogs keep focus where it belongs (F1027-F1032)"
+    }
+  ],
+  "title": "The app's other surfaces make sense"
+}

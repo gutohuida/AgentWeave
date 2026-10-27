@@ -1,0 +1,358 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "the mock server (npx vite --config vite.mock.config.ts)",
+      "key": "mock-renders",
+      "requirement": "mock-first",
+      "then": "both show the redesigned page with recorded data, every action responds (toast or state change), and `npx tsc -p tsconfig.mock.json --noEmit` passes",
+      "when": "the operator opens the Spec screen and the conversation screen with the spec panel open, in dark and in light"
+    },
+    {
+      "given": "documents in each state (being written, ready, approved with no build, approved with a build running, archived)",
+      "key": "header-actions",
+      "requirement": "one-clear-next-action",
+      "then": "the header shows exactly the actions open to it, one of them primary, and Check never changes the phase shown",
+      "when": "each is opened"
+    },
+    {
+      "given": "a document with one blocking gap and one warning",
+      "key": "check-inline",
+      "requirement": "check-shows-results-in-place",
+      "then": "the gap and the warning appear beside the requirement or task they concern, and the outline marks them",
+      "when": "Check is pressed"
+    },
+    {
+      "given": "a document",
+      "key": "native-sections",
+      "requirement": "rendered-natively",
+      "then": "its requirements and criteria are app components, not a frame, and a filter hides and shows them without reloading",
+      "when": "it is opened"
+    },
+    {
+      "given": "the document list",
+      "key": "list-filters",
+      "requirement": "document-list-filter-order",
+      "then": "only those show, slices under their roadmap in build order, and the choice is still applied after reopening the tab",
+      "when": "the operator filters to approved change documents and orders by roadmap order"
+    },
+    {
+      "given": "a document with requirements in several evidence states",
+      "key": "doc-filters",
+      "requirement": "within-document-filter-order",
+      "then": "only those requirements show, and tasks appear in dependency order",
+      "when": "the operator filters to 'awaiting evidence' and orders tasks by build order"
+    },
+    {
+      "given": "a long document",
+      "key": "outline-jump",
+      "requirement": "navigation",
+      "then": "the view moves to that requirement, the link copied there reopens it, and back returns to the previous position",
+      "when": "the operator picks a requirement in the outline, then presses back"
+    },
+    {
+      "given": "a document with one finished and one running build",
+      "key": "build-numbers",
+      "requirement": "build-progress-on-the-document",
+      "then": "each build shows its driver, level, people, task counts, the four-way time split and cost by role, and the running one updates as it advances",
+      "when": "it is opened"
+    },
+    {
+      "given": "the conversation screen with the spec panel open at its narrowest width",
+      "key": "panel-parity",
+      "requirement": "side-panel-parity",
+      "then": "the actions, outline, filters and build progress are all reachable, with nothing clipped",
+      "when": "the same document is shown"
+    },
+    {
+      "given": "the panel on a document with 18 requirements",
+      "key": "panel-strip",
+      "requirement": "panel-navigation",
+      "then": "the view moves to FR-11 then FR-12, the strip marks the one in view and shows its position, and each strip item is coloured by its evidence state",
+      "when": "the operator clicks requirement 11 in the strip, then presses next"
+    },
+    {
+      "given": "the panel's filter tray",
+      "key": "panel-tray",
+      "requirement": "panel-navigation",
+      "then": "each active filter shows as a chip with a count on the tray button, removing a chip removes only that filter, and clear all restores the full document",
+      "when": "the operator filters by evidence and by task, then removes one chip, then clears all"
+    },
+    {
+      "given": "a conversation attached to a document, two documents building and three opened recently",
+      "key": "picker-shortcuts",
+      "requirement": "open-a-spec",
+      "then": "the attached document, the two building documents with their progress and the three recent ones show as shortcuts above every document, which can be filtered, ordered and grouped by roadmap",
+      "when": "the operator opens the panel's Specs tab with nothing typed"
+    },
+    {
+      "given": "the picker",
+      "key": "picker-enter",
+      "requirement": "open-a-spec",
+      "then": "the field names the first match before Enter, Enter opens it for reading in the panel, and the conversation's attached document is unchanged",
+      "when": "the operator types part of a title and presses Enter"
+    },
+    {
+      "given": "the panel's Specs tab, the Ctrl/Cmd+K picker and the panel's switcher",
+      "key": "picker-everywhere",
+      "requirement": "open-a-spec",
+      "then": "each shows the same picker with the same filters and order",
+      "when": "each is opened"
+    },
+    {
+      "given": "the page in dark, light and with reduced motion",
+      "key": "motion-and-modes",
+      "requirement": "aesthetic",
+      "then": "no literal colours appear (grep), state changes animate in dark and light, and nothing animates under reduced motion",
+      "when": "the operator checks, opens and filters"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "d02706e5bd278676290eba915025f66588b1d6506c9d5abeada56b712152aeb7",
+      "FR-10": "ca3e8b83c56cda10bafac4d70960cfb5fd24624c42adc2f85c216dfb935f28e6",
+      "FR-11": "c9a9298b984dbc6564b3935001c7609c3b34531cda0d232db3cee2e21a7d9583",
+      "FR-12": "4d7b7103cf99fef3e60325ece49ed7be2fd765ba564cc30f22a94bb12e10dd29",
+      "FR-2": "62bb62daa3f4abcfcca57afa120ec96306edb155659629202301a3c46721d615",
+      "FR-3": "0335a889f917aa709d1851a78c3d5cee1dbf5a7b1c5a7c3dc8c579a1f3a6641d",
+      "FR-4": "0269c4652b20509be708c12a9a289631e4969792c501fbeb3d0a14b42f211695",
+      "FR-5": "2e5fa7843fafca2262a183a6237e07e72b20cb3ddd31c51f09331e7fa1e35234",
+      "FR-6": "081302b70c9eb99dce5ca4b7a0b5e33b414cd177d8847fe35351a4ee690a25ab",
+      "FR-7": "6d5dfa7fa5e1f5004f94024f863593f5d008d38a1f38c23dbb87223fd9b3a99f",
+      "FR-8": "31a032d65957fb69746b89651195d286bfcbfbdaa6c00b9928e29b2968244f10",
+      "FR-9": "fc852db8d377e8d9d65866b94895feef148d7d3f10c34ebe0ad7b197b8db313e"
+    },
+    "high_water": 12,
+    "requirements": {
+      "aesthetic": "FR-9",
+      "build-progress-on-the-document": "FR-7",
+      "check-shows-results-in-place": "FR-2",
+      "document-list-filter-order": "FR-4",
+      "mock-first": "FR-10",
+      "navigation": "FR-6",
+      "one-clear-next-action": "FR-1",
+      "open-a-spec": "FR-12",
+      "panel-navigation": "FR-11",
+      "rendered-natively": "FR-3",
+      "side-panel-parity": "FR-8",
+      "within-document-filter-order": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 1 (change). The mock (task-dadec899cc91) is approved; the wiring task builds after C (Check, Approve, Build) and D (each build's progress). The UI bundle reaches the operator's :8000 app on reload, so it ships only with lint, types and vitest green.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/spec/SpecPage.tsx and SpecDocumentPanel.tsx: list, header with health line, sandboxed SpecFrame",
+      "hub/ui/src/components/spec/SpecIndexTab.tsx and SpecDocumentPicker.tsx: both host SpecDocumentBrowser (search over SpecTree); opening is for reading, attaching stays the composer's (D9)",
+      "hub/ui/mock/README.md: the mock practice and its rules",
+      "The mock (task-dadec899cc91), run on :5199 and judged by the operator in the browser, 2026-10-26: approved, then the panel navigation and the picker approved the same evening; evidence for FR-1..FR-10 accepted (partial, mock only; FR-10 in full), FR-11 and FR-12 recorded awaiting a reviewer",
+      "The panel navigation and picker additions: tsc (mock config) and eslint clean on the changed files; screenshots panel_*.png, panel_tray_*.png, panel_switcher_*.png, picker_*.png, picker_search_*.png in testbed/ui-judge/mock/spec of that checkout"
+    ],
+    "limits": [
+      "The build data the page shows depends on roadmap slice D's build record; the mock simulates it as mock state",
+      "Not yet checked whether the Hub's document read returns everything native rendering needs (the mock parsed the payload kept inside the recorded HTML)",
+      "tsc, lint and vitest results for the first mock are the author's; vitest was not re-run after the panel navigation and the picker were added"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Native rendering replaces the sandboxed frame: approved with the mock (operator, 2026-10-26).",
+      "resolved": true
+    },
+    {
+      "question": "Document list layout: the left column, as in the approved mock (operator, 2026-10-26).",
+      "resolved": true
+    },
+    {
+      "question": "Built by Claude Code subagents outside the Hub's flows (operator, 2026-10-27), so delivery is none; tasks are closed as already built against the merged commits once their acceptance drives pass.",
+      "resolved": true
+    }
+  ],
+  "problem": "Operator, 2026-10-26: the spec flow feels weird (propose is only a check, approve jumps into the flow), the page should look and move like the rest of AgentWeave, and it needs better navigation, filtering and ordering (F1044, 'we need to create ordering for the spec'), in the side panel as well, including the navigation used to choose which spec to open. Today the page (hub/ui/src/components/spec/SpecPage.tsx, SpecDocumentPanel.tsx) is a document list, a header with one phase action and a health line, and the document itself as Hub-rendered HTML in a sandboxed frame (SpecFrame), so its requirements and tasks cannot be filtered or ordered by the app; choosing a spec in the panel (SpecIndexTab and the Ctrl/Cmd+K SpecDocumentPicker, both SpecDocumentBrowser) is a search box over a tree with no filters, order, build state or shortcuts; and nothing says what building a document cost or where the time went: the 2026-10-25 post-mortem needed SQL against the operator's database.",
+  "requirements": [
+    {
+      "key": "one-clear-next-action",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A document's header shows its phase and the actions open to it as buttons: Check while it is being written (never changing its phase), Approve when it is ready, Build or 'Approve and build' once it may be built, with the one the document is waiting for visually primary."
+    },
+    {
+      "key": "check-shows-results-in-place",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Pressing Check shows what blocks approval and what only warns, beside the parts of the document they concern, without leaving the page or freezing the document."
+    },
+    {
+      "key": "rendered-natively",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Filtering and ordering inside a document, and showing each requirement's evidence and each task's build state beside it, are not possible in a sandboxed frame of pre-rendered HTML. The operator approved replacing the frame (2026-10-26).",
+      "statement": "The document's sections, requirements, acceptance criteria and tasks are rendered by the app from the document's structure, so the page can filter, order, highlight and link them."
+    },
+    {
+      "key": "document-list-filter-order",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The document list can be filtered by kind, phase, text and 'has a build running', ordered by last change, phase, title or roadmap order, and grouped under its roadmap, and the choice persists per project."
+    },
+    {
+      "key": "within-document-filter-order",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Within a document, requirements can be filtered by evidence state and by task, and tasks by status and agent; tasks can be ordered by status or by build order (dependencies)."
+    },
+    {
+      "key": "navigation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An outline of the open document jumps to any section, requirement or task; a slice links to its roadmap and to the previous and next slice; back and forward return to the previous position; every position has a link that reopens it."
+    },
+    {
+      "key": "build-progress-on-the-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each build of the document shows, live: its driver, level and people; tasks by status; wall time split into building, waiting for review, checks and waiting to be handed out; runs; and cost split between building, reviewing and leading."
+    },
+    {
+      "key": "side-panel-parity",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26, approving the mock: 'don't forget that should be on the side panel as well'.",
+      "statement": "The conversation's spec side panel shows the same document, actions, navigation and build progress as the Spec tab, in a layout that fits the panel's width."
+    },
+    {
+      "key": "panel-navigation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: 'a better navigation of the spec side panel, better filtering and ordering' (approved: 'that's amazing, keep this').",
+      "statement": "The side panel switches to any other document from a switcher above its tabs; jumps to any section, and to any requirement or task from a strip that shows each one's state, with previous and next and its position; and filters and orders from one tray whose active choices stay visible as chips that remove themselves one at a time or all at once."
+    },
+    {
+      "key": "open-a-spec",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: 'when we open the side panel and open specs we open a navigation to choose the spec to open, I want that improved as well' (approved: 'It works. Perfect'). Attaching stays the composer's control (SpecIndexTab design D9).",
+      "statement": "Choosing a spec to open, from the panel's Specs tab, the Ctrl/Cmd+K picker or the panel's switcher, is one picker: a search field from which Enter opens the first match it names; with nothing typed, shortcuts to the conversation's attached document, to documents with a build running (with their progress) and to the last three opened; then every document with the Spec tab's filters, order and roadmap grouping. Opening never attaches a document to the conversation."
+    },
+    {
+      "key": "aesthetic",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The page uses only the app's tokens and primitives, works in dark and light, animates state changes (opening, checking, a build's progress) with the motion tokens, and stops animating under reduced motion."
+    },
+    {
+      "key": "mock-first",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator practice since 2026-10-20: mocks are real components, so applying the approved mock is wiring, not redrawing.",
+      "statement": "A mock of the Spec tab and the side panel, built from the real components fed recorded fixtures under hub/ui/mock, is approved by the operator before the page is wired to the Hub."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "spec-page-overhaul"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Spec tab's document list, document view and header",
+      "The conversation's spec side panel, using the same components in a compact layout, with its own navigation",
+      "Choosing a spec to open: the panel's Specs tab, the Ctrl/Cmd+K picker and the panel's switcher, as one picker",
+      "Check, Approve, Build and 'Approve and build' as the page's actions (behaviour from roadmap slices C and D)",
+      "Navigation: an outline of the open document, links between a roadmap and its slices, previous and next slice, back and forward",
+      "Filtering and ordering of the document list, and of requirements and tasks within a document",
+      "Each build's progress, runs, cost by role and waiting time, live",
+      "A mock of all of the above from real components and recorded fixtures, approved before wiring"
+    ],
+    "non_goals": [
+      "The behaviour behind Check, Approve and Build: roadmap slices C and D; this slice shows it",
+      "Project-wide stats across specs: roadmap slice G",
+      "Changing what a document contains or how the Hub validates it",
+      "Attaching a document to a conversation from the picker: opening is for reading, attaching stays the composer's control",
+      "The capability fold and merge dialogs, beyond restyling them to match",
+      "The top-switcher layout for the Spec tab's document list: the operator approved the left column"
+    ]
+  },
+  "summary": "The Spec tab and the conversation's spec side panel are rebuilt in AgentWeave's current aesthetic, as the rest of the app was: clear buttons for Check, Approve and Build, motion from the app's tokens, navigation within and between documents, filtering and ordering of documents, requirements and tasks, and each build's progress, runs and cost shown live on the document. The mock (task-dadec899cc91, components in hub/ui/src/components/spec/page/) was approved by the operator in the browser on 2026-10-26, side panel included. The same day the panel gained its own navigation (a jump strip and a filter tray with removable chips) and choosing a spec to open became one picker (search that Enter opens from, shortcuts to this conversation's document, builds running and recently opened, then every document filtered and ordered), used by the panel's Specs tab, the Ctrl/Cmd+K picker and the panel's switcher; both were approved too. What remains is wiring it to the Hub as roadmap slices C and D provide the behaviour.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Built as task-dadec899cc91 and approved by the operator 2026-10-26: presentational components in hub/ui/src/components/spec/page, styles in hub/ui/src/styles/spec-page.css, mock controller hub/ui/mock/specMock.ts. Added on the same branch the same day, and approved: the panel's navigation (SpecPanelNav.tsx) and the spec picker (SpecOpenPicker.tsx, mock route conversation/Architect/conv-9cdda4865e0b/specs).",
+      "files": [
+        "hub/ui/src/components/spec",
+        "hub/ui/src/styles",
+        "hub/ui/mock"
+      ],
+      "from": null,
+      "key": "mock",
+      "requirements": [
+        "mock-first",
+        "one-clear-next-action",
+        "check-shows-results-in-place",
+        "rendered-natively",
+        "document-list-filter-order",
+        "within-document-filter-order",
+        "navigation",
+        "build-progress-on-the-document",
+        "side-panel-parity",
+        "panel-navigation",
+        "open-a-spec",
+        "aesthetic"
+      ],
+      "reviewer": null,
+      "title": "Mock the redesigned spec page and side panel"
+    },
+    {
+      "depends_on": [
+        "mock"
+      ],
+      "description": "Wire the approved mock's components to the Hub's hooks in the Spec tab and the conversation panel (the panel's switcher, strip and filter tray; the picker in the panel's Specs tab, the Ctrl/Cmd+K dialog and the switcher, replacing SpecDocumentBrowser there), replacing the frame; recent documents and the attached one come from the panel tabs store and the conversation; rebuild the UI bundle. Build progress and the Check/Approve/Build actions are wired as roadmap slices C and D provide them. Also: one word for the writing phase in the pill and the ribbon, and a Stop control that does not read as a checkbox.",
+      "files": [
+        "hub/ui/src/components/spec",
+        "hub/ui/src/styles",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "wire",
+      "requirements": [
+        "one-clear-next-action",
+        "check-shows-results-in-place",
+        "rendered-natively",
+        "document-list-filter-order",
+        "within-document-filter-order",
+        "navigation",
+        "build-progress-on-the-document",
+        "side-panel-parity",
+        "panel-navigation",
+        "open-a-spec",
+        "aesthetic"
+      ],
+      "reviewer": null,
+      "title": "Wire the approved spec page"
+    }
+  ],
+  "title": "The spec page redesigned"
+}

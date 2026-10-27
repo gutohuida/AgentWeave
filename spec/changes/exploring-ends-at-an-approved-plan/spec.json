@@ -1,0 +1,365 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a document being written with one blocking gap",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_exploring_ends_at_an_approved_plan.py -k check: call the operator Check route and the agent submit route on the same document; assert equal blocking lists, phase exploring, and the save succeeding after Check.",
+      "key": "check-while-editing",
+      "requirement": "check-never-moves",
+      "then": "Check shows the same blocking list the agent's save returned, the phase is still exploring, and the agent's save succeeds",
+      "when": "the operator presses Check, and then an agent saves a change to the document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of a database holding a document in proposed",
+      "how_to_check": "Hazard check: take a read-only backup of the :8000 database (sqlite backup API, mode=ro, never the live file), start a Hub from the branch on the copy with DATABASE_URL naming it (port 8010), read the formerly proposed documents and their events, then call the old propose route and assert it is refused; plus a migration test in hub/tests on a fixture holding a proposed document.",
+      "key": "proposed-migrated",
+      "requirement": "no-proposed-phase",
+      "then": "that document is in exploring with an event naming the retirement, and asking to move any document to proposed is refused",
+      "when": "the Hub starts on this slice's code"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a ready document in exploring",
+      "how_to_check": "Same test file: approve via the operator route from exploring; the document's events show exploring -> approved and nothing between.",
+      "key": "approve-direct",
+      "requirement": "approve-from-exploring",
+      "then": "it is approved without passing through any other phase",
+      "when": "the operator approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator loaded a ready document, and an agent then saved a change to it",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_exploring_ends_at_an_approved_plan.py -k stale, reading the document (its version), saving a change as an agent, approving with the old version (refused, with the sentence), reloading and approving (accepted); red on master, green on the branch; paste both outputs.",
+      "key": "stale-approve-refused",
+      "requirement": "approve-what-was-seen",
+      "then": "the approval is refused saying the document changed since it was loaded; after reloading, approving succeeds; fails on master 43301a6 (no version is checked)",
+      "when": "the operator approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a ready document whose delivery is a flow",
+      "how_to_check": "Same test file: approve, then assert tasks exist, no Loop row names the document, and no Run was created; red on master.",
+      "key": "approve-starts-nothing",
+      "requirement": "approval-is-a-plan",
+      "then": "its tasks exist on the board, no loop exists for it and no run started; fails on master 43301a6 (approval creates the flow)",
+      "when": "it is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the approved document above, an hour later",
+      "how_to_check": "Same test file with a frozen clock advanced an hour: call the Build route, assert the flow exists with the delivery's agent, reviewer and cron and has fired once, and the document's events list approval and build separately.",
+      "key": "build-later",
+      "requirement": "build-is-separate",
+      "then": "the flow its delivery describes exists and fires, and the event history shows approval and build as two events",
+      "when": "the operator presses Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a ready document whose delivery is a flow",
+      "how_to_check": "Same test file: one request to the approve-and-build route; assert approved and flow exists; repeat with a stale version and assert the same refusal as stale-approve-refused and that nothing was created.",
+      "key": "one-action",
+      "requirement": "approve-and-build",
+      "then": "it is approved and its flow exists, from one request; with a changed document it is refused like approving alone",
+      "when": "the operator uses Approve and build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose intake recorded 'already built at <commit>'",
+      "how_to_check": "Route test: record intake as already built at a fixture commit, approve, assert the approval response offers close-as-built naming the commit, take it, assert no task is pending (uses slice B's close route).",
+      "key": "intake-already-built",
+      "requirement": "already-built-at-intake",
+      "then": "they are offered to close its tasks as already built at that commit, and choosing it leaves no task pending",
+      "when": "the operator approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change document at the tasks step",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_spec_journey_words.py: read the tasks step's instructions from spec_journey and assert the wording.",
+      "key": "tasks-step-text",
+      "requirement": "coarse-tasks",
+      "then": "it asks for one task per independently demonstrable piece with files and dependencies, and does not suggest a task per layer",
+      "when": "the agent's brief for that step is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose last step recorded a recommended flow with an agent, a reviewer and reasons",
+      "how_to_check": "A vitest over the Build dialog fed the document read's real payload asserting the prefilled agent, reviewer and reasons; and a Hub test loading a journey.json fixture that names 'delivery' with no invalid-journey diagnostic.",
+      "key": "recommendation-prefills",
+      "requirement": "recommend-a-build",
+      "then": "those choices are filled in with their reasons; and a spec/journey.json naming 'delivery' loads without being reported invalid",
+      "when": "the operator opens Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub's step instructions, tool descriptions, readiness messages and bundled charters",
+      "how_to_check": "Same words test: collect spec_journey step texts, the MCP tool descriptions, spec_completeness messages and hub/hub/data/charters/*.md and assert no instruction to propose; red on master.",
+      "key": "no-propose-words",
+      "requirement": "nothing-says-propose",
+      "then": "it finds none; it fails on master 43301a6",
+      "when": "a test searches them for telling anyone to propose a document"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "d57d9ad9f2bae842c2b596e38aac34f22c658d16edf9e509601dc211432e85d1",
+      "FR-10": "b62baf5486cd366d7391ab47a3025059add73ce2fc60eae8e62e0a7c0f993598",
+      "FR-11": "8081c8f9385203a645c89b84e01a9e046b09cff2b4c75ce4d7340bd5a55aefb0",
+      "FR-2": "3506bcb71b70fd3aeabc610fb93af13ce488d1dfe39e8b721379b66431b4c119",
+      "FR-3": "2fbdec90cd29492ee9ea26d09b07f1588b4807743c3caa55c7a2644cf756b313",
+      "FR-4": "be3c7990f04fbcc744f961079c777900d6a10007f7311208ab564683b1070648",
+      "FR-5": "de8ed4d68a17843a36cd818b0c1a0ae9c3da6a0ec6afedc2b2144e53d76ce2ad",
+      "FR-6": "e6f8aa6c77123acb8c6027c61b058a8da1a36f9bc50230ee78fbe361e1e1f525",
+      "FR-7": "cd1f821ac0043ca6d8ab88b2e243a9644ec9833d01239a8635e0c6d13770c40e",
+      "FR-8": "94a7add92016677d40c35d20739f2e0b7c21949cf8fb4e92c39851016eb46fb3",
+      "FR-9": "86dc4565b996570e5630b466eb2e8f66b3fb3785dc6d7f08e3e6b5316b730029"
+    },
+    "high_water": 11,
+    "requirements": {
+      "already-built-at-intake": "FR-8",
+      "approval-is-a-plan": "FR-5",
+      "approve-and-build": "FR-7",
+      "approve-from-exploring": "FR-3",
+      "approve-what-was-seen": "FR-4",
+      "build-is-separate": "FR-6",
+      "check-never-moves": "FR-1",
+      "coarse-tasks": "FR-9",
+      "no-proposed-phase": "FR-2",
+      "nothing-says-propose": "FR-11",
+      "recommend-a-build": "FR-10"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2 (hazard): a migration on the operator's live :8000 data moves every document in the proposed phase (four on 2026-10-27) back to exploring, with a recorded event each, and removes proposed from the allowed phases. Back up :8000's database (sqlite backup API) before the restart that runs it. Rollback: the downgrade re-allows proposed; the moved documents stay in exploring (re-proposing is the operator's one click). Build note: D extends this slice's Build action, so C lands before D.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_lifecycle.py TRANSITIONS (exploring->proposed->approved)",
+      "proposed is referenced in api/v1/spec.py:3162, spec_adoption.py:45, spec_manifest.py:34-40, spec_service.py:1628/1954/1995",
+      "api/v1/spec.py propose_document :3047 and the approval path around :3265 (materialise tasks, then the delivery's flow)",
+      "hub/hub/spec_journey.py JOURNEYS and the delivery step text",
+      "hub/hub/data/charters/spec.md: the spec author charter"
+    ],
+    "limits": [
+      "Whether the Hub already stores a content fingerprint the approval can name (submit returns a 'divergence' hash) is not confirmed as usable for this; the lifecycle task decides",
+      "Nothing driven yet",
+      "Every how_to_check is proposed coverage written from the criteria, not tests that exist yet"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": "large",
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "exploring -> approved -> archived (no proposed). A document is edited freely while exploring; Check reports readiness at any time without moving it. Approve names the content version the operator loaded. After approval the document changes only through amendments (roadmap slice D). Building is an action on an approved document, possibly repeated.",
+  "open_questions": [
+    {
+      "question": "Built by Claude Code subagents outside the Hub's flows (operator, 2026-10-27), so delivery is none; tasks are closed as already built against the merged commits once their acceptance drives pass.",
+      "resolved": true
+    }
+  ],
+  "problem": "Operator, 2026-10-26: 'the spec flow feels kind of weird: the propose is actually just a check and approve jumps straight into the flow if it exists'. Today (hub/hub/api/v1/spec.py propose_document :3047, spec_service.py :1954-1995) propose runs the readiness check and moves the document to proposed, where it is frozen until reopened; the agent cannot keep working on it. Approve (spec.py around :3265) accepts the intent, materialises the tasks and, when delivery is a flow, creates and starts the flow in the same click, so the operator cannot approve the what, look at the plan and decide how and when to build. The exploring journey (spec_journey.py JOURNEYS; the delivery step's text ends 'The document is then ready for the operator to propose') decides the build inside the spec. And nothing asks whether the work is already built, which on 2026-10-23 created 13 tasks for shipped work.",
+  "requirements": [
+    {
+      "key": "check-never-moves",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Propose froze the document, so every finding meant reopening it; the operator wants the agent to keep implementing changes while they look (2026-10-26).",
+      "statement": "The operator can Check a document at any time while it is being written; Check reports exactly the blocking gaps and warnings the agent's own save returns, and never changes the document's phase or stops an agent from saving it."
+    },
+    {
+      "key": "no-proposed-phase",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: move them back to exploring.",
+      "statement": "No document can enter a proposed phase, and every document in it when this ships is moved to exploring with a recorded event naming why."
+    },
+    {
+      "key": "approve-from-exploring",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator approves a document directly from exploring when it is ready, or over its gaps with approve-anyway as today."
+    },
+    {
+      "key": "approve-what-was-seen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With the document editable while the operator reads, an approval could otherwise accept text nobody read (operator, 2026-10-26: refuse).",
+      "statement": "An approval names the content version the operator loaded, and is refused, saying the document changed since it was loaded, when the stored content differs; after reloading it is accepted."
+    },
+    {
+      "key": "approval-is-a-plan",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Approving a document creates its tasks and starts nothing: no flow is created or fired and no run begins, whatever the document's delivery says."
+    },
+    {
+      "key": "build-is-separate",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An approved document has a Build action that starts building it as its recommended build says (in this slice: create and start the flow its delivery describes, or leave the tasks on the board), and the action can be taken later than approval."
+    },
+    {
+      "key": "approve-and-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approvals are scarce (operator, 2026-10-08); splitting must not cost an extra click when none is wanted.",
+      "statement": "'Approve and build' approves and starts the build in one operator action, with the same refusal rules as approving alone."
+    },
+    {
+      "key": "already-built-at-intake",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The intake step asks whether the work is already built and records the answer with the commits named; approving a document recorded as already built offers to close its tasks as already built (slice B) instead of laying them out for building."
+    },
+    {
+      "key": "coarse-tasks",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "The 2026-10-25 flow paid a tick, a reviewer wait and a gate run per fine-grained task; the integrator who won used coarse units.",
+      "statement": "The tasks step's instructions ask for one task per independently demonstrable piece, built by one agent, naming the files it edits and the tasks it waits on, rather than one task per layer or per file."
+    },
+    {
+      "key": "recommend-a-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "How it is built is now chosen when building starts (slice D); the spec suggests, the operator decides.",
+      "statement": "The last exploring step records a recommended build with a reason for each choice, Build and 'Approve and build' open with it filled in, and a project's spec/journey.json that names the old 'delivery' step still works."
+    },
+    {
+      "key": "nothing-says-propose",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "No step text, tool description, readiness message or charter the Hub ships tells an agent or the operator to propose a document; the spec author charter's rule about when to ask in the reply and when to call ask_user refers to approval instead of proposal."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "check-approve-build"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Check as an operator action that reports readiness without changing phase",
+      "Retiring the proposed phase, with documents now proposed moved back to exploring",
+      "Approving from exploring, refused when the content changed since the operator loaded it",
+      "Approval laying out tasks with nothing started; Build as a separate action; 'Approve and build' as one action",
+      "Intake asking whether the work is already built, and approval then offering close-as-built (slice B's action)",
+      "The tasks step asking for coarse tasks; the last step recommending a build with reasons; 'delivery' kept as an alias in spec/journey.json",
+      "Step texts, tool descriptions, readiness messages and the spec author charter no longer speaking of proposing",
+      "The current spec page header's buttons (Check, Approve, Build, Approve and build), until the redesigned page (slice F) replaces it"
+    ],
+    "non_goals": [
+      "Build drivers, levels, people, budgets and amendments: roadmap slice D. In this slice a build is what delivery does today (a flow, or tasks left on the board)",
+      "The redesigned spec page: slice F, which wires its approved mock to what this slice provides",
+      "Changing what readiness checks",
+      "Roadmap documents' own lifecycle beyond losing the proposed phase"
+    ]
+  },
+  "summary": "The spec flow stops mixing decisions. Check replaces Propose: it shows the readiness the agent already sees and never changes the phase, so the agent keeps editing while the operator looks. The proposed phase is retired. Approving accepts the version the operator loaded (refused if it changed since), and lays the tasks out as a plan with nothing running. Building is a separate action, with an 'Approve and build' shortcut. The exploring steps follow: intake asks whether the work is already built, the tasks step asks for coarse tasks, the last step recommends a build with reasons instead of deciding one, and nothing the Hub ships still tells anyone to propose.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Remove the proposed phase from the lifecycle and the routes that reach it, migrate proposed documents to exploring with an event, let approve go from exploring, make approval carry the loaded content version and refuse a mismatch; Check as an operator route that returns readiness and moves nothing. Acceptance drive written first, failing on master.",
+      "files": [
+        "hub/hub/spec_lifecycle.py",
+        "hub/hub/spec_service.py",
+        "hub/hub/spec_manifest.py",
+        "hub/hub/spec_adoption.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/db",
+        "hub/tests/test_exploring_ends_at_an_approved_plan.py"
+      ],
+      "from": null,
+      "key": "lifecycle",
+      "requirements": [
+        "check-never-moves",
+        "no-proposed-phase",
+        "approve-from-exploring",
+        "approve-what-was-seen"
+      ],
+      "reviewer": null,
+      "title": "Retire proposed; approve what was seen"
+    },
+    {
+      "depends_on": [
+        "lifecycle"
+      ],
+      "description": "Approval materialises tasks and starts nothing; a Build route starts what the delivery describes; Approve and build does both in one request; approving a document recorded as already built offers slice B's close-as-built.",
+      "files": [
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/spec_service.py",
+        "hub/tests/test_exploring_ends_at_an_approved_plan.py"
+      ],
+      "from": null,
+      "key": "approve-then-build",
+      "requirements": [
+        "approval-is-a-plan",
+        "build-is-separate",
+        "approve-and-build",
+        "already-built-at-intake"
+      ],
+      "reviewer": null,
+      "title": "Approval is a plan; build separately"
+    },
+    {
+      "depends_on": [
+        "lifecycle"
+      ],
+      "description": "Intake asks and records 'already built'; the tasks step asks for coarse tasks; the last step recommends a build with reasons, with 'delivery' accepted as an alias in spec/journey.json; step texts, tool descriptions, readiness messages and the spec author charter stop speaking of proposing; a test searches for it.",
+      "files": [
+        "hub/hub/spec_journey.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/spec_payload.py",
+        "hub/hub/data/charters",
+        "hub/tests/test_spec_journey_words.py"
+      ],
+      "from": null,
+      "key": "journey-and-words",
+      "requirements": [
+        "already-built-at-intake",
+        "coarse-tasks",
+        "recommend-a-build",
+        "nothing-says-propose"
+      ],
+      "reviewer": null,
+      "title": "Exploring steps and wording"
+    },
+    {
+      "depends_on": [
+        "approve-then-build",
+        "journey-and-words"
+      ],
+      "description": "Today's spec header offers Check, Approve, Build and Approve and build in place of Propose, with Build prefilled from the recommendation; rebuild the bundle. The redesigned page (slice F) later replaces this header.",
+      "files": [
+        "hub/ui/src/components/spec",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "header-buttons",
+      "requirements": [
+        "check-never-moves",
+        "approve-and-build",
+        "recommend-a-build"
+      ],
+      "reviewer": null,
+      "title": "Check, Approve, Build in today's header"
+    }
+  ],
+  "title": "Exploring ends at an approved plan: check, approve and build are separate"
+}

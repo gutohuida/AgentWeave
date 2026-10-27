@@ -1,0 +1,470 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a git fixture whose main has a pytest test that always fails, a project check running pytest on it, a flow with a completed task whose work adds an unrelated file, and its check run recorded failed with that test failing on main too",
+      "how_to_check": "The acceptance drive, written first: py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v on master (red, paste the 409) then on the branch (green).",
+      "key": "drive-lands-over-red-main",
+      "requirement": "approval-lands-over-failures-not-its-own",
+      "then": "the approval returns 200, the work is on main, and the approved transition has actor_kind 'run', override_by 'hub' and an override_reason containing the test id, the check run id and the first 12 characters of the main sha; on master bbf3f10 it returns 409 with 'fail on main too' and the work is not on main",
+      "when": "a reviewer's run (not the operator) approves the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same task before approval",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"hold\"",
+      "key": "no-operator-hold",
+      "requirement": "approval-lands-over-failures-not-its-own",
+      "then": "it answers None (no hold, so the mender is not woken for it); with the setting off it answers the PREEXISTING_CHECKS_HOLD_REMEDY hold as today",
+      "when": "approval_held_for_operator is asked about it for the reviewer"
+    },
+    {
+      "checked_by": "agent",
+      "given": "main fails test_a and the task's merged work fails test_b (test_a passes there)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"different_ids\"",
+      "key": "different-ids-are-the-tasks",
+      "requirement": "same-failure-by-test-id",
+      "then": "the result records test_b as the task's own, the approval is refused as the task's failure with the send-back wording, and no override or fix task is recorded; on master the same run is recorded preexisting and held for the operator",
+      "when": "the check run ends and a reviewer approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run whose failed id reproduces on its serial rerun",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_reuse_a_pass_and_confirm_a_failure.py -v -k \"main\"",
+      "key": "main-compared-by-ids",
+      "requirement": "same-failure-by-test-id",
+      "then": "the command run on main is the same serial command narrowed to the failed ids, and the result stores on_main.failed_tests; a check without node ids still runs whole on main and is never automatic",
+      "when": "main is asked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the gate command `py -3.11 -m pytest hub/tests -q -n auto --dist loadgroup -p no:cacheprovider --timeout=600`",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_reuse_a_pass_and_confirm_a_failure.py -v: the test at :310 now asserts the serial form; the flaky test at :255 still passes.",
+      "key": "serial-rerun",
+      "requirement": "rerun-on-its-own",
+      "then": "the narrowed command runs only that id with `-n 0`, without `--dist loadgroup`, and keeps `-p no:cacheprovider` and `--timeout=600`; a failure that passes that rerun is recorded flaky and the run passes",
+      "when": "it is narrowed to one failed node id for the confirmation rerun"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check run passed only because a failed test passed its serial rerun",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"flake\"",
+      "key": "flake-recorded-on-approval",
+      "requirement": "approval-lands-over-failures-not-its-own",
+      "then": "the approved transition has override_by 'hub' and an override_reason naming the test id as having passed when rerun on its own",
+      "when": "it is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "main fails test_x and the task's work edits the file holding test_x, which still fails",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"touched\"",
+      "key": "touched-test-is-the-tasks",
+      "requirement": "never-automatic-for-its-own",
+      "then": "the approval is refused (held for the operator as today), no override is recorded and no fix task filed; the same for a flaky test in a file the task changed, which fails the run",
+      "when": "a reviewer approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub-filed fix task for test_x, completed with work that leaves test_x failing on its tree and on main",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"fix_task_cannot\"",
+      "key": "fix-task-cannot-land-itself",
+      "requirement": "never-automatic-for-its-own",
+      "then": "the approval is refused and no override is recorded",
+      "when": "a reviewer approves the fix task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a non-pytest check (a script exiting 1) that fails on the task's merged commit and on main",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_gate.py -v (the F605 tests at :327-375 stay green unchanged).",
+      "key": "unnamed-failures-keep-todays-answer",
+      "requirement": "never-automatic-for-its-own",
+      "then": "the refusal is the existing 'fail on main too' hold for the operator, unchanged",
+      "when": "a reviewer approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the setting off and the red-main fixture",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"setting_off\"",
+      "key": "setting-off-restores-today",
+      "requirement": "a-setting-turns-it-off",
+      "then": "the reviewer is refused with 'fail on main too', no fix task exists, and the operator's landing records override_by 'operator' with the typed reason",
+      "when": "the reviewer approves, and then the operator lands with a typed reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project created before the migration and one created after",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_migration_0148_the_hub_may_override_checks.py -v and py -3.11 -m pytest hub/tests/test_project_checks_settings.py -v; vitest: cd hub/ui && npx vitest run src/__tests__/projectSettingsPanel.test.tsx",
+      "key": "setting-defaults-and-saves",
+      "requirement": "a-setting-turns-it-off",
+      "then": "both read on; the saved value reads back off; a run credential cannot change it",
+      "when": "their settings are read, and the operator saves the setting off"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the red-main fixture with two tasks whose check runs both end with test_x failing on main",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"one_fix_task\"",
+      "key": "one-fix-task-per-failure",
+      "requirement": "a-fix-task-is-filed",
+      "then": "exactly one fix task exists, naming test_x, the check, 'fails on main', the main sha and the first run; both approvals' override_reason name that task id",
+      "when": "both runs end"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a live flow holding two older pending medium-priority tasks and the fix task just filed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"queue\" and py -3.11 -m pytest hub/tests/test_firing_decision_is_shared.py -v",
+      "key": "fix-task-first-in-queue",
+      "requirement": "fix-task-heads-the-flow",
+      "then": "the selection pairs the free agent with the fix task, and the board's current item is the same task",
+      "when": "decide_firing runs with one free agent, and the board's loop summary is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub on :8010 started from the branch, a testbed project whose main has a failing pytest test, its check configured, and a two-task spec flow with Haiku agents where T2 depends on T1",
+      "how_to_check": "Drive step on :8010 (never :8000, never this repo as the project): record the task ids, the override_reason, the order of the flow's staffings from the runs table, and a screenshot of T1's story.",
+      "key": "drive-on-trial-hub",
+      "requirement": "fix-task-heads-the-flow",
+      "then": "T1 is approved with an automatic override visible in its story, the fix task is the next task the flow staffs, and T2 starts without the operator acting",
+      "when": "T1 is built and reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review whose run failed only on main's test_x",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_red_main_does_not_hold_the_night.py -v -k \"briefing\"",
+      "key": "briefing-says-not-the-tasks",
+      "requirement": "reviewer-is-told",
+      "then": "it says the failure is not the task's work, that approving lands with an override the Hub records, names the fix task, and does not contain 'end with `revision_needed`'",
+      "when": "the review briefing's checks sentence is composed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open agent and a task outside any flow, created pending",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_an_assigned_task_outside_a_flow_starts.py -v, red on master first.",
+      "key": "assigned-task-starts",
+      "requirement": "assigned-outside-a-flow-starts",
+      "then": "one queued entry for the agent with task_id set to the task exists after the commit and schedule_agent was asked for the agent; repeating the PATCH or a second commit queues nothing more; on master bbf3f10 no entry exists",
+      "when": "the operator (and, in a second case, an agent's run) moves it to assigned with that agent as assignee"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pending task with an assignee outside a flow, and an assigned task in a flow",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_an_assigned_task_outside_a_flow_starts.py -v -k \"untouched\"",
+      "key": "flow-and-pending-untouched",
+      "requirement": "assigned-outside-a-flow-starts",
+      "then": "no entry is queued for either by this mechanism",
+      "when": "they are created and moved by the flow"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task written straight into assigned outside a flow with no entry for its assignee, and one whose entry was delivered after it entered assigned",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_an_assigned_task_outside_a_flow_starts.py -v -k \"sweep\"",
+      "key": "sweep-backstop",
+      "requirement": "sweep-starts-what-was-missed",
+      "then": "an entry is queued for the first and none for the second",
+      "when": "stalls.sweep runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one task approved with an automatic override and one with the operator's",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_tasks_whole_story_is_in_its_drawer.py -v; cd hub/ui && npx vitest run src/__tests__/taskStory.test.tsx",
+      "key": "story-shows-the-hub",
+      "requirement": "override-is-shown-as-the-hubs",
+      "then": "the route returns override_by 'hub' and 'operator' respectively, and the drawer reads 'Approved by the Hub over failures that were not this task's' for the first and 'Approved over failing checks' for the second",
+      "when": "each task's story is read and rendered"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "2125c51690ca23c68150cd62d302da2c40697a607f37507d8fcc4472a34f13fd",
+      "FR-10": "923fd090d1ff1e844ce91c7b6d6401eff99995c1b5a324a338799b1dcd4b6a16",
+      "FR-11": "4da7bd013221d999a1e13b5617177746e9a1d6e744ca1f2c84d0a16cfd1650e6",
+      "FR-2": "6a896298b40165f46fc212128b54fa37e33992e526a211180c94b69b82adf710",
+      "FR-3": "2c3b352fdc198a74d4dd47a406142470d5fd09bdfa019641fa5e0e54cdeefa2b",
+      "FR-4": "536710ede2b332ce7777e5ff504862a53a9cfcacdb8c4ed9187b3c95bbd6a3d3",
+      "FR-5": "48c16fb7239e5270cf1737464a0d9ce145889d12bc79f00b228013758e92ffe4",
+      "FR-6": "8653ea8ea9f06db2a89d6da18b9f2dc033d214bc708b8abb3ab9e8a260dd7e95",
+      "FR-7": "7313c0a65bfbc25de0cc61f66bc137aa344e63b10029a5855c9892412cf923a5",
+      "FR-8": "6e42c104af7cc172dd3bbfe767d28b7bcce7b0b72496347a467b598d568eb34e",
+      "FR-9": "b2aa441b286334788b168732f390d22b32731d66e6ac9fed089d2302d24bcc38"
+    },
+    "high_water": 11,
+    "requirements": {
+      "a-fix-task-is-filed": "FR-6",
+      "a-setting-turns-it-off": "FR-5",
+      "approval-lands-over-failures-not-its-own": "FR-3",
+      "assigned-outside-a-flow-starts": "FR-9",
+      "fix-task-heads-the-flow": "FR-7",
+      "never-automatic-for-its-own": "FR-4",
+      "override-is-shown-as-the-hubs": "FR-11",
+      "rerun-on-its-own": "FR-2",
+      "reviewer-is-told": "FR-8",
+      "same-failure-by-test-id": "FR-1",
+      "sweep-starts-what-was-missed": "FR-10"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1. \"The same failure\" is the same pytest node ids, compared like for like (owner: project_checks.py, which already owns what a check result means). Today a failure is rerun once with the gate's own options (narrowed_command keeps `-n auto`, :598-626) and then the whole check is run on main, whose exit code alone decides `preexisting` (:713-726). New order for a failing check whose ids pytest named in full (failed_test_ids, :580-595): (1) rerun only those ids on the task's tree, serially (`-n` value set to 0, `--dist`, `--maxprocesses`, `--tx` dropped; a command without `-n` is already serial); all pass -> flaky, the check passes as today; (2) otherwise run the same serial narrowed command on main at the run's main_sha; each id that fails there is shared, each that passes is the task's own. The result stores on_main.failed_tests, shared_tests, own_tests and touched_tests. A check without named ids keeps today's whole-check baseline and check-level `preexisting`, which is never automatic. Why one serial rerun: the night's test passed one narrowed rerun and failed the next under `-n auto` while another suite ran; serial removes the load it creates for itself, and one attempt keeps a reproducible own failure from being retried into a pass, as today. Why narrowed on main: the same command on both trees is the comparison; a whole-suite main run (8-18 min that night) answers a different question.\n\nD2. Never automatic for the task's own (owner: project_checks records, requirement_gate decides). Excluded: any own id; any failing or flaky id whose file (the node id's path part) is in changed_paths(main_sha, merged) (:144); on a Hub-filed fix task, the ids it was filed for; checks without named ids, timeouts, more than MAX_RERUN_TESTS (50); a missing main answer (_MainBaseline.unavailable). A flaky test in a file the task changed now fails the run instead of passing: the one place this slice tightens the gate, because a task that adds a flaky test introduced it.\n\nD3. The override is decided where overrides are decided today and recorded where they are recorded (owner: requirement_gate._check_checks, :1081-1139, and task_transition_service.apply_transition, :903-971). _check_checks gains a third outcome beside 'refuse' and 'operator override': when the setting is on and every failure in the run is shared or flaky and none is excluded, it sets refusal.automatic_override (the checks, ids, kinds, run id, main sha, fix task id) and does not refuse. apply_transition writes override_reason from it with override_by 'hub' when the operator gave no reason; an operator's typed reason still wins and records override_by 'operator'. The actor stays the approver: actor kinds are run and operator only (task_transitions.py:34-36) and models.py:874-879 records the decision that the Hub acting is not a third actor kind, so 'who overrode' is a column of its own, not an actor. approval_held_for_operator asks evaluate (:1403), so the mender's hold disappears with the refusal and needs no change. The reviewer briefing (review_turn.py:560-567) reads the same decision instead of telling the reviewer to send the task back.\n\nD4. One project setting, on by default (owner: Project, beside `checks`, models.py:127; ProjectSettings in api/v1/projects.py:123-170). `checks_auto_override` governs the automatic override and fix-task filing together; off is exactly today. Slice D later replaces it with a per-level rule; keeping one switch now avoids inventing levels here.\n\nD5. The fix task is filed when the run ends, not at approval (owner: flaky_tests.py, widened from 'flaky tests the checks found' to 'failures the checks found that are not the task's'). At run end the Hub knows the failure is main's or a flake, the flow's agents are often idle waiting on the held task (2026-10-27), and approval's transaction stays free of task creation (create_task_for_actor commits, api/v1/tasks.py:868-890). Filed through create_task_for_actor with operator authority, as api/v1/checks.py:59-66 already does for flakes. Deduplicated by test id against open Hub-filed fix tasks, recorded as event_logs rows the way flaky_tests records 'handled' (no new task column). Text reuses fix_task_text for flakes and a sibling for main's failures (check, ids, main sha, run, failure excerpt, 'done when these ids pass on main').\n\nD6. 'Head of the flow' is priority (owner: scheduler._loop_queue_order, :590-614, shared with the board so they cannot disagree). Pending tasks order by priority rank (critical, high, medium, low) before created_at; the fix task is critical. Task.priority already exists with those values (schemas/tasks.py:57) and is used by nothing in the queue; spec materialisation writes medium (spec_tasks.py:415), so a spec flow's order is unchanged. Rejected: a dedicated 'head' flag (a second ordering field), and making the fix task a prerequisite of the remaining tasks (it would hold them, the opposite of the point). The flow is the held task's own loop when live (flow_advance.py:118-128's test); otherwise the fix task is pending and unassigned, visible on the board.\n\nD7. An assigned task outside a flow is started by one rule with several nudges (owner: new hub/hub/assigned_task_start.py, modelled on flow_advance's after-commit hook, flow_advance.py:50-53, :139-151). Rule: status assigned, loop_id null, assignee an open agent, dependency gate clear, and no entry with this task_id for this assignee queued, delivered or running since the task's latest move to assigned. Action: queue one entry bound to the task (task_id set, so the runtime moves it to in_progress as on 2026-10-27 at 02:56), origin 'operator', or 'agent' with origin_agent when an agent's run assigned it (no new origin type, so no CHECK-constraint rebuild of inbound_queue_entries), briefing = title, id, description and scheduler._briefing_completion_lines(task, is_flow=False); then turn_scheduler.schedule_agent. Nudged after commit by apply_transition (-> assigned), create_task_for_actor (created assigned) and update_task (new assignee while assigned); the stall sweep (stalls.py:65, every 300 s) runs the same rule for the project as the backstop. 'Since it entered assigned' is what stops a re-queue spin when a delivered turn ended without starting the task; that case is a divergence, already recorded elsewhere. Pending tasks with an assignee are not started: assigned is the operator's 'work this now'.\n\nHazard. (1) Policy: work now reaches main over red checks without the operator. Bounded by D1-D2 (ids must fail on main too, or pass alone; never a test the task touched), recorded on every such transition, and switched off per project by D4. (2) Migration 0148 (next free number at build time; slices C and K also add migrations): add task_transitions.override_by String(16) nullable, backfilled 'operator' where override_reason is not null; add projects.checks_auto_override Boolean not null server_default true. Runs on the operator's :8000 data at its next restart (authorised 2026-10-27; back up first with the mode=ro backup in .claude/reference/hubs.md). Rollback: downgrade drops both columns in batch mode; automatic overrides then read as operator overrides whose reason text says the Hub made them, and nothing else is lost. The operational rollback needs no code: turn the setting off. (3) The UI bundle commit reaches :8000 on its next reload; ship it with the backend that serves override_by and the setting.",
+  "evidence": {
+    "checked": [
+      "2026-10-27, :8000 database read with mode=ro: task_check_runs chk-cd85df778d96 (hub-tests flaky on the timing test, passed), chk-c542d9b41ea5 (own failures in test_surface_ceilings, on_main exit 0, preexisting false), chk-03b0cd6c1cea (timing test, confirmed.how 'tests' 29.0 s, on_main {exit_code 1} with no ids, preexisting true), chk-995c7260f79d (main 8ddfe38, passed 03:33); T1's transitions (approved 03:39 by QA, override_reason null); task-eecc162f6e1d's transitions (created by QA's run 00:43, pending->assigned by the mender 01:24, in_progress by runtime 02:56) and inbound entries (first entry for DeveloperOpus2 at 02:55:56 from the mender)",
+      "hub/hub/project_checks.py:25-27, :653-704 (confirm_failure: one rerun, narrowed when pytest named every failure, pass -> flaky), :598-626 and hub/tests/test_checks_reuse_a_pass_and_confirm_a_failure.py:310 (narrowed command keeps -n auto), :580-595 (ids only when every failure is named and at most MAX_RERUN_TESTS=50, :79), :399-403 (run_one records failed_tests), :713-726 (preexisting = the whole check failed on main; only exit_code/timed_out stored), :729-757 (_MainBaseline runs the whole check on main), :1088-1107 (confirm, then baseline, break on own failure), :144 (changed_paths)",
+      "hub/hub/requirement_gate.py:1103-1105 (operator reason overrides failed/error), :1124-1128 (all failing preexisting -> state preexisting), :547-559 (the 'fail on main too' text), :1317-1321 and :1351-1352 (held for the operator), :1362-1420 (approval_held_for_operator asks evaluate, so a gate change carries to the mender's hold)",
+      "hub/hub/task_transition_service.py:903-930 (only the operator may supply a reason; overridden = reason if checks_overridden), :955-971 (override_reason written on the transition), :979-980 (approval asks the flow's firing after commit)",
+      "hub/hub/task_transitions.py:34-36 (actor kinds run and operator only) and hub/hub/db/models.py:874-879 ('no third actor kind'), :902-904 (override_reason, operator-only by comment), migration 0119 (adds it)",
+      "hub/hub/review_turn.py:560-567 (a failed run tells the reviewer to send it back, preexisting or not)",
+      "hub/hub/flaky_tests.py:1-13 (flakes pass and are listed for the operator), :154-183 (fix_task_text), :186-201 (mark_handled); hub/hub/api/v1/checks.py:45-71 (the operator hands the list to a task via create_task_for_actor)",
+      "hub/hub/scheduler.py:590-614 (_loop_queue_order: non-pending first, pending oldest first; shared with api/v1/jobs.py), :846-883 (_loop_candidates by loop_id), :2086-2202 (decide_firing walks in that order and staffs free agents); hub/hub/spec_tasks.py:415 (materialised tasks are priority medium); hub/hub/schemas/tasks.py:57 (low, medium, high, critical)",
+      "hub/hub/api/v1/tasks.py:787-899 (create_task_for_actor: commit, link, broadcast, event; nothing queued for the assignee), :1689-1700 (assignee write in update_task); hub/hub/turn_scheduler.py:292 (schedule_agent starts a queued entry); hub/hub/inbound_queue.py:34-58 (new_entry origins: operator, agent, job, checkpoint, divergence, evidence, mender)",
+      "hub/hub/stalls.py:65 (SWEEP_SECONDS 300), :680-730 (the sweep looks at dead runs, in_progress tasks with no run, loops)",
+      "hub/hub/flow_advance.py:118-128 (what a live flow is), :50-53 and :139-151 (the after-commit hook pattern)",
+      "hub/tests/test_project_checks_gate.py:324-375 (F605 tests: preexisting recorded, held for the operator, a new failure beside a preexisting one stays the author's, the operator's Land override)"
+    ],
+    "limits": [
+      "Whether main 91b59b5 failed the same test id on 2026-10-27 is not recorded (on_main keeps the exit code only); the night's case is inferred to qualify from the identical id flaking on chk-cd85df778d96 and the fix task's title",
+      "A serial rerun still shares the machine with another check run (MAX_CONCURRENT_RUNS 2), so a timing test can fail it under that load; it then falls to the main comparison, which runs under the same conditions",
+      "The fixture repos in the tests run plain pytest without xdist; the `-n 0` rewrite is covered by the string test of the narrowed command, not by running xdist",
+      "Whether api/v1/jobs.py's board summary needs any change beyond the shared _loop_queue_order was not read line by line",
+      "The hop depth an agent-origin entry should carry is taken from how an agent's message is queued; the builder confirms it",
+      "Every how_to_check names proposed tests written from the criteria, not tests that exist yet, except the F605 and settings tests named as existing"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2 (hazard): a landing policy -- work reaches main over red checks without the operator -- plus a migration run on the operator's :8000 data at its next restart and a UI bundle that reaches their live app on reload. One-off change document for roadmap slice M; builds after slice L.",
+  "open_questions": [
+    {
+      "question": "The roadmap's non-goal reads 'at every level red checks mean no merge'. Decided: this slice narrows it to 'red checks that are the task's mean no merge' (failures that are main's or flakes land with the Hub's recorded override), as the operator's adding of slice M on 2026-10-27 implies; the roadmap's non-goal wording should be updated to match.",
+      "resolved": true
+    },
+    {
+      "question": "Do flakes also get an automatic fix task, or only main's failures? Decided: both, deduplicated per test id, as the slice intent says; a flake's fix task marks the flaky list handled so the Overview does not ask twice.",
+      "resolved": true
+    }
+  ],
+  "problem": "Night of 2026-10-26/27 (operator's :8000 Hub, read with a mode=ro SQLite query on 2026-10-27):\n- Slice B's T1 (task-8618731d065d) was approved by QA but the Hub refused the approval from about 00:44 until 03:39 (about 2 h 55 min) because check run chk-03b0cd6c1cea (started 00:16) failed `hub-tests` on one test, `test_turn_starts_never_freeze_the_hub.py::test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop`. Its narrowed rerun reproduced (confirmed.how 'tests', 29.0 s, run with the gate's own `-n auto` since narrowed_command keeps the options), and the same check failed on main 91b59b5 (on_main exit 1), so the refusal said 'fails on main too' and held the approval for the operator, who was asleep. The same test had already flaked on T1's previous run chk-cd85df778d96 (23:42; failed, passed on the narrowed rerun). T2-T4 depend on T1's approval, so the whole slice waited. T1 finally landed at 03:39 with no override_reason: only after the fix task was approved at 03:24 and main moved to 8ddfe38, whose check run passed.\n- The fix task task-eecc162f6e1d ('... fails under the full suite (and on main)') was created by QA's run at 00:43 outside any flow (loop_id null, priority high); the mender moved it pending -> assigned at 01:24; nothing was queued for its assignee until the mender messaged DeveloperOpus2 at 02:55:56 (entry-5ad8203ccc90), and the runtime moved it to in_progress at 02:56. The fix took 15 minutes; the wait 91.\nWhy the code behaves this way: the main baseline records only the exit code of the whole check on main (project_checks.py:724-726), so 'fails on main too' means 'this check fails on main', not 'these tests fail on main'; a check whose failures are all main's is held for the operator (requirement_gate.py:1124-1128, :1351-1352) and only the operator may approve over failing checks (task_transition_service.py:908-913); the review briefing tells the reviewer to send such a task back (review_turn.py:560-567), contradicting the gate; and nothing starts an assigned task outside a flow: create_task_for_actor commits and broadcasts only (api/v1/tasks.py:868-899), and the stall sweep looks only at in_progress tasks (stalls.py:718).",
+  "requirements": [
+    {
+      "key": "same-failure-by-test-id",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today any failure of the same check on main counts (project_checks.py:724-726), so a task that breaks test A while main breaks test B is held for the operator instead of sent back, and a landing automated on that answer would land a regression.",
+      "statement": "A check's failure counts as main's only when every pytest node id that failed on the task's merged commit (after its serial rerun) also fails when exactly those ids are run with the same serial command on main at the commit the check run was cut from; a failing id that passes there is the task's own and the task goes back to its builder; exit codes and failure counts are never compared."
+    },
+    {
+      "key": "rerun-on-its-own",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The night's test passed its narrowed rerun once and failed it once, each time run with the gate's `-n auto` (narrowed_command keeps the options, test at test_checks_reuse_a_pass_and_confirm_a_failure.py:310); a timing test is measured under load it does not need. One rerun, as today, so a deterministic own failure is never retried into a pass.",
+      "statement": "Before a failure is charged to anyone, the failed node ids are run once more on the same tree and nothing else, serially (the command's xdist worker count set to 0 and its distribution options dropped); if they all pass the failure is a flake and the check passes, recorded as flaky with the ids; if any fails again it stands and is compared with main."
+    },
+    {
+      "key": "approval-lands-over-failures-not-its-own",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Night of 2026-10-26/27: QA's approval of T1 waited 2 h 55 min for an operator who was asleep, and three dependent tasks with it, over a failure the task did not cause.",
+      "statement": "When every failure in the task's check run for the work approval would merge is main's or a flake, and the project's automatic override is on, an approval by an actor the mover rules otherwise permit (a reviewer's run or the operator) lands the task with no reason typed; the approval transition records override_by 'hub' and an override_reason naming each check and test id, whether it fails on main or passed on its own, the check run id, the main commit sha, and the fix task; the transition's actor stays the approver."
+    },
+    {
+      "key": "never-automatic-for-its-own",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A test the task touched is the task's to make pass even if main is red; a fix task that did not fix its test would otherwise land itself over the very failure it was filed for.",
+      "statement": "An override is never automatic for: a failing id that passes on main; a failing or flaky test whose file is among the paths the task's merged work changes against the run's main commit; on a Hub-filed fix task, the ids it was filed for; a check whose failures pytest did not name in full (a non-pytest check, a timeout, a truncated summary, more than 50 failures, a command that cannot be narrowed); or a run with no main answer. Each keeps today's answer: sent back to its builder, or held for the operator where the whole check fails on main too."
+    },
+    {
+      "key": "a-setting-turns-it-off",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Roadmap slice D later decides this per gate level; until then the operator needs one switch.",
+      "statement": "Each project has a setting, on by default for new and existing projects and shown with the project's checks in the app's settings, that turns off both the automatic override and the fix-task filing; off, approval over main's failures or flakes behaves exactly as before this change (held for the operator, who lands it with a typed reason)."
+    },
+    {
+      "key": "a-fix-task-is-filed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On 2026-10-27 the fix task existed only because QA wrote one; it was filed when the run ended rather than at approval, which is also when the flow's agents were idle waiting on T1.",
+      "statement": "When a check run ends with a failure that is main's or a flake and the setting is on, the Hub files one fix task naming the check, the test ids, the kind (fails on main / flaky), the main commit, the check run and its failure excerpt; where an open Hub-filed fix task already names every one of those ids nothing new is filed and the override names that task; a flake's fix task also marks the project's flaky-test list handled with that task."
+    },
+    {
+      "key": "fix-task-heads-the-flow",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Pending tasks are ordered oldest first today (scheduler.py:610-614), so a task filed mid-flow waits behind every pending task of the slice; spec-materialised tasks are all medium (spec_tasks.py:415), so a spec flow's own order does not change.",
+      "statement": "A fix task found by a task of a live flow is filed in that flow with priority critical, and a flow's queue orders its pending tasks by priority (critical, high, medium, low) before age, so the next firing staffs the fix task ahead of every other pending task, and the board names the same current item; found by a task outside a live flow, the fix task is filed pending and unassigned."
+    },
+    {
+      "key": "reviewer-is-told",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "review_turn.py:560-567 tells the reviewer to end with revision_needed for any failed run, which already contradicts the gate's F605 wording for main's failures.",
+      "statement": "A reviewer briefed on a task whose failing checks are all main's or flakes is told they are not the task's work, that approving lands it with an override the Hub records, and which fix task covers them; it is not told to send the task back."
+    },
+    {
+      "key": "assigned-outside-a-flow-starts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-27: task-eecc162f6e1d was moved to assigned at 01:24 and nothing was queued for its assignee until the mender messaged it at 02:55.",
+      "statement": "A task that belongs to no flow and is in status assigned, whose assignee is an open agent and whose prerequisites are met, gets one turn queued for that assignee naming and bound to the task, within seconds of entering assigned (created there, moved there, or given a new assignee while there), started as soon as the agent is idle; a turn already queued, delivered or running for that task and assignee since it entered assigned means nothing new is queued."
+    },
+    {
+      "key": "sweep-starts-what-was-missed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The stall sweep (every 300 s) queues the same turn for any task left assigned outside a flow with no turn queued or delivered for its assignee since it entered assigned, such as one assigned before this change, while the Hub was down, or whose prerequisites have since cleared."
+    },
+    {
+      "key": "override-is-shown-as-the-hubs",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The task's story in the app shows an automatic override as the Hub's, with its reason, distinct from an operator's override, which keeps reading as the operator's."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "a-red-main-does-not-hold-the-night"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Deciding by pytest node id whether a failure is main's, a flake, or the task's own",
+      "The confirmation rerun made serial (only the failed ids, xdist off) and the main comparison made with the same command",
+      "Approval landing over failures that are not the task's, recorded on the transition as the Hub's override",
+      "The cases where an override is never automatic",
+      "A project setting, on by default, that turns the automatic override and fix-task filing off",
+      "The Hub filing one fix task per set of failing tests, deduplicated, at the head of the task's live flow",
+      "Pending tasks in a flow's queue ordered by priority before age",
+      "The reviewer's briefing saying such failures are not the task's",
+      "A task moved to assigned outside any flow started for its assignee, with the stall sweep as backstop",
+      "The task story showing an automatic override as the Hub's"
+    ],
+    "non_goals": [
+      "Per-level rules for when an automatic override is allowed (Fast, Reviewed, Gated): roadmap slice D; this slice ships one project setting",
+      "The order of checks around completion and review, review waiting for the check run, and a UI check: roadmap slice L, which this builds after",
+      "Batching approved work for merge and running checks once per batch: roadmap slice E",
+      "The mender's waking rules, model and questions: roadmap slice N",
+      "Automatic override for failures pytest does not name by id (ruff, black, eslint, a timeout, more than 50 failures, a truncated summary): they keep today's answer",
+      "Quarantining, skipping or retrying flaky tests beyond the one serial rerun; the fix task is how a flake gets fixed",
+      "Making the checks faster or isolating a rerun from another check run executing at the same time",
+      "Starting a pending task because it has an assignee: only the assigned status means 'work this now'",
+      "A setting to turn off starting assigned tasks outside a flow",
+      "A third actor kind on transitions: the override is an attribute of the move, the actor stays the approver"
+    ]
+  },
+  "summary": "When the only failing checks on a task's work are failures that are not the task's -- the same test ids fail on main at the commit the check run was cut from, or the failing tests pass when rerun on their own -- approving the task lands it without the operator: the approval transition records an override the Hub made itself (who: the Hub; what: each check, test id, check run and the main commit), and the Hub files one fix task for those tests at the head of the running flow, so the next free agent fixes main while the slice goes on. 'The same failure' is decided by pytest node ids compared like for like (one serial rerun of only the failed ids on the task's tree, then the same serial command on main), never by exit codes or counts, and an override is never automatic for a failure the task introduced or could have (a test passing on main, a test file the task changed, the ids a fix task was filed for, a check whose failures pytest did not name). A project setting, on by default, turns it off. Separately, a task moved to `assigned` outside any flow gets a turn queued for its assignee at once, with the stall sweep as backstop, instead of waiting for someone to message the agent.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Acceptance drive first: write hub/tests/test_a_red_main_does_not_hold_the_night.py (every test function named in the criteria, using the git and check fixtures of test_project_checks_run.py and test_project_checks_gate.py with a real pytest check) and keep its red output from master: the reviewer's approval is 409 'fail on main too'. Then: make the confirmation rerun serial and compare with main by node id using the same narrowed command (project_checks: confirm_failure, narrowed_command, _MainBaseline, _record_main_result; store on_main.failed_tests and the shared, own and touched ids on the result); decide the automatic override in requirement_gate._check_checks with every exclusion of never-automatic-for-its-own; record override_by 'hub' and the reason in apply_transition; add the migration (task_transitions.override_by backfilled 'operator' where override_reason is set; projects.checks_auto_override default true) with its round-trip test; expose the setting in ProjectSettings and override_by in task_story; fix review_turn._checks_sentence. The fix-task assertions of the drive stay red until the next task.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/review_turn.py",
+        "hub/hub/task_story.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/tests/test_a_red_main_does_not_hold_the_night.py",
+        "hub/tests/test_checks_reuse_a_pass_and_confirm_a_failure.py",
+        "hub/tests/test_project_checks_gate.py",
+        "hub/tests/test_project_checks_settings.py",
+        "hub/tests/test_migration_0148_the_hub_may_override_checks.py"
+      ],
+      "from": null,
+      "key": "override-by-test-id",
+      "requirements": [
+        "same-failure-by-test-id",
+        "rerun-on-its-own",
+        "approval-lands-over-failures-not-its-own",
+        "never-automatic-for-its-own",
+        "a-setting-turns-it-off",
+        "reviewer-is-told"
+      ],
+      "reviewer": null,
+      "title": "Main's failures and flakes land with the Hub's override"
+    },
+    {
+      "depends_on": [
+        "override-by-test-id"
+      ],
+      "description": "When a check run ends (project_checks._finish with a decided state) with failures that are main's or flakes and the setting is on, file one fix task through create_task_for_actor as api/v1/checks.py:59 does, deduplicated by test id against open Hub-filed fix tasks recorded as event_logs rows (the pattern flaky_tests.HANDLED_EVENT uses), in the task's flow when it is live (flow_advance.py:118-128's test) with priority critical, else pending and unassigned; a flake's filing marks the flaky list handled. Order a flow's pending tasks by priority before age in scheduler._loop_queue_order (shared with the board in api/v1/jobs.py). Name the fix task in the override reason. Makes the drive's fix-task tests green.",
+      "files": [
+        "hub/hub/flaky_tests.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/scheduler.py",
+        "hub/tests/test_a_red_main_does_not_hold_the_night.py",
+        "hub/tests/test_firing_decision_is_shared.py",
+        "hub/tests/test_flaky_tests_reach_the_operator.py"
+      ],
+      "from": null,
+      "key": "fix-task-at-the-head",
+      "requirements": [
+        "a-fix-task-is-filed",
+        "fix-task-heads-the-flow"
+      ],
+      "reviewer": null,
+      "title": "The Hub files the fix task at the head of the flow"
+    },
+    {
+      "depends_on": [
+        "override-by-test-id"
+      ],
+      "description": "Red test first: hub/tests/test_an_assigned_task_outside_a_flow_starts.py (an operator PATCH and an agent's update_task to assigned outside a flow queue nothing on master). Add hub/hub/assigned_task_start.py: one rule (status assigned, loop_id null, open assignee, prerequisites met, no entry for that task and assignee queued, delivered or running since it last entered assigned) that queues a briefing entry bound to the task (task_id set; origin 'operator', or 'agent' with origin_agent when an agent's run assigned it) and calls turn_scheduler.schedule_agent; nudged after commit from apply_transition (to assigned), create_task_for_actor (created assigned) and update_task (new assignee while assigned), and run by stalls._sweep as the backstop. The briefing names the task and reuses scheduler._briefing_completion_lines(task, is_flow=False).",
+      "files": [
+        "hub/hub/assigned_task_start.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/stalls.py",
+        "hub/tests/test_an_assigned_task_outside_a_flow_starts.py"
+      ],
+      "from": null,
+      "key": "assigned-task-starts",
+      "requirements": [
+        "assigned-outside-a-flow-starts",
+        "sweep-starts-what-was-missed"
+      ],
+      "reviewer": null,
+      "title": "An assigned task outside a flow starts"
+    },
+    {
+      "depends_on": [
+        "override-by-test-id"
+      ],
+      "description": "In the project settings, beside the checks, a switch for the automatic override and fix-task filing (on by default, saying what it does); in the task story, an automatic override reads as the Hub's with its reason, an operator override as today. Vitest first over the real route payloads; rebuild and commit the UI bundle with the source (scripts/refresh_ui_bundle.py).",
+      "files": [
+        "hub/ui/src/components/settings/GeneralSettings.tsx",
+        "hub/ui/src/components/tasks/TaskStory.tsx",
+        "hub/ui/src/api/projects.ts",
+        "hub/ui/src/api/tasks.ts",
+        "hub/ui/src/__tests__/projectSettingsPanel.test.tsx",
+        "hub/ui/src/__tests__/taskStory.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "app-shows-it",
+      "requirements": [
+        "a-setting-turns-it-off",
+        "override-is-shown-as-the-hubs"
+      ],
+      "reviewer": null,
+      "title": "The setting and the Hub's override in the app"
+    }
+  ],
+  "title": "A red main or a flake does not hold the night"
+}

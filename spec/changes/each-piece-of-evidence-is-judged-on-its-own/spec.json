@@ -1,0 +1,267 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a completed task with four awaiting pieces for FR-1..FR-4",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_evidence_judged_piece_by_piece.py -k one_of_four, through the agent update_task route as the reviewer; red on master (four rejected with S), green on the branch; paste both outputs.",
+      "key": "one-of-four",
+      "requirement": "send-back-names-failures",
+      "then": "FR-3's piece is rejected with R3, and only that one is rejected; fails on master 43301a6 (all four are rejected with S)",
+      "when": "the reviewer sends it back naming FR-3's piece as failing with reason R3 and a send-back reason S"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same send-back",
+      "how_to_check": "Same test file: read the list_evidence route after the send-back and assert the three states and reasons.",
+      "key": "three-held",
+      "requirement": "unnamed-pieces-are-held",
+      "then": "FR-1, FR-2 and FR-4's pieces are held with reason S, and none is accepted or rejected",
+      "when": "list_evidence is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task with two awaiting pieces",
+      "how_to_check": "Same test file: both calls through update_task; assert held states and the refusal's status and text.",
+      "key": "general-send-back",
+      "requirement": "send-back-without-a-failing-piece",
+      "then": "both pieces are held with that reason; a send-back naming none and giving no reason is refused",
+      "when": "the reviewer sends it back naming none, with the reason 'lint fails'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the task above after the builder's fix commit and completion",
+      "how_to_check": "Same test file in a git fixture: commit, complete, attempt approval (assert refusal names FR-1, FR-2, FR-4), record at the new commit, approve, assert states.",
+      "key": "re-record",
+      "requirement": "held-is-recorded-again",
+      "then": "the first is refused for those requirements' missing evidence; the second accepts the four new pieces, and the held ones stay held",
+      "when": "approval is attempted without new pieces for FR-1, FR-2 and FR-4, and then again after the builder records them at the new commit and the reviewer approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the send-back above",
+      "how_to_check": "Same test file: after the send-back, list_evidence(review_state='awaiting') for the task returns nothing.",
+      "key": "no-second-decision",
+      "requirement": "verdict-stays-one-action",
+      "then": "no piece of that task is still awaiting a decision from anyone",
+      "when": "the builder's next turn starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task with pieces awaiting",
+      "how_to_check": "Same test file: the call is refused with the contradiction's text, and the task status and every piece's state are unchanged.",
+      "key": "approve-with-failure-refused",
+      "requirement": "contradiction-refused",
+      "then": "the approval is refused naming the contradiction and nothing changes",
+      "when": "the reviewer approves it while naming one piece as failing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the send-back above",
+      "how_to_check": "Route test over task_history and both list_evidence filters; plus a vitest over EvidencePieces fed the route's real payload showing 'held' distinct from 'rejected' with each reason and decider.",
+      "key": "trace-visible",
+      "requirement": "outcome-is-traceable",
+      "then": "the history names FR-3 rejected with R3 and three held; the two filters return three and one pieces",
+      "when": "the task's history and list_evidence(review_state='held') and (review_state='rejected') are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a review turn's brief and the update_task tool description",
+      "how_to_check": "A test reading the built review brief (review_turn) and the update_task tool's description from the MCP server, asserting both name the failing-pieces argument and the word held.",
+      "key": "brief-says-so",
+      "requirement": "reviewer-is-told-how",
+      "then": "both say how to name failing pieces and that unnamed pieces are held",
+      "when": "they are read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "69add9d855f28fa5c69416b76fdd4cc6918ea8443f3b93e4eed7c6e4cbe42dde",
+      "FR-2": "811601899cf1cd407994f0c4cfe45c0bb140f389c63fdf5c503f17396920e850",
+      "FR-3": "d37d25114f7c7fa792edaff2036a9af88977c57f2c6f3b106ded2c50c7a93714",
+      "FR-4": "0f9060400bb9a791527952dcf0be8f8e06d5a1336b4f9284783e422e4d46c7e3",
+      "FR-5": "d9c7ad678f0655cf1c927bf4190983b1e1f8c391ad71c2edd680fec8e423850b",
+      "FR-6": "d6855e09d9399b42851f6d8893eb7744e50260baf856e561d5f0a1ac99471185",
+      "FR-7": "0571785fb2a80e46fa29da18d764310a8d316cdccccdd68b7e8944635d48d3dc",
+      "FR-8": "ba09e5336e5876a0d7a6ec4001d02d977bf91c2736ad116416807152cea3278b"
+    },
+    "high_water": 8,
+    "requirements": {
+      "contradiction-refused": "FR-6",
+      "held-is-recorded-again": "FR-4",
+      "outcome-is-traceable": "FR-7",
+      "reviewer-is-told-how": "FR-8",
+      "send-back-names-failures": "FR-1",
+      "send-back-without-a-failing-piece": "FR-3",
+      "unnamed-pieces-are-held": "FR-2",
+      "verdict-stays-one-action": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2 (hazard): evidence gains a held state, which needs a migration of requirement_evidence's review-state constraint on :8000's live data; existing rows are unchanged (a pre-K bulk rejection stays a rejection). Back up before the restart. Rollback: the downgrade maps held back to awaiting. The verdict path in task_transition_service.py is also touched by L, M and E: K builds before E.",
+  "evidence": {
+    "checked": [
+      "hub/hub/task_transition_service.py:1010-1033: the verdict maps approved to ACCEPTED and anything else to REJECTED for every awaiting piece",
+      "hub/hub/requirement_evidence.py decide_with_verdict (around :1390) and its states AWAITING/ACCEPTED/REJECTED (:57-59); its docstring records why one verdict decides all (F672)",
+      "Vault src-109565ec0558: QA's 'held ... but rejected' note and slice 2's 24 accepted / 30 rejected"
+    ],
+    "limits": [
+      "How the reviewer names pieces (by evidence id or by requirement identifier) is left to the build; the criteria use requirement identifiers",
+      "Whether 'held' needs a new stored review state or a separate marker is the builder's choice; the observable states are what is required",
+      "Nothing driven yet",
+      "Every how_to_check is proposed coverage written from the criteria, not tests that exist yet"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Built by Claude Code subagents outside the Hub's flows (operator, 2026-10-27), so delivery is none; tasks are closed as already built against the merged commits once their acceptance drives pass.",
+      "resolved": true
+    }
+  ],
+  "problem": "Operator, 2026-10-26: 'when we reject or an agent rejects an evidence, all evidences are rejected on the same value ... should each evidence behave separately? This way we have a tracing of which evidence were rejected and why ... that is confusing.' Today the task's verdict decides all its awaiting evidence at once (task_transition_service.py:1023 calling requirement_evidence.decide_with_verdict): approving accepts every piece, sending back rejects every piece with the one verdict reason. It was built so no second decision is needed (F672). The cost: QA wrote on slice 1 of the red thread that FR-4, FR-7, FR-8 and FR-12 'held ... but are rejected with this verdict because they come from the same commit'; slice 2 shows 30 of 54 pieces 'rejected', which mostly counts send-backs times requirements (vault src-109565ec0558), so neither the record nor model comparisons say what actually failed.",
+  "requirements": [
+    {
+      "key": "send-back-names-failures",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A reviewer sending a task back can name the pieces of evidence that fail, each with its own reason, in the same action that sends it back; only the named pieces become rejected, each with its own reason."
+    },
+    {
+      "key": "unnamed-pieces-are-held",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A piece that held is not wrong; calling it rejected is what made the record and the counts misleading.",
+      "statement": "On a send-back, every awaiting piece of the task that the reviewer did not name as failing becomes held at its commit: not rejected, not accepted, and shown as held with the send-back's reason."
+    },
+    {
+      "key": "send-back-without-a-failing-piece",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A send-back that names no failing piece is allowed when it gives a reason (a defect outside any requirement, a failing check), and then every awaiting piece is held."
+    },
+    {
+      "key": "held-is-recorded-again",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26, option B: re-recording is correct by construction; carrying forward waits for slice H's numbers.",
+      "statement": "A held piece never counts as accepted evidence; the requirement it served needs a new piece at the builder's next commit, and the reviewer's next verdict judges that new piece."
+    },
+    {
+      "key": "verdict-stays-one-action",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F672: a second decision by someone else stalled finished work.",
+      "statement": "Neither the reviewer nor anyone else needs a separate evidence decision before or after the verdict: the send-back or approval decides every awaiting piece of the task in the one action."
+    },
+    {
+      "key": "contradiction-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Approving a task while naming any of its pieces as failing is refused, naming the contradiction."
+    },
+    {
+      "key": "outcome-is-traceable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "list_evidence, the task's history and the app's evidence views show each piece's outcome (accepted, rejected, held, awaiting) with its own reason and who decided it, and filtering by review state distinguishes held from rejected."
+    },
+    {
+      "key": "reviewer-is-told-how",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The review turn's brief and the update_task tool's description tell the reviewer how to name failing pieces and that unnamed ones are held, not rejected."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "evidence-judged-piece-by-piece"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A send-back naming failing pieces, each with its own reason, and an optional reason for the send-back as a whole",
+      "A third outcome for a piece on a send-back: held at that commit, neither accepted nor rejected",
+      "Held pieces recorded again at the builder's next commit and judged again",
+      "The per-piece outcome and reason in list_evidence, the task's history and today's evidence views",
+      "The reviewer's brief and the update_task tool saying how to name failing pieces"
+    ],
+    "non_goals": [
+      "Carrying held pieces forward to the next commit: deferred until roadmap slice H measures what re-recording costs (operator, 2026-10-26)",
+      "Rewriting past verdicts: evidence rejected in bulk before this ships stays as recorded",
+      "Per-model and per-level statistics: roadmap slice G reads what this records",
+      "The redesigned spec page's evidence display: slice F wires it",
+      "Changing approval: approving still accepts every awaiting piece of the task"
+    ]
+  },
+  "summary": "A reviewer's verdict stays one action, but inside it each piece of evidence gets its own outcome: a send-back rejects only the pieces named as failing, each with its own reason, and keeps the others as held at that commit; the builder's next commit records them all again for the reviewer. The record, the task's history and the evidence views then say which requirement failed and why, and counts of rejections stop multiplying rounds by requirements.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Let a send-back carry the failing pieces with their reasons; reject only those, hold the rest, refuse a reasonless empty send-back and an approval naming failures; held never counts as accepted; expose 'held' in list_evidence and the task history; update the review brief and the update_task tool text. Test red first against master's all-rejected behaviour.",
+      "files": [
+        "hub/hub/requirement_evidence.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/review_turn.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/db",
+        "hub/tests/test_evidence_judged_piece_by_piece.py"
+      ],
+      "from": null,
+      "key": "verdict-per-piece",
+      "requirements": [
+        "send-back-names-failures",
+        "unnamed-pieces-are-held",
+        "send-back-without-a-failing-piece",
+        "held-is-recorded-again",
+        "verdict-stays-one-action",
+        "contradiction-refused",
+        "outcome-is-traceable",
+        "reviewer-is-told-how"
+      ],
+      "reviewer": null,
+      "title": "Verdicts judge each piece"
+    },
+    {
+      "depends_on": [
+        "verdict-per-piece"
+      ],
+      "description": "Today's evidence views (EvidencePieces, coverage bar, task drawer) show held distinctly from rejected, each with its own reason and decider; rebuild the bundle.",
+      "files": [
+        "hub/ui/src/components/spec/EvidencePieces.tsx",
+        "hub/ui/src/components/spec/SpecCoverageBar.tsx",
+        "hub/ui/src/components/tasks",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "show-held",
+      "requirements": [
+        "outcome-is-traceable"
+      ],
+      "reviewer": null,
+      "title": "Show held and per-piece reasons in the app"
+    }
+  ],
+  "title": "Each piece of evidence is judged on its own"
+}

@@ -1,0 +1,401 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with one spec document that has a build, and work_tally.tally patched to return a recorded sentinel",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k same_function -v",
+      "key": "same-function-feeds-both",
+      "requirement": "one-tally",
+      "then": "the sentinel's figures appear unchanged in all three responses; on master the stats route answers 404",
+      "when": "the spec page's builds route (slice D's), GET /api/v1/projects/proj-test/stats and GET /api/v1/projects/proj-test/ledger are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub's source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k no_second_sum -v",
+      "key": "no-second-sum",
+      "requirement": "one-tally",
+      "then": "none is found outside hub/hub/work_tally.py",
+      "when": "a test scans hub/hub/api/v1/stats.py, the builds route's module and project_ledger.py for sums over TurnUsage, TaskCheckRun or TaskTransition durations"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded project with two spec documents (one with two builds, one with work before builds), a mender stall on one, an unbound conversation run, an unpriced run, a Copilot run and two worker invocations",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k totals_agree -v",
+      "key": "spec-rows-equal-pages",
+      "requirement": "totals-agree",
+      "then": "each spec row equals the sum of its page's builds in every figure, and spec rows + 'not from a spec' + workers equal /accounting's project api_equivalent_usd_micros, total_tokens, ai_nano_aiu and premium_requests",
+      "when": "each spec page's builds and the project stats are read through the routes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task built by Developer, reviewed by QA through a review turn, re-approved by QA through an ordinary message bound to the task while it is under_review, and a mender run on its stall",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k roles -v",
+      "key": "roles-split",
+      "requirement": "cost-by-role",
+      "then": "Developer's run is building, both QA runs are reviewing, the mender's is mending, every run appears in exactly one role, and the role costs sum to the spec's cost",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three mender conversations: one for a stall naming a task of document A, one for a loop_stalled stall naming document B's flow, one for a stall naming neither",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k mender -v",
+      "key": "mender-follows-stall",
+      "requirement": "mender-attributed-to-its-spec",
+      "then": "their runs count as mending under A, under B and under 'not from a spec' respectively",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build whose task is built for 10 min, waits 2 min, has a check run failing after 8 min, waits 30 min on that failure, is reviewed for 5 min while a second check runs, and is approved",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k partition -v",
+      "key": "partition-sums",
+      "requirement": "wall-time-partition",
+      "then": "building 10 min, checks 8 min, held by a failed check 30 min, reviewing 5 min, waiting for review 2 min, and the parts equal the build's wall time to the second",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec with three check runs, one failed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k checks -v",
+      "key": "checks-line",
+      "requirement": "checks-on-their-own-line",
+      "then": "both show 3 check runs, 2 passed, 1 failed and their summed running time, and no agent's run time includes it",
+      "when": "its spec page and its project row are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task built on Sonnet by Developer, sent back twice by QA on Opus, each send-back rejecting four pieces as recorded before slice K",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k send_back -v",
+      "key": "send-back-once",
+      "requirement": "send-backs-counted-once",
+      "then": "Sonnet's row shows 2 send-backs received and Opus's row 2 send-backs made, not 8",
+      "when": "the model grouping is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a send-back under slice K naming one failing piece of four",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k per_piece -v",
+      "key": "one-of-four",
+      "requirement": "verdicts-per-piece",
+      "then": "the recording model's row shows 1 rejected and 3 held for that send-back",
+      "when": "the model grouping is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two send-backs, one made while the task's newest check run had failed and one after a passing check",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k beside_failing -v",
+      "key": "beside-failing-check",
+      "requirement": "reviews-beside-a-failing-check",
+      "then": "exactly the first counts as a review beside a failing check, with that review run's cost and time",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the seeded project, with and without a 'since' date between its two builds",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k groupings -v; cd hub/ui && npx vitest run src/__tests__/projectWork.test.tsx",
+      "key": "groupings-agree",
+      "requirement": "groupings",
+      "then": "the four totals rows are equal for each 'since', work before builds shows as 'before builds' and 'no level recorded', and the view renders all four groupings from the route's real payload",
+      "when": "the spec, agent, model and level groupings are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec with one priced run, one unpriced run and one Copilot run reporting credits only",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k unpriced -v",
+      "key": "unpriced-counted",
+      "requirement": "unknown-is-not-zero",
+      "then": "each shows the priced cost with '1 unpriced' beside it and the credits in their own unit, and the ledger no longer adds the unpriced run as $0",
+      "when": "its spec page, its project row and the Activity tab's spend total are read"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a copy of the :8000 database taken with VACUUM INTO (mode=ro) and a Hub started from the branch on the copy at :8010",
+      "how_to_check": "Drive: VACUUM INTO a copy (.claude/reference/hubs.md:79), start the branch's Hub on it at :8010, screenshot both views; the expected figures are from the 2026-10-27 read-only queries recorded in evidence",
+      "key": "the-night-without-sql",
+      "requirement": "groupings",
+      "then": "slice B shows one 'before builds' entry with mending $15.86 over 42 runs, building $14.66 over 9, reviewing $11.28 over 11, 10 check runs, and 3 reviews beside a failing check costing $4.39; its project row equals the page",
+      "when": "the operator opens slice B's spec page and the Activity tab's project view grouped by spec, then by model"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "A run's spec and build",
+      "steps": [
+        "A run bound to a task (Run.task_id) belongs to that task's spec document (Task.spec_document_id) and to the build slice D records for the task.",
+        "Otherwise, a run of the Hub's mender belongs to the spec of the stall whose conversation_id is the run's conversation: the stall's task's document, else its loop's document (Loop.spec_document_id); when several stalls share the conversation they name the same task (stalls.mending_thread), so the first by first_seen_at decides.",
+        "Otherwise, a run slice D records as a build's lead belongs to that build's document.",
+        "Otherwise the run is 'not from a spec'.",
+        "A spec run with no build recorded belongs to the document's 'before builds' entry."
+      ]
+    },
+    {
+      "name": "A run's role (first match wins)",
+      "steps": [
+        "mending: the run's agent is the Hub's mender (stalls.is_mender on its Agent row).",
+        "leading: slice D records the run as a build's lead's.",
+        "reviewing: the run was delivered a review entry (InboundQueueEntry.review_task_id with delivered_in_run_id = the run), or it is bound to a task whose status at the run's start was completed or under_review and its agent is not the one recorded completing the task at that time (completion_attribution).",
+        "building: any other run bound to a task.",
+        "other: everything else."
+      ]
+    },
+    {
+      "name": "Wall-time partition of a build",
+      "steps": [
+        "The span runs from the first of the build's tasks leaving pending to the last one's approval, or to now while any is open.",
+        "Each instant goes to the first that applies: building (a building run of the build is running), reviewing (a reviewing run is running), checks (a check run of one of its tasks is running), held by a failed check (a task is completed or under_review and its newest finished check run failed), waiting for review (a task is completed or under_review), waiting to be handed out (otherwise).",
+        "Mending is not a time part: the mender's runs are counted as run time and cost, since they overlap the wait they mend.",
+        "Spec and level rows sum their builds' parts; agent and model rows carry run time by role instead."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "c74db9d435e694a8d9fe8b7114caaaa1f82dbd8382a0bbc10b5532190e05f8d2",
+      "FR-10": "668d6d90f13df32c2e0f9cf7982600624079ce1b23dfc66b7c6bcdf66ff37b9d",
+      "FR-11": "e132ce0cf3f552374fbaf451e28fa24c352c9dc39cd9cdf0d7bb53ca0e81bb4f",
+      "FR-2": "a231f6b260d58a7f8951bf1f71e475dc7e72694fd69ff9de6832748831e9c722",
+      "FR-3": "b9070b610a7f79922fc2c39982799c4d80bb2c40a4aa9bce0f461f87f948bd27",
+      "FR-4": "205ba5c7a2d33bcbb3df22f47f9d26be0713fd3c98d3f2d92bd9f8defb9ebac9",
+      "FR-5": "a90ba35797260ecd372f0ebd8f3f51f45977525cf8632c9abd246e4945748ad2",
+      "FR-6": "f172035a690fe1a5ead3fde546078fc5c8872668b2e43dc1c157cc480cff1f0b",
+      "FR-7": "4739923215114e9defc839d3ab5082b85f77f831e293335edd6999d39860a311",
+      "FR-8": "3fa7d0d2de8be6da7fa11febdcbee4534376f1abfa1c2cd762a7db142a7f08be",
+      "FR-9": "6f4a7fe638e1c0fe2bfd7951d1026822221e1b098f0f5cc736598b252c60ce33"
+    },
+    "high_water": 11,
+    "requirements": {
+      "checks-on-their-own-line": "FR-6",
+      "cost-by-role": "FR-3",
+      "groupings": "FR-10",
+      "mender-attributed-to-its-spec": "FR-4",
+      "one-tally": "FR-1",
+      "reviews-beside-a-failing-check": "FR-9",
+      "send-backs-counted-once": "FR-7",
+      "totals-agree": "FR-2",
+      "unknown-is-not-zero": "FR-11",
+      "verdicts-per-piece": "FR-8",
+      "wall-time-partition": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1. One module, hub/hub/work_tally.py, owns every figure. Not usage_accounting.py: that module owns recording usage and the budget's hot path (project_budget_state, used_tokens) and must stay cheap; the tally joins seven tables and is read on demand. It reuses usage_accounting's rules rather than restating them: _plus for unknown-is-not-zero, and the worker line from _worker_lines, so the grand total equals accounting_snapshot's project figure by construction rather than by coincidence. The spec page's builds route (slice D's), the new GET /projects/{id}/stats and project_ledger's spend total and by-agent lane all call it; task_story's per-run figures stay (a per-run display, not a sum shown beside these).\n\nD2. The function's output is the same shape at every level: a row of figures (cost by role, run time by role, runs by role, unpriced count, credits, wall-time parts, check runs, send-backs made and received, pieces by verdict, reviews beside a failing check). A build, a spec, an agent, a model and a level are all rows; a spec row is the sum of its build rows computed by the same summing helper, which is what makes totals-agree hold. The test proves it twice: structurally (patching tally changes every surface) and numerically (a seeded project's spec rows equal its pages and the grand total equals /accounting).\n\nD3. Role and spec are derived, not stored. Every input already exists: review turns via InboundQueueEntry.review_task_id and delivered_in_run_id (models.py:603, :665, indexed at :719), the mender via stalls.is_mender and Stall.conversation_id, the author via completion_attribution. Deriving means no migration and, more importantly, the figures cover every run already recorded: the night of 2026-10-26/27 shows without backfill. Checked on a read-only copy of :8000: the derivation attributes all 42 mender runs of that night to slice B and finds the one QA run (run-ec3c8b6af911, a message from the mender bound to T1 while under_review) that the review-entry rule alone would have counted as building. Slice D's lead runs are the one input not yet recorded; leading reads whatever D records and is empty until then.\n\nD4. The time split is a partition with a fixed precedence (algorithm 3) so the parts always sum to the wall time, as the card's stacked meter assumes (SpecBuilds.tsx:89). Two parts are added to slice F's four: reviewing (a reviewer working is not 'waiting for review') and held by a failed check (T1's 2 h 40 min). Check runs overlap review today; with slice L review waits for checks and the overlap disappears, which this split will show.\n\nD5. Attribution of quality figures. A send-back is charged to the work's builder (the run recorded completing it) and credited to the reviewer; a piece's verdict to the run that recorded the piece. Counting per piece reads RequirementEvidence.review_state as slice K leaves it (held included); bulk rejections recorded before K stay as recorded, and 'since' lets the operator compare from K's landing onward rather than this slice guessing which past rejections were bulk.\n\nD6. Where the project view lives: a 'Work' section at the top of the Activity tab, which is the project's ledger (the-activity-tab-becomes-the-projects-ledger). The ledger's spend-by-agent lane is removed in favour of the Work section's agent grouping so the tab shows one figure per agent; spend by day and by task stay.\n\nD7. Cost of reading. The tally is read on demand, not maintained; it is project-scoped and every join it needs is indexed (turn_usage.run_id unique, runs.task_id, inbound_queue delivered_in_run_id, task_check_runs task_id). The builder times it on the :8000 copy and records the figure in the task's evidence; a materialised summary is a later slice if that figure is too slow. The page refetches on the events the ledger and the spec page already listen to.\n\nTier 1: no migration, read-only routes, no secrets. The usual UI-bundle hazard applies (a committed bundle reaches :8000 on reload), handled by the normal refresh.",
+  "evidence": {
+    "checked": [
+      "hub/hub/usage_accounting.py:432-435 _plus (unknown is never zero); :538-575 accounting_snapshot sums turns per project and per agent and adds _worker_lines (:438) to the project figure (:562); :656 conversation_usage joins runs. No grouping by model, role, spec or level exists.",
+      "hub/hub/project_ledger.py:110-200 sums spend by day, agent and task again, counting an unpriced run as 0 (:129-130, :146).",
+      "hub/hub/task_story.py:91-96, :200-224 sums per-run cost a third time, unknown kept unknown.",
+      "hub/hub/db/models.py: TurnUsage (:1567, one row per run, run_id unique :1573-1575, model :1580); Run.task_id (:1445) and conversation_id (:1432); InboundQueueEntry.delivered_in_run_id (:603, indexed :719) and review_task_id (:665); Task.spec_document_id (:758); Loop.spec_document_id (:1938); Stall.task_id/loop_id/conversation_id (:1225-1275); CHECK_RUN_STATES (:3121); EVIDENCE_REVIEW_STATES and EVIDENCE_DECISIONS (:2893-2894).",
+      "hub/hub/run_liveness.py:126-137: a review run is bound to the task it inspects and Run does not carry review_task_id; hub/hub/inbound_queue.py:118-129 entry_kind tells a review entry from a work entry.",
+      "hub/hub/stalls.py:395-396 is_mender; :470-512 wake opens a mender conversation with no task and records it on the stall.",
+      "hub/hub/task_transition_service.py:185 completion_attribution; :734 _run_reviewed_the_task (the existing 'did this run review' reading).",
+      "hub/ui/src/components/spec/page/SpecBuilds.tsx:89-90, :153-166 and model.ts:119-138: the mock's build card splits cost into build/review/lead and time into four parts; no mending line.",
+      "hub/ui/src/components/activity/ProjectLedger.tsx:282, :295 spend by agent and by task lanes; ActivityScreen.tsx:61 renders the ledger; hub/hub/api/v1/__init__.py:55 registers the ledger router under projects.",
+      "Read-only queries on a mode=ro connection to ~/.agentweave/hub/data/agentweave.db, 2026-10-27, slice B (spdoc-484b096e0803, loop-cee87801ae6a): with the role and spec rules above, building 9 runs $14.66, reviewing 11 runs $11.28, mending 42 runs $15.86 (all 42 mender runs that night found through stalls; 0 outside a stall conversation); 10 check runs (4 failed); 4 send-backs; 3 send-backs by reviews whose newest check had failed, $0.49 + $1.30 + $2.60 = $4.39.",
+      "grep of openspec/changes and scripts/drive/FINDINGS.md for per-model stats: no overlapping change or finding."
+    ],
+    "limits": [
+      "Slice D's build record, level and lead are not built or specified yet; the builds route named in the criteria and the 'leading' role read what D records, and the file list's hub/hub/api/v1/spec.py is a guess at where D's builds route lives.",
+      "The role rule was checked against one night's data; a bound run by a second builder on a completed task (no case seen) would count as reviewing.",
+      "The tally's response time on the :8000 database is not measured yet (D7).",
+      "Every how_to_check is proposed coverage written from the criteria, not tests that exist yet."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 1 (change). A one-off change: no migration, read-only routes; on landing, the capability holding the Activity tab's ledger and the spec page's build display is updated through the app.",
+  "open_questions": [
+    {
+      "question": "Where the project view lives: a 'Work' section at the top of the Activity tab, replacing the ledger's spend-by-agent lane (decided, design D6).",
+      "resolved": true
+    },
+    {
+      "question": "Whether role and spec are stored on the run or derived: derived from existing records, so past runs are covered without a migration (decided, design D3).",
+      "resolved": true
+    },
+    {
+      "question": "Pieces rejected in bulk before slice K: counted as recorded, with a 'since' date to compare from K onward (decided, design D5).",
+      "resolved": true
+    }
+  ],
+  "problem": "On the night of 2026-10-26/27 slice B's flow spent about $42 API-equivalent, and the operator could only learn where it went through SQL against the :8000 database (the 2026-10-25 post-mortem needed SQL too: slice F's problem statement). Read-only against :8000 on 2026-10-27, for slice B's document spdoc-484b096e0803: the mender ran 42 times for $15.86 (38%), more than all building (9 runs, $14.66) and all reviewing (11 runs, $11.28); three QA reviews ($4.39) sent back work whose check run had already failed; check runs took 10 runs and about 108 minutes; and T1 sat 2 h 40 min approved-but-refused behind a check that failed on main. None of that is visible in the app. Today the Hub sums cost in three places with three rules: usage_accounting.accounting_snapshot keeps an unpriced run unknown (usage_accounting.py:432-435, :562), project_ledger.ledger counts it as $0 (project_ledger.py:129-130), and task_story sums per run again (task_story.py:200-224); none groups by model, level, role or spec, and none knows a run is the mender's or a review. Roadmap slice H (the measured re-run) compares Fast with Gated and models with each other from 'the app's own views', which do not exist yet.",
+  "requirements": [
+    {
+      "key": "one-tally",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Three sums with three rules exist today (accounting_snapshot, project_ledger, task_story). Totals that agree because two implementations happen to match drift apart the first time one changes; totals that come from one function cannot.",
+      "statement": "Every figure the spec page shows for a build, every figure in the project view, and the Activity tab's spend total and spend by agent are produced by one function in hub/hub/work_tally.py; no route or component computes a cost, a duration or a count of its own from the rows."
+    },
+    {
+      "key": "totals-agree",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done sentence: 'its totals equal the sum of the spec pages'. Tying the grand total to the accounting route ties the new view to the figure the budget is already held against (usage_accounting.used_tokens, :508).",
+      "statement": "For any project, each spec row of the project view equals, figure by figure, the sum of that document's builds on its spec page; and the spec rows plus the 'not from a spec' row plus the Hub's worker line equal the project's api_equivalent_usd_micros, total_tokens and Copilot credits reported by GET /projects/{id}/accounting."
+    },
+    {
+      "key": "cost-by-role",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The mender was 38% of slice B's cost on 2026-10-26/27 and appeared nowhere; the spec page mock splits cost into building, reviewing and leading only (SpecBuilds.tsx:90, :161).",
+      "statement": "Each run is counted in exactly one role: mending (a run of the Hub's mender), leading (a run slice D records as a build's lead), reviewing (a run that took a review turn of a task, or a run bound to a completed or under_review task by an agent other than the one recorded completing it), building (any other run bound to a task), or other (none of these); cost, run time and run count are shown per role, the mender's on a line of its own."
+    },
+    {
+      "key": "mender-attributed-to-its-spec",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Mender runs are not bound to a task (stalls.wake queues a conversation with no task, stalls.py:497-508), so binding alone would put $15.86 of slice B's cost outside it.",
+      "statement": "A mender run counts toward the spec document whose task or flow the stall it was woken for names (the stall's task's document, or its loop's document), and toward 'not from a spec' only when the stall names neither."
+    },
+    {
+      "key": "wall-time-partition",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The night's longest wait (T1, 2 h 40 min behind a check that also failed on main) is invisible in a four-part split; naming it is what lets slice H show whether L and M removed it.",
+      "statement": "Each build's wall time, from its first task leaving pending to its last task's approval (or now, while it runs), is split into building, reviewing, checks, held by a failed check, waiting for review and waiting to be handed out, by the precedence in the 'wall-time partition' algorithm, and the parts sum to the wall time to the second."
+    },
+    {
+      "key": "checks-on-their-own-line",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Check runs are shown on their own line per spec, per build and per level: how many ran, how many passed and failed, and their total running time, apart from any agent's run time."
+    },
+    {
+      "key": "send-backs-counted-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A send-back (a task moved from under_review to revision_needed or rejected) counts once, attributed to the agent, model and level of the run recorded as completing the work that was sent back, and to the reviewer agent and model that sent it back."
+    },
+    {
+      "key": "verdicts-per-piece",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice K's done sentence: 'the per-model counts in the stats count one rejection, not four'.",
+      "statement": "Evidence verdicts are counted per piece by its own outcome (accepted, rejected, held, awaiting), attributed to the model and agent of the run that recorded the piece; a send-back that names one failing piece among four counts one rejected and three held."
+    },
+    {
+      "key": "reviews-beside-a-failing-check",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "On 2026-10-26/27 three such reviews cost $4.39 and found what ruff and the suite had already found. Slice L is meant to make this zero; H needs to see that it did.",
+      "statement": "The view counts, per spec, reviewer agent and reviewer model, the send-backs made by a review run while the task's newest check run that started before the review ended had failed, with those reviews' cost and run time."
+    },
+    {
+      "key": "groupings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Comparing builders and levels is the slice's intent; 'before builds' keeps the night of 2026-10-26/27, which predates slice D, readable without SQL.",
+      "statement": "The project view shows the same figures grouped by spec, by agent, by model and by level, each grouping with a totals row equal to the others' and a 'since' date applied to all of them; work with no build recorded appears under its spec as 'before builds' and under level as 'no level recorded'."
+    },
+    {
+      "key": "unknown-is-not-zero",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The rule usage_accounting already keeps (_plus, usage_accounting.py:432-435) and project_ledger breaks (project_ledger.py:129).",
+      "statement": "A run with no priced cost is counted as unpriced and shown as a count beside the cost, never added as $0; Copilot credits are summed in their own unit; a figure no row reports is shown as unknown, not 0."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "project-stats"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "One tally function over the recorded rows, feeding the spec page's build numbers (slice F, build-progress-on-the-document), the project view and the Activity tab's spend lane",
+      "A run's role (building, reviewing, leading, mending) and its spec, derived from existing records, including runs recorded before this ships",
+      "Each build's wall time partitioned into building, reviewing, checks, held by a failed check, waiting for review and waiting to be handed out",
+      "The project view: the same figures grouped by spec, agent, model and level, with a totals row and a 'since' date",
+      "Send-backs counted once, evidence verdicts counted per piece (slice K's outcomes), and reviews beside a failing check",
+      "The spec page's build card showing the mending line and the two added time parts"
+    ],
+    "non_goals": [
+      "Recording builds, levels, leads or per-task builders: slice D records them; this slice reads them",
+      "Changing how verdicts are recorded: slice K; pieces rejected in bulk before K stay counted as recorded (use 'since' to compare from K onward)",
+      "Changing the order of checks and review: slice L; this slice only shows what the order cost",
+      "The cost of writing a spec (exploring conversations with the document attached): it stays under 'not from a spec'; the spec page shows builds only",
+      "Charts over time: the ledger's spend by day stays as it is",
+      "A budget or alert on these figures: the existing token budget is unchanged",
+      "Correcting the recorded model of a run moved between runners: slice J"
+    ]
+  },
+  "summary": "One function, the work tally, reads the records the Hub already keeps (runs and their usage, task transitions, check runs, evidence reviews, stalls, and slice D's builds and levels) and produces every number the spec page shows for a build and every number the project view shows. The project view, at the top of the Activity tab, groups those numbers by spec, agent, model and level: cost and run time split by role (building, reviewing, leading and mending, the mender on a line of its own), wall time split by what the work was waiting on (checks and 'held by a failed check' included), send-backs counted once each, evidence verdicts counted piece by piece, and reviews that sent back work a failing check had already flagged. Because both surfaces call the same function, the project view's spec rows equal the spec pages by construction, and a test proves it; the spec rows plus the work outside any spec plus the Hub's own worker calls equal the project total the accounting route already reports.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Acceptance drive first: write hub/tests/test_project_stats_come_from_the_same_records.py and see it fail on master (GET /projects/{id}/stats is 404, the ledger adds an unpriced run as $0, nothing knows a mender run's spec). Then add hub/hub/work_tally.py (run attribution, run role, wall-time partition, check line, send-backs, per-piece verdicts, reviews beside a failing check, groupings and 'since', per the algorithms), the read-only route GET /projects/{id}/stats, and make slice D's builds route and project_ledger's spend total and by-agent lane read from it, deleting their own sums. Check the derivations against a VACUUM INTO copy of :8000 for slice B's figures before finishing.",
+      "files": [
+        "hub/hub/work_tally.py",
+        "hub/hub/api/v1/stats.py",
+        "hub/hub/api/v1/__init__.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/project_ledger.py",
+        "hub/tests/test_project_stats_come_from_the_same_records.py",
+        "hub/tests/test_the_activity_tab_is_the_projects_ledger.py"
+      ],
+      "from": null,
+      "key": "tally",
+      "requirements": [
+        "one-tally",
+        "totals-agree",
+        "cost-by-role",
+        "mender-attributed-to-its-spec",
+        "wall-time-partition",
+        "checks-on-their-own-line",
+        "send-backs-counted-once",
+        "verdicts-per-piece",
+        "reviews-beside-a-failing-check",
+        "groupings",
+        "unknown-is-not-zero"
+      ],
+      "reviewer": null,
+      "title": "One tally feeds the spec page, the project view and the ledger"
+    },
+    {
+      "depends_on": [
+        "tally"
+      ],
+      "description": "A 'Work' section at the top of the Activity tab (hub/ui/src/components/activity/ProjectWork.tsx) with a Spec / Agent / Model / Level switch, a 'since' date, a totals row, cost and run time by role (mending on its own line), wall-time parts on spec and level rows, check runs, send-backs, pieces by verdict and reviews beside a failing check; the ledger's spend-by-agent lane gives way to it. The spec page's build card (SpecBuilds.tsx, model.ts) gains the mending cost line and the reviewing and held-by-a-failed-check time parts, fed by the same route payload shape. Vitest over the route's real payload in projectWork.test.tsx; show it in the mock server with the night's figures; rebuild the UI bundle.",
+      "files": [
+        "hub/ui/src/api/stats.ts",
+        "hub/ui/src/components/activity/ProjectWork.tsx",
+        "hub/ui/src/components/activity/ActivityScreen.tsx",
+        "hub/ui/src/components/activity/ProjectLedger.tsx",
+        "hub/ui/src/components/spec/page/SpecBuilds.tsx",
+        "hub/ui/src/components/spec/page/model.ts",
+        "hub/ui/src/__tests__/projectWork.test.tsx",
+        "hub/ui/src/__tests__/projectLedger.test.tsx",
+        "hub/ui/mock",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "view",
+      "requirements": [
+        "groupings",
+        "cost-by-role",
+        "wall-time-partition",
+        "checks-on-their-own-line",
+        "unknown-is-not-zero"
+      ],
+      "reviewer": null,
+      "title": "The project view, and the mender on the spec page"
+    }
+  ],
+  "title": "Project stats come from the same records as the spec page"
+}

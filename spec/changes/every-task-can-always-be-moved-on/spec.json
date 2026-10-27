@@ -1,0 +1,436 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the task transition table and the tools offered to agents, the mender and the flow's review turn",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_every_task_state_has_a_mover.py -v, run on master first (fails on completed/author outside a flow) and then on the branch (passes); paste both outputs.",
+      "key": "invariant-test",
+      "requirement": "every-state-has-a-mover",
+      "then": "every pair other than blocked names at least one actor and a target status it is allowed; on master 43301a6 the test fails for completed held by its author outside a flow",
+      "when": "a test enumerates each non-terminal status against each holder kind"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task moved to blocked with a reason",
+      "how_to_check": "On a Hub started from the branch (trial :8010), block a task with a reason via the board, open Overview, screenshot the row with its reason and action; or a component test over the Overview fed the route's real payload.",
+      "key": "blocked-on-overview",
+      "requirement": "blocked-is-shown-to-the-operator",
+      "then": "the task is listed as waiting on them, with its reason and an action that moves it",
+      "when": "the operator opens the Overview"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task created by create_task outside any flow, completed by DeveloperOpus and still held by it",
+      "how_to_check": "A Hub test calling the agent update_task route as QA on a completed task held by its author, red on master (403) and green on the branch, asserting the holder becomes QA and both verdicts are then allowed.",
+      "key": "reviewer-takes-it",
+      "requirement": "a-reviewer-takes-completed-work",
+      "then": "the move succeeds, QA is the holder, and QA can then approve or send it back; fails on master 43301a6 with 403",
+      "when": "QA calls update_task(status='under_review')"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same completed task",
+      "how_to_check": "Same test file: the author's two calls return 403 with the mover decision's reason.",
+      "key": "author-refused",
+      "requirement": "author-still-cannot-review",
+      "then": "both are refused, as today",
+      "when": "DeveloperOpus calls update_task(status='under_review') or (status='approved')"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose evidence the mender re-recorded",
+      "how_to_check": "A Hub test: record evidence on a task as the mender, then attempt both moves as the mender through update_task and mend_reset_task; both refused.",
+      "key": "mender-author-refused",
+      "requirement": "author-still-cannot-review",
+      "then": "both are refused",
+      "when": "the mender tries to move it to under_review or approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved spec document with four pending tasks whose work is on main at a known commit",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_close_spec_tasks_already_built.py: approve a four-task document in a git fixture, call the close route with a commit on main, assert task statuses and zero runs created.",
+      "key": "close-in-one-step",
+      "requirement": "close-already-built",
+      "then": "none of the four is pending or in progress on the board, and no run was started for any of them",
+      "when": "the operator closes them as already built, naming that commit"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the tasks closed above",
+      "how_to_check": "Same test file: read the evidence route, decide three accepted and one rejected, assert task statuses and task_history entries naming the commit.",
+      "key": "evidence-awaits-review",
+      "requirement": "already-built-is-reviewable",
+      "then": "each requirement had evidence naming the commit in review_state awaiting; afterwards the three tasks are approved, the fourth is not, and each task's history names the action and the commit",
+      "when": "list_evidence is read for the document, and then a reviewer accepts the evidence for three tasks' requirements and rejects one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with recorded evidence",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_evidence_tools_take_spdoc_ids.py, red on master (404) and green on the branch.",
+      "key": "spdoc-id-works",
+      "requirement": "evidence-tools-take-spdoc-ids",
+      "then": "both reads return the same rows and the record succeeds; fails on master 43301a6 with 404",
+      "when": "list_evidence is called with its spdoc- id and with its path, and record_evidence is called with its spdoc- id"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task held by its author, and the same task held by a reviewer",
+      "how_to_check": "A parametrised test in test_every_task_state_has_a_mover.py driving each path's real entry point for every (status, holder, actor) and comparing verdict and reason.",
+      "key": "same-answer",
+      "requirement": "one-answer-everywhere",
+      "then": "each path gives the same verdict and the same refusal reason; a test asserts this for every status, holder and actor the invariant test enumerates",
+      "when": "the same move is attempted by the same actor through update_task, the flow's review claim and the mender's reset"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task held by its author, DeveloperOpus, in the operator's app",
+      "how_to_check": "Playwright against a Hub started from the branch (trial :8010): open the completed task's drawer, open the status menu, choose review, pick QA; screenshot the picker and read the task back (status under_review, assignee QA).",
+      "key": "board-review-picker",
+      "requirement": "board-hands-to-a-reviewer",
+      "then": "the app asks which agent reviews it, lists every open agent except DeveloperOpus, and after choosing QA the task is under_review held by QA; at no point is 'Move to Under review' offered as a move that keeps DeveloperOpus as holder",
+      "when": "the operator opens the task's status menu and moves it into review"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each status and holder the invariant test enumerates",
+      "how_to_check": "A test comparing the moves the task route reports for the operator (the menu's source) with the mover decision for every enumerated (status, holder); plus a vitest that the menu renders exactly the route's moves.",
+      "key": "menu-offers-only-allowed",
+      "requirement": "board-hands-to-a-reviewer",
+      "then": "every move it offers is one the mover decision allows the operator, and a test asserts the menu's moves equal the decision's answer",
+      "when": "the board's status menu is rendered for the operator"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task linked to FR-1..FR-10 of its document, whose document then gains FR-11, and evidence for FR-11 recorded on that task from its checkout at a later commit and accepted",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_landing_explains_itself.py: replay the 2026-10-26 sequence in a git fixture (create task, add requirement, commit, record and accept evidence, land); red on master with the quoted refusal, green on the branch with the commit reachable from main.",
+      "key": "late-requirement-merges",
+      "requirement": "own-evidence-counts",
+      "then": "the later commit merges with it, and the task's requirement links include FR-11; on master 43301a6 the landing is refused as 'commits on neither master nor inside any commit the accepted evidence names'",
+      "when": "the operator lands the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose branch tip is named only by evidence still awaiting a decision",
+      "how_to_check": "Route test asserting the refusal body lists the awaiting evidence ids, requirement identifiers and commits; then Playwright on :8010: press Land, Accept beside the refusal, press Land, read the task back as approved.",
+      "key": "awaiting-evidence-offered",
+      "requirement": "refusal-offers-its-remedy",
+      "then": "the refusal names that evidence by requirement and commit and shows Accept and Reject beside it; accepting it there and pressing Land again lands the task",
+      "when": "the operator presses Land"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose checks are running on the commit approval would merge",
+      "how_to_check": "Vitest over the drawer fed the land route's real refusal bodies for a running run and for a failed run: no 'Land anyway' for running, present for failed.",
+      "key": "running-checks-wait",
+      "requirement": "refusal-offers-its-remedy",
+      "then": "the app says the landing waits for the checks and offers no 'Land anyway'; 'Land anyway' with a reason is offered only once a check has failed",
+      "when": "the operator presses Land"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose checks have been running for 8 minutes and whose previous check run took 14 minutes",
+      "how_to_check": "Vitest over the drawer fed the checks route's real payload (a running run plus a finished earlier run) asserting the text beside Land; then on :8010 with a real check run, screenshot the drawer at open (Land visible in the first viewport), wait for the run to pass, and capture the notification and the enabled Land without reloading.",
+      "key": "wait-shows-progress",
+      "requirement": "a-wait-is-visible",
+      "then": "beside Land, without scrolling, it reads that it waits for checks running 8 minutes of about 14; when the run passes, Land becomes available without a reload and the operator receives a notification naming the task",
+      "when": "the operator opens the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the 'Land anyway' control with no reason typed",
+      "how_to_check": "Vitest asserting the button is disabled, carries the disabled styling and a title naming the missing reason; a dark and light screenshot of the control with and without a reason.",
+      "key": "disabled-looks-disabled",
+      "requirement": "a-wait-is-visible",
+      "then": "it is visibly disabled and its title says a reason is needed; pressing it does nothing and says nothing new",
+      "when": "it is rendered"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "d787b3703f5570b3ccddffd5153af1e024478216ddfafaed35d7a62ab6189b8c",
+      "FR-10": "1ed7acf41463a6b4e683bf23b3f0f61e3ee6197deeacc0163c7abab50374b829",
+      "FR-11": "765fa805ee51abd1ae7a0f8503a9fdbf5270310884543ec4509f7ae6f5159b1c",
+      "FR-12": "fdb48be8f5462624615e5ee8e909384f67caa53f559a57742f605edc12b3982e",
+      "FR-2": "5e11fe7d071e18e197f1fa3fda439cd7f58ab1938e7a0201a4da0ed8dacdda86",
+      "FR-3": "7d894d2634875adbe160a3c34e506df0d48fb9e2239be944d6f71d9b1a1ddf7c",
+      "FR-4": "991bfc71f7a0a8899c2920bbbd5dd0ad6ce65284c7a389996956f46256c36aca",
+      "FR-5": "1ea35c090e4481f4d45200034463c17c35ec895daedf09d71d1ddce36f42b61b",
+      "FR-6": "7441e16c9b69712346dcd9f690bdaa21ef92429e4129898b751ca74bfe611dd4",
+      "FR-7": "74d797712e5096775bc9f5e25f46b677a1a93c22fcdfc1e804db88416c0b7292",
+      "FR-8": "d872db56103d59c25e4b846d719b1849474d3fdc031c129dd68460eb8e174d22",
+      "FR-9": "3e550898c21483106e4ee513810f0bdeae5921ed862a7fb48814898387560511"
+    },
+    "high_water": 12,
+    "requirements": {
+      "a-reviewer-takes-completed-work": "FR-3",
+      "a-wait-is-visible": "FR-12",
+      "already-built-is-reviewable": "FR-6",
+      "author-still-cannot-review": "FR-4",
+      "blocked-is-shown-to-the-operator": "FR-2",
+      "board-hands-to-a-reviewer": "FR-9",
+      "close-already-built": "FR-5",
+      "every-state-has-a-mover": "FR-1",
+      "evidence-tools-take-spdoc-ids": "FR-7",
+      "one-answer-everywhere": "FR-8",
+      "own-evidence-counts": "FR-10",
+      "refusal-offers-its-remedy": "FR-11"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "hub/hub/task_transitions.py STATUS_BANDS and BAND_AWAITING_HANDOFF: in a flow anybody but the author may take completed work",
+      "grep of agent_that_completed/completed_by: about 16 references across 7 files",
+      "Vault src-cb168bd3373f: the 403 and 409 texts from 2026-10-24",
+      "Vault src-17aeb9aea81f section 2.7 and commit 996c85d (mender hand-off to a reviewer)",
+      "Vault src-28d4bff83265: the 13 tasks created for already-built work and why they could not be closed",
+      "hub/hub/api/v1/agent_actions.py:1560 and :1704 raise 'no specification document at ...'",
+      "2026-10-26, task-dadec899cc91: the operator's refusal texts; task_integration._targets (joins TaskRequirementLink) and merge_targets; requirement_gate._check_unlanded; update_task(requirement_ids=[FR-11, FR-12]) cleared the refusal; master 91b59b5 'Integrate approved work 801e7d8c7293'",
+      "hub/ui/src/components/tasks/TaskDetailDrawer.tsx: 'Land anyway' disabled until a reason is typed, styled the same either way; offered whenever onlyChecksRefuse, including while checks run",
+      "hub/ui/src/components/tasks/TaskChecksRow.tsx: 'Checks running' rendered below Notes, no estimate; task_check_runs chk-e5e214af8671 took 14m25s and chk-0db3ae08c568 15m52s",
+      "hub/ui/src/components/spec/EvidencePieces.tsx: Accept reachable from SpecCoverageBar only (requirements chip, Show details, Evidence (n))"
+    ],
+    "limits": [
+      "Whether blocked tasks already appear on the Overview with an action was not checked; the first task confirms it",
+      "The holder kinds listed are the ones seen so far; the invariant test should derive them from the code rather than from this list",
+      "The file list of each task is from a grep; the builder confirms it",
+      "Whether the operator's notification channel (the app's notifications) can carry a check-finished notice was not checked",
+      "Every how_to_check is proposed coverage written from the criteria, not tests that exist yet"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": "small",
+    "step": "delivery"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Outside a flow, who may take a completed task into review: any agent other than its author (operator, 2026-10-26, option A).",
+      "resolved": true
+    },
+    {
+      "question": "Tasks closed as already built: approved once their evidence is accepted (operator, 2026-10-26, option A); at slice D's Fast level they close at once.",
+      "resolved": true
+    }
+  ],
+  "problem": "Four times in four days, rules that are each sensible combined into a task nobody could move:\n- 2026-10-25, task 0759b1 (retrospective src-17aeb9aea81f, section 2.7): the mender re-recorded evidence and so became the author; the author may not move its task to review (403), QA could not move a task the mender held, completed -> approved is not an edge (409), and mend_reset_task refused. 20 runs passed it back and forth. Since then 996c85d lets the mender hand it to a reviewer, which works around this one case at the cost of a mender turn.\n- 2026-10-24, task 5d4cf0a5006d (src-cb168bd3373f): outside a flow, the Architect was the named reviewer of DeveloperOpus's completed task. update_task(under_review) returned 403 because the author holds it; update_task(approved) returned 409. Only the operator could move it. In a flow the same hand-off works because the flow's review turn claims the task (task_transitions.py, BAND_AWAITING_HANDOFF: 'anybody else can'); direct delegation has no such path.\n- 2026-10-23 (src-28d4bff83265): three specs approved after their work was built created 13 pending tasks for work already on master. A run takes at most one task, pending can only go to assigned or in_progress, no agent tool deletes a task, so closing them costs one paid run each, or the operator deleting them by hand (which they did on 2026-10-26).\n- 2026-10-26, task-dadec899cc91 (the spec-page mock): landing it took the operator five attempts and the Architect three investigations. (1) The board offered 'Move to Under review', which was refused because the holder was the author. (2) Land was refused as 'commits on neither master nor inside any commit the accepted evidence names; ask the task's author to record evidence' while the evidence that would clear it already existed, awaiting a decision. (3) After the operator accepted it, Land was refused the same way: the evidence was for FR-11 and FR-12, added to the document after the task was created and never linked to it, and task_integration._targets counts only evidence reached through TaskRequirementLink. Linking them (update_task requirement_ids) cleared it; nothing said so. (4) Land then waited on checks that had restarted for the new tip; the drawer offered 'Land anyway', whose button is disabled until a reason is typed but does not look disabled, so pressing it did nothing. (5) Nothing said when the checks would finish; they are reported below the Notes section, with no estimate and no notice. Accept itself is reached only through the requirements chip's 'Show details' on the document.\nThe rule that the builder never approves is checked in about 16 places across 7 files (task_transition_service, scheduler, run_task_binding, agent_trigger, task_transitions, checkpoints), each answering a slightly different question, which is how the combinations above went unnoticed.\nAlso twice: list_evidence and record_evidence answer 404 'no specification document' for a spdoc- id that read_spec_document accepts (api/v1/agent_actions.py:1560, :1704).",
+  "requirements": [
+    {
+      "key": "every-state-has-a-mover",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each dead end so far came from rules checked one at a time; only a test over the whole table catches the combination before an agent meets it.",
+      "statement": "For every non-terminal task status and every kind of holder (none, the author, another agent, the mender), at least one agent can move the task to another status with the tools it is offered, except `blocked`, whose mover is the operator."
+    },
+    {
+      "key": "blocked-is-shown-to-the-operator",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A state reserved for the operator is a dead end if the operator cannot see it.",
+      "statement": "Every task whose only mover is the operator appears on the operator's Overview as waiting on them, with the action that moves it."
+    },
+    {
+      "key": "a-reviewer-takes-completed-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the hand-off a flow's review turn already makes (BAND_AWAITING_HANDOFF: 'not by the agent that finished it ... anybody else can'), and what slice D's Reviewed level means; one rule everywhere, and no named reviewer who can be busy or gone (operator, 2026-10-26).",
+      "statement": "Outside a flow, any agent other than the one recorded as completing a task can move that completed task to under_review, and becomes its holder; the author still cannot."
+    },
+    {
+      "key": "author-still-cannot-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The agent recorded as completing a task, including a mender that re-recorded its evidence, cannot move it to under_review or approve it."
+    },
+    {
+      "key": "close-already-built",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Specs approved after interactive work shipped otherwise cost one paid run per task, or a flow started on them rebuilds shipped work. Roadmap slice C offers this at approval when intake recorded the work as already built.",
+      "statement": "The operator can close every open task of an approved spec document in one action, naming the commit or commits on main that already hold the work, and no agent run is started for those tasks."
+    },
+    {
+      "key": "already-built-is-reviewable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: 'already built' is checked like any other work, so the record stays trustworthy; on 2026-10-23 the check found a possible gap (the Composer's spinning send button). One review covers the whole document.",
+      "statement": "Closing tasks as already built records, for each requirement those tasks serve, evidence pointing at the named commits, awaiting a decision like any other evidence; each task becomes approved only once the evidence for its requirements is accepted, and the action and its commits appear in each task's history."
+    },
+    {
+      "key": "evidence-tools-take-spdoc-ids",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "list_evidence and record_evidence accept a document's spdoc- id wherever they accept its path, and answer the same as for the path."
+    },
+    {
+      "key": "one-answer-everywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The dead ends came from separate checks each answering a slightly different question; one answer is what lets slice D add levels and a lead without new dead ends.",
+      "statement": "Every path that moves a task (update_task, a flow's staffing and review turn, the mender's tools, approval, the operator's board) gives the same answer, allowed or refused with the same reason, for the same status, holder and actor."
+    },
+    {
+      "key": "board-hands-to-a-reviewer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-26: the board offered 'Move to Under review', which keeps the author as holder and so can only be refused. A menu that offers a refused move teaches the operator that the menu cannot be trusted.",
+      "statement": "From the board, the operator can move a completed task into review by choosing any agent other than its author, who becomes its holder; the board's status menu offers no move the Hub would refuse the operator."
+    },
+    {
+      "key": "own-evidence-counts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-26: FR-11 and FR-12 were added to the spec-page document after its mock task existed; their evidence, recorded on that task from its checkout and accepted, merged nothing, because only evidence for linked requirements counts (task_integration._targets joins TaskRequirementLink). A document that grows while its task is open is normal in exploring and amending.",
+      "statement": "Evidence recorded on a task against a requirement of that task's own spec document counts toward what approving the task merges, whether or not the requirement was linked to the task when the task was created."
+    },
+    {
+      "key": "refusal-offers-its-remedy",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-26: two refusals told the operator to ask the author for new evidence when the cause was evidence awaiting a decision and then a missing link, and 'Land anyway' was offered for checks that had not failed but were still running. A refusal that names the wrong remedy costs more than one that names none.",
+      "statement": "When approving or landing a task is refused, the refusal names each cause the Hub can see and, in the operator's app, offers the action that clears it beside the refusal: Accept or Reject on each piece of evidence still awaiting a decision that approval would merge; linking a requirement whose accepted evidence on the task's branch the task does not serve; and, while the project's checks are still running on the work, a wait (with no override offered) instead of a refusal."
+    },
+    {
+      "key": "a-wait-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-26: the operator could not tell when the checks would finish (shown below the Notes, no estimate, no notice), and pressed a 'Land anyway' button that was disabled without looking it, so nothing happened.",
+      "statement": "While approval of a task waits on its project checks, the task's Land control shows that it is waiting, for how long the checks have run and how long the previous run on that task took, and becomes available without a reload when they pass; when they finish the operator is notified; a control that cannot act looks disabled and says why."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "every-task-can-move-on"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "One decision of who may move which task, consulted by every path that moves one",
+      "A test over that decision: every unfinished status and holder situation has an actor able to move it",
+      "Outside a flow: any agent other than the author taking a completed task into review",
+      "From the board: the operator handing a completed task to a reviewer they name, and the board offering no move it would refuse",
+      "Closing all open tasks of a spec document whose work is already built, in one step, approved once their evidence is accepted",
+      "Evidence a task records against a requirement of its own document counting toward what approving that task merges",
+      "A refused approval or landing naming its cause and offering the action that clears it, including Accept on waiting evidence and the wait on running checks",
+      "spdoc- ids accepted wherever the evidence tools take a document"
+    ],
+    "non_goals": [
+      "Gate levels, a lead, reviewer pools and builders lists: roadmap slice D, which adds them as inputs to the decision built here (including closing already-built tasks at once at the Fast level)",
+      "Letting an author review or approve its own work: the rule that author and reviewer differ stays (slice D's Fast level is where it becomes a choice)",
+      "A reviewer field on create_task: any agent but the author may review (operator, 2026-10-26)",
+      "Judging each piece of evidence separately in a verdict: roadmap slice K",
+      "An assignee field on update_task: the operator still owns who holds a task, apart from the review hand-off this document adds",
+      "A blocked task (waiting on a person) gaining an agent mover: it is meant to wait for the operator, and must only be visible to them",
+      "Redesigning where evidence is judged on the spec page (the evidence chip on each requirement card): roadmap slice F, the spec-page wiring; this document only puts Accept beside a refusal that waits on it",
+      "Making checks faster or optional: the checks stay as they are; this document only makes their wait visible"
+    ]
+  },
+  "summary": "No task may sit in a state that nobody can move with the tools they are offered. Who may move which task becomes one decision, answered the same by every path that moves a task, so roadmap slice D can later add gate levels and a lead as new inputs to it rather than as more scattered checks. A test enumerates every unfinished status and holder against that decision and fails where there is no mover; the dead ends recorded on 23-26 October are removed: any agent other than the author can take a completed task into review outside a flow (and the operator can hand it to one from the board), a spec whose work is already built can have its open tasks closed in one step, waiting for one review of its evidence, and a refused landing names what clears it and offers it. The evidence tools also accept a document's spdoc- id, as read_spec_document does.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "The acceptance drive first: write test_every_task_state_has_a_mover.py (the invariant and same-answer tests) and see it fail on master for completed/author outside a flow. Then bring the scattered who-may-move checks behind one decision that every moving path consults, and make it pass by letting any agent other than the author take a completed task into review outside a flow (becoming its holder), with author and mender-as-author still refused. Expose the decision's answer for the operator so the board can offer exactly it. Confirm blocked tasks are on the Overview with an action; fix if not.",
+      "files": [
+        "hub/hub/task_transitions.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/scheduler.py",
+        "hub/hub/run_task_binding.py",
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/checkpoints.py",
+        "hub/hub/checkpoint_handover.py",
+        "hub/tests/test_every_task_state_has_a_mover.py"
+      ],
+      "from": null,
+      "key": "mover-invariant",
+      "requirements": [
+        "one-answer-everywhere",
+        "every-state-has-a-mover",
+        "blocked-is-shown-to-the-operator",
+        "a-reviewer-takes-completed-work",
+        "author-still-cannot-review"
+      ],
+      "reviewer": null,
+      "title": "One mover decision, and no stuck tasks"
+    },
+    {
+      "depends_on": [
+        "mover-invariant"
+      ],
+      "description": "Resolve spdoc- ids in list_evidence and record_evidence as read_spec_document does; test both, red first.",
+      "files": [
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/tests/test_evidence_tools_take_spdoc_ids.py"
+      ],
+      "from": null,
+      "key": "spdoc-evidence",
+      "requirements": [
+        "evidence-tools-take-spdoc-ids"
+      ],
+      "reviewer": null,
+      "title": "Evidence tools accept spdoc ids"
+    },
+    {
+      "depends_on": [
+        "mover-invariant"
+      ],
+      "description": "An operator action on an approved spec document that closes its open tasks against named commits, records awaiting evidence per requirement, approves each task once its requirements' evidence is accepted, and writes each task's history; route, app button and tests.",
+      "files": [
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/task_transition_service.py",
+        "hub/ui/src",
+        "hub/hub/static/ui",
+        "hub/tests/test_close_spec_tasks_already_built.py"
+      ],
+      "from": null,
+      "key": "already-built",
+      "requirements": [
+        "close-already-built",
+        "already-built-is-reviewable"
+      ],
+      "reviewer": null,
+      "title": "Close a spec's tasks as already built"
+    },
+    {
+      "depends_on": [
+        "already-built",
+        "spdoc-evidence"
+      ],
+      "description": "Evidence recorded on a task against its own document's requirement counts toward its merge (link on record, or count it in the merge-target query; the builder picks and says why), red test first from the 2026-10-26 sequence. Refusals of approve/land name each cause with its remedy (awaiting evidence with Accept/Reject in place, a missing link, running checks as a wait with no override). The board's status menu offers only allowed moves and a review hand-off asks for the reviewer. The drawer shows the checks' wait beside Land with elapsed and previous duration, notifies on finish, and disabled controls look disabled. Rebuild the UI bundle.",
+      "files": [
+        "hub/hub/task_integration.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/ui/src",
+        "hub/hub/static/ui",
+        "hub/tests/test_landing_explains_itself.py"
+      ],
+      "from": null,
+      "key": "landing-explains-itself",
+      "requirements": [
+        "own-evidence-counts",
+        "refusal-offers-its-remedy",
+        "a-wait-is-visible",
+        "board-hands-to-a-reviewer"
+      ],
+      "reviewer": null,
+      "title": "Landing says what it waits for and offers the fix"
+    }
+  ],
+  "title": "Every task can always be moved on"
+}
