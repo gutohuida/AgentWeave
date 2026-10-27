@@ -8,7 +8,7 @@ still open: in the approval request itself when it has no task, otherwise from
 
 The turn is queued as the operator, because the operator asked for it in the approval request, to
 the agent that created the slice document, in the conversation where it created it while that is
-still open, otherwise in a new one (F1046). Its spec document is the roadmap, so it is a
+still open, otherwise in a new one (F1047). Its spec document is the roadmap, so it is a
 specification turn with no file-write tools.
 """
 
@@ -205,7 +205,7 @@ async def _queue_if_built(session: AsyncSession, document: SpecDocument) -> Opti
     )
     # The conversation the slice was written in, while it is still open. The operator may have
     # archived it since (or before) asking, and input queued into an archived conversation is
-    # never delivered (F1046), so the turn then opens a conversation of its own.
+    # never delivered (F1047), so the turn then opens a conversation of its own.
     conversation_id = str(detail["conversation_id"])
     if (
         await get_open_conversation(

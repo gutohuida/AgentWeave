@@ -659,7 +659,7 @@ async def test_the_next_slice_goes_to_the_slice_author_in_its_creating_conversat
 async def test_a_slice_whose_conversation_was_archived_is_drafted_in_a_new_one(
     app, auth_headers, planner, scheduled
 ):
-    """F1046. The operator archived the slice author's conversation before the slice was built;
+    """F1047. The operator archived the slice author's conversation before the slice was built;
     the drafting turn queued into it anyway and wedged the author's whole queue."""
     roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
     slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)

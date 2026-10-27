@@ -448,7 +448,7 @@ async def _attempt_turn(
     # Input in a conversation no turn can start in is held, with its reason and repair, and left
     # out of the turn, so it waits for the operator's Unarchive or withdrawal without holding the
     # agent's other conversations behind it. As the queue's head it used to end every pass with
-    # "conversation is unavailable", recorded nowhere, and nothing behind it ever ran (F1046).
+    # "conversation is unavailable", recorded nowhere, and nothing behind it ever ran (F1047).
     closed = await closed_conversations(db, project_id, agent, entries)
     if closed:
         recorded = False

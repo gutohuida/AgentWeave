@@ -698,7 +698,7 @@ async def unarchive_conversation(
     await session.refresh(conversation)
     await _broadcast_conversation(project_id, conversation)
     # Input queued into it while archived waits with "Unarchive it to deliver this input" as its
-    # reason, so reopening is what delivers it (F1046). A failure here is not the reopen's.
+    # reason, so reopening is what delivers it (F1047). A failure here is not the reopen's.
     from ...turn_scheduler import schedule_accepted
 
     await schedule_accepted(project_id, agent)

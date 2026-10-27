@@ -148,7 +148,7 @@ def held_conversations(entries: Iterable[InboundQueueEntry]) -> Set[str]:
 async def closed_conversations(
     db: AsyncSession, project_id: str, agent: str, entries: Iterable[InboundQueueEntry]
 ) -> Dict[Optional[str], str]:
-    """The conversations among *entries* no turn can start in, each with why and its repair (F1046).
+    """The conversations among *entries* no turn can start in, each with why and its repair (F1047).
 
     Input can reach a conversation after it was archived (a roadmap's next-slice turn names the
     conversation it was asked from), so this is asked of the queue as it stands, not prevented at

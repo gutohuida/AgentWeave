@@ -560,7 +560,7 @@ async def test_a_dead_run_stall_ends_once_its_run_is_live_or_over(app, executing
     }
 
 
-# F1047: a stall the mender gave up on is the operator's. On :8000 the same unchanged review stall
+# F1048: a stall the mender gave up on is the operator's. On :8000 the same unchanged review stall
 # was raised again on every 5-minute firing after each give-up: 30 mender turns and 27 copies of one
 # question overnight, while the reason never changed.
 
@@ -602,7 +602,7 @@ async def test_a_stall_given_up_on_is_raised_again_once_its_reason_changes(app):
     assert [row.outcome for row in await all_stalls()] == ["gave_up", "open"]
 
 
-# F1049: a stuck_task stall whose task was deleted stayed open for days (211 sightings on :8000);
+# F1050: a stuck_task stall whose task was deleted stayed open for days (211 sightings on :8000);
 # nothing ends a stall when its task goes without a transition.
 
 

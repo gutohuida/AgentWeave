@@ -200,7 +200,7 @@ async def record(
     """The open stall for this cause and subject, counted again, or a new one. Commits.
 
     A stall the mender gave up on is the operator's while its reason holds, so the same reason is
-    counted on it rather than opening a new stall that wakes the mender to give up again (F1047:
+    counted on it rather than opening a new stall that wakes the mender to give up again (F1048:
     30 turns and 27 copies of one question in a night). A changed reason is a new situation.
     """
     key = stall_key(cause, subject)
@@ -806,7 +806,7 @@ async def _end_dead_run_stalls_that_recovered(db: AsyncSession, live: set) -> No
 
 
 async def _end_stuck_task_stalls_that_moved(db: AsyncSession) -> None:
-    """End each open `stuck_task` stall whose task is gone or no longer in progress (F1049).
+    """End each open `stuck_task` stall whose task is gone or no longer in progress (F1050).
 
     A transition ends it through `resolve_task`; a deleted task goes through none, and its stall
     stayed open for days on :8000.

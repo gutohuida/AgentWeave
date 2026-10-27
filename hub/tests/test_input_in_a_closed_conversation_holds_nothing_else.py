@@ -1,4 +1,4 @@
-"""Input queued into a closed conversation holds nothing else (F1046).
+"""Input queued into a closed conversation holds nothing else (F1047).
 
 On the operator's Hub, 2026-10-27, the roadmap's next-slice turn was queued into the Architect's
 archived conversation. It sat at the head of the Architect's queue, the scheduler returned
