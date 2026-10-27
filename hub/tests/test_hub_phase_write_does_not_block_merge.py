@@ -12,6 +12,7 @@ import pytest
 from hub import task_integration
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
 from .test_task_integration import (
     AGENT_BRANCH,
     BASE,
@@ -28,7 +29,7 @@ from .test_task_integration_retry import builder  # noqa: F401 - fixture
 
 DOC = f"{BASE}/documents"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
-# Complete enough to propose: the integration fixture's own document is deliberately thin.
+# Complete enough to approve: the integration fixture's own document is deliberately thin.
 PAYLOAD = {
     "schema_version": SCHEMA_VERSION,
     "kind": "change-spec",
@@ -53,14 +54,18 @@ async def _document(app, auth_headers, run_headers):
 
 
 async def _approve_document(app, auth_headers):
-    for route in (f"{DOC}/close-exploration", f"{DOC}/propose"):
+    # Check, which moves nothing, then approve from exploring naming the version read.
+    for route in (f"{DOC}/close-exploration", f"{DOC}/check"):
         response = await app.post(route, params={"path": PATH}, headers=auth_headers)
         assert response.status_code == 200, response.text
         assert not response.json().get("blocking"), response.text
     response = await app.post(
         f"{DOC}/phase",
         params={"path": PATH, "to": "approved"},
-        json={"approve_anyway": True},
+        json={
+            "approve_anyway": True,
+            "content_version": await content_version(app, auth_headers, PATH),
+        },
         headers=auth_headers,
     )
     assert response.status_code == 200, response.text

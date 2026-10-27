@@ -1223,7 +1223,7 @@ def _operations() -> List[_Operation]:
             args=(
                 "path, title, kind, summary, problem, design, lifecycle, scope, requirements, "
                 "acceptance_criteria, tasks, algorithms, evidence, open_questions, delivery, "
-                "slices, roadmap"
+                "slices, roadmap, already_built"
             ),
             method="POST",
             path="/spec/documents",
@@ -1241,8 +1241,11 @@ def _operations() -> List[_Operation]:
                 "is no argument that sets a phase or approves — those are the operator's. "
                 '`delivery` is how a change-spec document will be built: `{"mode": "flow", '
                 '"agent": ..., "stop_when_queue_empties": ..., "stop_at": ..., "cron": '
-                '...}` or `{"mode": "none"}`. Include it in every later submission — a '
-                "submission replaces the whole document, so one without it drops the answer. "
+                '...}` or `{"mode": "none"}`, with `reasons` for each choice: it is a '
+                "recommendation the operator decides on when they build. Include it in every "
+                "later submission — a submission replaces the whole document, so one without it "
+                "drops the answer. `already_built` is intake's answer to whether the work exists: "
+                '`{"built": true, "commits": [<sha>, ...]}` or `{"built": false}`. '
                 "`slices` are a `roadmap`'s slices in build order (`key`, `title`, `intent`, "
                 "`done`, `builds_after`); a roadmap carries no requirements or tasks. `roadmap` "
                 '(`{"document": <roadmap path>, "slice": <key>}`) names the roadmap slice a '
@@ -1254,7 +1257,8 @@ def _operations() -> List[_Operation]:
                 "This is the one operation whose request is not flat: everything after `path` — "
                 "`title`, `kind`, `summary`, `problem`, `design`, `lifecycle`, `scope`, "
                 "`requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, "
-                "`open_questions`, `delivery`, `slices`, `roadmap` — goes inside the `document` "
+                "`open_questions`, `delivery`, `slices`, `roadmap`, `already_built` — goes inside "
+                "the `document` "
                 "object, and a key you "
                 "have nothing for is left out rather than sent as null."
             ),
