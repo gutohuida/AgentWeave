@@ -40428,7 +40428,7 @@ Cause (verified): `hub/ui/src/components/layout/PaneResizer.tsx:139-160` sets `f
 
 ## F1038 (B) -- removing a task worktree that holds a `node_modules` junction empties the main checkout's `node_modules`: `git worktree remove --force` follows the junction
 
-**Status:** open 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks.
+**Status:** open 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks. **Recurred 2026-10-27 05:44** on `:8000`: the main checkout's `hub/ui/node_modules` was found empty with that mtime (T4's merge and worktree removal); restored with `npm ci`. Slice A (`worktrees-never-destroy-or-strand-anything`) is being built in Wave 0.
 **Source:** drive
 **Theme:** Worktrees
 **Ready:** yes
@@ -40545,3 +40545,13 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 **Tier:** 0
 
 `stall-119d728f8da6` (`stuck_task:task-ca661c1265b8`, "Flaky: test_the_continuation_uses_the_remaining_deadline …") has been open since 10-25 21:32, was seen 211 times, and was last seen 10-26 18:35. The task row no longer exists, so the sweep has stopped seeing it (`stalls.py:701-716` reads only existing `in_progress` tasks), but nothing ends the stall: `resolve_task` runs on transitions, and deleting a task goes through none. The stall shows as open, with an open mender conversation, about nothing. Like the `dead_run` fix in F1043, the sweep should end an open `stuck_task` stall whose task is gone or no longer `in_progress`.
+
+## F1051 (B) -- the newest integration row is chosen by timestamp alone, and one approval writes several rows with the same timestamp
+
+**Status:** open 2026-10-27. Found while drafting slice I (`the-apps-other-surfaces-make-sense`), confirmed on `:8000` read-only.
+**Source:** code
+**Theme:** Integration
+**Ready:** yes
+**Tier:** 0
+
+`_latest_integrations_by_task` (`hub/hub/api/v1/tasks.py:557-578`) orders by `(task_id, created_at desc)` and keeps the first row per task. One approval can write more than one `task_integrations` row in the same transaction with an identical `created_at`: on `:8000`, task-8618731d065d has `merged` and `skipped` ("09617d3b6920 is already in master") both at `2026-10-27 03:39:29.548442`, and 26 task/timestamp pairs tie. Which row wins is then up to SQLite, so a task that merged can read "approved but not merged" on the Overview and in its drawer (part of what F1045 shows). **Expected:** the newest is decided by an order that cannot tie (the row's insertion sequence, or the outcome that matters for the approval: a `merged` row in the same approval wins over a `skipped` one). **Test:** two rows for one task with the same `created_at`, `merged` inserted before `skipped`: the route reports `merged`.
