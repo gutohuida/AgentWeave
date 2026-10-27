@@ -23,6 +23,8 @@ export interface SpecOpenPickerProps {
   /** In the switcher's popover the picker is narrower and does not repeat its title. */
   compact?: boolean
   autoFocus?: boolean
+  /** Beside a document in the list (Adopt, on one the Hub keeps no record of). */
+  rowAction?: (entry: SpecListEntry) => React.ReactNode
 }
 
 /**
@@ -114,6 +116,7 @@ export function SpecOpenPicker(props: SpecOpenPickerProps) {
           variant="popover"
           hideSearch
           hideHead
+          rowAction={props.rowAction}
         />
       </div>
     </div>

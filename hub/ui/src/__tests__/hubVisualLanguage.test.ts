@@ -132,7 +132,7 @@ describe('Hub UI mock alignment contracts', () => {
     // What this rule actually guards against — a hex quietly surviving a ramp swap — is covered
     // instead by 'restates --surface exactly as index.css declares it' below, which fails the
     // moment the palette moves and the copy does not.
-    const HEX_EXEMPT = new Set(['components/layout/SetupModal.tsx', 'components/spec/SpecFrame.tsx'])
+    const HEX_EXEMPT = new Set(['components/layout/SetupModal.tsx'])
     const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/
 
     function listTsxFiles(dir: string): string[] {

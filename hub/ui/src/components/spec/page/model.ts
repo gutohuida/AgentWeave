@@ -12,7 +12,7 @@ export type SpecPhase = 'exploring' | 'proposed' | 'approved' | 'archived' | 'cu
  *  being written; `ready` is a writing document whose last check found nothing blocking. */
 export type DocState = 'writing' | 'ready' | 'approved' | 'building' | 'archived'
 
-export type EvidenceState = 'verified' | 'awaiting' | 'in_progress' | 'not_started' | 'rejected'
+export type EvidenceState = 'verified' | 'awaiting' | 'in_progress' | 'held' | 'not_started' | 'rejected'
 
 export type TaskStatus =
   | 'pending'
@@ -56,6 +56,16 @@ export interface SpecTaskView {
   agent?: string | null
 }
 
+export interface SpecSlice {
+  key: string
+  title: string
+  intent: string
+  done: string
+  buildsAfter: string[]
+  /** The change document that specifies the slice, and where it stands. */
+  document?: { path: string; title: string; state: DocState } | null
+}
+
 export interface SpecDocumentView {
   id: string
   path: string
@@ -71,6 +81,11 @@ export interface SpecDocumentView {
   requirements: SpecRequirementView[]
   tasks: SpecTaskView[]
   openQuestions: Array<{ question: string; resolved: boolean }>
+  /** A finished change not yet folded into a capability: Fold is its next action. */
+  foldReady?: boolean
+  /** A roadmap's slices and the procedures a document describes. */
+  slices?: SpecSlice[]
+  algorithms?: Array<{ name: string; steps: string[] }>
   /** The roadmap this document is a slice of, and its neighbours in build order. */
   roadmap?: {
     path: string
@@ -146,6 +161,8 @@ export interface BuildView {
   reviewers: string[]
   lead: string | null
   running: boolean
+  /** How a build that is no longer running ended: it finished, or it was stopped (by the operator, a cap or a window). */
+  ended?: 'finished' | 'stopped'
   startedAt: string
   finishedAt: string | null
   landsOn: string
@@ -170,7 +187,7 @@ export interface StartBuildChoice {
 
 // ── The header's actions ────────────────────────────────────────────────
 
-export type SpecAction = 'check' | 'approve' | 'approve-and-build' | 'build' | 'open-build' | 'reopen'
+export type SpecAction = 'check' | 'approve' | 'approve-and-build' | 'build' | 'open-build' | 'reopen' | 'fold'
 
 export interface HeaderActions {
   /** The one the document is waiting for: drawn as the primary button. */
@@ -181,18 +198,23 @@ export interface HeaderActions {
 
 /** Exactly the actions open to a document in each state. Check is open while a document is being
  *  written or is approved but not yet built, and never changes the phase. */
-export function actionsFor(state: DocState): HeaderActions {
+export function actionsFor(state: DocState, kind: SpecKind = 'change-spec', foldReady = false): HeaderActions {
+  // Only a change is built: any other kind is approved and read, and has no build to start.
+  const builds = kind === 'change-spec'
   switch (state) {
     case 'writing':
       return { primary: 'check', secondary: [] }
     case 'ready':
-      return { primary: 'approve', secondary: ['check', 'approve-and-build'] }
+      return { primary: 'approve', secondary: builds ? ['check', 'approve-and-build'] : ['check'] }
     case 'approved':
-      return { primary: 'build', secondary: ['check'] }
+      // Every task decided and in no capability yet: folding is the close-out.
+      if (foldReady && builds) return { primary: 'fold', secondary: [] }
+      return builds ? { primary: 'build', secondary: ['check'] } : { primary: null, secondary: [] }
     case 'building':
-      return { primary: 'open-build', secondary: ['build'] }
+      return { primary: 'open-build', secondary: [] }
     case 'archived':
-      return { primary: 'reopen', secondary: [] }
+      // The Hub has no transition out of archived: nothing is offered.
+      return { primary: null, secondary: [] }
   }
 }
 
@@ -209,7 +231,7 @@ export function journeyIndex(state: DocState): number {
 }
 
 export const STATE_LABEL: Record<DocState, string> = {
-  writing: 'Being written',
+  writing: 'Writing',
   ready: 'Ready to approve',
   approved: 'Approved',
   building: 'Building',
@@ -222,6 +244,7 @@ export const EVIDENCE_LABEL: Record<EvidenceState, string> = {
   verified: 'Verified',
   awaiting: 'Awaiting review',
   in_progress: 'No evidence yet',
+  held: 'Held, sent back',
   not_started: 'Not started',
   rejected: 'Evidence rejected',
 }
@@ -230,6 +253,7 @@ export const EVIDENCE_TONE: Record<EvidenceState, string> = {
   verified: 'var(--green)',
   awaiting: 'var(--amber)',
   in_progress: 'var(--blue)',
+  held: 'var(--text-2)',
   not_started: 'var(--text-3)',
   rejected: 'var(--red)',
 }
@@ -324,6 +348,8 @@ export interface SpecListEntry {
   /** A slice: the roadmap's path and its position in the roadmap's build order. */
   roadmap?: { path: string; order: number } | null
   building: boolean
+  /** On disk, but the Hub keeps no record of it: it can be adopted. */
+  untracked?: boolean
 }
 
 export type ListOrder = 'changed' | 'phase' | 'title' | 'roadmap'
@@ -378,7 +404,7 @@ export function arrangeList(entries: SpecListEntry[], prefs: ListPreferences): L
       const groups: ListGroup[] = []
       for (const [label, states] of [
         ['Building', ['building']],
-        ['Being written', ['ready', 'writing']],
+        ['Writing', ['ready', 'writing']],
         ['Approved', ['approved']],
         ['Archived', ['archived']],
       ] as Array<[string, DocState[]]>) {

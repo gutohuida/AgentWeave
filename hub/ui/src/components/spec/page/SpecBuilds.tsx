@@ -105,8 +105,8 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
           </span>
         ) : (
           <span className="aw-sp-build-done">
-            <Icon name="check" size={12} />
-            Finished
+            <Icon name={b.ended === 'stopped' ? 'stop_circle' : 'check'} size={12} />
+            {b.ended === 'stopped' ? 'Stopped' : 'Finished'}
           </span>
         )}
         <span className="aw-sp-build-driver" title={DRIVER_MEANING[b.driver]}>
@@ -117,12 +117,12 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
           {LEVEL_LABEL[b.level]}
         </span>
         <span className="aw-sp-build-when">
-          {b.running ? `started ${formatAgo(b.startedAt, now)}` : `finished ${formatAgo(b.finishedAt ?? b.startedAt, now)}`} · lands on {b.landsOn}
+          {b.running ? `started ${formatAgo(b.startedAt, now)}` : `${b.ended === 'stopped' ? 'stopped' : 'finished'} ${formatAgo(b.finishedAt ?? b.startedAt, now)}`} · lands on {b.landsOn}
         </span>
         {b.running ? (
           <Button variant="ghost" size="xs" onClick={onStop} className="aw-sp-build-stop">
-            <Icon name="stop" size={12} />
-            Stop
+            <Icon name="stop_circle" size={13} />
+            Stop build
           </Button>
         ) : null}
       </div>

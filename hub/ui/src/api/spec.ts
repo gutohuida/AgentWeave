@@ -392,6 +392,8 @@ export interface SpecDocument {
    *  document changed since (`approve-what-was-seen`). */
   content_version?: string
   roadmap_slice?: SpecRoadmapSlice
+  /** On a roadmap: the change document that specifies each slice, by slice key. */
+  slice_documents?: Record<string, string>
   /** Set only on a retired (archived) capability: why, and the capability that absorbed it (F536). */
   retired?: SpecRetirement
 }
@@ -825,6 +827,9 @@ export interface SpecDocumentRecord {
   /** A tester's amendments to the approved document, and how many the operator has not reviewed
    *  (`a-tester-drives-the-built-product-and-keeps-the-spec-true`). Absent when there are none. */
   amendments?: { total: number; unreviewed: number }
+  /** Present while a build of this document is running: how many of the tasks it covers are
+   *  approved (`the-spec-page-redesigned`: the list's 'building now' mark and the picker's progress). */
+  build?: { id: string; done: number; total: number }
   updated_at: string
 }
 
