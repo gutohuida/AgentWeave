@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
@@ -49,6 +50,7 @@ from .db.models import (
     TaskTransition,
 )
 from .model_catalog import default_model
+from .runner_provider import has_provider
 from .subprocess_windows import no_console_kwargs
 from .utils import persist_event, short_id
 
@@ -284,6 +286,11 @@ async def _withdraw_unread_brief(db: AsyncSession, stall: Stall) -> None:
                     InboundQueueEntry.conversation_id == stall.conversation_id,
                     InboundQueueEntry.agent == MENDER,
                     InboundQueueEntry.state == "queued",
+                    # Only the brief. The operator's answer to a note the mender left is queued into
+                    # this same thread, and the brief tells the mender to end the stall `gave_up`
+                    # right after leaving the note: that answer is not about the stall's end and is
+                    # delivered when the mender's run ends.
+                    InboundQueueEntry.origin_type == "mender",
                 )
             )
         )
@@ -424,24 +431,48 @@ async def ensure_mender(db: AsyncSession, project_id: str) -> "tuple[Optional[Ag
     # model, and 42 mender turns in one night ran on that runner's Opus. Mending is reading state
     # and calling a few routes; the everyday model does it, and a model the operator chose on the
     # Manager page is kept. Resolved here, on every wake, so no migration moves an existing mender.
-    wanted = row.model or default_model(chosen.cli) or chosen.model
+    #
+    # A runner with its own model provider keeps its own model: the catalog's default names a
+    # subscription model that provider may not serve.
+    wanted = (
+        row.model
+        or (None if has_provider(chosen.provider_config) else default_model(chosen.cli))
+        or chosen.model
+    )
     if wanted and wanted != chosen.model:
-        runner = (
-            await db.execute(
-                select(Runner)
-                .where(
-                    Runner.project_id == project_id,
-                    Runner.cli == chosen.cli,
-                    Runner.model == wanted,
+        # The runner the mender is moved to carries the chosen runner's provider and flags: they
+        # are how that runner runs, and only its model differs.
+        candidates = (
+            (
+                await db.execute(
+                    select(Runner)
+                    .where(
+                        Runner.project_id == project_id,
+                        Runner.cli == chosen.cli,
+                        Runner.model == wanted,
+                    )
+                    .order_by(Runner.created_at)
                 )
-                .order_by(Runner.created_at)
             )
-        ).scalars().first() or Runner(
+            .scalars()
+            .all()
+        )
+        runner = next(
+            (
+                candidate
+                for candidate in candidates
+                if (candidate.flags or None) == (chosen.flags or None)
+                and (candidate.provider_config or None) == (chosen.provider_config or None)
+            ),
+            None,
+        ) or Runner(
             id=f"runner-{short_id()}",
             project_id=project_id,
             name=f"{chosen.cli} — {wanted} (mender)",
             cli=chosen.cli,
             model=wanted,
+            flags=deepcopy(chosen.flags),
+            provider_config=deepcopy(chosen.provider_config),
         )
         db.add(runner)
     agent = (
