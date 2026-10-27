@@ -1,5 +1,5 @@
 import type { Runner } from '@/api/runners'
-import type { ModelCatalogResponse } from '@/api/modelCatalog'
+import { providerForRunner, resolveCatalogModel, type ModelCatalogResponse } from '@/api/modelCatalog'
 
 /** The catalog a provider runner's models come from: the Claude API ids, which the `claude`
  * catalog declares (`hub/hub/runner_provider.py::provider_model_ids`). */
@@ -19,6 +19,28 @@ export function providerRunnerModelLabel(
  * the Hub refuses a run's `model` override with a 400. */
 export function runnerSetsModel(runner: Pick<Runner, 'provider_config'> | null | undefined): boolean {
   return !!runner?.provider_config
+}
+
+/** The stored model *model* when the Hub will not pass it to a run on *cli*, else null
+ * (`rebinding-an-agents-runner-starts-clean` D4/D7; mirrors `model_applies_to_cli` in
+ * `hub/hub/model_catalog.py`). A conversation can store a model its agent's CLI does not offer,
+ * Claude's `haiku` on an agent since rebound to Copilot: the Hub then runs the runner's own model,
+ * and the composer says so. It is withheld only when another CLI declares it (by id or alias) and
+ * this one does not; a model no CLI declares runs as stored. A display rule only, the backend
+ * decides; the stored model is never removed from the overrides, which the composer sends back with
+ * every message and the Hub refuses to see changed. */
+export function withheldStoredModel(
+  catalog: ModelCatalogResponse | undefined,
+  cli: string | null | undefined,
+  model: string | null | undefined,
+): string | null {
+  const providerId = providerForRunner(cli)
+  if (!catalog || !providerId || !model) return null
+  const declares = (provider: ModelCatalogResponse['providers'][number]) =>
+    resolveCatalogModel(provider, model) !== null
+  const own = catalog.providers.find((p) => p.provider === providerId)
+  if (!own || declares(own)) return null
+  return catalog.providers.some(declares) ? model : null
 }
 
 /** The overrides a run on *runner* may carry. A conversation can hold a `model` stored before its

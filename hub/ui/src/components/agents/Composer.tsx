@@ -347,6 +347,7 @@ export function Composer({
           <ComposerModelControls
             runner={runner}
             effectiveModel={modelIsRunners ? effectiveModel : (pendingOverrides.model ?? effectiveModel)}
+            runnerModel={effectiveModel}
             modelIsRunners={modelIsRunners}
             modelPickerRequest={modelPickerRequest}
             effectiveControls={{ ...effectiveControls, ...pendingOverrides }}
