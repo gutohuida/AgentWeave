@@ -190,37 +190,47 @@ async def tally(
     *,
     since: Optional[datetime] = None,
     now: Optional[datetime] = None,
+    build_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Every figure about where the project's work went, at every level, from `since` on."""
+    """Every figure about where the project's work went, at every level, from `since` on.
+
+    With `build_id` the same code reads only what that build can own: its tasks (and their
+    transitions, check runs and evidence), the runs bound to them, and the conversations of the
+    stalls and the lead that name it. `builds[build_id]` is then identical to the whole-project
+    tally's; the groupings and the worker line are not computed (they would be partial).
+    """
     now = _aware(now) or datetime.now(timezone.utc)
     since = _aware(since)
 
     async def load(*columns: Any, where: Any) -> List[Any]:
         return list((await session.execute(select(*columns).where(where))).all())
 
+    focus = await session.get(Build, build_id) if build_id else None
+    if build_id and (focus is None or focus.project_id != project_id):
+        raise LookupError(f"no build {build_id!r} in project {project_id!r}")
+    # The document's builds stay in view when scoped: a flow's stall is placed among them by time.
+    build_where = Build.project_id == project_id
+    if focus is not None:
+        build_where = build_where & (Build.document_id == focus.document_id)
     builds = (
-        (
-            await session.execute(
-                select(Build).where(Build.project_id == project_id).order_by(Build.created_at)
-            )
-        )
+        (await session.execute(select(Build).where(build_where).order_by(Build.created_at)))
         .scalars()
         .all()
     )
     builds_by_id = {b.id: b for b in builds}
+    task_where = Task.project_id == project_id
+    if focus is not None:
+        task_where = task_where & (Task.build_id == focus.id)
     tasks = {
-        t.id: t
-        for t in (await session.execute(select(Task).where(Task.project_id == project_id)))
-        .scalars()
-        .all()
+        t.id: t for t in (await session.execute(select(Task).where(task_where))).scalars().all()
     }
+    scoped_ids = list(tasks) if focus is not None else None
+    doc_where = SpecDocument.project_id == project_id
+    if focus is not None:
+        doc_where = doc_where & (SpecDocument.id == focus.document_id)
     docs = {
         d.id: d
-        for d in (
-            await session.execute(select(SpecDocument).where(SpecDocument.project_id == project_id))
-        )
-        .scalars()
-        .all()
+        for d in (await session.execute(select(SpecDocument).where(doc_where))).scalars().all()
     }
     menders = {
         a.name
@@ -229,16 +239,23 @@ async def tally(
         .all()
         if (a.config or {}).get("hub_role") == _MENDER_ROLE
     }
+    loop_where = Loop.project_id == project_id
+    if focus is not None:
+        loop_where = loop_where & (Loop.spec_document_id == focus.document_id)
     loops = {
         row.id: row.spec_document_id
-        for row in await load(Loop.id, Loop.spec_document_id, where=Loop.project_id == project_id)
+        for row in await load(Loop.id, Loop.spec_document_id, where=loop_where)
     }
+    stall_where = (Stall.project_id == project_id) & Stall.conversation_id.is_not(None)
+    if focus is not None:
+        stall_where = stall_where & (
+            Stall.task_id.in_(scoped_ids)
+            | (Stall.task_id.is_(None) & Stall.loop_id.in_(list(loops)))
+        )
     stalls = (
         (
             await session.execute(
-                select(Stall)
-                .where(Stall.project_id == project_id, Stall.conversation_id.is_not(None))
-                .order_by(Stall.first_seen_at, Stall.id)
+                select(Stall).where(stall_where).order_by(Stall.first_seen_at, Stall.id)
             )
         )
         .scalars()
@@ -248,22 +265,26 @@ async def tally(
     for stall in stalls:
         stall_of.setdefault(stall.conversation_id, stall)
     lead_builds = {b.lead_conversation_id: b for b in builds if b.lead_conversation_id}
+    review_where = (
+        (InboundQueueEntry.project_id == project_id)
+        & InboundQueueEntry.review_task_id.is_not(None)
+        & InboundQueueEntry.delivered_in_run_id.is_not(None)
+    )
+    if focus is not None:
+        review_where = review_where & InboundQueueEntry.review_task_id.in_(scoped_ids)
     review_runs = {
-        row[0]
-        for row in await load(
-            InboundQueueEntry.delivered_in_run_id,
-            where=(InboundQueueEntry.project_id == project_id)
-            & InboundQueueEntry.review_task_id.is_not(None)
-            & InboundQueueEntry.delivered_in_run_id.is_not(None),
-        )
+        row[0] for row in await load(InboundQueueEntry.delivered_in_run_id, where=review_where)
     }
 
+    transition_where = TaskTransition.project_id == project_id
+    check_where = TaskCheckRun.project_id == project_id
+    if focus is not None:
+        transition_where = transition_where & TaskTransition.task_id.in_(scoped_ids)
+        check_where = check_where & TaskCheckRun.task_id.in_(scoped_ids)
     transitions = (
         (
             await session.execute(
-                select(TaskTransition)
-                .where(TaskTransition.project_id == project_id)
-                .order_by(TaskTransition.sequence)
+                select(TaskTransition).where(transition_where).order_by(TaskTransition.sequence)
             )
         )
         .scalars()
@@ -276,9 +297,7 @@ async def tally(
     checks = (
         (
             await session.execute(
-                select(TaskCheckRun)
-                .where(TaskCheckRun.project_id == project_id)
-                .order_by(TaskCheckRun.started_at)
+                select(TaskCheckRun).where(check_where).order_by(TaskCheckRun.started_at)
             )
         )
         .scalars()
@@ -288,6 +307,14 @@ async def tally(
     for check in checks:
         checks_by_task.setdefault(check.task_id, []).append(check)
 
+    run_where = Run.project_id == project_id
+    if focus is not None:
+        conversations = {s.conversation_id for s in stalls}
+        if focus.lead_conversation_id:
+            conversations.add(focus.lead_conversation_id)
+        run_where = run_where & (
+            Run.task_id.in_(scoped_ids) | Run.conversation_id.in_(list(conversations))
+        )
     runs = {
         r.id: r
         for r in await load(
@@ -298,16 +325,15 @@ async def tally(
             Run.status,
             Run.started_at,
             Run.ended_at,
-            where=Run.project_id == project_id,
+            where=run_where,
         )
     }
+    usage_where = TurnUsage.project_id == project_id
+    if focus is not None:
+        usage_where = usage_where & TurnUsage.run_id.in_(list(runs))
     usages = {
         u.run_id: u
-        for u in (
-            await session.execute(select(TurnUsage).where(TurnUsage.project_id == project_id))
-        )
-        .scalars()
-        .all()
+        for u in (await session.execute(select(TurnUsage).where(usage_where))).scalars().all()
     }
 
     # ------------------------------------------------------------------------------------------
@@ -511,14 +537,21 @@ async def tally(
     # ------------------------------------------------------------------------------------------
     # Pieces of evidence, each by its own outcome
     # ------------------------------------------------------------------------------------------
-    requirement_doc = {
-        row.id: row.document_id
-        for row in await load(
-            SpecRequirement.id,
-            SpecRequirement.document_id,
-            where=SpecRequirement.project_id == project_id,
-        )
-    }
+    requirement_doc = (
+        {}
+        if focus is not None
+        else {
+            row.id: row.document_id
+            for row in await load(
+                SpecRequirement.id,
+                SpecRequirement.document_id,
+                where=SpecRequirement.project_id == project_id,
+            )
+        }
+    )
+    evidence_where = RequirementEvidence.project_id == project_id
+    if focus is not None:
+        evidence_where = evidence_where & RequirementEvidence.task_id.in_(scoped_ids)
     for piece in await load(
         RequirementEvidence.requirement_id,
         RequirementEvidence.task_id,
@@ -526,7 +559,7 @@ async def tally(
         RequirementEvidence.actor,
         RequirementEvidence.review_state,
         RequirementEvidence.produced_at,
-        where=RequirementEvidence.project_id == project_id,
+        where=evidence_where,
     ):
         if since is not None and _aware(piece.produced_at) < since:
             continue
@@ -565,7 +598,10 @@ async def tally(
     # The Hub's own worker calls
     # ------------------------------------------------------------------------------------------
     workers_acc = _Acc()
-    for line in await _worker_lines(session, project_id, since=since):
+    worker_lines = (
+        [] if focus is not None else await _worker_lines(session, project_id, since=since)
+    )
+    for line in worker_lines:
         workers_acc.add_all(
             {
                 "cost.total": line["api_equivalent_usd_micros"],
@@ -575,14 +611,18 @@ async def tally(
             }
         )
     worker_rows = (
-        await session.execute(
-            select(
-                WorkerInvocation.created_at,
-                WorkerInvocation.cost_usd_micros,
-                WorkerInvocation.total_tokens,
-            ).where(WorkerInvocation.project_id == project_id)
-        )
-    ).all()
+        []
+        if focus is not None
+        else (
+            await session.execute(
+                select(
+                    WorkerInvocation.created_at,
+                    WorkerInvocation.cost_usd_micros,
+                    WorkerInvocation.total_tokens,
+                ).where(WorkerInvocation.project_id == project_id)
+            )
+        ).all()
+    )
     for created_at, cost, tokens in worker_rows:
         if since is not None and (created_at is None or _aware(created_at) < since):
             continue

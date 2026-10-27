@@ -252,7 +252,7 @@ async def test_the_spec_page_the_project_view_and_the_ledger_call_the_same_funct
     assert figures.json()["cost"]["build"] == 7.0
 
 
-def test_no_second_sum_over_usage_checks_or_durations_outside_the_tally():
+def test_no_second_sum_over_usage_check_runs_or_durations_outside_the_tally():
     """The stats route, the ledger and the builds route read the tally; none of them reads the rows
     it sums. A name check, since a sum can be spelled many ways."""
     sources = {
@@ -406,7 +406,9 @@ async def test_totals_agree_spec_rows_equal_the_pages_and_the_accounting_total(a
 
 
 @pytest.mark.asyncio
-async def test_every_run_has_one_role_and_the_role_costs_sum_to_the_spec_cost(app, auth_headers):
+async def test_roles_every_run_has_one_role_and_the_role_costs_sum_to_the_spec_cost(
+    app, auth_headers
+):
     """Developer builds t1; QA reviews it through a review turn and, later, through an ordinary
     message bound to the task while it is under_review; the mender runs on its stall."""
     await seed(
@@ -569,7 +571,7 @@ async def test_the_wall_time_partition_sums_to_the_builds_wall_time(app, auth_he
 
 
 @pytest.mark.asyncio
-async def test_check_runs_have_their_own_line_apart_from_any_agents_time(app, auth_headers):
+async def test_checks_have_their_own_line_apart_from_any_agents_time(app, auth_headers):
     await seed(
         doc("doc-a"),
         build("b-a", "doc-a"),
@@ -640,7 +642,7 @@ async def test_a_send_back_is_counted_once_not_once_per_rejected_piece(app, auth
 
 
 @pytest.mark.asyncio
-async def test_a_send_back_naming_one_piece_of_four_counts_one_rejected_three_held(
+async def test_per_piece_one_failing_piece_of_four_counts_one_rejected_three_held(
     app, auth_headers
 ):
     await seed(
@@ -663,7 +665,7 @@ async def test_a_send_back_naming_one_piece_of_four_counts_one_rejected_three_he
 
 
 @pytest.mark.asyncio
-async def test_a_review_beside_a_failing_check_is_counted_with_its_cost_and_time(app, auth_headers):
+async def test_beside_failing_check_review_is_counted_with_its_cost_and_time(app, auth_headers):
     """Two send-backs: one made while the task's newest check had failed, one after a passing
     check. Exactly the first is a review beside a failing check."""
     await seed(
@@ -772,3 +774,52 @@ async def test_an_unpriced_run_is_counted_beside_the_cost_never_added_as_zero(ap
     assert by_agent["unpriced-agent"]["unpriced"] == 1
     assert by_agent["dev"]["usd"] == 2.0 and by_agent["dev"]["unpriced"] == 0
     assert stats["groups"]["agent"][0]["key"] == "dev", "known spend first"
+
+
+# ---------------------------------------------------------------------------------------------
+# scope: a build's figures read only that build
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_scope_a_builds_figures_equal_the_whole_tallys_and_load_only_its_runs(app):
+    """The page polls one build's figures every few seconds: the same code path, scoped to the
+    build, answers its row identically and books no run that is not the build's."""
+    await _a_project()
+    now = at(500)
+    async with async_session_factory() as db:
+        full = await work_tally.tally(db, P, now=now)
+    for build_id in ("b-a1", "b-a2"):
+        async with async_session_factory() as db:
+            scoped = await work_tally.tally(db, P, now=now, build_id=build_id)
+        assert scoped["builds"][build_id] == full["builds"][build_id], build_id
+        assert scoped["total"]["runs"]["total"] == full["builds"][build_id]["runs"]["total"]
+        assert scoped["total"]["runs"]["total"] < full["total"]["runs"]["total"]
+    async with async_session_factory() as db:
+        with pytest.raises(LookupError):
+            await work_tally.tally(db, P, build_id="no-such-build")
+
+
+@pytest.mark.asyncio
+async def test_scope_one_builds_figures_stay_fast_beside_thousands_of_other_runs(app, auth_headers):
+    import time
+
+    rows = [doc("doc-big"), build("b-one", "doc-big"), task("t-one", "doc-big", "b-one")]
+    rows += [run("r-one", "dev", 1, 5, "t-one"), usage("r-one", "dev", 1_000_000)]
+    rows += [
+        doc("doc-other"),
+        build("b-big", "doc-other", start=10),
+        task("t-big", "doc-other", "b-big"),
+    ]
+    for i in range(3000):
+        rows.append(run(f"r-big-{i}", "dev", 11, 12, "t-big"))
+        rows.append(usage(f"r-big-{i}", "dev", 1_000))
+    await seed(*rows)
+
+    started = time.perf_counter()
+    response = await app.get(f"{BASE}/project/builds/b-one/figures", headers=auth_headers)
+    elapsed = time.perf_counter() - started
+
+    assert response.status_code == 200, response.text
+    assert response.json()["runs"] == 1 and response.json()["cost"]["build"] == 1.0
+    assert elapsed < 0.2, f"one build's figures took {elapsed * 1000:.0f} ms beside 3000 other runs"

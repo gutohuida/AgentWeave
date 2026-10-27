@@ -505,8 +505,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
             ...(goneId ? { predicate: (q) => q.queryKey[3] !== goneId } : {}),
           })
           // An approval merges into main and moves the ledger's lanes (slice project-ledger).
-          inv({ queryKey: ['project', pid, 'ledger'] })
-          inv({ queryKey: ['project', pid, 'stats'] })
+          refreshWorkSoon(queryClient, pid)
           inv({ queryKey: ['project', pid, 'status'] })
           // Neither payload carries `loop_id` (`tasks.py` broadcasts only `id`/`title`/`status`),
           // and `Task.loop_id` is write-once (design D14) so there is no reassignment to track —
@@ -528,8 +527,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           break
         }
         case 'task_integration_retried':
-          inv({ queryKey: ['project', pid, 'ledger'] })
-          inv({ queryKey: ['project', pid, 'stats'] })
+          refreshWorkSoon(queryClient, pid)
           // The note reads a per-task key, and a retry appends a row to exactly one of them.
           inv({
             queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
@@ -597,8 +595,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv(agentListFilter(pid))
           inv({ queryKey: ['project', pid, 'accounting'] })
           // A run's spend and divergence are ledger lanes.
-          inv({ queryKey: ['project', pid, 'ledger'] })
-          inv({ queryKey: ['project', pid, 'stats'] })
+          refreshWorkSoon(queryClient, pid)
           inv({ queryKey: ['projects'] })
           // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
           invalidateTaskStories(queryClient, pid)
@@ -781,6 +778,24 @@ function invalidateCoalesced(queryClient: QueryClient, filters?: InvalidateFilte
     ...filters,
     predicate: (q) => !pending.has(q) && (own ? own(q) : true),
   })
+}
+
+/** How long the project's work tally waits before it is read again. */
+export const WORK_REFRESH_MS = 3000
+const workTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+/** The ledger and the work tally (`/stats`) are each a read over the project's whole history, and
+ *  every run and task event moves them: refetch them once per few seconds, not once per event. */
+export function refreshWorkSoon(queryClient: QueryClient, projectId: string | undefined): void {
+  if (!projectId || workTimers.has(projectId)) return
+  workTimers.set(
+    projectId,
+    setTimeout(() => {
+      workTimers.delete(projectId)
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'ledger'] })
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'stats'] })
+    }, WORK_REFRESH_MS),
+  )
 }
 
 const handledKeys = new WeakMap<SSEEvent, Set<string>>()

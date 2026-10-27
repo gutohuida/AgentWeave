@@ -4184,7 +4184,10 @@ async def build_figures_of(
     cost split by who spent it (`build-progress-on-the-document`). Computed per read."""
     project_id, _ = project
     build = await _project_build(session, project_id, build_id)
-    return work_tally.build_figures(await work_tally.tally(session, project_id), build)
+    # Scoped to the build: the card is polled every few seconds and must not read the whole history.
+    return work_tally.build_figures(
+        await work_tally.tally(session, project_id, build_id=build.id), build
+    )
 
 
 @router.post("/builds/{build_id}/stop")
