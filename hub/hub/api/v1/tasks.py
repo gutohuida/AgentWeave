@@ -1867,9 +1867,11 @@ async def update_task_for_actor(
         approval_report=approval_report,
         withdrawn_reviews=withdrawn_reviews,
     )
-    if completion_checks is not None and not completion_checks.decided:
-        # Recorded past the budget (D5): a fast failure the run decided while this committed found
-        # the task not yet `completed` and could not return it. Asked again now that it is.
+    if completion_checks is not None:
+        # A run that decided a failure of the task's own while this completion committed -- past
+        # the budget (D5), or a slow check failing between the fast prefix and this commit -- found
+        # the task not yet `completed` and could not return it. Asked again now that it is;
+        # `return_failed_work` acts only on the latest run, on this work, failed by the task.
         from ...project_checks import schedule_return
 
         schedule_return(task.id)

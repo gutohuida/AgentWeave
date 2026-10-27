@@ -12,6 +12,7 @@ flow firing (`_fire_job_internal`) and the real stall recorder.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import time
 from datetime import datetime, timezone
@@ -673,3 +674,86 @@ async def test_outside_a_flow_a_failed_task_is_returned_to_its_builder(app, tmp_
     task = await _task()
     assert (task.status, task.assignee) == ("revision_needed", "DeveloperA")
     assert (await _latest_transition(TASK)).origin == "checks"
+
+
+# ---------------------------------------------------------------------------------------------
+# Review of slice L: re-completing failed work, the return's race, one deadline
+# ---------------------------------------------------------------------------------------------
+
+
+async def test_completing_unchanged_work_again_after_its_run_failed_is_refused(app, tmp_path):
+    """The builder's work fails the suite and comes back; completing it again unchanged is refused
+    with that run's output (its run is the current verdict for exactly this work, so none starts).
+    """
+    await _builder_task(tmp_path, content="x = 1\n")
+    await _configure([_lint(tmp_path), _slow(tmp_path, fails_on="ledger.py")])
+
+    assert (await _complete(app)).status_code == 200
+    await project_checks.drain()
+    task = await _task()
+    assert (task.status, task.assignee) == ("revision_needed", BUILDER)
+
+    resumed = await app.patch(
+        AGENT_TASKS.format(TASK), json={"status": "in_progress"}, headers=BUILDER_HEADERS
+    )
+    assert resumed.status_code == 200, resumed.text
+    again = await _complete(app)
+    await project_checks.drain()
+
+    assert again.status_code == 409, again.text
+    assert "assert 2 == 3" in again.json()["detail"]["message"]
+    assert (await _task()).status == "in_progress"
+    [run] = await _runs()
+    assert run.state == "failed", "nothing ran again: the recorded verdict answered"
+
+
+async def test_the_return_does_not_overwrite_a_move_made_while_it_ran(app, tmp_path, monkeypatch):
+    """While the return runs git, another session approves the task: the approval stands."""
+    await _completed_outside_a_flow(tmp_path)
+    await _configure([_slow(tmp_path, fails_on="ledger.py")])
+    async with async_session_factory() as db:
+        (await db.get(Task, TASK)).status = "under_review"  # so the run's own return does not act
+        await db.commit()
+    run_id = await project_checks.request_run("proj-test", TASK)
+    await project_checks.drain()
+    async with async_session_factory() as db:
+        (await db.get(Task, TASK)).status = "completed"
+        await db.commit()
+
+    original = project_checks.check_targets
+
+    async def approved_meanwhile(session, task, root, *, awaiting_review):
+        targets = await original(session, task, root, awaiting_review=awaiting_review)
+        async with async_session_factory() as other:
+            (await other.get(Task, task.id)).status = "approved"
+            await other.commit()
+        return targets
+
+    monkeypatch.setattr(project_checks, "check_targets", approved_meanwhile)
+    assert await project_checks.return_failed_work(run_id) is False
+    assert (await _task()).status == "approved"
+
+
+async def test_ending_a_run_on_older_work_counts_against_the_budget(app, tmp_path, monkeypatch):
+    """A run on older work that does not end when told to must not hold the completion past the
+    budget (the MCP client gives up at COMPLETION_REQUEST_TIMEOUT_SECONDS)."""
+    import hub.pty_runner as pty_runner
+
+    monkeypatch.setattr(project_checks, "COMPLETION_BUDGET_SECONDS", 2.0)
+    monkeypatch.setattr(pty_runner, "terminate_process_tree", lambda pid: None)
+    await _builder_task(tmp_path, content="x = 1\n")
+    sleeper = _script(tmp_path, "sleeper", "import time\ntime.sleep(12)\n")
+    await _configure([{"name": "lint", "command": sleeper, "timeout_seconds": 60, "fast": True}])
+    older = git(tmp_path, "rev-parse", worktrees.task_branch_name(TASK)).stdout.strip()
+    assert await project_checks.request_run("proj-test", TASK, targets=[older])
+    await asyncio.sleep(1.5)  # the older run is inside its check now, which ignores being ended
+    commit_on_branch(tmp_path, worktrees.task_branch_name(TASK), "more.py", "y = 2\n", create=False)
+    git(tmp_path, "checkout", "-q", "main")
+
+    started = time.monotonic()
+    completed = await _complete(app)
+    elapsed = time.monotonic() - started
+    await project_checks.drain()
+
+    assert completed.status_code == 200, completed.text
+    assert elapsed < 2.0 + 5.0, elapsed

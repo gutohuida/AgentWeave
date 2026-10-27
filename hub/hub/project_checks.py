@@ -1492,7 +1492,7 @@ class CompletionChecks:
     merged_sha: Optional[str] = None
 
 
-async def _stop_run_on_older_work(task_id: str, targets: List[str]) -> None:
+async def _stop_run_on_older_work(task_id: str, timeout: float) -> None:
     """A run still in flight for *task_id* checks work the completion is replacing: end it, recorded
     `superseded`, so the completion's run checks what it completes (one per task, D4)."""
     from .pty_runner import terminate_process_tree
@@ -1504,7 +1504,7 @@ async def _stop_run_on_older_work(task_id: str, targets: List[str]) -> None:
     proc = _processes.get(task_id)
     if proc is not None and proc.poll() is None:
         await asyncio.to_thread(terminate_process_tree, proc.pid)
-    await asyncio.wait({job}, timeout=60)
+    await asyncio.wait({job}, timeout=timeout)
 
 
 async def _snapshot_task_checkout(root: Path, task: Task, agent: Optional[str]) -> None:
@@ -1531,9 +1531,18 @@ async def fast_checks_at_completion(
     configured, nothing is checkable, or no run could be started: the completion is as before.
 
     Reads through the caller's session (nothing is staged in it) and starts the run with the targets
-    passed explicitly (F680's pattern): the completing transaction has not committed."""
+    passed explicitly (F680's pattern): the completing transaction has not committed.
+
+    **One deadline for all of it**: the snapshot, the merged commit, ending a run on older work and
+    the fast checks all count against the budget, so the Hub answers inside the MCP client's
+    COMPLETION_REQUEST_TIMEOUT_SECONDS however the time is spent.
+
+    **A verdict already recorded for exactly this work is the answer**: completing unchanged work
+    again after its run failed with its own failure is refused with that run's output, as a fresh
+    fast failure is (any of its checks, not only the fast ones -- the failure is known now)."""
     from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 
+    deadline = time.monotonic() + COMPLETION_BUDGET_SECONDS
     project = await session.get(Project, task.project_id)
     checks = configured_checks(project)
     if project is None or not project.main_branch or not any(c["fast"] for c in checks):
@@ -1553,18 +1562,26 @@ async def fast_checks_at_completion(
     if is_running(task.id):
         current = await latest_run(session, task.id)
         if current is None or list(current.target_shas or []) != targets or current.main_sha != tip:
-            await _stop_run_on_older_work(task.id, targets)
+            await _stop_run_on_older_work(task.id, max(0.0, deadline - time.monotonic()))
     run_id = await request_run(task.project_id, task.id, targets=targets)
     if run_id is None:
         current = await latest_run(session, task.id)
-        if current is None or current.state != "running" or not is_running(task.id):
+        if (
+            current is None
+            or current.state != "running"
+            or not is_running(task.id)
+            or list(current.target_shas or []) != targets
+            or current.main_sha != tip
+        ):
+            # Nothing to wait on for this work: a run on older work outlived the stop's share of
+            # the budget. The completion is recorded; the review waits for a run on this work.
             return None
         run_id = current.id  # the run already in flight on exactly this work
     decided = True
     event = _fast_waiters.get(run_id)
     if event is not None:
         try:
-            await asyncio.wait_for(event.wait(), timeout=COMPLETION_BUDGET_SECONDS)
+            await asyncio.wait_for(event.wait(), timeout=max(0.0, deadline - time.monotonic()))
         except asyncio.TimeoutError:
             decided = False
     async with async_session_factory() as fresh:
@@ -1577,6 +1594,12 @@ async def fast_checks_at_completion(
         for result in run.results or []
         if result.get("name") in fast and failed(result) and not preexisting(result)
     ]
+    if run.state == "failed" and own_failure(run.results):
+        # Decided before this completion asked (a re-completion of unchanged work) or within its
+        # wait: every failure of the task's own is the builder's to fix now.
+        failing = [
+            result for result in run.results or [] if failed(result) and not preexisting(result)
+        ]
     if run.state == "error":
         failing = []  # the Hub could not produce a result: not the builder's to fix (D6)
     return CompletionChecks(
@@ -1736,6 +1759,21 @@ async def return_failed_work(run_id: str) -> bool:
             if await asyncio.to_thread(unmerged, root, tip, targets) != list(run.target_shas or []):
                 return False
             report = failure_report(run.results or [], run_id=run.id, merged_sha=run.merged_sha)
+            # **Compare-and-set** before the move: everything above read `completed` without a
+            # write lock while git ran, and another session (a review, the operator's approval) may
+            # have moved the task since. This UPDATE takes the write lock and matches only a task
+            # still `completed`; until this transaction commits no other writer can move it, so the
+            # refreshed task is the one the move is made on. Nothing matched: it moved, left alone.
+            claimed = await session.execute(
+                update(Task)
+                .where(Task.id == task.id, Task.status == "completed")
+                .values(updated=datetime.now(timezone.utc))
+                .execution_options(synchronize_session=False)
+            )
+            if not claimed.rowcount:
+                await session.rollback()
+                return False
+            await session.refresh(task)
             try:
                 await apply_transition(
                     session,
