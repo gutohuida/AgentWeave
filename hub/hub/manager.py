@@ -23,7 +23,8 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import EventLog, ManagerJob
+from .db.models import EventLog, ManagerJob, Runner
+from .model_catalog import default_model, get_provider
 from .runner_adapters.one_shot import WorkerUsage
 from .utils import persist_event
 
@@ -149,9 +150,29 @@ def _listed(spec: JobSpec, row: Optional[ManagerJob]) -> Dict[str, Any]:
     }
 
 
+async def _mender_default(
+    db: AsyncSession, project_id: str, row: Optional[ManagerJob]
+) -> Optional[Dict[str, str]]:
+    """The model the mender runs on when the entry names none -- the catalog's default for its
+    runner's CLI (`stalls.ensure_mender`) -- as `{id, label}`, or `None` with no runner or no default.
+    Listed so the Manager page can say what the mender costs before it runs."""
+    runner = await db.get(Runner, row.runner_id) if row is not None and row.runner_id else None
+    if runner is None or runner.project_id != project_id:
+        return None
+    model_id = default_model(runner.cli)
+    if model_id is None:
+        return None
+    provider = get_provider(runner.cli)
+    declared = provider.model(model_id) if provider is not None else None
+    return {"id": model_id, "label": declared.label if declared is not None else model_id}
+
+
 async def get_job(db: AsyncSession, project_id: str, key: str) -> Dict[str, Any]:
     """The job as the routes list it. *key* must be registered."""
-    job = _listed(_BY_KEY[key], await get_job_row(db, project_id, key))
+    row = await get_job_row(db, project_id, key)
+    job = _listed(_BY_KEY[key], row)
+    if key == MENDER:
+        job["default_model"] = await _mender_default(db, project_id, row)
     if key == CHAPTERS:
         job["usage_total"] = await usage_total(db, project_id, key)
     return job
@@ -205,6 +226,8 @@ async def list_jobs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
     for job in listed:
         if job["key"] == CHAPTERS:
             job["usage_total"] = await usage_total(db, project_id, CHAPTERS)
+        if job["key"] == MENDER:
+            job["default_model"] = await _mender_default(db, project_id, by_key.get(MENDER))
     return listed
 
 

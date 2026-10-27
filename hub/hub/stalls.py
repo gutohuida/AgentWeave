@@ -48,6 +48,7 @@ from .db.models import (
     TaskIntegration,
     TaskTransition,
 )
+from .model_catalog import default_model
 from .subprocess_windows import no_console_kwargs
 from .utils import persist_event, short_id
 
@@ -418,23 +419,29 @@ async def ensure_mender(db: AsyncSession, project_id: str) -> "tuple[Optional[Ag
     if chosen is None or chosen.project_id != project_id:
         return None, f"The mender's runner '{row.runner_id}' no longer exists in this project."
     runner = chosen
-    if row.model and row.model != chosen.model:
+    # **No model chosen means the catalog's default for the runner's CLI, not the runner's own**
+    # (`the-mender-wakes-only-for-real-stalls` D5). On :8000 the operator picked a runner, never a
+    # model, and 42 mender turns in one night ran on that runner's Opus. Mending is reading state
+    # and calling a few routes; the everyday model does it, and a model the operator chose on the
+    # Manager page is kept. Resolved here, on every wake, so no migration moves an existing mender.
+    wanted = row.model or default_model(chosen.cli) or chosen.model
+    if wanted and wanted != chosen.model:
         runner = (
             await db.execute(
                 select(Runner)
                 .where(
                     Runner.project_id == project_id,
                     Runner.cli == chosen.cli,
-                    Runner.model == row.model,
+                    Runner.model == wanted,
                 )
                 .order_by(Runner.created_at)
             )
         ).scalars().first() or Runner(
             id=f"runner-{short_id()}",
             project_id=project_id,
-            name=f"{chosen.cli} — {row.model} (mender)",
+            name=f"{chosen.cli} — {wanted} (mender)",
             cli=chosen.cli,
-            model=row.model,
+            model=wanted,
         )
         db.add(runner)
     agent = (

@@ -85,6 +85,43 @@ async def mender_on():
         await session.commit()
 
 
+async def runner_of(session, agent):
+    """`(cli, model)` of the runner the agent is bound to."""
+    runner = await session.get(Runner, agent.runner_id)
+    return runner.cli, runner.model
+
+
+async def mender_agent():
+    async with async_session_factory() as session:
+        return (
+            await session.execute(select(Agent).where(Agent.name == stalls.MENDER))
+        ).scalar_one()
+
+
+async def mender_entry(*, runner_model, model):
+    """The Manager entry on, with a Claude runner naming *runner_model* and the entry's *model*."""
+    async with async_session_factory() as session:
+        session.add(
+            Runner(
+                id="runner-pick",
+                project_id="proj-test",
+                name="Picked",
+                cli="claude",
+                model=runner_model,
+            )
+        )
+        session.add(
+            ManagerJob(
+                project_id="proj-test",
+                job=manager.MENDER,
+                enabled=True,
+                runner_id="runner-pick",
+                model=model,
+            )
+        )
+        await session.commit()
+
+
 async def mender_run():
     """A running turn of the Hub's own mender agent."""
     async with async_session_factory() as session:
@@ -183,7 +220,9 @@ async def test_a_stall_wakes_the_mender_once(app, auth_headers, builder, tmp_pat
         mender = (
             await session.execute(select(Agent).where(Agent.name == stalls.MENDER))
         ).scalar_one()
-        assert stalls.is_mender(mender) and mender.runner_id == "runner-mend"
+        assert stalls.is_mender(mender)
+        # The entry names Haiku's runner and no model: the mender runs on the catalog default.
+        assert await runner_of(session, mender) == ("claude", "claude-sonnet-5-5")
         entries = (
             (
                 await session.execute(
@@ -257,7 +296,8 @@ async def test_turning_the_mender_on_makes_its_agent(app, auth_headers):
         agent = (
             await session.execute(select(Agent).where(Agent.name == stalls.MENDER))
         ).scalar_one()
-    assert stalls.is_mender(agent) and agent.runner_id == "runner-m3"
+        assert await runner_of(session, agent) == ("claude", "claude-sonnet-5-5")
+    assert stalls.is_mender(agent)
 
 
 @pytest.mark.asyncio
@@ -637,3 +677,87 @@ async def test_a_stuck_task_stall_ends_once_its_task_is_gone_or_moved(app):
         "stuck_task:task-moved": "resolved",
         "stuck_task:task-still": "open",
     }
+
+
+# the-mender-wakes-only-for-real-stalls, task 2: an entry that names no model runs the mender on the
+# catalog's default model for its runner's CLI. On :8000 the operator chose a runner (Opus) and
+# never a model, and 42 mender turns in one night ran on Opus.
+
+
+async def _wake_the_mender():
+    with patch("hub.turn_scheduler.schedule_accepted", new=AsyncMock()):
+        await _report_and_drain(UNSTAFFED)
+
+
+async def _queued_for_the_mender():
+    async with async_session_factory() as session:
+        return (
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == stalls.MENDER)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+
+@pytest.mark.asyncio
+async def test_an_entry_with_no_model_runs_the_mender_on_sonnet(app):
+    await mender_entry(runner_model="claude-opus-5-5", model=None)
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    async with async_session_factory() as session:
+        assert await runner_of(session, agent) == ("claude", "claude-sonnet-5-5")
+    assert len(await _queued_for_the_mender()) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_existing_mender_on_opus_moves_to_sonnet_at_its_next_wake(app):
+    await mender_entry(runner_model="claude-opus-5-5", model=None)
+    async with async_session_factory() as session:
+        # What :8000 has today: the agent bound to the Opus runner, from an entry with no model.
+        session.add(
+            Agent(
+                id="ag-old-mender",
+                project_id="proj-test",
+                name=stalls.MENDER,
+                config={"hub_role": stalls.HUB_ROLE},
+                runner_id="runner-pick",
+            )
+        )
+        await session.commit()
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    assert agent.id == "ag-old-mender"
+    async with async_session_factory() as session:
+        assert await runner_of(session, agent) == ("claude", "claude-sonnet-5-5")
+
+
+@pytest.mark.asyncio
+async def test_a_model_the_operator_chose_for_the_mender_is_kept(app):
+    await mender_entry(runner_model="claude-sonnet-5-5", model="claude-opus-5-5")
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    async with async_session_factory() as session:
+        assert await runner_of(session, agent) == ("claude", "claude-opus-5-5")
+
+
+@pytest.mark.asyncio
+async def test_the_manager_names_the_mender_its_default_model_and_no_other_job(app, auth_headers):
+    await mender_entry(runner_model="claude-opus-5-5", model=None)
+
+    listed = (await app.get("/api/v1/projects/proj-test/manager/jobs", headers=auth_headers)).json()
+
+    by_key = {job["key"]: job for job in listed["jobs"]}
+    assert by_key["mender"]["default_model"] == {
+        "id": "claude-sonnet-5-5",
+        "label": "Sonnet 5.5",
+    }
+    assert all(job.get("default_model") is None for key, job in by_key.items() if key != "mender")
