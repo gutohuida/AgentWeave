@@ -331,6 +331,7 @@ async def record(
     )
     session.add(evidence)
     await session.flush()
+    await _serve_requirement_of_own_document(session, requirement, task_id, actor)
 
     if evidence.review_state == ACCEPTED:
         session.add(
@@ -350,6 +351,34 @@ async def record(
         await capture_footprint(session, evidence, workspace, taken=taken)
 
     return evidence
+
+
+async def _serve_requirement_of_own_document(
+    session: AsyncSession,
+    requirement: SpecRequirement,
+    task_id: Optional[str],
+    actor: Actor,
+) -> None:
+    """Evidence a task records against a requirement of its own document links that requirement to it.
+
+    `task_integration._targets` merges the evidence of the requirements a task is linked to, so
+    evidence for one the document gained after the task was created merged nothing (2026-10-26,
+    FR-11 and FR-12 of the spec-page mock). Linking when it is recorded, rather than widening that
+    query, leaves one rule for what a task serves, and the task's requirement links say it.
+    Evidence for another document's requirement is not the task's to serve, and is left alone.
+    """
+    if not task_id:
+        return
+    task = await session.get(Task, task_id)
+    if (
+        task is None
+        or not task.spec_document_id
+        or task.spec_document_id != requirement.document_id
+    ):
+        return
+    from . import requirement_links
+
+    await requirement_links.link(session, task, [requirement], actor=actor)
 
 
 async def duplicate_of(

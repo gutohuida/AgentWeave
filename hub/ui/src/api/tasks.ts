@@ -629,21 +629,69 @@ export function useUpdateTask() {
   return useMutation({
     // `blocked_reason` is required by the Hub when the status is `blocked`, and ignored otherwise —
     // so it is sent only when present rather than as a null the validator would still have to
-    // reject.
+    // reject. `assignee` names who holds the task after the move: a review hand-off sends the
+    // reviewer, because moving completed work into review while its author holds it is refused.
     mutationFn: ({
       id,
       status,
       blocked_reason,
+      assignee,
     }: {
       id: string
       status: string
       blocked_reason?: string
+      assignee?: string
     }) =>
       patchJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}`, {
         status,
         ...(blocked_reason ? { blocked_reason } : {}),
+        ...(assignee ? { assignee } : {}),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] }),
+    onSuccess: (_task, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+      // The menu's moves belong to the holder, which this move may have changed.
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks', id, 'moves'] })
+    },
+  })
+}
+
+/**
+ * Link requirements to a task, added to what it serves. The remedy a landing refusal offers when
+ * accepted evidence reaches no link (`every-task-can-always-be-moved-on`, FR-11).
+ */
+export function useLinkTaskRequirements() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id, requirement_ids }: { id: string; requirement_ids: string[] }) =>
+      patchJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}`, { requirement_ids }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
+  })
+}
+
+/**
+ * Accept or reject one piece of evidence by id, from beside the refusal that waits on it. The same
+ * route the spec page's evidence chip uses; here the operator has no document open, so every key
+ * the decision can move is invalidated.
+ */
+export function useDecideEvidencePiece() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      id,
+      decision,
+      reason,
+    }: {
+      id: string
+      decision: 'accepted' | 'rejected'
+      reason: string
+    }) =>
+      postJson<unknown>(`/api/v1/projects/${projectId}/project/spec/evidence/${id}/decision`, {
+        decision,
+        reason,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 }
 
@@ -851,12 +899,20 @@ export type AllowedTransitions = Record<string, string[]>
  * mover decision's answer for this task as it is held, narrower than the map `useAllowedTransitions`
  * reads, so a menu built from it offers nothing the Hub would refuse.
  */
+export interface TaskMoves {
+  task_id: string
+  status: string
+  moves: string[]
+  /** Open agents the operator may hand a completed task to for review, never its author. */
+  reviewers?: string[]
+}
+
 export function useTaskMoves(taskId: string | null) {
   const { selectedProjectId: projectId } = useConfigStore()
   return useQuery({
     queryKey: ['project', projectId, 'tasks', taskId, 'moves'],
     queryFn: () =>
-      getJson<{ task_id: string; status: string; moves: string[] }>(
+      getJson<TaskMoves>(
         `/api/v1/projects/${projectId}/tasks/${taskId}/moves`,
       ),
     enabled: !!projectId && !!taskId,

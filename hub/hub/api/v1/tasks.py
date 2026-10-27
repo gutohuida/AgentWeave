@@ -2128,7 +2128,47 @@ async def task_moves(
     for target in sorted(allowed_targets(task.status, ACTOR_OPERATOR)):
         if (await decide_move(session, task, target, actor)).allowed:
             moves.append(target)
-    return {"task_id": task.id, "status": task.status, "moves": moves}
+    reviewers: List[str] = []
+    if task.status == "completed":
+        # Review is entered by naming who reviews, so the menu offers it whenever somebody can: the
+        # holder alone, as the author, is exactly the move the Hub refuses (2026-10-26).
+        reviewers = await _reviewers_for(session, task, actor)
+        if reviewers and "under_review" not in moves:
+            moves = sorted([*moves, "under_review"])
+    return {"task_id": task.id, "status": task.status, "moves": moves, "reviewers": reviewers}
+
+
+async def _reviewers_for(session: AsyncSession, task: Task, actor: Actor) -> List[str]:
+    """Every open agent the operator may hand this completed task to, by the mover decision itself.
+
+    Each candidate is tried as the holder the way the PATCH does it (the assignee is written, then the
+    move is decided), and the row is restored after, so the list is the decision's answer and not a
+    second statement of the author rule.
+    """
+    from ...task_transition_service import decide_move
+
+    names = (
+        (
+            await session.execute(
+                select(Agent.name)
+                .where(Agent.project_id == task.project_id, Agent.lifecycle != "archived")
+                .order_by(Agent.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    holder = task.assignee
+    reviewers: List[str] = []
+    try:
+        with session.no_autoflush:
+            for name in names:
+                task.assignee = name
+                if (await decide_move(session, task, "under_review", actor)).allowed:
+                    reviewers.append(name)
+    finally:
+        task.assignee = holder
+    return reviewers
 
 
 @router.get("/{task_id}/transitions")
