@@ -1281,6 +1281,61 @@ def edit_text(
         return _write_text(project_root, record, content, actor)
 
 
+def agent_actor(agent: str, run_id: str) -> Actor:
+    """An agent's change: its name and run, both taken from the run's credential by the route."""
+    return {"kind": "agent", "agent": agent, "run_id": run_id}
+
+
+def _text_record(project_root: Path, private_root: Path, source_id: str) -> _Record:
+    """The held text source, or `VaultError` (409 for a file source: changed by replacing it)."""
+    record = _held_record(project_root, private_root, source_id)
+    kind = record.file_kind
+    if kind is not None:
+        raise VaultError(file_not_text(kind[1]), status=409)
+    return record
+
+
+def replace_passage(
+    project_root: Path,
+    private_root: Path,
+    source_id: str,
+    *,
+    old: str,
+    new: str,
+    actor: Actor,
+) -> Dict[str, Any]:
+    """Replace the one occurrence of *old* in a text source's text by *new*. Refused (400) when
+    *old* is empty, occurs nowhere or occurs more than once, saying which; nothing changes then."""
+    if not old:
+        raise VaultError("The old text to replace is empty; name the passage to change.")
+    with _write_lock(project_root, source_id):
+        record = _text_record(project_root, private_root, source_id)
+        text = record.text() or ""
+        count = text.count(old)
+        if count == 0:
+            raise VaultError(
+                "The old text does not occur in this source, so nothing was changed. Read the "
+                "entry again and copy the passage exactly."
+            )
+        if count > 1:
+            raise VaultError(
+                f"The old text occurs more than once ({count} times) in this source, so nothing "
+                "was changed. Include more of the surrounding text so it occurs exactly once."
+            )
+        return _write_text(project_root, record, text.replace(old, new, 1), actor, "passage")
+
+
+def append_text(
+    project_root: Path, private_root: Path, source_id: str, *, text: str, actor: Actor
+) -> Dict[str, Any]:
+    """Add *text* to the end of a text source's text."""
+    if not text:
+        raise VaultError("There is no text to append.")
+    with _write_lock(project_root, source_id):
+        record = _text_record(project_root, private_root, source_id)
+        return _write_text(project_root, record, (record.text() or "") + text, actor, "append")
+
+
 def _write_text(
     project_root: Path, record: _Record, content: str, actor: Actor, detail: Optional[str] = None
 ) -> Dict[str, Any]:
