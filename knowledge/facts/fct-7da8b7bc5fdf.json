@@ -1,0 +1,23 @@
+{
+  "id": "fct-7da8b7bc5fdf",
+  "kind": "fact",
+  "claim": "The next :8000 restart converts the database to WAL and runs migrations 0144 to 0146.",
+  "citations": [
+    {
+      "source": "src-17aeb9aea81f",
+      "quote": "The next `:8000` restart converts the database to WAL and runs migrations `0144`–`0146`.",
+      "line_start": 175,
+      "line_end": 175
+    }
+  ],
+  "sources": [
+    "src-17aeb9aea81f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-26T01:48:53.916393Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

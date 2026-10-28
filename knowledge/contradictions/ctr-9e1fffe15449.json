@@ -1,0 +1,24 @@
+{
+  "id": "ctr-9e1fffe15449",
+  "kind": "contradiction",
+  "facts": [
+    "fct-7cff2b4e5a2b",
+    "fct-d0d934cef195"
+  ],
+  "presumed": "fct-7cff2b4e5a2b",
+  "explanation": "The new hub-tests command omits the `cd hub` prefix, while the existing fact says checks must be entered exactly with `cd hub` so the suite imports the scratch checkout's code.",
+  "status": "resolved",
+  "visibility": "tracked",
+  "holder": null,
+  "created_at": "2026-10-26T01:49:13.144047Z",
+  "found_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  },
+  "resolution": {
+    "stands": "fct-7cff2b4e5a2b",
+    "note": "The project's hub-tests check, as configured on 2026-10-28, is `py -3.11 -m pytest hub/tests -q -n auto --dist loadgroup -p no:cacheprovider --timeout=600` from the repository root, with a 3600 s timeout. The 10-24 `cd hub ... tests/ --dist loadfile --timeout=300` form was replaced by it on 10-26; checks of a task worktree still import that worktree's code and pass.",
+    "decision": "src-4af7ff01c49a",
+    "resolved_at": "2026-10-28T16:00:45.892673Z"
+  }
+}

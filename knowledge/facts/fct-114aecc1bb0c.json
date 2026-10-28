@@ -1,0 +1,23 @@
+{
+  "id": "fct-114aecc1bb0c",
+  "kind": "fact",
+  "claim": "GET /loops has a budget of 80 ms and 25 statements but currently takes about 200 ms and issues 38 statements.",
+  "citations": [
+    {
+      "source": "src-17aeb9aea81f",
+      "quote": "`GET /loops` is about 200 ms against its 80 ms budget (was 2.5 s) and issues 38 statements against\n  25",
+      "line_start": 163,
+      "line_end": 164
+    }
+  ],
+  "sources": [
+    "src-17aeb9aea81f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-26T01:48:53.878434Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

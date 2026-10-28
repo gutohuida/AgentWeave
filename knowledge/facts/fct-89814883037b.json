@@ -1,0 +1,23 @@
+{
+  "id": "fct-89814883037b",
+  "kind": "fact",
+  "claim": "The operator requires that approval runs the full suite; the proposed merge queue keeps this while running it once per batch.",
+  "citations": [
+    {
+      "source": "src-17aeb9aea81f",
+      "quote": "This keeps the operator's \"approval runs the\n   full suite\" while paying it once per batch.",
+      "line_start": 122,
+      "line_end": 123
+    }
+  ],
+  "sources": [
+    "src-17aeb9aea81f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-26T01:48:53.855304Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

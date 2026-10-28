@@ -1,0 +1,23 @@
+{
+  "id": "fct-c14d1b63da05",
+  "kind": "fact",
+  "claim": "F787, where a new agent's first trigger held the write lock over 30 s, has not been re-driven to confirm it is fixed.",
+  "citations": [
+    {
+      "source": "src-17aeb9aea81f",
+      "quote": "F787 (a new agent's first trigger held the write lock over 30 s) is probably gone with WAL and\n  slice 3, but has not been re-driven.",
+      "line_start": 166,
+      "line_end": 167
+    }
+  ],
+  "sources": [
+    "src-17aeb9aea81f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-26T01:48:53.886011Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
