@@ -1888,7 +1888,10 @@ def _rung_3_join(
 
 
 def _rung_3_reason(
-    task: Task, availability: "Sequence[AgentAvailability]", exclude: "Mapping[str, str]"
+    task: Task,
+    availability: "Sequence[AgentAvailability]",
+    exclude: "Mapping[str, str]",
+    pool: "Optional[set[str]]" = None,
 ) -> str:
     """Design D2/D3's rung-3 sentence, bound to `_RUNG_3_REASON_BOUND` characters (tasks 2.3, 2.4).
 
@@ -1896,6 +1899,17 @@ def _rung_3_reason(
     what `test_resolve_reviewer_reads_the_roster_once` pins.
     """
     remedy = _capitalize_first(own_review_remedy(task))
+    if pool is not None:
+        # A build's reviewers are the only agents that could take this (rung 2 skips the rest), so
+        # only they are named as busy; an agent outside the pool is not a reviewer who is busy.
+        names = ", ".join(sorted(pool))
+        availability = [record for record in availability if record.name in pool]
+        remedy = f"Only the build's reviewers [{names}] can take it. {remedy}"
+        if not availability:
+            return (
+                f"{_RUNG_3_PREFIX}None of the build's reviewers [{names}] is on the project's "
+                f"roster. {remedy}"
+            )
     if not availability:
         # Task 2.3, R8: no "; ".join of an empty clause list, and no REJECT -- rejecting a task
         # frees nobody when nobody is on the roster to free.
@@ -2087,7 +2101,9 @@ async def resolve_reviewer(
             ),
         )
 
-    return ReviewerChoice(rung="unstaffed", reason=_rung_3_reason(task, availability, exclude))
+    return ReviewerChoice(
+        rung="unstaffed", reason=_rung_3_reason(task, availability, exclude, pool)
+    )
 
 
 @dataclass(frozen=True)
