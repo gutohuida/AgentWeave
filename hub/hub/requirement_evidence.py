@@ -1441,7 +1441,12 @@ async def decide(
 
 
 async def verdict_pieces(
-    session: AsyncSession, task: Task, *, actor: Actor, decision: str
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    decision: str,
+    own_work: bool = False,
 ) -> List[Tuple[RequirementEvidence, str]]:
     """The pieces a verdict on *task* decides, oldest first, each with its requirement's identifier.
 
@@ -1451,6 +1456,10 @@ async def verdict_pieces(
     earlier wording of its requirement (F751: `decide` refuses it as `evidence_stale`). Only the
     task's own pieces (D2): another task serving the same requirement keeps its evidence for its own
     reviewer.
+
+    *own_work* is a Fast build's approval (`a-build-has-a-driver-a-level-and-its-people`, D4): no
+    reviewer exists at that level, so the builder's approval accepts the builder's own pieces, and
+    only a run other than the acting one still being live leaves a piece as it is.
     """
     rows = (
         await session.execute(
@@ -1466,12 +1475,17 @@ async def verdict_pieces(
     pieces: List[Tuple[RequirementEvidence, str]] = []
     for evidence, requirement in rows:
         if (
-            actor.kind == "agent"
+            not own_work
+            and actor.kind == "agent"
             and evidence.actor_kind == "agent"
             and actor.name == evidence.actor
         ):
             continue
-        if evidence.run_id and run_liveness.run_is_live(evidence.run_id):
+        if (
+            evidence.run_id
+            and not (own_work and evidence.run_id == actor.run_id)
+            and run_liveness.run_is_live(evidence.run_id)
+        ):
             continue
         if decision == ACCEPTED and evidence.digest != requirement.digest:
             continue
@@ -1536,6 +1550,7 @@ async def decide_with_verdict(
     decision: str,
     reason: str,
     failing: Optional[Dict[str, str]] = None,
+    own_work: bool = False,
 ) -> List[EvidenceReview]:
     """Decide the evidence recorded for *task* with the verdict on it
     (`the-reviewers-verdict-decides-the-tasks-evidence`, vis-D4), piece by piece
@@ -1566,7 +1581,7 @@ async def decide_with_verdict(
         )
     reviews: List[EvidenceReview] = []
     for evidence, _identifier in await verdict_pieces(
-        session, task, actor=actor, decision=decision
+        session, task, actor=actor, decision=decision, own_work=own_work
     ):
         if decision == ACCEPTED:
             outcome, why = ACCEPTED, reason

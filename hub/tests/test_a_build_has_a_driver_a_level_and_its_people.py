@@ -533,3 +533,97 @@ async def _evidence_naming(task_id, commit):
             )
         )
         await db.commit()
+
+
+# ---------------------------------------------------------------------------------------------
+# Fast: an allowed approval accepts the builder's awaiting evidence (slice D drive, B1)
+# ---------------------------------------------------------------------------------------------
+
+
+async def _evidence_row(task_id):
+    (row,) = await _rows(RequirementEvidence, RequirementEvidence.task_id == task_id)
+    return row
+
+
+async def _complete_with_evidence(task_id):
+    await _evidence_naming(task_id, "4b5ac3a5b3db" + "0" * 28)
+    await _move(task_id, "in_progress", "dev", run_id="run-dev-b1")
+    await _move(task_id, "completed", "dev", run_id="run-dev-b1")
+
+
+@pytest.mark.asyncio
+async def test_at_fast_the_builders_own_approval_accepts_its_evidence(
+    app, auth_headers, author_headers
+):
+    """B1(a): the builder completes (evidence awaiting) and approves its own task at Fast. On the
+    unfixed code the gate refused 409 "nobody has judged it", because a builder never accepts its
+    own evidence and Fast has no reviewer."""
+    await _roster_rows("dev", "qa")
+    await _approved(app, auth_headers, author_headers, _document())
+    built = await _build(app, auth_headers, driver="hand", level="fast", builders=["dev"])
+    assert built.status_code == 200, built.text
+    t1 = (await _tasks_by_key())["t1"]
+    await _complete_with_evidence(t1.id)
+    assert (await _evidence_row(t1.id)).review_state == "awaiting"
+
+    await _move(t1.id, "approved", "dev", run_id="run-dev-b1")
+
+    (task,) = await _rows(Task, Task.id == t1.id)
+    assert task.status == "approved"
+    assert (await _evidence_row(t1.id)).review_state == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_at_reviewed_the_builders_own_approval_is_still_refused(
+    app, auth_headers, author_headers
+):
+    """The level guard: a Reviewed build's builder approving completed work is refused, its
+    evidence untouched."""
+    from hub.task_transition_service import TransitionRefusedError
+
+    await _roster_rows("dev", "qa")
+    await _approved(app, auth_headers, author_headers, _document())
+    built = await _build(app, auth_headers, driver="hand", level="reviewed", builders=["dev"])
+    assert built.status_code == 200, built.text
+    t1 = (await _tasks_by_key())["t1"]
+    await _complete_with_evidence(t1.id)
+
+    with pytest.raises(TransitionRefusedError):
+        await _move(t1.id, "approved", "dev", run_id="run-dev-b1")
+
+    (task,) = await _rows(Task, Task.id == t1.id)
+    assert task.status == "completed"
+    assert (await _evidence_row(t1.id)).review_state == "awaiting"
+
+
+@pytest.mark.asyncio
+async def test_a_flow_driven_fast_build_is_approved_by_the_flow_with_its_evidence_accepted(
+    app, auth_headers, author_headers
+):
+    """B1(b): a flow-driven Fast build's completed task, with no checks to wait for, is approved by
+    the flow's firing (origin job), and its awaiting evidence is accepted by that approval."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from hub.scheduler import JobScheduler
+
+    await _roster_rows("dev", "qa")
+    await _approved(app, auth_headers, author_headers, _document())
+    scheduling = patch(
+        "hub.turn_scheduler.schedule_agent",
+        AsyncMock(return_value=MagicMock(waiting_reason=None, terminal_failure=False)),
+    )
+    with scheduling:
+        built = await _build(app, auth_headers, driver="flow", level="fast", builders=["dev"])
+    assert built.status_code == 200, built.text
+    t1 = (await _tasks_by_key())["t1"]
+    await _complete_with_evidence(t1.id)
+
+    (loop,) = await _rows(Loop)
+    with scheduling:
+        async with async_session_factory() as db:
+            job = await db.get(AIJob, loop.job_id)
+            await JobScheduler()._do_fire_job(job, "scheduled", db)
+
+    (task,) = await _rows(Task, Task.id == t1.id)
+    assert task.status == "approved"
+    assert (await _evidence_row(t1.id)).review_state == "accepted"

@@ -1330,6 +1330,15 @@ async def _decide_evidence_with_verdict(
         ),
         reason=verdict_reason or "",
         failing=failing_pieces,
+        # A Fast build has no reviewer (slice D, D4): its builder, lead or flow approving completed
+        # work accepts the builder's own evidence, which a reviewer-less approval would otherwise
+        # leave awaiting and refuse as "nobody has judged it".
+        own_work=bool(
+            to_status == "approved"
+            and task.build_id
+            and task.level == "fast"
+            and task.status == "completed"
+        ),
     )
     return await requirement_evidence.verdict_note(session, reviews)
 
