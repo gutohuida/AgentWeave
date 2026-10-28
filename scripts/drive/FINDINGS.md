@@ -40769,3 +40769,73 @@ Area: Keyboard & dialogs.
 (1) `picker-everywhere` names "the Ctrl/Cmd+K picker", but Ctrl+K's Spec documents section has no filters, order or shortcuts; the picker is Ctrl+Shift+K. (2) A running build's header shows the close-as-built strip for the task the build is working. (3) In G's by-agent and by-model groupings, wall time and checks sit under rows named "checks and wall time" and "no model recorded"; totals are right, labels mislead. (4) After Approve is refused (steps_skipped) the inline Check marks and the "N warnings" chip disappear. (5) Palette "settings" puts a conversation titled "Reply with exactly the word OK..." first; Enter opens it. Also seen, pre-existing: Add-agent and Vault Add dialogs open with focus on Close (F931 family); Overview "Running now" says no agent works while a run is parked on ask_user; the approval report quotes a raw `POST /api/v1/.../journey?path=...` to the operator (F574 family). The drive also saw F1064 independently: the Hub's own "Integrate approved work 63e3bd59605b" raised "master moved outside the Hub" on Overview (event 09:47:58).
 
 Drive record F/G/I (what held, 8 Haiku turns): F -- the header offers exactly each state's actions (writing: Check; checked: Approve with Approve-and-build; approved: Build; building: running chip, Stop, Raise cap; finished: Fold), Check never moves the phase, warnings inline and in the outline, Approve anyway carries into the build, build figures (3m3s = 1m40s building + 1m16s reviewing + 7s waiting; $0.43) match the DB, the list marks a running build, filters persist across reload, anchors and Back/Forward restore position, no literal colours and no transitions under reduced motion. G -- `turn_usage`, `/accounting`, `/stats`, `/ledger` and the Activity view agree to the micro-dollar ($0.729663); spec rows sum to the project; a build's figures read only that build; wall parts sum to the total; four groupings agree; `since` works; 12 task events gave 2 stats fetches. I -- App settings from rail and palette with notifications moved out of Project settings; decline-one and the ended-wait question row; F1027-F1032 re-drives hold (F1027 partly). Not reached: the mock server, archived header, the mender on the spec page, G's send-back/verdict/beside-failing figures, decline-all, merge-row retry, zero-project rail.
+
+## F1073 (B) -- the mender offers answers it cannot carry out and misstates the evidence gate: "Approve without the check -- operator approval overrides the partial-evidence gate", which neither it nor the operator can do
+
+**Status:** open 2026-10-28. Found by slice H's Gated build on :8000 (`build-cee80c298887`), question `q-96041fe49960`.
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 1
+
+At 13:53 the mender asked about `task-a2437846eb7f` (reviewed, approval refused on FR-3's partial evidence) and offered "Approve without the check". The operator chose it. The mender's next turn (`run-f8b79cd509be`) replied "I can't act on that answer. Approving the task isn't one of my powers", and the operator's own `PATCH status=approved` was refused 409 `gate_unsatisfied`: there is no override for an evidence gate, only for checks (`override_checks_reason`). So the option was false twice: the mender cannot approve, and nobody can approve over the gate. A mender option should be an action the Hub will take on that answer, or say plainly that the operator must act and how. At 14:27 it asked the same question again (`q-527c404bf04f`), 21 s before the operator approved. Area: Questions x Flows & review.
+
+## F1074 (B) -- at Gated, a criterion checked by the operator blocks approval until the operator records full evidence, and nothing says so before it happens or names the screen to do it on
+
+**Status:** open 2026-10-28. Found by slice H's Gated build (:8000).
+**Source:** drive
+**Theme:** Requirements, evidence & coverage
+**Ready:** no -- decide whether Gated should ask for operator checks up front (at Build) or offer them on the task when review ends
+**Tier:** 1
+
+FR-3 of the candidate had a `checked_by: operator` criterion. At Gated, QA's evidence covered it partially, and approval was refused: "record evidence that demonstrates all of it, with covers: full, and have it accepted ... or build the task at a level that does not gate them". The refusal names no screen; the route that works is the operator's `POST /project/spec/evidence` (`ev-f59cdc2a15c5` here). Starting the build said nothing about the operator check it would need. Fast approved the same task over the criterion with no question. The drive did the real check in a browser on a scratch Hub served from the build's branches. Area: Requirements, evidence & coverage x Flows & review.
+
+## F1075 (C) -- a build's checks queue two at a time, with no view of queue time, and the side-by-side suites make timing tests fail; Fast spent 70 of its 89 minutes in checks
+
+**Status:** open 2026-10-28. Found by slice H's Fast build (:8000, `build-f7c5b7855dbc`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** no -- decide the policy (serial checks, a per-task subset, or a slot count)
+**Tier:** 1
+
+The builder's three turns ended by 11:19. Each task's Hub suite then ran 40 to 45 min side by side (about 12 min alone). The third task's run (`chk-a6633ef823ea`, started 11:17) began its suite only at 11:50, when a slot freed. The build panel's `checks` (4214 s) counts the wait and the run together. The load made `test_a_busy_project_opens_inside_a_second` (1.009 s against 1.0) and `test_more_operator_streams_than_the_pool_holds_all_open` fail. The Hub approved over them as not the task's and opened follow-up `task-c9d09a9fd379` ($0.18, in no build's cost). Area: Worktrees & integration x Accounting & allowance.
+
+## F1076 (C) -- the mender woke on a "no progress" stall while a healthy check run was queued, called it possibly hung and recommended killing it
+
+**Status:** open 2026-10-28. Found by slice H's Fast build (:8000), stall `stall-c6e926fdf51d`, question `q-3985f03c03f5`.
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+At 12:27 the loop had nothing moving since 11:52 because two check runs were in progress; the stall detector raised `no_progress`. The mender's question said `chk-a6633ef823ea` was "at 70 min (previous run 41 min)" and "may be hung", with "Restart checks" recommended. The run was healthy: it had waited 33 min for a slot and finished at 12:29. A loop whose tasks are in running checks is not stalled. The mender also reads a check's age from when it was queued, not from when it started. Area: Jobs & loops (mender).
+
+## F1077 (C) -- a build record's `spent_usd`, which the cap reads, leaves out the mender turns its own figures count ($0.87 vs $1.05 at Fast, $2.47 vs $2.87 at Gated)
+
+**Status:** open 2026-10-28. Found by slice H (:8000). Related to F1068.
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** no -- decide whether mender turns count toward a build's cap
+**Tier:** 1
+
+`builds[].spent_usd` = building + reviewing. The build panel's `figures.cost` and `GET /stats`'s build row add `mend`. The two disagree on one screen, and a cap cannot see mender spend. A follow-up task the build's checks opened (`task-c9d09a9fd379`) is in neither. Area: Accounting & allowance.
+
+## F1078 (C) -- a check run with failing tests that were approved over as not the task's is recorded as `passed`
+
+**Status:** open 2026-10-28. Found by slice H's Fast build (:8000), `chk-2cbb324baa52` on `task-e50d0d42e298`.
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Two tests failed in the run and passed alone. The Hub classified them as flaky, approved and opened a follow-up. The run's `state` is `passed` and `figures.checks` counts 3 passed, 0 failed, so any count of failed check runs (FR-8 of slice H, the build panel) misses it. A "passed with N failures not the task's" state, or a count beside it, would keep it visible. Area: Worktrees & integration.
+
+## F1079 (C) -- slice H: numbers no view shows: a build's base commit, the per-run model, operator actions, escaped defects, mender wakes with nothing stalled, expired mender questions, and any wall split for flows before builds
+
+**Status:** open 2026-10-28. Found by slice H's comparison (`.agentweave/vault-notes/2026-10-28-the-measured-re-run.md`), whose cells marked "from a query" are these.
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** no -- the build view needs `base_sha` (FR-2 of slice H fails on it today); the rest are a decision on what the project view should carry
+**Tier:** 1
+
+`measured_rerun_check.py` builds-match fails only on "the build record names no base commit". The models come from `/accounting recent_turns` (latest turns only, not tied to a build). Also seen: the build's start answer reads `reviewer: null` while `reviewers: ["QA"]` (the flow's delivery reviewer, not the build's), which reads as "no reviewer". Area: Accounting & allowance x Spec documents.
