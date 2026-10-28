@@ -40727,3 +40727,45 @@ The lead's first `submit_spec_document` carried the roadmap link; its third and 
 Hand "starts no turn at all", but each amendment decision queued input for the lead; `run-3895d6d08359` ran ($0.006) and two more entries were queued. Runs not bound to a build task are not in the build's `spent_usd` or figures (`cost.lead` 0.0), so a cap cannot see them. Also (D): lowering a hand build's cap below its spend ($0.01 vs $0.92) changes nothing and says nothing. Area: Inbound queue x Accounting.
 
 Drive record D/D2/E (what held, 20 Haiku turns, $2.26): D -- build recorded with every setting, a second Build 409 naming the running one, legible refusals (unknown agent, inverted window, bad level), level on tasks and transitions, declared builders applied and `ghost` reported unresolved, the flow staffed only builders and reviewers, the build finished and its job disabled, `spent_usd` equal to turn_usage. D2 -- a lead's add_task proposal left the board unchanged and accepted joined the running build at its level and builder; `proposal_decided`, `amendment_stale`, decline-needs-reason, non-author 403, `draft_next_slice_retired` all legible; the next-slice offer raised and taken once; a hand commit raised a notice in ~14 s and a `reset --hard` as a rewrite in ~15 s; rigor retired. E -- four approvals answered ~1 s each, one ~60 s gather, a conflicting task removed before the check naming the file and the other task, the breaker found by one narrowed run and sent back alone with output, the rest landed, sent-back work cannot land or be re-approved, landing state on the checks route with position and seconds, a restart mid-gather lost and repeated nothing. Not reached: every UI criterion, the lead driver, Gated, budget-cap stop on a flow, lands-nowhere, M's override inside a batch, dependent-waits-for-prerequisite.
+
+## F1069 (B) -- the composer's "Open an existing specification document" picker overflows its dialog: 697 px of content in a 558 px dialog, "+ New", "Roadmap" and the phase filter cut off (Ctrl+Shift+K the same)
+
+**Status:** open 2026-10-28; being fixed (Tier 0, slice F's own defect). Found by the scoped browser drive of slices F/G/I (scratch Hub :8033, profile drivefgi, Haiku runners); shots `testbed/ui-judge/drive1028-fgi/open_existing.png`, `ctrlshiftk.png`.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+`spec-picker` scrollWidth/clientWidth 697/557: the corpus strip takes a wide left column and pushes the picker to the right edge. The panel's Specs tab renders the same picker cleanly (`panel_specs_tab.png`). Area: Spec documents x Keyboard & dialogs.
+
+## F1070 (B) -- the side panel at 360 px clips the spec page's approval-gaps block (scrollWidth 392 vs 360), against `side-panel-parity`
+
+**Status:** open 2026-10-28; being fixed (Tier 0, slice F). Found by the scoped browser drive of slices F/G/I (:8033); shot `panel_narrow.png`.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+The right edge of the gap text is lost ("at s", "whic", "th"). Area: Spec documents (side panel).
+
+## F1071 (C) -- Ctrl+Shift+K opens the spec picker on top of the command palette: two layers, two Escapes
+
+**Status:** open 2026-10-28; being fixed (Tier 0, slice F). Found by the scoped browser drive of slices F/G/I (:8033): dialogs `['Command palette', 'Search documents']`, then `['Command palette']`, then `[]`.
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Area: Keyboard & dialogs.
+
+## F1072 (C) -- slice F/G/I friction: Ctrl+K's "Spec documents" is a flat list while the real picker lives on Ctrl+Shift+K; a running build's header offers "Close 1 open task as already built"; agent/model groupings put wall time under synthetic rows; Check's warnings vanish after a refused Approve; palette "settings" ranks a conversation first
+
+**Status:** open 2026-10-28. Found by the scoped browser drive of slices F/G/I (:8033); shots `run1_full.png`, `activity_Agent.png`, `activity_Model.png`, `check_after.png`, `approve_click.png`, `palette_settings.png`.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** no -- each needs a small decision
+**Tier:** 1
+
+(1) `picker-everywhere` names "the Ctrl/Cmd+K picker", but Ctrl+K's Spec documents section has no filters, order or shortcuts; the picker is Ctrl+Shift+K. (2) A running build's header shows the close-as-built strip for the task the build is working. (3) In G's by-agent and by-model groupings, wall time and checks sit under rows named "checks and wall time" and "no model recorded"; totals are right, labels mislead. (4) After Approve is refused (steps_skipped) the inline Check marks and the "N warnings" chip disappear. (5) Palette "settings" puts a conversation titled "Reply with exactly the word OK..." first; Enter opens it. Also seen, pre-existing: Add-agent and Vault Add dialogs open with focus on Close (F931 family); Overview "Running now" says no agent works while a run is parked on ask_user; the approval report quotes a raw `POST /api/v1/.../journey?path=...` to the operator (F574 family). The drive also saw F1064 independently: the Hub's own "Integrate approved work 63e3bd59605b" raised "master moved outside the Hub" on Overview (event 09:47:58).
+
+Drive record F/G/I (what held, 8 Haiku turns): F -- the header offers exactly each state's actions (writing: Check; checked: Approve with Approve-and-build; approved: Build; building: running chip, Stop, Raise cap; finished: Fold), Check never moves the phase, warnings inline and in the outline, Approve anyway carries into the build, build figures (3m3s = 1m40s building + 1m16s reviewing + 7s waiting; $0.43) match the DB, the list marks a running build, filters persist across reload, anchors and Back/Forward restore position, no literal colours and no transitions under reduced motion. G -- `turn_usage`, `/accounting`, `/stats`, `/ledger` and the Activity view agree to the micro-dollar ($0.729663); spec rows sum to the project; a build's figures read only that build; wall parts sum to the total; four groupings agree; `since` works; 12 task events gave 2 stats fetches. I -- App settings from rail and palette with notifications moved out of Project settings; decline-one and the ended-wait question row; F1027-F1032 re-drives hold (F1027 partly). Not reached: the mock server, archived header, the mender on the spec page, G's send-back/verdict/beside-failing figures, decline-all, merge-row retry, zero-project rail.
