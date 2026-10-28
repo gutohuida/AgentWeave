@@ -1476,6 +1476,9 @@ async def phase_findings(
         # Same-file tasks with no order between them run in parallel and collide (F694): the save
         # result's advisory alone never reached the operator, so proposal and approval say it too.
         *spec_completeness.overlap_warnings(payload),
+        # F1014: tasks that declare no files hide any overlap; a warning, not a note, because the
+        # operator should weigh it before approving, as with the overlap it stands in for.
+        *spec_completeness.undeclared_files_warnings(payload),
         *_steps_skipped(workspace, document),
         *await _amendments_unreviewed(session, document),
         *await _vault_warnings(session, workspace, document),
