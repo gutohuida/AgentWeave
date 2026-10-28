@@ -169,3 +169,43 @@ def test_0154_adds_the_merge_sha_the_seen_tip_and_notices_and_round_trips(tmp_pa
         assert "main_notices" not in tables(conn)
         assert "main_tip_seen" not in columns(conn, "projects")
         assert conn.execute("SELECT id FROM projects").fetchall() == [("proj-old",)]
+
+
+async def test_a_batched_landing_is_the_hubs_own_and_a_hand_commit_still_raises(
+    app, auth_headers, tmp_path, tmp_path_factory, monkeypatch
+):
+    """B2: every integration row a batch writes carries its merge commit, so the watch (restarted,
+    memory empty) raises nothing for the batch and adds nothing to an open notice."""
+    from . import test_approved_work_merges_in_batches as batches
+
+    monkeypatch.setattr(batches.queue(), "BATCH_GATHER_SECONDS", 3600.0)
+    check, _ = batches.counting_check(tmp_path_factory)
+    ids, _ = await batches.tasks_under_review(tmp_path, 2)
+    await batches.set_checks([check])  # with checks, approval lands through the batch queue
+    await project_checks.drain()
+    await project_checks.watch_main_once()
+    hand = _commit(tmp_path, "hand.txt", "Hand work")
+    await project_checks.watch_main_once()
+    (opened,) = await _notices(app, auth_headers)
+    assert [c["subject"] for c in opened["commits"]] == ["Hand work"]
+
+    for task_id in ids:
+        assert (await batches.approve(app, auth_headers, task_id)).status_code == 200
+    await batches.queue().drain()
+    await project_checks.drain()
+    merges = git(tmp_path, "rev-list", "--first-parent", f"{hand}..main").stdout.split()
+    assert len(merges) == 2
+    for task_id in ids:
+        [row] = await batches.merged_rows(task_id)
+        assert row.merged_sha in merges, (task_id, row.merged_sha, merges)
+
+    _restart()
+    await project_checks.watch_main_once()
+    (notice,) = await _notices(app, auth_headers)
+    assert [c["subject"] for c in notice["commits"]] == ["Hand work"], notice["commits"]
+
+    later = _commit(tmp_path, "later.txt", "Later hand work")
+    await project_checks.watch_main_once()
+    (notice,) = await _notices(app, auth_headers)
+    assert [c["subject"] for c in notice["commits"]][0] == "Later hand work"
+    assert notice["new_tip"] == later
