@@ -311,3 +311,6 @@ def drive():
 
 if __name__ == "__main__":
     main()
+
+# Expected on master: fails at step 2 (the agent has no vault edit or archive tool), so steps 3-6
+# never get their precondition. It passes only once FR-2, FR-8 and FR-10 are built.
