@@ -802,7 +802,14 @@ async def test_scope_a_builds_figures_equal_the_whole_tallys_and_load_only_its_r
 
 @pytest.mark.asyncio
 async def test_scope_one_builds_figures_stay_fast_beside_thousands_of_other_runs(app, auth_headers):
-    import time
+    """The scoped read loads that build's runs, not the project's: counted in rows, not timed.
+
+    A 200 ms wall-clock bound passed here and failed on CI's loaded runner at 201-209 ms (runs
+    40600112011, 40606840326); the rows read are what the scoping changes, and they do not vary
+    with the machine. Unscoped, the read loads all 3001 runs and their usage.
+    """
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
 
     rows = [doc("doc-big"), build("b-one", "doc-big"), task("t-one", "doc-big", "b-one")]
     rows += [run("r-one", "dev", 1, 5, "t-one"), usage("r-one", "dev", 1_000_000)]
@@ -816,10 +823,25 @@ async def test_scope_one_builds_figures_stay_fast_beside_thousands_of_other_runs
         rows.append(usage(f"r-big-{i}", "dev", 1_000))
     await seed(*rows)
 
-    started = time.perf_counter()
-    response = await app.get(f"{BASE}/project/builds/b-one/figures", headers=auth_headers)
-    elapsed = time.perf_counter() - started
+    read = {"runs": 0, "turn_usage": 0}
+
+    def count_rows(state):  # noqa: ANN001, ANN202
+        tables = {getattr(f, "name", None) for f in state.statement.get_final_froms()}
+        counted = tables & read.keys()
+        if not state.is_select or not counted:
+            return None
+        frozen = state.invoke_statement().freeze()
+        for table in counted:
+            read[table] += len(frozen().all())
+        return frozen()
+
+    event.listen(Session, "do_orm_execute", count_rows)
+    try:
+        response = await app.get(f"{BASE}/project/builds/b-one/figures", headers=auth_headers)
+    finally:
+        event.remove(Session, "do_orm_execute", count_rows)
 
     assert response.status_code == 200, response.text
     assert response.json()["runs"] == 1 and response.json()["cost"]["build"] == 1.0
-    assert elapsed < 0.2, f"one build's figures took {elapsed * 1000:.0f} ms beside 3000 other runs"
+    assert read["runs"] and read["runs"] < 10, f"read {read['runs']} run rows for a one-run build"
+    assert read["turn_usage"] < 10, f"read {read['turn_usage']} usage rows for a one-run build"

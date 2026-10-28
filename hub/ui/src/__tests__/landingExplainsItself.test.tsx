@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -231,7 +231,9 @@ describe('the wait for checks is visible beside Land', () => {
     screen.getByTestId('task-open-task-1').click()
 
     const wait = await screen.findByTestId('task-land-wait-task-1')
-    expect(wait).toHaveTextContent('Waiting for checks · running 8 minutes of about 14')
+    // Never a made-up age: before the clock's first reading the label says only that it waits.
+    expect(wait.textContent).toMatch(/^Waiting for checks( · running 8 minutes of about 14)?$/)
+    await waitFor(() => expect(wait).toHaveTextContent('Waiting for checks · running 8 minutes of about 14'))
     // Beside Land: the same row of the drawer.
     expect(wait.parentElement).toBe(screen.getByTestId('task-land-task-1').parentElement)
   })

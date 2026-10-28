@@ -40578,7 +40578,7 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 
 ## F1054 (C) -- a flake the task itself introduces lands with the Hub's automatic override
 
-**Status:** open 2026-10-27. Found by the review of slice M (`a-red-main-does-not-hold-the-night`), adversarial run.
+**Status:** won't fix 2026-10-28 -- by design. The operator decided: yes, a flake the task itself introduces still gets the Hub's automatic override (the fix task M files keeps it visible). Found by the review of slice M (`a-red-main-does-not-hold-the-night`), adversarial run.
 **Source:** code
 **Theme:** Checks
 **Ready:** no -- needs a decision on how much evidence of flakiness on main is required

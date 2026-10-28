@@ -196,9 +196,10 @@ export function LandWait({ taskId }: { taskId: string }) {
     )
   }
   if (!wait) return null
-  const running = elapsed ?? 0
   const unit = (seconds: number) => `${minutes(seconds)} ${minutes(seconds) === 1 ? 'minute' : 'minutes'}`
   const previous = wait.previousSeconds
+  // Until the clock has its first reading the run's age is unknown, not "1 minute".
+  const age = elapsed == null ? '' : ` · running ${unit(elapsed)}${previous != null ? ` of about ${minutes(previous)}` : ''}`
   return (
     <span
       data-testid={`task-land-wait-${taskId}`}
@@ -206,8 +207,7 @@ export function LandWait({ taskId }: { taskId: string }) {
       className="text-[11px]"
       style={{ color: 'var(--text-2)' }}
     >
-      Waiting for checks · running {unit(running)}
-      {previous != null ? ` of about ${minutes(previous)}` : ''}
+      Waiting for checks{age}
     </span>
   )
 }

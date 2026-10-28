@@ -82,28 +82,48 @@ async def test_work_sent_back_after_its_batch_was_checked_does_not_land(
 async def test_an_approval_during_a_running_batch_answers_at_once(
     app, auth_headers, tmp_path, tmp_path_factory, monkeypatch
 ):
-    """With checks, an approval made while a batch is checking must answer at once (queued)."""
+    """With checks, an approval made while a batch is checking must answer at once (queued).
+
+    Ordered, not timed: the check holds until the test releases it, so the second approval either
+    returns while the batch is still running or (if it waits for the batch) only after the release
+    that comes after it -- never, so the check's own cap ends it and `finished` is there. A 3 s
+    wall-clock bound measured the approval's own git work under load instead (3.7 s on a loaded
+    local run, 2026-10-28).
+    """
     import asyncio
     import sys
-    import time as _time
 
-    outside = tmp_path_factory.mktemp("slow")
-    script = outside / "slow.py"
-    script.write_text("import time\ntime.sleep(8)\n", encoding="utf-8")
-    check = {"name": "slow", "command": f'"{sys.executable}" "{script}"', "timeout_seconds": 120}
+    outside = tmp_path_factory.mktemp("held")
+    started, release, finished = (outside / n for n in ("started", "release", "finished"))
+    script = outside / "held.py"
+    script.write_text(
+        "import pathlib, sys, time\n"
+        "started, release, finished = map(pathlib.Path, sys.argv[1:4])\n"
+        "started.touch()\n"
+        "deadline = time.monotonic() + 60\n"
+        "while not release.exists() and time.monotonic() < deadline:\n"
+        "    time.sleep(0.05)\n"
+        "finished.touch()\n",
+        encoding="utf-8",
+    )
+    command = f'"{sys.executable}" "{script}" "{started}" "{release}" "{finished}"'
+    check = {"name": "held", "command": command, "timeout_seconds": 120}
     ids, works = await tasks_under_review(tmp_path, 2)
     await set_checks([check])
-    monkeypatch.setattr(landing_queue, "BATCH_GATHER_SECONDS", 1.0)
-    started = _time.monotonic()
-    first = await approve(app, auth_headers, ids[0])
-    print("first approval took", round(_time.monotonic() - started, 2), first.status_code)
-    await asyncio.sleep(2.0)  # the gather window passes; the timer starts the batch
-    started = _time.monotonic()
+    monkeypatch.setattr(landing_queue, "BATCH_GATHER_SECONDS", 0.2)
+    assert (await approve(app, auth_headers, ids[0])).status_code == 200
+    for _ in range(600):  # the gather window passes and the timer starts the batch's check
+        if started.exists():
+            break
+        await asyncio.sleep(0.05)
+    assert started.exists(), "the first approval's batch never started its check"
+
     second = await approve(app, auth_headers, ids[1])
-    took = _time.monotonic() - started
-    print("second approval took", round(took, 2), second.status_code)
+    batch_still_running = not finished.exists()
+    release.touch()
     await landing_queue.drain()
-    assert took < 3.0, f"the approval answered after {took:.1f}s (it waited for the batch)"
+    assert second.status_code == 200, second.text
+    assert batch_still_running, "the approval answered only after the batch's check had ended"
 
 
 @pytest.mark.asyncio
