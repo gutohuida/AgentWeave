@@ -328,9 +328,75 @@ async def test_a_run_that_stores_nothing_keeps_the_facts_and_one_that_stores_rep
     assert [fact["id"] for fact in _facts(folder)] == [first["id"]]
 
     assert (await _distil(app, auth_headers, source["id"])).status_code == 202
-    [replaced] = _facts(folder)
-    assert replaced["claim"] == "Returns within 30 days."
+    kept, replacement = sorted(_facts(folder), key=lambda f: "superseded_at" not in f)
+    assert replacement["claim"] == "Returns within 30 days."
+    assert "superseded_at" not in replacement
+    # The earlier fact is superseded, not deleted: same id, claim and citations.
+    assert kept["id"] == first["id"] and kept["superseded_by"] == source["id"]
+    assert kept["claim"] == first["claim"] and kept["citations"] == first["citations"]
     assert [f["outcome"] for f in await _firings()] == ["written", "empty", "written"]
+
+
+@pytest.mark.asyncio
+async def test_ac_moved_keeps_id(app, auth_headers, worker, tmp_path) -> None:
+    quote = "the refund limit is 437 euros."
+    worker(
+        [("Refunds up to 437 euros need no approval.", [quote])],
+        [("Refunds up to 437 euros need no approval.", [quote])],
+    )
+    await _enable(app, auth_headers, runner_id=await _runner(app, auth_headers))
+    source = await _upload(app, auth_headers)
+    folder = tmp_path / "knowledge" / "facts"
+    [first] = _facts(folder)
+    assert first["citations"][0]["line_start"] == 4
+
+    path = tmp_path / "knowledge" / "sources" / f"{source['id']}.md"
+    path.write_text("Preface.\nMore preface.\n" + TRANSCRIPT, encoding="utf-8")
+    assert (await _distil(app, auth_headers, source["id"])).status_code == 202
+
+    [again] = _facts(folder)
+    assert again["id"] == first["id"]
+    assert "superseded_at" not in again
+    assert (again["citations"][0]["line_start"], again["citations"][0]["line_end"]) == (6, 6)
+
+
+@pytest.mark.asyncio
+async def test_ac_superseded(app, auth_headers, worker, tmp_path) -> None:
+    worker(
+        [
+            ("Refunds up to 437 euros need no approval.", ["the refund limit is 437 euros."]),
+            ("Returns within 30 days.", ["within 30 days of purchase."]),
+        ],
+        [("Returns within 30 days.", ["within 30 days of purchase."])],
+        [("Returns within 30 days.", ["within 30 days of purchase."])],
+    )
+    await _enable(app, auth_headers, runner_id=await _runner(app, auth_headers))
+    source = await _upload(app, auth_headers)
+    folder = tmp_path / "knowledge" / "facts"
+    by_claim = {f["claim"]: f for f in _facts(folder)}
+    a = by_claim["Refunds up to 437 euros need no approval."]
+
+    assert (await _distil(app, auth_headers, source["id"])).status_code == 202
+    after_first = next(f for f in _facts(folder) if f["id"] == a["id"])
+    assert after_first["claim"] == a["claim"] and after_first["citations"] == a["citations"]
+    assert after_first["superseded_by"] == source["id"]
+    stamp = after_first["superseded_at"]
+
+    # Pressing Distil again with no change neither revives nor supersedes A a second time.
+    assert (await _distil(app, auth_headers, source["id"])).status_code == 202
+    again = next(f for f in _facts(folder) if f["id"] == a["id"])
+    assert again["superseded_at"] == stamp
+
+    entries = (await app.get(f"{BASE}/vault/map", headers=auth_headers)).json()["entries"]
+    row = next(e for e in entries if e["id"] == a["id"])
+    assert row["superseded_by"] == source["id"] and row["superseded_at"] == stamp
+
+    from hub import vault as vault_module
+
+    read = vault_module.read_entry(tmp_path, tmp_path / "private", a["id"])
+    assert read is not None and "SUPERSEDED" in read["content"]
+    warnings = vault_module.fact_warnings(tmp_path, tmp_path / "private", [a["id"]])
+    assert not any("no longer in the vault" in w["message"] for w in warnings[a["id"]])
 
 
 # ---------------------------------------------------------------------------

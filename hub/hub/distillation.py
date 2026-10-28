@@ -36,6 +36,7 @@ any spawn (cannot-read). The reading is its own firing, with `step: read`.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import re
 import tempfile
@@ -336,10 +337,23 @@ async def distil(plan: Plan, *, trigger: str) -> int:
             )
             line_offset += piece.count("\n")
         if stored_ids:
-            replaced = sorted(earlier - set(stored_ids))
-            for fact_id in replaced:
+            for fact_id, citations in reusable.moved.items():
                 await asyncio.to_thread(
-                    vault.delete_fact, plan.project_root, plan.private_root, fact_id
+                    vault.relocate_fact, plan.project_root, plan.private_root, fact_id, citations
+                )
+            replaced = sorted(earlier - set(stored_ids))
+            at = vault.now()
+            for fact_id in replaced:
+                # Kept in the vault, not deleted: a requirement may cite it (D6).
+                await asyncio.to_thread(
+                    functools.partial(
+                        vault.supersede_fact,
+                        plan.project_root,
+                        plan.private_root,
+                        fact_id,
+                        by=source_id,
+                        at=at,
+                    )
                 )
             await asyncio.to_thread(
                 vault.delete_open_contradictions_citing,
@@ -543,20 +557,28 @@ class Reusable:
     draft never takes the fact an exactly quoted one would have kept. Each earlier fact is claimed
     at most once, lowest id first, and once claimed is in *kept*."""
 
-    def __init__(self, facts: Dict[str, Tuple[vault.CitationKey, vault.CitationKey]]) -> None:
+    def __init__(
+        self, facts: Dict[str, Tuple[vault.CitationKey, vault.CitationKey, vault.CitationKey]]
+    ) -> None:
         self._facts = dict(sorted(facts.items()))
         self.kept: Set[str] = set()
+        # Facts kept on a third pass, whose quotes moved: their citations, at the new lines.
+        self.moved: Dict[str, List[Dict[str, Any]]] = {}
 
     def claim(
-        self, citations: List[Dict[str, Any]], visibility: str, *, exact: bool
+        self, citations: List[Dict[str, Any]], visibility: str, *, mode: str
     ) -> Optional[str]:
-        """Take the first unclaimed earlier fact whose key matches *citations*; None if none does."""
-        key = (vault.citation_key if exact else vault.span_key)(citations, visibility)
-        index = 0 if exact else 1
+        """Take the first unclaimed earlier fact whose key matches *citations* in *mode*
+        (`exact`, `span` or `quote`); None if none does."""
+        key_of = {"exact": vault.citation_key, "span": vault.span_key, "quote": vault.quote_key}
+        key = key_of[mode](citations, visibility)
+        index = ("exact", "span", "quote").index(mode)
         for fact_id, keys in self._facts.items():
             if keys[index] == key:
                 del self._facts[fact_id]
                 self.kept.add(fact_id)
+                if mode == "quote":
+                    self.moved[fact_id] = citations
                 return fact_id
         return None
 
@@ -599,10 +621,10 @@ async def _distil_piece(
                 cited.append((draft, citations))
         # The exact pass over every draft first, then the same-lines pass over what is left.
         claimed: Dict[int, str] = {}
-        for exact in (True, False):
+        for mode in ("exact", "span", "quote"):
             for at, (_, citations) in enumerate(cited):
                 if at not in claimed:
-                    earlier = reusable.claim(citations, source["visibility"], exact=exact)
+                    earlier = reusable.claim(citations, source["visibility"], mode=mode)
                     if earlier is not None:
                         claimed[at] = earlier
         for at, (draft, citations) in enumerate(cited):
