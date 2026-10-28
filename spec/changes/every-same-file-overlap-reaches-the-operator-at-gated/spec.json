@@ -1,0 +1,173 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the pairs ('lib.py','./lib.py'), ('pkg/lib.py','pkg//lib.py'), ('.','lib.py') and ('pkg/lib.py','pkg/../pkg/lib.py')",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_spec_task_files.py -v",
+      "key": "spellings-overlap",
+      "requirement": "every-spelling-overlaps",
+      "then": "each returns the shared path; on master 0ff5d74 each returns None",
+      "when": "paths_overlap is asked about each pair"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a payload whose task declares files ['../x.py']",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_spec_task_files.py -v",
+      "key": "climbing-path-refused",
+      "requirement": "every-spelling-overlaps",
+      "then": "it is refused with a PayloadError naming the task and tasks[0].files[0]; on master it is accepted",
+      "when": "it is validated"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with two tasks that declare no files, at the build step",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_approval_warnings_routes.py -v",
+      "key": "check-and-approve-name-them",
+      "requirement": "undeclared-files-reach-the-operator",
+      "then": "the check answer and the approval 409 (warnings or notes) both carry undeclared_task_files naming both tasks; on master neither does",
+      "when": "the operator presses Check and then Approve"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two unordered_file_overlap gaps, 't1'/'t2' on 'lib.py' and 't3'/'t4' on 'util.py'",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/specApprovalWarnings.test.tsx",
+      "key": "two-pairs-on-screen",
+      "requirement": "every-pair-is-named",
+      "then": "both 'lib.py' and 'util.py' appear on screen; on master only 'lib.py' does",
+      "when": "the approval gap list renders them"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a document with two same-file pairs and a task with no files, in the app",
+      "how_to_check": "Operator, on the spec page of a scratch document: press Approve and read the gap list.",
+      "key": "operator-sees-both-pairs",
+      "requirement": "every-pair-is-named",
+      "then": "the gap list names both pairs and the task with no files",
+      "when": "the operator presses Approve on the spec page"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "2c51fdc9007e0d505235538a67df09b0a637a41e6c5ecaa6d1adbec63bfaaf5e",
+      "FR-2": "c1782ce0268cc5f749ec16e4405d52d7528cf8cd796b2a786096259dd9befdd0",
+      "FR-3": "acf148eac873286eab2ea4b561270322c06d141a5b55dd3f4e95c84d60b37475"
+    },
+    "high_water": 3,
+    "requirements": {
+      "every-pair-is-named": "FR-3",
+      "every-spelling-overlaps": "FR-1",
+      "undeclared-files-reach-the-operator": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1. One change for three findings because they share the seam (the planner's same-file warning reaching the operator) and together edit hub/hub and hub/ui, which slice H needs to exercise the UI check, the reviewer and the merge queue. D2. Normalise, don't validate spellings away: an author may legitimately write './lib.py'; the Hub folds it rather than refusing it. Only a path that leaves the repository is refused, because it can never be a file of this repository. D3. undeclared_task_files at approval: the builder decides note or warning; a note keeps every file-less multi-task document from needing Approve anyway, a warning makes the operator acknowledge it. Either way it is on the operator's screen, which is the requirement. D4. GapLines keeps grouping for codes whose difference is in the place, and lists messages for codes whose difference is in the message. D5. Each task carries its own failing test and the fix (the Hub's test_only_task rule): a test-only first task would fail the project checks at its own approval and, with checks before review, be sent back. The repro tests were run red on master 0ff5d74 on 2026-10-28 before this document was written, which is what the acceptance-drive-first rule asks; the no_acceptance_drive gap is approved over for that reason.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "The Hub orders tasks that edit the same file so they are not built in parallel and collide. Its warning compares declared paths as raw strings, so './lib.py', 'pkg//lib.py', 'pkg/../pkg/lib.py' and '.' slip past it, and '../outside.py' is accepted as repo-relative (spec_completeness.py:418-429, spec_payload.py near :665). Tasks with no files at all are named only in the save result, which the app never reads, so the operator approves tasks the Hub cannot order (spec_service.py:1478 adds overlap_warnings to the phase findings but not undeclared_files_warnings). And when there are two same-file pairs, the approval gap list prints the first pair's message only (SpecPhaseParts.tsx:21-32, GapLines prints group[0].message), because every overlap finding has where='tasks'. Each was reproduced on master 0ff5d74 on 2026-10-28.",
+  "requirements": [
+    {
+      "key": "every-spelling-overlaps",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1013: the same-file warning compared raw strings, so tasks that edit one file under two spellings were built in parallel with no warning.",
+      "statement": "Two declared task paths that name the same file or directory once normalised (backslashes, './', doubled slashes, '..' segments, '.' as the repository root, and letter case where the checkout's filesystem ignores it) MUST be reported as overlapping, and a declared path that normalises outside the repository MUST be refused as invalid, naming the task and the path."
+    },
+    {
+      "key": "undeclared-files-reach-the-operator",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1014: the warning lived only in the save result, which the app never reads, so the operator approved tasks the Hub could not order. F694 fixed its sibling unordered_file_overlap the same way.",
+      "statement": "When a document's tasks include one that declares no files, check (propose) and approval MUST report undeclared_task_files naming those tasks, on the operator's screen, as the save already does for the agent."
+    },
+    {
+      "key": "every-pair-is-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1015: two same-file pairs read as one line naming only the first pair; the operator could not learn of the second from the screen.",
+      "statement": "The approval gap list, and the 'Approved over these gaps' list after approval, MUST show every finding's message when findings of one code differ in their message, so each same-file pair is named."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Normalising declared task paths before comparing them: './', doubled slashes, '..' segments, '.' as the root that covers every path, and case on a case-insensitive checkout",
+      "Refusing a declared path that normalises outside the repository, like an absolute one, naming the task and the path",
+      "Check (propose) and approval reporting undeclared_task_files, as a note or warning, so it reaches the operator's screen",
+      "The approval gap list and the 'Approved over these gaps' list naming every finding of a code whose findings differ only in their message"
+    ],
+    "non_goals": [
+      "Ordering tasks automatically: the warning still asks the author to chain them with depends_on",
+      "Changing which codes need Approve anyway, beyond deciding whether undeclared_task_files is a note or a warning",
+      "Any other gap code's rendering"
+    ]
+  },
+  "summary": "The twin of spec/changes/every-same-file-overlap-reaches-the-operator for slice H's Gated build: the same requirements, criteria and tasks, so the Gated build gets fresh tasks (a build covers only a document's open tasks, F1058). Three open findings about tasks that edit the same file, fixed together: every spelling of one path draws the same-file warning and a path climbing out of the repository is refused (F1013); tasks that declare no files are named at check and approval, not only to the agent that saved them (F1014); and the approval gap list names every same-file pair instead of the first (F1015). It is also slice H's measured candidate: built twice, at Fast and at Gated, to compare the levels.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Test first, in the same task: add to hub/tests/test_spec_task_files.py that paths_overlap returns the shared path for ('lib.py','./lib.py'), ('pkg/lib.py','pkg//lib.py'), ('.','lib.py') and ('pkg/lib.py','pkg/../pkg/lib.py'), and that a payload with files ['../x.py'] raises PayloadError naming the task and tasks[0].files[0]; see them fail on the base commit and record the failure in the evidence. Then in hub/hub/spec_completeness.py make _normalise_path fold backslashes, './', doubled slashes and '..' with posixpath.normpath, treat '.' as the root that covers every path, and case-fold when the workspace's filesystem is case-insensitive; and in hub/hub/spec_payload.py refuse a declared path that normalises outside the repository, with the same field and message shape as the absolute-path refusal.",
+      "files": [
+        "hub/hub/spec_completeness.py",
+        "hub/hub/spec_payload.py",
+        "hub/tests/test_spec_task_files.py"
+      ],
+      "from": null,
+      "key": "every-spelling-overlaps",
+      "requirements": [
+        "every-spelling-overlaps"
+      ],
+      "reviewer": null,
+      "title": "Every spelling of one path overlaps, and a climbing path is refused (F1013)"
+    },
+    {
+      "depends_on": [],
+      "description": "Test first, in the same task: add to hub/tests/test_approval_warnings_routes.py a document whose two tasks declare no files, placed at the build step; its check answer and its approval 409 must carry undeclared_task_files (in warnings or notes) naming both tasks. See it fail on the base commit and record the failure. Then in hub/hub/spec_service.py add spec_completeness.undeclared_files_warnings(payload) to the phase findings beside overlap_warnings; decide whether it is a note (NOTE_CODES) or a warning, say which in the commit, and keep every existing approval-warnings test green.",
+      "files": [
+        "hub/hub/spec_service.py",
+        "hub/tests/test_approval_warnings_routes.py"
+      ],
+      "from": null,
+      "key": "undeclared-files-at-approval",
+      "requirements": [
+        "undeclared-files-reach-the-operator"
+      ],
+      "reviewer": null,
+      "title": "Check and approval name tasks that declare no files (F1014)"
+    },
+    {
+      "depends_on": [],
+      "description": "Test first, in the same task: add to hub/ui/src/__tests__/specApprovalWarnings.test.tsx that GapLines given two unordered_file_overlap gaps (lib.py and util.py, both where='tasks') shows both paths; see it fail on the base commit and record the failure. Then in hub/ui/src/components/spec/SpecPhaseParts.tsx make GapLines show each finding's message when a code's findings differ in message (keep the grouped line with up to three places when the messages are the same, as for criterion_without_check). The same component renders 'Approved over these gaps'. Keep the other spec-page tests green.",
+      "files": [
+        "hub/ui/src/components/spec/SpecPhaseParts.tsx",
+        "hub/ui/src/__tests__/specApprovalWarnings.test.tsx"
+      ],
+      "from": null,
+      "key": "every-pair-on-screen",
+      "requirements": [
+        "every-pair-is-named"
+      ],
+      "reviewer": null,
+      "title": "The gap list names every finding whose message differs (F1015)"
+    }
+  ],
+  "title": "Every same-file overlap reaches the operator (Gated build)"
+}

@@ -73,6 +73,8 @@ ROWS = [
     (("expired",), None, "N: mender questions that expired unanswered"),
 ]
 CLASSES = ("defect", "not the task", "hub")
+#: The Gated build's twin of the candidate (F1058); set from --gated-document.
+GATED_DOCUMENT: Optional[str] = None
 
 _results: List[Tuple[str, bool, str]] = []
 
@@ -209,6 +211,14 @@ def load_two(hub: Hub, path: str, name: str) -> Optional[Tuple[dict, dict, dict]
             f"cannot read the document {path} from the app ({why}); no build of it can exist",
         )
         return None
+    if GATED_DOCUMENT and GATED_DOCUMENT != path:
+        # A document's build covers only its open tasks, so the Gated build runs on a twin of the
+        # candidate with the same payload and fresh tasks (F1058); its builds join the Fast ones.
+        twin, why = document_page(hub, GATED_DOCUMENT)
+        if twin is None:
+            report(name, False, f"cannot read the Gated twin {GATED_DOCUMENT} from the app ({why})")
+            return None
+        page = {**page, "builds": [*page.get("builds", []), *twin.get("builds", [])]}
     levels = by_level(page)
     fast, gated = levels.get("fast", []), levels.get("gated", [])
     if len(fast) != 1 or len(gated) != 1 or len(finished_builds(page)) != 2:
@@ -732,10 +742,15 @@ def main() -> int:
     ap.add_argument("--hub", default=os.environ.get("AW_HUB", "http://127.0.0.1:8000"))
     ap.add_argument("--project", default=os.environ.get("AW_PROJECT", DEFAULT_PROJECT))
     ap.add_argument("--document", default=DEFAULT_DOCUMENT)
+    ap.add_argument(
+        "--gated-document", default=DEFAULT_DOCUMENT.replace("/spec.json", "-at-gated/spec.json")
+    )
     modes = ["candidate", "windows", "budget", "note", "defects", "re-recording", "vault"]
     for m in modes:
         ap.add_argument(f"--{m}", action="store_true")
     args = ap.parse_args()
+    global GATED_DOCUMENT
+    GATED_DOCUMENT = args.gated_document
     hub = Hub(args.hub, args.project)
     chosen = [m for m in modes if getattr(args, m.replace("-", "_"))] or ["builds-match"]
     table = {

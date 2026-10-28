@@ -40615,3 +40615,13 @@ Slice H requires each build to land its approved work on its own branch cut from
 **Tier:** 1
 
 H's FR-2/FR-3/FR-10 read from the app's views. What no route answers today (the drive falls back to approximations, marked "from a query"): (1) a build's base commit -- `builds.view` has no field; (2) its landing branch and tip (only `main`/`nowhere`, F1056); (3) the runs and their models per build -- no route ties a run or turn to a build, and `/accounting` `recent_turns` is a capped project-wide list; (4) the runs in a time window (no list-runs route); (5) real defects, escaped defects and operator actions per build; (6) FR-7's approval hours held by a failure not the task's, the mender's model, mender wakes with no stalled work and expired mender questions; (7) a "judged again" flag on held evidence; (8) wall time and cost per task (`spend.by_task` is cost only). Also: for flows that predate builds the project view's `wall` is 0 in every part (both H baselines, `GET /stats` groups.spec rows for loop-df5f74816122 and loop-cee87801ae6a), so the baselines' wall-time split comes only from queries. Seam: Accounting x builds x the spec page's build panel.
+
+## F1058 (C) -- a document can be built once: a second build covers only its open tasks, so after one build approves them the next has nothing to build, and a re-run needs a copy of the document
+
+**Status:** open 2026-10-28. Found preparing slice H, whose FR-2 builds one candidate document twice (Fast, then Gated).
+**Source:** code
+**Theme:** Spec documents
+**Ready:** no -- design gap: H assumes a re-build; D defines a build over the document's open tasks
+**Tier:** 1
+
+`POST /documents/build` covers the document's tasks whose status is not terminal (`hub/hub/api/v1/spec.py:3479-3494`, then `builds.cover_tasks`); a build whose every task is approved or rejected has finished (`builds.finish_if_done`). After the Fast build approves the candidate's three tasks, a Gated build of the same document would cover none. H's Gated build therefore runs on a twin document with the same payload (`spec/changes/every-same-file-overlap-reaches-the-operator-at-gated`, spdoc on :8000), and `measured_rerun_check.py --gated-document` reads its builds beside the Fast one's. **Expected (if re-building is wanted):** a build may re-run a document from its base commit with fresh tasks, its earlier tasks kept as the earlier build's record. Seam: Spec documents x builds.
