@@ -63,7 +63,7 @@ PROBLEMS = (
     "problem blocks the release.\n"
     f"{OPEN}\n{F2}\n"
 )
-OLD_NOTES = "The old office was on Rua Augusta. It closed in 2024 and the team moved.\n"
+OLD_NOTES = "Releases are cut every Friday. A release needs two approvals before it ships.\n"
 EDIT_TURN = (
     "Two chores in the project's knowledge vault. First, the source named 'Problems' lists "
     "F-1 as open; it has been fixed, so change that line in the vault so that it reads "
