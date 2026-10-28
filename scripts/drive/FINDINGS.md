@@ -40585,3 +40585,33 @@ All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's 
 **Tier:** 1
 
 Slice M treats a failed test id that passes when rerun on its own as a flake, lands the approval with the Hub's recorded override, and files a fix task, without asking main (its FR-2). The reviewer changed `lib.py` (not a test file, so the touched-file rule does not fire) so that `test_lib.py::test_ok` failed once and then passed on the serial rerun: approval returned 200 with "passed when rerun on its own" and a fix task blamed the flake. A flake the task introduced through code it changed is the task's own defect. **Options:** require the id to have flaked before on main (the flaky-test records already kept, `flaky_tests.py`), or rerun the id on main's tree as well and count it a flake only when it is unstable there too; or treat a flake as the task's own when any file the task changed is imported by the test (costlier to compute). Not fixed in M: the operator decides.
+
+## F1055 (C) -- the Hub's acceptance-drive rule and its test-only-task rule cannot both be met: `no_acceptance_drive` asks for a first task every other task waits on, and `test_only_task` says that task fails the project's checks at its own approval
+
+**Status:** open 2026-10-28. Found authoring slice H's candidate (`every-same-file-overlap-reaches-the-operator`, spdoc-19cff1fe73b3) on :8000.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** no -- needs a decision on which shape the Hub recommends
+**Tier:** 1
+
+A first task holding only the three repro tests, with the two fix tasks depending on it, saved with `test_only_task` ("edits only tests and ... depends on it, so it is red until they land and fails the project's checks at approval; put the failing test and the fix that turns it green in one task", `spec_completeness.py:520-546`). Folding each test into its fix task, as that warning asks, then drew `no_acceptance_drive` at approval ("the first task ... is not an acceptance drive every other task waits on", `spec_completeness.py:~395-415`). Every Tier 1/2 document written to CLAUDE.md's "acceptance drive first" rule hits one or the other, and with slice L's checks-before-review the first shape is sent back by the checks. **Options:** count a task whose description and files put its test first as the drive (drop `no_acceptance_drive` when every task carries a test path), or exempt a drive task from the approval checks until its dependents land. Seam: Spec documents x Worktrees & integration (checks at approval).
+
+## F1056 (B) -- a build can land only on `main` or `nowhere`, and on a project whose checkout the Hub runs from, landing anywhere but `master` means switching that checkout's branch
+
+**Status:** open 2026-10-28. Found preparing slice H (`the-measured-re-run`, FR-4 `lands-off-master`) on :8000.
+**Source:** code
+**Theme:** Worktrees & integration
+**Ready:** no -- design gap between slice D (D8: "A named branch is not offered") and slice H (FR-4)
+**Tier:** 1
+
+Slice H requires each build to land its approved work on its own branch cut from the base commit. `builds.LANDINGS` is `("main", "nowhere")` (`hub/hub/builds.py:47-49`), and integration merges into the project's own checkout and refuses unless that checkout is on the target branch (`task_integration.py:75-79`, `checkout_obstacle` :760). So the only way to land a build off `master` is to point the project's main branch elsewhere and switch the checkout -- which for this repository is the checkout :8000 serves its code and UI bundle from. H therefore runs with `landing: nowhere` and assembles each build's branch afterwards from the task branches, which skips slice E's merge queue. **Expected:** a build may name a landing branch, created from its base commit and merged into in a worktree of its own, never in the project's checkout. Seam: Worktrees & integration x builds.
+
+## F1057 (C) -- the build record and the project view lack the figures a measured comparison needs: no base commit, no landing branch, no runs or models per build, no list of runs in a window, no per-task wall time
+
+**Status:** open 2026-10-28. Found writing slice H's acceptance drive (`scripts/drive/measured_rerun_check.py`) against :8000.
+**Source:** code
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 1
+
+H's FR-2/FR-3/FR-10 read from the app's views. What no route answers today (the drive falls back to approximations, marked "from a query"): (1) a build's base commit -- `builds.view` has no field; (2) its landing branch and tip (only `main`/`nowhere`, F1056); (3) the runs and their models per build -- no route ties a run or turn to a build, and `/accounting` `recent_turns` is a capped project-wide list; (4) the runs in a time window (no list-runs route); (5) real defects, escaped defects and operator actions per build; (6) FR-7's approval hours held by a failure not the task's, the mender's model, mender wakes with no stalled work and expired mender questions; (7) a "judged again" flag on held evidence; (8) wall time and cost per task (`spend.by_task` is cost only). Also: for flows that predate builds the project view's `wall` is 0 in every part (both H baselines, `GET /stats` groups.spec rows for loop-df5f74816122 and loop-cee87801ae6a), so the baselines' wall-time split comes only from queries. Seam: Accounting x builds x the spec page's build panel.
