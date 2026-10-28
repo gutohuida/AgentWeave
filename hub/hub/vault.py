@@ -542,6 +542,10 @@ class _Record:
         )
         return None if raw is None else hashlib.sha256(raw).hexdigest()
 
+    @property
+    def archived(self) -> bool:
+        return isinstance(self.meta.get("archived_at"), str)
+
     def stale(self) -> bool:
         """Whether the source changed after its facts were drawn: its version is not the one a
         distillation last recorded (D4). A source never changed since this was kept is not stale."""
@@ -566,6 +570,8 @@ class _Record:
             # The agent whose run added it by path (`agents-add-files-to-the-vault-by-path`);
             # None for the operator's own uploads and every source written before it.
             "added_by": meta.get("added_by"),
+            "archived": self.archived,
+            "archived_at": meta.get("archived_at"),
             "available": text is not None,
             "opening": None if text is None else _opening(text),
         }
@@ -580,8 +586,18 @@ class _Fact:
     def claim(self) -> Optional[str]:
         return self.meta.get("claim")
 
+    def archived(self, records: Dict[str, "_Record"]) -> bool:
+        """Whether every source it cites is archived (D7); a fact citing a source that is not
+        archived, or not known, is not."""
+        sources = self.meta["sources"]
+        return bool(sources) and all(s in records and records[s].archived for s in sources)
+
     def listed(
-        self, flags: Optional[Dict[str, Any]] = None, *, stale: bool = False
+        self,
+        flags: Optional[Dict[str, Any]] = None,
+        *,
+        stale: bool = False,
+        archived: bool = False,
     ) -> Dict[str, Any]:
         """As the map lists it, with *flags* (disputed, presumed, superseded_by) derived from the
         contradictions that cite it. *stale*: a source of it changed after it was drawn."""
@@ -598,6 +614,7 @@ class _Fact:
             "kind": "fact",
             "name": claim[:MAX_NAME_CHARS] if claim else "A private fact",
             "type": "fact",
+            "archived": archived,
             "visibility": meta["visibility"],
             "created_at": meta["created_at"],
             "holder": meta.get("holder"),
@@ -681,7 +698,7 @@ def dated_facts(
     )
     listed = []
     for fact in _facts(project_root, private_root).values():
-        if fact.claim is None or fact.meta["id"] in superseded:
+        if fact.claim is None or fact.meta["id"] in superseded or fact.archived(records):
             continue
         order = _fact_order(fact, records)
         listed.append(
@@ -708,14 +725,18 @@ def _newest_first(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def build_map(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
     """Every source, newest first, each followed by the facts that cite it, newest first. A fact
-    whose sources are all absent is listed at the end. Facts carry their derived flags."""
+    whose sources are all absent is listed at the end. Facts carry their derived flags. An archived
+    source, and a fact whose cited sources are all archived, are left out (D7)."""
     records = _records(project_root, private_root)
-    sources = _newest_first([record.listed(record.text()) for record in records.values()])
+    sources = _newest_first(
+        [record.listed(record.text()) for record in records.values() if not record.archived]
+    )
     flags = _all_flags(project_root, private_root)
     facts = _newest_first(
         [
             fact.listed(flags.get(fact_id), stale=_is_stale(fact, records))
             for fact_id, fact in _facts(project_root, private_root).items()
+            if not fact.archived(records)
         ]
     )
     known = {source["id"] for source in sources}
@@ -798,8 +819,9 @@ def _read_fact(project_root: Path, private_root: Path, fact_id: str) -> Optional
     contradictions = _contradictions(project_root, private_root)
     reports = _reports(project_root, private_root)
     flags = _all_flags(project_root, private_root, contradictions, reports)
+    records = _records(project_root, private_root)
     entry = fact.listed(
-        flags.get(fact_id), stale=_is_stale(fact, _records(project_root, private_root))
+        flags.get(fact_id), stale=_is_stale(fact, records), archived=fact.archived(records)
     )
     if fact.claim is None:
         entry.update(content=None, next_offset=None, note=_held_elsewhere(entry["holder"]))
@@ -820,6 +842,8 @@ def _read_fact(project_root: Path, private_root: Path, fact_id: str) -> Optional
             "STALE: its source changed after this fact was drawn, and the source has not been "
             "distilled since. The claim may no longer be true; check the source itself.",
         )
+    if entry["archived"]:
+        disputes.insert(0, _ARCHIVED_FACT)
     if disputes:
         content += "\n" + "\n".join(disputes) + "\n"
     entry.update(
@@ -859,8 +883,21 @@ def read_entry(
     note = (
         None if kind is None else f"This text was transcribed from the {kind[1]} '{entry['name']}'."
     )
-    entry.update(content=text[offset:end], next_offset=end if end < len(text) else None, note=note)
+    page = text[offset:end]
+    if record.archived:
+        page = _ARCHIVED_SOURCE + "\n\n" + page if offset == 0 else page
+    entry.update(content=page, next_offset=end if end < len(text) else None, note=note)
     return entry
+
+
+_ARCHIVED_SOURCE = (
+    "ARCHIVED: this source is archived. It is not listed in the vault map or counted, and its "
+    "facts are not compared by the checks, until it is restored."
+)
+_ARCHIVED_FACT = (
+    "ARCHIVED: every source this fact cites is archived. It is not listed in the vault map or "
+    "compared by the checks until one of them is restored."
+)
 
 
 def _not_read_yet(word: str) -> str:
@@ -1331,6 +1368,56 @@ def replace_file(
                 storage.write(tracked, f"{SOURCES}/{source}.json", _encode(stub))
         record_change(project_root, record, "replace", actor)
         return record.listed(None)
+
+
+def _set_archived(
+    project_root: Path, private_root: Path, source_id: str, *, archive: bool, actor: Actor
+) -> Dict[str, Any]:
+    """Archive or restore a source, recorded as a change. Archived state lives in the record and,
+    for a private source, in its stub too (D1, D7). 409 when it is already in that state."""
+    with _write_lock(project_root, source_id):
+        record = _held_record(project_root, private_root, source_id)
+        if record.archived == archive:
+            raise VaultError(
+                f"This source is already {'archived' if archive else 'not archived'}.", status=409
+            )
+        stamp = _now() if archive else None
+        assert record.text_root is not None
+        if archive:
+            record.meta["archived_at"] = stamp
+        else:
+            record.meta.pop("archived_at", None)
+        storage.write(record.text_root, f"{SOURCES}/{source_id}.json", _encode(record.meta))
+        tracked = tracked_root(project_root)
+        if record.text_root != tracked:
+            stub = _load(storage.read(tracked, f"{SOURCES}/{source_id}.json"), source_id)
+            if stub is not None:
+                if archive:
+                    stub["archived_at"] = stamp
+                else:
+                    stub.pop("archived_at", None)
+                storage.write(tracked, f"{SOURCES}/{source_id}.json", _encode(stub))
+        record_change(project_root, record, "archive" if archive else "restore", actor)
+        return record.listed(record.text())
+
+
+def archive_source(
+    project_root: Path, private_root: Path, source_id: str, *, actor: Actor
+) -> Dict[str, Any]:
+    return _set_archived(project_root, private_root, source_id, archive=True, actor=actor)
+
+
+def restore_source(
+    project_root: Path, private_root: Path, source_id: str, *, actor: Actor
+) -> Dict[str, Any]:
+    return _set_archived(project_root, private_root, source_id, archive=False, actor=actor)
+
+
+def list_archived(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
+    """The archived sources, newest first, for the Vault tab; they are not in the map."""
+    return _newest_first(
+        [r.listed(r.text()) for r in _records(project_root, private_root).values() if r.archived]
+    )
 
 
 def clear_transcription(project_root: Path, private_root: Path, source_id: str) -> None:
