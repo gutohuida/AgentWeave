@@ -24,6 +24,7 @@ failure, so a red run spends only the distillations and the one agent turn. Run 
     py -3.11 scripts/drive/d1028_vault_sources_change.py
 """
 
+import datetime
 import json
 import os
 import pathlib
@@ -131,7 +132,13 @@ def poll(fn, secs=15.0, every=0.5):
 
 def start_hub():
     TMP.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
+    # The drive may itself run inside an agent turn on the operator's Hub: its HUB_URL, run
+    # credential and tool-server bin would be inherited by the scratch agent's runs, which
+    # would then send their tool calls to :8000. Hand the scratch Hub none of them.
+    env = {k: v for k, v in os.environ.items() if k != "HUB_URL" and not k.startswith("AW_")}
+    env["PATH"] = os.pathsep.join(
+        p for p in env.get("PATH", "").split(os.pathsep) if "tool-server" not in p.replace("\\", "/")
+    )
     env["DATABASE_URL"] = f"sqlite+aiosqlite:///{DB.as_posix()}"
     env["AW_BOOTSTRAP_API_KEY"] = KEY
     log = open(TMP / "hub.log", "w", encoding="utf-8")  # noqa: SIM115 -- the child's stdout
@@ -190,7 +197,7 @@ def turn(base, message):
     ended = poll(lambda: ro("select status from runs where id=?", (run_id,))[0][0]
                  not in ("running", "queued", "starting"), TURN_WAIT)
     check("the turn ends", ended, run_id)
-    outputs = ro("select kind, content, payload from agent_outputs where run_id=? "
+    outputs = ro("select kind, content, payload, timestamp from agent_outputs where run_id=? "
                  "order by sequence, timestamp", (run_id,))
     return run_id, outputs
 
@@ -243,9 +250,17 @@ def drive():
     # 2: the agent's turn changes the vault.
     run_id, outputs = turn(base, EDIT_TURN)
     (TMP / "outputs.json").write_text(json.dumps(outputs, indent=2, default=str), encoding="utf-8")
-    tools = [f"{content}{payload}" for kind, content, payload in outputs if kind == "tool_use"]
-    results_text = [f"{content}{payload}" for kind, content, payload in outputs if kind == "tool_result"]
-    ours = [t for t in tools if pr in t and "vault_read" not in t and "vault_map" not in t]
+    tools = [f"{content}{payload}" for kind, content, payload, _t in outputs if kind == "tool_use"]
+    results_text = [f"{content}{payload}" for kind, content, payload, _t in outputs if kind == "tool_result"]
+    mapped = [r for t, r in zip(tools, results_text) if "vault_map" in t]
+    check("2-0 the agent's own vault_map call reached the scratch Hub and was answered, not rejected",
+          mapped and any('\\"ok\\": true' in r or '"ok": true' in r for r in mapped)
+          and not any("Invalid or inactive run credential" in r or '"status": 401' in r
+                             or '"status":401' in r for r in mapped),
+          f"vault_map results={[r[:160] for r in results_text][:3]} tools={[t[:80] for t in tools][:3]}")
+    # Only a vault tool call counts: a Write of a scratch file naming the source is not an edit.
+    ours = [t for t in tools if pr in t and not t.startswith(("Called Write", "Called Edit"))
+            and "vault_read" not in t and "vault_map" not in t]
     errored = [r for r in results_text if re.search(r'"?(status|code)"?\W{0,3}(4\d\d|5\d\d)', r)]
     check("2a the agent made a vault tool call on 'Problems' beyond reading it, and none was refused",
           ours and not errored, f"calls={[t[:160] for t in ours]} errors={[r[:160] for r in errored]}")
@@ -260,8 +275,22 @@ def drive():
 
     # 3: a background distillation fires on its own after the edit.
     fired = poll(lambda: len(firings(base, pr)) > fired_before, DISTIL_WAIT, every=3)
-    check("3 a distillation of 'Problems' fired after the edit without anyone pressing Distil",
+    check("3a a distillation of 'Problems' fired after the edit without anyone pressing Distil",
           fired, f"before={fired_before} now={len(firings(base, pr))}")
+    # A firing is logged when it ends. The edit "did not wait for it" if the edit's own tool result
+    # came back before that firing ended: a synchronous edit that distilled inline would end after.
+    first_edit = next((i for i, o in enumerate(outputs)
+                       if o[0] == "tool_use" and pr in f"{o[1]}{o[2]}"
+                       and "vault_read" not in f"{o[1]}{o[2]}" and "vault_map" not in f"{o[1]}{o[2]}"), None)
+    edit_back = next((o[3] for o in outputs[(first_edit or 0):] if o[0] == "tool_result"), None)
+
+    def when(value):
+        return datetime.datetime.fromisoformat(str(value).replace("Z", "")).replace(tzinfo=None)
+
+    newest = firings(base, pr)[:1]
+    check("3b the edit's tool result came back before that distillation finished",
+          edit_back and newest and when(edit_back) < when(newest[0]["at"]),
+          f"edit result at {edit_back}, firing ended at {newest[0]['at'] if newest else None}")
 
     # 4: the operator presses Distil again.
     settled = len(firings(base, pr))
@@ -283,8 +312,9 @@ def drive():
     check("4c the earlier 'F-1 open' fact is listed with superseded_by the source and superseded_at set",
           old_open and old_open.get("superseded_by") == pr and old_open.get("superseded_at"),
           f"{old_open}")
-    check("4d its vault_read says it was superseded",
-          code == 200 and "superseded" in json.dumps(read_open).lower(), f"{code} {str(read_open)[:300]}")
+    read_text = (read_open.get("content") or "") if isinstance(read_open, dict) else ""
+    check("4d its vault_read content says it was superseded",
+          code == 200 and "superseded" in read_text.lower(), f"{code} content={read_text[:300]!r}")
     f2_now = next((e for e in after if e.get("id") == f2_fact["id"]), None)
     check("4e the F-2 fact keeps its id and is not superseded",
           f2_now and not f2_now.get("superseded_at"), f"{f2_now}")
@@ -302,7 +332,7 @@ def drive():
     # 6: the next turn's vault line counts what the map holds now.
     expected = len(after)
     _, line_outputs = turn(base, LINE_TURN)
-    said = " ".join(c or "" for kind, c, _p in line_outputs if kind not in ("tool_use", "tool_result"))
+    said = " ".join(c or "" for kind, c, _p, _t in line_outputs if kind not in ("tool_use", "tool_result"))
     counted = re.search(r"knowledge vault with (\d+) entr", said)
     check("6 the next turn's vault line counts one source and its facts fewer than before",
           counted and int(counted.group(1)) == expected < len(before),
