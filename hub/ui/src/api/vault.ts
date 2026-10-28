@@ -268,6 +268,38 @@ export function useUploadVaultFile() {
   })
 }
 
+/** Change a text source's whole text, naming the version it was read at (`PUT /vault/sources/{id}/text`). */
+export function useEditVaultSource() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: ({ sourceId, content, version }: { sourceId: string; content: string; version: string }) =>
+      putJson<VaultEntry>(`/api/v1/projects/${projectId}/vault/sources/${sourceId}/text`, { content, version }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault'] })
+    },
+  })
+}
+
+/** Replace a PDF or image source's file; the bytes are the body (`PUT /vault/sources/{id}/file`). */
+export function useReplaceVaultFile() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: async ({ sourceId, file, mediaType }: { sourceId: string; file: File; mediaType: string }) => {
+      const res = await fetchWithAuth(`/api/v1/projects/${projectId}/vault/sources/${sourceId}/file`, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': mediaType },
+      })
+      return (await res.json()) as VaultEntry
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault'] })
+    },
+  })
+}
+
 /** A file source's bytes as an object URL the page can show, fetched with the key because the Hub
  *  authenticates by header and a bare `src` cannot. A 404 is a Hub older than the bundle or a file
  *  that is gone: no URL and no error. A 409 is a private file held on another machine, which the

@@ -254,6 +254,106 @@ async def upload_vault_file(
     return _distil_after_upload(background, project_id, entry)
 
 
+class TextEdit(BaseModel):
+    """The operator's edit: the whole new text, and the version of the text it was made from."""
+
+    content: str
+    version: str = Field(max_length=128)
+
+    model_config = {"extra": "forbid"}
+
+
+async def after_change(
+    project_id: str, root: Path, private: Path, entry: Dict[str, Any], *, reads_files: bool
+) -> Dict[str, Any]:
+    """What a change answers: the source, its new version, and what becomes of its facts. With the
+    distillation job on, the source is distilled again in the background and the answer waits for
+    no model; otherwise the facts are stale, and the answer says what to enable (FR-7, FR-9)."""
+    source_id = entry["id"]
+    answer = {
+        **entry,
+        "version": await asyncio.to_thread(vault.source_version, root, private, source_id),
+    }
+    if entry.get("type") == vault.DECISION:
+        return {**answer, "stale": False, "note": distillation.DECISION_NOT_DISTILLED}
+    facts = await asyncio.to_thread(vault.facts_citing, root, private, source_id)
+    reason = await distillation.stale_reason(project_id, reads_files=reads_files)
+    if reason is None:
+        distillation.request_redistil(project_id, source_id)
+        return {
+            **answer,
+            "stale": False,
+            "note": "Saved. The source is being distilled again in the background.",
+        }
+    if not facts:
+        return {**answer, "stale": False, "note": "Saved."}
+    return {
+        **answer,
+        "stale": True,
+        "note": f"Saved. The source's facts are stale until it is distilled: {reason}",
+    }
+
+
+@router.put("/sources/{source_id}/text")
+async def edit_vault_source(
+    source_id: str,
+    body: TextEdit,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The operator changes a text source's whole text, naming the version it was read at: 404 for
+    an unknown source, 409 for a file source (changed by replacing it), for text that changed
+    since that version, and for a source held on another machine."""
+    project_id = project[0]
+    root, private = await roots(session, project_id)
+    try:
+        entry = await asyncio.to_thread(
+            vault.edit_text,
+            root,
+            private,
+            source_id,
+            content=body.content,
+            version=body.version,
+            actor=vault.OPERATOR,
+        )
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc
+    return await after_change(project_id, root, private, entry, reads_files=False)
+
+
+@router.put("/sources/{source_id}/file")
+async def replace_vault_file(
+    source_id: str,
+    request: Request,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The operator replaces a PDF or image source's file with the raw request body, checked as an
+    upload is (415, 400, 413); 409 for a text source. Its transcription is discarded."""
+    project_id = project[0]
+    media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if media_type not in vault.FILE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail=f"A file source is one of {', '.join(vault.FILE_TYPES)}, not {media_type!r}.",
+        )
+    data = await request.body()
+    root, private = await roots(session, project_id)
+    try:
+        entry = await asyncio.to_thread(
+            vault.replace_file,
+            root,
+            private,
+            source_id,
+            media_type=media_type,
+            data=data,
+            actor=vault.OPERATOR,
+        )
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc
+    return await after_change(project_id, root, private, entry, reads_files=True)
+
+
 class PathsAdd(BaseModel):
     """A bulk add by path (`agents-add-files-to-the-vault-by-path`). `distil` has no default: the
     caller states whether the batch is distilled (vault-D2)."""
