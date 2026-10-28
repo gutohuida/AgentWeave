@@ -40625,3 +40625,43 @@ H's FR-2/FR-3/FR-10 read from the app's views. What no route answers today (the 
 **Tier:** 1
 
 `POST /documents/build` covers the document's tasks whose status is not terminal (`hub/hub/api/v1/spec.py:3479-3494`, then `builds.cover_tasks`); a build whose every task is approved or rejected has finished (`builds.finish_if_done`). After the Fast build approves the candidate's three tasks, a Gated build of the same document would cover none. H's Gated build therefore runs on a twin document with the same payload (`spec/changes/every-same-file-overlap-reaches-the-operator-at-gated`, spdoc on :8000), and `measured_rerun_check.py --gated-document` reads its builds beside the Fast one's. **Expected (if re-building is wanted):** a build may re-run a document from its base commit with fresh tasks, its earlier tasks kept as the earlier build's record. Seam: Spec documents x builds.
+
+## F1059 (B) -- inside a flow, a builder's completion is recorded without waiting for the fast checks: two flow tasks completed in ~0.4 s and their first check run started 5-20 s afterwards
+
+**Status:** open 2026-10-28; being fixed (Tier 0, slice L's own defect). Found by the scoped drive of slices L/M/J (scratch Hub :8031, profile drivelmj, project aw-drive-lmj, Haiku runners).
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+Outside a flow the fast check ran before the completion was recorded (task-7973: run 09:20:41, completed 09:20:51; task-222e: run 09:21:53.9, completed 09:21:54.5). In the flow, `shout` (task-0356) completed 09:33:06.67 with its first run chk-f272e33e44ac starting 09:33:11.18, and `title_case` (task-e0e7) completed 09:34:17.3 with chk-7fb9fec82c6e starting 09:34:37.6; the Hub-filed fix task (task-a8340) in the same flow did get its run first. A fast-check failure on those tasks would have reached `completed` and been caught only after. Evidence: `task_check_runs.started_at` vs `task_transitions.created_at`, read-only, and the agents' update_task call times. Path: `api/v1/tasks.py:1947` -> `run_fast_checks_before_completion` -> `project_checks.fast_checks_at_completion` (silent `return None` exits). Area: Worktrees & integration (project checks) x Flows & review.
+
+## F1060 (B) -- a re-completion of unchanged work is refused with the earlier run's output and never says the work is unchanged or which checkout is checked; the builder, editing its agent worktree, retried ~10 times and decided the checks were a "stale cached result"
+
+**Status:** open 2026-10-28; being fixed (Tier 0, slice L's own defect). Found by the scoped drive of slices L/M/J (:8031, aw-drive-lmj).
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+Task-222e was sent back with origin `checks`. The next builder turn was an empty-queue flow firing with no task checkout bound; it edited `.agentweave/worktrees/dev` instead of `.agentweave/tasks/task-222e...`, then called `update_task(completed)` about ten times, each answered 409 "check unit failed on b872798b33c5 ... check run chk-f3ef5307ba17" (a non-fast check, quoted from the earlier run). The agent's words: "The check system seems to be showing a stale cached result." Refusing unchanged work with its recorded verdict is by design (`fast_checks_at_completion` docstring); the refusal must say the work is unchanged since that run and where the task's checkout is. Area: Worktrees & integration x Runs.
+
+## F1061 (C) -- returning a task to its builder after its own check failure neither wakes nor tells the builder
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices L/M/J (:8031, aw-drive-lmj).
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 1
+
+Task-222e went to `revision_needed` (origin `checks`, note "the project's checks failed on check run chk-f3ef5307ba17" with the output) at 09:26:57; no builder turn and no queue entry followed. It was picked up only because the tester fired the flow at 09:27:58 and the builder's empty-queue firing found it. Outside a flow nothing would pick it up. Slice L does not promise a wake; the send-back is otherwise silent. Area: Worktrees & integration x Inbound queue.
+
+## F1062 (D) -- the checks' return of a task to its builder is recorded as `actor_kind='operator'`; only `origin='checks'` says otherwise
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices L/M/J (:8031): `task_transitions` sequence 5 of task-222e, `actor_kind='operator'`, `origin='checks'`. Whether the task's history names the checks on screen (`history-names-the-checks`) was not driven.
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+Drive record (what held, 16 Haiku turns + 2 Copilot-stub turns): fast-check validation (a fast check over 120 s is 422 with the reason); completion refused on an uncommitted ruff failure with the check, merged sha, run id and output, after the Hub snapshotted the agent's uncommitted work; one run per work; review refused 409 `checks_pending` while a slow check ran; own failure sent back with no review; reviews staged 3 s and 6 s after checks passed (the minute held); M's red-main flow landed with `override_by='hub'` and a named reason, one critical fix task filed, staffed at once, landed, and the next check ran on the fixed main; an assigned task outside a flow started in under 1 s; J's rebind claude -> copilot (stub) -> claude started a new session at each crossing with one legible diagnostic, kept the session on a same-runner turn, and usage named the model. Not reached: all UI criteria, Codex, a real Copilot turn, the 120 s budget, the hub-ui check, migration backfills, M's setting-off behaviour live.
