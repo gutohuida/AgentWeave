@@ -757,3 +757,71 @@ async def test_ending_a_run_on_older_work_counts_against_the_budget(app, tmp_pat
 
     assert completed.status_code == 200, completed.text
     assert elapsed < 2.0 + 5.0, elapsed
+
+
+async def _put_in_a_flow(*, evidence_governs=True):
+    """Bind the builder's task to a loop whose work needs evidence (a flow's), recording none."""
+    async with async_session_factory() as session:
+        session.add(
+            AIJob(
+                id="job-flow-l",
+                project_id="proj-test",
+                name="flow-l",
+                agent=BUILDER,
+                message="work",
+                cron="*/5 * * * *",
+                session_mode="new",
+                enabled=False,
+            )
+        )
+        await session.flush()
+        session.add(
+            Loop(
+                id="loop-flow-l",
+                project_id="proj-test",
+                job_id="job-flow-l",
+                purpose="work",
+                work_needs_evidence=evidence_governs,
+            )
+        )
+        await session.flush()
+        (await session.get(Task, TASK)).loop_id = "loop-flow-l"
+        await session.commit()
+
+
+async def test_a_flow_tasks_completion_before_its_evidence_still_waits_for_the_fast_checks(
+    app, tmp_path
+):
+    """Defect found by the slice L drive: where evidence governs and the builder completes before
+    recording evidence naming a commit, the review target was empty, the fast checks never started,
+    and a failing check was not refused at completion."""
+    await _builder_task(tmp_path, content=BAD_LINE)
+    await _put_in_a_flow()
+    await _configure([_lint(tmp_path), _slow(tmp_path)])
+
+    refused = await _complete(app)
+
+    assert refused.status_code == 409, refused.text
+    assert LINT_OUTPUT in refused.json()["detail"]["message"]
+    assert (await _task()).status == "in_progress"
+
+
+async def test_re_completing_unchanged_work_says_the_work_is_unchanged_and_where_it_is_checked(
+    app, tmp_path
+):
+    await _builder_task(tmp_path, content="x = 1\n")
+    await _configure([_lint(tmp_path), _slow(tmp_path, fails_on="ledger.py")])
+    assert (await _complete(app)).status_code == 200
+    await project_checks.drain()
+    resumed = await app.patch(
+        AGENT_TASKS.format(TASK), json={"status": "in_progress"}, headers=BUILDER_HEADERS
+    )
+    assert resumed.status_code == 200, resumed.text
+
+    again = await _complete(app)
+
+    assert again.status_code == 409, again.text
+    message = again.json()["detail"]["message"]
+    [run] = await _runs()
+    assert "unchanged" in message and run.target_shas[0][:12] in message, message
+    assert f".agentweave/tasks/{TASK}" in message and "commit" in message, message

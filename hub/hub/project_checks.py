@@ -1707,6 +1707,11 @@ class CompletionChecks:
     #: The fast checks that failed with a failure of the task's own (not one main shares).
     failing: List[Dict[str, Any]]
     merged_sha: Optional[str] = None
+    #: Set only when the verdict is one already recorded for exactly this work (nothing ran for
+    #: this completion): the task's checkout relative to the project root, and the commit checked.
+    #: The refusal then says so; a retry on unchanged work looked like a stale cache to an agent.
+    unchanged_checkout: Optional[str] = None
+    unchanged_commit: Optional[str] = None
 
 
 async def _stop_run_on_older_work(task_id: str, timeout: float) -> None:
@@ -1770,12 +1775,21 @@ async def fast_checks_at_completion(
         return None
     await _snapshot_task_checkout(root, task, agent)
     targets = await check_targets(session, task, root, awaiting_review=True)
+    if not targets:
+        # Where evidence governs (a flow's task) and none names a commit yet, the review has no
+        # target to name; the work being completed is the task's branch tip, and the fast checks
+        # are for that work (the slice L drive: flow completions were recorded before any check).
+        from . import task_integration
+
+        branch_tip = await asyncio.to_thread(task_integration.task_branch_tip, root, task.id)
+        targets = [branch_tip] if branch_tip else []
     tip = await asyncio.to_thread(main_tip, root, project.main_branch)
     if tip is None:
         return None
     targets = await asyncio.to_thread(unmerged, root, tip, targets)
     if not targets:
         return None
+    recorded = await latest_run(session, task.id)
     if is_running(task.id):
         current = await latest_run(session, task.id)
         if current is None or list(current.target_shas or []) != targets or current.main_sha != tip:
@@ -1819,9 +1833,20 @@ async def fast_checks_at_completion(
         ]
     if run.state == "error":
         failing = []  # the Hub could not produce a result: not the builder's to fix (D6)
-    return CompletionChecks(
+    outcome = CompletionChecks(
         run_id=run_id, decided=decided, failing=failing, merged_sha=run.merged_sha
     )
+    if failing and recorded is not None and recorded.id == run_id and recorded.state == "failed":
+        # The verdict was recorded before this completion asked: nothing ran for it.
+        from . import worktrees
+
+        checkout = worktrees.task_worktree_path(root, task.id)
+        try:
+            outcome.unchanged_checkout = checkout.relative_to(root).as_posix()
+        except ValueError:
+            outcome.unchanged_checkout = str(checkout)
+        outcome.unchanged_commit = targets[0][:12]
+    return outcome
 
 
 def failure_report(

@@ -837,6 +837,16 @@ class ChecksFailedError(TransitionRefusedError):
             f"Task {task.id} was not completed. {report}\n\nFix what the check reports and move "
             f"the task to completed again; the fast checks run again on the new work."
         )
+        if getattr(outcome, "unchanged_checkout", None):
+            message = (
+                f"Task {task.id} was not completed. Its work is unchanged since check run "
+                f"{outcome.run_id} (commit {outcome.unchanged_commit}), so that run's verdict "
+                f"stands and nothing ran again; this is not a stale cache. {report}\n\n"
+                f"The checks run on the task's checkout at {outcome.unchanged_checkout} (relative "
+                f"to the project root), not on your own agent worktree. Make the fix there and "
+                f"commit it in that checkout, then move the task to completed again; the fast "
+                f"checks run again on the new commit."
+            )
         self.refusal = _ChecksRefusal(
             "checks_failed",
             message,
