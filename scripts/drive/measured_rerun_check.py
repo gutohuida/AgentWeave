@@ -696,7 +696,11 @@ def check_vault(hub: Hub, path: str) -> None:
         report(name, False, "GET /vault/map did not answer")
         return
     entries = body.get("entries", [])
-    hit = [e for e in entries if "measured-re-run" in json.dumps(e).lower()]
+    hit = [
+        e
+        for e in entries
+        if e.get("kind") == "source" and "measured-re-run" in json.dumps(e).lower()
+    ]
     if not hit:
         report(
             name, False, f"no entry mentions the measured re-run among {len(entries)} vault entries"
@@ -712,12 +716,15 @@ def check_vault(hub: Hub, path: str) -> None:
             bool(e.get("dated") or e.get("date")),
             f"dated={e.get('dated') or e.get('date')!r}",
         )
+        # The map lists facts as entries of their own, each naming the source it cites; a
+        # source entry carries no count of them.
+        citing = [f for f in entries if f.get("kind") == "fact" and e.get("id") in json.dumps(f)]
         report(
             name,
-            bool(e.get("facts") or e.get("fact_count")),
+            bool(citing),
             (
-                "distillation produced facts that cite it"
-                if (e.get("facts") or e.get("fact_count"))
+                f"distillation produced {len(citing)} facts that cite it"
+                if citing
                 else "no facts cite it"
             ),
         )
