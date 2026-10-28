@@ -95,12 +95,16 @@ async def _assert_streams_leave_the_pool_free(app, auth_headers, path: str, quer
         )
         assert engine.pool.checkedout() == 0, "an open stream is holding a pooled connection"
 
-        started = time.perf_counter()
-        resp = await asyncio.wait_for(
-            app.get("/api/v1/projects/proj-test/agents", headers=auth_headers), 10
-        )
-        elapsed = time.perf_counter() - started
-        assert resp.status_code == 200, resp.text
+        # Best of three: a pool leak makes every read wait out the 30s pool timeout, while one slow
+        # read under a loaded suite (-n auto) says nothing about the pool.
+        elapsed = float("inf")
+        for _ in range(3):
+            started = time.perf_counter()
+            resp = await asyncio.wait_for(
+                app.get("/api/v1/projects/proj-test/agents", headers=auth_headers), 10
+            )
+            elapsed = min(elapsed, time.perf_counter() - started)
+            assert resp.status_code == 200, resp.text
         assert elapsed < 1.0, f"GET /agents took {elapsed:.2f}s with {opened} streams open"
     finally:
         await asyncio.gather(*(stream.close() for stream in held))
