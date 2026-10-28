@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { ApiError } from '@/api/client'
+import { GapLines } from '@/components/spec/SpecPhaseParts'
 
 /**
  * Approval lists what is missing and can approve anyway (`approve-lists-what-is-missing-and-can-
@@ -222,6 +223,16 @@ describe('SpecPhaseBar approval warnings', () => {
     expect(
       within(overridden).getAllByTestId(/^approval-warning-/).map((line) => line.dataset.testid),
     ).toEqual(['approval-warning-requirement_without_criterion', 'approval-warning-steps_skipped'])
+  })
+
+  it('names every finding whose message differs, so both same-file pairs reach the screen (F1015)', () => {
+    const overlaps = [
+      { code: 'unordered_file_overlap', where: 'tasks', message: "tasks 't1' and 't2' both edit 'lib.py' without depends_on" },
+      { code: 'unordered_file_overlap', where: 'tasks', message: "tasks 't3' and 't4' both edit 'util.py' without depends_on" },
+    ]
+    render(<GapLines gaps={overlaps} />)
+    expect(screen.getByText(/lib\.py/)).toBeInTheDocument()
+    expect(screen.getByText(/util\.py/)).toBeInTheDocument()
   })
 
   it('shows no overridden block for an approval that overrode nothing', () => {
