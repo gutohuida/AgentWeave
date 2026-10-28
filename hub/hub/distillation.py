@@ -36,6 +36,7 @@ any spawn (cannot-read). The reading is its own firing, with `step: read`.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import functools
 import logging
 import re
@@ -63,6 +64,7 @@ SOURCE_END = "--- end of source ---"
 
 UPLOADED = "source_uploaded"
 REQUESTED = "distil_requested"
+CHANGED = "source_changed"
 FACTS_WRITTEN = "facts_written"
 
 # The check sends other sources' claims up to this many characters, about 2,000 facts.
@@ -310,15 +312,35 @@ async def distil(plan: Plan, *, trigger: str) -> int:
                 vault.facts_citing, plan.project_root, plan.private_root, source_id
             )
         )
-        text = plan.text
+        # The version first, then the text: a change in between leaves the version older than the
+        # text, so one more distillation follows rather than a stale fact being called current.
+        version = await asyncio.to_thread(
+            vault.source_version, plan.project_root, plan.private_root, source_id
+        )
+        # Read again under the lock: the source may have been changed, or read by another
+        # distillation, while this one waited for it.
+        found = await asyncio.to_thread(
+            vault.source_text, plan.project_root, plan.private_root, source_id
+        )
+        text = found[1] if found is not None else plan.text
         if text is None:
-            # Another distillation may have read it while this one waited for the lock.
-            found = await asyncio.to_thread(
-                vault.source_text, plan.project_root, plan.private_root, source_id
+            held = await asyncio.to_thread(
+                vault.file_of, plan.project_root, plan.private_root, source_id
             )
-            text = found[1] if found is not None else None
-        if text is None:
+            if held is not None and held[1] is not None:
+                plan = dataclasses.replace(plan, file=held[1])
             text = await _transcribe(plan, trigger=trigger)
+            if text is not None and version is not None:
+                now = await asyncio.to_thread(
+                    vault.source_version, plan.project_root, plan.private_root, source_id
+                )
+                if now != version:
+                    # The file was replaced while it was read: that reading is of the old one.
+                    await asyncio.to_thread(
+                        vault.clear_transcription, plan.project_root, plan.private_root, source_id
+                    )
+                    request_redistil(plan.project_id, source_id)
+                    return 0
         if text is None:
             return 0
         # F587, F684: a fact drawn again from the same lines keeps its id, so the decisions and
@@ -368,7 +390,76 @@ async def distil(plan: Plan, *, trigger: str) -> int:
                 [fact_id for fact_id in stored_ids if fact_id not in kept],
                 initiator=initiator_for(trigger),
             )
+        if version is not None and not reusable.failed:
+            await asyncio.to_thread(
+                vault.set_distilled_version,
+                plan.project_root,
+                plan.private_root,
+                source_id,
+                version,
+            )
+            now = await asyncio.to_thread(
+                vault.source_version, plan.project_root, plan.private_root, source_id
+            )
+            if now is not None and now != version:
+                request_redistil(plan.project_id, source_id)
     return len(stored_ids)
+
+
+# ---------------------------------------------------------------------------
+# After a change (`redistil-after-change`)
+# ---------------------------------------------------------------------------
+
+# Sources with a re-distillation running or waiting, by (project, source): True when one more is
+# wanted once the running one ends. At most one waits, however many changes arrive (D3).
+_changed: Dict[Tuple[str, str], bool] = {}
+_background: Set["asyncio.Task[None]"] = set()
+
+
+def request_redistil(project_id: str, source_id: str) -> None:
+    """Distil a changed source again in the background, without the caller waiting for any model.
+    Changes arriving while one runs coalesce into a single further distillation. A job that is
+    off or has no runner makes this a no-op: the source's facts stay stale instead."""
+    key = (project_id, source_id)
+    if key in _changed:
+        _changed[key] = True
+        return
+    _changed[key] = False
+    task = asyncio.get_running_loop().create_task(_redistil(project_id, source_id))
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
+async def _redistil(project_id: str, source_id: str) -> None:
+    key = (project_id, source_id)
+    try:
+        while True:
+            await distil_in_background(project_id, source_id, trigger=CHANGED)
+            if not _changed[key]:
+                return
+            _changed[key] = False
+    finally:
+        _changed.pop(key, None)
+
+
+async def stale_reason(project_id: str, *, reads_files: bool) -> Optional[str]:
+    """Why a changed source will not be distilled now (the job off, no runner, a runner that cannot
+    read files) and what to enable, or None when it will be."""
+    async with async_session_factory() as db:
+        job = await manager.get_job_row(db, project_id, manager.DISTILLATION)
+        runner = await db.get(Runner, job.runner_id) if job is not None and job.runner_id else None
+    if job is None or not job.enabled:
+        return "the vault distillation job is disabled. Enable it on the Manager page."
+    if runner is None or runner.project_id != project_id:
+        return "the vault distillation job has no runner. Choose one on the Manager page."
+    if reads_files:
+        adapter = get_adapter(runner.cli)
+        if adapter is None or not adapter.one_shot_reads_files:
+            return (
+                f"the job's runner is a {runner.cli} runner, which cannot read PDFs or images. "
+                "Choose a Claude runner for the job on the Manager page."
+            )
+    return None
 
 
 async def _transcribe(plan: Plan, *, trigger: str) -> Optional[str]:
@@ -575,6 +666,8 @@ class Reusable:
     ) -> None:
         self._facts = dict(sorted(facts.items()))
         self.kept: Set[str] = set()
+        # A piece's spawn failed: the run cannot say the source has been distilled.
+        self.failed = False
         # Facts kept on a third pass, whose quotes moved: their citations, at the new lines.
         self.moved: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -624,6 +717,7 @@ async def _distil_piece(
     stored: List[str] = []
     dropped = 0
     if not result.ok or result.parsed is None:
+        reusable.failed = True
         outcome, detail = "failed", result.error or result.outcome
     else:
         drafts = result.parsed.facts if isinstance(result.parsed, Distilled) else []
