@@ -40628,7 +40628,7 @@ H's FR-2/FR-3/FR-10 read from the app's views. What no route answers today (the 
 
 ## F1059 (B) -- inside a flow, a builder's completion is recorded without waiting for the fast checks: two flow tasks completed in ~0.4 s and their first check run started 5-20 s afterwards
 
-**Status:** open 2026-10-28; being fixed (Tier 0, slice L's own defect). Found by the scoped drive of slices L/M/J (scratch Hub :8031, profile drivelmj, project aw-drive-lmj, Haiku runners).
+**Status:** fixed 2026-10-28 in b513303 (merge 4aebe4a) (Tier 0, slice L's own defect; a test failing before the fix, then the fix). Found by the scoped drive of slices L/M/J (scratch Hub :8031, profile drivelmj, project aw-drive-lmj, Haiku runners).
 **Source:** drive
 **Theme:** Checks
 **Ready:** yes
@@ -40638,7 +40638,7 @@ Outside a flow the fast check ran before the completion was recorded (task-7973:
 
 ## F1060 (B) -- a re-completion of unchanged work is refused with the earlier run's output and never says the work is unchanged or which checkout is checked; the builder, editing its agent worktree, retried ~10 times and decided the checks were a "stale cached result"
 
-**Status:** open 2026-10-28; being fixed (Tier 0, slice L's own defect). Found by the scoped drive of slices L/M/J (:8031, aw-drive-lmj).
+**Status:** fixed 2026-10-28 in b513303 (merge 4aebe4a) (Tier 0, slice L's own defect; a test failing before the fix, then the fix). Found by the scoped drive of slices L/M/J (:8031, aw-drive-lmj).
 **Source:** drive
 **Theme:** Checks
 **Ready:** yes
@@ -40668,7 +40668,7 @@ Drive record (what held, 16 Haiku turns + 2 Copilot-stub turns): fast-check vali
 
 ## F1063 (B) -- at Fast a builder's approval is refused because its evidence is unjudged, so "Fast approves without a reviewer" never fires
 
-**Status:** open 2026-10-28; being fixed (Tier 0, slice D's own defect). Found by the scoped drive of slices D/D2/E (scratch Hub :8032, profile drivedde, project aw-drive-dde, Haiku runners).
+**Status:** fixed 2026-10-28 in 2d7ed79 (merge 12050fd) (Tier 0, slice D's own defect; a test failing before the fix, then the fix). Found by the scoped drive of slices D/D2/E (scratch Hub :8032, profile drivedde, project aw-drive-dde, Haiku runners).
 **Source:** drive
 **Theme:** Flows & review
 **Ready:** yes
@@ -40678,7 +40678,7 @@ At a Fast build the builder completed its task (evidence `awaiting`) and called 
 
 ## F1064 (B) -- the Hub's own batched landings raise "main moved" notices, and join an open one, because their integration rows carry no merge sha
 
-**Status:** open 2026-10-28; being fixed (Tier 0, slices D2/E's own defect). Found by the scoped drive of slices D/D2/E (:8032).
+**Status:** fixed 2026-10-28 in bd55d7a (merge 139f6d5) (Tier 0, slices D2/E's own defect; a test failing before the fix, then the fix). Found by the scoped drive of slices D/D2/E (:8032).
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes
@@ -40688,7 +40688,7 @@ Every `task_integrations` row the batch wrote had `merged_sha = NULL`, so the ma
 
 ## F1065 (B) -- a "no reviewer free" stall names agents outside the build's reviewer pool as "running a turn" when they are not running
 
-**Status:** open 2026-10-28; being fixed (Tier 0, slice D). Found by the scoped drive of slices D/D2/E (:8032).
+**Status:** fixed 2026-10-28 in 2d7ed79 (merge 12050fd) (Tier 0, slice D; a test failing before the fix, then the fix). Found by the scoped drive of slices D/D2/E (:8032).
 **Source:** drive
 **Theme:** Flows & review
 **Ready:** yes
@@ -40730,7 +40730,7 @@ Drive record D/D2/E (what held, 20 Haiku turns, $2.26): D -- build recorded with
 
 ## F1069 (B) -- the composer's "Open an existing specification document" picker overflows its dialog: 697 px of content in a 558 px dialog, "+ New", "Roadmap" and the phase filter cut off (Ctrl+Shift+K the same)
 
-**Status:** open 2026-10-28; being fixed (Tier 0, slice F's own defect). Found by the scoped browser drive of slices F/G/I (scratch Hub :8033, profile drivefgi, Haiku runners); shots `testbed/ui-judge/drive1028-fgi/open_existing.png`, `ctrlshiftk.png`.
+**Status:** fixed 2026-10-28 in 9826951 (Tier 0, slice F's own defect; a test failing before the fix, then the fix). Found by the scoped browser drive of slices F/G/I (scratch Hub :8033, profile drivefgi, Haiku runners); shots `testbed/ui-judge/drive1028-fgi/open_existing.png`, `ctrlshiftk.png`.
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes
@@ -40740,7 +40740,7 @@ Drive record D/D2/E (what held, 20 Haiku turns, $2.26): D -- build recorded with
 
 ## F1070 (B) -- the side panel at 360 px clips the spec page's approval-gaps block (scrollWidth 392 vs 360), against `side-panel-parity`
 
-**Status:** open 2026-10-28; being fixed (Tier 0, slice F). Found by the scoped browser drive of slices F/G/I (:8033); shot `panel_narrow.png`.
+**Status:** fixed 2026-10-28 in 9826951 (Tier 0, slice F; a test failing before the fix, then the fix). Found by the scoped browser drive of slices F/G/I (:8033); shot `panel_narrow.png`.
 **Source:** drive
 **Theme:** Spec documents
 **Ready:** yes
@@ -40750,7 +40750,7 @@ The right edge of the gap text is lost ("at s", "whic", "th"). Area: Spec docume
 
 ## F1071 (C) -- Ctrl+Shift+K opens the spec picker on top of the command palette: two layers, two Escapes
 
-**Status:** open 2026-10-28; being fixed (Tier 0, slice F). Found by the scoped browser drive of slices F/G/I (:8033): dialogs `['Command palette', 'Search documents']`, then `['Command palette']`, then `[]`.
+**Status:** fixed 2026-10-28 in 9826951 (Tier 0, slice F; a test failing before the fix, then the fix). Found by the scoped browser drive of slices F/G/I (:8033): dialogs `['Command palette', 'Search documents']`, then `['Command palette']`, then `[]`.
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
