@@ -281,6 +281,43 @@ export function useEditVaultSource() {
   })
 }
 
+/** Archive a source: it and its facts leave the map and the checks but stay readable by id
+ *  (`POST /vault/sources/{id}/archive`). */
+export function useArchiveVaultSource() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: (sourceId: string) =>
+      postJson<VaultEntry>(`/api/v1/projects/${projectId}/vault/sources/${sourceId}/archive`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault'] })
+    },
+  })
+}
+
+/** Restore an archived source (`POST /vault/sources/{id}/restore`). */
+export function useRestoreVaultSource() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: (sourceId: string) =>
+      postJson<VaultEntry>(`/api/v1/projects/${projectId}/vault/sources/${sourceId}/restore`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault'] })
+    },
+  })
+}
+
+/** The archived sources, newest first; the map does not list them (`GET /vault/archived`). */
+export function useArchivedVaultSources() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ sources: VaultEntry[] }>({
+    queryKey: ['project', projectId, 'vault', 'archived'],
+    queryFn: () => getJson<{ sources: VaultEntry[] }>(`/api/v1/projects/${projectId}/vault/archived`),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
 /** Replace a PDF or image source's file; the bytes are the body (`PUT /vault/sources/{id}/file`). */
 export function useReplaceVaultFile() {
   const queryClient = useQueryClient()
