@@ -40665,3 +40665,65 @@ Task-222e went to `revision_needed` (origin `checks`, note "the project's checks
 **Tier:** 0
 
 Drive record (what held, 16 Haiku turns + 2 Copilot-stub turns): fast-check validation (a fast check over 120 s is 422 with the reason); completion refused on an uncommitted ruff failure with the check, merged sha, run id and output, after the Hub snapshotted the agent's uncommitted work; one run per work; review refused 409 `checks_pending` while a slow check ran; own failure sent back with no review; reviews staged 3 s and 6 s after checks passed (the minute held); M's red-main flow landed with `override_by='hub'` and a named reason, one critical fix task filed, staffed at once, landed, and the next check ran on the fixed main; an assigned task outside a flow started in under 1 s; J's rebind claude -> copilot (stub) -> claude started a new session at each crossing with one legible diagnostic, kept the session on a same-runner turn, and usage named the model. Not reached: all UI criteria, Codex, a real Copilot turn, the 120 s budget, the hub-ui check, migration backfills, M's setting-off behaviour live.
+
+## F1063 (B) -- at Fast a builder's approval is refused because its evidence is unjudged, so "Fast approves without a reviewer" never fires
+
+**Status:** open 2026-10-28; being fixed (Tier 0, slice D's own defect). Found by the scoped drive of slices D/D2/E (scratch Hub :8032, profile drivedde, project aw-drive-dde, Haiku runners).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+At a Fast build the builder completed its task (evidence `awaiting`) and called `update_task(approved)`: 409 "This task's work has been recorded and nobody has judged it: FR-5 at 4b5ac3a5b3db. Approving now would record that the work is good and merge none of it, because only accepted evidence is merged. To land it, accept the evidence, or grant an agent the capability to accept it...". A builder cannot accept its own evidence; the operator's approval accepted it in the same act ("Accepted with the approval of task-..."). Slice D's D4 promises completed -> approved at Fast for the builder, the lead and the flow. The flow's own Fast approval after checks pass was not driven. Area: Tasks x Requirements, evidence & coverage.
+
+## F1064 (B) -- the Hub's own batched landings raise "main moved" notices, and join an open one, because their integration rows carry no merge sha
+
+**Status:** open 2026-10-28; being fixed (Tier 0, slices D2/E's own defect). Found by the scoped drive of slices D/D2/E (:8032).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Every `task_integrations` row the batch wrote had `merged_sha = NULL`, so the main watch could not tell the Hub's "Integrate approved work..." merges from a hand commit: after the first notice was marked seen, a batch of Hub merges alone produced `mnot-9c494088cdc7`, and the genuine notice (a hand commit) absorbed the Hub's merges as its list grew; `main_moved` events at 09:25:26, 09:30:57, 09:43:28. The operator is notified after every landing. Area: Worktrees & integration x Logs, events & SSE.
+
+## F1065 (B) -- a "no reviewer free" stall names agents outside the build's reviewer pool as "running a turn" when they are not running
+
+**Status:** open 2026-10-28; being fixed (Tier 0, slice D). Found by the scoped drive of slices D/D2/E (:8032).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+`review_unstaffed` at 09:24:40 with reviewers `[qa]`: "dev2 is running a turn; lead is running a turn; qa is booked for task-471e79841cd2"; no dev2 or lead run was active. `scheduler._rung_3_clause_text`'s fallback label is applied to out-of-pool agents. Area: Flows & review.
+
+## F1066 (C) -- a resubmission without `roadmap` silently unlinks a document from its roadmap slice
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices D/D2/E (:8032).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+The lead's first `submit_spec_document` carried the roadmap link; its third and fourth resubmissions dropped it and the stored document ended with no `roadmap`, with no warning. With D2's next-slice offer, an unlinked slice reads as unclaimed and can be offered again. Expected: a save that drops the link of a document that had one warns (or keeps it). Area: Spec documents.
+
+## F1067 (C) -- three small refusal/field defects in slices D and D2: `next-slice/take` with an unknown agent answers code `no_offer`; `builds/{id}/stop` ignores a `reason` body; `amendments[].task_id` stays null after an accepted add_task
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices D/D2/E (:8032).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+`POST .../next-slice/take` naming `ghost` -> 422 `code: "no_offer"`, message "ghost is not an open agent" (wrong code for the refusal). `POST .../builds/{id}/stop {"reason": ...}` -> stored reason always "stopped by the operator". PATCH of cap and window on a `finished` build is accepted as a no-op. After an accepted add_task, the response's `task_created` names the task but `amendments[].task_id` stays null. Area: Spec documents x builds.
+
+## F1068 (C) -- on a hand-driven build each amendment decision queues a paid turn for the proposing lead, and those unbound lead runs are not counted in the build's spend
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices D/D2/E (:8032). Possibly by design for the decision input; the uncounted spend is not.
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** no -- decide whether a hand build's lead is told by a turn
+**Tier:** 1
+
+Hand "starts no turn at all", but each amendment decision queued input for the lead; `run-3895d6d08359` ran ($0.006) and two more entries were queued. Runs not bound to a build task are not in the build's `spent_usd` or figures (`cost.lead` 0.0), so a cap cannot see them. Also (D): lowering a hand build's cap below its spend ($0.01 vs $0.92) changes nothing and says nothing. Area: Inbound queue x Accounting.
+
+Drive record D/D2/E (what held, 20 Haiku turns, $2.26): D -- build recorded with every setting, a second Build 409 naming the running one, legible refusals (unknown agent, inverted window, bad level), level on tasks and transitions, declared builders applied and `ghost` reported unresolved, the flow staffed only builders and reviewers, the build finished and its job disabled, `spent_usd` equal to turn_usage. D2 -- a lead's add_task proposal left the board unchanged and accepted joined the running build at its level and builder; `proposal_decided`, `amendment_stale`, decline-needs-reason, non-author 403, `draft_next_slice_retired` all legible; the next-slice offer raised and taken once; a hand commit raised a notice in ~14 s and a `reset --hard` as a rewrite in ~15 s; rigor retired. E -- four approvals answered ~1 s each, one ~60 s gather, a conflicting task removed before the check naming the file and the other task, the breaker found by one narrowed run and sent back alone with output, the rest landed, sent-back work cannot land or be re-approved, landing state on the checks route with position and seconds, a restart mid-gather lost and repeated nothing. Not reached: every UI criterion, the lead driver, Gated, budget-cap stop on a flow, lands-nowhere, M's override inside a batch, dependent-waits-for-prerequisite.
