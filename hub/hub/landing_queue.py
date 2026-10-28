@@ -1518,6 +1518,13 @@ async def _land_batch(
 
     def _fast_forward():
         moved = project_checks._git(root, "merge", "--ff-only", "-q", target)
+        if moved.returncode == 0:
+            # The main watch must not read these merge commits as someone else's before the
+            # integration records commit (B2).
+            from . import main_watch
+
+            for sha in _first_parent_commits(root, base, target):
+                main_watch.note_own_merge(sha)
         return moved
 
     result = await blocking.run_serialized(_fast_forward)
@@ -1534,6 +1541,12 @@ async def _land_batch(
     return True
 
 
+def _first_parent_commits(root: Path, old: str, new: str) -> List[str]:
+    """The merge commits a batch made between *old* and *new*, oldest first."""
+    listed = project_checks._git(root, "rev-list", "--first-parent", "--reverse", f"{old}..{new}")
+    return [line for line in (listed.stdout or "").split() if line]
+
+
 async def _record_landed(
     root: Path,
     main_branch: str,
@@ -1548,10 +1561,12 @@ async def _record_landed(
     from .task_transition_service import _redrain_after_commit
 
     previous = [base, *prefixes[:-1]]
+    made: Dict[str, List[str]] = {}
 
     def _riding() -> Dict[str, Tuple[List[str], bool]]:
         out: Dict[str, Tuple[List[str], bool]] = {}
-        for landing, before in zip(landings, previous, strict=True):
+        for landing, before, prefix in zip(landings, previous, prefixes, strict=True):
+            made[landing.id] = _first_parent_commits(root, before, prefix)
             for sha in target_shas(landing):
                 listed = project_checks._git(root, "rev-list", "--reverse", f"{before}..{sha}")
                 commits = [line for line in listed.stdout.split() if line and line != sha]
@@ -1572,9 +1587,13 @@ async def _record_landed(
             task = await session.get(Task, landing.task_id)
             if row is None or task is None or row.state == LANDED:
                 continue
+            merges = list(made.get(row.id, []))
             for entry in row.targets or []:
                 sha = entry.get("commit_sha")
                 commits, already = riding.get(f"{row.id}:{sha}", ([], False))
+                # One merge commit per target that was not already in main, in order: the record
+                # carries it so the main watch knows this move was the Hub's own (B2).
+                merge_commit = merges.pop(0) if merges and not already else None
                 result = ti.IntegrationResult(
                     outcome=ti.SKIPPED if already else ti.MERGED,
                     reason=(
@@ -1586,6 +1605,7 @@ async def _record_landed(
                     source_branch=entry.get("branch"),
                     target_branch=main_branch,
                     rode_along=[] if already else commits,
+                    merged_sha=merge_commit,
                 )
                 _record(session, task, result, row, batch_id=batch_id, override_reason=override)
             row.state, row.landed_sha, row.ended_at, row.reason = LANDED, prefix, _now(), ""

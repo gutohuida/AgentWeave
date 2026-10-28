@@ -366,10 +366,27 @@ def run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> Di
     return result
 
 
+def _decode_output(raw: bytes) -> str:
+    """A check's output as text: UTF-8 where it is, else the Windows ANSI code page the child wrote
+    it in (cp1252), else UTF-8 with the bad bytes replaced -- never a silent U+FFFD for a
+    character the check printed in its own code page."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        return raw.decode("cp1252")
+    except UnicodeDecodeError:
+        return raw.decode("utf-8", "replace")
+
+
 def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> Dict[str, Any]:
     from .pty_runner import IS_WINDOWS, terminate_process_tree
 
     env, removed = check_environment()
+    # A Python child writes a pipe in the console's ANSI code page on Windows: ask for UTF-8 so a
+    # '…' in an assertion message arrives as itself (C2); `_decode_output` covers the rest.
+    env.setdefault("PYTHONIOENCODING", "utf-8")
     started = time.monotonic()
     if owner is not None and owner in _superseded:
         # Main moved while this run was still building its checkout: `supersede` found no process
@@ -412,7 +429,7 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
     finally:
         if owner is not None and _processes.get(owner) is proc:
             _processes.pop(owner, None)
-    text = scrub((output or b"").decode("utf-8", "replace"), removed)
+    text = scrub(_decode_output(output or b""), removed)
     if timed_out:
         text += f"\n[the check ran past its {check['timeout_seconds']}s timeout and was ended]"
     result = {
