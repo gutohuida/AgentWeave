@@ -69,7 +69,7 @@ EDIT_TURN = (
     "F-1 as open; it has been fixed, so change that line in the vault so that it reads "
     f"exactly '{CLEARED}' (keep the F-2 line as it is). Second, archive the source named "
     "'Old notes': nobody needs it any more. Use the vault tools, not files in the repository, "
-    "then say what you did in one sentence."
+    "and do not add new sources to the vault. Then say what you did in one sentence."
 )
 LINE_TURN = (
     "Quote, word for word, the single line of your context that begins with 'This project has "
@@ -189,6 +189,41 @@ def firings(base, source_id):
     return [f for f in found if (f.get("subject") or {}).get("source") == source_id]
 
 
+def agent_tool_calls(outputs):
+    """The agent's `aw-tool <name>` shell invocations, each with its paired result.
+
+    Returns dicts of tool name, is_error (the result's flag), ok (the Hub's `ok` in the result's
+    output, None if it cannot be read) and the output text.
+    """
+    def parse(text):
+        try:
+            return json.loads(text)
+        except (TypeError, ValueError):
+            return {}
+
+    results_by_id = {}
+    for kind, _content, payload, _t in outputs:
+        if kind == "tool_result":
+            data = parse(payload)
+            results_by_id[data.get("call_id")] = data
+    found = []
+    for kind, _content, payload, _t in outputs:
+        if kind != "tool_use":
+            continue
+        data = parse(payload)
+        command = str(parse(data.get("input")).get("command") or "")
+        # The arguments file may follow the name: `aw-tool vault_x .agentweave/calls/1.json`.
+        for name in re.findall(r"aw-tool\s+([A-Za-z_]+)", command):
+            if name in ("vault_map", "vault_read", "vault_report", "vault_add"):
+                continue
+            result = results_by_id.get(data.get("call_id"), {})
+            output = str(result.get("output") or "")
+            body = parse(output[output.find("{"):]) if "{" in output else {}
+            found.append({"tool": name, "call_id": data.get("call_id"), "is_error": bool(result.get("is_error", True)),
+                          "ok": body.get("ok") if isinstance(body, dict) else None, "output": output})
+    return found
+
+
 def turn(base, message):
     """One real agent turn; returns (run id, its outputs)."""
     code, run = api("POST", f"{base}/agent/trigger", {"agent": AGENT, "message": message})
@@ -258,12 +293,17 @@ def drive():
           and not any("Invalid or inactive run credential" in r or '"status": 401' in r
                              or '"status":401' in r for r in mapped),
           f"vault_map results={[r[:160] for r in results_text][:3]} tools={[t[:80] for t in tools][:3]}")
-    # Only a vault tool call counts: a Write of a scratch file naming the source is not an edit.
-    ours = [t for t in tools if pr in t and not t.startswith(("Called Write", "Called Edit"))
-            and "vault_read" not in t and "vault_map" not in t]
-    errored = [r for r in results_text if re.search(r'"?(status|code)"?\W{0,3}(4\d\d|5\d\d)', r)]
-    check("2a the agent made a vault tool call on 'Problems' beyond reading it, and none was refused",
-          ours and not errored, f"calls={[t[:160] for t in ours]} errors={[r[:160] for r in errored]}")
+    # Only an `aw-tool <edit/archive tool>` invocation counts: writing an arguments file, reading,
+    # reporting or adding a source is not an edit. Each is paired with its own tool_result.
+    calls = agent_tool_calls(outputs)
+    edits = [c for c in calls if re.search(r"replace|append|edit|update", c["tool"])]
+    archives = [c for c in calls if "archive" in c["tool"]]
+    refused = [c for c in edits + archives if c["is_error"] or c["ok"] is not True]
+    check("2a the agent called a vault edit tool and an archive tool, and the Hub answered both ok",
+          edits and archives and not refused,
+          f"edits={[(c['tool'], c['ok']) for c in edits]} archives={[(c['tool'], c['ok']) for c in archives]} "
+          f"refused={[(c['tool'], c['output'][:160]) for c in refused]} "
+          f"all={[(c['tool'], c['ok']) for c in calls]}")
     _, entry = api("GET", f"{base}/vault/entries/{pr}")
     text = (entry or {}).get("content") or ""
     check("2b 'Problems' holds 'F-1 the map is slow: cleared' and still holds the F-2 line",
@@ -279,10 +319,8 @@ def drive():
           fired, f"before={fired_before} now={len(firings(base, pr))}")
     # A firing is logged when it ends. The edit "did not wait for it" if the edit's own tool result
     # came back before that firing ended: a synchronous edit that distilled inline would end after.
-    first_edit = next((i for i, o in enumerate(outputs)
-                       if o[0] == "tool_use" and pr in f"{o[1]}{o[2]}"
-                       and "vault_read" not in f"{o[1]}{o[2]}" and "vault_map" not in f"{o[1]}{o[2]}"), None)
-    edit_back = next((o[3] for o in outputs[(first_edit or 0):] if o[0] == "tool_result"), None)
+    edit_back = next((o[3] for o in outputs if o[0] == "tool_result" and edits
+                      and f'"call_id": "{edits[0]["call_id"]}"' in o[2]), None)
 
     def when(value):
         return datetime.datetime.fromisoformat(str(value).replace("Z", "")).replace(tzinfo=None)
@@ -342,5 +380,5 @@ def drive():
 if __name__ == "__main__":
     main()
 
-# Expected on master: fails at step 2 (the agent has no vault edit or archive tool), so steps 3-6
+# Expected on master: fails at 2a (the agent has no vault edit or archive tool), so steps 2b-6
 # never get their precondition. It passes only once FR-2, FR-8 and FR-10 are built.
