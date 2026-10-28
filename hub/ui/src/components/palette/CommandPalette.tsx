@@ -95,6 +95,8 @@ export function CommandPalette({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return
       if (event.key.toLowerCase() !== 'k') return
+      // Ctrl/Cmd+Shift+K is document search's (ConversationView, SpecPage), not the palette's.
+      if (event.shiftKey) return
       event.preventDefault()
       setOpen((value) => {
         if (!value && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {

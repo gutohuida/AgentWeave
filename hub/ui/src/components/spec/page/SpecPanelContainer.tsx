@@ -98,7 +98,7 @@ export function SpecPickerContainer(props: {
   const [adopted, setAdopted] = React.useState(false)
   const now = React.useMemo(() => new Date(), [])
   return (
-    <div className="aw-sp aw-sp-panel" data-layout="panel" data-testid="spec-picker">
+    <div className="aw-sp aw-sp-panel" data-layout="panel" data-testid="spec-picker" style={{ flexDirection: 'column', minWidth: 0 }}>
       {list.specList ? <SpecCorpusStrip specList={list.specList} adoptedSinceRebuild={adopted} onRebuilt={() => setAdopted(false)} /> : null}
       <SpecOpenPicker
         entries={list.entries}
