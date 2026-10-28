@@ -361,6 +361,45 @@ async def test_ac_moved_keeps_id(app, auth_headers, worker, tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_an_edit_inserting_lines_and_changing_one_fact(
+    app, auth_headers, worker, tmp_path
+) -> None:
+    note = "Problems\nF-1 the map is slow: open\nF-2 the tab flickers: open\n"
+    f1, f2 = "F-1 the map is slow: open", "F-2 the tab flickers: open"
+    worker(
+        [("Problems", ["Problems"]), ("F-1 is open", [f1]), ("F-2 is open", [f2])],
+        [
+            ("Problems", ["Problems"]),
+            ("Owner is the platform team", ["Owner: the platform team."]),
+            ("Reviewed weekly", ["Reviewed weekly."]),
+            ("F-1 is cleared", ["F-1 the map is slow: cleared"]),
+            ("F-2 is open", [f2]),
+        ],
+    )
+    await _enable(app, auth_headers, runner_id=await _runner(app, auth_headers))
+    source = await _upload(app, auth_headers, content=note)
+    folder = tmp_path / "knowledge" / "facts"
+    by_claim = {f["claim"]: f for f in _facts(folder)}
+    header, old_f1, old_f2 = (by_claim[c] for c in ("Problems", "F-1 is open", "F-2 is open"))
+
+    path = tmp_path / "knowledge" / "sources" / f"{source['id']}.md"
+    path.write_text(
+        "Problems\nOwner: the platform team.\nReviewed weekly.\n"
+        "F-1 the map is slow: cleared\nF-2 the tab flickers: open\n",
+        encoding="utf-8",
+    )
+    assert (await _distil(app, auth_headers, source["id"])).status_code == 202
+
+    now = {f["id"]: f for f in _facts(folder)}
+    assert now[header["id"]]["citations"][0]["line_start"] == 1
+    assert now[old_f2["id"]]["citations"][0]["line_start"] == 5
+    assert "superseded_at" not in now[old_f2["id"]]
+    assert now[old_f1["id"]]["superseded_by"] == source["id"]
+    claims = {f["claim"] for f in now.values() if "superseded_at" not in f}
+    assert {"Owner is the platform team", "Reviewed weekly", "F-1 is cleared"} <= claims
+
+
+@pytest.mark.asyncio
 async def test_ac_superseded(app, auth_headers, worker, tmp_path) -> None:
     worker(
         [

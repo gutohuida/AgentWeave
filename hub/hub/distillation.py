@@ -548,6 +548,19 @@ def _record_pairs(
     return recorded, dropped
 
 
+def _requoted(old: vault.CitationKey, new: vault.CitationKey) -> bool:
+    """Whether every citation in *new* quotes the same text as one in *old* on the same lines,
+    from another word on (one loose quote inside the other). Two lines that merely share a line
+    number after an edit are different facts."""
+    olds = list(old[1])
+    for source, quote, start, end in new[1]:
+        if not any(
+            (s, a, b) == (source, start, end) and (q in quote or quote in q) for s, q, a, b in olds
+        ):
+            return False
+    return True
+
+
 class Reusable:
     """The source's earlier facts a re-distil may keep under their ids (F587, F684).
 
@@ -574,7 +587,9 @@ class Reusable:
         key = key_of[mode](citations, visibility)
         index = ("exact", "span", "quote").index(mode)
         for fact_id, keys in self._facts.items():
-            if keys[index] == key:
+            if keys[index] == key and (
+                mode != "span" or _requoted(keys[0], vault.citation_key(citations, visibility))
+            ):
                 del self._facts[fact_id]
                 self.kept.add(fact_id)
                 if mode == "quote":
@@ -621,7 +636,7 @@ async def _distil_piece(
                 cited.append((draft, citations))
         # The exact pass over every draft first, then the same-lines pass over what is left.
         claimed: Dict[int, str] = {}
-        for mode in ("exact", "span", "quote"):
+        for mode in ("exact", "quote", "span"):
             for at, (_, citations) in enumerate(cited):
                 if at not in claimed:
                     earlier = reusable.claim(citations, source["visibility"], mode=mode)
