@@ -57,6 +57,28 @@ def test_a_directory_covers_the_paths_beneath_it():
     assert paths_overlap("hub/hub", "hub/hubris.py") is None
 
 
+@pytest.mark.parametrize(
+    "a, b, shared",
+    [
+        ("lib.py", "./lib.py", "lib.py"),
+        ("pkg/lib.py", "pkg//lib.py", "pkg/lib.py"),
+        (".", "lib.py", "lib.py"),
+        ("pkg/lib.py", "pkg/../pkg/lib.py", "pkg/lib.py"),
+        ("pkg\\lib.py", "pkg/lib.py", "pkg/lib.py"),
+    ],
+)
+def test_every_spelling_of_one_path_overlaps(a, b, shared):
+    assert paths_overlap(a, b) == shared
+    assert paths_overlap(b, a) == shared
+
+
+def test_a_path_that_climbs_out_of_the_repository_is_refused_naming_the_task():
+    with pytest.raises(PayloadError) as exc:
+        _complete(_tasks(("task-one", {"files": ["../x.py"]})))
+    assert "task-one" in str(exc.value)
+    assert exc.value.field == "tasks[0].files[0]"
+
+
 def test_unordered_overlap_names_both_tasks_and_the_path_without_blocking():
     tasks = _tasks(
         ("a", {"files": ["hub/hub/mcp_server.py"]}), ("b", {"files": ["hub/hub/mcp_server.py"]})

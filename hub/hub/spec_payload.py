@@ -26,6 +26,7 @@ agent is ignored — the agent chooses correlation, never identity.
 from __future__ import annotations
 
 import json
+import posixpath
 import re
 from datetime import datetime
 from typing import Annotated, Any, Dict, List, Literal, Optional
@@ -51,6 +52,15 @@ KEY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 # state, and the two must change together.
 FACT_ID_RE = re.compile(r"^fct-[0-9a-f]{12}$")
 _ABSOLUTE_PATH_RE = re.compile(r"^([/\\]|[A-Za-z]:)")
+
+
+def fold_path(path: str) -> str:
+    """A declared repo-relative path with every spelling folded: backslashes, './', doubled
+    slashes and '..' resolved; '.' is the repository root. A result starting '..' climbs out."""
+    folded = posixpath.normpath(path.strip().replace("\\", "/"))
+    return folded.lstrip("/") if folded != "/" else "."
+
+
 MODALS = ("MUST", "SHOULD", "MAY", "SHALL")
 KINDS = ("baseline", "system-map", "roadmap", "change-spec", "capability")
 
@@ -664,6 +674,13 @@ def validate_payload(raw: Any) -> SpecPayload:
                 raise PayloadError(
                     f"task {task.key!r} lists {path!r} in files, which is absolute; "
                     "files are repo-relative",
+                    field=f"tasks[{index}].files[{position}]",
+                )
+            folded = fold_path(path)
+            if folded == ".." or folded.startswith("../"):
+                raise PayloadError(
+                    f"task {task.key!r} lists {path!r} in files, which climbs out of the "
+                    "repository; files are repo-relative",
                     field=f"tasks[{index}].files[{position}]",
                 )
 

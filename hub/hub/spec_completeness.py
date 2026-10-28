@@ -21,11 +21,13 @@ is the whole point of asking.
 
 from __future__ import annotations
 
+import os
 import re
+import sys
 from dataclasses import dataclass, field
 from typing import AbstractSet, Dict, List, Mapping, Optional, Tuple
 
-from .spec_payload import SpecPayload
+from .spec_payload import SpecPayload, fold_path
 
 # The marker the skills used for an unresolved question, kept because documents
 # and habits already use it. Matched case-insensitively and tolerant of spacing.
@@ -415,13 +417,22 @@ def _acceptance_drive_findings(payload: SpecPayload) -> List[Finding]:
     ]
 
 
+_CASE_INSENSITIVE_FS = os.path.normcase("A") == "a" or sys.platform == "darwin"
+
+
 def _normalise_path(path: str) -> str:
-    return path.strip().replace("\\", "/").strip("/")
+    folded = fold_path(path)
+    return folded.lower() if _CASE_INSENSITIVE_FS else folded
 
 
 def paths_overlap(a: str, b: str) -> Optional[str]:
-    """The overlapping path of two declared paths, or None. A directory covers what is beneath it."""
+    """The overlapping path of two declared paths, or None. A directory covers what is beneath it;
+    '.' is the repository root and covers every path."""
     left, right = _normalise_path(a), _normalise_path(b)
+    if left == "." and right != ".":
+        return right
+    if right == ".":
+        return left
     if left == right or right.startswith(left + "/"):
         return right
     if left.startswith(right + "/"):
