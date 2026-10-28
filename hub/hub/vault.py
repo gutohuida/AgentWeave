@@ -85,7 +85,16 @@ _CTR_ID_RE = re.compile(r"^ctr-[0-9a-f]{12}$")
 _RPT_ID_RE = re.compile(r"^rpt-[0-9a-f]{12}$")
 _DATED_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # What a private fact's stub under knowledge/facts holds: never the claim, which is the knowledge.
-_FACT_STUB_KEYS = ("id", "kind", "visibility", "holder", "created_at", "sources")
+_FACT_STUB_KEYS = (
+    "id",
+    "kind",
+    "visibility",
+    "holder",
+    "created_at",
+    "sources",
+    "superseded_by",
+    "superseded_at",
+)
 # A private contradiction's stub: which two facts, never what either claims or why they disagree.
 _CTR_STUB_KEYS = ("id", "kind", "visibility", "holder", "created_at", "facts")
 
@@ -532,8 +541,13 @@ class _Fact:
         """As the map lists it, with *flags* (disputed, presumed, superseded_by) derived from the
         contradictions that cite it."""
         meta, claim = self.meta, self.claim
+        marks = dict(flags or _UNDISPUTED)
+        if meta.get("superseded_at"):
+            # A distillation that did not keep it; a decision's or a correction's mark wins.
+            marks["superseded_by"] = marks.get("superseded_by") or meta.get("superseded_by")
         return {
-            **(flags or _UNDISPUTED),
+            **marks,
+            "superseded_at": meta.get("superseded_at"),
             "id": meta["id"],
             "kind": "fact",
             "name": claim[:MAX_NAME_CHARS] if claim else "A private fact",
@@ -741,6 +755,13 @@ def _read_fact(project_root: Path, private_root: Path, fact_id: str) -> Optional
     content = _card(fact.meta)
     disputes = _dispute_lines(fact_id, contradictions, facts)
     disputes += _report_lines(fact_id, reports, facts)
+    if fact.meta.get("superseded_at"):
+        disputes.insert(
+            0,
+            f"SUPERSEDED by a later distillation of {fact.meta.get('superseded_by')} at "
+            f"{fact.meta['superseded_at']}: its source was changed (or distilled again) and the "
+            "distillation did not draw this claim again. It is kept as it was said.",
+        )
     if disputes:
         content += "\n" + "\n".join(disputes) + "\n"
     entry.update(
@@ -1088,7 +1109,7 @@ def add_fact(
     root = tracked if visibility == "tracked" else str(private_root)
     storage.write(root, f"{FACTS}/{fact_id}.json", _encode(meta))
     if visibility == "private":
-        stub = {key: meta[key] for key in _FACT_STUB_KEYS}
+        stub = {key: meta[key] for key in _FACT_STUB_KEYS if key in meta}
         storage.write(tracked, f"{FACTS}/{fact_id}.json", _encode(stub))
     return meta
 
@@ -1124,29 +1145,91 @@ def span_key(citations: List[Dict[str, Any]], visibility: str) -> CitationKey:
     )
 
 
+def quote_key(citations: List[Dict[str, Any]], visibility: str) -> CitationKey:
+    """What makes a fact drawn again whose quotes moved the same fact: its visibility and its
+    citations as a set, each its source and loose quote, whatever lines the quote is on now."""
+    return (
+        visibility,
+        frozenset((c["source"], loose_quote(c["quote"])) for c in citations),
+    )
+
+
 def facts_by_citations(
     project_root: Path, private_root: Path, source_id: str
-) -> Dict[str, Tuple[CitationKey, CitationKey]]:
-    """The facts citing *source_id* whose record is here, in id order, each with its
-    `citation_key` and its `span_key`: what a re-distil matches its drafts against."""
-    found: Dict[str, Tuple[CitationKey, CitationKey]] = {}
+) -> Dict[str, Tuple[CitationKey, CitationKey, CitationKey]]:
+    """The facts citing *source_id* whose record is here and which no distillation has
+    superseded, in id order, each with its `citation_key`, `span_key` and `quote_key`: what a
+    re-distil matches its drafts against."""
+    found: Dict[str, Tuple[CitationKey, CitationKey, CitationKey]] = {}
     for fact_id, fact in sorted(_facts(project_root, private_root).items()):
         meta = fact.meta
-        if source_id in meta["sources"] and meta.get("citations"):
+        if source_id in meta["sources"] and meta.get("citations") and not meta.get("superseded_at"):
             found[fact_id] = (
                 citation_key(meta["citations"], meta["visibility"]),
                 span_key(meta["citations"], meta["visibility"]),
+                quote_key(meta["citations"], meta["visibility"]),
             )
     return found
 
 
 def facts_citing(project_root: Path, private_root: Path, source_id: str) -> List[str]:
-    """The ids of the facts, records or stubs, that cite *source_id*."""
+    """The ids of the facts, records or stubs, that cite *source_id* and are still current (not
+    superseded by an earlier distillation)."""
     return [
         fact_id
         for fact_id, fact in _facts(project_root, private_root).items()
-        if source_id in fact.meta["sources"]
+        if source_id in fact.meta["sources"] and not fact.meta.get("superseded_at")
     ]
+
+
+def _rewrite_fact(
+    project_root: Path, private_root: Path, fact_id: str, change: Dict[str, Any]
+) -> None:
+    """Merge *change* into a fact's record and its stub, wherever each is; keys a stub does not
+    hold are written to the record only."""
+    if not _FACT_ID_RE.match(fact_id):
+        raise VaultError(f"not a fact id: {fact_id!r}")
+    tracked, private = tracked_root(project_root), str(private_root)
+    for root in (private, tracked):
+        raw = storage.read(root, f"{FACTS}/{fact_id}.json")
+        meta = _fact_meta(raw, fact_id)
+        if meta is None:
+            continue
+        if "claim" not in meta:
+            update = {k: v for k, v in change.items() if k in _FACT_STUB_KEYS}
+        else:
+            update = change
+        storage.write(root, f"{FACTS}/{fact_id}.json", _encode({**meta, **update}))
+
+
+def supersede_fact(
+    project_root: Path, private_root: Path, fact_id: str, *, by: str, at: str
+) -> None:
+    """Mark a fact superseded by the source whose distillation did not keep it: it stays in the
+    vault, claim and citations unchanged (`vault-sources-can-be-edited-replaced-and-archived`)."""
+    _rewrite_fact(project_root, private_root, fact_id, {"superseded_by": by, "superseded_at": at})
+
+
+def relocate_fact(
+    project_root: Path, private_root: Path, fact_id: str, citations: List[Dict[str, Any]]
+) -> None:
+    """Rewrite a kept fact's citations to the lines its quotes are on now."""
+    _rewrite_fact(
+        project_root,
+        private_root,
+        fact_id,
+        {
+            "citations": [
+                {key: c[key] for key in ("source", "quote", "line_start", "line_end")}
+                for c in citations
+            ]
+        },
+    )
+
+
+def now() -> str:
+    """The timestamp a fact is created with, for a caller that must stamp a batch alike."""
+    return _now()
 
 
 def delete_fact(project_root: Path, private_root: Path, fact_id: str) -> None:
