@@ -31,7 +31,7 @@ export function GapLines({ gaps }: { gaps: SpecBlockingFinding[] }) {
           return (
             <li key={code} data-testid={`approval-warning-${code}`} className="flex min-w-0 items-start gap-1.5">
               <Icon name="warning" size={13} className="shrink-0" />
-              <span className="min-w-0 [overflow-wrap:anywhere]">
+              <div className="min-w-0 [overflow-wrap:anywhere]">
                 <code>{code}</code>
                 {` ×${group.length}`}
                 <ul className="flex flex-col gap-0.5">
@@ -48,7 +48,7 @@ export function GapLines({ gaps }: { gaps: SpecBlockingFinding[] }) {
                     </li>
                   ))}
                 </ul>
-              </span>
+              </div>
             </li>
           )
         }
