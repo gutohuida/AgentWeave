@@ -63,23 +63,52 @@ def slow_git(loop_thread: threading.Thread) -> Iterator[GitLog]:
 
 class LagProbe:
     """`async with LagProbe() as probe:` samples the loop every 10 ms; `probe.worst` is the
-    longest a sample woke late, in seconds."""
+    longest a sample woke late, in seconds.
+
+    A control thread samples the same way. A late wake-up the control thread shares (it was late
+    over the same interval) is the whole process starved by a loaded machine, not the loop held by
+    its own work, and is not counted: a git call on the loop sleeps without the GIL, so the thread
+    keeps waking on time and the stall still counts.
+    """
 
     def __init__(self) -> None:
         self.worst = 0.0
         self._on = True
         self._task: "asyncio.Task[None] | None" = None
+        self._thread: "threading.Thread | None" = None
+        self._thread_late: List[tuple] = []
+
+    def _control(self) -> None:
+        while self._on:
+            started = time.perf_counter()
+            time.sleep(SAMPLE)
+            ended = time.perf_counter()
+            if ended - started - SAMPLE > SAMPLE:
+                self._thread_late.append((started, ended))
+
+    def _starved(self, started: float, ended: float) -> bool:
+        covered = 0.0
+        for begin, end in self._thread_late:
+            covered += max(0.0, min(end, ended) - max(begin, started))
+        return covered >= 0.8 * (ended - started)
 
     async def _sample(self) -> None:
         while self._on:
             started = time.perf_counter()
             await asyncio.sleep(SAMPLE)
-            self.worst = max(self.worst, time.perf_counter() - started - SAMPLE)
+            ended = time.perf_counter()
+            late = ended - started - SAMPLE
+            if late > SAMPLE and self._starved(started, ended):
+                continue
+            self.worst = max(self.worst, late)
 
     async def __aenter__(self) -> "LagProbe":
+        self._thread = threading.Thread(target=self._control, daemon=True)
+        self._thread.start()
         self._task = asyncio.create_task(self._sample())
         await asyncio.sleep(0.03)
         self.worst = 0.0
+        self._thread_late.clear()
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -87,3 +116,5 @@ class LagProbe:
         self._on = False
         if self._task is not None:
             await self._task
+        if self._thread is not None:
+            self._thread.join()
