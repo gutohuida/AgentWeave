@@ -1,0 +1,19 @@
+{
+  "id": "ctr-845c224ea45c",
+  "kind": "contradiction",
+  "facts": [
+    "fct-484ac6046b5b",
+    "fct-fe9f4e045fda"
+  ],
+  "presumed": "fct-484ac6046b5b",
+  "explanation": "The new fact says the Hub approves over check failures judged not the task's and opens a follow-up task, while the existing fact says it neither passes nor blames the task but holds the approval for the operator.",
+  "status": "open",
+  "visibility": "tracked",
+  "holder": null,
+  "created_at": "2026-10-28T15:06:41.771363Z",
+  "found_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  },
+  "resolution": null
+}
