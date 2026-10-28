@@ -308,3 +308,33 @@ async def test_check_and_approve_name_same_file_tasks_with_no_order(
     assert detail["code"] == "approval_warnings"
     assert "unordered_file_overlap" in {w["code"] for w in detail["warnings"]}
     assert (await _phase(app, auth_headers, "approved", approve_anyway=True)).status_code == 200
+
+
+_NO_FILE_TASKS = [
+    {"key": "t-one", "description": "a", "requirements": ["alpha"]},
+    {"key": "t-two", "description": "b", "requirements": ["alpha"]},
+]
+
+
+# F1014
+@pytest.mark.asyncio
+async def test_check_and_approve_name_tasks_that_declare_no_files(
+    app, auth_headers, run_headers, tmp_path  # noqa: F811
+):
+    """Tasks with no `files` hide any overlap; the operator saw nothing at approval."""
+    await _create(app, auth_headers)
+    await _submit(app, run_headers, _checked(tasks=_NO_FILE_TASKS))
+    await _place(step="build", size="large")
+
+    def named(findings):
+        return [f for f in findings if f["code"] == "undeclared_task_files"]
+
+    checked = (await _check(app, auth_headers)).json()
+    found = named(checked["warnings"])
+    assert found and "'t-one'" in found[0]["message"] and "'t-two'" in found[0]["message"]
+
+    refused = await _phase(app, auth_headers, "approved")
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    found = named([*detail["warnings"], *detail.get("notes", [])])
+    assert found and "'t-one'" in found[0]["message"] and "'t-two'" in found[0]["message"]
