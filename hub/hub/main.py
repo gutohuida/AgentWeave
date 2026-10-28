@@ -326,9 +326,11 @@ def _reset_ui_staleness_cache() -> None:
     _ui_staleness_cache = None
 
 
-#: The one route that takes a body over the global cap: a PDF or image for the vault, whose own
-#: limit is `vault.MAX_FILE_BYTES`.
-_FILE_UPLOAD_PATH = re.compile(r"^/api/v1/projects/[^/]+/vault/files$")
+#: The routes that take a body over the global cap: a PDF or image for the vault, new or replacing
+#: a source's file, whose own limit is `vault.MAX_FILE_BYTES`.
+_FILE_UPLOAD_PATH = re.compile(
+    r"^/api/v1/projects/[^/]+/vault/(files|sources/src-[0-9a-f]{12}/file)$"
+)
 
 
 class ContentSizeLimitMiddleware:

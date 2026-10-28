@@ -51,6 +51,8 @@ import platform
 import re
 import secrets
 import shutil
+import threading
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Tuple
@@ -143,6 +145,10 @@ class VaultStorage(Protocol):
         ...
 
 
+_BUSY_RETRIES = 8
+_BUSY_WAIT = 0.01
+
+
 class LocalVaultStorage:
     """The local filesystem. A write goes to a temporary file first and is renamed into place, so
     a reader never sees half a record."""
@@ -159,13 +165,30 @@ class LocalVaultStorage:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(f".{path.name}.{secrets.token_hex(4)}.tmp")
         temporary.write_bytes(data)
-        os.replace(temporary, path)
+        # Windows refuses a rename onto a file another thread is reading at that instant (a
+        # change racing a distillation's read of the same record): it is over in milliseconds.
+        for attempt in range(_BUSY_RETRIES):
+            try:
+                os.replace(temporary, path)
+                return
+            except PermissionError:
+                if attempt == _BUSY_RETRIES - 1:
+                    with contextlib.suppress(OSError):
+                        temporary.unlink()
+                    raise
+                time.sleep(_BUSY_WAIT * (attempt + 1))
 
     def read(self, root: str, relative: str) -> Optional[bytes]:
-        try:
-            return self._path(root, relative).read_bytes()
-        except (FileNotFoundError, NotADirectoryError, IsADirectoryError):
-            return None
+        for attempt in range(_BUSY_RETRIES):
+            try:
+                return self._path(root, relative).read_bytes()
+            except (FileNotFoundError, NotADirectoryError, IsADirectoryError):
+                return None
+            except PermissionError:  # being replaced at this instant (see `write`)
+                if attempt == _BUSY_RETRIES - 1:
+                    raise
+                time.sleep(_BUSY_WAIT * (attempt + 1))
+        return None
 
     def list(self, root: str, directory: str) -> List[str]:
         try:
@@ -508,6 +531,26 @@ class _Record:
             return None
         return storage.read(self.text_root, f"{SOURCES}/{self.meta['id']}.{kind[0]}")
 
+    def version(self) -> Optional[str]:
+        """A hash of the source's current text (a file source: its bytes), None when they are not
+        on this machine. Computed from the files, so it cannot drift from them (D2)."""
+        if self.text_root is None:
+            return None
+        kind = self.file_kind
+        raw = storage.read(
+            self.text_root, f"{SOURCES}/{self.meta['id']}.{'md' if kind is None else kind[0]}"
+        )
+        return None if raw is None else hashlib.sha256(raw).hexdigest()
+
+    def stale(self) -> bool:
+        """Whether the source changed after its facts were drawn: its version is not the one a
+        distillation last recorded (D4). A source never changed since this was kept is not stale."""
+        drawn = self.meta.get("distilled_version")
+        if not isinstance(drawn, str):
+            return False
+        current = self.version()
+        return current is not None and current != drawn
+
     def listed(self, text: Optional[str]) -> Dict[str, Any]:
         meta = self.meta
         return {
@@ -537,11 +580,14 @@ class _Fact:
     def claim(self) -> Optional[str]:
         return self.meta.get("claim")
 
-    def listed(self, flags: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def listed(
+        self, flags: Optional[Dict[str, Any]] = None, *, stale: bool = False
+    ) -> Dict[str, Any]:
         """As the map lists it, with *flags* (disputed, presumed, superseded_by) derived from the
-        contradictions that cite it."""
+        contradictions that cite it. *stale*: a source of it changed after it was drawn."""
         meta, claim = self.meta, self.claim
         marks = dict(flags or _UNDISPUTED)
+        marks["stale"] = stale and not meta.get("superseded_at")
         if meta.get("superseded_at"):
             # A distillation that did not keep it; a decision's or a correction's mark wins.
             marks["superseded_by"] = marks.get("superseded_by") or meta.get("superseded_by")
@@ -651,6 +697,11 @@ def dated_facts(
     return sorted(listed, key=lambda fact: (fact["order"], fact["id"]), reverse=True)
 
 
+def _is_stale(fact: _Fact, records: Dict[str, _Record]) -> bool:
+    """Whether a source of *fact* changed after the fact was drawn."""
+    return any(s in records and records[s].stale() for s in fact.meta["sources"])
+
+
 def _newest_first(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(entries, key=lambda entry: (entry["created_at"], entry["id"]), reverse=True)
 
@@ -658,13 +709,12 @@ def _newest_first(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def build_map(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
     """Every source, newest first, each followed by the facts that cite it, newest first. A fact
     whose sources are all absent is listed at the end. Facts carry their derived flags."""
-    sources = _newest_first(
-        [record.listed(record.text()) for record in _records(project_root, private_root).values()]
-    )
+    records = _records(project_root, private_root)
+    sources = _newest_first([record.listed(record.text()) for record in records.values()])
     flags = _all_flags(project_root, private_root)
     facts = _newest_first(
         [
-            fact.listed(flags.get(fact_id))
+            fact.listed(flags.get(fact_id), stale=_is_stale(fact, records))
             for fact_id, fact in _facts(project_root, private_root).items()
         ]
     )
@@ -748,7 +798,9 @@ def _read_fact(project_root: Path, private_root: Path, fact_id: str) -> Optional
     contradictions = _contradictions(project_root, private_root)
     reports = _reports(project_root, private_root)
     flags = _all_flags(project_root, private_root, contradictions, reports)
-    entry = fact.listed(flags.get(fact_id))
+    entry = fact.listed(
+        flags.get(fact_id), stale=_is_stale(fact, _records(project_root, private_root))
+    )
     if fact.claim is None:
         entry.update(content=None, next_offset=None, note=_held_elsewhere(entry["holder"]))
         return entry
@@ -761,6 +813,12 @@ def _read_fact(project_root: Path, private_root: Path, fact_id: str) -> Optional
             f"SUPERSEDED by a later distillation of {fact.meta.get('superseded_by')} at "
             f"{fact.meta['superseded_at']}: its source was changed (or distilled again) and the "
             "distillation did not draw this claim again. It is kept as it was said.",
+        )
+    if entry["stale"]:
+        disputes.insert(
+            0,
+            "STALE: its source changed after this fact was drawn, and the source has not been "
+            "distilled since. The claim may no longer be true; check the source itself.",
         )
     if disputes:
         content += "\n" + "\n".join(disputes) + "\n"
@@ -787,6 +845,9 @@ def read_entry(
         return None
     text = record.text()
     entry = record.listed(text)
+    entry["version"] = record.version()
+    entry["stale"] = record.stale()
+    entry["changes"] = changes_of(project_root, record)
     kind = record.file_kind
     if text is None:
         note = _held_elsewhere(entry["holder"])
@@ -1053,6 +1114,231 @@ def add_file(
         added_by=added_by,
     )
     return _Record(meta, body_root).listed(None)
+
+
+# ---------------------------------------------------------------------------
+# Changing a source (`vault-sources-can-be-edited-replaced-and-archived`)
+# ---------------------------------------------------------------------------
+
+#: Who made a change: the operator, or an agent with the run its credential names. Built by the
+#: route from the credential, never from a request body.
+Actor = Dict[str, Any]
+OPERATOR: Actor = {"kind": "operator"}
+
+_write_locks: Dict[Tuple[str, str], threading.Lock] = {}
+_write_locks_guard = threading.Lock()
+
+
+def _write_lock(project_root: Path, source_id: str) -> threading.Lock:
+    """The short per-source lock a change holds for its read-check-write. It is not the
+    distillation's lock, so a change never waits for a model (D3)."""
+    with _write_locks_guard:
+        return _write_locks.setdefault((str(project_root), source_id), threading.Lock())
+
+
+def _changes_name(source_id: str) -> str:
+    return f"{SOURCES}/{source_id}.changes.json"
+
+
+def _read_changes(root: str, source_id: str) -> List[Dict[str, Any]]:
+    raw = storage.read(root, _changes_name(source_id))
+    if raw is None:
+        return []
+    try:
+        found = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return []
+    return [c for c in found if isinstance(c, dict)] if isinstance(found, list) else []
+
+
+def changes_of(project_root: Path, record: _Record) -> List[Dict[str, Any]]:
+    """A source's recorded changes, oldest first: from where its text is, else from the stub's
+    copy in this repository."""
+    root = record.text_root if record.text_root is not None else tracked_root(project_root)
+    return _read_changes(root, record.meta["id"])
+
+
+def record_change(
+    project_root: Path,
+    record: _Record,
+    action: str,
+    actor: Actor,
+    detail: Optional[str] = None,
+) -> None:
+    """Append one change (what, when, who) to the source's `sources/<id>.changes.json`. A private
+    source's list is also written under knowledge/, beside its stub: it holds no text."""
+    change: Dict[str, Any] = {"action": action, "at": _now(), "by": actor}
+    if detail:
+        change["detail"] = detail
+    tracked = tracked_root(project_root)
+    primary = record.text_root if record.text_root is not None else tracked
+    changes = _read_changes(primary, record.meta["id"]) + [change]
+    storage.write(primary, _changes_name(record.meta["id"]), _encode(changes))
+    if primary != tracked:
+        storage.write(tracked, _changes_name(record.meta["id"]), _encode(changes))
+
+
+def _held_record(project_root: Path, private_root: Path, source_id: str) -> _Record:
+    """The source whose text is on this machine, or `VaultError` (404, or 409 when held elsewhere)."""
+    record = (
+        _records(project_root, private_root).get(source_id) if _ID_RE.match(source_id) else None
+    )
+    if record is None:
+        raise VaultError(f"No source '{source_id}'", status=404)
+    if record.text_root is None:
+        raise VaultError(
+            f"This source is private and {private_text_is(record.meta.get('holder'))}; it is "
+            "changed on the machine that holds it.",
+            status=409,
+        )
+    return record
+
+
+def _save_meta(record: _Record, changes: Dict[str, Any]) -> None:
+    """Merge *changes* into the source's record, where its text is."""
+    assert record.text_root is not None
+    record.meta.update(changes)
+    storage.write(record.text_root, f"{SOURCES}/{record.meta['id']}.json", _encode(record.meta))
+
+
+def source_version(project_root: Path, private_root: Path, source_id: str) -> Optional[str]:
+    """A source's current version (a hash of its text, or of its file's bytes), None when it is
+    unknown or not held here."""
+    record = _records(project_root, private_root).get(source_id)
+    return None if record is None else record.version()
+
+
+def set_distilled_version(
+    project_root: Path, private_root: Path, source_id: str, version: str
+) -> None:
+    """Record the version a completed distillation drew the source's facts from (D4)."""
+    with _write_lock(project_root, source_id):
+        record = _records(project_root, private_root).get(source_id)
+        if record is None or record.text_root is None:
+            return
+        _save_meta(record, {"distilled_version": version})
+
+
+def edit_text(
+    project_root: Path,
+    private_root: Path,
+    source_id: str,
+    *,
+    content: str,
+    version: str,
+    actor: Actor,
+) -> Dict[str, Any]:
+    """Replace a text source's whole text, made from the text at *version*. Refused (409) for a
+    file source and when the text is no longer that version; nothing changes then."""
+    with _write_lock(project_root, source_id):
+        record = _held_record(project_root, private_root, source_id)
+        kind = record.file_kind
+        if kind is not None:
+            raise VaultError(file_not_text(kind[1]), status=409)
+        if record.version() != version:
+            raise VaultError(
+                "This source changed since it was opened, so this edit was not saved. Open it "
+                "again to see the current text, then make the edit on that.",
+                status=409,
+            )
+        return _write_text(project_root, record, content, actor)
+
+
+def _write_text(
+    project_root: Path, record: _Record, content: str, actor: Actor, detail: Optional[str] = None
+) -> Dict[str, Any]:
+    """Write *content* as a text source's text and record the change; the caller holds the lock."""
+    if not content:
+        raise VaultError("A source needs some text.")
+    if "\x00" in content:
+        raise VaultError(
+            "This looks like a binary file, not text; the vault takes text, PDFs and images."
+        )
+    data = content.encode("utf-8")
+    if len(data) > MAX_CONTENT_BYTES:
+        raise VaultError(
+            f"The text is {len(data)} bytes; a source is at most {MAX_CONTENT_BYTES}.", status=413
+        )
+    assert record.text_root is not None
+    before = record.version()
+    storage.write(record.text_root, f"{SOURCES}/{record.meta['id']}.md", data)
+    changes: Dict[str, Any] = {"sha256": hashlib.sha256(data).hexdigest()}
+    if "distilled_version" not in record.meta and before is not None:
+        changes["distilled_version"] = before
+    _save_meta(record, changes)
+    record_change(project_root, record, "edit", actor, detail)
+    return record.listed(content)
+
+
+def file_not_text(word: str) -> str:
+    return (
+        f"This source is a {word}: its file is changed by replacing it, not by editing its text. "
+        "Its text is a transcription the Hub made."
+    )
+
+
+def replace_file(
+    project_root: Path,
+    private_root: Path,
+    source_id: str,
+    *,
+    media_type: str,
+    data: bytes,
+    actor: Actor,
+) -> Dict[str, Any]:
+    """Replace a PDF or image source's file, as an upload is checked: 415 for another media type,
+    413 above MAX_FILE_BYTES, 400 for bytes that do not begin as the type's do. The source keeps
+    its id and fields; its transcription is discarded, so the next distillation reads the new
+    file. 409 for a text source."""
+    known = FILE_TYPES.get(media_type)
+    if known is None:
+        raise VaultError(
+            f"A file source is one of {', '.join(FILE_TYPES)}, not {media_type!r}.", status=415
+        )
+    if len(data) > MAX_FILE_BYTES:
+        raise VaultError(
+            f"The file is {len(data)} bytes; a source is at most {MAX_FILE_BYTES}.", status=413
+        )
+    if not data or not known[1](data):
+        raise VaultError(f"The bytes are not {media_type}: they do not begin as that type does.")
+    with _write_lock(project_root, source_id):
+        record = _held_record(project_root, private_root, source_id)
+        old = record.file_kind
+        if old is None:
+            raise VaultError(
+                "This source is text: it is changed by editing its text, not by replacing a file.",
+                status=409,
+            )
+        assert record.text_root is not None
+        root, source = record.text_root, record.meta["id"]
+        before = record.version()
+        storage.write(root, f"{SOURCES}/{source}.{known[0]}", data)
+        if old[0] != known[0]:
+            storage.delete(root, f"{SOURCES}/{source}.{old[0]}")
+        storage.delete(root, f"{SOURCES}/{source}.md")  # the earlier file's transcription
+        changes: Dict[str, Any] = {
+            "media_type": media_type,
+            "sha256": hashlib.sha256(data).hexdigest(),
+        }
+        if "distilled_version" not in record.meta and before is not None:
+            changes["distilled_version"] = before
+        _save_meta(record, changes)
+        tracked = tracked_root(project_root)
+        if record.meta["visibility"] == "private":
+            stub = _load(storage.read(tracked, f"{SOURCES}/{source}.json"), source)
+            if stub is not None:
+                stub["media_type"] = media_type
+                storage.write(tracked, f"{SOURCES}/{source}.json", _encode(stub))
+        record_change(project_root, record, "replace", actor)
+        return record.listed(None)
+
+
+def clear_transcription(project_root: Path, private_root: Path, source_id: str) -> None:
+    """Discard a file source's transcription, so the next distillation reads the file again."""
+    with _write_lock(project_root, source_id):
+        record = _records(project_root, private_root).get(source_id)
+        if record is not None and record.file_kind is not None and record.text_root is not None:
+            storage.delete(record.text_root, f"{SOURCES}/{source_id}.md")
 
 
 # ---------------------------------------------------------------------------
@@ -1846,7 +2132,7 @@ def close_report(project_root: Path, private_root: Path, rpt_id: str, note: str)
     return _listed_report(closed, facts, records)
 
 
-def _encode(meta: Dict[str, Any]) -> bytes:
+def _encode(meta: Any) -> bytes:
     return (json.dumps(meta, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
