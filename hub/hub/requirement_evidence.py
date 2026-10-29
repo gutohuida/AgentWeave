@@ -1605,6 +1605,135 @@ async def decide_with_verdict(
     return reviews
 
 
+async def own_accepted_commits_on_main(
+    session: AsyncSession, task: Task, root: Path, main_branch: str
+) -> frozenset:
+    """The commits *task*'s own accepted evidence names that are already in *main_branch*.
+
+    Read before a checks send-back takes the write lock, so no git runs under it: those pieces are
+    not what failed (FR-2 of `a-checks-send-back-returns-the-task-s-accepted-evidence`), and
+    `return_accepted` leaves them accepted. Unknown reachability is not on main.
+    """
+    shas = (
+        (
+            await session.execute(
+                select(EvidenceFootprint.commit_sha)
+                .join(RequirementEvidence, RequirementEvidence.id == EvidenceFootprint.evidence_id)
+                .where(
+                    RequirementEvidence.task_id == task.id,
+                    RequirementEvidence.review_state == ACCEPTED,
+                    EvidenceFootprint.commit_sha.isnot(None),
+                    EvidenceFootprint.commit_sha != "",
+                )
+                .distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not shas:
+        return frozenset()
+
+    def _on_main() -> frozenset:
+        return frozenset(sha for sha in shas if is_reachable_from(root, sha, main_branch) is True)
+
+    return await blocking.run(_on_main)
+
+
+@dataclass(frozen=True)
+class ReturnedPiece:
+    """A piece of accepted evidence a checks send-back held, with the commits it was accepted at."""
+
+    review: EvidenceReview
+    identifier: str
+    commits: Tuple[str, ...]
+
+
+async def return_accepted(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    reason: str,
+    on_main: frozenset = frozenset(),
+) -> List[ReturnedPiece]:
+    """Hold every accepted piece *task* itself recorded, with *reason* (the checks' report).
+
+    Only a checks send-back calls this (`a-checks-send-back-returns-the-task-s-accepted-evidence`,
+    D1): it is the finding that the accepted commits fail, and left accepted they stay what the
+    checks judge and approval merges, so no fix could ever be checked (F1081). A reviewer's
+    send-back never does: it decides awaiting pieces only (`decide_with_verdict`). Another task's
+    evidence is never touched, nor a piece whose every commit is in *on_main*
+    (`own_accepted_commits_on_main`): that work already landed and is not what failed. A piece
+    naming no commit is held. Stages the reviews in the caller's transaction.
+    """
+    rows = (
+        await session.execute(
+            select(RequirementEvidence, SpecRequirement)
+            .join(SpecRequirement, SpecRequirement.id == RequirementEvidence.requirement_id)
+            .where(
+                RequirementEvidence.task_id == task.id,
+                RequirementEvidence.review_state == ACCEPTED,
+            )
+            .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
+        )
+    ).all()
+    if not rows:
+        return []
+    commits_of: Dict[str, List[str]] = {}
+    for evidence_id, sha in (
+        await session.execute(
+            select(EvidenceFootprint.evidence_id, EvidenceFootprint.commit_sha).where(
+                EvidenceFootprint.evidence_id.in_([evidence.id for evidence, _ in rows]),
+                EvidenceFootprint.commit_sha.isnot(None),
+                EvidenceFootprint.commit_sha != "",
+            )
+        )
+    ).all():
+        if sha not in commits_of.setdefault(evidence_id, []):
+            commits_of[evidence_id].append(sha)
+    returned: List[ReturnedPiece] = []
+    for evidence, requirement in rows:
+        commits = tuple(commits_of.get(evidence.id, ()))
+        if commits and all(sha in on_main for sha in commits):
+            continue
+        review = EvidenceReview(
+            id=f"evr-{short_id()}",
+            project_id=evidence.project_id,
+            evidence_id=evidence.id,
+            decision=HELD,
+            actor_kind=actor.kind,
+            actor=actor.name or "",
+            run_id=actor.run_id,
+            reason=reason,
+        )
+        session.add(review)
+        evidence.review_state = HELD
+        returned.append(ReturnedPiece(review, requirement.identifier or evidence.id, commits))
+    return returned
+
+
+def returned_note(returned: Sequence[ReturnedPiece]) -> Optional[str]:
+    """The history's account of the accepted evidence a checks send-back returned (FR-4), or None.
+
+    Named apart from the awaiting pieces `verdict_note` names as held, with the commits it had been
+    accepted at, so the author and the next reviewer see why a requirement lost its acceptance.
+    """
+    if not returned:
+        return None
+    identifiers = sorted({piece.identifier for piece in returned}, key=natural_key)
+    commits: List[str] = []
+    for piece in returned:
+        for sha in piece.commits:
+            if sha[:7] not in commits:
+                commits.append(sha[:7])
+    at = f" (accepted at {', '.join(commits)})" if commits else ""
+    return (
+        f"Accepted evidence returned: {', '.join(identifiers)}{at}, held because the project's "
+        "checks found that work fails; record it again at the fix."
+    )
+
+
 async def verdict_note(session: AsyncSession, reviews: Sequence[EvidenceReview]) -> Optional[str]:
     """What a verdict decided, piece by piece, for the task's history; None when it decided none.
 

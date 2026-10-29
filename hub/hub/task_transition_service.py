@@ -941,6 +941,7 @@ async def apply_transition(
     closing_with: frozenset = frozenset(),
     failing_pieces: Optional[Dict[str, str]] = None,
     git_answers: Optional[traces.GitAnswers] = None,
+    accepted_on_main: frozenset = frozenset(),
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
 
@@ -964,6 +965,10 @@ async def apply_transition(
     recorded for it with *verdict_reason* (the verdict's notes); `revision_needed` and `rejected`
     reject only *failing_pieces* (evidence id to its own reason, `failing_pieces_of`) and hold every
     other piece with *verdict_reason*. What it decided is written on the history row's note.
+    A send-back whose origin is `checks` also holds the task's own accepted evidence
+    (`a-checks-send-back-returns-the-task-s-accepted-evidence`, D1), less the pieces whose commits
+    are all in *accepted_on_main* (`requirement_evidence.own_accepted_commits_on_main`, read by the
+    caller before its write lock).
 
     Raises `TransitionRefusedError` (or a subclass) instead of mutating when the move is not permitted.
     The caller commits; this function stages the change and the history row together so a refusal
@@ -1146,6 +1151,11 @@ async def apply_transition(
         decided = await _decide_evidence_with_verdict(
             session, task, actor, to_status, verdict_reason, failing_pieces
         )
+        if origin == ORIGIN_CHECKS and to_status == "revision_needed":
+            returned = await _return_accepted_evidence(
+                session, task, actor, verdict_reason, accepted_on_main
+            )
+            decided = " ".join(part for part in (returned, decided) if part) or None
     if decided:
         # Its own sentence after the caller's note, which may not end in one (L's check return).
         lead = (note or "").rstrip()
@@ -1341,6 +1351,28 @@ async def _decide_evidence_with_verdict(
         ),
     )
     return await requirement_evidence.verdict_note(session, reviews)
+
+
+async def _return_accepted_evidence(
+    session: AsyncSession,
+    task: Task,
+    actor: Actor,
+    verdict_reason: Optional[str],
+    on_main: frozenset,
+) -> Optional[str]:
+    """A checks send-back holds the task's own accepted evidence, so the next completion is checked
+    on the fix rather than on the commit that failed (F1081). Returns the history's account."""
+    from . import requirement_evidence
+
+    returned = await requirement_evidence.return_accepted(
+        session,
+        task,
+        actor=evidence_actor(actor),
+        reason=(verdict_reason or "").strip()
+        or f"Held with the checks' sending back of {task.id}: the accepted work fails them",
+        on_main=on_main,
+    )
+    return requirement_evidence.returned_note(returned)
 
 
 def evidence_actor(actor: Actor):

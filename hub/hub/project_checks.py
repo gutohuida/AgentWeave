@@ -2018,6 +2018,11 @@ async def return_failed_work(run_id: str) -> bool:
             if await asyncio.to_thread(unmerged, root, tip, targets) != list(run.target_shas or []):
                 return False
             report = failure_report(run.results or [], run_id=run.id, merged_sha=run.merged_sha)
+            # Read before the write lock: the send-back holds the task's accepted evidence, less
+            # what already landed (`a-checks-send-back-returns-the-task-s-accepted-evidence`, FR-2).
+            from .requirement_evidence import own_accepted_commits_on_main
+
+            on_main = await own_accepted_commits_on_main(session, task, root, project.main_branch)
             # **Compare-and-set** before the move: everything above read `completed` without a
             # write lock while git ran, and another session (a review, the operator's approval) may
             # have moved the task since. This UPDATE takes the write lock and matches only a task
@@ -2042,6 +2047,7 @@ async def return_failed_work(run_id: str) -> bool:
                     origin=ORIGIN_CHECKS,
                     verdict_reason=report,
                     note=f"the project's checks failed on check run {run.id}",
+                    accepted_on_main=on_main,
                 )
             except TransitionRefusedError:
                 logger.warning("could not return %s for its failed checks", task.id, exc_info=True)

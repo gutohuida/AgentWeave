@@ -40861,7 +40861,7 @@ Repro, read from the live database (read-only): QA approved the last task, `task
 
 ## F1081 (B) -- re-completing a sent-back task checks the commit its old accepted evidence names, not the fix
 
-**Status:** open 2026-10-29. Found right after F1080, on the same task, `task-a80259e4ab36`. (F1080 and F1081 were first written as F1047/F1048 on a branch whose ledger was behind master's; renumbered 2026-10-29.) Second occurrence of the archive task's 9-hour stall (vault note `src-f2ceb873aae1`). Being fixed by the change `a-checks-send-back-returns-the-task-s-accepted-evidence`.
+**Status:** fixed 2026-10-29 by `a-checks-send-back-returns-the-task-s-accepted-evidence` (D1): a checks send-back (a failed check run at completion, or a failing landing batch) now holds the task's own accepted evidence, less pieces already on main, so the next completion is checked on the fix. Tests: `hub/tests/test_a_checks_send_back_returns_accepted_evidence.py` (`test_fix_is_checked_after_check_run` and `test_fix_is_checked_after_landing` failed before the change by targeting A). Was: open 2026-10-29. Found right after F1080, on the same task, `task-a80259e4ab36`. (F1080 and F1081 were first written as F1047/F1048 on a branch whose ledger was behind master's; renumbered 2026-10-29.) Second occurrence of the archive task's 9-hour stall (vault note `src-f2ceb873aae1`). Being fixed by the change `a-checks-send-back-returns-the-task-s-accepted-evidence`.
 **Source:** drive
 **Theme:** Worktrees & integration x Evidence
 **Ready:** yes
