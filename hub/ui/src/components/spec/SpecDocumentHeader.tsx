@@ -6,9 +6,14 @@ import '@/styles/spec-header.css'
 
 export type SpecPhase = 'exploring' | 'approved' | 'archived' | 'current'
 
-const PHASE_LABEL: Record<SpecPhase, string> = {
+/** What the pill reads: the phase, or for a built change the Hub's `display_phase` (F1089). */
+export type SpecShownPhase = SpecPhase | 'building' | 'done'
+
+const PHASE_LABEL: Record<SpecShownPhase, string> = {
   exploring: 'Exploring',
   approved: 'Approved',
+  building: 'Building',
+  done: 'Done',
   archived: 'Archived',
   current: 'Current',
 }
@@ -71,7 +76,7 @@ export function SpecDocumentHeader({
   title: string
   kind: string
   /** Absent for a document the Hub keeps no record of (no phase is known). */
-  phase?: SpecPhase | null
+  phase?: SpecShownPhase | null
   primary?: SpecPrimaryAction | null
   health: React.ReactNode
   onArchive?: () => void

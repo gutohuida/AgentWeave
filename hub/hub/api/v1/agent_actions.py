@@ -2233,6 +2233,8 @@ async def read_spec_document(
         # Returned rather than enforced, so an agent can judge how settled this is instead of
         # guessing — or being refused and concluding the capability is absent.
         "phase": document.phase,
+        # What the operator reads: an approved change is approved, building or done (F1089).
+        "display_phase": await spec_lifecycle.display_phase(session, document),
         "explore_closed": document.explore_closed_at is not None,
         "step": document.step,
         "size": document.size,

@@ -50,6 +50,8 @@
 }
 .aw-spec-phase::before { content: ''; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
 .aw-spec-phase[data-phase="approved"], .aw-spec-phase[data-phase="current"] { background: color-mix(in oklab, var(--green) 14%, transparent); color: var(--green); }
+.aw-spec-phase[data-phase="building"] { background: color-mix(in oklab, var(--blue) 14%, transparent); color: var(--blue); }
+.aw-spec-phase[data-phase="done"] { background: color-mix(in oklab, var(--green) 14%, transparent); color: var(--green); }
 .aw-spec-chip {
   display: inline-flex; align-items: center; height: 22px; padding: 0 8px;
   border: 1px solid var(--border); border-radius: 999px; font-size: 11.5px; color: var(--text-2);

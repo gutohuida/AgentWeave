@@ -228,7 +228,7 @@ export function CommandPalette({
               >
                 <Icon name="description" size={14} className="palette-row-icon" style={{ color: 'var(--text-3)' }} />
                 <span className="palette-row-main"><span className="palette-row-title">{highlight(document.title)}</span><span className="palette-row-sub">{document.kind.replace(/-/g, ' ')} · updated {formatDistanceToNow(hubDate(document.updated_at), { addSuffix: true })}</span></span>
-                <span className="palette-status-chip" data-status={document.phase}>{document.phase}</span>
+                <span className="palette-status-chip" data-status={document.display_phase ?? document.phase}>{document.display_phase ?? document.phase}</span>
               </Command.Item>
             ))}
           </Command.Group>

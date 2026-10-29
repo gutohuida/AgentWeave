@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MenuSelect } from '@/components/ui/menu'
 import { formatAgo } from '@/lib/format'
-import { arrangeList, STATE_LABEL, type ListOrder, type ListPreferences, type SpecListEntry } from './model'
+import { arrangeList, SHOWN_LABEL, type ListOrder, type ListPreferences, type SpecListEntry } from './model'
 import '@/styles/spec-page.css'
 
 const ORDERS: Array<{ value: ListOrder; label: string; detail: string }> = [
@@ -169,14 +169,14 @@ function Row({
       data-roadmap={roadmap ? 'true' : undefined}
       aria-current={e.path === active ? 'page' : undefined}
       onClick={() => onOpen(e.path)}
-      title={`${e.title} — ${STATE_LABEL[e.state]}, changed ${formatAgo(e.updatedAt, now)}`}
+      title={`${e.title} — ${SHOWN_LABEL[e.shown]}, changed ${formatAgo(e.updatedAt, now)}`}
     >
       {roadmap ? (
         <Icon name="list_tree" size={13} className="aw-sp-list-icon" />
       ) : position !== undefined ? (
         <span className="aw-sp-list-pos">{position}</span>
       ) : null}
-      <span className="aw-sp-list-dot" data-state={e.state} aria-hidden="true" />
+      <span className="aw-sp-list-dot" data-state={e.shown} aria-hidden="true" />
       <span className="aw-sp-list-name">{e.title}</span>
       {e.building ? <span className="aw-sp-live" title="A build is running" aria-label="A build is running" /> : null}
       {roadmap && slices !== undefined ? <span className="aw-sp-list-meta">{slices}</span> : <span className="aw-sp-list-meta">{formatAgo(e.updatedAt, now)}</span>}

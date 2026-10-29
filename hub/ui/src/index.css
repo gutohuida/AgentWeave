@@ -952,10 +952,12 @@
     background: var(--surface-3); color: var(--text-2); font-size: 9px; line-height: 1.5;
     text-transform: uppercase; letter-spacing: .03em;
   }
+  .palette-status-chip[data-status="building"],
   .palette-status-chip[data-status="in_progress"],
   .palette-status-chip[data-status="under_review"],
   .palette-status-chip[data-status="proposed"] { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber); }
   .palette-status-chip[data-status="approved"],
+  .palette-status-chip[data-status="done"],
   .palette-status-chip[data-status="current"] { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
   .palette-status-chip[data-status="rejected"],
   .palette-status-chip[data-status="revision_needed"] { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }

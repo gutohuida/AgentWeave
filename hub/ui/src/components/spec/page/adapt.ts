@@ -18,6 +18,7 @@ import {
   type SpecPhase,
   type SpecTaskView,
   type TaskStatus,
+  shownOf,
 } from './model'
 
 // ── The document's structure ────────────────────────────────────────────
@@ -141,6 +142,7 @@ export function documentView(input: DocumentInputs): SpecDocumentView {
     kind: kindOf(record.kind),
     phase: PHASES.includes(record.phase as SpecPhase) ? (record.phase as SpecPhase) : 'approved',
     state: stateOf(record.phase, building, input.checkedClean),
+    shown: shownOf(stateOf(record.phase, building, input.checkedClean), record.display_phase),
     summary: payload.summary ?? '',
     problem: payload.problem ?? '',
     inScope: payload.scope?.in_scope ?? [],
@@ -227,6 +229,7 @@ export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): 
       kind: kindByPath.get(entry.path) ?? 'baseline',
       phase: archived ? 'archived' : PHASES.includes(phase) ? phase : 'approved',
       state,
+      shown: shownOf(state, record?.display_phase ?? entry.display_phase),
       updatedAt: record?.updated_at ?? entry.updated_at ?? '',
       roadmap: parentIsRoadmap ? { path: entry.parent!, order: entry.order ?? 0 } : null,
       building,

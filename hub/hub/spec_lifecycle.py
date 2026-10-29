@@ -532,6 +532,39 @@ async def open_task_ids(session: AsyncSession, document: SpecDocument) -> List[s
     return list(rows.scalars())
 
 
+async def display_phases(session: AsyncSession, documents: List[SpecDocument]) -> Dict[str, str]:
+    """The phase each document is *shown* in, by id (F1089). Not a lifecycle phase: nothing is stored.
+
+    An approved change document that has been built reads `building` while a build runs or any task
+    bound to it is open (`open_task_ids`' meaning, side-finding tasks included), and `done` when
+    neither holds; one never built stays `approved`. Every other document shows its phase.
+    """
+    from .db.models import Build, Task
+
+    shown = {document.id: document.phase for document in documents}
+    approved = [d.id for d in documents if d.kind == "change-spec" and d.phase == APPROVED]
+    if not approved:
+        return shown
+    built: Dict[str, bool] = {}
+    for document_id, state in await session.execute(
+        select(Build.document_id, Build.state).where(Build.document_id.in_(approved))
+    ):
+        built[document_id] = built.get(document_id, False) or state == "running"
+    open_rows = await session.execute(
+        select(Task.spec_document_id)
+        .where(Task.spec_document_id.in_(approved), Task.status.notin_(_TASK_DONE))
+        .distinct()
+    )
+    has_open = set(open_rows.scalars())
+    for document_id, running in built.items():
+        shown[document_id] = "building" if running or document_id in has_open else "done"
+    return shown
+
+
+async def display_phase(session: AsyncSession, document: SpecDocument) -> str:
+    return (await display_phases(session, [document]))[document.id]
+
+
 async def merged_into(session: AsyncSession, document: SpecDocument) -> List[str]:
     """Paths of the capability documents a merge has folded this change into, in merge order."""
     from .db.models import SpecDocumentMerge

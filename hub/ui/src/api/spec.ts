@@ -22,6 +22,9 @@ export interface SpecEntry {
    *  is a phase transition and does not relocate the file, so a document can be `archived` here
    *  while its path still sits outside `spec/changes/archive/` — the tree has to check both. */
   phase?: string | null
+  /** What the operator reads (F1089): `phase`, except an approved change reads `approved`,
+   *  `building` or `done`. Absent from a Hub that predates it. */
+  display_phase?: string | null
   /** The durable id the panel shell keys a `spec:` tab by (design D4, `2026-08-18-one-shell-three-panels`),
    *  present only for documents the Hub tracks a record for — `null` for a document discovery
    *  found on disk that was never created through the Hub. */
@@ -793,6 +796,9 @@ export interface SpecDocumentRecord {
   /** The authority on where the document stands. The `aw-spec-status` metadata
    *  inside the file is a copy for whoever reads it, never the source. */
   phase: 'exploring' | 'approved' | 'archived' | 'current'
+  /** What the operator reads (F1089): `phase`, except an approved change reads `approved`,
+   *  `building` or `done`. Computed by the Hub, never from `phase` here. */
+  display_phase?: 'exploring' | 'approved' | 'building' | 'done' | 'archived' | 'current'
   /** The document as the Hub last wrote it. */
   content_digest: string | null
   explore_closed: boolean
