@@ -40910,3 +40910,15 @@ Repro: `task_transition_service.py:1259` calls `project_checks.schedule` for a t
 **Tier:** 0
 
 Repro: Architect submitted the document; the answer was `blocking: []`, `ready_to_approve: true`, `warnings: []`, and the operator's Check agreed. The operator pressed Approve and got three gaps: `criterion_without_check` x16 (no `checked_by`), `no_acceptance_drive` (the first task was not depended on by every other task) and `steps_skipped` (document still at step `intake`). The first two come from `spec_completeness.approval_gaps` (`spec_completeness.py:360`, `:385`), which the submit answer and Check do not run. An agent filling a document in one pass cannot see them until the operator is already trying to approve, which costs the operator an extra round trip each time. **Expected:** `submit_spec_document`'s `blocking` (or a separate `approval_gaps` list) and Check report everything approval would, so `ready_to_approve: true` means approval goes through, or at most warns. **Test:** submit a change-spec with criteria lacking `checked_by` and no acceptance-drive task: the submit answer names `criterion_without_check` and `no_acceptance_drive`, and `ready_to_approve` is false.
+
+**Also (2026-10-29, Architect):** an unresolved open question only warns. `submit_spec_document` answered `blocking: []` and `ready_to_approve: true` for `a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset`, while three open questions were `resolved: false` and only raised `unresolved_question` warnings. The tool's own description says "An unresolved one blocks the document".
+
+## F1086 (B) -- the Hub's own knowledge-vault output dirties the project checkout and blocks its own landing
+
+**Status:** open 2026-10-29. Found by reading the ledger of `spdoc-a7d41f10be14` (Architect).
+**Source:** ledger
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Repro: `task-94d59bc7214d` was approved at 17:02. Its integration was `skipped` twice (17:03, 17:04) with "the project's checkout has uncommitted changes to tracked files". Stall `stall-92f8a073661c` was raised, and the mender gave up: "uncommitted changes under knowledge/ (vault output)". The task landed only at 17:38, after the operator-approved commit `6e3689b` "Commit knowledge vault output (operator-approved to unblock integration)" and a 30-minute check rerun. `hub/hub/vault.py` writes sources and facts under the project's `knowledge/` directory, which is tracked, so every distillation can block every approval until somebody commits by hand. F715 made the preview *say* the checkout is dirty; nothing stops the Hub from being the one dirtying it. **Expected:** the Hub's own writes to tracked paths in the project checkout never block its own integration: it commits them itself, or integration does not count them. **Test:** with an uncommitted vault write under `knowledge/` and nothing else changed, approving a task integrates it, `merged`.
