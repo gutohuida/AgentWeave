@@ -49,6 +49,10 @@ const RECOMMENDED: SpecRecommendedBuild = {
   budget_cap_usd: null,
   landing: 'main',
   task_builders: {},
+  // One checker (`one-checker`): the document's reviewer, read as its checker.
+  builder: null,
+  checker: 'qa',
+  task_checkers: {},
   reasons: {
     mode: 'The work splits into three tasks.',
     agent: 'dev built the module it changes.',
@@ -232,8 +236,8 @@ describe('Approve, Approve and build, and Build (recommendation-prefills)', () =
     expect(within(dialog).getByTestId('build-reason-agent')).toHaveTextContent(
       'dev built the module it changes.',
     )
-    expect(within(dialog).getByTestId('build-reviewer')).toHaveTextContent('@qa')
-    expect(within(dialog).getByTestId('build-reason-reviewer')).toHaveTextContent(
+    expect(within(dialog).getByTestId('build-checker')).toHaveValue('qa')
+    expect(within(dialog).getByTestId('build-reason-checker')).toHaveTextContent(
       'qa reviewed the last slice.',
     )
     expect(within(dialog).getByTestId('build-reason-mode')).toHaveTextContent('three tasks')
@@ -289,9 +293,11 @@ describe('Approve, Approve and build, and Build (recommendation-prefills)', () =
       driver: 'flow',
       level: 'reviewed',
       builders: [],
-      reviewers: [],
+      builder: '',
+      checker: 'qa',
       landing: 'main',
       task_builders: {},
+      task_checkers: {},
     })
   })
 

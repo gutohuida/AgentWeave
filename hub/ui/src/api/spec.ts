@@ -183,6 +183,10 @@ export interface BuildChoices {
   level?: BuildLevel
   builders?: string[]
   reviewers?: string[]
+  /** The default builder and checker, and each task's own checker by key (`one-checker`). */
+  builder?: string
+  checker?: string
+  task_checkers?: Record<string, string>
   lead?: string
   budget_cap_usd?: number
   window_start?: string
@@ -211,6 +215,11 @@ export interface SpecRecommendedBuild {
   landing?: BuildLanding
   /** Each declared task's builder by key, as the document names it (F1046). */
   task_builders?: Record<string, string | null>
+  /** The default builder and checker, and each task's own checker by key (`one-checker`), an older
+   *  document's tester or reviewer read as its checker. Absent from an older Hub. */
+  builder?: string | null
+  checker?: string | null
+  task_checkers?: Record<string, string | null>
   reasons: Partial<
     Record<
       | 'mode'
@@ -223,6 +232,7 @@ export interface SpecRecommendedBuild {
       | 'level'
       | 'builders'
       | 'reviewers'
+      | 'checker'
       | 'lead'
       | 'cap'
       | 'landing',
