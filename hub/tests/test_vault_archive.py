@@ -219,3 +219,4 @@ def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
 # Re-run at b8eaaae (2026-10-29): 26 vault tests and test_surface_ceilings pass; new commit so hub-tests re-checks.
 # Re-run at 153f814 (2026-10-29): 7 archive tests and test_surface_ceilings (6) pass; new commit so hub-tests re-checks.
 # Re-run at e916bfc (2026-10-29): archive, agent-change, change tests (26) and test_surface_ceilings (6) pass on the merge with master a11ae1d; new commit so hub-tests re-checks.
+# Re-run at 7e323f2 (2026-10-29): 26 vault tests and test_surface_ceilings (6) pass; new commit so hub-tests re-checks.
