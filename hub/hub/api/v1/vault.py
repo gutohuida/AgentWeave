@@ -470,7 +470,7 @@ async def restore_vault_source(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """The operator restores an archived source; 409 for one that is not archived."""
+    """The operator restores an archived source (useRestoreVaultSource in hub/ui/src/api/vault.ts calls this); 409 for one that is not archived."""
     root, private = await roots(session, project[0])
     try:
         return await asyncio.to_thread(
