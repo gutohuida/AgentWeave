@@ -4,8 +4,6 @@ vault line and both checks, stay readable by id, and come back on restore.
 
 `vault-sources-can-be-edited-replaced-and-archived` (Tier 2), the operator's half of ac-archive,
 ac-out-of-checks, ac-archived-read and ac-restore (the agent tools' half is with those tools).
-
-Client reach (ratchet passes, 6 tests, at 3e5c373): the archive routes are called by hub/ui/src/api/vault.ts (the clientless-route ratchet holds at its ceiling of 19; count re-measured at 19 on 2026-10-29 at HEAD, with master a11ae1d merged in, route table read, by this task's checkout). The first Hub check ran at f7cf6d3, before the client hooks (d4bf7fe) existed; HEAD carries them; test_surface_ceilings.py passes (6) at 4751ac4, and again at 1121fe1 with master a11ae1d merged (2026-10-29), and again at 4cb5bb9 by the developer turn that moved the task to completed, and again at 6c7a8b8 (6 passed, 2026-10-29).
 """
 
 import json
@@ -195,18 +193,6 @@ def test_the_archive_routes_have_a_client() -> None:
     assert len(orphans) <= 19, f"clientless routes grew past the ratchet: {len(orphans)}"
 
 
-# Archive client reach: hub/ui/src/api/vault.ts calls archive, restore and /vault/archived.
-# Measured on the merged tree 2026-10-29: 19 clientless routes, equal to the ceiling.
-# Re-run 2026-10-29: test_surface_ceilings passes on this tree (6 passed).
-# Re-run 2026-10-29 after the archive client landed: hub-tests re-checks on this commit (vault tests 179 passed).
-# Re-run 2026-10-29 (Developer turn): ratchet and vault suites pass at HEAD 51e6d71; touching so hub-tests re-runs on a new commit.
-# Re-run 2026-10-29: hub-tests ratchet passes at HEAD (19 == ceiling); new commit for the check.
-# Re-measured at acc4569 (turn 2026-10-29): 19 clientless routes, none of them archive routes.
-# Re-run 02:00 2026-10-29: 12 ratchet+archive tests pass, 179 vault tests pass at d565e59.
-# Re-run 2026-10-29 (Developer turn): ratchet 6 passed and vault archive/changes 25 passed at 98189bc; touching so hub-tests re-runs on a new commit.
-# Re-run 2026-10-29 (Developer, later turn): the ratchet passes locally at 19 (identical clientless set to master); touching so hub-tests re-runs.
-
-
 def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
     """The operator's three archive routes each have a client hook in the dashboard's api layer."""
     src = (Path(__file__).resolve().parents[1] / "ui" / "src" / "api" / "vault.ts").read_text(
@@ -217,13 +203,3 @@ def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
     for route in ("/archive`", "/restore`", "/vault/archived`"):
         assert route in src
     assert src.count("/api/v1/projects/${projectId}/vault/") >= 3
-
-
-# Re-run at 1028d51 (2026-10-29): ratchet passes on the branch and on its merge with master; new commit for hub-tests.
-# Re-run at b8eaaae (2026-10-29): 26 vault tests and test_surface_ceilings pass; new commit so hub-tests re-checks.
-# Re-run at 153f814 (2026-10-29): 7 archive tests and test_surface_ceilings (6) pass; new commit so hub-tests re-checks.
-# Re-run at e916bfc (2026-10-29): archive, agent-change, change tests (26) and test_surface_ceilings (6) pass on the merge with master a11ae1d; new commit so hub-tests re-checks.
-# Re-run at 7e323f2 (2026-10-29): 26 vault tests and test_surface_ceilings (6) pass; new commit so hub-tests re-checks.
-# Re-run 2026-10-29 (Developer turn, 4 evidence rows recorded): ratchet and 25 vault tests pass at HEAD; new commit so hub-tests re-checks.
-# ratchet re-verified 2026-10-29: test_surface_ceilings passes at HEAD (client hooks reach archive, restore, list-archived)
-# Re-run 2026-10-29 (Developer turn): test_surface_ceilings 6 passed locally at HEAD (19 == ceiling); new commit so hub-hub-tests re-runs.

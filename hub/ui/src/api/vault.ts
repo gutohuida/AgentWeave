@@ -295,7 +295,7 @@ export function useArchiveVaultSource() {
   })
 }
 
-/** Restore an archived source (`POST /vault/sources/{id}/restore`); no component calls it yet; it is the route's client for the route ratchet. */
+/** Restore an archived source (`POST /vault/sources/{id}/restore`); no component calls it yet. */
 export function useRestoreVaultSource() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)

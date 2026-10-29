@@ -452,7 +452,7 @@ async def archive_vault_source(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """The operator archives a source (called by useArchiveVaultSource in hub/ui/src/api/vault.ts, ratchet checked 2026-10-29): it and its facts leave the map, the turn's vault line and
+    """The operator archives a source: it and its facts leave the map, the turn's vault line and
     the checks, and stay readable by id. 404 for an unknown source, 409 for one already archived
     or held on another machine."""
     root, private = await roots(session, project[0])
@@ -470,7 +470,7 @@ async def restore_vault_source(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """The operator restores an archived source (useRestoreVaultSource in hub/ui/src/api/vault.ts calls this); 409 for one that is not archived."""
+    """The operator restores an archived source; 409 for one that is not archived."""
     root, private = await roots(session, project[0])
     try:
         return await asyncio.to_thread(
@@ -485,7 +485,7 @@ async def list_archived_vault_sources(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """The archived sources, newest first; the map does not list them (useArchivedVaultSources in hub/ui/src/api/vault.ts calls this)."""
+    """The archived sources, newest first; the map does not list them."""
     root, private = await roots(session, project[0])
     return {"sources": await asyncio.to_thread(vault.list_archived, root, private)}
 
