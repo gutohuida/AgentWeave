@@ -1459,12 +1459,14 @@ def _set_archived(
 def archive_source(
     project_root: Path, private_root: Path, source_id: str, *, actor: Actor
 ) -> Dict[str, Any]:
+    """Archive a source; 404 for an unknown one, 409 for one already archived."""
     return _set_archived(project_root, private_root, source_id, archive=True, actor=actor)
 
 
 def restore_source(
     project_root: Path, private_root: Path, source_id: str, *, actor: Actor
 ) -> Dict[str, Any]:
+    """Restore an archived source; 404 for an unknown one, 409 for one not archived."""
     return _set_archived(project_root, private_root, source_id, archive=False, actor=actor)
 
 
