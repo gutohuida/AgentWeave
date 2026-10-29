@@ -2489,6 +2489,14 @@ async def _render_hub_agent_context(
                 lines.append(duty)
         lines.append("")
 
+    # The build the bound task, or the task under review, belongs to: its driver and that task's
+    # builder and checker (`agents-read-the-build`), whichever document the operator has open.
+    from ... import builds as _builds
+
+    lines.extend(
+        await _builds.turn_lines(db, task_id or (review.task_id if review is not None else None))
+    )
+
     if spec_document:
         # The document is the file on disk, so its existence is a filesystem question. A project
         # whose directory is unavailable simply contributes no line here — an unavailable workspace

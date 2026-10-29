@@ -26,7 +26,8 @@ async def test_a_flow_whose_tasks_name_no_reviewer_is_warned(app, planner):  # n
     body = await _submit(app, planner, _flow(("a", {"files": ["x.py"]})))
     (warning,) = _warned(body)
     assert warning["where"] == "tasks"
-    assert "reviewer" in warning["message"]
+    # One checker per task (`one-checker`): the warning names the field a new document sets.
+    assert "checker" in warning["message"]
     assert "any free agent" in warning["message"]
     # Advisory: it never enters the blocking findings.
     assert CODE not in {f["code"] for f in body["blocking"]}
@@ -35,6 +36,12 @@ async def test_a_flow_whose_tasks_name_no_reviewer_is_warned(app, planner):  # n
 @pytest.mark.asyncio
 async def test_a_flow_with_a_declared_reviewer_is_not_warned(app, planner):  # noqa: F811
     body = await _submit(app, planner, _flow(("a", {"files": ["x.py"], "reviewer": "aw-reviewer"})))
+    assert _warned(body) == []
+
+
+@pytest.mark.asyncio
+async def test_a_flow_with_a_declared_checker_is_not_warned(app, planner):  # noqa: F811
+    body = await _submit(app, planner, _flow(("a", {"files": ["x.py"], "checker": "aw-reviewer"})))
     assert _warned(body) == []
 
 
