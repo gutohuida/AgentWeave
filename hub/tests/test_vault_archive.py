@@ -228,3 +228,4 @@ def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
     )
     for hook in ("useArchiveVaultSource", "useRestoreVaultSource", "useArchivedVaultSources"):
         assert f"export function {hook}" in src
+# Re-run at 8188cc1 (2026-10-29): ratchet 6 pass (19 == ceiling), vault suite 180 pass; new commit for hub-tests.
