@@ -209,3 +209,4 @@ def test_the_archive_routes_have_a_client() -> None:
 # Re-run at 667287d: ratchet measured 19 == ceiling, 34 archive/contradiction/spec-check tests pass.
 # Re-run at 5a05f1f (turn 2026-10-29, 3rd): 13 archive/agent-change tests pass, route ratchet 19 == ceiling; left uncommitted for the Hub snapshot.
 # Re-run at a9f9ee1: surface-ceilings 6 pass (19 clientless routes); archive+agent-change tests 13 pass.
+# Re-run 2026-10-29 (Developer turn): ratchet 6 passed and vault archive/changes 25 passed at 98189bc; touching so hub-tests re-runs on a new commit.
