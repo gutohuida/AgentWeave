@@ -173,6 +173,9 @@ export function VaultScreen() {
       ? readableApiError(contradictions.error, "Could not read this project's contradictions.")
       : null,
     reports.error && !isNoVault(reports.error) ? readableApiError(reports.error, "Could not read this project's reports.") : null,
+    archivedSources.error && !isNoVault(archivedSources.error)
+      ? readableApiError(archivedSources.error, "Could not read this project's archived sources.")
+      : null,
   ].filter((n): n is string => Boolean(n))
 
   /** A change is saved at once; when the Hub says the facts are stale or are being drawn again, the
