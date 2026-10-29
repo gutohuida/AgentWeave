@@ -215,3 +215,4 @@ def test_the_archive_routes_have_a_client() -> None:
 # Re-run at 236b157 (2026-10-29): ratchet 6 pass, vault tests 13 pass; fresh commit so hub-tests re-checks.
 # Re-run at 19b681a (2026-10-29): ratchet 6 pass, 69 vault tests pass; fresh commit so hub-tests re-checks.
 # Re-run at 37075b8 (2026-10-29): ratchet 6 pass (19 == ceiling), 53 vault tests pass; hooks in vault.ts postdate failed run f7cf6d.
+# Re-run at 81fa19a (2026-10-29): ratchet 6 pass (19 == ceiling), 25 archive/agent/changes tests pass; fresh commit so hub-tests re-checks.
