@@ -1,0 +1,180 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "project P with documents A and B, and the operator opens B on the Spec page",
+      "how_to_check": "UI test on SpecPage with a remounted tree and preserved localStorage; plus the drive below",
+      "key": "ac-reopens",
+      "requirement": "reopens-last",
+      "then": "B is open both times, not the manifest",
+      "when": "they go to Overview, then click Spec in the rail; and again after reloading the window"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub :8010 with the built bundle",
+      "how_to_check": "Drive on the trial Hub in a browser; fails on master by opening the manifest",
+      "key": "ac-drive",
+      "requirement": "reopens-last",
+      "then": "the change document is open each time",
+      "when": "the operator opens a change document, leaves for the board, returns to Spec, then reloads the window and returns again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "B is remembered",
+      "how_to_check": "UI test",
+      "key": "ac-named",
+      "requirement": "named-wins",
+      "then": "A opens from the link, and A opens again from the rail",
+      "when": "a link to A is followed, then the operator leaves and clicks Spec in the rail"
+    },
+    {
+      "checked_by": "agent",
+      "given": "B is remembered in project P, and project Q has documents C and D",
+      "how_to_check": "UI test with two project ids",
+      "key": "ac-per-project",
+      "requirement": "per-project",
+      "then": "P opens B, and Q later opens D",
+      "when": "the operator opens D in Q, returns to P and clicks Spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "B is remembered and B is then deleted",
+      "how_to_check": "UI test with B removed from the list payload",
+      "key": "ac-gone",
+      "requirement": "gone-falls-back",
+      "then": "the manifest home opens, and B is no longer remembered",
+      "when": "the operator clicks Spec in the rail"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "746e72e0c4ab3bf2ba9f9436a034e0d59691e26cb851c32cd4eb8dcd8b2f6ff6",
+      "FR-2": "1679efd68cf3dcf2d036a51e9c30fcb2afdb9df3840ea5e5b87f8a8960fa6163",
+      "FR-3": "43cf1352f28630f2415fb87535e172b1ef412a502033461df6f6ab419471bc35",
+      "FR-4": "06b9e99d6ab897db69ba2a09c810fc89092ce3fee0d1629aa0b855dcb57e4b12"
+    },
+    "high_water": 4,
+    "requirements": {
+      "gone-falls-back": "FR-4",
+      "named-wins": "FR-2",
+      "per-project": "FR-3",
+      "reopens-last": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "builders": [
+      "Developer"
+    ],
+    "cron": "*/5 * * * *",
+    "driver": "hand",
+    "landing": "main",
+    "level": "reviewed",
+    "mode": "none",
+    "reasons": {
+      "agent": "Developer (Sonnet): routine UI state work, to save quota.",
+      "cron": "No flow, so no schedule.",
+      "mode": "One small UI task; a flow's setup costs more than handing it to one agent.",
+      "reviewer": "QA drives it in the browser and gives the verdict.",
+      "stop": "No flow, so nothing to stop.",
+      "tester": "No separate tester: QA checks and tests."
+    },
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Remembered per project and per window, like the list's other preferences (`page/hooks.ts`), never on the Hub. The last document opened is a habit of one person in one window, not shared project state. A link or a navigation that names a document always wins; remembering only fills in the case where none is named. The board's remembered scope (slice board-by-spec) follows the same rule.",
+  "evidence": {
+    "checked": [
+      "SpecPage.tsx: with no document named, the effect resolves to the manifest home via resolveSelection(inventory, null, home)",
+      "page/hooks.ts: list preferences are already kept per project in localStorage, the pattern this follows"
+    ],
+    "limits": [
+      "Not driven; whether the rail's Spec link always arrives with no document named was read, not observed"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "fix",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Operator, 2026-10-28 (vault note src-08aab5d8a1c5): \"The operator keeps returning to it and seeing the main AgentWeave spec, when they just want to go back to the spec they were on.\" Cause, read on master: when the Spec page is reached with no document named, `SpecPage.tsx` (the effect at ~line 52) always resolves to the manifest home (`resolveSelection(inventory, null, list.specList?.home)`). Nothing records which document was open last.",
+  "requirements": [
+    {
+      "key": "reopens-last",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the Spec page is reached with no document named, it opens the document the operator last had open on the Spec page in that project, including after the app is reloaded or restarted."
+    },
+    {
+      "key": "named-wins",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the Spec page is reached with a document named (a link, the palette, a notification, back/forward), it opens that document, and that document becomes the one remembered."
+    },
+    {
+      "key": "per-project",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each project remembers its own last document; opening a document in one project never changes what another project's Spec page opens."
+    },
+    {
+      "key": "gone-falls-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the remembered document no longer exists (deleted, or renamed by a path no longer in the list), the Spec page opens what it opens today (the manifest home, then the first readable document), and forgets the stale one. An archived document that is still in the list is reopened."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Spec page reached with no document named, in each project",
+      "Falling back to today's behaviour when the remembered document no longer exists"
+    ],
+    "non_goals": [
+      "Remembering the scroll position or the open section inside the document",
+      "Remembering documents in the side panel's tabs (they already persist through panelTabsStore)",
+      "Sharing the remembered document across windows, machines or the Hub",
+      "Changing which document a link, the palette or a notification opens"
+    ]
+  },
+  "summary": "Opening the Spec page without naming a document opens the one the operator last had open in that project, not the AgentWeave manifest.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "depends_on": [],
+      "description": "Remember, per project and per window, the last document open on the Spec page, and open it when the page is reached with no document named, falling back to today's choice when it no longer exists. Write the UI test for ac-reopens first and see it fail on master, then the rest; rebuild and commit the bundle; drive it on the trial Hub.",
+      "files": [
+        "hub/ui/src/components/spec/SpecPage.tsx",
+        "hub/ui/src/components/spec/page/hooks.ts",
+        "hub/ui/src/__tests__/specPageRemembersLast.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "remember-last-spec",
+      "requirements": [
+        "reopens-last",
+        "named-wins",
+        "per-project",
+        "gone-falls-back"
+      ],
+      "reviewer": "QA",
+      "title": "Spec page reopens the last spec"
+    }
+  ],
+  "title": "The spec page reopens the spec you were reading"
+}

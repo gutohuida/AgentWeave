@@ -1,0 +1,103 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "The slices follow what the operator can see working, not the technical layers. Slice 1 makes the plan one thing and puts it in the spec. Both the recommendation step (2) and the dialog redesign (3) are built on it. Redesigning the dialog first would mean redesigning a screen whose data still disagrees with itself. Slices 4, 5 and 6 do not depend on 1 to 3, so they can run alongside them.\n\nDecided with the operator, 2026-10-29:\n- **One person checks a task.** That checker drives the product and gives the verdict.\n- **Build stays a dialog.** Every choice made in it is written into the spec, so agents know how the spec is being built.\n- **People are set per task, with build-wide defaults.** Each task's builder and checker come pre-filled, and the operator changes only the rows they want to.\n- **Recommendations weigh only each agent's model, that model's cost, and how complex the task is.** They are pre-filled suggestions the operator can override at Build, not a step the operator approves.\n- **By hand means the operator starts the work.** A hand build only puts the tasks on the board under their builders. The operator then asks an agent to pick a task up.\n- **Readable ids sit alongside the internal id.** People and agents use the readable one. The internal `task-...` id stays as the durable key, so nothing that already stores ids breaks. Tasks with no spec use a project acronym. A task keeps its readable id when its spec is renamed.\n- **Tasks disappearing from the board are set aside.** Neither the operator nor the code shows a cause, so the board slice covers filtering only.\n- **The spec header is redesigned, not made collapsible.** It goes from three rows to two: the breadcrumb, history and slice navigation become a small line above the title, and the journey ribbon folds into the phase pill. Banners join the header as one line that can be expanded. Once the body is scrolled, the header condenses to a single line with the title, the phase and the primary action. In the side panel, the document switcher and tabs share that row. Collapsible parts were rejected because they would keep every layer and make the operator fold them on every visit.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Spec header: redesign it, or make its parts collapsible? Answer: redesign it, compact and condensing on scroll (operator, 2026-10-29).",
+      "resolved": true
+    }
+  ],
+  "problem": "Operator, 2026-10-29: the Build screen \"feels disconnected from the process\" and \"doesn't tie together\". What I found on master by reading the code (nothing was driven):\n- The spec names people in overlapping ways: `delivery.agent`, `builders`, `reviewer`, `reviewers`, `tester`, `tasks[].builder` and `tasks[].reviewer`. The Build dialog (`BuildDialog.tsx`) ticks only `builders` and `reviewers`. It prints `reviewer` as a line of text, and never shows `tester` or a task's own reviewer. So an agent the spec named to check the work does not come pre-selected.\n- What the operator chooses at Build is stored on the build record, never on the spec. An agent told to build reads only the recommendation and takes it as the plan (F1083: Architect started a flow on a hand build). Nothing refuses a second driver on a document whose build is running.\n- At Build, a task's builder becomes its assignee (`builds.cover_tasks`). Whether a flow then gives that task to that agent when they are outside the build's `builders` list is untested, and unclear from the code (`scheduler._agents_a_loop_may_staff`).\n- Nothing recommends who should build or check each task.\n- The board (`BoardView.tsx`) filters only by agent and title. It cannot show one spec's tasks, or the tasks with no spec.\n- Task ids like `task-2a9cc1abc8e4` are hard to tell apart when an agent names one in a message.\n- The spec header stays fixed at the top of the document. It has three rows (`SpecPageHeader.tsx`): the bar with history, breadcrumb and slice navigation; the title, meta and actions; and the journey ribbon. A banner follows, and in the side panel a document switcher and tabs as well. Together they leave little room for the body (operator, 2026-10-28, vault note src-2a9cc1abc8e4).",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "One plan of people per task, from the spec's recommendation through Build to the board",
+      "The operator's build choices recorded in the spec where agents read them",
+      "A recommended builder and checker for each task",
+      "A redesigned Build dialog",
+      "Filtering the board by spec, by no spec, or showing all tasks",
+      "Readable task ids",
+      "A redesigned spec header that leaves the body room"
+    ],
+    "non_goals": [
+      "Finding why some tasks seemed to disappear from the board (set aside on 2026-10-29: no repro)",
+      "Changing what the levels Fast, Reviewed and Gated decide",
+      "Starting agents automatically in a hand build",
+      "Recommending agents by anything other than model, cost and task complexity (for example, by who built similar work before)",
+      "Replacing the internal task-... ids",
+      "Redesigning the rest of the spec page beyond its header",
+      "Reopening the last spec on the Spec page (its own small change, the-spec-page-reopens-the-spec-you-were-reading)"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "On the trial Hub, a spec whose task t1 names builder DeveloperOpus and checker QA is built as a flow whose builders list holds only Developer. t1 is worked by DeveloperOpus and checked by QA. The spec shows the build as the operator's choice. An agent's create_flow on the spec is refused, naming the build.",
+      "intent": "Each task names one builder and one checker. Build opens with exactly the people the spec names. Whatever the operator chooses is written into the spec, where agents read it. Each driver gives every task to its builder and its check to its checker, and a second driver on a running build is refused (F1083).",
+      "key": "build-plan-in-spec",
+      "title": "The build plan lives in the spec, and every task goes to its people"
+    },
+    {
+      "builds_after": [
+        "build-plan-in-spec"
+      ],
+      "done": "A spec with one hazardous task and one routine task recommends different agents for them, with a stated reason for each pick, and Build opens with those picks filled in. A reviewer files a follow-up on a spec whose flow has stopped on an empty queue. The task gets the build's builder and checker, and the flow starts it without anyone stepping in.",
+      "intent": "While a spec is written, before delivery, each task gets a recommended builder and checker chosen from the roster by model, cost and the task's complexity, each with its reason. Build opens with them pre-filled, and the operator can override any of them. A follow-up task filed against a spec whose build is running, such as a reviewer's side finding, joins that build. It goes to the build's builder and checker, and a flow that stopped on an empty queue picks it back up.",
+      "key": "recommended-people",
+      "title": "Every task comes with a recommended builder and checker"
+    },
+    {
+      "builds_after": [
+        "build-plan-in-spec",
+        "recommended-people"
+      ],
+      "done": "The operator approves the mock, the shipped dialog matches it, and every field the spec carries is visible and pre-filled.",
+      "intent": "The Build dialog is redesigned in the UI overhaul's style around the one plan: build-wide defaults, plus a per-task table of builder and checker showing the recommendation and its reason. It is mocked first, as real components.",
+      "key": "build-dialog-overhaul",
+      "title": "The Build dialog, redesigned"
+    },
+    {
+      "builds_after": [],
+      "done": "Choosing a spec on the board shows exactly its tasks. 'No spec' shows exactly the unbound ones. 'All' shows every task the board shows today. A task approved while another batch is checking reads 'waiting to land' on its card. The spec does not read as built until that task has landed.",
+      "intent": "The board can be narrowed to one spec's tasks or to the tasks that belong to no spec, or can show every task. It says which of these it is showing. Each task's card says whether its approved work is waiting to land, being checked, or landed. A spec or build counts as done only when every one of its tasks has landed on main, not merely been approved.",
+      "key": "board-by-spec",
+      "title": "The board shows one spec, no spec, or all"
+    },
+    {
+      "builds_after": [],
+      "done": "An agent's message names 'BPS-3'. The operator finds the task on the board by that id, every task tool accepts it, and the id is unchanged after the spec is renamed.",
+      "intent": "Every task gets a short, readable id made of its spec's acronym and a number (Jira style), or the project's acronym when it has no spec. The id is shown everywhere a task is named and accepted wherever a task id is.",
+      "key": "readable-task-ids",
+      "title": "Tickets have readable ids"
+    },
+    {
+      "builds_after": [],
+      "done": "In the side panel at its default width, with a warning showing, the body is visible above the fold. Every action is still reachable without opening a menu that was not needed before. The operator approves the result against the mock.",
+      "intent": "The spec header is two rows instead of three, with banners folded into it, and condenses to one line once the body is scrolled. This holds in the page and in the side panel. It is mocked first, as real components.",
+      "key": "compact-spec-header",
+      "title": "The spec header, redesigned"
+    }
+  ],
+  "summary": "How an approved spec gets built is spread across overlapping fields today: who builds and checks each task, how the work is driven, and where it lands. The Build dialog shows only some of them, and none of it is written back where agents can read it. It all ends on a board that cannot be narrowed to one spec and names tickets by random ids, under a spec header that leaves little room for the spec itself. This roadmap makes it one plan, from recommendation to board.",
+  "tasks": [],
+  "title": "Building a spec ties together, from plan to board"
+}

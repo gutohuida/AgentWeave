@@ -158,4 +158,4 @@ if __name__ == "__main__":
 # Observed on task-a85075abe995's branch (88c8b2c + this drive), 2026-10-29 (artefacts
 # drive1029-build-plan-in-spec/212021-dialog): 15 passed, 0 failed. The dialog opens with Developer and
 # QA as the defaults and t1 as DeveloperOpus/QA2, and confirming sends exactly those people. The
-# spec page's approval bar for the same document still read "names no reviewer" (F1085).
+# spec page's approval bar for the same document still read "names no reviewer" (F1088).

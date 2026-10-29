@@ -1,0 +1,368 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a build where drive task D and build task B both serve FR-x, D is approved and landed with accepted FR-x evidence at its own commit, and B's commit breaks an existing test",
+      "how_to_check": "Hub test through the real task and evidence routes over a git fixture; it fails on master because the run targets D's commit",
+      "key": "ac-shared-requirement-check",
+      "requirement": "own-work",
+      "then": "a check run is recorded whose target contains B's branch commit, it fails naming the broken test, and no pass is reused from D's run",
+      "when": "B moves to completed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "tasks A and B both serve FR-x, B is approved with accepted FR-x evidence at commit b, and A has its own commit a",
+      "how_to_check": "Hub test reading the integration preview and the task_integrations row A's approval writes",
+      "key": "ac-sibling-not-merged",
+      "requirement": "own-work",
+      "then": "A's merge targets are a only, and b is not merged through A",
+      "when": "A is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "B from ac-shared-requirement-check was sent back and D's commit is on the main branch",
+      "how_to_check": "Same Hub test, continued: count task_check_runs for B after the second completion",
+      "key": "ac-recompletion-checked",
+      "requirement": "every-completion-checked",
+      "then": "a new check run targets that commit",
+      "when": "B completes again with a new commit"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task C depends only on D; task B (not a prerequisite of C) serves FR-x with D and is approved with accepted FR-x evidence at commit b",
+      "how_to_check": "Hub test: approve C through PATCH /tasks and assert 200, and that git log of C's branch has no merge of b",
+      "key": "ac-no-third-party-merge",
+      "requirement": "prerequisite-is-its-own",
+      "then": "approval does not refuse for lacking b, and C's checkout was never asked to merge b",
+      "when": "C is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "C depends on D and D's commit d is brought into C's checkout",
+      "how_to_check": "Hub test reading the merge commit's message in C's worktree",
+      "key": "ac-merge-label",
+      "requirement": "merge-names-its-producer",
+      "then": "its message names d and D's task id, and no other task's",
+      "when": "the Hub writes the merge commit"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow whose only moving task has a run executing for longer than the no-progress window, with no status change",
+      "how_to_check": "Hub test with the run registered live and the clock past NO_PROGRESS_MINUTES; assert no stalls row",
+      "key": "ac-long-run-no-stall",
+      "requirement": "live-run-is-progress",
+      "then": "no no_progress stall is opened for that flow",
+      "when": "the stall scan runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task in_progress with an executing run",
+      "how_to_check": "Hub test through the mender's agent-actions route with the run registered live",
+      "key": "ac-reset-refused",
+      "requirement": "no-reset-of-a-live-run",
+      "then": "the call is refused naming the run id, agent and start time, and the task's status and history are unchanged",
+      "when": "the mender calls mend_reset_task to assigned"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build with default builder Developer and checker QA",
+      "how_to_check": "Hub test for the stored people and the flow's firing; vitest for the board card's 'by default' mark, fed the shape GET /tasks returns",
+      "key": "ac-added-task-staffed",
+      "requirement": "mid-build-task-has-people",
+      "then": "the task's builder is Developer and checker QA, the board marks both 'by default', and the flow starts it when its dependencies are met",
+      "when": "a reviewer adds a task to it naming neither"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review",
+      "how_to_check": "Hub test through update_task and task_history; vitest for TaskTransitionHistory fed the route's real response",
+      "key": "ac-reason-recorded",
+      "requirement": "send-back-says-why",
+      "then": "task_history's revision_needed row carries merge-needed and the sentence, and the app's task history shows both",
+      "when": "the reviewer sends it back with class merge-needed, a sentence, and no failing pieces"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review",
+      "how_to_check": "Hub test through the agent update_task route",
+      "key": "ac-reason-required",
+      "requirement": "send-back-class-producer",
+      "then": "the call is refused naming the six classes and the task stays under_review",
+      "when": "the reviewer sends it back with no reason class"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose check fails, once failing on confirmation and once passing on the confirming re-run",
+      "how_to_check": "Hub test with stubbed check results (confirmed exit 1, then 0)",
+      "key": "ac-hub-sendback-class",
+      "requirement": "send-back-class-producer",
+      "then": "the first row records broken-check and the second records flaky",
+      "when": "the Hub sends it back"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the trial Hub :8010 restarted onto this change, and a two-task flow where a drive task and a build task share a requirement and the build task breaks an existing test",
+      "how_to_check": "Drive on :8010 with Haiku agents; read task_check_runs.target_shas and the task history",
+      "key": "ac-live-replay",
+      "requirement": "own-work",
+      "then": "the build task's completion check fails on its own commit before any review turn starts, and no task is asked to merge a commit of a task it does not depend on",
+      "when": "the flow runs both tasks to completion"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "f9b7051999e1a553efc4b8fb6823f68696ef6c780ceef1989551184b439d4515",
+      "FR-2": "6673420693c026aaded4d46a9d4f151278ea83f6a620816528d9c35b7108e6a0",
+      "FR-3": "a45c4b1a87b00cc7b580a3c75145a40a1b6a570bcbbed66c2f0b9afbc5b20ee2",
+      "FR-4": "7c4149ffc8c2e451e0d1b5e6d17216615155902fce43e7e970bb2dc509139f6e",
+      "FR-5": "95113bbbb1497d36d73f55683715f1e9323d9aa36b3d3e0cfbe04c53c1ff71d9",
+      "FR-6": "6764cb241af149a70a5328e71677d4a6cfa54afe02abd687fc338a8b4c13eaa0",
+      "FR-7": "2b2791fe1c4d080a6c493b1b2db038960a33a58bd8489b0de08f5222fb832acc",
+      "FR-8": "08a2e0ea604d90451910a15b99d4ed6d9f58fa14f9ea0d56595be24aee2e7f3b",
+      "FR-9": "d1c584a8fe758638224cad672c29c654464d8b3312ace12553d2207d52232b59"
+    },
+    "high_water": 9,
+    "requirements": {
+      "every-completion-checked": "FR-2",
+      "live-run-is-progress": "FR-5",
+      "merge-names-its-producer": "FR-4",
+      "mid-build-task-has-people": "FR-7",
+      "no-reset-of-a-live-run": "FR-6",
+      "own-work": "FR-1",
+      "prerequisite-is-its-own": "FR-3",
+      "send-back-class-producer": "FR-9",
+      "send-back-says-why": "FR-8"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "The first task changes the merge-target contract; Opus for the Tier 2 piece.",
+      "cron": "Every 5 minutes, the default; the tasks are long turns, so a faster cadence buys nothing.",
+      "mode": "Dogfooding is the point. Each task carries its own failing-first tests and disjoint requirements, so this build cannot trip the shared-requirement bug it fixes (D6).",
+      "reviewer": "QA reviewed every task of the flow these defects were found in and knows the ids.",
+      "stop": "Four tasks; stop when they are done.",
+      "tester": "QA already drives each change on a scratch Hub from the review checkout, never :8000 or :8010, which is the only safe way to run this Hub code before a restart; no separate tester."
+    },
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true,
+    "tester": "QA"
+  },
+  "design": "Decision records. Each gives the decision, the alternative rejected and why. HOW beyond this belongs to the build.\n\nD1. A task's work is its own branch and the evidence it recorded.\n- Rejected: keep joining by requirement and filter out siblings case by case (F520 already tried this with \"only once that task is approved\").\n- Why: a requirement is shared by design (a drive task covers every requirement it drives); a commit is not. A case-by-case filter answers \"whose commit?\" from the wrong key and failed again on 10-29.\n- Requirement links keep saying what a task *serves* (coverage and the completion gate). F520's clause is retired (operator, 2026-10-29).\n\nD2. Fix the one answer, `merge_targets`, rather than each reader.\n- Rejected: patch only the completion check's fallback (project_checks.py:1794) to prefer the branch tip.\n- Why: five readers route through `merge_targets` (completion check, review target, approval check, prerequisite top-up, approval refusal). Patching one leaves gap 2, and lets the readers disagree about what approval merges, which is the drift D12 of task-dependencies exists to prevent.\n\nD3. A run counts as alive when it is in the Hub's run registry, the test the stuck_task scan already uses (stalls.py:814), and the reset refusal uses the same test.\n- Rejected: a heartbeat or worktree-activity timeout.\n- Why: the heartbeat is written by nothing (stalls.py:814 comment), and worktree quiet is exactly the guess that made the mender reset a live run.\n\nD4. A task added to a running build takes the build's default builder and checker, shown as \"by default\" (operator, 2026-10-29).\n- Rejected: requiring the adding agent to name both, or holding the task for the operator.\n- Why: one adds friction to every reviewer's add, the other stalls the flow on the operator. The \"by default\" mark keeps a wrong default visible.\n\nD5. A send-back carries a reason class and a sentence, required from reviewers and set by the Hub on its own send-backs.\n- Rejected: deriving the class from the failing pieces.\n- Why: the cases that lost their reason on 10-29 named no failing piece, so there was nothing to derive from. Per-piece rejection text stays as built.\n\nD6. No separate acceptance-drive task.\n- Rejected: the usual first drive task every other task waits on.\n- Why: it serves every requirement. Until task 1 is live in the running Hub, its evidence would stand in for each build task's work, which is the defect being fixed. Each task carries its own failing-first tests instead; approval will warn `no_acceptance_drive`. The live replay (ac-live-replay) runs after a Hub restart onto the change.\n\nHazards and rollback:\n- **What reaches master (Tier 2).** FR-1/FR-3 change what approval merges. Risk: a build that relied on a sibling's evidence merging through another task's approval stops merging that work. That is visible as an approval that merges nothing (\"already in\" or \"nothing to merge\"), not as wrong code landing. Rollback: revert the task 1 commit. No data is rewritten; existing evidence and integration rows are untouched.\n- **Likely migration (FR-8).** Storing a reason class on a transition probably needs a nullable column on task_transitions. Old rows stay NULL and show \"no reason recorded\". Rollback: the migration's downgrade drops the column. The migration must follow `.claude/rules/` (migration checklist).\n- **Hub restart.** All of this is Hub code. Agents build on their branches; nothing takes effect in the running :8000 Hub until the operator merges to master and restarts it, and that restart runs the migration on live data. Back up the database before that restart (VACUUM INTO, per .claude/reference/hubs.md).\n- **Reviewer contract (FR-9).** A send-back without a class is refused, so an agent prompt that does not know the classes will see a refusal. The refusal names the six classes, so the agent can retry in the same turn.",
+  "evidence": {
+    "checked": [
+      "Hub database (read-only) for proj-d85a82bf4216: task_transitions, task_check_runs (target_shas, reused_from), task_integrations, task_landings, stalls and runs for every task of spdoc-a7d41f10be14",
+      "evidence_reviews per review run: one copied reason per send-back up to 2026-10-27; distinct reasons per rejected piece, and held pieces, from 2026-10-28",
+      "git log of the operator's checkout 16:00-20:20 on 2026-10-29: snapshot commits 3d25ad3, 0324f63, 00fe846 and the 'Bring in ... prerequisite work' merges",
+      "Code: project_checks.check_targets (1021-1037) and the completion path (1785-1806); task_integration._targets (307-352) and merge_targets (624-649); task_workspace._prerequisite_commits (194+); worktrees.py:980 merge message; stalls.py no_progress and stuck_task scans (65, 804-850)",
+      "FINDINGS.md F520: its direction admitted 'or by tasks already approved', the clause that crosses commits here"
+    ],
+    "limits": [
+      "The causes of gaps 1 and 2 were read in code and match the recorded ids; neither is reproduced in a test yet. The acceptance criteria are proposed coverage, not passing tests",
+      "Not established whether the fix for 'A sent-back task's fix is checked' (task-58195abe01a9) was live in the running Hub at 19:14; the missing check runs are explained by unmerged() either way",
+      "How mend_reset_task validates its edge was not read; ac-reset-refused will establish it",
+      "Retiring F520's clause may change a path that relied on a sibling's evidence to merge (test_sibling_evidence_waits_for_its_task.py); the build must read that test and say what it asserted"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "answer": "Retire (operator, 2026-10-29).",
+      "question": "F520 clause 'or by tasks already approved': retire or keep?",
+      "resolved": true
+    },
+    {
+      "answer": "The build's default builder and checker, shown as by default (operator, 2026-10-29).",
+      "question": "Who builds and checks a task added mid-build?",
+      "resolved": true
+    },
+    {
+      "answer": "Send-back reasons here; the vault-output landing block filed separately as F1086 (operator, 2026-10-29).",
+      "question": "Send-back reasons and the vault-output landing block: here or separately?",
+      "resolved": true
+    }
+  ],
+  "problem": "Found by reading the ledger of the flow \"The build plan lives in the spec, and every task goes to its people\" (spdoc-a7d41f10be14) on 2026-10-29. Its six tasks had four send-backs, and two of them were produced or made worse by the Hub itself.\n\n1. **The completion check checked the wrong commit.** task-40ed6157e1c5 (\"Refuse a second driver\") completed with its own work at 3d25ad3. The check (chk-d9d91d70e0c7) targeted 65ae915, the acceptance-drive task's commit. Its tree matched an earlier run, so it reused that pass without running anything. The change broke two existing Hub tests; QA found them 80 minutes later. The second and third completions (19:14, 19:37) ran no check at all: the stand-in commit had landed on master by then, so `unmerged()` left nothing to check. Cause, read in code: `project_checks.check_targets` asks `task_integration.merge_targets`, which joins evidence by requirement (`_targets`, task_integration.py:307-352). The drive task's accepted FR-7 evidence therefore became the F1083 task's \"work\". The fallback to the task's own branch tip (project_checks.py:1794-1802) fires only when that answer is empty.\n2. **A task was sent back for a merge it never needed.** task-dac742f3f922 depends on the drive task and \"Plan in the spec\", both already landed. Approval was refused with 409 because its branch lacked 00fe846. That is task-40ed6157e1c5's commit, labelled \"prerequisite task-94d59bc7214d's commit\". Cause: `task_workspace._prerequisite_commits` asks `merge_targets` for the prerequisite's work, and once task-40ed6157e1c5 was approved its FR-7 evidence counted as the drive task's work (the F520 clause \"or by tasks already approved\"). The send-back cost one build turn and one review turn, with nothing wrong in the code.\n3. **The mender reset a task whose run was alive.** At 17:39 the stall check reported loop-7e7ab7938538 as no_progress (\"no run started and no task changed status since 17:07\"). DeveloperOpus's run on task-799357e3e80e was executing from 17:02 to 18:02. The mender guessed \"the run died\" from a quiet worktree and moved the task in_progress -> assigned. `mend_reset_task` accepted it.\n4. **A task added mid-build has nobody.** QA added task-4161311000e6 (\"Board card names each build task's checker\") during review. It has no assignee, no builder and no checker, in the very build whose subject is that every task goes to its people.\n5. **A send-back that names no failing piece loses its reason.** task-40ed6157e1c5's second send-back (a real regression) and task-dac742f3f922's (a merge only) both read \"Evidence: ... held (not named as failing)\" in the task history. Why the task came back survives only in the reviewer's notes and turn output, so telling a defect from a merge or a flake took database queries.\n\nAlready fixed, and not part of this change: per-piece evidence verdicts. Up to 2026-10-27 a send-back rejected every piece from the commit with one copied reason (for example run-ebcd966c87db: 13 rejections, 1 distinct reason). Since 2026-10-28 (\"Verdicts judge each piece\", task-980250864260) only the named pieces are rejected, each with its own reason, and the rest are held (for example run-c830ab15f653: 3 rejections, 3 reasons). The vault fact fct-bfdeee9417b9 still states the old rule and has been reported (rpt-f3cd6f900172).\n\nWho it hurts: the operator, who pays for turns that fix nothing and gets regressions past a gate that claims to check them; and every reviewer, whose verdict becomes the only real check.",
+  "requirements": [
+    {
+      "key": "own-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On 2026-10-29 the F1083 task's completion check ran on the drive task's commit and reused a pass, so a change breaking two existing tests passed the gate. Retires F520's 'or by tasks already approved' (operator, 2026-10-29).",
+      "statement": "The commits that a task's completion check, review turn and approval check treat as the task's work are the task's own: the newest commit on its branch and commits named by evidence it recorded. A commit named by evidence another task recorded, including against a requirement both tasks serve and including after that task is approved, never counts as this task's work."
+    },
+    {
+      "key": "every-completion-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The F1083 task's second and third completions recorded no check run at all.",
+      "statement": "Every move of a task to completed, including each one after a send-back, either records a check run whose target contains that completion's newest branch commit, or says in the task's history why no check ran. It never skips silently because a stand-in commit is already on the main branch."
+    },
+    {
+      "key": "prerequisite-is-its-own",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "task-dac742f3f922 was sent back for lacking 00fe846, a commit of a task it does not depend on.",
+      "statement": "The work a dependent task's checkout takes in from a prerequisite, and the work approval requires the dependent's branch to contain, are commits produced by that prerequisite task. A commit produced by a task the dependent does not depend on, directly or through its prerequisites, is never required."
+    },
+    {
+      "key": "merge-names-its-producer",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A 'Bring in prerequisite work' commit made by the Hub names the task that produced the commit it merges."
+    },
+    {
+      "key": "live-run-is-progress",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The stall scan does not report a loop or flow as having made no progress while a run on one of its tasks is executing."
+    },
+    {
+      "key": "no-reset-of-a-live-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The mender reset task-799357e3e80e at 17:39 while DeveloperOpus's run was executing (17:02-18:02).",
+      "statement": "Resetting a task (mend_reset_task, or any route that moves an in_progress task back to assigned or pending) while a run on that task is executing is refused. The refusal names the run, its agent and when it started, and the task is unchanged."
+    },
+    {
+      "key": "mid-build-task-has-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "task-4161311000e6 was added during review with no assignee, builder or checker.",
+      "statement": "A task added to a running build, by any agent or by an amendment, takes the build's default builder and checker unless the addition names them. The board shows each as 'by default' when it came that way."
+    },
+    {
+      "key": "send-back-says-why",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two send-backs on 2026-10-29, one a regression and one a merge only, both read just 'held (not named as failing)' in the history.",
+      "statement": "Every move of a task to revision_needed records a reason class (defect, regression, broken-check, merge-needed, evidence-only or flaky) and a sentence of reason, whether or not it names failing pieces. The class and sentence appear in the task's history in the app and in task_history."
+    },
+    {
+      "key": "send-back-class-producer",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "A reviewer's send-back without a reason class is refused, naming the classes. A send-back the Hub makes itself (checks or a landing batch) records broken-check, or flaky when a confirming re-run passed."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Which commits a task's completion check, review turn, approval check, prerequisite top-up and approval refusal treat as the task's work",
+      "Running the fast checks on every completion, including after a send-back",
+      "The label on the Hub's 'Bring in prerequisite work' merge commits",
+      "The stall scan's no_progress cause when a run is executing",
+      "Refusing a reset of a task whose run is executing",
+      "A task added to a running build taking the build's default builder and checker",
+      "A reason class and sentence on every send-back, shown in the task history in the app"
+    ],
+    "non_goals": [
+      "Per-piece evidence verdicts: already built (task-980250864260) and live since 2026-10-28",
+      "How long checks take, or how often a run is superseded when main moves (landing latency): a separate change",
+      "Knowledge-vault output leaving tracked files uncommitted in the project checkout and blocking a landing: filed separately as F1086",
+      "Requirement coverage and the completion gate: a requirement served by several tasks stays served by all of them",
+      "Reviewer behaviour, such as judging whether an edited test expectation was legitimate",
+      "Re-running or re-landing the tasks of spdoc-a7d41f10be14; their history stays as it is",
+      "Merge conflicts between tasks that genuinely depend on each other: those remain the author's to resolve"
+    ]
+  },
+  "summary": "The Hub decides which commits are \"a task's work\" through the evidence recorded against the task's requirements. When two tasks in one build share a requirement, which happens whenever an acceptance-drive task covers the requirements it drives, one task's commit stands in for the other's. That stand-in is what gets checked at completion, required as a prerequisite merge, and counted at approval. This change makes a task's work its own commits and makes every completion check that work. It also makes the mender unable to reset a task whose run is alive, gives a task added mid-build the build's people, and makes every send-back say why in the task's history.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Make merge_targets (and so every reader: completion check, review target, approval check, prerequisite top-up, approval refusal) answer a task's work from its own branch and the evidence it recorded, retiring F520's 'or by tasks already approved'. Run the fast checks on every completion, recording why when none can run. Label the prerequisite merge with its producing task. Hub tests for ac-shared-requirement-check, ac-sibling-not-merged, ac-recompletion-checked, ac-no-third-party-merge and ac-merge-label, written failing first in this task; update test_sibling_evidence_waits_for_its_task.py and say what changed.",
+      "files": [
+        "hub/hub/task_integration.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/task_workspace.py",
+        "hub/hub/worktrees.py"
+      ],
+      "from": null,
+      "key": "own-work-everywhere",
+      "requirements": [
+        "own-work",
+        "every-completion-checked",
+        "prerequisite-is-its-own",
+        "merge-names-its-producer"
+      ],
+      "reviewer": null,
+      "title": "A task's work is its own commits"
+    },
+    {
+      "depends_on": [],
+      "description": "Stop the no_progress scan from reporting a flow with an executing run, and refuse a reset of a task whose run is executing, naming the run. Hub tests for ac-long-run-no-stall and ac-reset-refused.",
+      "files": [
+        "hub/hub/stalls.py",
+        "hub/hub/api/v1/agents.py"
+      ],
+      "from": null,
+      "key": "live-run-guard",
+      "requirements": [
+        "live-run-is-progress",
+        "no-reset-of-a-live-run"
+      ],
+      "reviewer": null,
+      "title": "A live run is progress and cannot be reset"
+    },
+    {
+      "depends_on": [],
+      "description": "Give a task added to a running build the build's default builder and checker unless the addition names them, and mark them 'by default' on the board. Hub test for ac-added-task-staffed; UI test for the mark.",
+      "files": [
+        "hub/hub/builds.py",
+        "hub/hub/scheduler.py",
+        "hub/ui/src/components/tasks/"
+      ],
+      "from": null,
+      "key": "added-task-people",
+      "requirements": [
+        "mid-build-task-has-people"
+      ],
+      "reviewer": null,
+      "title": "A task added mid-build gets the build's people"
+    },
+    {
+      "depends_on": [
+        "own-work-everywhere",
+        "added-task-people"
+      ],
+      "description": "Record a reason class and sentence on every move to revision_needed: required from a reviewer (update_task), set by the Hub for check and landing send-backs (broken-check or flaky). Show both in TaskTransitionHistory. Hub tests for ac-reason-recorded, ac-reason-required and ac-hub-sendback-class; UI test for the history row; refresh the bundle. If storage needs a migration, follow the migration checklist in .claude/rules/.",
+      "files": [
+        "hub/hub/task_transition_service.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/ui/src/components/tasks/"
+      ],
+      "from": null,
+      "key": "send-back-reason",
+      "requirements": [
+        "send-back-says-why",
+        "send-back-class-producer"
+      ],
+      "reviewer": null,
+      "title": "Every send-back says why"
+    }
+  ],
+  "title": "A task's checks and merges use its own work, and a live run is never reset"
+}
