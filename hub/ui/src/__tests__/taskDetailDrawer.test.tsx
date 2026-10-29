@@ -552,3 +552,16 @@ describe('the failed merge, read in the drawer (F823)', () => {
     expect(within(drawer).queryByTestId('task-integrations-task-1')).toBeNull()
   })
 })
+
+describe("the build's people (hand-only-places-on-the-board)", () => {
+  it('names the builder and the checker in the Build field', () => {
+    renderDrawer(makeTask({ build_id: 'build-1', level: 'reviewed', builder: 'Developer', checker: 'QA' }), vi.fn())
+    expect(screen.getByTestId('task-build-task-1')).toHaveTextContent('Reviewed · builder @Developer · checker @QA')
+  })
+
+  it('names no checker where none is derived', () => {
+    renderDrawer(makeTask({ build_id: 'build-1', level: 'fast', builder: 'Developer' }), vi.fn())
+    expect(screen.getByTestId('task-build-task-1')).toHaveTextContent('Fast · builder @Developer')
+    expect(screen.getByTestId('task-build-task-1')).not.toHaveTextContent('checker')
+  })
+})
