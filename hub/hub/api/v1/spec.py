@@ -292,11 +292,10 @@ async def _delivery_status(
     # Who reviews (F508): the default by name with the same usability test as the builder, or no
     # key at all, which the approval bar reads as "any free agent". A review never falls back from
     # a stale default to someone else (`review_turn.resolve_declared_reviewer`), so it is flagged.
-    if delivery.reviewer:
-        status["reviewer"] = delivery.reviewer
-        status["reviewer_state"] = await delivery_agent_state(
-            session, project_id, delivery.reviewer
-        )
+    checker = spec_payload_module.default_checker(payload)[0]
+    if checker:
+        status["reviewer"] = checker
+        status["reviewer_state"] = await delivery_agent_state(session, project_id, checker)
     return status
 
 
@@ -3555,12 +3554,11 @@ async def _build(
             )
         ):
             started.lead = build.lead
-    delivery = _delivery_of(payload)
     view = await builds.view(session, build)
     outcome: Dict[str, Any] = {
         "flow": flow,
         "delivery_agent": delivery_agent,
-        "reviewer": delivery.reviewer if delivery is not None else None,
+        "reviewer": spec_payload_module.default_checker(payload)[0],
         "build": {**view, "unresolved_builders": unresolved},
     }
     await spec_lifecycle.record_event(
@@ -3631,7 +3629,7 @@ async def _joined_build(
     outcome: Dict[str, Any] = {
         "flow": flow,
         "delivery_agent": body.delivery_agent,
-        "reviewer": delivery.reviewer if delivery is not None else None,
+        "reviewer": spec_payload_module.default_checker(payload)[0],
         "build": {**view, "joined": True, "message": message, "unresolved_builders": []},
     }
     await spec_lifecycle.record_event(
