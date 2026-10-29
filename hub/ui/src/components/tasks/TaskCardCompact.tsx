@@ -119,9 +119,20 @@ export function TaskCardCompact({
             <span
               className="aw-task-card-age"
               data-testid={`task-level-${task.id}`}
-              title={`Built at level ${task.level}${task.builder ? `, builder @${task.builder}` : ''}`}
+              title={`Built at level ${task.level}${task.builder ? `, builder @${task.builder}` : ''}${task.checker ? `, checker @${task.checker}` : ''}`}
             >
               {task.level}
+            </span>
+          ) : null}
+          {/* The build's checker, named on the card beside the assignee so a hand build's board says
+              who will check each task before anyone is asked to (`hand-only-places-on-the-board`). */}
+          {task.checker ? (
+            <span
+              className="aw-task-card-age"
+              data-testid={`task-checker-${task.id}`}
+              title={`Checked by @${task.checker}`}
+            >
+              checks @{task.checker}
             </span>
           ) : null}
           {task.priority === 'high' || task.priority === 'critical' ? (

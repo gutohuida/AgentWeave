@@ -131,3 +131,23 @@ describe('start work', () => {
     expect(screen.queryByRole('button', { name: /Start work on/ })).toBeNull()
   })
 })
+
+describe("a build task's people (hand-only-places-on-the-board)", () => {
+  it('names the builder as assignee and the checker beside it', () => {
+    render(
+      <TaskCardCompact
+        task={makeTask({ status: 'pending', assignee: 'Developer', build_id: 'build-1', level: 'reviewed', builder: 'Developer', checker: 'QA' })}
+        onOpen={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('task-assignee-task-1')).toHaveTextContent('@Developer')
+    expect(screen.getByTestId('task-checker-task-1')).toHaveTextContent('checks @QA')
+    expect(screen.getByTestId('task-level-task-1')).toHaveAttribute('title', 'Built at level reviewed, builder @Developer, checker @QA')
+  })
+
+  it('names no checker where the build names none', () => {
+    render(<TaskCardCompact task={makeTask({ build_id: 'build-1', level: 'fast', builder: 'Developer' })} onOpen={vi.fn()} />)
+    expect(screen.queryByTestId('task-checker-task-1')).toBeNull()
+    expect(screen.getByTestId('task-level-task-1')).toHaveAttribute('title', 'Built at level fast, builder @Developer')
+  })
+})
