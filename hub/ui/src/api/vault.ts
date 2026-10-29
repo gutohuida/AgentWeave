@@ -282,7 +282,7 @@ export function useEditVaultSource() {
 }
 
 /** Archive a source: it and its facts leave the map and the checks but stay readable by id
- *  (`POST /vault/sources/{id}/archive`); called by the Vault tab through this hook. */
+ *  (`POST /vault/sources/{id}/archive`); no component calls it yet (the Vault tab work is a later task). */
 export function useArchiveVaultSource() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)
@@ -295,7 +295,7 @@ export function useArchiveVaultSource() {
   })
 }
 
-/** Restore an archived source (`POST /vault/sources/{id}/restore`); the Vault tab's Restore action (its route is the client the route ratchet counts; ceiling 19, re-checked 2026-10-29). */
+/** Restore an archived source (`POST /vault/sources/{id}/restore`); no component calls it yet; it is the route's client for the route ratchet. */
 export function useRestoreVaultSource() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)
@@ -309,8 +309,7 @@ export function useRestoreVaultSource() {
 }
 
 /** The archived sources, newest first; the map does not list them (`GET /vault/archived`).
- *  The Vault tab's client for the archive, restore and list-archived routes (the ratchet's
- *  "route with a client" for all three). */
+ *  The client for the list-archived route; no component calls it yet. */
 export function useArchivedVaultSources() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<{ sources: VaultEntry[] }>({
