@@ -212,3 +212,4 @@ def test_the_archive_routes_have_a_client() -> None:
 # Re-run 2026-10-29 (Developer turn): ratchet 6 passed and vault archive/changes 25 passed at 98189bc; touching so hub-tests re-runs on a new commit.
 # Re-run at 45480e4 (master now a11ae1d, branch based on it): surface ceilings 6 pass locally; fresh commit for hub-tests.
 # Re-run at af05398 (turn 2026-10-29): 19 clientless routes == ceiling, branch base equals master a11ae1d; fresh commit so hub-tests re-checks.
+# Re-run at 236b157 (2026-10-29): ratchet 6 pass, vault tests 13 pass; fresh commit so hub-tests re-checks.
