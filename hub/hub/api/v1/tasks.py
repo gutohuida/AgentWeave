@@ -240,6 +240,18 @@ async def _attach_requirements(
         # deliberately excluded: they round-trip as `unresolved_requirements`, and including them
         # here would invite a GET→PATCH cycle to resubmit a reference that already failed.
         response.requirement_ids = [item["identifier"] for item in response.requirement_links]
+    # Each build task's checker beside its builder, from the build's people
+    # (`hand-only-places-on-the-board`). Here because every task read passes through this.
+    build_task_ids = [response.id for response in responses if response.build_id]
+    if build_task_ids:
+        from ... import builds
+
+        build_tasks = (
+            (await session.execute(select(Task).where(Task.id.in_(build_task_ids)))).scalars().all()
+        )
+        checkers = await builds.checkers_by_task(session, build_tasks)
+        for response in responses:
+            response.checker = checkers.get(response.id)
     return responses
 
 
