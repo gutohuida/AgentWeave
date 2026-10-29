@@ -10,6 +10,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import builds as builds_service
 from ... import loop_history, refused_capability, task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
@@ -955,6 +956,31 @@ async def create_job(
         # the second (an unknown requirement, an id already taken) used to leave an enabled loop
         # holding the first. Every refusal a task create makes from its body is asked here instead.
         await _check_initial_tasks(session, project_id, initial_task_bodies)
+
+    # F1083: a document whose build is running already has its driver. Asked here and not in
+    # `build_flow_rows`, which the build itself uses to create its own flow. Before any row exists,
+    # so no job, loop or task changes on a refusal.
+    if body.spec_document_id is not None:
+        running = await builds_service.running_build(
+            session, await _document_id_for(session, project_id, body.spec_document_id)
+        )
+        # A build whose own flow was archived has no driver left, so it no longer counts.
+        driver_loop = (
+            await session.get(Loop, running.loop_id)
+            if running is not None and running.loop_id
+            else None
+        )
+        if driver_loop is not None and driver_loop.archived_at is not None:
+            running = None
+        if running is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"document '{running.document_id}' is already being built by build "
+                    f"'{running.id}', driven by {running.driver}; a flow or loop cannot be "
+                    "added to a running build. Nothing was created"
+                ),
+            )
 
     # The agent, the cron expression and the document claim are asked by `build_flow_rows`, which
     # approval (`set_phase`) shares, so both doors refuse the same things with the same answers.

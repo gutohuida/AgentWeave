@@ -645,24 +645,32 @@ async def test_1_6_an_ended_flow_is_not_reported_as_building(app, auth_headers, 
 
 @pytest.mark.asyncio
 async def test_1_6_a_flow_started_by_hand_is_reported_on_re_approval(
-    app, auth_headers, run_headers
+    app, auth_headers, run_headers, monkeypatch
 ):
     await _agent("dev")
     await _proposed(app, auth_headers, run_headers, _document(delivery={"mode": "none"}))
     await _approve(app, auth_headers)
-    started = await app.post(
-        "/api/v1/projects/proj-test/jobs",
-        json={
-            "name": "By hand",
-            "agent": "dev",
-            "message": "Work it",
-            "cron": "*/5 * * * *",
-            "purpose": "",
-            "stop_when_queue_empties": True,
-            "spec_document_id": await _document_id(),
-        },
-        headers=auth_headers,
-    )
+    # Approval starts a hand build, and a running build refuses a second driver (F1083, covered in
+    # test_one_driver_per_document); this test is about re-approval finding a flow already there.
+
+    async def no_running_build(*args, **kwargs):
+        return None
+
+    with monkeypatch.context() as patch:
+        patch.setattr(jobs_api.builds_service, "running_build", no_running_build)
+        started = await app.post(
+            "/api/v1/projects/proj-test/jobs",
+            json={
+                "name": "By hand",
+                "agent": "dev",
+                "message": "Work it",
+                "cron": "*/5 * * * *",
+                "purpose": "",
+                "stop_when_queue_empties": True,
+                "spec_document_id": await _document_id(),
+            },
+            headers=auth_headers,
+        )
     assert started.status_code == 201, started.text
     await _reopen_and_repropose(
         app, auth_headers, run_headers, {**_two_tasks(), "delivery": {"mode": "none"}}
@@ -967,7 +975,11 @@ async def test_1_10_a_loop_insert_that_hits_the_claim_index_is_a_409_leaving_no_
     async def no_conflict(*args, **kwargs):
         return None
 
+    async def no_running_build(*args, **kwargs):
+        return None
+
     monkeypatch.setattr(jobs_api, "_check_spec_document_conflict", no_conflict)
+    monkeypatch.setattr(jobs_api.builds_service, "running_build", no_running_build)
 
     response = await app.post(
         "/api/v1/projects/proj-test/jobs",
