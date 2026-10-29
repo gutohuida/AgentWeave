@@ -308,7 +308,8 @@ export function useRestoreVaultSource() {
   })
 }
 
-/** The archived sources, newest first; the map does not list them (`GET /vault/archived`). */
+/** The archived sources, newest first; the map does not list them (`GET /vault/archived`).
+ *  Together with archive and restore above, this is the operator's client for those routes. */
 export function useArchivedVaultSources() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<{ sources: VaultEntry[] }>({
