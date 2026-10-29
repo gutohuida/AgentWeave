@@ -282,7 +282,7 @@ export function useEditVaultSource() {
 }
 
 /** Archive a source: it and its facts leave the map and the checks but stay readable by id
- *  (`POST /vault/sources/{id}/archive`); reached by the Vault tab client hooks below. */
+ *  (`POST /vault/sources/{id}/archive`); called by the Vault tab through this hook. */
 export function useArchiveVaultSource() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)
