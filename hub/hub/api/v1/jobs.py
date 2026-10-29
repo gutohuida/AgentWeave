@@ -964,6 +964,14 @@ async def create_job(
         running = await builds_service.running_build(
             session, await _document_id_for(session, project_id, body.spec_document_id)
         )
+        # A build whose own flow was archived has no driver left, so it no longer counts.
+        driver_loop = (
+            await session.get(Loop, running.loop_id)
+            if running is not None and running.loop_id
+            else None
+        )
+        if driver_loop is not None and driver_loop.archived_at is not None:
+            running = None
         if running is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
