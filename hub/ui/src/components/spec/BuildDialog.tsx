@@ -21,7 +21,7 @@ const DRIVERS: Array<{ value: BuildDriver; label: string; detail: string }> = [
 ]
 
 const LEVELS: Array<{ value: BuildLevel; label: string; detail: string }> = [
-  { value: 'fast', label: 'Fast', detail: 'The builder or the lead approves; no reviewer.' },
+  { value: 'fast', label: 'Fast', detail: 'The builder or the lead approves; no checker.' },
   { value: 'reviewed', label: 'Reviewed', detail: 'Anyone but the builder approves; gaps are reported.' },
   { value: 'gated', label: 'Gated', detail: 'Approval waits for accepted evidence per requirement.' },
 ]
@@ -29,8 +29,8 @@ const LEVELS: Array<{ value: BuildLevel; label: string; detail: string }> = [
 /**
  * Build, or Approve and build (`exploring-ends-at-an-approved-plan`, FR-6, FR-7, FR-10), with the
  * build's settings (`a-build-has-a-driver-a-level-and-its-people`, FR-1, FR-3): who drives it, at
- * which level, with which builders, reviewers and lead, within which cap and window, landing where,
- * and each task's builder. Opens with the build the document recommends filled in, each choice
+ * which level, with which builders, checker and lead, within which cap and window, landing where,
+ * and each task's builder and checker. Opens with the build the document recommends filled in, each choice
  * beside the reason its author gave; the operator decides.
  *
  * `onConfirm` receives exactly the settings shown. `delivery_agent` is sent only when the operator
@@ -67,7 +67,8 @@ export function BuildDialog({
   )
   const [level, setLevel] = useState<BuildLevel>(recommended?.level ?? 'reviewed')
   const [builders, setBuilders] = useState<string[]>(recommended?.builders ?? [])
-  const [reviewers, setReviewers] = useState<string[]>(recommended?.reviewers ?? [])
+  const [builder, setBuilder] = useState<string>(recommended?.builder ?? '')
+  const [checker, setChecker] = useState<string>(recommended?.checker ?? '')
   const [lead, setLead] = useState<string>(recommended?.lead ?? '')
   const [cap, setCap] = useState<string>(
     recommended?.budget_cap_usd != null ? String(recommended.budget_cap_usd) : '',
@@ -77,6 +78,11 @@ export function BuildDialog({
   const [taskBuilders, setTaskBuilders] = useState<Record<string, string>>(
     Object.fromEntries(
       Object.entries(recommended?.task_builders ?? {}).map(([key, name]) => [key, name ?? '']),
+    ),
+  )
+  const [taskCheckers, setTaskCheckers] = useState<Record<string, string>>(
+    Object.fromEntries(
+      Object.entries(recommended?.task_checkers ?? {}).map(([key, name]) => [key, name ?? '']),
     ),
   )
   const reasons = recommended?.reasons ?? {}
@@ -93,9 +99,11 @@ export function BuildDialog({
       driver: noFlow ? 'hand' : driver,
       level,
       builders,
-      reviewers,
+      builder,
+      checker,
       landing,
       task_builders: taskBuilders,
+      task_checkers: taskCheckers,
     }
     if (driver === 'lead') choices.lead = lead
     if (capValue !== undefined) choices.budget_cap_usd = capValue
@@ -121,7 +129,45 @@ export function BuildDialog({
       </p>
     ) : null
   const verb = approve ? 'Approve and build' : 'Build'
-  const taskKeys = Object.keys(taskBuilders)
+  const taskKeys = Array.from(new Set([...Object.keys(taskBuilders), ...Object.keys(taskCheckers)]))
+
+  /** A person the document names who is no open agent stays selected and says so, so what is shown
+   *  is what is sent. */
+  const personOptions = (current: string, blank: string) => [
+    <option key="" value="">
+      {blank}
+    </option>,
+    ...(current && !openAgents.includes(current)
+      ? [
+          <option key={current} value={current}>
+            @{current} (not an open agent)
+          </option>,
+        ]
+      : []),
+    ...openAgents.map((name) => (
+      <option key={name} value={name}>
+        @{name}
+      </option>
+    )),
+  ]
+  const personSelect = (
+    testId: string,
+    value: string,
+    onChange: (value: string) => void,
+    blank: string,
+    style: React.CSSProperties = field,
+  ) => (
+    <select
+      data-testid={testId}
+      className="control-field"
+      style={style}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      disabled={isPending}
+    >
+      {personOptions(value, blank)}
+    </select>
+  )
 
   const select = (
     id: string,
@@ -300,47 +346,44 @@ export function BuildDialog({
 
           <div>
             <span className={label} style={{ color: 'var(--text-3)' }}>
-              Reviewers {reviewers.length ? '' : '(none chosen: any free agent but the builder)'}
+              Default builder
             </span>
-            {people('build-reviewers', reviewers, setReviewers)}
-            {recommended?.reviewer ? (
-              <p className="mt-1" data-testid="build-reviewer">
-                Every task without its own reviewer is reviewed by @{recommended.reviewer}.
-              </p>
-            ) : null}
-            {why('reviewer', 'build-reason-reviewer')}
-            {why('reviewers', 'build-reason-reviewers')}
+            {personSelect('build-builder', builder, setBuilder, 'The first builder')}
+          </div>
+
+          <div>
+            <span className={label} style={{ color: 'var(--text-3)' }}>
+              Default checker
+            </span>
+            {personSelect('build-checker', checker, setChecker, 'Any free agent but the builder')}
+            {why(reasons.checker ? 'checker' : 'reviewer', 'build-reason-checker')}
           </div>
 
           {taskKeys.length ? (
             <div>
               <span className={label} style={{ color: 'var(--text-3)' }}>
-                Each task's builder
+                Each task's builder and checker
               </span>
-              <div className="space-y-1" data-testid="build-task-builders">
+              <div className="space-y-1" data-testid="build-task-people">
                 {taskKeys.map((key) => (
                   <div key={key} className="flex items-center gap-2">
                     <code className="w-24 shrink-0 truncate">{key}</code>
-                    <input
-                      className="control-field"
-                      style={{ ...field, padding: '4px 8px' }}
-                      data-testid={`build-task-builder-${key}`}
-                      value={taskBuilders[key] ?? ''}
-                      placeholder="whoever the driver gives it to"
-                      list="build-open-agents"
-                      maxLength={32}
-                      disabled={isPending}
-                      onChange={(event) =>
-                        setTaskBuilders({ ...taskBuilders, [key]: event.target.value.trim() })
-                      }
-                    />
+                    {personSelect(
+                      `build-task-builder-${key}`,
+                      taskBuilders[key] ?? '',
+                      (value) => setTaskBuilders({ ...taskBuilders, [key]: value }),
+                      'Default builder',
+                      { ...field, padding: '4px 8px' },
+                    )}
+                    {personSelect(
+                      `build-task-checker-${key}`,
+                      taskCheckers[key] ?? '',
+                      (value) => setTaskCheckers({ ...taskCheckers, [key]: value }),
+                      'Default checker',
+                      { ...field, padding: '4px 8px' },
+                    )}
                   </div>
                 ))}
-                <datalist id="build-open-agents">
-                  {openAgents.map((name) => (
-                    <option key={name} value={name} />
-                  ))}
-                </datalist>
               </div>
             </div>
           ) : null}
