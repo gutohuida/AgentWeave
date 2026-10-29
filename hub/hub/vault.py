@@ -1459,17 +1459,22 @@ def _set_archived(
 def archive_source(
     project_root: Path, private_root: Path, source_id: str, *, actor: Actor
 ) -> Dict[str, Any]:
+    """Archive a source; 404 for an unknown one, 409 for one already archived. Reached by the
+    operator's POST /vault/sources/{id}/archive (the Vault tab's client) and by the agents' archive
+    tool."""
     return _set_archived(project_root, private_root, source_id, archive=True, actor=actor)
 
 
 def restore_source(
     project_root: Path, private_root: Path, source_id: str, *, actor: Actor
 ) -> Dict[str, Any]:
+    """Restore an archived source; 404 for an unknown one, 409 for one not archived. Reached by the
+    operator's POST /vault/sources/{id}/restore and by the agents' restore tool."""
     return _set_archived(project_root, private_root, source_id, archive=False, actor=actor)
 
 
 def list_archived(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
-    """The archived sources, newest first, for the Vault tab; they are not in the map."""
+    """The archived sources, newest first, for the Vault tab (GET /vault/archived); they are not in the map."""
     return _newest_first(
         [r.listed(r.text()) for r in _records(project_root, private_root).values() if r.archived]
     )
