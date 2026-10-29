@@ -79,6 +79,9 @@ export interface Task {
   build_id?: string | null
   level?: 'fast' | 'reviewed' | 'gated' | null
   builder?: string | null
+  /** Who checks it, where its build names a checker: the task's own, else the build's default
+   *  (`hand-only-places-on-the-board`). Derived by the Hub per request; null outside a build. */
+  checker?: string | null
   /**
    * The requirement identifiers this task serves, in the form they are submitted in.
    *
