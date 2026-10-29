@@ -55,6 +55,21 @@ export interface VaultEntry {
    *  none is known. Reads counted before the Hub recorded readers are in `fetches` only, so the
    *  readers' counts may sum to less. Absent on a Hub that predates readers. */
   readers?: VaultReaderCount[]
+  /** A fact's: its source changed after it was drawn and has not been distilled since. */
+  stale?: boolean
+  /** A fact's: when a distillation did not draw it again; it is kept, marked superseded. */
+  superseded_at?: string | null
+  /** True for an archived source or fact, read by id; the map does not list those. */
+  archived?: boolean
+  archived_at?: string | null
+}
+
+/** One recorded change to a source (`changes` on a read of the entry), oldest first. */
+export interface VaultChange {
+  action: 'edit' | 'replace' | 'archive' | 'restore'
+  at: string
+  by: { kind: 'operator' } | { kind: 'agent'; agent: string; run_id: string | null }
+  detail?: string
 }
 
 /** One agent's reads of one vault entry. */
@@ -82,6 +97,10 @@ export interface VaultEntryPage extends VaultEntry {
   /** A fact's claim and citations, when its record is on this machine. */
   claim?: string
   citations?: VaultCitation[]
+  /** A source's: the version of its text, which an edit names. */
+  version?: string | null
+  /** A source's recorded changes, oldest first. */
+  changes?: VaultChange[]
 }
 
 export function isFact(entry: VaultEntry): boolean {
@@ -282,7 +301,7 @@ export function useEditVaultSource() {
 }
 
 /** Archive a source: it and its facts leave the map and the checks but stay readable by id
- *  (`POST /vault/sources/{id}/archive`); no component calls it yet (the Vault tab work is a later task). */
+ *  (`POST /vault/sources/{id}/archive`). */
 export function useArchiveVaultSource() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)
@@ -295,7 +314,7 @@ export function useArchiveVaultSource() {
   })
 }
 
-/** Restore an archived source (`POST /vault/sources/{id}/restore`); no component calls it yet. */
+/** Restore an archived source (`POST /vault/sources/{id}/restore`). */
 export function useRestoreVaultSource() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)
@@ -309,7 +328,7 @@ export function useRestoreVaultSource() {
 }
 
 /** The archived sources, newest first; the map does not list them (`GET /vault/archived`).
- *  The client for the list-archived route; no component calls it yet. */
+ *  The client for the list-archived route. */
 export type ArchivedVaultSources = { sources: VaultEntry[] }
 
 export function useArchivedVaultSources() {
