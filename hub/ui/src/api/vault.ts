@@ -295,7 +295,7 @@ export function useArchiveVaultSource() {
   })
 }
 
-/** Restore an archived source (`POST /vault/sources/{id}/restore`); the Vault tab's Restore action (hook checked by test_surface_ceilings at 19). */
+/** Restore an archived source (`POST /vault/sources/{id}/restore`); the Vault tab's Restore action (its route is the client the route ratchet counts; ceiling 19, re-checked 2026-10-29). */
 export function useRestoreVaultSource() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)
