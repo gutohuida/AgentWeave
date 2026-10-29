@@ -3554,7 +3554,6 @@ async def _build(
             )
         ):
             started.lead = build.lead
-    delivery = _delivery_of(payload)
     view = await builds.view(session, build)
     outcome: Dict[str, Any] = {
         "flow": flow,
