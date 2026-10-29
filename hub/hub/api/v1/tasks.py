@@ -252,6 +252,10 @@ async def _attach_requirements(
         checkers = await builds.checkers_by_task(session, build_tasks)
         for response in responses:
             response.checker = checkers.get(response.id)
+        marks = await builds.default_marks_by_task(session, build_tasks)
+        for response in responses:
+            response.builder_by_default = marks.get(response.id, {}).get("builder", False)
+            response.checker_by_default = marks.get(response.id, {}).get("checker", False)
     return responses
 
 
@@ -872,6 +876,12 @@ async def create_task_for_actor(
         spec_document_id=spec_document_id,
         loop_id=body.loop_id,
     )
+    if spec_document_id:
+        # Against a document whose build runs: the task joins the build and takes its people
+        # (`a-task-s-checks-and-merges-use-its-own-work...`, FR-7).
+        from ... import builds
+
+        await builds.join_running_build(session, task)
     session.add(task)
     if body.depends_on:
         # Written in the task's own commit, so a refusal cannot leave the task without its edges.

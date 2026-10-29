@@ -224,7 +224,7 @@ def checker_of(build: Optional[Build], task: Task) -> Optional[Tuple[Optional[st
     if build is None or not isinstance(build.people, dict):
         return None
     tasks = build.people.get("tasks") or {}
-    key = task.spec_task_key or ""
+    key = task.spec_task_key or task.id
     if key not in tasks:
         return None
     own = _person((tasks.get(key) or {}).get("checker"))
@@ -246,6 +246,29 @@ async def checkers_by_task(session: AsyncSession, tasks: Iterable[Task]) -> Dict
         named = checker_of(by_build[task.build_id], task)
         if named is not None and named[0]:
             found[task.id] = named[0]
+    return found
+
+
+async def default_marks_by_task(
+    session: AsyncSession, tasks: Iterable[Task]
+) -> Dict[str, Dict[str, bool]]:
+    """Which of a build task's people came by default, by task id (`added-task-people`): the board
+    marks each 'by default'. The checker is the build's default where no one named one for the
+    task; the builder only where a task added mid-build took the build's."""
+    found: Dict[str, Dict[str, bool]] = {}
+    by_build: Dict[str, Optional[Build]] = {}
+    for task in tasks:
+        if not task.build_id:
+            continue
+        if task.build_id not in by_build:
+            by_build[task.build_id] = await session.get(Build, task.build_id)
+        build = by_build[task.build_id]
+        named = checker_of(build, task)
+        entry = ((build.people or {}).get("tasks") or {}).get(task.spec_task_key or task.id) or {}
+        found[task.id] = {
+            "builder": bool(entry.get("builder_default")),
+            "checker": bool(named is not None and named[0] and named[1] == "default"),
+        }
     return found
 
 
@@ -504,11 +527,18 @@ async def cover_tasks(
     return unresolved
 
 
-async def join_running_build(session: AsyncSession, task: Task) -> None:
-    """A task a document declares while a build of it runs joins that build (FR-2): re-approving a
-    reopened document whose build still runs, or the operator accepting an amendment that adds a
-    task (`spec_amendments.accept_proposal`), adds it to that build's flow (`spec_tasks`), and so to
-    the build, at its level, with its declared builder applied as `cover_tasks` applies one."""
+async def join_running_build(
+    session: AsyncSession, task: Task, *, checker: Optional[str] = None
+) -> None:
+    """A task added while a build of its document runs joins that build (FR-2): re-approving a
+    reopened document whose build still runs, the operator accepting an amendment that adds a task
+    (`spec_amendments.accept_proposal`), or an agent creating a task against the document, adds it
+    to that build's flow, and so to the build, at its level, with its declared builder applied as
+    `cover_tasks` applies one.
+
+    It takes the build's default builder and checker unless the addition names them (*checker* is
+    the one it names; the task's `builder` the other), and the build's people record which it
+    took by default, for the board to mark (`added-task-people`)."""
     if task.build_id or not task.spec_document_id:
         return
     build = await running_build(session, task.spec_document_id)
@@ -516,6 +546,19 @@ async def join_running_build(session: AsyncSession, task: Task) -> None:
         return
     task.build_id = build.id
     task.level = build.level
+    if task.loop_id is None:
+        task.loop_id = build.loop_id
+    if isinstance(build.people, dict):
+        people = dict(build.people)
+        tasks_map = dict(people.get("tasks") or {})
+        key = task.spec_task_key or task.id
+        entry: Dict[str, Any] = {"builder": _person(task.builder), "checker": _person(checker)}
+        if not entry["builder"]:
+            task.builder = _person(people.get("builder"))
+            entry["builder_default"] = True
+        tasks_map.setdefault(key, entry)
+        people["tasks"] = tasks_map
+        build.people = people
     if (
         task.builder
         and task.assignee is None
