@@ -33,6 +33,9 @@ const RECOMMENDED: SpecRecommendedBuild = {
   budget_cap_usd: 5.0,
   landing: 'main',
   task_builders: { t1: 'dev', t2: null },
+  builder: 'dev',
+  checker: 'qa',
+  task_checkers: { t1: 'lead', t2: null },
   reasons: { lead: 'lead knows this code.', level: 'A small change, low risk.' },
 }
 
@@ -150,11 +153,15 @@ describe('BuildDialog', () => {
     expect(screen.getByTestId('build-level')).toHaveValue('fast')
     expect(screen.getByTestId('build-builders-dev')).toBeChecked()
     expect(screen.getByTestId('build-builders-qa')).not.toBeChecked()
-    expect(screen.getByTestId('build-reviewers-qa')).toBeChecked()
+    expect(screen.getByTestId('build-builder')).toHaveValue('dev')
+    expect(screen.getByTestId('build-checker')).toHaveValue('qa')
+    expect(screen.queryByTestId('build-reviewers')).toBeNull()
     expect(screen.getByTestId('build-cap')).toHaveValue('5')
     expect(screen.getByTestId('build-landing')).toHaveValue('main')
     expect(screen.getByTestId('build-task-builder-t1')).toHaveValue('dev')
     expect(screen.getByTestId('build-task-builder-t2')).toHaveValue('')
+    expect(screen.getByTestId('build-task-checker-t1')).toHaveValue('lead')
+    expect(screen.getByTestId('build-task-checker-t2')).toHaveValue('')
     expect(screen.getByTestId('build-reason-level')).toHaveTextContent('low risk')
     expect(screen.getByTestId('build-reason-lead')).toHaveTextContent('lead knows this code.')
   })
@@ -170,10 +177,12 @@ describe('BuildDialog', () => {
       lead: 'lead',
       level: 'fast',
       builders: ['dev'],
-      reviewers: ['qa'],
+      builder: 'dev',
+      checker: 'qa',
       budget_cap_usd: 5,
       landing: 'main',
       task_builders: { t1: 'dev', t2: '' },
+      task_checkers: { t1: 'lead', t2: '' },
     })
   })
 
@@ -193,10 +202,12 @@ describe('BuildDialog', () => {
       driver: 'flow',
       level: 'gated',
       builders: ['dev', 'qa'],
-      reviewers: ['qa'],
+      builder: 'dev',
+      checker: 'qa',
       budget_cap_usd: 12.5,
       landing: 'nowhere',
       task_builders: { t1: 'dev', t2: 'qa' },
+      task_checkers: { t1: 'lead', t2: '' },
     })
   })
 
@@ -219,6 +230,66 @@ function renderPhaseBar() {
   )
 }
 
+describe('BuildDialog people (ac-dialog-prefill)', () => {
+  const PEOPLE: SpecRecommendedBuild = {
+    ...RECOMMENDED,
+    builder: 'Developer',
+    checker: 'QA',
+    builders: [],
+    reviewers: [],
+    task_builders: { t1: 'DeveloperOpus' },
+    task_checkers: { t1: 'QA2' },
+  }
+
+  it('selects the default and each task people from the document and sends exactly them', () => {
+    const onConfirm = vi.fn()
+    render(
+      <BuildDialog
+        title="Demo"
+        approve={false}
+        recommended={PEOPLE}
+        openAgents={['Developer', 'DeveloperOpus', 'QA', 'QA2', 'lead']}
+        isPending={false}
+        error={null}
+        onCancel={() => {}}
+        onConfirm={onConfirm}
+      />,
+    )
+
+    expect(screen.getByTestId('build-builder')).toHaveValue('Developer')
+    expect(screen.getByTestId('build-checker')).toHaveValue('QA')
+    expect(screen.getByTestId('build-task-builder-t1')).toHaveValue('DeveloperOpus')
+    expect(screen.getByTestId('build-task-checker-t1')).toHaveValue('QA2')
+
+    fireEvent.click(screen.getByTestId('build-confirm'))
+    const sent = onConfirm.mock.calls[0][0] as BuildChoices
+    expect(sent).toMatchObject({
+      builder: 'Developer',
+      checker: 'QA',
+      task_builders: { t1: 'DeveloperOpus' },
+      task_checkers: { t1: 'QA2' },
+    })
+    expect(sent).not.toHaveProperty('reviewers')
+  })
+
+  it('keeps a named person who is no open agent selected, and says so', () => {
+    render(
+      <BuildDialog
+        title="Demo"
+        approve={false}
+        recommended={PEOPLE}
+        openAgents={['Developer']}
+        isPending={false}
+        error={null}
+        onCancel={() => {}}
+        onConfirm={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('build-checker')).toHaveValue('QA')
+    expect(screen.getByRole('option', { name: '@QA (not an open agent)' })).toBeInTheDocument()
+  })
+})
+
 describe('Build on the spec header', () => {
   it('posts the settings the dialog showed to the build route', async () => {
     renderPhaseBar()
@@ -235,10 +306,12 @@ describe('Build on the spec header', () => {
       lead: 'lead',
       level: 'fast',
       builders: ['dev'],
-      reviewers: ['qa'],
+      builder: 'dev',
+      checker: 'qa',
       budget_cap_usd: 5,
       landing: 'main',
       task_builders: { t1: 'dev', t2: '' },
+      task_checkers: { t1: 'lead', t2: '' },
     })
   })
 
