@@ -214,6 +214,53 @@ async def people_of(session: AsyncSession, build: Build) -> Dict[str, Any]:
     }
 
 
+def checker_of(build: Optional[Build], task: Task) -> Optional[Tuple[Optional[str], str]]:
+    """The checker *build* gives *task* (`check-goes-to-its-checker`), and whose choice it is:
+    `task` (the task's own) or `default` (the build's default checker, None where it has none).
+
+    None where the build does not say: a build recorded before migration 0156, or a task that
+    joined it after it started. The document's declaration then stands
+    (`review_turn.resolve_declared_reviewer`)."""
+    if build is None or not isinstance(build.people, dict):
+        return None
+    tasks = build.people.get("tasks") or {}
+    key = task.spec_task_key or ""
+    if key not in tasks:
+        return None
+    own = _person((tasks.get(key) or {}).get("checker"))
+    if own:
+        return own, "task"
+    return _person(build.people.get("checker")), "default"
+
+
+async def checkers_by_task(session: AsyncSession, tasks: Iterable[Task]) -> Dict[str, str]:
+    """Each build task's checker by task id, where its build names one: what the board shows
+    beside the builder (`hand-only-places-on-the-board`). One read per distinct build."""
+    found: Dict[str, str] = {}
+    by_build: Dict[str, Optional[Build]] = {}
+    for task in tasks:
+        if not task.build_id:
+            continue
+        if task.build_id not in by_build:
+            by_build[task.build_id] = await session.get(Build, task.build_id)
+        named = checker_of(by_build[task.build_id], task)
+        if named is not None and named[0]:
+            found[task.id] = named[0]
+    return found
+
+
+def not_open_reason(task: Task, role: str, name: str) -> str:
+    """Why a build's task waits for a *role* (`builder`, `checker`) who is not an open agent
+    (`flow-gives-task-to-its-builder`, `check-goes-to-its-checker`): it is held, never handed to
+    somebody else, so a broken plan shows instead of being quietly substituted."""
+    what = "its work" if role == "builder" else "its check"
+    return (
+        f"{task.id}'s {role} {name} is not an open agent of this project, so {what} is held and "
+        f"given to nobody else. Add or unarchive {name}, or stop the build and start it again "
+        f"naming an agent who is."
+    )
+
+
 # --- the build in the spec document (`choices-in-the-spec`, `build-end-shown`) -------------------
 
 #: Who made the choices a document's `hub.builds` records: the operator, at Build. The author's
@@ -746,16 +793,28 @@ async def compose_brief(session: AsyncSession, build: Build, title: str) -> str:
     cap = usd(build.budget_cap_usd_micros)
     lines = [
         f'You lead the build {build.id} of "{title}", at level {build.level}.',
-        "Hand each task to a builder, and each completed task to a reviewer, with "
-        "hand_out_task(task_id, agent, review). You approve only under the level's rules.",
+        "Hand each task to its builder, and each completed task to its checker, with "
+        "hand_out_task(task_id, agent, review). A task handed to anyone but its builder is "
+        "recorded with who it went to. "
+        + (
+            "At Fast no check is handed out: you or the builder approve."
+            if build.level == FAST
+            else "A check goes only to the task's checker, where it names one."
+        )
+        + " You approve only under the level's rules.",
         "",
         "Open tasks:",
     ]
     open_tasks = [t for t in tasks if t.status not in TERMINAL_STATUSES]
     for task in open_tasks:
         holder = task.assignee or "nobody"
-        declared = f", declared builder {task.builder}" if task.builder else ""
-        lines.append(f"- {task.id} [{task.status}] {task.title} (held by {holder}{declared})")
+        # Each task's people, as the operator chose them (`lead-told-the-people`).
+        named = checker_of(build, task)
+        checker = named[0] if named is not None else None
+        lines.append(
+            f"- {task.id} [{task.status}] {task.title} (held by {holder}; builder "
+            f"{task.builder or 'none named'}, checker {checker or 'none named'})"
+        )
     if not open_tasks:
         lines.append("- none")
     pool = builders or sorted(free)
@@ -816,7 +875,14 @@ class HandOutRefused(Exception):  # noqa: N818 -- "refused" is the outcome, not 
 
 
 async def hand_out(
-    session: AsyncSession, *, caller: str, project_id: str, task_id: str, agent: str, review: bool
+    session: AsyncSession,
+    *,
+    caller: str,
+    project_id: str,
+    task_id: str,
+    agent: str,
+    review: bool,
+    run_id: Optional[str] = None,
 ) -> Tuple[Task, Build, str]:
     """The lead hands *task_id* to *agent*: to build it, or (*review*) to review it (FR-5, D6).
 
@@ -825,6 +891,11 @@ async def hand_out(
     chosen agent's turn bound to the task the way the operator's trigger does (`task_id` /
     `review_task_id`). Returns the task, its build and the queued entry's id; the caller commits
     and schedules the agent. Raises `HandOutRefused`.
+
+    A pending task handed out moves to `assigned` as the lead's run (*run_id*), and its history
+    row names who it went to and, where that is not its builder, who its builder is
+    (`lead-told-the-people`). A check is refused at Fast, and to anyone but the task's checker
+    where the build names one (`check-goes-to-its-checker`).
     """
     from .api.v1.agent_trigger import review_dispatch_refusal
     from .conversations import inherit_runtime_overrides, name_conversation, new_conversation
@@ -845,7 +916,11 @@ async def hand_out(
             403,
         )
     pool = list(build.reviewers if review else build.builders) or None
-    if pool is not None and agent not in pool:
+    # The task's own people are its pool whatever the build-wide lists say (`flow-gives-task-to-
+    # its-builder`, `check-goes-to-its-checker`).
+    named = checker_of(build, task) if review else None
+    own = (named[0] if named is not None else None) if review else task.builder
+    if pool is not None and agent not in pool and agent != own:
         which = "reviewer pool" if review else "builders"
         raise HandOutRefused(
             f"{agent} is not among build {build.id}'s {which} ({', '.join(pool)}).", 409
@@ -853,6 +928,25 @@ async def hand_out(
     if agent not in await open_agents(session, project_id):
         raise HandOutRefused(f"{agent} is not an open agent of this project.", 409)
     if review:
+        # The check follows the level and goes to the task's checker (`check-goes-to-its-checker`):
+        # none at Fast, and only the checker the build names, where it names one.
+        if build.level == FAST:
+            raise HandOutRefused(
+                f"Build {build.id} is at Fast, where no check is handed out: you or the builder "
+                f"approve {task.id}.",
+                409,
+            )
+        checker = own
+        if checker and checker != agent:
+            raise HandOutRefused(
+                f"{task.id}'s check goes to its checker {checker}, not to {agent}."
+                + (
+                    ""
+                    if checker in await open_agents(session, project_id)
+                    else " " + not_open_reason(task, "checker", checker)
+                ),
+                409,
+            )
         # The dispatch's own read-only refusals, the checks wait and the commit to review, asked
         # now so the lead is answered instead of a turn that never starts (as the mender's
         # hand-off does, `mender._hand_to_review`).
@@ -894,6 +988,21 @@ async def hand_out(
                     f"Task {task_id} waits for its prerequisites: {gate.to_dict()}", 409
                 )
         task.assignee = agent
+        if run_id and task.status == "pending":
+            # Handed out is assigned, recorded as the lead's move, naming who it went to and,
+            # where that is not the task's builder, who was (`lead-told-the-people`).
+            from .task_transition_service import TransitionRefusedError, apply_transition
+            from .task_transitions import run_actor
+
+            note = f"handed by the lead {caller} to {agent}"
+            if task.builder and task.builder != agent:
+                note += f"; its named builder is {task.builder}"
+            try:
+                await apply_transition(
+                    session, task, "assigned", run_actor(run_id, caller), note=note
+                )
+            except TransitionRefusedError as exc:
+                raise HandOutRefused(str(exc), 409) from exc
     loop = await session.get(Loop, build.loop_id) if build.loop_id else None
     conversation = new_conversation(project_id=project_id, agent=agent, origin="job")
     kind = "Review" if review else "Build"
