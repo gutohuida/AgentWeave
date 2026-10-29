@@ -1,7 +1,15 @@
 import * as React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { VaultCitation, VaultContradiction, VaultEntry, VaultEntryPage } from '@/api/vault'
+import {
+  VAULT_FILE_ACCEPT,
+  fileKindOf,
+  type VaultChange,
+  type VaultCitation,
+  type VaultContradiction,
+  type VaultEntry,
+  type VaultEntryPage,
+} from '@/api/vault'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
@@ -45,6 +53,9 @@ export function VaultReader({
   file,
   fileError,
   focusFactId,
+  onEdit,
+  onReplaceFile,
+  onArchive,
   now,
 }: {
   entry: VaultEntry
@@ -72,15 +83,39 @@ export function VaultReader({
   fileError?: string | null
   /** Open on the Facts view with this fact marked (a report's corrected fact). */
   focusFactId?: string | null
+  /** Save a text source's new whole text, naming the version it was read at; answers `{ error }`
+   *  with the Hub's reason when refused. */
+  onEdit?: (id: string, content: string, version: string) => VaultActionResult
+  /** Replace a file source's file; answers `{ error }` when refused. */
+  onReplaceFile?: (id: string, file: File) => VaultActionResult
+  onArchive?: (id: string) => VaultActionResult
   now: Date
 }) {
   const [tab, setTab] = React.useState<ReaderTab>('text')
+  // The text being edited, when the operator is editing; the version it was read at rides with it.
+  const [draft, setDraft] = React.useState<string | null>(null)
+  const [saving, setSaving] = React.useState(false)
+  // Why the Hub refused the last edit, replacement or archive.
+  const [refusal, setRefusal] = React.useState<string | null>(null)
+  const fileInput = React.useRef<HTMLInputElement>(null)
   // The fact whose citation is shown in the text: its cited lines are marked.
   const [citing, setCiting] = React.useState<string | null>(null)
   React.useEffect(() => {
     setTab(focusFactId ? 'facts' : 'text')
     setCiting(null)
+    setDraft(null)
+    setRefusal(null)
   }, [entry.id, focusFactId])
+  const isFile = fileKindOf(entry.media_type) !== null
+  const run = async (action: VaultActionResult) => {
+    setRefusal(null)
+    const result = await action
+    if (result && 'error' in result) {
+      setRefusal(result.error)
+      return false
+    }
+    return true
+  }
   const kind = kindOf(entry.type)
   const folder = folderOf(entry)
   const fileKind = fileLabel(entry)
@@ -111,6 +146,61 @@ export function VaultReader({
               <Icon name="sparkles" size={14} />
               {extracting ? 'Extracting…' : facts.length ? 'Extract again' : 'Extract facts'}
             </Button>
+            {onEdit && !isFile ? (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="vault-edit"
+                disabled={draft !== null || !page || page.content === null || !page.version || hasMore}
+                title={hasMore ? 'Load the whole text before editing it.' : 'Change this source’s text. Its facts follow once it is extracted again.'}
+                onClick={() => {
+                  setRefusal(null)
+                  setDraft(page?.content ?? '')
+                  setTab('text')
+                }}
+              >
+                <Icon name="edit_note" size={14} />
+                Edit
+              </Button>
+            ) : null}
+            {onReplaceFile && isFile ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="vault-replace"
+                  title="Swap in a newer version of this file. It stays the same source."
+                  onClick={() => fileInput.current?.click()}
+                >
+                  <Icon name="upload" size={14} />
+                  Replace
+                </Button>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  hidden
+                  data-testid="vault-replace-input"
+                  accept={VAULT_FILE_ACCEPT}
+                  onChange={(e) => {
+                    const chosen = e.target.files?.[0]
+                    e.target.value = ''
+                    if (chosen) void run(onReplaceFile(entry.id, chosen))
+                  }}
+                />
+              </>
+            ) : null}
+            {onArchive ? (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="vault-archive"
+                title="Take this source and its facts out of agents’ view. Nothing is lost; restore it from the archived list."
+                onClick={() => void run(onArchive(entry.id))}
+              >
+                <Icon name="archive" size={14} />
+                Archive
+              </Button>
+            ) : null}
             <Menu>
               <MenuTrigger asChild>
                 <Button variant="ghost" size="icon-sm" aria-label="More actions">
@@ -198,8 +288,54 @@ export function VaultReader({
       </header>
 
       <div className="vault-reader-body">
+        {refusal ? (
+          <p className="vault-note" role="alert" data-tone="amber" data-testid="vault-refusal">
+            <Icon name="alert_triangle" size={14} />
+            <span>{refusal}</span>
+          </p>
+        ) : null}
         {tab === 'text' ? (
           <>
+            {draft !== null ? (
+              <div className="flex max-w-[86ch] flex-col gap-2">
+                <textarea
+                  className="vault-edit-text"
+                  data-testid="vault-edit-text"
+                  aria-label="Source text"
+                  rows={16}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    data-testid="vault-edit-save"
+                    disabled={saving || !onEdit || !page?.version}
+                    onClick={async () => {
+                      if (!onEdit || !page?.version) return
+                      setSaving(true)
+                      try {
+                        if (await run(onEdit(entry.id, draft, page.version))) setDraft(null)
+                      } finally {
+                        setSaving(false)
+                      }
+                    }}
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button variant="ghost" size="sm" disabled={saving} onClick={() => setDraft(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            {page?.stale ? (
+              <p className="vault-note" data-tone="amber" data-testid="vault-source-stale">
+                <Icon name="alert_triangle" size={14} />
+                <span>This source changed after its facts were drawn. Extract facts again to bring them up to date.</span>
+              </p>
+            ) : null}
             {file ? <FileView entry={entry} file={file} /> : null}
             {fileError ? (
               <p className="vault-note" role="alert" data-tone="amber">
@@ -212,14 +348,15 @@ export function VaultReader({
                 <Icon name="alert_triangle" size={14} />
                 <span>{error}</span>
               </p>
-            ) : (
+            ) : draft === null ? (
               <EntryText entry={entry} page={page} ranges={ranges} onShowFormatted={() => setCiting(null)} />
-            )}
+            ) : null}
             {hasMore && !error ? (
               <Button variant="ghost" size="sm" className="self-start" disabled={loadingMore} onClick={onLoadMore}>
                 {loadingMore ? 'Loading…' : 'Show more'}
               </Button>
             ) : null}
+            {page?.changes?.length ? <Changes changes={page.changes} now={now} /> : null}
           </>
         ) : null}
         {tab === 'facts' ? (
@@ -241,6 +378,31 @@ export function VaultReader({
         {tab === 'used' ? <UsedBy entry={entry} now={now} /> : null}
       </div>
     </article>
+  )
+}
+
+const CHANGE_WORDS: Record<VaultChange['action'], string> = {
+  edit: 'Edited',
+  replace: 'File replaced',
+  archive: 'Archived',
+  restore: 'Restored',
+}
+
+/** What was done to the source, oldest first, and by whom. */
+function Changes({ changes, now }: { changes: VaultChange[]; now: Date }) {
+  return (
+    <section className="vault-changes" aria-label="Changes to this source">
+      <p className="vault-group-head">Changes</p>
+      <ol data-testid="vault-changes">
+        {changes.map((change, i) => (
+          <li key={i} className="vault-change" data-action={change.action}>
+            <span>{CHANGE_WORDS[change.action] ?? change.action}</span>
+            <span>by {change.by.kind === 'agent' ? change.by.agent : 'the operator'}</span>
+            <span title={formatDateTime(change.at, now)}>{formatAgo(change.at, now)}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
   )
 }
 
@@ -443,9 +605,23 @@ function FactsView({
                   {fact.presumed ? 'Disputed, presumed to hold' : 'Disputed'}
                 </span>
               ) : null}
-              {fact.superseded_by ? (
-                <span className="vault-chip">
-                  {fact.superseded_by.startsWith('fct-') ? 'Superseded by a corrected fact' : 'Superseded by a decision'}
+              {fact.superseded_by || fact.superseded_at ? (
+                <span className="vault-chip" data-testid={`vault-superseded-${fact.id}`}>
+                  {fact.superseded_by?.startsWith('fct-')
+                    ? 'Superseded by a corrected fact'
+                    : fact.superseded_at && (!fact.superseded_by || fact.sources?.includes(fact.superseded_by))
+                      ? 'Superseded: its source was changed'
+                      : 'Superseded by a decision'}
+                </span>
+              ) : null}
+              {fact.stale ? (
+                <span
+                  className="vault-chip"
+                  data-tone="amber"
+                  data-testid={`vault-stale-${fact.id}`}
+                  title="Its source changed after this fact was drawn and has not been extracted since."
+                >
+                  Stale
                 </span>
               ) : null}
             </p>

@@ -63,6 +63,12 @@ export interface VaultLibraryProps {
   /** Absent where the Hub has no route to remove an entry. */
   onDelete?: (id: string) => void
   onSaveSettings: (next: { default_visibility: VaultVisibility; private_location: string | null }) => VaultActionResult | void
+  /** Archived sources (`GET /vault/archived`), listed apart from the map's entries. */
+  archived?: VaultEntry[]
+  onRestore?: (id: string) => VaultActionResult
+  onEdit?: (id: string, content: string, version: string) => VaultActionResult
+  onReplaceFile?: (id: string, file: File) => VaultActionResult
+  onArchive?: (id: string) => VaultActionResult
   /** The open entry's reading state, past its first page. */
   reader?: {
     hasMore?: boolean
@@ -87,6 +93,8 @@ export function VaultLibrary(props: VaultLibraryProps) {
   const { entries, settings, selectedId, onSelect, now } = props
   const contradictions = props.contradictions
   const reports = props.reports ?? []
+  const archived = props.archived ?? []
+  const [restoreRefusal, setRestoreRefusal] = React.useState<string | null>(null)
   // Sources, plus any fact whose source is not in the map (it would otherwise be unreachable).
   const { sources, factCounts } = React.useMemo(() => {
     const sourceIds = new Set(entries.filter((e) => e.kind !== 'fact').map((e) => e.id))
@@ -172,7 +180,7 @@ export function VaultLibrary(props: VaultLibraryProps) {
     setAdding(true)
   }
 
-  if (sources.length === 0 && contradictions.length === 0 && reports.length === 0) {
+  if (sources.length === 0 && contradictions.length === 0 && reports.length === 0 && archived.length === 0) {
     return (
       <div className="vault-library" data-empty="true" data-testid="vault-page" {...bind}>
         <VaultEmptyState onAdd={() => openAdd('text')} onFiles={(files) => { setDropped(files); setAdding(true) }} />
@@ -380,6 +388,45 @@ export function VaultLibrary(props: VaultLibraryProps) {
               <EntryRow key={e.id} entry={e} factCount={factCounts[e.id] ?? 0} active={e.id === selectedId} wide={!selected} ambiguous={duplicates.has(e.name)} onOpen={() => onSelect(e.id)} onExtract={props.onExtractFacts} onDelete={props.onDelete} now={now} />
             ))
           )}
+          {!reviewing && archived.length ? (
+            <section className="vault-archived" data-testid="vault-archived" aria-label="Archived sources">
+              <p className="vault-group-head">
+                Archived
+                <span>{archived.length}</span>
+              </p>
+              <p className="vault-review-intro">Agents do not see these. Restore one to bring it and its facts back.</p>
+              {restoreRefusal ? (
+                <p className="vault-note" role="alert" data-tone="amber" data-testid="vault-restore-refusal">
+                  <Icon name="alert_triangle" size={14} />
+                  <span>{restoreRefusal}</span>
+                </p>
+              ) : null}
+              {archived.map((e) => (
+                <div key={e.id} className="vault-row" data-testid={`vault-archived-${e.id}`}>
+                  <span className="vault-row-text">
+                    <span className="vault-row-name">{baseName(e)}</span>
+                    <span className="vault-row-meta">
+                      {e.archived_at ? <span>Archived {formatDay(e.archived_at, now)}</span> : null}
+                    </span>
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    data-testid={`vault-restore-${e.id}`}
+                    disabled={!props.onRestore}
+                    onClick={async () => {
+                      setRestoreRefusal(null)
+                      const result = await props.onRestore?.(e.id)
+                      if (result && 'error' in result) setRestoreRefusal(result.error)
+                    }}
+                  >
+                    <Icon name="refresh" size={12} />
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </section>
+          ) : null}
         </div>
       </section>
 
@@ -393,6 +440,9 @@ export function VaultLibrary(props: VaultLibraryProps) {
           onExtractFacts={props.onExtractFacts}
           onResolve={props.onResolve}
           onDelete={props.onDelete}
+          onEdit={props.onEdit}
+          onReplaceFile={props.onReplaceFile}
+          onArchive={props.onArchive}
           onClose={() => onSelect(null)}
           {...props.reader}
           now={now}

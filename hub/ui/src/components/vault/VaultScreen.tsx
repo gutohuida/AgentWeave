@@ -4,7 +4,12 @@ import {
   fileKindOf,
   isFact,
   isNoVault,
+  useArchiveVaultSource,
+  useArchivedVaultSources,
   useCloseVaultReport,
+  useEditVaultSource,
+  useReplaceVaultFile,
+  useRestoreVaultSource,
   useReviewVaultReport,
   useDistilVaultSource,
   useResolveContradiction,
@@ -114,6 +119,11 @@ export function VaultScreen() {
   const closeReport = useCloseVaultReport()
   const reviewReport = useReviewVaultReport()
   const updateSettings = useUpdateVaultSettings()
+  const archivedSources = useArchivedVaultSources()
+  const editSource = useEditVaultSource()
+  const replaceFile = useReplaceVaultFile()
+  const archiveSource = useArchiveVaultSource()
+  const restoreSource = useRestoreVaultSource()
 
   if (isNoVault(map.error) || isNoVault(settings.error)) {
     return (
@@ -164,6 +174,50 @@ export function VaultScreen() {
       : null,
     reports.error && !isNoVault(reports.error) ? readableApiError(reports.error, "Could not read this project's reports.") : null,
   ].filter((n): n is string => Boolean(n))
+
+  /** A change is saved at once; when the Hub says the facts are stale or are being drawn again, the
+   *  toast carries its sentence and the map is watched for the new facts. */
+  const changed = (title: string, answer: { note?: string; stale?: boolean }) => {
+    watch()
+    toast({ title, description: answer.note, tone: answer.stale ? 'neutral' : 'success' })
+  }
+
+  const edit = async (id: string, content: string, version: string): Promise<{ error: string } | void> => {
+    try {
+      changed('Saved', await editSource.mutateAsync({ sourceId: id, content, version }))
+    } catch (error) {
+      return { error: readableApiError(error, 'Could not save that change.') }
+    }
+  }
+
+  const replace = async (id: string, file: File): Promise<{ error: string } | void> => {
+    const mediaType = vaultFileMediaType(file)
+    if (!mediaType) return { error: 'Replace a PDF or image with a PDF or image.' }
+    try {
+      changed('File replaced', await replaceFile.mutateAsync({ sourceId: id, file, mediaType }))
+    } catch (error) {
+      return { error: readableApiError(error, 'Could not replace that file.') }
+    }
+  }
+
+  const archive = async (id: string): Promise<{ error: string } | void> => {
+    try {
+      await archiveSource.mutateAsync(id)
+      setSelectedId(null)
+      toast({ title: 'Archived', description: 'Agents no longer see it. Restore it from the archived list.', tone: 'success' })
+    } catch (error) {
+      return { error: readableApiError(error, 'Could not archive that source.') }
+    }
+  }
+
+  const restore = async (id: string): Promise<{ error: string } | void> => {
+    try {
+      await restoreSource.mutateAsync(id)
+      toast({ title: 'Restored', tone: 'success' })
+    } catch (error) {
+      return { error: readableApiError(error, 'Could not restore that source.') }
+    }
+  }
 
   const add = async (input: VaultAddInput): Promise<VaultAddResult | void> => {
     if (input.kind === 'text') {
@@ -248,6 +302,11 @@ export function VaultScreen() {
       notices={notices}
       extractingId={distil.isPending ? distil.variables : (extracting?.id ?? null)}
       onAdd={add}
+      archived={archivedSources.data?.sources ?? []}
+      onEdit={edit}
+      onReplaceFile={replace}
+      onArchive={archive}
+      onRestore={restore}
       onExtractFacts={(id) =>
         distil.mutate(id, {
           onSuccess: () => {
