@@ -218,6 +218,30 @@ async def test_delivery_status_names_the_default_reviewer(
     assert (await status_of())["reviewer_state"] == "archived"
 
 
+@pytest.mark.parametrize("field", ["checker", "tester", "reviewer"])
+async def test_delivery_status_names_the_default_checker_whatever_field_names_it(
+    app, auth_headers, run_headers, field  # noqa: F811
+):
+    """F1085: a document naming `checker` (or an older `tester`) shows that agent, not "no reviewer"."""
+    path = "spec/changes/demo/spec.json"
+    await _create(app, auth_headers, path)
+    await _agent("dev")
+    await _submit_document(
+        app, run_headers, _document(delivery={**FLOW, field: "QA"}), path=path
+    )
+    got = await app.get(f"{BASE}/spec", params={"path": path}, headers=auth_headers)
+    assert got.status_code == 200, got.text
+    assert got.json()["delivery_status"] == {
+        "state": "ok",
+        "agent": "dev",
+        "reviewer": "QA",
+        "reviewer_state": "unknown",
+    }
+    await _agent("QA")
+    got = await app.get(f"{BASE}/spec", params={"path": path}, headers=auth_headers)
+    assert got.json()["delivery_status"]["reviewer_state"] == "ok"
+
+
 def test_the_submit_tool_says_delivery_takes_a_reviewer():
     from hub.mcp_server import submit_spec_document
 
