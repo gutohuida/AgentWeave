@@ -565,18 +565,27 @@ def reviewer_undeclared_warnings(payload: SpecPayload) -> List[Finding]:
     design prose and left the field empty, and a leftover stub agent got the review. The Hub cannot
     read the prose, so it says what the fields will do. Advisory, like `overlap_warnings`.
     """
-    if payload.delivery is None or payload.delivery.mode != "flow" or payload.delivery.reviewer:
+    delivery = payload.delivery
+    if delivery is None or delivery.mode != "flow":
+        return []
+    # A default checker under any of its names (`old-names-still-build`) is a declared one.
+    if (
+        delivery.checker
+        or delivery.reviewer
+        or isinstance(delivery.tester, str)
+        and delivery.tester
+    ):
         return []
     local = [t for t in payload.tasks if t.from_ is None]
-    if not local or any(t.reviewer for t in local):
+    if not local or any(t.checker or t.reviewer for t in local):
         return []
     return [
         Finding(
             "reviewer_undeclared",
             "tasks",
-            "neither `delivery.reviewer` nor any task's `reviewer` is set, so the flow will give "
-            "each review to any free agent; if a particular agent should review, set "
-            "`delivery.reviewer` (or `reviewer` on a task that needs a different one)",
+            "neither `delivery.checker` nor any task's `checker` is set, so the flow will give "
+            "each check to any free agent; if a particular agent should check, set "
+            "`delivery.checker` (or `checker` on a task that needs a different one)",
         )
     ]
 

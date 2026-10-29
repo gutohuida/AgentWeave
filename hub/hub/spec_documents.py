@@ -56,6 +56,12 @@ INDEX_RELATIVE = INDEX_PATH
 #: the authority; a payload may not carry this key (`spec_payload.validate_payload`).
 HUB_FIELD = "hub"
 
+#: The Hub block's copy of the document's builds (`choices-in-the-spec`, `build-end-shown`): the
+#: running build and the most recent ended one, as `builds.record_in_document` writes them. The
+#: build rows are the authority; every other rewrite of the block carries this key across
+#: (`spec_service.hub_block`).
+HUB_BUILDS = "builds"
+
 #: The route a legacy `.html` document is converted by, named in its diagnostic (FR-6).
 CONVERT_ROUTE = "POST /project/spec/convert?to=json"
 

@@ -283,7 +283,9 @@ async def _apply_and_write(
     divergence = spec_lifecycle.divergence(document, existing_content)
 
     # Stored as the payload plus the row's hub block (FR-1); the page is rendered when it is read.
-    content = spec_documents.write_payload(workspace, document.path, stored, hub_block(document))
+    content = spec_documents.write_payload(
+        workspace, document.path, stored, hub_block(document, existing_content)
+    )
 
     await spec_lifecycle.record_content(
         session,
@@ -1532,20 +1534,28 @@ async def rerender_phase(
     stored = spec_documents.parse_stored(content)
     if stored is None:
         return
-    rewritten = spec_documents.serialize(stored, hub_block(document))
+    rewritten = spec_documents.serialize(stored, hub_block(document, content))
     if rewritten != content:
         spec_documents.write_document(workspace, document.path, rewritten)
     document.content_digest = spec_lifecycle.digest(rewritten)
 
 
-def hub_block(document: SpecDocument) -> Dict[str, Any]:
+def hub_block(document: SpecDocument, content: Optional[str] = None) -> Dict[str, Any]:
     """The row's copy for the stored file (FR-1): phase, step and size. Rigor retired
-    (`amendments-main-watch-and-the-next-slice`, D3), so a document no longer states one."""
-    return {
+    (`amendments-main-watch-and-the-next-slice`, D3), so a document no longer states one.
+
+    The document's builds (`spec_documents.HUB_BUILDS`) are carried across from *content*, the
+    file being rewritten: `builds.record_in_document` writes them, and no other rewrite of the
+    block may drop them."""
+    block: Dict[str, Any] = {
         "phase": document.phase,
         "step": document.step,
         "size": document.size,
     }
+    carried = spec_documents.parse_hub(content).get(spec_documents.HUB_BUILDS)
+    if carried:
+        block[spec_documents.HUB_BUILDS] = carried
+    return block
 
 
 async def render_page(
@@ -1636,7 +1646,11 @@ async def rerender_corpus(
         # has a row today (`build_index` only files documents that are both on disk and known to
         # the Hub); a rowless one keeps the block it carries.
         document = by_path.get(entry.path)
-        hub = hub_block(document) if document is not None else spec_documents.parse_hub(current)
+        hub = (
+            hub_block(document, current)
+            if document is not None
+            else spec_documents.parse_hub(current)
+        )
         rendered = spec_documents.serialize(stored, hub)
         if rendered == current:
             continue

@@ -477,6 +477,14 @@ def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[
         "budget_cap_usd": delivery.budget_cap_usd,
         "landing": delivery.landing or builds.LANDING_MAIN,
         "task_builders": _declared_builders(payload),
+        # One builder and one checker per task, plus the defaults (`one-checker`), an older
+        # document's tester or reviewer read as its checker (`old-names-still-build`).
+        "builder": spec_payload_module.default_builder(payload),
+        "checker": spec_payload_module.default_checker(payload)[0],
+        "task_checkers": {
+            key: people["checker"]
+            for key, people in spec_payload_module.declared_people(payload).items()
+        },
         "reasons": dict(delivery.reasons),
     }
 
@@ -554,6 +562,11 @@ class _BuildChoices(RequestModel):
     landing: Optional[Literal["main", "nowhere"]] = None
     # Each task's builder as the operator left it in the dialog, by task key; "" clears it.
     task_builders: Optional[Dict[str, Annotated[str, StringConstraints(max_length=32)]]] = None
+    # The default builder and checker (`one-checker`): left out, the document's.
+    builder: Optional[str] = Field(default=None, max_length=32)
+    checker: Optional[str] = Field(default=None, max_length=32)
+    # Each task's checker as the operator left it in the dialog, by task key; "" clears it.
+    task_checkers: Optional[Dict[str, Annotated[str, StringConstraints(max_length=32)]]] = None
 
 
 class BuildRequest(_BuildChoices):
@@ -3410,6 +3423,17 @@ async def _build_settings(
         window_end=end,
         landing=landing,
         task_builders=dict(body.task_builders or {}),
+        builder=(
+            body.builder.strip() or None
+            if body.builder is not None
+            else spec_payload_module.default_builder(payload)
+        ),
+        checker=(
+            body.checker.strip() or None
+            if body.checker is not None
+            else spec_payload_module.default_checker(payload)[0]
+        ),
+        task_checkers=dict(body.task_checkers or {}),
     )
 
 
@@ -3497,6 +3521,13 @@ async def _build(
         open_tasks,
         _declared_builders(payload),
         settings.task_builders,
+        declared_checkers={
+            key: people["checker"]
+            for key, people in spec_payload_module.declared_people(payload).items()
+        },
+        chosen_checkers=settings.task_checkers,
+        default_builder=settings.builder,
+        default_checker=settings.checker,
     )
     if settings.driver == builds.DRIVER_HAND or document.kind != "change-spec":
         flow = (
@@ -3535,6 +3566,8 @@ async def _build(
     await spec_lifecycle.record_event(
         session, document, kind=BUILD_REPORT, actor=_operator(), detail=outcome
     )
+    # The operator's choices, into the document beside the recommendation (`choices-in-the-spec`).
+    await builds.record_in_document(session, document.id)
     return outcome, started
 
 
@@ -3549,6 +3582,9 @@ _CHOICE_FIELDS = (
     "window_end",
     "landing",
     "task_builders",
+    "builder",
+    "checker",
+    "task_checkers",
 )
 
 

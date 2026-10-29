@@ -5287,6 +5287,8 @@ def submit_spec_document(
       asked for), and optionally `title`. Approving the document creates these as real tasks, and
       `title` is the name the board shows — a few words, not the sentence. Without one a name is
       derived from the description, which reads as prose because that is what it is. A task may
+      name its `builder` and its `checker` (one agent each, by name; the checker both tests the
+      work and records its verdict), where they differ from the delivery's defaults. A task may
       also name sibling task keys in `depends_on`; it is not started until they are done. Tasks
       expected to edit the same file are chained with `depends_on`, so same-file tasks are built
       in order rather than in parallel. `files` optionally lists the repo-relative paths (never
@@ -5312,14 +5314,16 @@ def submit_spec_document(
 
     `delivery` — the build you recommend, for a change-spec document only; the operator decides
       when they build it, and Build opens with it filled in. Either
-      `{"mode": "flow", "agent": "<name>", "reviewer": "<name>", "stop_when_queue_empties": true,
-      "stop_at": None, "cron": "*/5 * * * *"}` (a flow: at least one of
-      `stop_when_queue_empties`/`stop_at` must be set, `agent` is the default agent's name from the
-      open roster, `reviewer` is the agent that reviews every task whose own `reviewer` is empty --
-      leave it out and any free agent reviews -- and `stop_at` is an ISO-8601 timestamp carrying a
-      timezone) or `{"mode": "none"}` (no flow: the tasks go on the board and
+      `{"mode": "flow", "agent": "<name>", "builder": "<name>", "checker": "<name>",
+      "stop_when_queue_empties": true, "stop_at": None, "cron": "*/5 * * * *"}` (a flow: at least
+      one of `stop_when_queue_empties`/`stop_at` must be set, `agent` is the default agent's name
+      from the open roster, `builder` builds every task that names no `builder` (empty: `agent`),
+      `checker` checks every task whose own `checker` is empty -- one agent tests the work and
+      records its verdict; leave it out and any free agent checks. An older document's `reviewer`
+      and `tester` are still read as checkers, the tester first -- and `stop_at` is an ISO-8601
+      timestamp carrying a timezone) or `{"mode": "none"}` (no flow: the tasks go on the board and
       are started by hand). Add `reasons`, one sentence per choice keyed `mode`, `agent`,
-      `reviewer`, `tester`, `stop` or `cron`, saying why you recommend it. **Include `delivery`
+      `builder`, `checker`, `stop` or `cron`, saying why you recommend it. **Include `delivery`
       in every later submission of this document**, not only the first one that answers it: a
       submission replaces the whole document, so one without it drops the answer.
 
@@ -5488,6 +5492,12 @@ def read_spec_document(
     own `identifier`, `state` and `anchor`, and leaves out retired requirements. A requirement
     marked `section_truncated` is refused, because resubmitting it would delete what the read cut:
     read it whole first.
+
+    **A change document's `build` is the operator's decision, not the recommendation.** It holds
+    `running` (the build now running, or null) and `last_ended` (the most recent stopped or finished
+    one): the driver, level, default builder and checker, each task's builder and checker, the
+    lead, cap, window and landing the operator chose when they pressed Build. `delivery` is what
+    the author recommended; where the two differ, follow `build`.
 
     Also returns `phase`, which says how settled this document is. Readable at any phase
     — an unapproved document is still worth reading, and its phase tells you not to build on it yet.
