@@ -1,0 +1,23 @@
+{
+  "id": "fct-07f86836fb05",
+  "kind": "fact",
+  "claim": "The only per-task override in a change document is `reviewer`, which overrides `delivery.reviewer`.",
+  "citations": [
+    {
+      "source": "src-cce308f8fb82",
+      "quote": "The only per-task override is `reviewer`,\n  which overrides `delivery.reviewer`.",
+      "line_start": 9,
+      "line_end": 10
+    }
+  ],
+  "sources": [
+    "src-cce308f8fb82"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-28T19:42:23.467405Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

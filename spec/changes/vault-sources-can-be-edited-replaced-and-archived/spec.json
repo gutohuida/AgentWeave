@@ -1,0 +1,506 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub (never :8000) on a throwaway project with vault-distillation enabled on a Claude Haiku runner, and a tracked text source 'Problems' holding two lines, 'F-1 the map is slow: open' and 'F-2 the tab flickers: open', distilled into facts",
+      "how_to_check": "Acceptance drive: py -3.11 scripts/drive/d1028_vault_sources_change.py (proposed), committed failing before the build",
+      "key": "ac-drive",
+      "requirement": "agents-edit-text",
+      "then": "the agent's tool call is answered 200; 'Problems' holds 'F-1 the map is slow: cleared' with a change recorded naming the agent and its run; a background distillation fired without the edit waiting for it; the map lists a fact that F-1 is cleared, the earlier 'F-1 open' fact listed with superseded_by the source and superseded_at set and its vault_read saying it was superseded; the F-2 fact keeps its id; 'Old notes' and its facts are absent from vault_map and the next turn's vault line counts one entry fewer, while vault_read of it answers archived true. On today's master the agent has no edit tool, so this fails",
+      "when": "a real Haiku agent turn is told to mark F-1 cleared in the vault, archive a second source 'Old notes', and then the operator presses Distil on 'Problems' again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a tracked and a private text source, each with name, type, dated and visibility set",
+      "how_to_check": "pytest hub/tests/test_vault_changes.py (proposed)",
+      "key": "ac-operator-edit",
+      "requirement": "operator-edits-text",
+      "then": "it answers 200; id, name, type, visibility, dated and created_at are unchanged; the map's opening and GET /vault/entries/{id} on the operator's and the agents' routes answer the new text",
+      "when": "the operator's edit route is called on each with new text and the version it was read at"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a text source holding 'alpha' once and 'beta' twice, and a run credential for agent Scout",
+      "how_to_check": "pytest hub/tests/test_vault_agent_changes.py (proposed)",
+      "key": "ac-agent-replace-passage",
+      "requirement": "agents-edit-text",
+      "then": "the first answers 200 and the text holds 'gamma'; replacing 'beta' is refused saying it occurs more than once, and 'delta' saying it does not occur, neither changing the text; the append answers 200 with 'note' at the end",
+      "when": "the agent replaces 'alpha' by 'gamma', then tries to replace 'beta', then 'delta', then appends 'note'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a text source read by the operator at version V, then changed",
+      "how_to_check": "pytest hub/tests/test_vault_changes.py (proposed)",
+      "key": "ac-outdated-edit",
+      "requirement": "edit-from-outdated-text-refused",
+      "then": "it is refused with a reason saying the source changed since it was opened, and the changed text stands",
+      "when": "the operator's edit is sent naming version V"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PDF source",
+      "how_to_check": "pytest hub/tests/test_vault_changes.py and test_vault_agent_changes.py (proposed)",
+      "key": "ac-file-not-text",
+      "requirement": "file-source-not-edited-as-text",
+      "then": "each is refused with a reason saying the file is changed by replacing it, and its bytes and transcription are unchanged",
+      "when": "the operator's edit, an agent's passage replacement and an agent's append are each tried on it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a transcribed PDF source",
+      "how_to_check": "pytest hub/tests/test_vault_changes.py (proposed)",
+      "key": "ac-operator-replace",
+      "requirement": "operator-replaces-file",
+      "then": "the valid one answers 200 with id, name, type, visibility, dated and created_at unchanged, GET /vault/sources/{id}/file answers the new bytes and the earlier transcription is gone; the mismatched one is refused as an upload would be, changing nothing",
+      "when": "the operator replaces it with another valid PDF, and separately tries a file whose bytes do not match its Content-Type"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an image source and an agent run",
+      "how_to_check": "pytest hub/tests/test_vault_agent_changes.py (proposed)",
+      "key": "ac-agent-replace",
+      "requirement": "agents-replace-file",
+      "then": "the first answers 200 and the file route answers the new bytes; the second is refused with the same reason vault_add gives for that path",
+      "when": "the agent replaces it with a PNG inside its workspace, and then with a path outside both the workspace and the project directory"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a tracked text source",
+      "how_to_check": "pytest hub/tests/test_vault_agent_changes.py (proposed)",
+      "key": "ac-record",
+      "requirement": "record-each-change",
+      "then": "a read of the entry answers four changes oldest first (edit by operator, edit by Scout with Scout's run id, archive, restore), the agent's taken from its credential and not the body; the record is a file under knowledge/ beside the source",
+      "when": "the operator edits it, agent Scout appends to it with a request body naming another agent, then the operator archives and restores it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "vault-distillation enabled with a runner whose worker is held blocked",
+      "how_to_check": "pytest hub/tests/test_vault_changes.py (proposed), with the distillation worker faked",
+      "key": "ac-redistil",
+      "requirement": "redistil-after-change",
+      "then": "both answer before the worker returns, and one distillation of each source is recorded as fired",
+      "when": "a text source is edited and a file source replaced"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a distilled source whose fact quotes its line 3",
+      "how_to_check": "pytest hub/tests/test_vault_distillation.py, a new case that fails before the build",
+      "key": "ac-moved-keeps-id",
+      "requirement": "moved-fact-keeps-id",
+      "then": "the fact keeps its id and its citation names lines 5 to 5; today it would be re-minted under a new id",
+      "when": "two lines are inserted above it and the source is distilled again, the worker drawing the same claim from the quote now on line 5"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a distilled source with facts A and B, and a requirement in a spec document citing A",
+      "how_to_check": "pytest hub/tests/test_vault_distillation.py, flipping the cases that assert earlier facts are deleted",
+      "key": "ac-superseded",
+      "requirement": "superseded-facts-kept",
+      "then": "A is still a file in the vault with its claim and citations unchanged, listed with superseded_by the source id and superseded_at the distillation's time; its vault_read says it was superseded; the requirement's vault warnings do not say A is no longer in the vault",
+      "when": "the source is distilled again (once after an edit, once by pressing Distil with no change) and the worker no longer draws A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "vault-distillation disabled, and a source with two facts",
+      "how_to_check": "pytest hub/tests/test_vault_changes.py (proposed)",
+      "key": "ac-stale",
+      "requirement": "stale-when-not-distilled",
+      "then": "the edit answers 200 saying the facts are stale and what to enable; until the distillation completes both facts are listed stale true and their vault_read says the source changed after they were drawn; afterwards no fact of the source is stale",
+      "when": "the source is edited, then the job is enabled and the source distilled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "sources S1 and S2, a fact citing only S1 and a fact citing both",
+      "how_to_check": "pytest hub/tests/test_vault_archive.py (proposed)",
+      "key": "ac-archive",
+      "requirement": "archive-source",
+      "then": "vault_map lists neither S1 nor the fact citing only S1, still lists the fact citing both, and the turn's Knowledge vault line counts accordingly; archiving S2 as well, with nothing else in the vault, leaves the turn with no vault line",
+      "when": "S1 is archived"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an archived source whose fact would contradict a newly distilled fact, and a proposed document whose requirement it would conflict with",
+      "how_to_check": "pytest hub/tests/test_vault_archive.py (proposed), asserting both checks' compared sets",
+      "key": "ac-out-of-checks",
+      "requirement": "archived-out-of-checks",
+      "then": "neither prompt includes the archived fact",
+      "when": "a contradiction check and a spec-vault-check fire"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an archived source and its fact",
+      "how_to_check": "pytest hub/tests/test_vault_archive.py (proposed)",
+      "key": "ac-archived-read",
+      "requirement": "archived-still-readable",
+      "then": "each answers 200 with archived true, and vault_read's content says it is archived",
+      "when": "each is read by id on the operator's and the agents' routes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a source archived with its facts",
+      "how_to_check": "pytest hub/tests/test_vault_archive.py and test_vault_agent_changes.py (proposed)",
+      "key": "ac-restore",
+      "requirement": "restore-source",
+      "then": "the map, the turn's vault count and the checks' compared set are what they were before it was archived",
+      "when": "it is restored, by the operator and (in the agent tools' tests) by an agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault page fed a map with a text source, a file source, a superseded fact and a stale fact, an archived list, and a refused edit",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultChanges.test.tsx (proposed)",
+      "key": "ac-tab-component",
+      "requirement": "archived-in-tab",
+      "then": "Edit shows on the text source, Replace on the file source, Archive on both; the archived source is listed apart with Restore; the superseded and stale facts are marked; the refusal's reason is shown",
+      "when": "it renders and an entry is selected"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a797ff8189825ef0a3c7e0b117d4a15002e8537e254bc58e719f6ecb97d6538e",
+      "FR-10": "c933baa9d3f2c5381e2aad149fb51cc7804aed7ec303029f7e7f085277afa7df",
+      "FR-11": "4fea3b0cd7b123037c8344ecec581ed322ec25972db356cc27add3e3083d0d46",
+      "FR-12": "cd21974f0aff5967e85f0bdbe127540812ad68203ae49b7600a257af84485936",
+      "FR-13": "92c8df69b05e51fa23a961e9c231122be7cf5ed716b692348d2d9de786c1636e",
+      "FR-14": "87186e0b7841d6574bc52008e7d99c127db8881485ba871bd6cfa714411c08c4",
+      "FR-15": "fcf7c679b71e6e3cdcaa70f3d02ffedc76516d6b206cd5ebf2ece8f139ce139e",
+      "FR-16": "8cea5e935ceb9f9b5554708c9473af687e168165a0d190fb466f233fa9cce900",
+      "FR-2": "9929051b9fbfde918c40004814cbf0cc4ba0c25c4eae8e558da4eb218a8167bc",
+      "FR-3": "4f43976e4b2c3023a8ee258159abb4e799c07fe9c3de357cf24cb4abf97df87c",
+      "FR-4": "d53d84ebe5183036e27cc0e73fe9fbfd8ca078cdb441338f30d2f25c9812b00a",
+      "FR-5": "20520faaa446a9a935ce494eaea307255bc800ec0fbe04b260416ffd70a23161",
+      "FR-6": "ec6e8c0842d034d13762314043fb17020268ad53b49e86c94e55ceeb6cfec161",
+      "FR-7": "6262af43d2a0d4fc0b1053c15680d51d28d7466df2c293dd0630c8455adeeb33",
+      "FR-8": "7d6ead3fec1117a99dd6534536f1e2e552ff51e5c3e1a7532d8c8ffffc59d33e",
+      "FR-9": "954c434fe61d8a7540ae6bf0f3f463d2eac39d51800d1c5f275d3de1c0338b5d"
+    },
+    "high_water": 16,
+    "requirements": {
+      "agents-edit-text": "FR-2",
+      "agents-replace-file": "FR-5",
+      "archive-source": "FR-10",
+      "archived-in-tab": "FR-13",
+      "archived-out-of-checks": "FR-16",
+      "archived-still-readable": "FR-11",
+      "edit-from-outdated-text-refused": "FR-14",
+      "file-source-not-edited-as-text": "FR-3",
+      "moved-fact-keeps-id": "FR-15",
+      "operator-edits-text": "FR-1",
+      "operator-replaces-file": "FR-4",
+      "record-each-change": "FR-6",
+      "redistil-after-change": "FR-7",
+      "restore-source": "FR-12",
+      "stale-when-not-distilled": "FR-9",
+      "superseded-facts-kept": "FR-8"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer, the operator's choice (2026-10-28).",
+      "cron": "Every 5 minutes, the default: often enough that a task whose prerequisite was just approved starts promptly.",
+      "mode": "The work splits into six tasks with a dependency chain and two that can run in parallel (agent tools and the Vault tab), which a flow starts as their prerequisites are met and has reviewed before the operator merges.",
+      "reviewer": "QA, the operator's choice (2026-10-28): an Opus reviewer that builds none of this, so no review lands on the work's author.",
+      "stop": "Stop when the queue empties: the flow has a fixed set of tasks from this document, and once they are done there is nothing for it to pick up.",
+      "tester": "QA tests the running product as part of its review, so the agent judging the code also sees the routes and tools fire; no separate tester is needed for six tasks."
+    },
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true,
+    "tester": "QA"
+  },
+  "design": "- D1 — Everything lives in vault files; no database migration. A source's archived state and its change list are kept with the source: the change list as sources/<id>.changes.json beside the record (the name does not match the source id pattern src-<12 hex>, so _ids never lists it as a source), and archived_at in the source record. For a private source both are also written into its stub under knowledge/, which holds no text. Rejected: a table of changes. Why: the map is built from files so a colleague who pulls knowledge/ sees the same vault; a table would be this Hub's alone.\n- D2 — A source's version is a hash of its current text (or file bytes), answered on every entry read. The operator's edit sends the version it was read at and is refused when the hash differs. Agents' passage replacement needs no version: its old text must occur exactly once. Rejected: a counter in the record. Why: a hash cannot drift from the text, including after a git pull changes the file.\n- D3 — Edits never wait for a distillation. Today distil() holds a per-source lock across its model calls (hub/hub/distillation.py:305). A change takes its own short per-source write lock for read-check-write, not the distillation lock. Each distillation records the version it distilled; when it completes and the source's version has moved on, one more distillation is started (coalesced: at most one waiting per source). Rejected: queueing edits behind the distillation lock. Why: redistil-after-change says the answer never waits for a model.\n- D4 — Stale is derived, not stored on facts. The source record holds distilled_version, set when a distillation completes; a source's facts are stale while its version differs from distilled_version. Rejected: writing stale onto every fact. Why: one write per change instead of one per fact, and it cannot be left behind.\n- D5 — Superseded is written onto the fact when a distillation drops it: superseded_by (the source id) and superseded_at, in the fact record and, for a private fact, its stub. distil() stops calling vault.delete_fact on the facts it did not keep. A superseded fact is no candidate for id reuse, is not superseded again, and is treated by the checks as a fact superseded by a corrected report is today. Open contradictions citing it are deleted as today (delete_open_contradictions_citing); resolved ones keep pointing at a fact that still exists. Rejected: pairing each dropped fact with its replacement. Why: operator, 2026-10-28.\n- D6 — Moved facts: Reusable gets a third pass after the exact and same-lines passes, keyed on the source and loose quote without line numbers; a fact claimed by it keeps its id and has its citations rewritten to the new lines. Rejected: rewriting citations at edit time by diffing old and new text. Why: the distillation already locates every quote in the current text (distillation.locate), so no diff logic is needed.\n- D7 — Archive is a filter in one place. build_map skips archived sources and facts whose cited sources are all archived; because the turn's Knowledge vault line, vault_map and the checks' fact lists are built from it, all follow. Reads by id (read_entry) still answer them, with archived true. The Vault tab gets the archived sources from a separate listing route. Rejected: moving archived files to another folder. Why: a move changes paths that git history and citations name, and restoring would move them back.\n- D8 — Routes and tools. Operator: replace a source's text, replace its file (raw body, the same type and signature checks as POST /vault/files), archive, restore, and list archived. Agents, under agent-actions with the run's credentials: replace a passage, append, replace a file by path (the vault_add path rules, reused), archive, restore — each an MCP tool on every agent, beside vault_report. The actor recorded in a change comes from the credential only.\n- Hazards and rollback:\n  - No migration and no Hub-restart hazard beyond the usual: agents build on their branches; the :8000 Hub picks the Hub code up at its next restart, and a committed UI bundle reaches its app on the next reload (CLAUDE.md).\n  - Live data: this repository's own knowledge/ is a real vault the :8000 Hub writes. After merging, a re-distillation there keeps superseded facts instead of deleting them, and edits write .changes.json files under knowledge/sources. Rollback is reverting the merge; facts already marked superseded would then list as ordinary facts under the old code (it ignores the fields), so roll back by also deleting the superseded fact files, found by their superseded_by field.\n  - Trust: agents may now change and archive any source, private ones included. Mitigation is the change record (D1) and that archive is reversible (no delete exists). Tier 2 by CLAUDE.md (an agent-facing contract over live data): the acceptance drive is committed failing before the build.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "The knowledge vault only grows: a source can be added, read and distilled, but never changed or put away. The operator keeps running notes in the vault (for example, problems found while using AgentWeave) and needs to update them as things change — marking a problem as cleared, or adding to a note — and needs to replace a file with a newer version of it (an unsigned PDF by its signed copy). Today the only way is to upload a second copy, which leaves the old source and its now-wrong facts in the vault for agents to read, and nothing can ever be taken out of agents' view. A change to a note (a problem was cleared) is itself a new fact about the project, so the vault's facts must follow the changed source, and what used to be true must stay visible as replaced rather than vanish. It affects the operator, who curates the vault, and every agent that reads it, which currently reads facts that are no longer true.",
+  "requirements": [
+    {
+      "key": "operator-edits-text",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today a source's text can never change (hub/hub/api/v1/vault.py has no route that writes an existing source), so a running note can only be duplicated, leaving the old copy and its facts for agents to read.",
+      "statement": "The operator MUST be able to change the whole text of a text source from the Vault tab, tracked or private. The source keeps its id, name, type, visibility, dated and created_at; from the moment the change is answered, the map's opening and every read of the entry (operator's and agents') answer the new text."
+    },
+    {
+      "key": "agents-edit-text",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28: agents edit any source, by replacing a passage or appending — marking an item cleared or adding a note without sending a long source back whole. Requiring exactly one occurrence is also what keeps an agent from editing text that changed under it (edit-from-outdated-text-refused).",
+      "statement": "Working agents MUST have tools, through the agent-actions routes under the run's own credentials, to change any text source, tracked or private, in two ways: replace a passage (an old text, which MUST occur exactly once in the source, by a new text) and append text to the end. Either has the same outcome as the operator's edit. A replacement whose old text occurs zero times or more than once MUST be refused, saying which, and change nothing."
+    },
+    {
+      "key": "edit-from-outdated-text-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28: refuse rather than let the last edit win, so an agent and the operator editing the same note do not silently overwrite each other.",
+      "statement": "The operator's edit MUST name the version of the text it was made from, and MUST be refused, changing nothing, with a reason saying the source changed since it was opened, when the source's text is no longer that version."
+    },
+    {
+      "key": "file-source-not-edited-as-text",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A file source's text is a transcription the Hub made; editing it by hand would let the text and the file disagree. Operator, 2026-10-28: text sources are edited, files are replaced.",
+      "statement": "Changing the text of a PDF or image source, by any of the ways to edit, MUST be refused with a reason saying the file is changed by replacing it, and change nothing."
+    },
+    {
+      "key": "operator-replaces-file",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator's case: an unsigned PDF is replaced by its signed copy and stays the same source, so what cites it keeps pointing at it.",
+      "statement": "The operator MUST be able to replace a PDF or image source's file from the Vault tab with a new file, subject to the same type and signature checks as an upload. The source keeps its id, name, type, visibility, dated and created_at; its file route answers the new bytes and its earlier transcription is discarded, so the next distillation transcribes the new file."
+    },
+    {
+      "key": "agents-replace-file",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents have no way to send raw bytes; vault_add already adds files by path inside the workspace or project directory.",
+      "statement": "Working agents MUST have a tool that replaces a PDF or image source's file with a file named by path, accepting exactly the paths vault_add accepts and refusing, with the same reasons, the paths it refuses."
+    },
+    {
+      "key": "record-each-change",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28: agents may change any source because every change is recorded. Under knowledge/ so a colleague who pulls the repository sees the same history (the map is built from files, not from this Hub's rows).",
+      "statement": "Every edit, replacement, archive and restore of a source MUST be recorded with the source: what was done, when, and who did it — the operator, or the agent's name and run id taken from the run's credential, never from the request. A read of the entry MUST answer its changes, oldest first, and the Vault tab MUST show them on the selected source. A tracked source's changes MUST be written under knowledge/ beside it."
+    },
+    {
+      "key": "redistil-after-change",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28: re-distilling is a must, so the facts follow the source.",
+      "statement": "When an edit or replacement is answered and the vault-distillation job is enabled with a runner, the Hub MUST distil the source again in the background; the answer MUST NOT wait for any model."
+    },
+    {
+      "key": "moved-fact-keeps-id",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28. Today a fact keeps its id only when drawn from the same line numbers (vault.citation_key and vault.span_key, hub/hub/vault.py:1105-1124), so inserting a paragraph near the top of a note would supersede every fact below it although their text did not change.",
+      "statement": "When a source is distilled again, a fact drawn again whose quoted text is still in the source MUST keep its id even when the lines it quotes have moved, and its citations MUST be updated to the lines where the quote now is."
+    },
+    {
+      "key": "superseded-facts-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28: what used to be true (a problem was open) stays visible as replaced, by the same rule on every distillation; superseded_by names the change rather than a replacing fact, which would need the model to pair old and new facts. Today distillation deletes every earlier fact it did not keep (hub/hub/distillation.py, the replaced loop calling vault.delete_fact), which breaks resolved contradictions and requirements citing them (F587, F617).",
+      "statement": "Whenever a source is distilled again — after an edit or a replacement, or by pressing Distil on an unchanged source — each of its earlier facts the distillation does not keep MUST stay in the vault rather than be deleted, with its claim and citations unchanged, listed in the map with superseded_by naming the source and superseded_at the time of that distillation. Its vault_read content MUST say it was superseded when its source was changed (or distilled again) at that time."
+    },
+    {
+      "key": "stale-when-not-distilled",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28: save, and mark the facts stale, rather than refuse the edit.",
+      "statement": "When an edit or replacement is made while the vault-distillation job is disabled or has no runner, the change MUST still be saved and answered, the answer saying the source's facts are stale and what to enable. Until a distillation of the source completes, each of its facts MUST be listed with stale true, and its vault_read content MUST say its source changed after it was drawn."
+    },
+    {
+      "key": "archive-source",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28: archiving instead of deleting — the entry leaves agents' view but nothing is lost; a fact drawn from two sources is still backed by the one not archived.",
+      "statement": "The operator (from the Vault tab) and working agents (through a tool) MUST be able to archive any source. An archived source, and each of its facts whose cited sources are all archived, MUST NOT be listed by vault_map and MUST NOT be counted in the turn's Knowledge vault line; the line MUST be omitted when every entry is archived. A fact that also cites a source not archived MUST stay listed."
+    },
+    {
+      "key": "archived-out-of-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-28: archived knowledge is left out of the checks. A requirement citing an archived fact gets no new warning (a non-goal).",
+      "statement": "An archived fact MUST NOT be sent to the contradiction check or to spec-vault-check."
+    },
+    {
+      "key": "archived-still-readable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Requirements and contradictions cite fact ids; an archived fact must not read as 'no longer in the vault'.",
+      "statement": "A read of an archived source or fact by id, on the operator's and the agents' routes, MUST answer it with archived true, and its vault_read content MUST say it is archived."
+    },
+    {
+      "key": "restore-source",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Archiving is reversible by design; that is what makes it safe to let agents do it.",
+      "statement": "The operator and working agents MUST be able to restore an archived source, after which it and its facts are listed, counted and checked exactly as before it was archived."
+    },
+    {
+      "key": "archived-in-tab",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator works the vault from the tab.",
+      "statement": "The Vault tab MUST list archived sources apart from the map's entries, each with a Restore action, and MUST show Edit (text sources), Replace (file sources) and Archive on a selected source, and superseded and stale facts marked as such; a refusal MUST be shown with its reason."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Changing the text of an existing text source (replacing a passage, appending, or editing the whole text in the Vault tab), by the operator and by working agents, on any source",
+      "Replacing a file source (PDF or image) with a new file, keeping it the same source, by the operator in the Vault tab and by working agents through a tool that takes a path",
+      "Recording every edit, replacement, archive and restore: who made it (operator, or agent and run) and when",
+      "Distilling the changed source again automatically; a fact a distillation no longer draws is kept and marked superseded, never deleted; a fact whose quoted text only moved keeps its id",
+      "When distillation cannot run (job disabled or without a runner), the change is saved and the source's facts are marked stale until it is distilled",
+      "Archiving a source, by the operator and by agents: it and its facts leave vault_map, the turn's vault count and the vault checks, and stay readable by id",
+      "Restoring an archived source, by the operator and by agents"
+    ],
+    "non_goals": [
+      "Deleting vault entries: archiving replaces it",
+      "Editing a file source's transcription by hand: a file is changed by replacing it",
+      "Keeping earlier versions of a source's text (git keeps them for tracked sources; nothing does for private ones, by choice)",
+      "Changing visibility between tracked and private",
+      "Editing a fact's claim directly instead of its source",
+      "Archiving a fact on its own, apart from its sources",
+      "Warning a requirement that cites an archived fact (operator, 2026-10-28: archived facts are only left out of the checks)",
+      "Replacing a PDF in the acceptance drive (operator, 2026-10-28: the Hub test with a faked worker covers it for now)"
+    ]
+  },
+  "summary": "",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Write scripts/drive/d1028_vault_sources_change.py as ac-drive states it: a scratch Hub started from hub/ on a throwaway database and project (never :8000, never the trial database), vault-distillation enabled on a Claude Haiku runner, a real Haiku agent turn that marks F-1 cleared and archives 'Old notes', then Distil pressed again. It asserts every clause of ac-drive's then. Run it on master and record in the task notes which assertions fail (the agent has no edit tool, so it must fail). Commit it failing.",
+      "files": [
+        "scripts/drive/d1028_vault_sources_change.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "agents-edit-text",
+        "superseded-facts-kept",
+        "archive-source"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, written and failing first"
+    },
+    {
+      "depends_on": [
+        "drive"
+      ],
+      "description": "D5 and D6, shown by pressing Distil on an unchanged or hand-edited source. Reusable's third pass on source and loose quote (citations rewritten to the new lines); distil() writes superseded_by/superseded_at on facts it did not keep (record and private stub) instead of vault.delete_fact; superseded facts are not reused nor superseded again; the map and vault_read show them. Flip the existing deletion cases in test_vault_distillation.py; add ac-moved-keeps-id and ac-superseded.",
+      "files": [
+        "hub/hub/distillation.py",
+        "hub/hub/vault.py",
+        "hub/tests/test_vault_distillation.py"
+      ],
+      "from": null,
+      "key": "distil-keeps-facts",
+      "requirements": [
+        "moved-fact-keeps-id",
+        "superseded-facts-kept"
+      ],
+      "reviewer": null,
+      "title": "A distillation keeps moved facts' ids and supersedes, never deletes, the facts it drops"
+    },
+    {
+      "depends_on": [
+        "distil-keeps-facts"
+      ],
+      "description": "D1-D4 and the operator's routes of D8: version hash on entry reads; edit text (refused on an outdated version, and on a file source); replace a file (the upload's type and signature checks; transcription discarded); the change list in sources/<id>.changes.json (and the private stub), answered on entry reads; the short write lock; background re-distillation after a change with coalescing when the version moved on during a distillation; distilled_version and derived stale. Tests in hub/tests/test_vault_changes.py for ac-operator-edit, ac-outdated-edit, ac-file-not-text (operator side), ac-operator-replace, ac-redistil, ac-stale.",
+      "files": [
+        "hub/hub/vault.py",
+        "hub/hub/distillation.py",
+        "hub/hub/api/v1/vault.py",
+        "hub/tests/test_vault_changes.py"
+      ],
+      "from": null,
+      "key": "operator-changes",
+      "requirements": [
+        "operator-edits-text",
+        "edit-from-outdated-text-refused",
+        "file-source-not-edited-as-text",
+        "operator-replaces-file",
+        "record-each-change",
+        "redistil-after-change",
+        "stale-when-not-distilled"
+      ],
+      "reviewer": null,
+      "title": "The operator edits a text source and replaces a file source, recorded, re-distilled or marked stale"
+    },
+    {
+      "depends_on": [
+        "operator-changes"
+      ],
+      "description": "D7 and the operator's archive, restore and list-archived routes: archived_at on the record and private stub, recorded as a change; build_map skips archived sources and facts whose sources are all archived (so vault_map, the turn's Knowledge vault line and both checks follow); reads by id answer archived true with a note in vault_read content. Tests in hub/tests/test_vault_archive.py for ac-archive, ac-out-of-checks, ac-archived-read, ac-restore (operator side).",
+      "files": [
+        "hub/hub/vault.py",
+        "hub/hub/distillation.py",
+        "hub/hub/vault_spec_check.py",
+        "hub/hub/api/v1/vault.py",
+        "hub/tests/test_vault_archive.py"
+      ],
+      "from": null,
+      "key": "archive",
+      "requirements": [
+        "archive-source",
+        "archived-out-of-checks",
+        "archived-still-readable",
+        "restore-source",
+        "record-each-change"
+      ],
+      "reviewer": null,
+      "title": "Archiving and restoring a source takes it out of agents' view and the checks, and back"
+    },
+    {
+      "depends_on": [
+        "archive"
+      ],
+      "description": "The agents' half of D8: agent-actions routes and MCP tools for replacing a passage (exactly one occurrence), appending, replacing a file by path (vault_add's path rules reused), archiving and restoring, on every agent beside vault_report (mcp_server.py, the Copilot tool list, and the agents' instruction text). The actor of each change comes from the run's credential only. Tests in hub/tests/test_vault_agent_changes.py for ac-agent-replace-passage, ac-file-not-text (agent side), ac-agent-replace, ac-record, ac-restore (agent side). Then run the acceptance drive and record it passing.",
+      "files": [
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/copilot_acp.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/tests/test_vault_agent_changes.py"
+      ],
+      "from": null,
+      "key": "agent-tools",
+      "requirements": [
+        "agents-edit-text",
+        "agents-replace-file",
+        "record-each-change",
+        "archive-source",
+        "restore-source",
+        "file-source-not-edited-as-text"
+      ],
+      "reviewer": null,
+      "title": "Agents edit, append, replace files, archive and restore through their tools"
+    },
+    {
+      "depends_on": [
+        "archive"
+      ],
+      "description": "Edit (text sources, sending the version read), Replace (file sources), Archive on a selected source; an archived list with Restore; the source's changes; superseded and stale facts marked; refusals shown with their reason. Component test src/__tests__/vaultChanges.test.tsx for ac-tab-component. Refresh the UI bundle (scripts/refresh_ui_bundle.py) and commit hub/ui/src and hub/hub/static/ui together.",
+      "files": [
+        "hub/ui/src/api/vault.ts",
+        "hub/ui/src/components/vault/VaultLibrary.tsx",
+        "hub/ui/src/components/vault/VaultReader.tsx",
+        "hub/ui/src/components/vault/VaultScreen.tsx",
+        "hub/ui/src/components/vault/vaultKinds.ts",
+        "hub/ui/src/__tests__/vaultChanges.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "vault-tab",
+      "requirements": [
+        "archived-in-tab",
+        "record-each-change"
+      ],
+      "reviewer": null,
+      "title": "The Vault tab edits, replaces, archives and restores, and marks superseded and stale facts"
+    }
+  ],
+  "title": "Vault sources can be edited, replaced and archived"
+}
