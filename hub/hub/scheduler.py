@@ -15,7 +15,14 @@ from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
-from . import dependency_gate, requirement_evidence, requirement_links, stalls, traces
+from . import (
+    dependency_gate,
+    landing_queue,
+    requirement_evidence,
+    requirement_links,
+    stalls,
+    traces,
+)
 from .checkpoint_generation import format_notes, render_checkpoint
 from .checkpoints import (
     checkpoint_by_task_author,
@@ -42,6 +49,7 @@ from .db.models import (
     Question,
     Run,
     Task,
+    TaskLanding,
     TaskTransition,
     fit_error_summary,
 )
@@ -406,6 +414,29 @@ async def _loop_flow_busy_refusal(
     return LoopBusyRefusal(busy_reason, condition)
 
 
+async def _approved_tasks_landing(
+    session: AsyncSession, loop: Loop, states: "Sequence[str]"
+) -> int:
+    """How many of *loop*'s approved tasks have a landing in one of *states*
+    (`a-checks-send-back-returns-the-task-s-accepted-evidence`, design D2, finding F1080).
+
+    An approved task is terminal for the queue, but its work is not on main until its landing has
+    landed, and a landing batch can still send it back. A task has at most one open landing
+    (`landing_queue.open_landing`), so an open row is its latest one.
+    """
+    return (
+        await session.scalar(
+            select(func.count(func.distinct(TaskLanding.task_id)))
+            .join(Task, Task.id == TaskLanding.task_id)
+            .where(
+                Task.loop_id == loop.id,
+                Task.status == "approved",
+                TaskLanding.state.in_(tuple(states)),
+            )
+        )
+    ) or 0
+
+
 async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
     """Return why *job*'s loop should stop firing, or `None` if it should proceed.
 
@@ -445,7 +476,11 @@ async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
             ever_count = await session.scalar(
                 select(func.count(Task.id)).where(Task.loop_id == loop.id)
             )
-            if ever_count:
+            # **Drained means landed** (design D2, F1080). A flow that ended at its last approval
+            # left nobody to resume the task when its landing batch sent it back, so the queue is
+            # not empty while an approved task's landing is open. A task with no landing (no
+            # checks, or nowhere to land) is done at approval, as before.
+            if ever_count and not await _approved_tasks_landing(session, loop, landing_queue.OPEN):
                 return QUEUE_DRAINED_REASON
     return None
 
@@ -1381,6 +1416,32 @@ class FiringFacts:
             return counts
 
         return dict((await self._once(("counts", loop.project_id), read)).get(loop.id, {}))
+
+    async def approved_tasks_landing(self, loop: Loop, states: "Sequence[str]") -> int:
+        """`_approved_tasks_landing`'s answer. One statement for every loop, and none where *loop*
+        holds no approved task (read from `status_counts`, which the walk has already paid for)."""
+        if not (await self.status_counts(loop)).get("approved"):
+            return 0
+
+        async def read() -> "Dict[str, Dict[str, int]]":
+            ids = [row.id for row in await self.loops(loop.project_id)]
+            counts: "Dict[str, Dict[str, int]]" = {}
+            rows = await self._session.execute(
+                select(Task.loop_id, TaskLanding.state, func.count(func.distinct(Task.id)))
+                .join(Task, Task.id == TaskLanding.task_id)
+                .where(
+                    Task.loop_id.in_(ids),
+                    Task.status == "approved",
+                    TaskLanding.state.in_(landing_queue.OPEN),
+                )
+                .group_by(Task.loop_id, TaskLanding.state)
+            )
+            for loop_id, landing_state, count in rows.all():
+                counts.setdefault(loop_id, {})[landing_state] = count
+            return counts
+
+        by_state = (await self._once(("landing", loop.project_id), read)).get(loop.id, {})
+        return sum(count for landing_state, count in by_state.items() if landing_state in states)
 
     async def _running_runs(self, project_id: str) -> "list[tuple]":
         async def read() -> "list[tuple]":
@@ -2843,6 +2904,16 @@ async def decide_firing(
         )
 
     stall_reason = await _stall_reason_from_walk(session, loop, gated, facts)
+    if stall_reason is None and await facts.approved_tasks_landing(
+        loop, (landing_queue.QUEUED, landing_queue.CHECKING, landing_queue.LANDING)
+    ):
+        # **A landing in progress is work in progress** (design D2, F1080). The queue's only open
+        # work is approved tasks the landing queue is checking or merging; its end decides whether
+        # a task comes back. Neither a stall nor an empty queue to fill -- the same rule F1049 gave
+        # a review about to start. A `held` landing waits on the operator and is not this case.
+        return FiringDecision(
+            kind=DECISION_IN_FLIGHT, unstaffed=tuple(unstaffed), deferred=tuple(deferred)
+        )
     if stall_reason is None:
         return FiringDecision(
             kind=DECISION_PROCEED_EMPTY, unstaffed=tuple(unstaffed), deferred=tuple(deferred)

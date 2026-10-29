@@ -40851,7 +40851,7 @@ Two tests failed in the run and passed alone. The Hub classified them as flaky, 
 
 ## F1080 (B) -- a flow that stops on an empty queue stays stopped when the landing checks send one of its tasks back
 
-**Status:** open 2026-10-29. Reported by the operator ("another thing stopped the flow") on `Vault sources can be edited, replaced and archived` (`spdoc-ed2248eba283`).
+**Status:** fixed 2026-10-29 by `a-checks-send-back-returns-the-task-s-accepted-evidence` (D2): a flow with `stop_when_queue_empties` does not end while an approved task's landing is open (queued, checking, landing, held), and a firing whose only open work is landings in progress is in flight, not a stall. Tests: `hub/tests/test_a_flow_stays_open_until_its_work_lands.py` (`test_ac_flow_stays_open_while_its_last_tasks_landing_is_queued`, `test_ac_landing_wait_quiet_records_in_progress_and_wakes_no_mender` and `test_ac_resumed_after_landing_send_back_starts_the_assignees_turn` failed before the change). Was: open 2026-10-29. Reported by the operator ("another thing stopped the flow") on `Vault sources can be edited, replaced and archived` (`spdoc-ed2248eba283`).
 **Source:** drive
 **Theme:** Flows x Worktrees & integration
 **Ready:** yes
