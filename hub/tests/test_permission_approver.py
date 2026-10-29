@@ -722,7 +722,11 @@ def other_drive(workspace):
             yield letter
             return
     outside = str(workspace.parent / "outside")
-    for letter in "ZYXWVUTSRQ":
+    # A `subst` drive is visible to every process on the machine, so a concurrent check run sees it
+    # too: never make one at a letter another test names as a drive that does not exist (`Z:` in
+    # test_the_shell_judge_reads_a_word_whole.py, `Z:`/`Y:` in test_workspace_writes.py), or that
+    # test resolves its word through this one's `outside/` and fails intermittently.
+    for letter in "WVUTSRQ":
         if os.path.exists(letter + ":\\"):
             continue
         made = subprocess.run(["subst", letter + ":", outside], capture_output=True)
