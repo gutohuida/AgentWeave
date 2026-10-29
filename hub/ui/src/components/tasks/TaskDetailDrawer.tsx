@@ -747,12 +747,13 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           )}
 
           {/* The build covering it (`a-build-has-a-driver-a-level-and-its-people`): the level its
-              approval is governed at, and the builder it was declared with. */}
+              approval is governed at, the builder it was declared with, and who checks it. */}
           {task.build_id && (
             <Field label="Build">
               <span className="truncate block" data-testid={`task-build-${task.id}`}>
                 {task.level ? `${task.level[0]!.toUpperCase()}${task.level.slice(1)}` : 'In a build'}
                 {task.builder ? ` · builder @${task.builder}` : ''}
+                {task.checker ? ` · checker @${task.checker}` : ''}
               </span>
             </Field>
           )}
