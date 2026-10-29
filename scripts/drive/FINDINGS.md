@@ -40900,3 +40900,13 @@ Repro: the operator pressed Build with driver **hand**, level **fast**, builders
 **Tier:** 0
 
 Repro: `task_transition_service.py:1259` calls `project_checks.schedule` for a task moved to `completed` with no run, inside the transaction that moves it. The scheduled `request_run` can run before that commit, read the task as `in_progress`, resolve no targets (`check_targets`: `awaiting_review` is false, and a sent-back task's evidence is held), and return `None` with no run recorded. While it is between `_starting.add` and its return, a second `request_run` for the task returns `None` at `project_checks.py:1199`. Both requests end with no run on the fix. Measured with 24 copies of the test under `-n auto`: 18 failed before the test's drain, 0 of 75 in three runs after. In a flow the firing's `checks_waits` backstop requests again; for a hand-driven task nothing does until someone asks for review. Fix direction: schedule after commit, as `landing_queue.release_after_commit` does.
+
+## F1085 (B) -- Check and `submit_spec_document` say "ready to approve", then approval refuses with gaps neither reported
+
+**Status:** open 2026-10-29. Found when the operator approved `the-build-plan-lives-in-the-spec-and-every-task-goes-to-its-people` (`spdoc-a7d41f10be14`).
+**Source:** drive
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+Repro: Architect submitted the document; the answer was `blocking: []`, `ready_to_approve: true`, `warnings: []`, and the operator's Check agreed. The operator pressed Approve and got three gaps: `criterion_without_check` x16 (no `checked_by`), `no_acceptance_drive` (the first task was not depended on by every other task) and `steps_skipped` (document still at step `intake`). The first two come from `spec_completeness.approval_gaps` (`spec_completeness.py:360`, `:385`), which the submit answer and Check do not run. An agent filling a document in one pass cannot see them until the operator is already trying to approve, which costs the operator an extra round trip each time. **Expected:** `submit_spec_document`'s `blocking` (or a separate `approval_gaps` list) and Check report everything approval would, so `ready_to_approve: true` means approval goes through, or at most warns. **Test:** submit a change-spec with criteria lacking `checked_by` and no acceptance-drive task: the submit answer names `criterion_without_check` and `no_acceptance_drive`, and `ready_to_approve` is false.
