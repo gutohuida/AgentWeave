@@ -370,10 +370,14 @@ async def _review_was_declared(session: AsyncSession, run: Run, task: Task) -> b
     two branches below are exhaustive.
     """
     from . import review_turn
+    from .scheduler import build_checker_resolution
 
-    resolution = await review_turn.resolve_declared_reviewer(
-        session, project_id=run.project_id, task=task
-    )
+    # The build's checker first, as the firing staffed it (`check-goes-to-its-checker`).
+    resolution = await build_checker_resolution(session, task, run.project_id, None)
+    if resolution is None:
+        resolution = await review_turn.resolve_declared_reviewer(
+            session, project_id=run.project_id, task=task
+        )
     return bool(resolution.declared) and resolution.agent == run.agent
 
 

@@ -400,6 +400,7 @@ async def hand_out_shared_task(
             task_id=task_id,
             agent=body.agent,
             review=body.review,
+            run_id=actor.run_id,
         )
     except builds.HandOutRefused as exc:
         await session.rollback()

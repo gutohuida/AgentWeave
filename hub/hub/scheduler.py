@@ -2012,6 +2012,45 @@ def _rung_3_reason(
     return _rung_3_join(remedy, included, (), booked=booked_present)
 
 
+async def build_checker_resolution(
+    session: AsyncSession, task: Task, project_id: str, facts: "Optional[FiringFacts]"
+) -> "Optional[Any]":
+    """The checker *task*'s build gives it, as a declaration (`check-goes-to-its-checker`): the
+    operator's choice at Build, which may differ from the document's. None where the build does not
+    say (`builds.checker_of`), so the document's declaration stands; a resolution with nobody
+    declared where the build names no checker for the task, so rung 2 runs. A checker who is not an
+    open agent is unresolved, saying so: the check is held, never passed to somebody else."""
+    from . import builds, review_turn
+    from .db.models import Build
+
+    if not task.build_id:
+        return None
+    build = (
+        await facts.build_by_id(project_id, task.build_id)
+        if facts is not None
+        else await session.get(Build, task.build_id)
+    )
+    named = builds.checker_of(build, task)
+    if named is None:
+        return None
+    checker = named[0]
+    if not checker:
+        return review_turn.ReviewerResolution()
+    if facts is not None:
+        roster = await facts.agents(project_id)
+    else:
+        roster = list(
+            (await session.execute(select(Agent).where(Agent.project_id == project_id)))
+            .scalars()
+            .all()
+        )
+    if any(agent.name == checker and agent.lifecycle != "archived" for agent in roster):
+        return review_turn.ReviewerResolution(declared=checker, agent=checker)
+    return review_turn.ReviewerResolution(
+        declared=checker, unresolved=builds.not_open_reason(task, "checker", checker)
+    )
+
+
 async def resolve_reviewer(
     session: AsyncSession,
     task: Task,
@@ -2080,12 +2119,14 @@ async def resolve_reviewer(
 
     unavailable = unavailable or set()
 
-    resolution = await review_turn.resolve_declared_reviewer(
-        session,
-        project_id=project_id,
-        task=task,
-        roster=await facts.agents(project_id) if facts is not None else None,
-    )
+    resolution = await build_checker_resolution(session, task, project_id, facts)
+    if resolution is None:
+        resolution = await review_turn.resolve_declared_reviewer(
+            session,
+            project_id=project_id,
+            task=task,
+            roster=await facts.agents(project_id) if facts is not None else None,
+        )
     if resolution.declared:
         if resolution.agent and resolution.agent in unavailable and resolution.agent not in exclude:
             return ReviewerChoice(
@@ -2607,6 +2648,52 @@ async def decide_firing(
                     in_flight.append((task.id, agent))
                     surfaced_rows.add(task.id)
                     unstaffed.append((task.id, _abandoned_work_reason(task, agent, abandonment)))
+                    continue
+                if agent in taken:
+                    deferred.append(
+                        (
+                            task.id,
+                            f"{agent} already holds another selection in this firing and may take "
+                            f"only one at a time",
+                        )
+                    )
+                    continue
+            elif task.build_id and task.builder:
+                # **A build's task goes to its own builder, and to nobody else**
+                # (`flow-gives-task-to-its-builder`). Before the default and the pool, which are
+                # for work nobody was named for: the builder need not be among the build's
+                # builders, and is not withheld for being named to check other work (F767). Reached
+                # where the build gave the task to nobody -- its builder was not an open agent then
+                # -- or its holder was cleared since. A builder who is not an open agent holds the
+                # task, saying so, rather than letting the pool substitute somebody.
+                agent = task.builder
+                record = next(
+                    (r for r in await facts.roster(loop.project_id) if r.name == agent), None
+                )
+                if record is None or not record.has_runner:
+                    from .builds import not_open_reason
+
+                    reason = (
+                        not_open_reason(task, "builder", agent)
+                        if record is None
+                        else f"{task.id}'s builder {agent} has no runner bound, so its work is "
+                        f"held and given to nobody else. Bind a runner to {agent}."
+                    )
+                    unstaffed.append((task.id, reason))
+                    continue
+                if agent in running or agent in held_agents or attendance.attends(task.id, agent):
+                    # Busy: the task waits for its builder (in flight, F23), and nobody else is
+                    # given it in the meantime.
+                    in_flight.append((task.id, agent))
+                    continue
+                if await facts.is_read_only(loop.project_id, agent):
+                    unstaffed.append(
+                        (
+                            task.id,
+                            f"{task.id}'s builder {agent} is read-only and holds no task's work, "
+                            f"so its work is held and given to nobody else.",
+                        )
+                    )
                     continue
                 if agent in taken:
                     deferred.append(

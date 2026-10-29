@@ -418,6 +418,9 @@ class TaskResponse(BaseModel):
     build_id: Optional[str] = Field(default=None, max_length=64)
     level: Optional[str] = Field(default=None, max_length=16)
     builder: Optional[str] = Field(default=None, max_length=64)
+    # Who checks it, where its build names a checker (`hand-only-places-on-the-board`): the task's
+    # own, else the build's default. Derived per request from the build's people, never stored.
+    checker: Optional[str] = Field(default=None, max_length=64)
     # The most recent attempt to integrate this task's approved work, or null where none has ever
     # been made (every non-`approved` task, and one whose approval predates this field existing on
     # older rows the migration never touched). The full history stays at
