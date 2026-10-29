@@ -281,6 +281,46 @@ export function useEditVaultSource() {
   })
 }
 
+/** Archive a source: it and its facts leave the map and the checks but stay readable by id
+ *  (`POST /vault/sources/{id}/archive`); no component calls it yet (the Vault tab work is a later task). */
+export function useArchiveVaultSource() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: (sourceId: string) =>
+      postJson<VaultEntry>(`/api/v1/projects/${projectId}/vault/sources/${sourceId}/archive`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault'] })
+    },
+  })
+}
+
+/** Restore an archived source (`POST /vault/sources/{id}/restore`); no component calls it yet. */
+export function useRestoreVaultSource() {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: (sourceId: string) =>
+      postJson<VaultEntry>(`/api/v1/projects/${projectId}/vault/sources/${sourceId}/restore`, {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'vault'] })
+    },
+  })
+}
+
+/** The archived sources, newest first; the map does not list them (`GET /vault/archived`).
+ *  The client for the list-archived route; no component calls it yet. */
+export type ArchivedVaultSources = { sources: VaultEntry[] }
+
+export function useArchivedVaultSources() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<ArchivedVaultSources>({
+    queryKey: ['project', projectId, 'vault', 'archived'],
+    queryFn: () => getJson<ArchivedVaultSources>(`/api/v1/projects/${projectId}/vault/archived`),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
 /** Replace a PDF or image source's file; the bytes are the body (`PUT /vault/sources/{id}/file`). */
 export function useReplaceVaultFile() {
   const queryClient = useQueryClient()

@@ -872,8 +872,9 @@ def vault_read(entry_id: str, offset: int = 0) -> Dict[str, Any]:
     """One vault entry by its id (`src-…`), with up to 50,000 characters of its text.
 
     `content` is the text from `offset`. When `next_offset` is not null there is more: call again
-    with `offset=next_offset`. You cannot edit the vault: if an entry looks wrong or contradicts
-    what you know, report it with `vault_report(entry_id, message)` rather than working around it.
+    with `offset=next_offset`. If an entry looks wrong or contradicts what you know, change it with
+    `vault_replace_passage` or `vault_append` (text sources), or report it with
+    `vault_report(entry_id, message)` when you are not sure.
     """
     return _hub_request("GET", f"/vault/entries/{entry_id}", params={"offset": offset or None})
 
@@ -916,6 +917,59 @@ def save_chapters(chapters: List[Dict[str, Any]], reason: str) -> Dict[str, Any]
     user asks you to organise the thread.
     """
     return _hub_request("POST", "/chapters", {"chapters": chapters, "reason": reason})
+
+
+@_tool()
+def vault_replace_passage(entry_id: str, old: str, new: str) -> Dict[str, Any]:
+    """Change a text source (`src-…`) by replacing one passage of its text.
+
+    `old` must occur exactly once in the source's text, copied exactly; a passage that occurs
+    nowhere or more than once is refused (400) saying which, and nothing changes. A PDF or image
+    source is refused (409): its file is changed with `vault_replace_file`. The source is distilled
+    again in the background; its earlier facts are superseded by the new ones. Recorded with your
+    name and run.
+    """
+    return _hub_request(
+        "POST",
+        f"/vault/sources/{entry_id}/replace-passage",
+        {"old": old, "new": new},
+    )
+
+
+@_tool()
+def vault_append(entry_id: str, text: str) -> Dict[str, Any]:
+    """Add `text` to the end of a text source (`src-…`); a PDF or image source is refused (409).
+
+    The source is distilled again in the background. Recorded with your name and run.
+    """
+    return _hub_request("POST", f"/vault/sources/{entry_id}/append", {"text": text})
+
+
+@_tool()
+def vault_replace_file(entry_id: str, path: str) -> Dict[str, Any]:
+    """Replace a PDF or image source's file with the file `path` names; the Hub reads it.
+
+    `path` is relative to your working directory or absolute, inside your workspace or the project
+    directory, and is refused with the reasons `vault_add` gives. A text source is refused (409):
+    change it with `vault_replace_passage` or `vault_append`. Its transcription is discarded and
+    the source is distilled again in the background.
+    """
+    return _hub_request("POST", f"/vault/sources/{entry_id}/replace-file", {"path": path})
+
+
+@_tool()
+def vault_archive(entry_id: str) -> Dict[str, Any]:
+    """Archive a source (`src-…`): it and the facts that cite only archived sources leave
+    `vault_map` and the Knowledge vault line, and stay readable by id (`archived: true`).
+    `vault_restore` undoes it.
+    """
+    return _hub_request("POST", f"/vault/sources/{entry_id}/archive", {})
+
+
+@_tool()
+def vault_restore(entry_id: str) -> Dict[str, Any]:
+    """Restore an archived source (`src-…`): it and its facts are listed and checked as before."""
+    return _hub_request("POST", f"/vault/sources/{entry_id}/restore", {})
 
 
 # Restated from `hub/hub/vault.py` (this module imports nothing from the Hub);

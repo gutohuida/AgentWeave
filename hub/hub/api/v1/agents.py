@@ -1575,6 +1575,59 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="vault_replace_passage",
+            args="entry_id, old, new",
+            method="POST",
+            path="/vault/sources/{entry_id}/replace-passage",
+            fields=("old", "new"),
+            required=("old", "new"),
+            text=(
+                "change a text source by replacing one passage: `old` must occur exactly once in its text, else the call is refused saying whether it occurs nowhere or more than once. The source is distilled again in the background. Recorded with your name and run."
+            ),
+        ),
+        _Operation(
+            tool="vault_append",
+            args="entry_id, text",
+            method="POST",
+            path="/vault/sources/{entry_id}/append",
+            fields=("text",),
+            required=("text",),
+            text=(
+                "add text to the end of a text source. The source is distilled again in the background. Recorded with your name and run."
+            ),
+        ),
+        _Operation(
+            tool="vault_replace_file",
+            args="entry_id, path",
+            method="POST",
+            path="/vault/sources/{entry_id}/replace-file",
+            fields=("path",),
+            required=("path",),
+            text=(
+                "replace a PDF or image source's file with the file `path` names (the paths and refusals of vault_add); a text source is changed with vault_replace_passage or vault_append."
+            ),
+        ),
+        _Operation(
+            tool="vault_archive",
+            args="entry_id",
+            method="POST",
+            path="/vault/sources/{entry_id}/archive",
+            fields=(),
+            required=(),
+            text=(
+                "archive a source: it and the facts citing only archived sources leave the map and the turn's vault line, and stay readable by id."
+            ),
+        ),
+        _Operation(
+            tool="vault_restore",
+            args="entry_id",
+            method="POST",
+            path="/vault/sources/{entry_id}/restore",
+            fields=(),
+            required=(),
+            text=("restore an archived source and its facts."),
+        ),
+        _Operation(
             tool="request_agent",
             args="name, template, task",
             method="POST",

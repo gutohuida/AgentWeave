@@ -301,6 +301,29 @@ def _read(item: Item) -> Tuple[Optional[bytes], Optional[str]]:
         return None, f"The Hub could not read it: {exc.strerror or exc}."
 
 
+def read_replacement(given: str, reach: Reach) -> Tuple[str, bytes]:
+    """The PDF or image *given* names, as `vault_add` reaches and reads a file: the same paths
+    accepted and the same reasons for those refused (`IntakeError`). A folder or a text file is
+    no replacement for a file source."""
+    located, refusal = _locate(given, reach)
+    if located is None:
+        raise IntakeError(refusal or "No such file.")
+    if located.is_dir():
+        raise IntakeError(f"{given!r} is a folder; name one PDF or image file.")
+    media_type, refusal = _kind(located)
+    if refusal is not None:
+        raise IntakeError(refusal)
+    if media_type is None:
+        raise IntakeError(
+            f"{given!r} is a text file; a file source is replaced by a PDF or image "
+            f"({', '.join(FILE_EXTENSIONS)})."
+        )
+    data, refusal = _read(Item(given=given, path=located, media_type=media_type))
+    if data is None:
+        raise IntakeError(refusal or "The Hub could not read it.")
+    return media_type, data
+
+
 def add_all(
     project_root: Path,
     private_root: Path,

@@ -761,6 +761,21 @@ async def granted_vault_roots(
     return [Path(root["path"]) for root in json.loads(granted)["roots"]]
 
 
+async def _agent_vault_reach(session: AsyncSession, actor: AgentActor):
+    """Where this run's paths may resolve: its workspace, the project directory and its grants."""
+    from ... import vault_intake
+    from . import vault as vault_routes
+
+    run = await session.get(Run, actor.run_id)
+    workspace = Path(run.workspace_dir) if run is not None and run.workspace_dir else None
+    project_root = await vault_routes.project_root(session, actor.project_id)
+    return vault_intake.agent_reach(
+        workspace,
+        project_root,
+        await granted_vault_roots(session, actor.project_id, actor.agent, project_root),
+    )
+
+
 @router.post("/vault/paths")
 async def add_vault_paths(
     body: VaultPathsAdd,
@@ -776,17 +791,9 @@ async def add_vault_paths(
     result per file (added, skipped as a duplicate, refused with its reason); `distil` is
     required. See `vault.add_paths` for the refusals before anything is written.
     """
-    from ... import vault_intake
     from . import vault as vault_routes
 
-    run = await session.get(Run, actor.run_id)
-    workspace = Path(run.workspace_dir) if run is not None and run.workspace_dir else None
-    project_root = await vault_routes.project_root(session, actor.project_id)
-    reach = vault_intake.agent_reach(
-        workspace,
-        project_root,
-        await granted_vault_roots(session, actor.project_id, actor.agent, project_root),
-    )
+    reach = await _agent_vault_reach(session, actor)
     answer = await vault_routes.add_paths(
         session, background, actor.project_id, body, reach=reach, added_by=actor.agent
     )
@@ -809,6 +816,164 @@ async def add_vault_paths(
             agent=actor.agent,
         )
     return answer
+
+
+class VaultPassageReplace(RequestModel):
+    old: str = Field(max_length=1_100_000)
+    new: str = Field(max_length=1_100_000)
+
+
+class VaultTextAppend(RequestModel):
+    text: str = Field(max_length=1_100_000)
+
+
+class VaultFileReplace(RequestModel):
+    path: str = Field(max_length=4096)
+
+
+async def _vault_change(
+    session: AsyncSession,
+    actor: AgentActor,
+    source_id: str,
+    action: str,
+    change,
+    *,
+    reads_files: bool = False,
+    changed: bool = True,
+):
+    """Run one vault change as this run's agent, the actor built from the credential only (never
+    from the body), and answer as the operator's route does. `change(root, private, actor)` is the
+    vault call; a refusal answers its own status and changes nothing."""
+    from ... import vault
+    from . import vault as vault_routes
+
+    root, private = await vault_routes.roots(session, actor.project_id)
+    who = vault.agent_actor(actor.agent, actor.run_id)
+    try:
+        entry = await asyncio.to_thread(change, root, private, who)
+    except vault.VaultError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    await persist_event(
+        session,
+        actor.project_id,
+        "vault_source_changed",
+        {"subject": {"source": source_id}, "action": action, "run_id": actor.run_id},
+        agent=actor.agent,
+    )
+    if not changed:
+        return entry
+    return await vault_routes.after_change(
+        actor.project_id, root, private, entry, reads_files=reads_files
+    )
+
+
+@router.post("/vault/sources/{entry_id}/replace-passage")
+async def replace_vault_passage(
+    entry_id: str,
+    body: VaultPassageReplace,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Replace the one occurrence of `old` in a text source by `new`. 400 saying whether `old`
+    occurs nowhere or more than once; 409 for a file source (changed by replacing it)."""
+    from ... import vault
+
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "replace-passage",
+        lambda root, private, who: vault.replace_passage(
+            root, private, entry_id, old=body.old, new=body.new, actor=who
+        ),
+    )
+
+
+@router.post("/vault/sources/{entry_id}/append")
+async def append_vault_text(
+    entry_id: str,
+    body: VaultTextAppend,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Add text to the end of a text source; 409 for a file source."""
+    from ... import vault
+
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "append",
+        lambda root, private, who: vault.append_text(
+            root, private, entry_id, text=body.text, actor=who
+        ),
+    )
+
+
+@router.post("/vault/sources/{entry_id}/replace-file")
+async def replace_vault_file(
+    entry_id: str,
+    body: VaultFileReplace,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Replace a PDF or image source's file with the file `path` names, reached and checked as
+    `vault_add` reaches a path (same reasons); 409 for a text source."""
+    from ... import vault, vault_intake
+
+    reach = await _agent_vault_reach(session, actor)
+    try:
+        media_type, data = await asyncio.to_thread(vault_intake.read_replacement, body.path, reach)
+    except vault_intake.IntakeError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "replace-file",
+        lambda root, private, who: vault.replace_file(
+            root, private, entry_id, media_type=media_type, data=data, actor=who
+        ),
+        reads_files=True,
+    )
+
+
+@router.post("/vault/sources/{entry_id}/archive")
+async def archive_vault_source(
+    entry_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Archive a source: it and its facts leave the map, the turn's vault line and the checks."""
+    from ... import vault
+
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "archive",
+        lambda root, private, who: vault.archive_source(root, private, entry_id, actor=who),
+        changed=False,
+    )
+
+
+@router.post("/vault/sources/{entry_id}/restore")
+async def restore_vault_source(
+    entry_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Restore an archived source; 409 for one that is not archived."""
+    from ... import vault
+
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "restore",
+        lambda root, private, who: vault.restore_source(root, private, entry_id, actor=who),
+        changed=False,
+    )
 
 
 @router.post("/mcp-adapter-online", status_code=status.HTTP_204_NO_CONTENT)

@@ -63,7 +63,12 @@ PROBLEMS = (
     "problem blocks the release.\n"
     f"{OPEN}\n{F2}\n"
 )
-OLD_NOTES = "Releases are cut every Friday. A release needs two approvals before it ships.\n"
+OLD_NOTES = (
+    "Release rules, agreed in the March planning call.\n"
+    "A release is cut every Friday at 16:00.\n"
+    "A release needs two approvals before it ships.\n"
+    "The release manager is Dana Whitfield.\n"
+)
 EDIT_TURN = (
     "Two chores in the project's knowledge vault. First, the source named 'Problems' lists "
     "F-1 as open; it has been fixed, so change that line in the vault so that it reads "
@@ -213,12 +218,26 @@ def agent_tool_calls(outputs):
         data = parse(payload)
         command = str(parse(data.get("input")).get("command") or "")
         # The arguments file may follow the name: `aw-tool vault_x .agentweave/calls/1.json`.
-        for name in re.findall(r"aw-tool\s+([A-Za-z_]+)", command):
+        names = [n for n in re.findall(r"aw-tool\s+([A-Za-z_]+)", command)]
+        result = results_by_id.get(data.get("call_id"), {})
+        output = str(result.get("output") or "")
+        # One shell command may run several tools (`a; b`): their answers come back concatenated
+        # in one result, so each tool takes the JSON answer at its own position.
+        bodies, decoder, at = [], json.JSONDecoder(), 0
+        while True:
+            at = output.find("{", at)
+            if at < 0:
+                break
+            try:
+                body, end = decoder.raw_decode(output, at)
+            except ValueError:
+                break
+            bodies.append(body)
+            at = end
+        for index, name in enumerate(names):
             if name in ("vault_map", "vault_read", "vault_report", "vault_add"):
                 continue
-            result = results_by_id.get(data.get("call_id"), {})
-            output = str(result.get("output") or "")
-            body = parse(output[output.find("{"):]) if "{" in output else {}
+            body = bodies[index] if index < len(bodies) else {}
             found.append({"tool": name, "call_id": data.get("call_id"), "is_error": bool(result.get("is_error", True)),
                           "ok": body.get("ok") if isinstance(body, dict) else None, "output": output})
     return found
@@ -298,9 +317,16 @@ def drive():
     calls = agent_tool_calls(outputs)
     edits = [c for c in calls if re.search(r"replace|append|edit|update", c["tool"])]
     archives = [c for c in calls if "archive" in c["tool"]]
-    refused = [c for c in edits + archives if c["is_error"] or c["ok"] is not True]
+    # The agent may fumble an argument file (a usage error from `aw-tool`, never sent to the Hub)
+    # and call again; what counts is that each kind was answered ok at least once and the Hub
+    # itself refused none.
+    def answered(group):
+        return any(not c["is_error"] and c["ok"] is True for c in group)
+
+    refused = [c for c in edits + archives
+               if (c["is_error"] or c["ok"] is not True) and "usage" not in c["output"]]
     check("2a the agent called a vault edit tool and an archive tool, and the Hub answered both ok",
-          edits and archives and not refused,
+          answered(edits) and answered(archives) and not refused,
           f"edits={[(c['tool'], c['ok']) for c in edits]} archives={[(c['tool'], c['ok']) for c in archives]} "
           f"refused={[(c['tool'], c['output'][:160]) for c in refused]} "
           f"all={[(c['tool'], c['ok']) for c in calls]}")
