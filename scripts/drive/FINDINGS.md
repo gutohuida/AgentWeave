@@ -40883,7 +40883,7 @@ Repro: Architect's review turn on `task-a80259e4ab36`. The turn ran in `.agentwe
 
 ## F1083 (B) -- a hand-driven build's builder sees only the document's recommended delivery, and `create_flow` on that document is not refused
 
-**Status:** open 2026-10-29. Found when the operator built `a-checks-send-back-returns-the-task-s-accepted-evidence` (`spdoc-ed413679f369`) by hand.
+**Status:** part (2) fixed 2026-10-29 -- `POST /jobs` refuses a flow or loop on a document with a running build, 409 naming build and driver (`hub/tests/test_one_driver_per_document.py`); part (1), the agent-readable build, is open. Found when the operator built `a-checks-send-back-returns-the-task-s-accepted-evidence` (`spdoc-ed413679f369`) by hand.
 **Source:** drive
 **Theme:** Spec flow x Flows
 **Ready:** yes
