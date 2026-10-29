@@ -452,7 +452,7 @@ async def archive_vault_source(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """The operator archives a source: it and its facts leave the map, the turn's vault line and
+    """The operator archives a source (useArchiveVaultSource in hub/ui/src/api/vault.ts calls this): it and its facts leave the map, the turn's vault line and
     the checks, and stay readable by id. 404 for an unknown source, 409 for one already archived
     or held on another machine."""
     root, private = await roots(session, project[0])
