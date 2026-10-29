@@ -1459,7 +1459,8 @@ def _set_archived(
 def archive_source(
     project_root: Path, private_root: Path, source_id: str, *, actor: Actor
 ) -> Dict[str, Any]:
-    """Archive a source; 404 for an unknown one, 409 for one already archived."""
+    """Archive a source; 404 for an unknown one, 409 for one already archived. Reached by the
+    operator's POST /vault/sources/{id}/archive and by the agents' archive tool."""
     return _set_archived(project_root, private_root, source_id, archive=True, actor=actor)
 
 
