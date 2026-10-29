@@ -199,4 +199,4 @@ def test_the_archive_routes_have_a_client() -> None:
 # Measured on the merged tree 2026-10-29: 19 clientless routes, equal to the ceiling.
 # Re-run 2026-10-29: test_surface_ceilings passes on this tree (6 passed).
 # Re-run 2026-10-29 after the archive client landed: hub-tests re-checks on this commit (vault tests 179 passed).
-# Re-run again 2026-10-29: ratchet 12 passed on this tree; touching the file so hub-tests runs on a new commit.
+# Re-run 2026-10-29 (Developer turn): ratchet and vault suites pass at HEAD 51e6d71; touching so hub-tests re-runs on a new commit.
