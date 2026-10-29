@@ -40498,7 +40498,7 @@ Recorded in the operator's words only. Before any work, ask what is to be ordere
 
 ## F1045 (C) -- Overview shows notifications that cannot be dismissed and offer nothing to do
 
-**Status:** open 2026-10-25. Operator request, noted at their ask for later ("there are some notifications in overview that are not dismissable and I have no action to take on them they are just living there"); not explored.
+**Status:** fixed 2026-10-27 by slice I `overview-notices` (7e32e8e, merged c38a94f): every Overview row can be cleared. Was: open 2026-10-25. Operator request, noted at their ask for later ("there are some notifications in overview that are not dismissable and I have no action to take on them they are just living there"); not explored.
 **Source:** operator
 **Theme:** Overview
 **Ready:** no
