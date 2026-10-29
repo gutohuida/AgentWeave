@@ -5,7 +5,7 @@ vault line and both checks, stay readable by id, and come back on restore.
 `vault-sources-can-be-edited-replaced-and-archived` (Tier 2), the operator's half of ac-archive,
 ac-out-of-checks, ac-archived-read and ac-restore (the agent tools' half is with those tools).
 
-Client reach (ratchet passes, 6 tests, at 3e5c373): the archive routes are called by hub/ui/src/api/vault.ts (the clientless-route ratchet holds at its ceiling of 19; count re-measured at 19 on 2026-10-29 at HEAD, with master a11ae1d merged in, route table read, by this task's checkout). The first Hub check ran at f7cf6d3, before the client hooks (d4bf7fe) existed; HEAD carries them; test_surface_ceilings.py passes (6) at 4751ac4, and again at 1121fe1 with master a11ae1d merged (2026-10-29).
+Client reach (ratchet passes, 6 tests, at 3e5c373): the archive routes are called by hub/ui/src/api/vault.ts (the clientless-route ratchet holds at its ceiling of 19; count re-measured at 19 on 2026-10-29 at HEAD, with master a11ae1d merged in, route table read, by this task's checkout). The first Hub check ran at f7cf6d3, before the client hooks (d4bf7fe) existed; HEAD carries them; test_surface_ceilings.py passes (6) at 4751ac4, and again at 1121fe1 with master a11ae1d merged (2026-10-29), and again at 4cb5bb9 by the developer turn that moved the task to completed.
 """
 
 import json
