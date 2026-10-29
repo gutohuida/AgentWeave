@@ -258,3 +258,18 @@ describe('one synth', () => {
     expect(ui).toBe(brand)
   })
 })
+
+describe('a main move and a next-slice offer call the operator', () => {
+  it('names the branch, and a rewrite as one; offers the next slice by its title', () => {
+    expect(classify('main_moved', { project_id: 'proj-a', branch: 'master', moved_rewrite: false })).toMatchObject({
+      kind: 'fail',
+      text: 'master moved outside the Hub',
+    })
+    expect(classify('main_moved', { project_id: 'proj-a', branch: 'master', moved_rewrite: true })?.text).toBe(
+      'The history of master was rewritten outside the Hub',
+    )
+    expect(
+      classify('next_slice_offered', { project_id: 'proj-a', next_slice: { key: 's2', title: 'Slice two' } }),
+    ).toMatchObject({ kind: 'done', text: 'A slice is built: draft Slice two?' })
+  })
+})

@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from sqlalchemy import select, update
@@ -28,14 +27,12 @@ from . import (
     spec_journey,
     spec_lifecycle,
     spec_naming,
-    spec_rigor,
     traces,
 )
 from .db.models import (
     InboundQueueEntry,
     SpecDocument,
     SpecDocumentMerge,
-    SpecEditProposal,
     SpecRequirement,
 )
 from .project_workspace import ProjectWorkspace
@@ -67,27 +64,6 @@ class SaveResult:
 
 
 @dataclass
-class ProposeResult:
-    """What a `contract`/`gate`-rigor submission produced, instead of a write.
-
-    `openspec/changes/2026-08-17-authoring-rigor-and-scope` design D1: the live document is
-    untouched; `proposals` names what was created (one dict per changed unit — `id`, `unit_kind`,
-    `unit_key`, `change_kind`), and `unchanged` names units the submission left identical to what
-    is stored (including `"metadata"` when nothing in the non-requirement bundle differed) — not an
-    error, just nothing to propose.
-    """
-
-    path: str
-    phase: str
-    proposals: List[Dict[str, Any]] = field(default_factory=list)
-    unchanged: List[str] = field(default_factory=list)
-    # Units this submission repeated exactly -- the same proposer, content, change, position and
-    # document version as a proposal still pending -- named instead of proposed a second time
-    # (`a-pending-proposal-can-be-withdrawn`, D1).
-    already_pending: List[Dict[str, Any]] = field(default_factory=list)
-
-
-@dataclass
 class RenameResult:
     path: str
     previous_path: str
@@ -99,14 +75,6 @@ class SaveRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outcome, 
     def __init__(self, message: str, *, code: str, field_path: str = "") -> None:
         self.code = code
         self.field_path = field_path
-        super().__init__(message)
-
-
-class ProposalRefusedError(RuntimeError):  # noqa: N818 - "refused" is the outcome, not a fault
-    """An accept/reject that may not happen, with the reason and a machine-readable code."""
-
-    def __init__(self, message: str, *, code: str) -> None:
-        self.code = code
         super().__init__(message)
 
 
@@ -150,7 +118,7 @@ async def save_document(
     actor: spec_lifecycle.Actor,
     via: str = "write",
 ) -> Any:
-    """Store a submission against an existing document — or, an agent's at `contract`/`gate` rigor, propose it.
+    """Store a submission against an existing document.
 
     `via` names the path a capability write came by: `"merge"` (`merge_document`) or `"create"`
     (the creation scaffold). A capability's content changes only through a merge, so a direct
@@ -158,7 +126,7 @@ async def save_document(
     (`a-finished-change-is-folded-into-its-capability`); every other kind is unaffected.
 
     Incompleteness is reported, not refused: a document under discussion is
-    incomplete by definition, and it is the transition to `proposed` that cares.
+    incomplete by definition, and it is approval that cares.
     What *is* refused is a submission against an approved document — silently
     rewriting what an operator approved would make the approval meaningless.
 
@@ -174,11 +142,9 @@ async def save_document(
     enough that `spec-document-authority`'s own scenario ("the same submission from the operator
     succeeds") could only be exercised by calling this function in-process.
 
-    Returns a `SaveResult` at `sketch` rigor (unchanged from before this function gained a second
-    branch) or a `ProposeResult` at `contract`/`gate` — `openspec/changes/2026-08-17-authoring-rigor-and-scope`
-    design D1. One tool, one payload shape; whether it applies immediately or waits for an operator
-    to accept it is the document's own property, read from `document.rigor`, never the caller's
-    choice.
+    Returns a `SaveResult`. Every save applies: the `ProposeResult` an agent's save at
+    `contract`/`gate` rigor once returned retired with document rigor
+    (`amendments-main-watch-and-the-next-slice`, D3).
     """
     # The kind first, from the raw submission: since validation became kind-aware (C1a D1), a
     # payload of the wrong kind would otherwise be refused for that kind's shape rules, sending the
@@ -228,11 +194,9 @@ async def save_document(
     existing_content = spec_documents.read_document(workspace, document.path)
     stored_before = spec_documents.parse_stored(existing_content)
 
-    # Proposals gate an agent's edit; the operator, who reviews them, writes directly at any rigor
-    # (fix-D8). Their own write used to become a proposal that approval never listed (F611).
-    if document.rigor in (spec_rigor.CONTRACT, spec_rigor.GATE) and actor.kind != "operator":
-        return await propose_edit(session, document, payload, stored_before, actor=actor)
-
+    # Every save before approval applies, whatever rigor the row still carries: document rigor
+    # retired (`amendments-main-watch-and-the-next-slice`, D3), and with it the edit proposals an
+    # agent's save at contract/gate became. After approval a change is an amendment.
     return await _apply_and_write(
         session, workspace, document, payload, stored_before, existing_content, actor=actor
     )
@@ -292,11 +256,8 @@ async def _apply_and_write(
 ) -> SaveResult:
     """Mint, render, write and record — the write every accepted payload goes through.
 
-    Shared by `save_document`'s `sketch`-rigor path and `accept_proposal`'s applied unit, so a
-    `contract`/`gate` document's accepted proposal gets identity minting, rendering, reindexing and
-    completeness reporting exactly as a direct `sketch` write does — not a second, looser
-    implementation of the same thing (the same reasoning `merge_document` already states for reusing
-    this function's predecessor).
+    Shared by `save_document` and an accepted or applied amendment (`spec_amendments`), so every
+    write gets identity minting, rendering, reindexing and completeness reporting the same way.
     """
     previous_map, high_water = spec_identity.read_identity(stored_before)
 
@@ -425,441 +386,6 @@ async def _completeness_report(
     ]
 
 
-# The non-requirement fields treated as one unit (design D2): everything a submission carries
-# except the per-requirement list (which gets its own, finer-grained diff) and the Hub-owned
-# identity block (which an agent's submission cannot meaningfully "change" — `_apply_and_write`
-# overwrites it unconditionally regardless of what a submission echoes back). Deliberately every
-# other top-level field, not a fixed enumeration: a payload field this module does not yet know
-# about diffing by name would otherwise be silently dropped by a `contract`/`gate` submission —
-# neither applied (the whole point of gating) nor proposed (nothing built anywhere to review it) —
-# which is a worse failure than folding it into the one bundle unit that already exists.
-_METADATA_EXCLUDED_KEYS = {"requirements", spec_identity.IDENTITY_FIELD}
-
-
-def _metadata_bundle(payload_dict: Dict[str, Any]) -> Dict[str, Any]:
-    return {k: v for k, v in payload_dict.items() if k not in _METADATA_EXCLUDED_KEYS}
-
-
-async def propose_edit(
-    session: AsyncSession,
-    document: SpecDocument,
-    payload: SpecPayload,
-    stored_before: Optional[Dict[str, Any]],
-    *,
-    actor: spec_lifecycle.Actor,
-) -> ProposeResult:
-    """Diff a `contract`/`gate` submission against what is stored; record one proposal per change.
-
-    Design D2. Requirement units are matched by **key** — never a minted identifier, which a
-    brand-new (`add`) unit does not have until its proposal is accepted and the normal
-    `_apply_and_write`/`spec_identity.mint` path finally runs. The non-requirement fields are one
-    unit (`_metadata_bundle`, above). A submission identical to what is stored creates zero
-    proposals and is not an error — resubmitting unchanged content is not a mistake.
-    """
-    submitted = payload_to_dict(payload)
-    stored_requirements: Dict[str, Dict[str, Any]] = {
-        entry["key"]: entry
-        for entry in (stored_before or {}).get("requirements") or []
-        if isinstance(entry, dict) and entry.get("key")
-    }
-    submitted_requirements = [
-        entry for entry in submitted.get("requirements") or [] if isinstance(entry, dict)
-    ]
-
-    proposals: List[Dict[str, Any]] = []
-    unchanged: List[str] = []
-    seen_keys: set = set()
-    previous_key: Optional[str] = None
-    # The document's pending proposals, read once (D1): a repeat of one of this proposer's is
-    # named rather than proposed again, and whatever of theirs this submission neither repeats nor
-    # replaces is superseded at the end (D2).
-    pending = list(
-        (
-            await session.execute(
-                select(SpecEditProposal)
-                .where(
-                    SpecEditProposal.document_id == document.id,
-                    SpecEditProposal.status == "pending",
-                )
-                .order_by(SpecEditProposal.created_at)
-            )
-        ).scalars()
-    )
-    mine = [
-        row
-        for row in pending
-        if row.proposer_actor_kind == actor.kind and row.proposer_actor_name == (actor.name or "")
-    ]
-    already_pending: List[Dict[str, Any]] = []
-    kept_ids: set = set()
-
-    async def _propose(**unit: Any) -> None:
-        repeat = next(
-            (
-                row
-                for row in mine
-                if row.unit_kind == unit["unit_kind"]
-                and row.unit_key == unit["unit_key"]
-                and row.change_kind == unit["change_kind"]
-                and row.position_after_key == unit["position_after_key"]
-                and row.proposed_payload == unit["proposed_payload"]
-                and row.expected_digest == document.content_digest
-            ),
-            None,
-        )
-        if repeat is not None:
-            kept_ids.add(repeat.id)
-            already_pending.append(
-                {
-                    "id": repeat.id,
-                    "unit_kind": repeat.unit_kind,
-                    "unit_key": repeat.unit_key,
-                    "change_kind": repeat.change_kind,
-                }
-            )
-            return
-        created = await _create_proposal(session, document, actor=actor, **unit)
-        kept_ids.add(created["id"])
-        proposals.append(created)
-        # A revision replaces this proposer's earlier word on the unit (D2).
-        for row in mine:
-            if (
-                row.id not in kept_ids
-                and row.unit_kind == unit["unit_kind"]
-                and row.unit_key == unit["unit_key"]
-            ):
-                await _leave_pending(
-                    session,
-                    row,
-                    status="superseded",
-                    resolved_by=actor.name or "",
-                    reason=f"superseded by {created['id']}",
-                )
-                kept_ids.add(row.id)  # decided now, whether or not the race was ours
-
-    for entry in submitted_requirements:
-        key = entry.get("key")
-        if not key:
-            continue
-        seen_keys.add(key)
-        existing = stored_requirements.get(key)
-        if existing is None:
-            await _propose(
-                unit_kind="requirement",
-                unit_key=key,
-                change_kind="add",
-                position_after_key=previous_key,
-                proposed_payload=entry,
-                previous_payload=None,
-            )
-        elif existing != entry:
-            await _propose(
-                unit_kind="requirement",
-                unit_key=key,
-                change_kind="modify",
-                position_after_key=None,
-                proposed_payload=entry,
-                previous_payload=existing,
-            )
-        else:
-            unchanged.append(key)
-        previous_key = key
-
-    for key, existing in stored_requirements.items():
-        if key in seen_keys:
-            continue
-        await _propose(
-            unit_kind="requirement",
-            unit_key=key,
-            change_kind="remove",
-            position_after_key=None,
-            proposed_payload={},
-            previous_payload=existing,
-        )
-
-    metadata_new = _metadata_bundle(submitted)
-    metadata_old = _metadata_bundle(stored_before or {})
-    if metadata_new != metadata_old:
-        await _propose(
-            unit_kind="metadata",
-            unit_key="metadata",
-            change_kind="modify",
-            position_after_key=None,
-            proposed_payload=metadata_new,
-            previous_payload=metadata_old if stored_before else None,
-        )
-    else:
-        unchanged.append("metadata")
-
-    # A submission is the proposer's whole document, so it is their current word on every unit.
-    # Whatever of theirs it neither repeated nor replaced -- a unit put back as stored, or one no
-    # longer mentioned -- they took back (D2, operator review). Without this a `remove` from v1
-    # stayed pending after v2 restored the unit, and accepting it deleted what they brought back.
-    for row in mine:
-        if row.id not in kept_ids:
-            await _leave_pending(
-                session,
-                row,
-                status="superseded",
-                resolved_by=actor.name or "",
-                reason="superseded: the proposer's latest submission leaves this unit as stored",
-            )
-
-    return ProposeResult(
-        path=document.path,
-        phase=document.phase,
-        proposals=proposals,
-        unchanged=unchanged,
-        already_pending=already_pending,
-    )
-
-
-async def _leave_pending(
-    session: AsyncSession,
-    proposal: SpecEditProposal,
-    *,
-    status: str,
-    resolved_by: str,
-    reason: Optional[str] = None,
-) -> bool:
-    """Move `proposal` out of `pending`, if it is still there. True when this call moved it.
-
-    A conditional UPDATE whose row count is checked, never an attribute write on a row loaded
-    earlier (design D7): two requests deciding the same proposal each held it as `pending`, and the
-    later write won, turning `accepted` into `rejected`. The shape `questions.py` uses for the same
-    race. The row is refreshed either way, so the caller reads what now stands.
-    """
-    values: Dict[str, Any] = {
-        "status": status,
-        "resolved_at": datetime.now(timezone.utc),
-        "resolved_by_actor_name": resolved_by,
-    }
-    if reason is not None:
-        values["resolution_reason"] = reason
-    result = await session.execute(
-        update(SpecEditProposal)
-        .where(SpecEditProposal.id == proposal.id, SpecEditProposal.status == "pending")
-        .values(**values)
-        .execution_options(synchronize_session=False)
-    )
-    await session.refresh(proposal)
-    return result.rowcount == 1
-
-
-def _not_pending(proposal: SpecEditProposal) -> ProposalRefusedError:
-    return ProposalRefusedError(
-        f"this proposal is {proposal.status}, not pending", code="proposal_not_pending"
-    )
-
-
-async def _create_proposal(
-    session: AsyncSession,
-    document: SpecDocument,
-    *,
-    unit_kind: str,
-    unit_key: str,
-    change_kind: str,
-    position_after_key: Optional[str],
-    proposed_payload: Dict[str, Any],
-    previous_payload: Optional[Dict[str, Any]],
-    actor: spec_lifecycle.Actor,
-) -> Dict[str, Any]:
-    proposal = SpecEditProposal(
-        id=f"spprop-{short_id()}",
-        document_id=document.id,
-        unit_kind=unit_kind,
-        unit_key=unit_key,
-        change_kind=change_kind,
-        position_after_key=position_after_key,
-        proposed_payload=proposed_payload,
-        previous_payload=previous_payload,
-        expected_digest=document.content_digest,
-        status="pending",
-        proposer_actor_kind=actor.kind,
-        proposer_actor_name=actor.name or "",
-        proposer_run_id=actor.run_id,
-    )
-    session.add(proposal)
-    await session.flush()
-    return {
-        "id": proposal.id,
-        "unit_kind": unit_kind,
-        "unit_key": unit_key,
-        "change_kind": change_kind,
-    }
-
-
-def _apply_unit(stored_before: Dict[str, Any], proposal: SpecEditProposal) -> Dict[str, Any]:
-    """The full payload dict `proposal` would produce, applied on top of `stored_before`.
-
-    Fed into `validate_payload` and then `_apply_and_write` — accepting one unit still writes the
-    whole document, because rendering has never worked any other way; this is what reconstructs
-    "the whole document, with just this unit changed" from a proposal that only ever stored the
-    changed unit.
-    """
-    if proposal.unit_kind == "metadata":
-        merged: Dict[str, Any] = {
-            k: v for k, v in stored_before.items() if k not in _METADATA_EXCLUDED_KEYS
-        }
-        merged["requirements"] = list(stored_before.get("requirements") or [])
-        merged.update(proposal.proposed_payload)
-        return merged
-
-    merged = dict(stored_before)
-    requirements = list(merged.get("requirements") or [])
-    index = next(
-        (i for i, entry in enumerate(requirements) if entry.get("key") == proposal.unit_key), None
-    )
-    if proposal.change_kind == "remove":
-        if index is not None:
-            requirements.pop(index)
-    else:
-        if index is not None:
-            requirements[index] = proposal.proposed_payload
-        elif proposal.change_kind == "add":
-            insert_at = 0
-            if proposal.position_after_key:
-                after_index = next(
-                    (
-                        i
-                        for i, entry in enumerate(requirements)
-                        if entry.get("key") == proposal.position_after_key
-                    ),
-                    None,
-                )
-                insert_at = after_index + 1 if after_index is not None else len(requirements)
-            requirements.insert(insert_at, proposal.proposed_payload)
-        else:
-            requirements.append(proposal.proposed_payload)
-    merged["requirements"] = requirements
-    return merged
-
-
-async def accept_proposal(
-    session: AsyncSession,
-    workspace: ProjectWorkspace,
-    document: SpecDocument,
-    proposal: SpecEditProposal,
-    *,
-    actor: spec_lifecycle.Actor,
-    expected_digest: Optional[str] = None,
-    reason: str = "",
-) -> SaveResult:
-    """Apply one pending proposal's unit to the live document, or refuse and say why.
-
-    Design D4/D5. Operator-only, enforced here — not only at the API boundary, the same discipline
-    `spec_rigor.set_rigor` and `spec_lifecycle.transition` already apply to their own operator-only
-    acts. Two independent staleness checks: `expected_digest` (if the caller supplies one) is the
-    operator's own last-seen digest, mirroring `RigorRequest`'s use of the same name; the proposal's
-    own `expected_digest` (always checked) is D5's compare-and-swap against what the document
-    actually was when this proposal was created. Either mismatch refuses rather than applies.
-    """
-    if actor.kind != "operator":
-        raise ProposalRefusedError(
-            "only the operator can accept a proposal", code="accept_is_the_operators"
-        )
-    if proposal.status != "pending":
-        raise ProposalRefusedError(
-            f"this proposal is {proposal.status}, not pending", code="proposal_not_pending"
-        )
-    if (
-        expected_digest is not None
-        and document.content_digest is not None
-        and expected_digest != document.content_digest
-    ):
-        raise ProposalRefusedError(
-            "the document changed since you read it; re-read it and decide again",
-            code="stale_digest",
-        )
-    if document.content_digest != proposal.expected_digest:
-        if not await _leave_pending(
-            session, proposal, status="stale", resolved_by=actor.name or ""
-        ):
-            raise _not_pending(proposal)
-        raise ProposalRefusedError(
-            "the document changed since this proposal was created; it is now stale, not accepted",
-            code="proposal_stale",
-        )
-
-    existing_content = spec_documents.read_document(workspace, document.path)
-    stored_before = spec_documents.parse_stored(existing_content) or {}
-    merged = _apply_unit(stored_before or {}, proposal)
-    try:
-        payload = validate_payload(merged)
-    except PayloadError as exc:
-        raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
-
-    # Claimed before anything is written, so losing the race to another decision writes no file
-    # (D7). `resolution_reason` is kept, as `reject_proposal` keeps its own (F209): the route
-    # declared and size-limited this field and then dropped it, leaving *why* a spec change was let
-    # in as the one half of the pair the corpus did not record. A write refused below rolls this
-    # claim back with the rest of the transaction.
-    if not await _leave_pending(
-        session, proposal, status="accepted", resolved_by=actor.name or "", reason=reason
-    ):
-        raise _not_pending(proposal)
-
-    result = await _apply_and_write(
-        session,
-        workspace,
-        document,
-        payload,
-        stored_before,
-        existing_content,
-        actor=actor,
-        extra_detail={
-            "proposal_id": proposal.id,
-            "proposer_actor_kind": proposal.proposer_actor_kind,
-            "proposer_actor_name": proposal.proposer_actor_name,
-        },
-    )
-    return result
-
-
-async def reject_proposal(
-    session: AsyncSession,
-    proposal: SpecEditProposal,
-    *,
-    actor: spec_lifecycle.Actor,
-    reason: str = "",
-) -> None:
-    """Refuse a pending proposal, leaving the live document untouched — "no residue" is automatic.
-
-    Design D4/F2: the live document was never written for this proposal, so there is nothing on
-    the document itself to clean up.
-    """
-    if actor.kind != "operator":
-        raise ProposalRefusedError(
-            "only the operator can reject a proposal", code="reject_is_the_operators"
-        )
-    if proposal.status != "pending" or not await _leave_pending(
-        session, proposal, status="rejected", resolved_by=actor.name or "", reason=reason
-    ):
-        raise _not_pending(proposal)
-
-
-async def withdraw_proposal(
-    session: AsyncSession,
-    proposal: SpecEditProposal,
-    *,
-    actor: spec_lifecycle.Actor,
-    note: str = "",
-) -> None:
-    """Take a pending proposal off the list without judging it (design D3).
-
-    For twins and proposals nobody is pursuing: a reject records that the edit is wrong, which
-    nobody decided. Operator-only, like accept and reject. The live document is untouched.
-    """
-    if actor.kind != "operator":
-        raise ProposalRefusedError(
-            "only the operator can withdraw a proposal", code="withdraw_is_the_operators"
-        )
-    if proposal.status != "pending" or not await _leave_pending(
-        session, proposal, status="withdrawn", resolved_by=actor.name or "", reason=note
-    ):
-        raise _not_pending(proposal)
-
-
 async def merge_document(
     session: AsyncSession,
     workspace: ProjectWorkspace,
@@ -869,7 +395,7 @@ async def merge_document(
     *,
     actor: spec_lifecycle.Actor,
     note: str = "",
-) -> SaveResult | ProposeResult:
+) -> SaveResult:
     """Fold a finished change's content into a capability document, by explicit authored merge.
 
     Resolving the path arguments to documents and refusing an unfinished or mistargeted merge
@@ -885,20 +411,12 @@ async def merge_document(
     `spec_document_merges` already answers "what did this change's merge do" by querying
     `change_document_id`).
 
-    For a non-operator actor at `contract`/`gate` rigor `save_document` proposes instead of writing
-    (a `ProposeResult`, not a `SaveResult`); the operator's merge writes at any rigor (fix-D8,
-    F611). No `SpecDocumentMerge` row is written for a proposal: the table's job is to audit folds
-    that actually happened, and a pending proposal is not one. The caller distinguishes the two
-    return types the same way `agent_actions.py:1155` already does for a plain `save_document`.
-
     Committing and broadcasting `spec_updated` is the caller's job too, the same way it is for
     every other route in `spec.py` — this function only prepares the session.
     """
     result = await save_document(
         session, workspace, capability_document, raw_payload, actor=actor, via="merge"
     )
-    if isinstance(result, ProposeResult):
-        return result
     if not source_documents:
         # A merge naming no change is the operator editing the capability: recorded as one, so
         # every change to a capability's content has a history entry saying where it came from.
@@ -1325,7 +843,7 @@ async def fold(
     capability: SpecDocument,
     items: Optional[List[FoldItem]],
     **options: Any,
-) -> Tuple[SaveResult | ProposeResult, bool]:
+) -> Tuple[SaveResult, bool]:
     """`_fold`, as a trace of its own (`background-work-is-a-trace`)."""
     attributes = {"aw.spec.change": change.path, "aw.spec.capability": capability.path}
     async with traces.work("spec_fold", change.project_id, **attributes):
@@ -1347,7 +865,7 @@ async def _fold(
     algorithms: Optional[Sequence[FoldAlgorithm]] = None,
     retire_algorithms: Sequence[str] = (),
     criteria: Sequence[FoldCriterion] = (),
-) -> Tuple[SaveResult | ProposeResult, bool]:
+) -> Tuple[SaveResult, bool]:
     """Fold a finished change into a capability through the merge, then archive the change.
 
     Every refusal is decided before the merge writes anything. Returns the merge's result and
@@ -1391,7 +909,7 @@ async def _fold(
         result.standing_warnings = [w for w in result.warnings if _identity(w) in standing]
         result.warnings = [w for w in result.warnings if _identity(w) not in standing]
         result.warnings.extend(draft.warnings)
-    if isinstance(result, ProposeResult) or not archive or change.phase == spec_lifecycle.ARCHIVED:
+    if not archive or change.phase == spec_lifecycle.ARCHIVED:
         return result, False
     await spec_lifecycle.transition(
         session,
@@ -1625,7 +1143,6 @@ async def roadmap_states(
 #: How far a slice's change document has come; where several name one slice, the furthest wins.
 _SLICE_PHASE_RANK = {
     spec_lifecycle.EXPLORING: 1,
-    spec_lifecycle.PROPOSED: 2,
     spec_lifecycle.APPROVED: 3,
     spec_lifecycle.ARCHIVED: 4,
 }
@@ -1800,7 +1317,7 @@ NOTE_CODES = frozenset({"roadmap_slice_unclaimed"})
 
 @dataclass(frozen=True)
 class PhaseFindings:
-    """What a move to proposed or approved finds: refusals, which nothing passes, gaps, which the
+    """What an approval finds: refusals, which nothing passes, gaps, which the
     operator may approve over (approve-lists-what-is-missing-and-can-approve-anyway, FR-2/3), and
     notes, which gate nothing (`NOTE_CODES`)."""
 
@@ -1843,11 +1360,10 @@ async def _completeness(
     )
     findings += await _unclaimed_slices(session, workspace, document.project_id, payload)
     if to_phase == spec_lifecycle.APPROVED:
-        # A document whose import source was reopened after it was proposed is approved anyway and
-        # the reference recorded as `document_not_approved` (task-dependencies, settled).
-        # A document proposed before this change (or one whose delivery answer is incomplete) is
-        # approved anyway: an absent or incomplete delivery just means no flow is created, and the
-        # approval report says so (D4) — it is not a reason to refuse approval.
+        # A document whose import source is not approved is approved anyway and the reference
+        # recorded as `document_not_approved` (task-dependencies, settled). A document whose
+        # delivery answer is absent or incomplete is approved anyway: it just means Build creates
+        # no flow, and the build report says so (D4) — it is not a reason to refuse approval.
         excluded_at_approval = {
             "import_not_approved",
             "delivery_unanswered",
@@ -1875,8 +1391,8 @@ def _steps_skipped(
     last = ahead[-1]
     # The full route (F730): without `/api/v1/projects/{id}` it named nothing callable.
     routes = f"POST /api/v1/projects/{document.project_id}/project/documents"
-    # Only an exploring document's step moves, and approval meets this on a proposed one (F752),
-    # where the journey call alone answers 409 `no_journey`.
+    # Only an exploring document's step moves (F752); on any other the journey call alone answers
+    # 409 `no_journey`.
     back = (
         ""
         if document.phase == spec_lifecycle.EXPLORING
@@ -1951,7 +1467,7 @@ async def phase_findings(
     The gaps add what only proposal and approval report: `spec_completeness.approval_gaps` and
     `steps_skipped`. A payload that is missing or invalid raises `SaveRefusedError`, a refusal.
     """
-    if to_phase not in (spec_lifecycle.PROPOSED, spec_lifecycle.APPROVED):
+    if to_phase != spec_lifecycle.APPROVED:
         return PhaseFindings([], [])
     payload, findings = await _completeness(session, workspace, document, to_phase)
     findings = [
@@ -1960,6 +1476,9 @@ async def phase_findings(
         # Same-file tasks with no order between them run in parallel and collide (F694): the save
         # result's advisory alone never reached the operator, so proposal and approval say it too.
         *spec_completeness.overlap_warnings(payload),
+        # F1014: tasks that declare no files hide any overlap; a warning, not a note, because the
+        # operator should weigh it before approving, as with the overlap it stands in for.
+        *spec_completeness.undeclared_files_warnings(payload),
         *_steps_skipped(workspace, document),
         *await _amendments_unreviewed(session, document),
         *await _vault_warnings(session, workspace, document),
@@ -1972,36 +1491,30 @@ async def phase_findings(
     )
 
 
-async def propose(
+async def check(
     session: AsyncSession,
     workspace: ProjectWorkspace,
     document: SpecDocument,
-    *,
-    actor: spec_lifecycle.Actor,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Move a document to `proposed`: `(blocking, warnings)`.
+    """The document's readiness, `(blocking, warnings)`, exactly as the agent's last save of the
+    stored payload reported it, and nothing moved (`exploring-ends-at-an-approved-plan`, FR-1).
 
-    `blocking` is the refusals, and the document stays put when there are any. `warnings` are the
-    gaps, which proposal passes and the operator sees again at approval.
-
-    The checks run inside `transition()` against the payload the document actually carries, so
-    this is the same answer whoever asks. A document whose file no longer parses cannot be
-    proposed at all — there is nothing to check.
+    Read-only: no phase, file, digest or event is written, so the operator can check at any time
+    while an agent keeps saving. It is the save's own report (`_completeness_report`) over the
+    payload on disk, so the two cannot disagree. A document whose file carries no payload, or one
+    that no longer validates, raises `SaveRefusedError`: there is nothing to check.
     """
-    try:
-        event = await spec_lifecycle.transition(
-            session,
-            document,
-            to_phase=spec_lifecycle.PROPOSED,
-            actor=actor,
-            workspace=workspace,
+    stored = spec_documents.read_payload(workspace, document.path)
+    if stored is None:
+        raise SaveRefusedError(
+            "this document carries no payload to check; it has not been written by the Hub",
+            code="no_payload",
         )
-    except spec_lifecycle.PhaseError as exc:
-        if exc.code == "document_incomplete":
-            return exc.blocking, exc.warnings
-        raise
-    await rerender_phase(session, workspace, document)
-    return [], list(event.detail.get("warnings") or [])
+    try:
+        payload = validate_payload(stored)
+    except PayloadError as exc:
+        raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
+    return await _completeness_report(session, workspace, document, payload)
 
 
 async def rerender_phase(
@@ -2026,12 +1539,10 @@ async def rerender_phase(
 
 
 def hub_block(document: SpecDocument) -> Dict[str, Any]:
-    """The row's copy for the stored file (FR-1): phase, rigor, step and size."""
+    """The row's copy for the stored file (FR-1): phase, step and size. Rigor retired
+    (`amendments-main-watch-and-the-next-slice`, D3), so a document no longer states one."""
     return {
         "phase": document.phase,
-        # From the row, never from a submission. An agent that could state a rigor in a payload
-        # could lower a gate that is blocking it, which is the one thing this must not permit.
-        "rigor": document.rigor or "sketch",
         "step": document.step,
         "size": document.size,
     }
@@ -2047,7 +1558,7 @@ async def render_page(
     """The page a stored document shows, rendered on read (FR-2), or ``None`` with no payload.
 
     The same render a save produced before storage moved to JSON, with the corpus navigation a
-    reindex used to write in when the index files the document. Phase and rigor come from the row
+    reindex used to write in when the index files the document. The phase comes from the row
     where there is one, else from the file's hub block.
     """
     stored = spec_documents.parse_stored(content)
@@ -2060,7 +1571,6 @@ async def render_page(
     identifiers, _ = spec_identity.read_identity(stored)
     hub = spec_documents.parse_hub(content)
     phase = document.phase if document is not None else hub.get("phase") or spec_lifecycle.EXPLORING
-    rigor = (document.rigor if document is not None else hub.get("rigor")) or "sketch"
     corpus = None
     manifest, _, _ = spec_documents.read_index(workspace)
     if manifest is not None and path in manifest.by_path():
@@ -2071,7 +1581,6 @@ async def render_page(
         identifiers,
         phase=phase,
         stored_payload=stored,
-        rigor=rigor,
         corpus=corpus,
         slice_of=slice_of(workspace, payload),
         # A roadmap's page says where each slice stands (F579); only a read can, since the state

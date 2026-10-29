@@ -235,7 +235,10 @@ async def test_a_settings_save_survives_a_failing_retry(app, auth_headers, build
 async def test_apply_transition_still_integrates_through_the_public_function(
     app, auth_headers, builder, tmp_path
 ):
-    """Pins the rename. Approval must keep merging through the coroutine the retry also uses."""
+    """Approval keeps merging through the path the retry also uses: both queue a landing
+    (`landing_queue.stage`), the one writer into main (`approved-work-merges-in-batches`)."""
+    from hub import landing_queue
+
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -244,10 +247,18 @@ async def test_apply_transition_still_integrates_through_the_public_function(
     git(tmp_path, "checkout", "-q", "main")
     task = await linked_task(app, auth_headers)
 
-    spy = AsyncMock(return_value=[])
-    with patch("hub.task_transition_service.integrate_task", spy):
+    kinds = []
+    real = landing_queue.stage
+
+    def spy(*args, **kwargs):
+        kinds.append(kwargs["kind"])
+        return real(*args, **kwargs)
+
+    with patch("hub.landing_queue.stage", spy):
         assert (await approve(app, auth_headers, task)).status_code == 200
-    spy.assert_awaited_once()
+        retried = await app.post(f"{TASKS}/{task}/integrations/retry", headers=auth_headers)
+        assert retried.status_code == 200, retried.text
+    assert kinds == ["approval", "retry"]
 
 
 # ---------------------------------------------------------------------------

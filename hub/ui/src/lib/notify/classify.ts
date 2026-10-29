@@ -43,12 +43,43 @@ function textFor(type: string, d: Payload): { kind: NotifyKind; text: string; co
       const tool = str(d, 'tool_name')
       return { kind: 'ask', text: `${str(d, 'agent') || 'An agent'} wants permission${tool ? ` for ${tool}` : ''}` }
     }
+    case 'task_checks_finished': {
+      // The checks a landing waited on have decided: the operator can press Land, or must act.
+      const task = str(d, 'task_title') || str(d, 'task_id') || 'A task'
+      return str(d, 'state') === 'passed'
+        ? { kind: 'done', text: `Checks passed for ${task}: it can be landed` }
+        : { kind: 'fail', text: `Checks did not pass for ${task}` }
+    }
+    case 'task_landing_changed': {
+      // A batch landed the work, sent it back, or waits for the operator
+      // (`approved-work-merges-in-batches`); the queue's other moves are everyday traffic.
+      const task = str(d, 'task_title') || str(d, 'task_id') || 'A task'
+      const state = str(d, 'state')
+      if (state === 'landed') return { kind: 'done', text: `${task} landed on main` }
+      if (state === 'sent_back') return { kind: 'fail', text: `${task} was sent back by its landing batch` }
+      if (state === 'held') return { kind: 'ask', text: `${task}'s landing is held` }
+      return null
+    }
     case 'stall_recorded':
       return { kind: 'fail', text: str(d, 'reason') ? `Work stalled: ${str(d, 'reason')}` : 'Work stalled' }
     case 'run_failed':
       return { kind: 'fail', text: `${str(d, 'agent') || 'An agent'}'s run failed` }
     case 'queue_chain_suspended':
       return { kind: 'fail', text: `A message chain to ${str(d, 'agent') || 'an agent'} was suspended` }
+    case 'main_moved': {
+      // `hub/hub/main_watch.py`: a move of main the Hub's own integration did not make.
+      const branch = str(d, 'branch') || 'main'
+      return {
+        kind: 'fail',
+        text: d.moved_rewrite === true ? `The history of ${branch} was rewritten outside the Hub` : `${branch} moved outside the Hub`,
+      }
+    }
+    case 'next_slice_offered': {
+      // `hub/hub/slice_drafting.py`: a slice is built and its next slice's drafting is offered.
+      const next = (d.next_slice as Payload | undefined) ?? {}
+      const title = str(next, 'title') || str(next, 'key') || 'the next slice'
+      return { kind: 'done', text: `A slice is built: draft ${title}?` }
+    }
     case 'loop_stopped': {
       const reason = str(d, 'reason')
       if (reason === QUEUE_DRAINED_REASON) return { kind: 'done', text: 'A loop finished its queue' }

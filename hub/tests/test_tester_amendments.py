@@ -16,6 +16,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, InboundQueueEntry, Loop, Run, SpecDocument, Task
 from hub.spec_documents import parse_stored
 
+from ._spec_versions import content_version
 from .test_spec_documents_api import PATH, _document
 from .test_spec_documents_api import _submit as _submit_document
 
@@ -71,7 +72,8 @@ async def _agents(*names):
 
 
 async def _approved(app, auth_headers, author_headers, **overrides):
-    """An approved flow document with one task; returns that task's id."""
+    """An approved flow document with one task, its flow built (Approve and build: approval alone
+    starts nothing since `exploring-ends-at-an-approved-plan`); returns that task's id."""
     await _agents("dev", "tess")
     created = await app.post(
         f"{BASE}/documents", json={"path": PATH, "title": "Demo"}, headers=auth_headers
@@ -82,12 +84,15 @@ async def _approved(app, auth_headers, author_headers, **overrides):
     assert written.status_code == 200, written.text
     async with async_session_factory() as db:
         row = (await db.execute(select(SpecDocument).where(SpecDocument.path == PATH))).scalar_one()
-        row.phase = "proposed"
         row.explore_closed_at = datetime.now(timezone.utc)
         await db.commit()
     approved = await app.post(
-        f"{BASE}/documents/phase?path={PATH}&to=approved",
-        json={"reason": "test", "approve_anyway": True},
+        f"{BASE}/documents/approve-and-build?path={PATH}",
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "test",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text
@@ -434,18 +439,15 @@ async def test_a_reapproval_with_unreviewed_amendments_lists_the_gap(
     task_id = await _approved(app, auth_headers, author_headers)
     tester = await _run("run-tester", "tess", reviews=task_id)
     assert (await app.post(AMEND, json=NEW_CRITERION, headers=tester)).status_code == 201
-    for to in ("exploring", "proposed"):
-        async with async_session_factory() as db:
-            row = (
-                await db.execute(select(SpecDocument).where(SpecDocument.path == PATH))
-            ).scalar_one()
-            row.phase = to
-            row.explore_closed_at = datetime.now(timezone.utc)
-            await db.commit()
+    async with async_session_factory() as db:
+        row = (await db.execute(select(SpecDocument).where(SpecDocument.path == PATH))).scalar_one()
+        row.phase = "exploring"
+        row.explore_closed_at = datetime.now(timezone.utc)
+        await db.commit()
 
     response = await app.post(
         f"{BASE}/documents/phase?path={PATH}&to=approved",
-        json={"reason": "t"},
+        json={"content_version": await content_version(app, auth_headers, PATH), "reason": "t"},
         headers=auth_headers,
     )
 
@@ -471,7 +473,7 @@ async def test_the_documents_view_counts_the_amendments_not_reviewed(
     listed = await app.get(f"{BASE}/documents", headers=auth_headers)
 
     (view,) = [d for d in listed.json()["documents"] if d["path"] == PATH]
-    assert view["amendments"] == {"total": 2, "unreviewed": 1}
+    assert view["amendments"] == {"total": 2, "unreviewed": 1, "proposed": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -506,12 +508,15 @@ async def test_a_named_tester_reviews_before_the_default_reviewer_and_after_the_
     assert written.status_code == 200, written.text
     async with async_session_factory() as db:
         row = (await db.execute(select(SpecDocument).where(SpecDocument.path == PATH))).scalar_one()
-        row.phase = "proposed"
         row.explore_closed_at = datetime.now(timezone.utc)
         await db.commit()
     approved = await app.post(
         f"{BASE}/documents/phase?path={PATH}&to=approved",
-        json={"reason": "t", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "t",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text

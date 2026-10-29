@@ -12,7 +12,7 @@ import json
 import pytest
 from sqlalchemy import select
 
-from hub import slice_drafting, spec_completeness, turn_scheduler
+from hub import spec_completeness, turn_scheduler
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, InboundQueueEntry, Run, SpecDocument, Task
@@ -22,6 +22,8 @@ from hub.spec_payload import (
     payload_to_dict,
     validate_payload,
 )
+
+from ._spec_versions import content_version
 
 ROADMAP_PATH = "spec/changes/the-plan/spec.json"
 
@@ -283,7 +285,7 @@ async def _propose(app, auth_headers, path):
     """The propose route answers 200 either way; a refusal leaves the phase and lists `blocking`."""
     closed = await app.post(f"{BASE}/documents/close-exploration?path={path}", headers=auth_headers)
     assert closed.status_code == 200, closed.text
-    response = await app.post(f"{BASE}/documents/propose?path={path}", headers=auth_headers)
+    response = await app.post(f"{BASE}/documents/check?path={path}", headers=auth_headers)
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -291,7 +293,11 @@ async def _propose(app, auth_headers, path):
 async def _approve(app, auth_headers, path, **body):
     return await app.post(
         f"{BASE}/documents/phase?path={path}&to=approved",
-        json={"approve_anyway": True, **body},
+        json={
+            "content_version": await content_version(app, auth_headers, path),
+            "approve_anyway": True,
+            **body,
+        },
         headers=auth_headers,
     )
 
@@ -300,7 +306,7 @@ async def _approved_roadmap_doc(app, auth_headers, planner):
     path = await _agent_create(app, planner, kind="roadmap", title="The plan")
     saved = await _agent_submit(app, planner, path, _roadmap())
     assert saved.status_code == 200, saved.text
-    assert (await _propose(app, auth_headers, path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, path))["blocking"] == []
     approved = await _approve(app, auth_headers, path)
     assert approved.status_code == 200, approved.text
     return path, approved.json()
@@ -313,7 +319,7 @@ async def _proposed_slice(app, auth_headers, headers, roadmap_path, key="s1"):
     )
     assert saved.status_code == 200, saved.text
     proposed = await _propose(app, auth_headers, path)
-    assert proposed["phase"] == "proposed", proposed
+    assert proposed["blocking"] == [], proposed
     return path
 
 
@@ -474,7 +480,7 @@ async def _proposed_slice_with(app, auth_headers, headers, roadmap_path, **overr
         _slice_doc(roadmap={"document": roadmap_path, "slice": "s1"}, **overrides),
     )
     assert saved.status_code == 200, saved.text
-    assert (await _propose(app, auth_headers, path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, path))["blocking"] == []
     return path
 
 
@@ -491,240 +497,8 @@ async def _closed_slice(app, auth_headers, planner, roadmap_path):
         headers=auth_headers,
     )
     assert reopened.status_code == 200, reopened.text
-    assert (await _propose(app, auth_headers, slice_path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, slice_path))["blocking"] == []
     return slice_path, task_id
-
-
-@pytest.mark.asyncio
-async def test_approval_waits_for_the_slice_tasks(app, auth_headers, planner, scheduled):
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = await _proposed_slice_with(
-        app, auth_headers, planner, roadmap_path, tasks=_two_tasks()
-    )
-
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-
-    assert approved.status_code == 200, approved.text
-    assert len(approved.json()["tasks_created"]) == 2
-    assert approved.json()["next_slice"] == {
-        "state": "waiting",
-        "slice": "s2",
-        "agent": "planner",
-        "open_tasks": 2,
-    }
-    assert await _queued() == []
-    assert scheduled == []
-
-
-@pytest.mark.asyncio
-async def test_the_last_task_closing_queues_the_drafting_turn(
-    app, auth_headers, planner, scheduled
-):
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = await _proposed_slice_with(
-        app, auth_headers, planner, roadmap_path, tasks=_two_tasks()
-    )
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-    first, second = approved.json()["tasks_created"]
-
-    await _move(app, auth_headers, first, "rejected")
-    await _settle()
-    assert await _queued() == []
-    assert scheduled == []
-
-    await _move(app, auth_headers, second, "in_progress", "completed", "under_review", "approved")
-    await _settle()
-
-    entries = await _queued()
-    assert len(entries) == 1
-    entry = entries[0]
-    assert entry.origin_type == "operator"
-    assert entry.origin_agent is None
-    assert entry.hop_depth == 0
-    assert entry.conversation_id == CONVERSATION
-    assert entry.spec_document == roadmap_path
-    assert "s2" in entry.content and "Slice two" in entry.content
-    assert roadmap_path in entry.content
-    assert f"`{first}`" in entry.content and f"`{second}`" in entry.content
-    assert ": rejected" in entry.content and ": approved" in entry.content
-    assert scheduled == [("proj-test", "planner")]
-
-
-@pytest.mark.asyncio
-async def test_the_drafting_turn_says_what_was_rejected_and_what_merged(
-    app, auth_headers, planner, scheduled
-):
-    """F501. The real drafting run read every task's status, saw `approved` three times, skipped
-    `list_evidence`, and called work "solid" whose evidence the operator had rejected twice and
-    which never reached main. The turn has to carry those two facts itself, not ask for them."""
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = await _proposed_slice_with(
-        app, auth_headers, planner, roadmap_path, tasks=_two_tasks()
-    )
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-    first, second = approved.json()["tasks_created"]
-    identifier = (await app.get(f"{TASKS}/{first}", headers=auth_headers)).json()[
-        "requirement_ids"
-    ][0]
-    recorded = await app.post(
-        "/api/v1/agent-actions/spec/evidence",
-        json={"identifier": identifier, "summary": "ran it", "task_id": first},
-        headers=planner,
-    )
-    assert recorded.status_code == 201, recorded.text
-    decided = await app.post(
-        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
-        json={"decision": "rejected", "reason": "the documented test command fails"},
-        headers=auth_headers,
-    )
-    assert decided.status_code == 200, decided.text
-    # The second task serves the same requirement; its own accepted evidence keeps C1b's
-    # all-rejected block from refusing its approval.
-    other = await app.post(
-        "/api/v1/agent-actions/spec/evidence",
-        json={"identifier": identifier, "summary": "checked it", "task_id": second},
-        headers=planner,
-    )
-    assert other.status_code == 201, other.text
-    accepted = await app.post(
-        f"{BASE}/spec/evidence/{other.json()['id']}/decision",
-        json={"decision": "accepted"},
-        headers=auth_headers,
-    )
-    assert accepted.status_code == 200, accepted.text
-
-    await _move(app, auth_headers, first, "rejected")
-    await _move(app, auth_headers, second, "in_progress", "completed", "under_review", "approved")
-    await _settle()
-
-    (entry,) = await _queued()
-    assert f"{identifier} evidence rejected: the documented test command fails" in entry.content
-    assert "no merge into the main branch is recorded" in entry.content
-
-
-@pytest.mark.asyncio
-async def test_the_drafting_turn_is_queued_once(app, auth_headers, planner, scheduled):
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-    (task_id,) = approved.json()["tasks_created"]
-
-    await _move(app, auth_headers, task_id, "rejected")
-    await _move(app, auth_headers, task_id, "pending", "rejected")
-    await _settle()
-
-    assert len(await _queued()) == 1
-    assert scheduled == [("proj-test", "planner")]
-
-
-@pytest.mark.asyncio
-async def test_a_slice_with_no_open_task_queues_at_approval(app, auth_headers, planner, scheduled):
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path, task_id = await _closed_slice(app, auth_headers, planner, roadmap_path)
-
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-
-    assert approved.status_code == 200, approved.text
-    assert approved.json()["next_slice"] == {"state": "queued", "slice": "s2", "agent": "planner"}
-    entries = await _queued()
-    assert len(entries) == 1
-    assert f"`{task_id}`" in entries[0].content and ": rejected" in entries[0].content
-    assert entries[0].spec_document == roadmap_path
-    assert scheduled == [("proj-test", "planner")]
-
-
-@pytest.mark.asyncio
-async def test_the_next_slice_goes_to_the_slice_author_in_its_creating_conversation(
-    app, auth_headers, planner, scheduled
-):
-    """The roadmap's author and the slice's author may differ; the slice's is asked."""
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    other = await _run(
-        "run-other", "aw_run_other-secret", agent="drafter", conversation_id="conv-d"
-    )
-    slice_path = await _proposed_slice(app, auth_headers, other, roadmap_path)
-
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-    assert approved.json()["next_slice"]["agent"] == "drafter"
-    (task_id,) = approved.json()["tasks_created"]
-    await _move(app, auth_headers, task_id, "rejected")
-    await _settle()
-
-    entries = await _queued("drafter")
-    assert [e.conversation_id for e in entries] == ["conv-d"]
-    assert await _queued("planner") == []
-
-
-@pytest.mark.asyncio
-async def test_the_last_slice_queues_nothing(app, auth_headers, planner, scheduled):
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path, key="s2")
-
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-
-    assert approved.status_code == 200, approved.text
-    assert approved.json()["next_slice"] == {"state": "last_slice", "slice": None, "agent": None}
-    (task_id,) = approved.json()["tasks_created"]
-    await _move(app, auth_headers, task_id, "rejected")
-    await _settle()
-    assert await _queued() == []
-    assert scheduled == []
-
-
-@pytest.mark.asyncio
-async def test_a_slice_the_operator_created_has_no_author_to_ask(
-    app, auth_headers, planner, scheduled
-):
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = "spec/changes/operator-slice/spec.json"
-    created = await app.post(
-        f"{BASE}/documents", json={"path": slice_path, "title": "Slice one"}, headers=auth_headers
-    )
-    assert created.status_code == 201, created.text
-    saved = await _agent_submit(
-        app, planner, slice_path, _slice_doc(roadmap={"document": roadmap_path, "slice": "s1"})
-    )
-    assert saved.status_code == 200, saved.text
-    assert (await _propose(app, auth_headers, slice_path))["phase"] == "proposed"
-
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-
-    assert approved.status_code == 200, approved.text
-    assert approved.json()["next_slice"]["state"] == "no_author"
-    (task_id,) = approved.json()["tasks_created"]
-    await _move(app, auth_headers, task_id, "rejected")
-    await _settle()
-    assert await _queued() == []
-
-
-@pytest.mark.asyncio
-async def test_not_asking_queues_nothing(app, auth_headers, planner, scheduled):
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
-
-    approved = await _approve(app, auth_headers, slice_path)
-
-    assert approved.status_code == 200, approved.text
-    assert "next_slice" not in approved.json()
-    (task_id,) = approved.json()["tasks_created"]
-    await _move(app, auth_headers, task_id, "rejected")
-    await _settle()
-    assert await _queued() == []
-    assert scheduled == []
-
-
-@pytest.mark.asyncio
-async def test_a_document_that_is_not_a_slice_is_unaffected(app, auth_headers, planner, scheduled):
-    path = await _agent_create(app, planner)
-    assert (await _agent_submit(app, planner, path, _slice_doc(roadmap=None))).status_code == 200
-    assert (await _propose(app, auth_headers, path))["phase"] == "proposed"
-
-    approved = await _approve(app, auth_headers, path, draft_next_slice=True)
-
-    assert approved.status_code == 200, approved.text
-    assert approved.json()["next_slice"] == {"state": "not_a_slice", "slice": None, "agent": None}
-    assert len(approved.json()["tasks_created"]) == 1
-    assert await _queued() == []
 
 
 @pytest.mark.asyncio
@@ -736,74 +510,6 @@ async def test_draft_next_slice_is_refused_off_an_approval(app, auth_headers, pl
         headers=auth_headers,
     )
     assert response.status_code == 400, response.text
-
-
-@pytest.mark.asyncio
-async def test_a_scheduling_failure_leaves_the_approval_standing(
-    app, auth_headers, planner, monkeypatch
-):
-    """What the route returns when scheduling raises: the approval is committed, the entry is
-    durable (the next drain delivers it), and the response still says queued."""
-
-    async def broken(project_id, agent):
-        raise RuntimeError("scheduler is down")
-
-    monkeypatch.setattr(turn_scheduler, "schedule_agent", broken)
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path, _ = await _closed_slice(app, auth_headers, planner, roadmap_path)
-
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-
-    assert approved.status_code == 200, approved.text
-    body = approved.json()
-    assert body["phase"] == "approved"
-    assert body["next_slice"]["state"] == "queued"
-    assert len(await _queued()) == 1
-
-
-@pytest.mark.asyncio
-async def test_a_queueing_failure_leaves_the_approval_standing(
-    app, auth_headers, planner, scheduled, monkeypatch
-):
-    """When the entry itself cannot be written, the approval still stands and says so."""
-
-    def broken_entry(**kwargs):
-        raise ValueError("cannot build the entry")
-
-    monkeypatch.setattr(slice_drafting, "new_entry", broken_entry)
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path, _ = await _closed_slice(app, auth_headers, planner, roadmap_path)
-
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-
-    assert approved.status_code == 200, approved.text
-    assert approved.json()["phase"] == "approved"
-    assert approved.json()["next_slice"]["state"] == "not_queued"
-    assert await _queued() == []
-    assert scheduled == []
-
-
-@pytest.mark.asyncio
-async def test_a_queueing_failure_never_fails_the_task_transition(
-    app, auth_headers, planner, scheduled, monkeypatch
-):
-    """What the task route returns when queueing raises on the last task: the task still closes."""
-    roadmap_path, _ = await _approved_roadmap_doc(app, auth_headers, planner)
-    slice_path = await _proposed_slice(app, auth_headers, planner, roadmap_path)
-    approved = await _approve(app, auth_headers, slice_path, draft_next_slice=True)
-    (task_id,) = approved.json()["tasks_created"]
-
-    def broken_entry(**kwargs):
-        raise ValueError("cannot build the entry")
-
-    monkeypatch.setattr(slice_drafting, "new_entry", broken_entry)
-    await _move(app, auth_headers, task_id, "rejected")
-    await _settle()
-
-    async with async_session_factory() as session:
-        assert (await session.get(Task, task_id)).status == "rejected"
-    assert await _queued() == []
-    assert scheduled == []
 
 
 # 4.1 -- guidance -------------------------------------------------------------------------------
@@ -862,7 +568,7 @@ async def test_an_approved_change_document_keeps_its_duty(app, auth_headers, pla
 
     path = await _agent_create(app, planner)
     assert (await _agent_submit(app, planner, path, _slice_doc(roadmap=None))).status_code == 200
-    assert (await _propose(app, auth_headers, path))["phase"] == "proposed"
+    assert (await _propose(app, auth_headers, path))["blocking"] == []
     assert (await _approve(app, auth_headers, path)).status_code == 200
 
     assert SPEC_PHASE_DUTIES["approved"] in await _context_with_open(path)
@@ -917,21 +623,21 @@ async def test_the_spec_read_names_the_roadmap_slice_for_the_app(app, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_a_submission_says_whether_it_is_ready_to_propose(app, auth_headers, planner):
+async def test_a_submission_says_whether_it_is_ready_to_approve(app, auth_headers, planner):
     """F502. A real agent read `ok: true` beside eight blocking findings and told the operator the
     document was ready. The answer to that question is now a field, not an inference."""
     path = await _agent_create(app, planner, title="Slice one")
     saved = await _agent_submit(app, planner, path, _slice_doc(acceptance_criteria=[]))
     assert saved.status_code == 200, saved.text
     assert saved.json()["blocking"]
-    assert saved.json()["ready_to_propose"] is False
+    assert saved.json()["ready_to_approve"] is False
 
 
 @pytest.mark.asyncio
 async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     app, auth_headers, planner
 ):
-    """The warning rides the submit response; `ready_to_propose` is decided by `blocking` alone."""
+    """The warning rides the submit response; `ready_to_approve` is decided by `blocking` alone."""
     path = await _agent_create(app, planner, title="Slice one")
     tasks = [
         {
@@ -945,7 +651,7 @@ async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
     assert saved.status_code == 200, saved.text
     body = saved.json()
-    assert body["ready_to_propose"] is True
+    assert body["ready_to_approve"] is True
     assert len(body["warnings"]) == 1
     assert "t1" in body["warnings"][0]["message"]
     assert "hub/hub/x.py" in body["warnings"][0]["message"]

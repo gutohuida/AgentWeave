@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, deleteJson, getJson, postJson, putJson } from './client'
+import { ApiError, deleteJson, getJson, patchJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
 import type { KeptWork } from '@/store/specDeletionStore'
@@ -31,8 +31,8 @@ export interface SpecEntry {
 /** Whether the delivery a change-spec document declares can actually be honoured, computed fresh
  *  on every `GET /spec` read rather than stored in the file (design D5,
  *  `a-document-says-how-it-will-be-built-and-approval-starts-it`). Present only for a change-spec
- *  document at `exploring` or `proposed`; absent for every other document, kind or phase, and
- *  absent entirely from a Hub that predates this change (the `:8000` skew). */
+ *  document at `exploring` or `approved` (where Build reads it); absent for every other document,
+ *  kind or phase, and absent entirely from a Hub that predates this change (the `:8000` skew). */
 export interface SpecDeliveryStatus {
   state: 'ok' | 'stale' | 'none' | 'absent'
   agent?: string
@@ -93,13 +93,15 @@ export interface ApprovalDependencyProblem {
   reason: string
 }
 
-/** What approval did about the document's delivery (design D6/D7). `state` is `not_applicable`
- *  for a document that is not a change-spec (only a change declares a delivery), `none` when the
- *  document declared no flow, `not_created` when a flow was declared but could not be made,
- *  `existing` when an unarchived flow already declared the document, and `created` for a new one.
- *  `messages` carries the Hub's own sentences, in the order it returns them. */
+/** What a build did about the document's delivery (design D6/D7; Build since
+ *  `exploring-ends-at-an-approved-plan`). `state` is `not_applicable` for a document that is not a
+ *  change-spec (only a change declares a delivery), `none` when the document declared no flow,
+ *  `not_created` when a flow was declared but could not be made, `existing` when an unarchived flow
+ *  already declared the document, `created` for a new one, and `already_built` when Approve and
+ *  build built nothing because intake recorded the work as built. `messages` carries the Hub's own
+ *  sentences, in the order it returns them. */
 export interface ApprovalFlowOutcome {
-  state: 'created' | 'existing' | 'not_created' | 'none' | 'not_applicable'
+  state: 'created' | 'existing' | 'not_created' | 'none' | 'not_applicable' | 'already_built'
   job_id?: string
   name?: string
   agent?: string
@@ -121,8 +123,112 @@ export interface SpecApprovalOutcome {
   closed_linking_retired?: ApprovalClosedLinkingRetired[]
   no_longer_declared?: ApprovalUndeclaredTask[]
   dependencies_not_honoured: ApprovalDependencyProblem[]
+  /** Only on a report written before approval stopped starting the flow: Build reports it now. */
+  flow?: ApprovalFlowOutcome
+  delivery_agent?: string | null
+  /** Intake recorded the work as already built (`already-built-at-intake`): close its tasks as
+   *  built at these commits instead of building them. */
+  already_built?: SpecAlreadyBuiltOffer
+}
+
+export interface SpecAlreadyBuiltOffer {
+  commits: string[]
+  route: string
+  message: string
+}
+
+/** What the newest Build (or Approve and build) did (`build-is-separate`). */
+export interface SpecBuildOutcome {
   flow: ApprovalFlowOutcome
   delivery_agent?: string | null
+  reviewer?: string | null
+  /** The build it recorded (`a-build-has-a-driver-a-level-and-its-people`); absent from an older
+   *  Hub. `unresolved_builders` names each declared builder that is no open agent. */
+  build?: SpecBuild & {
+    unresolved_builders?: Array<{ task: string; builder: string }>
+    joined?: boolean
+    message?: string
+  }
+}
+
+export type BuildDriver = 'flow' | 'lead' | 'hand'
+export type BuildLevel = 'fast' | 'reviewed' | 'gated'
+export type BuildLanding = 'main' | 'nowhere'
+
+/** One build of a document, as `GET /project/spec` lists them (`builds`, newest first). */
+export interface SpecBuild {
+  id: string
+  state: 'running' | 'stopped' | 'finished'
+  driver: BuildDriver
+  level: BuildLevel
+  builders: string[]
+  reviewers: string[]
+  lead: string | null
+  budget_cap_usd: number | null
+  spent_usd: number | null
+  unpriced_turns: number
+  window_start: string | null
+  window_end: string | null
+  landing: BuildLanding
+  loop_id: string | null
+  stop_reason: string | null
+  created_at: string | null
+  stopped_at: string | null
+}
+
+/** What the operator chooses when they press Build: each left out takes the recommendation. */
+export interface BuildChoices {
+  delivery_agent?: string
+  driver?: BuildDriver
+  level?: BuildLevel
+  builders?: string[]
+  reviewers?: string[]
+  lead?: string
+  budget_cap_usd?: number
+  window_start?: string
+  window_end?: string
+  landing?: BuildLanding
+  task_builders?: Record<string, string>
+}
+
+/** The build the document recommends, with a reason per choice (`recommend-a-build`): what Build
+ *  and Approve and build open with. Absent on a document that declares no delivery. The build's
+ *  settings (driver to task_builders) are absent from an older Hub. */
+export interface SpecRecommendedBuild {
+  mode: 'flow' | 'none'
+  agent: string | null
+  reviewer: string | null
+  tester: string | false | null
+  cron: string
+  stop_when_queue_empties: boolean
+  stop_at: string | null
+  driver?: BuildDriver
+  level?: BuildLevel
+  builders?: string[]
+  reviewers?: string[]
+  lead?: string | null
+  budget_cap_usd?: number | null
+  landing?: BuildLanding
+  /** Each declared task's builder by key, as the document names it (F1046). */
+  task_builders?: Record<string, string | null>
+  reasons: Partial<
+    Record<
+      | 'mode'
+      | 'agent'
+      | 'reviewer'
+      | 'tester'
+      | 'stop'
+      | 'cron'
+      | 'driver'
+      | 'level'
+      | 'builders'
+      | 'reviewers'
+      | 'lead'
+      | 'cap'
+      | 'landing',
+      string
+    >
+  >
 }
 
 /** The roadmap slice a change document specifies (`a-spec-is-written-one-slice-at-a-time`, D7).
@@ -130,23 +236,6 @@ export interface SpecApprovalOutcome {
 export interface SpecRoadmapSlice {
   document: string
   slice: string
-}
-
-/** What an approval asked with `draft_next_slice` did about the next slice (D4, D4a). `waiting` means
- *  the turn is queued once the slice's `open_tasks` close; `queued` means it was queued now (no
- *  linked task was open); the other states say why nothing will be queued. */
-export interface SpecNextSliceOutcome {
-  state:
-    | 'waiting'
-    | 'queued'
-    | 'last_slice'
-    | 'no_author'
-    | 'no_conversation'
-    | 'not_a_slice'
-    | 'not_queued'
-  slice: string | null
-  agent: string | null
-  open_tasks?: number
 }
 
 /** Where an approved or archived change stands on its way into the corpus, computed per read
@@ -234,6 +323,43 @@ export function useAskReconcile() {
   )
 }
 
+/** One task closed as already built: where it was, where it is now, and the evidence recorded. */
+export interface AlreadyBuiltTask {
+  id: string
+  title: string
+  from_status: string
+  status: string
+  evidence: string[]
+}
+
+export interface AlreadyBuiltResult {
+  document: string
+  commits: string[]
+  tasks: AlreadyBuiltTask[]
+}
+
+/** Close every open task of an approved change as already built, against commits on the main
+ *  branch (`every-task-can-always-be-moved-on` FR-5/FR-6). Each task moves to under review with
+ *  evidence awaiting a decision, and is approved once that evidence is accepted. */
+export function useCloseAlreadyBuilt() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path, commits }: { path: string; commits: string[] }) =>
+      postJson<AlreadyBuiltResult>(
+        `/api/v1/projects/${projectId}/project/documents/${path}/close-already-built`,
+        { commits },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+      for (const key of [['specCoverage'], ['specEvidence'], ['task'], ['tasks']]) {
+        queryClient.invalidateQueries({ queryKey: ['project', projectId, ...key] })
+      }
+    },
+  })
+}
+
 export interface SpecDocument {
   path: string
   content: string
@@ -241,7 +367,16 @@ export interface SpecDocument {
   delivery_status?: SpecDeliveryStatus
   fold_state?: SpecFoldState
   approval_outcome?: SpecApprovalOutcome
+  build_outcome?: SpecBuildOutcome
+  recommended_build?: SpecRecommendedBuild
+  /** Every build of this document, newest first (absent from an older Hub). */
+  builds?: SpecBuild[]
+  /** The version of the content this read shows. An approval names it, and is refused when the
+   *  document changed since (`approve-what-was-seen`). */
+  content_version?: string
   roadmap_slice?: SpecRoadmapSlice
+  /** On a roadmap: the change document that specifies each slice, by slice key. */
+  slice_documents?: Record<string, string>
   /** Set only on a retired (archived) capability: why, and the capability that absorbed it (F536). */
   retired?: SpecRetirement
 }
@@ -596,14 +731,8 @@ export function useSpecEvents() {
       // A piece an agent records while a row is open, and a recording run's end (`{run_ended}`,
       // which un-greys a piece held as still being recorded), both arrive here with no path.
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specEvidence'] })
-      // An accepted/rejected proposal, or a fresh one from a gated submission, changes what this
-      // document's pending list looks like — the same broadcast covers all three (accept/reject
-      // routes and submit_spec_document all emit `spec_updated`).
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specProposals'] })
-      // A rigor change arrives here (`set_document_rigor` broadcasts `{path, rigor}`), and so does
-      // a save that retires a requirement — the history, the requirement list and an open
-      // requirement's detail all move with them.
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRigorHistory'] })
+      // A save that retires a requirement arrives here: the requirement list and an open
+      // requirement's detail move with it.
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRequirements'] })
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRequirement'] })
       // A scan or an answer (`{path: null, drift: true}`) moves this document's drift strip.
@@ -653,13 +782,8 @@ export interface SpecDocumentRecord {
   kind: string
   /** The authority on where the document stands. The `aw-spec-status` metadata
    *  inside the file is a copy for whoever reads it, never the source. */
-  phase: 'exploring' | 'proposed' | 'approved' | 'archived' | 'current'
-  /** What happens to work that ignores this document. **Not phase.** Phase asks whether the
-   *  operator agreed to it; rigor asks what the system does about work that does not satisfy it.
-   *  A `gate` document can still be exploring, and an approved one can still be a sketch. */
-  rigor: 'sketch' | 'contract' | 'gate'
-  /** The document as the Hub last wrote it. Sent back on a rigor change so it cannot land on a
-   *  document edited underneath the operator who read it. */
+  phase: 'exploring' | 'approved' | 'archived' | 'current'
+  /** The document as the Hub last wrote it. */
   content_digest: string | null
   explore_closed: boolean
   /** Where a change being explored stands on its journey, and how big the work is
@@ -673,14 +797,18 @@ export interface SpecDocumentRecord {
    *  that predates it. */
   approval_warnings_overridden?: SpecBlockingFinding[]
   /** A tester's amendments to the approved document, and how many the operator has not reviewed
-   *  (`a-tester-drives-the-built-product-and-keeps-the-spec-true`). Absent when there are none. */
-  amendments?: { total: number; unreviewed: number }
+   *  (`a-tester-drives-the-built-product-and-keeps-the-spec-true`), and how many proposals wait
+   *  for the operator (`proposed`, absent from an older Hub). Absent when there are none. */
+  amendments?: { total: number; unreviewed: number; proposed?: number }
+  /** Present while a build of this document is running: how many of the tasks it covers are
+   *  approved (`the-spec-page-redesigned`: the list's 'building now' mark and the picker's progress). */
+  build?: { id: string; done: number; total: number }
   updated_at: string
 }
 
 export type SpecSize = 'fix' | 'small' | 'large'
 
-/** One reason a document cannot be proposed yet, and where to look. */
+/** One reason a document cannot be approved yet, and where to look. */
 export interface SpecBlockingFinding {
   code: string
   where: string
@@ -714,7 +842,7 @@ function useSpecMutation<TArgs, TResult>(
 }
 
 /** Start an exploration. The document exists from this moment, which is what
- *  gives "propose" and "approve" something to refer to.
+ *  gives "check" and "approve" something to refer to.
  *
  *  `path` is optional and normally omitted: the Hub mints a placeholder, because
  *  a document is created before anyone knows what it is about and a path derived
@@ -780,87 +908,126 @@ export function useSaveProjectJourney() {
   })
 }
 
-export function useProposeSpecDocument() {
-  return useSpecMutation<
-    { path: string },
-    SpecDocumentRecord & {
-      blocking: SpecBlockingFinding[]
-      /** Gaps proposal let through; approval will list them again. Absent from an older Hub. */
-      warnings?: SpecBlockingFinding[]
-    }
-  >((projectId, { path }) =>
-    postJson(
-      `/api/v1/projects/${projectId}/project/documents/propose?path=${encodeURIComponent(path)}`,
-    ),
-  )
+/** Check a document's readiness and move nothing (`check-never-moves`): the blocking findings and
+ *  warnings the agent's own save returns, so the agent keeps writing while the operator looks. */
+export function useCheckSpecDocument() {
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path }: { path: string }) =>
+      postJson<
+        SpecDocumentRecord & {
+          blocking: SpecBlockingFinding[]
+          warnings: SpecBlockingFinding[]
+          ready: boolean
+          content_version: string
+        }
+      >(`/api/v1/projects/${projectId}/project/documents/check?path=${encodeURIComponent(path)}`),
+  })
 }
 
-/** Approving, or reopening. There is no agent-facing equivalent of this call. */
-/** Raise or lower how strictly a document is enforced.
- *
- *  There is deliberately no agent-facing equivalent anywhere in this codebase. An agent blocked by
- *  a gate that could lower the document has not been gated. */
-export function useSetSpecRigor() {
+/** What a build route answers: the document, and what the build did. */
+export type SpecBuildResult = SpecDocumentRecord & { build_outcome: SpecBuildOutcome }
+
+/** Build an approved document as its recommended build says (`build-is-separate`), at any time
+ *  after approval. `delivery_agent` replaces a flow delivery's agent for this build (`''`: no flow). */
+export function useBuildSpecDocument() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path, ...choices }: { path: string } & BuildChoices) =>
+      postJson<SpecBuildResult>(
+        `/api/v1/projects/${projectId}/project/documents/build?path=${encodeURIComponent(path)}`,
+        choices,
+      ),
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
+  })
+}
+
+/** Raise a build's cap or move its window; a build its cap or window stopped resumes. */
+export function useUpdateBuild() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...change
+    }: {
+      id: string
+      budget_cap_usd?: number
+      window_start?: string
+      window_end?: string
+    }) => patchJson<SpecBuild>(`/api/v1/projects/${projectId}/project/builds/${id}`, change),
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
+  })
+}
+
+/** Stop a running build: nothing new is handed out, running turns finish. */
+export function useStopBuild() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      postJson<SpecBuild>(`/api/v1/projects/${projectId}/project/builds/${id}/stop`),
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
+  })
+}
+
+/** Approve and build in one action (`approve-and-build`), refused exactly as approving alone is. */
+export function useApproveAndBuildSpecDocument() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: ({
       path,
-      rigor,
-      reason,
-      expectedDigest,
+      content_version,
+      delivery_agent,
+      approve_anyway,
+      ...choices
     }: {
       path: string
-      rigor: string
-      reason?: string
-      expectedDigest?: string | null
-    }) =>
-      postJson<SpecDocumentRecord>(`/api/v1/projects/${projectId}/project/documents/${path}/rigor`, {
-        rigor,
-        reason: reason ?? '',
-        expected_digest: expectedDigest ?? null,
-      }),
-    // What `useSpecMutation` invalidates, plus the history of the path just changed — so the tab
-    // that pressed Confirm does not wait for the `spec_updated` round-trip to see its own change.
-    // Its own `onSuccess`, the way `useSetSpecPhase` has one, so the shared helper and every other
-    // mutation built on it are unchanged.
-    onSuccess: (_record, { path }) => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specRigorHistory', path] })
-    },
-  })
-}
-
-/** One recorded rigor change. `reason` is `''` where none was given — every change the app made
- *  before it asked for one (F429). */
-export interface SpecRigorEvent {
-  id: string
-  from: SpecDocumentRecord['rigor']
-  to: SpecDocumentRecord['rigor']
-  actor_kind: string
-  actor: string
-  reason: string
-  created_at: string
-}
-
-/** Oldest first — the order the route returns (`spec_rigor.history_for`: `created_at, id`). */
-export function useSpecRigorHistory(path: string | null) {
-  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<{ events: SpecRigorEvent[] }>({
-    queryKey: ['project', projectId, 'specRigorHistory', path],
-    queryFn: () =>
-      getJson<{ events: SpecRigorEvent[] }>(
-        `/api/v1/projects/${projectId}/project/documents/${path}/rigor-history`,
+      content_version: string
+      approve_anyway?: boolean
+    } & BuildChoices) =>
+      postJson<
+        SpecDocumentRecord & {
+          approval_outcome?: SpecApprovalOutcome
+          build_outcome: SpecBuildOutcome
+          approval_notes?: SpecBlockingFinding[]
+        }
+      >(
+        `/api/v1/projects/${projectId}/project/documents/approve-and-build?path=${encodeURIComponent(path)}`,
+        {
+          reason: '',
+          content_version,
+          ...(delivery_agent !== undefined ? { delivery_agent } : {}),
+          ...(approve_anyway ? { approve_anyway } : {}),
+          ...choices,
+        },
       ),
-    enabled: isConfigured && !!projectId && !!path,
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
   })
 }
 
-/** One amendment a tester made to an approved document, oldest first from the route. */
+/** A phase move or a build may create tasks and a flow, so the loops and jobs keys are refreshed
+ *  with the documents — or the header would keep offering Build beside the flow just made. */
+function invalidateAfterPhase(queryClient: ReturnType<typeof useQueryClient>, projectId: string | null) {
+  queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+  queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+  queryClient.invalidateQueries({ queryKey: ['project', projectId, 'loops'] })
+  queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] })
+}
+
+/** One amendment to an approved document, oldest first from the route: a tester's, applied at
+ *  once, or an author's or the lead's proposal, which the operator accepts or declines. */
 export interface SpecAmendment {
   id: string
-  op: 'add_task' | 'add_criterion' | 'change_criterion' | 'remove_criterion' | 'cannot_satisfy'
+  op:
+    | 'add_task'
+    | 'add_requirement'
+    | 'add_criterion'
+    | 'change_criterion'
+    | 'remove_criterion'
+    | 'cannot_satisfy'
   target: string
   requirement: string | null
   identifier: string | null
@@ -884,6 +1051,31 @@ export interface SpecAmendment {
   answered_by?: string | null
   /** The report an operator's amendment answers. */
   responds_to?: string | null
+  /** `applied` at once (a tester's), `proposed` and waiting for the operator, `accepted`,
+   *  `declined`, or `stale` (no longer applied when accepted). Absent from an older Hub. */
+  state?: 'applied' | 'proposed' | 'accepted' | 'declined' | 'stale'
+  decided_by?: string | null
+  decided_at?: string | null
+  decided_reason?: string | null
+}
+
+/** The operator accepts a proposed amendment: applied to the document as it stands, or refused
+ *  409 `amendment_stale` naming why. The proposer is told either way. */
+export function useAcceptSpecAmendment() {
+  return useSpecMutation<{ path: string; id: string }, { state: string; task_created: string | null }>(
+    (projectId, { path, id }) =>
+      postJson(`/api/v1/projects/${projectId}/project/documents/${path}/amendments/${id}/accept`, {}),
+  )
+}
+
+/** The operator declines a proposed amendment with a reason the proposer reads. */
+export function useDeclineSpecAmendment() {
+  return useSpecMutation<{ path: string; id: string; reason: string }, { state: string }>(
+    (projectId, { path, id, reason }) =>
+      postJson(`/api/v1/projects/${projectId}/project/documents/${path}/amendments/${id}/decline`, {
+        reason,
+      }),
+  )
 }
 
 export function useSpecAmendments(path: string | null, enabled = true) {
@@ -1021,11 +1213,9 @@ export function useSpecRequirement(identifier: string, path: string) {
   })
 }
 
-/** Approving (or reopening). Approving a change-spec document with a flow delivery may create the
- *  flow (design D6, `a-document-says-how-it-will-be-built-and-approval-starts-it`), so this
- *  invalidates the loops and jobs keys on success too — not just `useSpecMutation`'s
- *  `specDocuments`/`specs` — or the phase bar would keep offering "Start a flow…" beside the flow
- *  approval just made. */
+/** Approving, reopening or archiving. Approval lays the tasks out and starts nothing
+ *  (`approval-is-a-plan`); it names the `content_version` the operator loaded and is refused when
+ *  the document changed since (`approve-what-was-seen`). */
 export function useSetSpecPhase() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()
@@ -1034,8 +1224,7 @@ export function useSetSpecPhase() {
       path,
       to,
       reason,
-      delivery_agent,
-      draft_next_slice,
+      content_version,
       no_capability_change,
       absorbed_by,
       approve_anyway,
@@ -1049,14 +1238,8 @@ export function useSetSpecPhase() {
       /** Retiring a capability (to `archived`): the current capability that absorbed it. Sent only
        *  when chosen, so a Hub without retirement never receives it (F536). */
       absorbed_by?: string
-      /** Sent only for a document whose `GET /spec` named a `roadmap_slice`: a Hub that returns
-       *  that field also accepts this one, and no other Hub is ever sent it (it would 422). */
-      draft_next_slice?: boolean
-      /** Sent only when the operator chose one from the stale-delivery strip (design D5b): an
-       *  agent name, or `''` for "No flow". Omitted otherwise — a bundle with no `delivery_status`
-       *  (the strip never appears without it) must never send this to a Hub that predates it,
-       *  which would 422 an unknown field. */
-      delivery_agent?: string
+      /** With `to: 'approved'` only: the version of the document read the operator approved. */
+      content_version?: string
       /** Approve over the gaps a refused approval listed (409 `approval_warnings`). Sent only on
        *  that resend: a Hub that answers `approval_warnings` is the one that accepts it. */
       approve_anyway?: boolean
@@ -1064,7 +1247,6 @@ export function useSetSpecPhase() {
       postJson<
         SpecDocumentRecord & {
           approval_outcome?: SpecApprovalOutcome
-          next_slice?: SpecNextSliceOutcome
           /** F704: what approval told and did not gate on (an unclaimed roadmap slice). */
           approval_notes?: SpecBlockingFinding[]
         }
@@ -1072,134 +1254,14 @@ export function useSetSpecPhase() {
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
         {
           reason: reason ?? '',
-          ...(delivery_agent !== undefined ? { delivery_agent } : {}),
-          ...(draft_next_slice !== undefined ? { draft_next_slice } : {}),
+          ...(content_version !== undefined ? { content_version } : {}),
           ...(no_capability_change ? { no_capability_change } : {}),
           ...(absorbed_by ? { absorbed_by } : {}),
           ...(approve_anyway ? { approve_anyway } : {}),
         },
       ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'loops'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] })
-    },
+    onSuccess: () => invalidateAfterPhase(queryClient, projectId),
   })
-}
-
-// ---------------------------------------------------------------------------
-// Edit proposals — `contract`/`gate` rigor gates a submission behind one of
-// these instead of writing it (openspec/changes/2026-08-17-authoring-rigor-and-scope).
-// ---------------------------------------------------------------------------
-
-export interface SpecEditProposal {
-  id: string
-  unit_kind: 'requirement' | 'metadata'
-  unit_key: string
-  change_kind: 'add' | 'modify' | 'remove'
-  /** `add` proposals only — the key of the requirement it was submitted immediately after, or
-   *  null for "first". The in-position anchor a brand-new requirement has no existing row to
-   *  carry otherwise. */
-  position_after_key: string | null
-  proposed_payload: Record<string, unknown>
-  previous_payload: Record<string, unknown> | null
-  status: 'pending' | 'accepted' | 'rejected' | 'stale' | 'withdrawn' | 'superseded'
-  /** The document version this was made against. Two identical proposals on different versions
-   *  are not duplicates: the older is refused as stale on accept (`a-pending-proposal-can-be-
-   *  withdrawn`, D4). Absent from a Hub older than the field. */
-  expected_digest?: string | null
-  proposer_actor_kind: string | null
-  proposer_actor_name: string | null
-  created_at: string
-  resolved_at: string | null
-  resolved_by_actor_name: string | null
-  resolution_reason: string
-}
-
-export function useSpecProposals(path: string | null) {
-  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<{ proposals: SpecEditProposal[] }>({
-    queryKey: ['project', projectId, 'specProposals', path],
-    queryFn: () =>
-      getJson<{ proposals: SpecEditProposal[] }>(
-        `/api/v1/projects/${projectId}/project/documents/${path}/proposals`,
-      ),
-    enabled: isConfigured && !!projectId && !!path,
-  })
-}
-
-/** Every decided proposal for a document, newest decision first (slice remaining-hidden-data).
- *  Under the same key prefix as the pending list, so every decision refreshes it too. A Hub older
- *  than `?status=` ignores it and answers pending ones; those are filtered out here, never shown
- *  as decided. */
-export function useSpecResolvedProposals(path: string | null) {
-  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<{ proposals: SpecEditProposal[] }>({
-    queryKey: ['project', projectId, 'specProposals', path, 'resolved'],
-    queryFn: async () => {
-      const body = await getJson<{ proposals: SpecEditProposal[] }>(
-        `/api/v1/projects/${projectId}/project/documents/${path}/proposals?status=resolved`,
-      )
-      return { proposals: body.proposals.filter((proposal) => proposal.status !== 'pending') }
-    },
-    enabled: isConfigured && !!projectId && !!path,
-  })
-}
-
-/** A decision on one proposal. Invalidates the document's proposals **on settled**, not only on
- *  success: an accept refused as stale still moves the row out of `pending`, and the pressing tab
- *  must not wait for the broadcast to drop it (F428, F431; `a-pending-proposal-can-be-withdrawn`
- *  D5). Everything else `useSpecMutation` invalidates, on success, as before. */
-function useProposalDecision<TArgs extends { path: string }, TResult>(
-  call: (projectId: string, args: TArgs) => Promise<TResult>,
-) {
-  const queryClient = useQueryClient()
-  const { selectedProjectId: projectId } = useConfigStore()
-  return useMutation({
-    mutationFn: (args: TArgs) => call(projectId ?? '', args),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
-    },
-    onSettled: (_data, _error, args) => {
-      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specProposals', args.path] })
-    },
-  })
-}
-
-export function useAcceptSpecProposal() {
-  return useProposalDecision<
-    { path: string; proposalId: string; expectedDigest?: string | null },
-    SpecDocumentRecord
-  >((projectId, { path, proposalId, expectedDigest }) =>
-    postJson(
-      `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/accept`,
-      { expected_digest: expectedDigest ?? null },
-    ),
-  )
-}
-
-export function useRejectSpecProposal() {
-  return useProposalDecision<{ path: string; proposalId: string; reason?: string }, unknown>(
-    (projectId, { path, proposalId, reason }) =>
-      postJson(
-        `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/reject`,
-        { reason: reason ?? '' },
-      ),
-  )
-}
-
-/** Take a pending proposal off the list without judging it (D3): for duplicates and proposals
- *  nobody is pursuing. The document is untouched. */
-export function useWithdrawSpecProposal() {
-  return useProposalDecision<{ path: string; proposalId: string; note?: string }, unknown>(
-    (projectId, { path, proposalId, note }) =>
-      postJson(
-        `/api/v1/projects/${projectId}/project/documents/${path}/proposals/${proposalId}/withdraw`,
-        { note: note ?? '' },
-      ),
-  )
 }
 
 // --------------------------------------------------------------------------- the corpus, from the app

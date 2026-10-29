@@ -252,33 +252,6 @@ def test_shall_takes_the_same_tone_as_must():
     assert 'class="aw-modal aw-modal-must"' in html
 
 
-def test_the_rigor_chip_takes_a_tone_for_contract_and_gate_but_not_sketch():
-    """sketch is the default and blocks nothing, so it stays the plain neutral chip; contract
-    and gate mean something happens, so each gets its own tone."""
-    for rigor, expected_class in (
-        ("contract", "aw-chip-rigor-contract"),
-        ("gate", "aw-chip-rigor-gate"),
-    ):
-        html = render_document(
-            _payload(),
-            {},
-            phase="exploring",
-            stored_payload=payload_to_dict(_payload()),
-            rigor=rigor,
-        )
-        assert f'class="aw-chip {expected_class}">{rigor}' in html
-
-    sketch_html = render_document(
-        _payload(),
-        {},
-        phase="exploring",
-        stored_payload=payload_to_dict(_payload()),
-        rigor="sketch",
-    )
-    assert 'class="aw-chip">sketch' in sketch_html
-    assert "aw-chip-rigor-sketch" not in sketch_html
-
-
 def test_the_document_carries_no_navigation_script_of_its_own():
     """The shell injects the bridge into the frame. A second copy here would
     diverge from the one that is actually used."""
@@ -441,12 +414,11 @@ def test_a_document_with_no_identity_block_has_no_retirements():
 
 def test_the_phase_chip_takes_a_tone_per_lifecycle_state():
     """Phase answers "can I rely on this?", so each state reads differently. `approved` and a
-    capability's `current` are settled, `proposed` waits on an operator, `exploring` has not
-    arrived and `archived` has been superseded."""
+    capability's `current` are settled, `exploring` has not arrived and `archived` has been
+    superseded."""
     for phase, expected_class in (
         ("approved", "aw-chip-phase-done"),
         ("current", "aw-chip-phase-done"),
-        ("proposed", "aw-chip-phase-waiting"),
         ("exploring", "aw-chip-phase-quiet"),
         ("archived", "aw-chip-phase-archived"),
     ):
@@ -470,7 +442,7 @@ def test_the_kind_chip_is_never_toned():
 def test_the_phase_tone_is_never_the_accent():
     """The document already spends the accent on links and on MUST. A third meaning would empty
     it of any, so the phase scheme uses the done/warn tones instead."""
-    for phase in ("approved", "current", "proposed", "exploring", "archived"):
+    for phase in ("approved", "current", "exploring", "archived"):
         html = _render(_payload(), phase=phase)
         chip = re.search(r'class="aw-chip aw-chip-phase-[a-z]+"', html)
         assert chip is not None
@@ -478,7 +450,7 @@ def test_the_phase_tone_is_never_the_accent():
 
 
 def test_an_unresolved_question_is_toned_and_a_resolved_one_is_not():
-    """An unresolved question blocks propose, so it is a state and not a label."""
+    """An unresolved question warns at approval, so it is a state and not a label."""
     payload = _payload(
         open_questions=[
             {"question": "Still deciding?", "resolved": False},
@@ -606,14 +578,19 @@ def _rich_payload():
 # `satisfies` refs as chips, link/task/nav hover states, one off-scale radius corrected) plus the
 # `data-group` attribute those bands are keyed on. No `corpus` argument was passed and the
 # None-branch still renders no region.
-_BASELINE_DIGEST = "b619291e8bad8c6a7c3a916bcccc9f57ef8c06b242e07ea0eb91414de23c428c"
+# Recaptured 2026-10-27 the same way (`exploring-ends-at-an-approved-plan`): the diff against
+# 1f02d86 is confined to the stylesheet — the retired `proposed` phase's `.aw-chip-phase-waiting`
+# rule and the two comments that named proposing. No `corpus` argument, no payload field.
+# Recaptured 2026-10-27 again (`amendments-main-watch-and-the-next-slice`, rigor retires): the
+# delta is the removed `aw-spec-rigor` meta, the rigor chip and its two `.aw-chip-rigor-*` rules.
+_BASELINE_DIGEST = "49a2360730525852564f6710f0c7bd9e8f36a07ad58fa26508bf0e6f6449e6af"
 
 
 def test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte():
     payload = _rich_payload()
     identifiers, _ = mint(["alpha"])
     html = render_document(
-        payload, identifiers, phase="current", stored_payload=payload_to_dict(payload), rigor="gate"
+        payload, identifiers, phase="current", stored_payload=payload_to_dict(payload)
     )
     assert hashlib.sha256(html.encode("utf-8")).hexdigest() == _BASELINE_DIGEST
 
@@ -621,7 +598,7 @@ def test_omitting_corpus_reproduces_the_pre_change_output_byte_for_byte():
 def test_explicit_corpus_none_is_identical_to_omitting_it():
     payload = _rich_payload()
     identifiers, _ = mint(["alpha"])
-    kwargs = {"phase": "current", "stored_payload": payload_to_dict(payload), "rigor": "gate"}
+    kwargs = {"phase": "current", "stored_payload": payload_to_dict(payload)}
     omitted = render_document(payload, identifiers, **kwargs)
     explicit = render_document(payload, identifiers, corpus=None, **kwargs)
     assert omitted == explicit
@@ -642,7 +619,6 @@ def _render_with_corpus(corpus):
         identifiers,
         phase="current",
         stored_payload=payload_to_dict(payload),
-        rigor="gate",
         corpus=corpus,
     )
 

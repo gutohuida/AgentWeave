@@ -144,7 +144,7 @@ async def mender_land_task(
     checks they run first on the commit merged onto the main branch, and a failure refuses with
     their results for the mender to take to the operator. Without, it retries the merge.
     """
-    from ... import project_checks, project_workspace
+    from ... import project_checks, project_workspace, task_integration
     from ...task_transition_service import (
         ResolutionRefusedError,
         land_resolution,
@@ -181,18 +181,49 @@ async def mender_land_task(
                     },
                 )
         try:
-            results = await land_resolution(session, task, who, commit)
+            landing = await land_resolution(session, task, who, commit)
         except ResolutionRefusedError as exc:
             await session.rollback()
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     else:
-        results = await retry_integration(session, task, who)
+        landing = await retry_integration(session, task, who)
+    landing_id = landing.id
     await session.commit()
+    # Through the landing queue, as every merge into main is: merged now without checks, in the
+    # next batch with them (`approved-work-merges-in-batches`).
+    from ... import landing_queue
+    from ...db.models import TaskIntegration, TaskLanding
+
+    await landing_queue.settle(actor.project_id)
+    landed = await session.get(TaskLanding, landing_id)
+    await session.refresh(landed)
+    results = []
+    if landed.state not in landing_queue.OPEN:
+        from sqlalchemy import select
+
+        results = list(
+            (
+                await session.execute(
+                    select(TaskIntegration)
+                    .where(
+                        TaskIntegration.task_id == task.id,
+                        TaskIntegration.created_at >= landed.created_at,
+                    )
+                    .order_by(TaskIntegration.created_at)
+                )
+            ).scalars()
+        )
+    if any(r.outcome == task_integration.MERGED for r in results):
+        # The mend landed: its scratch checkout has done its work. A refusal above, or a merge that
+        # failed again, keeps it for the mender's next attempt; a stall that ends removes it too
+        # (`stalls.end`), so an abandoned mend leaves nothing either.
+        await stalls.release_mend_checkout(session, actor.project_id, task.id)
     payload = {"task_id": task.id, "agent": actor.agent, "commit": body.commit}
     await persist_event(session, actor.project_id, "mender_landed", payload, agent=actor.agent)
     await sse_manager.broadcast(actor.project_id, "task_integration_retried", payload)
     return {
         "task_id": task.id,
+        "landing": landed.state,
         "results": [
             {"outcome": r.outcome, "reason": r.reason, "commit_sha": r.commit_sha} for r in results
         ],
@@ -280,6 +311,7 @@ async def _hand_to_review(
     refused dispatch leaves the task as it was. The dispatch's own read-only refusals are asked
     first, so the mender is answered now rather than by a turn that never starts.
     """
+    from ... import project_checks
     from ...conversations import inherit_runtime_overrides, name_conversation, new_conversation
     from ...inbound_queue import new_entry
     from ...task_integration import review_target
@@ -289,6 +321,19 @@ async def _hand_to_review(
     refusal = await review_dispatch_refusal(session, task, reviewer=reviewer)
     if refusal is not None:
         raise HTTPException(status_code=refusal[0], detail=refusal[1])
+    # The review waits for the project's checks, here as in a flow and for an agent
+    # (`checks-run-before-anyone-reviews`, D8). The dispatch stages the review as the operator, so
+    # `apply_transition`'s gate for agents would not see this hand-off: it is refused here.
+    wait = await project_checks.review_wait(session, task)
+    if wait is not None:
+        if wait.needs_a_run:
+            project_checks.schedule(task.project_id, task.id)
+        elif wait.state == "failed":
+            project_checks.schedule_return(task.id)
+        raise HTTPException(
+            status_code=409,
+            detail=f"{task.id} cannot be handed to a reviewer yet: {wait.reason}.",
+        )
     target = await review_target(session, task)
     if not target.resolved:
         raise HTTPException(status_code=409, detail=target.refusal)

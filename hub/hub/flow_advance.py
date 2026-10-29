@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, Set
+from typing import Any, Dict, Optional, Set
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,9 +103,34 @@ async def _after_run(project_id: str, run_id: str) -> None:
         logger.debug("could not ask for a flow's firing after run %s", run_id, exc_info=True)
 
 
+async def live_job_id(session: AsyncSession, loop_id: Optional[str]) -> Optional[str]:
+    """The job of *loop_id* where it is a live flow -- a loop with a document, not ended or
+    archived, whose job is enabled and not archived -- else `None`. The one test of "live"."""
+    from .db.models import AIJob, Loop
+
+    if not loop_id:
+        return None
+    loop = await session.get(Loop, loop_id)
+    if (
+        loop is None
+        or loop.spec_document_id is None
+        or loop.ending_state is not None
+        or loop.archived_at is not None
+    ):
+        return None
+    job = await session.get(AIJob, loop.job_id)
+    if job is None or not job.enabled or job.archived_at is not None:
+        return None
+    return job.id
+
+
+async def is_live(session: AsyncSession, loop_id: Optional[str]) -> bool:
+    """Whether *loop_id* is a live flow (`live_job_id`)."""
+    return await live_job_id(session, loop_id) is not None
+
+
 async def _advance_soon(loop_id: str) -> None:
     from .db.engine import async_session_factory
-    from .db.models import AIJob, Loop
     from .scheduler import get_scheduler
 
     try:
@@ -116,18 +141,9 @@ async def _advance_soon(loop_id: str) -> None:
         _scheduled.pop(loop_id, None)
     try:
         async with async_session_factory() as session:
-            loop = await session.get(Loop, loop_id)
-            if (
-                loop is None
-                or loop.spec_document_id is None
-                or loop.ending_state is not None
-                or loop.archived_at is not None
-            ):
+            job_id = await live_job_id(session, loop_id)
+            if job_id is None:
                 return
-            job = await session.get(AIJob, loop.job_id)
-            if job is None or not job.enabled or job.archived_at is not None:
-                return
-            job_id = job.id
         scheduler = get_scheduler()
         if scheduler is None:
             return

@@ -97,8 +97,10 @@ async def test_a_fact_drawn_again_from_the_same_lines_keeps_its_id_and_record(
     assert distilled.status_code == 202, distilled.text
     second = _facts(folder)
     assert refund in second and (folder / f"{refund}.json").read_bytes() == before
-    assert returns not in second
-    assert len(second) == 3
+    # Not drawn again: superseded, kept in the vault with its claim (D6), never deleted.
+    assert second[returns]["superseded_at"] and second[returns]["claim"] == first[returns]["claim"]
+    assert "superseded_at" not in second[refund]
+    assert len(second) == 4
 
 
 @pytest.mark.asyncio

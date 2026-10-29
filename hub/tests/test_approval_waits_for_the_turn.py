@@ -30,8 +30,6 @@ from hub.db.models import Agent, EvidenceFootprint, Run, Task
 from .test_loop_lands_its_work import commit_on_task_branch, loop_task, make_loop
 from .test_task_integration import (
     AGENT_BRANCH,
-    BASE,
-    PATH,
     TASKS,
     accept_evidence,
     approve,
@@ -417,10 +415,10 @@ async def test_rigor_does_not_exempt_the_refusal(app, auth_headers, turn, tmp_pa
     assert sketch["blocking"] == [], "a sketch document enforces nothing — this is the live turn"
     assert sketch["unfinished"] and sketch["unfinished"][0]["agent"] == "builder"
 
-    raised = await app.post(
-        f"{BASE}/documents/{PATH}/rigor", json={"rigor": "gate"}, headers=auth_headers
-    )
-    assert raised.status_code == 200, raised.text
+    # Document rigor retired: the gate is the task's level (Gated).
+    async with async_session_factory() as session:
+        (await session.get(Task, task)).level = "gated"
+        await session.commit()
 
     refused_again = await app.patch(
         f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers

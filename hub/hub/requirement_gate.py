@@ -130,6 +130,19 @@ OPERATOR_ON_FAILING_CHECKS = (
 CHECK_TAIL_IN_MESSAGE = 1500
 NEWLINE = chr(10)
 
+#: K: what a `blocking` entry says of a requirement whose only current evidence a send-back held.
+#: Not a coverage state (coverage reads it `in_progress`, reason `HELD_ONLY`); named here so the
+#: refusal says what happened rather than "no evidence".
+HELD = "held"
+REMEDY_HELD = (
+    "its evidence was held when the task was sent back, and a held piece is not accepted -- the "
+    "author records it again at the new commit, for the next verdict to judge"
+)
+REVIEWER_SENDS_BACK_HELD = (
+    "If you are reviewing this task, recording held evidence again is its author's work, not "
+    "yours: move the task to revision_needed with notes naming the requirement."
+)
+
 #: The rejected refusal's remedy is the author's; a reviewer who meets it has its own move (F497).
 REVIEWER_SENDS_BACK_REJECTED = (
     "If you are reviewing this task, replacing rejected evidence is its author's work, not yours: "
@@ -183,9 +196,18 @@ class GateRefusal:
     # would merge. A seventh kind of claim: "approving records this work as good and lands none of
     # it". One entry, naming the branch and the commits.
     unlanded: List[Dict[str, Any]] = field(default_factory=list)
+    # Accepted evidence this task recorded for a requirement it is not linked to, naming a commit
+    # that is among the `unlanded` ones: approval merges only what a linked requirement's evidence
+    # names, so the remedy is the link, not new evidence (`every-task-can-always-be-moved-on` FR-11).
+    unlinked: List[Dict[str, Any]] = field(default_factory=list)
     # Set when the operator's stated reason cleared a failed or errored check result; the caller
     # records the reason on the transition.
     checks_overridden: bool = False
+    # Set where every failure of the checks is provably not the task's -- the same test ids fail on
+    # main too, or passed when rerun on their own -- and the project lets the Hub override them
+    # (`a-red-main-does-not-hold-the-night`, D3): the approval lands, and the caller records the
+    # Hub's override on the transition. Never a refusal: absent from `refuses`.
+    automatic_override: Optional[Dict[str, Any]] = None
     # F695: an approved prerequisite's commit the task's branch does not contain -- its merge
     # conflicted and was left for the author. A seventh kind of claim: "this is missing work it
     # was built on". See `_check_prerequisites_merged`.
@@ -194,6 +216,14 @@ class GateRefusal:
     # work merges is *unknown* -- an eighth kind of claim, and not "not checked, approve". One
     # entry, carrying git's own words.
     git_unreadable: List[Dict[str, str]] = field(default_factory=list)
+    # What approval would merge, as the gate resolved it (`task_integration.Target`s), or `None`
+    # where the question could not be asked (no main branch, no repository). Not a refusal: the
+    # approval freezes these on its landing (`approved-work-merges-in-batches`, D3).
+    will_merge: Optional[List[Any]] = None
+    # Whether the task's per-task check run failed with a failure of its own on these targets and
+    # the operator overrode it: that task lands alone, unchecked (`approved-work-merges-in-batches`,
+    # D2).
+    overrode_own_failure: bool = False
 
     @property
     def refuses(self) -> bool:
@@ -224,6 +254,7 @@ class GateRefusal:
                 self._unverified_detail(),
                 self._merge_detail(),
                 self._unaccepted_detail(),
+                self._unlinked_detail(),
                 self._unlanded_detail(),
                 self._unfinished_detail(),
                 self._checks_detail(),
@@ -245,31 +276,42 @@ class GateRefusal:
         if not parts:
             return ""
         rejected = any(entry["state"] == requirement_coverage.REJECTED for entry in self.blocking)
+        held = any(entry["state"] == HELD for entry in self.blocking)
         # F701: lowering the rigor relieves only what a gate enforces. A rejection blocks at every
         # rigor (D2), `sketch` included, so where every entry is a rejection the offer cannot work.
+        # So does held evidence (K).
         relievable = self.diagnostics or any(
-            entry["state"] != requirement_coverage.REJECTED for entry in self.blocking
+            entry["state"] not in (requirement_coverage.REJECTED, HELD) for entry in self.blocking
         )
         if relievable:
             sentence = (
                 "This task serves requirements a gate is enforcing, and they are not verified: "
                 + "; ".join(parts)
-                + ". Satisfy them, or lower the document's rigor — which is recorded"
+                + ". Satisfy them, or build the task at a level that does not gate them"
                 + (
-                    ", though a rejected requirement blocks approval at every rigor."
+                    ", though a rejected requirement blocks approval at every level."
                     if rejected
-                    else "."
+                    else ", though held evidence blocks approval at every level." if held else "."
                 )
             )
-        else:
+        elif not held:
             sentence = (
                 "This task serves requirements that were rejected: "
                 + "; ".join(parts)
-                + ". A rejected requirement blocks approval at every rigor, so lowering the "
-                "document's rigor does not clear it."
+                + ". A rejected requirement blocks approval at every level, so a lower "
+                "level does not clear it."
+            )
+        else:
+            sentence = (
+                "This task serves requirements whose evidence was rejected or held: "
+                + "; ".join(parts)
+                + ". Both block approval at every level, so a lower level does "
+                "not clear them."
             )
         if rejected:
             sentence += " " + REVIEWER_SENDS_BACK_REJECTED
+        if held:
+            sentence += " " + REVIEWER_SENDS_BACK_HELD
         return sentence
 
     def _merge_detail(self) -> str:
@@ -417,6 +459,22 @@ class GateRefusal:
             f"only accepted evidence is merged. To land it, {ACCEPT_OR_GRANT}."
         )
 
+    def _unlinked_detail(self) -> str:
+        """Each unserved requirement by name, and the link that clears it."""
+        if not self.unlinked:
+            return ""
+        pieces = [
+            f"{entry.get('identifier') or 'a requirement'} at "
+            f"{str(entry.get('commit_sha') or '')[:12] or 'an unnamed commit'}"
+            for entry in self.unlinked
+        ]
+        return (
+            "This task has accepted evidence that approving would not merge, because the task is "
+            "not linked to the requirement it demonstrates: "
+            + "; ".join(pieces)
+            + ". Link the requirement to the task and approve again."
+        )
+
     def _unlanded_detail(self) -> str:
         """Name the branch and its commits, say why approving would leave them, and what clears it.
 
@@ -431,7 +489,9 @@ class GateRefusal:
         # F772: where every one of these commits is named by a piece awaiting judgement, the author
         # has recorded exactly what is asked for here, and accepting it (the `unaccepted` sentence)
         # is the whole remedy. Asking them to record it again sends them after what exists.
-        awaiting = {str(piece.get("commit_sha") or "") for piece in self.unaccepted} - {""}
+        awaiting = {
+            str(piece.get("commit_sha") or "") for piece in [*self.unaccepted, *self.unlinked]
+        } - {""}
         commits = [str(sha) for sha in entry.get("commits") or [] if sha]
         if commits and all(sha in awaiting for sha in commits):
             return ""
@@ -576,6 +636,7 @@ class GateRefusal:
             "unmergeable": list(self.unmergeable),
             "unaccepted": list(self.unaccepted),
             "unlanded": list(self.unlanded),
+            "unlinked": list(self.unlinked),
             "unfinished": list(self.unfinished),
             "reported": list(self.reported),
             "unmerged_prerequisites": list(self.unmerged_prerequisites),
@@ -611,12 +672,21 @@ async def _enforced_requirements(
     """
     if rows is None:
         rows = await _linked_requirements(session, task)
+    # A task is governed by its level's rule (`a-build-has-a-driver-a-level-and-its-people`, D1):
+    # Fast as `sketch`, Reviewed as `contract`, Gated as `gate`. Document rigor retired
+    # (`amendments-main-watch-and-the-next-slice`, D3): a task with no level -- outside any build,
+    # unless the retirement's migration recorded one for it -- is judged by `sketch`'s rule.
+    from .builds import rigor_for_level
+
+    by_level = rigor_for_level(task.level)
+
+    def rule(document) -> str:
+        return by_level or spec_rigor.SKETCH
+
     enforced = [
-        requirement
-        for requirement, document in rows
-        if (document.rigor or spec_rigor.SKETCH) != spec_rigor.SKETCH
+        requirement for requirement, document in rows if rule(document) != spec_rigor.SKETCH
     ]
-    rigors = {document.id: (document.rigor or spec_rigor.SKETCH) for _, document in rows}
+    rigors = {document.id: rule(document) for _, document in rows}
     return enforced, rigors
 
 
@@ -854,7 +924,9 @@ def _merges_something_new(situation: _MergeSituation) -> bool:
     )
 
 
-async def _check_unlanded(task: Task, refusal: GateRefusal, situation: _MergeSituation) -> None:
+async def _check_unlanded(
+    session: AsyncSession, task: Task, refusal: GateRefusal, situation: _MergeSituation
+) -> None:
     """Refuse where the task's own branch holds commits approval would leave behind (F681).
 
     Rigor-independent, as `_check_mergeable` is: this is not a claim that the work is unproven but
@@ -876,6 +948,49 @@ async def _check_unlanded(task: Task, refusal: GateRefusal, situation: _MergeSit
     refusal.unlanded.append(
         {"branch": branch, "target_branch": situation.main_branch, "commits": commits}
     )
+    await _check_unlinked(session, task, refusal, commits)
+
+
+async def _check_unlinked(
+    session: AsyncSession, task: Task, refusal: GateRefusal, commits: List[str]
+) -> None:
+    """Name the accepted evidence this task recorded for a requirement it does not serve.
+
+    Asked only once commits are left behind: it is the cause of that, where the evidence naming
+    them exists and is accepted but reaches no link. Evidence recorded since
+    `_serve_requirement_of_own_document` is linked as it is recorded; this is for what predates it.
+    """
+    from .db.models import EvidenceFootprint, RequirementEvidence
+
+    rows = (
+        await session.execute(
+            select(RequirementEvidence, EvidenceFootprint.commit_sha, SpecRequirement.identifier)
+            .join(EvidenceFootprint, EvidenceFootprint.evidence_id == RequirementEvidence.id)
+            .join(SpecRequirement, SpecRequirement.id == RequirementEvidence.requirement_id)
+            .where(
+                RequirementEvidence.task_id == task.id,
+                RequirementEvidence.review_state == "accepted",
+                EvidenceFootprint.kind == "git",
+                EvidenceFootprint.commit_sha.in_(commits),
+                ~RequirementEvidence.requirement_id.in_(
+                    select(TaskRequirementLink.requirement_id).where(
+                        TaskRequirementLink.task_id == task.id
+                    )
+                ),
+            )
+            .order_by(EvidenceFootprint.observed_at.asc())
+        )
+    ).all()
+    for evidence, commit_sha, identifier in rows:
+        refusal.unlinked.append(
+            {
+                "evidence_id": evidence.id,
+                "requirement_id": evidence.requirement_id,
+                "identifier": identifier,
+                "commit_sha": commit_sha,
+                "remedy": f"link {identifier} to the task",
+            }
+        )
 
 
 async def _check_prerequisites_merged(
@@ -985,15 +1100,24 @@ async def _coverage_by_document(
 def _rejected_entries(
     by_document: Dict[str, List[SpecRequirement]],
     reports: Dict[str, requirement_coverage.CoverageReport],
+    *,
+    held: bool = False,
 ) -> List[Any]:
-    """The coverage entries of the task's requirements that are `rejected` -- D2's refusal."""
+    """The coverage entries of the task's requirements that are `rejected` -- D2's refusal -- or,
+    with *held*, whose only current evidence was held by a send-back (K)."""
+
+    def refused(entry) -> bool:
+        if held:
+            return entry.reason == requirement_coverage.HELD_ONLY
+        return entry.state == requirement_coverage.REJECTED
+
     rejected: List[Any] = []
     for document_id, requirements in by_document.items():
         wanted_ids = {requirement.id for requirement in requirements}
         rejected.extend(
             entry
             for entry in reports[document_id].requirements
-            if entry.requirement_id in wanted_ids and entry.state == requirement_coverage.REJECTED
+            if entry.requirement_id in wanted_ids and refused(entry)
         )
     return rejected
 
@@ -1009,64 +1133,167 @@ async def rejected_identifiers(session: AsyncSession, task: Task) -> List[str]:
     return [entry.identifier or "a requirement" for entry in entries]
 
 
+async def held_identifiers(session: AsyncSession, task: Task) -> List[str]:
+    """The requirements this task serves whose only current evidence a send-back held (K): each
+    refuses `approved` at every rigor too, until its author records it again. Beside
+    `rejected_identifiers`, so the review briefing names everything `evaluate` will refuse."""
+    rows = await _linked_requirements(session, task)
+    if not rows:
+        return []
+    entries = _rejected_entries(*await _coverage_by_document(session, task, rows), held=True)
+    return [entry.identifier or "a requirement" for entry in entries]
+
+
 async def _check_checks(
     session: AsyncSession,
     task: Task,
     refusal: GateRefusal,
     situation: "_MergeSituation",
     *,
-    start_checks: bool,
     override_checks_reason: Optional[str],
 ) -> None:
-    """The project's checks on the work approval would merge (`approval-runs-the-projects-checks`).
+    """The task's own check result on the work approval would merge.
 
-    Reads the recorded result and never runs a check. Only a caller that is approving
-    (*start_checks*) may schedule a run, in the background, for a result that is missing, stale or
-    interrupted (D5); every other caller of the gate reads only.
+    `approved-work-merges-in-batches` (D2, D6): the landing gate is the batch's one check run on
+    main with the queued work merged, so approval no longer waits for a per-task result. A missing,
+    running, errored, interrupted or stale result refuses nothing and starts nothing, and a pass on
+    any earlier main tip counts. What still refuses is the task's own confirmed failure on these
+    same merge targets, whatever main tip it ran on. A failure main shares, or a flake, refuses
+    nothing either: the batch applies slice M's rule to it. Reads only; never runs a check.
+
+    The operator's reason over a failed result lands that task alone, unchecked
+    (`overrode_own_failure`), as approving over failing checks always has.
     """
     from . import project_checks
 
     targets = [target.commit_sha for target in situation.will_merge]
     view = await project_checks.view(session, task, situation.root, situation.main_branch, targets)
-    if view is None or view.state == "passed":
+    if view is None:
         return
     run = view.run
-    if view.state in ("failed", "error") and (override_checks_reason or "").strip():
-        refusal.checks_overridden = True
+    if view.state == "passed":
+        # A pass that holds a flake of a named test still lands, as before; it is recorded as the
+        # Hub's override naming the test (`flake-recorded-on-approval`).
+        refusal.automatic_override = await automatic_override(session, task, view)
         return
-    state = view.state
-    previous_error = ""
-    if state == "error" and start_checks:
-        # F516: an error is the Hub failing to produce a result, not a verdict; approving retries.
-        project_checks.schedule(task.project_id, task.id, targets)
-        state = "running"
-        previous_error = (run.error if run is not None else "") or "an unknown error"
-    elif state in ("missing", "stale", "interrupted"):
-        if refusal.unmergeable:
-            # F613: nothing starts over a conflict, so "they start when approval is requested"
-            # would be false; the conflict is the refusal.
-            return
-        if start_checks:
-            # F680: the targets this transaction resolved, not ones re-read from committed state.
-            project_checks.schedule(task.project_id, task.id, targets)
-            state = "running"
-        else:
-            state = "not_run"
-    results = list(run.results or []) if run is not None and view.state == "failed" else []
+    failed_here = view.state == "failed"
+    if not failed_here and run is not None and run.state == "failed" and view.state == "stale":
+        # A verdict on these same targets from an earlier main tip still says what the work does.
+        tip = await asyncio.to_thread(
+            project_checks.main_tip, situation.root, situation.main_branch
+        )
+        if tip is not None:
+            now = await asyncio.to_thread(project_checks.unmerged, situation.root, tip, targets)
+            failed_here = bool(now) and list(run.target_shas or []) == list(now)
+    if not failed_here or run is None:
+        return
+    if (override_checks_reason or "").strip():
+        refusal.checks_overridden = True  # the operator's typed reason wins over the Hub's
+        refusal.overrode_own_failure = True
+        return
+    if not project_checks.own_failure(run.results):
+        # Main's failure or a flake: the Hub's override where M allows it (recorded on the
+        # approval, as before); otherwise the batch holds the landing for the operator.
+        refusal.automatic_override = await automatic_override(session, task, view)
+        return
+    results = list(run.results or [])
     failing = [r for r in results if project_checks.failed(r)]
-    if failing and all(project_checks.preexisting(r) for r in failing):
-        # F605 (fix-D13): main fails the same checks, so this is not the task's; the operator's.
-        state = "preexisting"
     refusal.checks.append(
         {
-            "state": state,
-            "run_id": (
-                run.id if run is not None and view.state in ("failed", "error", "running") else None
-            ),
+            "state": "failed",
+            "run_id": run.id,
             "failing": failing,
-            "error": run.error if run is not None and view.state == "error" else "",
-            "previous_error": previous_error,
+            "error": "",
+            "previous_error": "",
         }
+    )
+
+
+async def automatic_override_allowed(session: AsyncSession, task: Task) -> bool:
+    """Whether the Hub may land *task* over failures that are not its own, and file their fix task
+    (`a-red-main-does-not-hold-the-night`, FR-5): the project's `checks_auto_override`, on by
+    default. **The one place this policy is asked**: slice D adds its per-level rule here
+    (`builds.allows_automatic_override(level)`, never at Gated). Never raises."""
+    from .builds import allows_automatic_override
+    from .db.models import Project
+
+    # A task in a Gated build is never landed over its checks by the Hub: the operator chose Gated
+    # to judge every landing (`a-build-has-a-driver-a-level-and-its-people`, D5).
+    if task.build_id and not allows_automatic_override(task.level):
+        return False
+    try:
+        project = await session.get(Project, task.project_id)
+    except Exception:  # noqa: BLE001 -- no answer is no override
+        logger.warning("could not read the override setting of %s", task.project_id, exc_info=True)
+        return False
+    return project is not None and bool(getattr(project, "checks_auto_override", True))
+
+
+async def automatic_override(
+    session: AsyncSession, task: Task, view: Any
+) -> Optional[Dict[str, Any]]:
+    """The Hub's override for approving *task* over its checks' *view*, or `None` where there is none
+    to make (`a-red-main-does-not-hold-the-night`, D3): every failure and flake must be provably not
+    the task's (`project_checks.not_the_tasks`, which excludes, among others, the ids a Hub-filed
+    fix task was filed for), and the project must allow it (`automatic_override_allowed`).
+
+    `{"run_id", "main_sha", "failures": [{"check", "test", "kind"}], "fix_tasks": {test: task}}`;
+    `override_reason_for` words it for the transition. Reads only."""
+    from . import flaky_tests, project_checks
+    from .db.models import TaskCheckRun
+
+    run = view.run
+    results = view.reused if view.state == "passed" and view.reused is not None else None
+    if results is None:
+        if run is None:
+            return None
+        results = list(run.results or [])
+    if not await automatic_override_allowed(session, task):
+        return None
+    found = project_checks.not_the_tasks(
+        results, excluded=await flaky_tests.filed_for(session, task)
+    )
+    if not found:
+        return None
+    source = run
+    if view.reused is not None and view.state == "passed":
+        # A pass of the same tree reused from another run: that run found the flake.
+        reused_from = next(
+            (r.get("reused_from") for r in results if isinstance(r, dict) and r.get("flaky")),
+            None,
+        )
+        source = await session.get(TaskCheckRun, reused_from) if reused_from else run
+    by_test = await flaky_tests.fix_tasks_by_test(session, task.project_id, open_only=False)
+    return {
+        "run_id": source.id if source is not None else None,
+        "main_sha": source.main_sha if source is not None else None,
+        "failures": found,
+        "fix_tasks": {
+            entry["test"]: by_test[flaky_tests._key(entry["test"])]
+            for entry in found
+            if flaky_tests._key(entry["test"]) in by_test
+        },
+    }
+
+
+def override_reason_for(decided: Dict[str, Any]) -> str:
+    """The `override_reason` the approval transition records for the Hub's override: each check
+    and test id and why it is not the task's, the check run, the main commit and the fix task."""
+    main = str(decided.get("main_sha") or "")[:12] or "the main branch"
+    parts = []
+    for entry in decided.get("failures") or []:
+        why = (
+            f"fails on main at {main} too"
+            if entry["kind"] == "fails on main"
+            else "passed when rerun on its own"
+        )
+        parts.append(f"`{entry['check']}` {entry['test']} {why}")
+    fixes = sorted(set((decided.get("fix_tasks") or {}).values()))
+    fix = f"; fix task {', '.join(fixes)}" if fixes else "; no fix task was filed for them yet"
+    return (
+        "The Hub approved over failures that were not this task's: "
+        + "; ".join(parts)
+        + f" (check run {decided.get('run_id')}, main {main}{fix})."
     )
 
 
@@ -1075,7 +1302,6 @@ async def evaluate(
     task: Task,
     *,
     acting_run_id: Optional[str] = None,
-    start_checks: bool = False,
     override_checks_reason: Optional[str] = None,
 ) -> tuple[GateRefusal, str]:
     """`(refusal, policy_digest)` for moving this task to `approved`.
@@ -1089,8 +1315,8 @@ async def evaluate(
     signature keeps no second surface in step — `task_transition_service.py:555` is the only caller,
     checked rather than assumed.
 
-    *start_checks* is passed only by a caller that is approving (the transition and the land
-    route); *override_checks_reason* only by the operator's approval. See `_check_checks`.
+    *override_checks_reason* is passed only by the operator's approval. No caller starts a check
+    run through the gate (`approved-work-merges-in-batches`, D2). See `_check_checks`.
     """
     refusal = GateRefusal()
     # Both repository-aware checks, and both **above** the early return two statements down. That
@@ -1100,17 +1326,15 @@ async def evaluate(
     if fault is not None:
         refusal.git_unreadable.append({"error": fault})
     if situation is not None:
+        refusal.will_merge = list(situation.will_merge)
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)
-        await _check_unlanded(task, refusal, situation)
+        await _check_unlanded(session, task, refusal, situation)
         await _check_checks(
             session,
             task,
             refusal,
             situation,
-            # F613: work that does not merge cannot be checked; a run started now only errors the
-            # same way. One starts again once the work or main moves.
-            start_checks=start_checks and not refusal.unmergeable,
             override_checks_reason=override_checks_reason,
         )
         await _check_prerequisites_merged(session, task, refusal, situation)
@@ -1135,6 +1359,19 @@ async def evaluate(
                 "requirement_id": entry.requirement_id,
                 "state": entry.state,
                 "remedy": REMEDY[requirement_coverage.REJECTED],
+            }
+        )
+        rejected_requirement_ids.add(entry.requirement_id)
+    # K (`each-piece-of-evidence-is-judged-on-its-own`): a requirement whose only current evidence a
+    # send-back held is refused at every rigor too. Before K that send-back rejected the piece, and
+    # this step refused it; a held piece counts for no more, and needs a new one at the next commit.
+    for entry in _rejected_entries(by_all_document, reports_by_document, held=True):
+        refusal.blocking.append(
+            {
+                "identifier": entry.identifier,
+                "requirement_id": entry.requirement_id,
+                "state": HELD,
+                "remedy": REMEDY_HELD,
             }
         )
         rejected_requirement_ids.add(entry.requirement_id)

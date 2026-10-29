@@ -113,6 +113,10 @@ class Project(Base):
     # where a wrong guess puts work in a branch the operator never chose. The guess survives as a
     # suggestion offered at setup, and takes effect only once someone accepts it.
     main_branch: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # The main tip the main watch last accounted for (`main_watch`, migration 0154). Persisted so a
+    # restart neither loses a move made while the Hub was down nor raises one twice; null until the
+    # first look, which records the tip and raises nothing.
+    main_tip_seen: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     # --- Evidence retention (UNUSED) ---
     # Nothing reads or writes this column. It held a retention policy that no cleaner ever applied;
@@ -125,6 +129,13 @@ class Project(Base):
     # `{"name", "command", "timeout_seconds"}` the Hub runs on the work a task's approval would
     # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
     checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Whether the Hub lands an approval over check failures that are provably not the task's --
+    # the same test ids fail on main too, or passed when rerun on their own -- recording its own
+    # override, and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5, migration
+    # 0151). On by default for new and existing projects; off is the behaviour before that change.
+    checks_auto_override: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one;
@@ -459,6 +470,13 @@ class Conversation(Base):
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     provider_session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    # The CLI (`claude`, `codex`, `copilot`) whose session `provider_session_id` is, or NULL when
+    # that is not known: a session the operator typed, a job's stored id, one an agent reported
+    # about itself, or one that predates the column and no completed run could attribute. A
+    # session is resumed only by the CLI that made it, so a launch compares this with the bound
+    # runner's CLI (`rebinding-an-agents-runner-starts-clean`). Written only with the session id,
+    # through `conversations.set_provider_session`; a ratchet test refuses any other assignment.
+    provider_session_cli: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     lifecycle: Mapped[str] = mapped_column(String(16), default="open", nullable=False)
     # Null until the conversation's first message names it. Nothing may present the id as a
     # label, so every surface that lists a titleless conversation labels it as new instead.
@@ -762,6 +780,14 @@ class Task(Base):
     # in SQLite, and this column sits on an already-live table, so an `ADD COLUMN` migration (`0075`)
     # is the only thing that ever touches it directly.
     loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # Whether this task's approved review is its whole gate and approval merges its branch tip,
+    # whatever its loop declares: set on a fix task the Hub files for failures that were not the
+    # held task's (`a-red-main-does-not-hold-the-night`, migration 0151). Such a task serves no
+    # requirement, so in a flow whose document makes evidence govern it could record no evidence,
+    # had no review target and merged nothing. Never set by an agent.
+    merges_branch_tip: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # What happens when a run bound to this task ends without the task moving.
     #
     # Per task rather than per project because the operator's stated use — a cheap model doing the
@@ -803,6 +829,16 @@ class Task(Base):
     workspace_scheme: Mapped[str] = mapped_column(
         String(16), default="task", server_default="task", nullable=False
     )
+    # --- Built by a build (`a-build-has-a-driver-a-level-and-its-people`, migration 0152) ---
+    # Which build covers this task, and the level it is built at (`builds.LEVELS`), written when
+    # the build starts or when the task joins a running one. Both null for a task outside any
+    # build, which is governed by its document's rigor exactly as before. Not a ForeignKey, for the
+    # SQLite column-drop reason `loop_id` above gives.
+    build_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    level: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # The agent the document (or the operator, in the Build dialog) named to build this task. Kept
+    # when it names no open agent, so the operator sees what was asked for (F1046).
+    builder: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 
@@ -902,6 +938,18 @@ class TaskTransition(Base):
     # Why the operator approved over failing checks (`approval-runs-the-projects-checks` D7). Null
     # on every transition that overrode nothing; only the operator can set it.
     override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Who overrode, where `override_reason` is set: `operator` (their typed reason) or `hub` (the Hub
+    # over failures that were not the task's, `a-red-main-does-not-hold-the-night` D3, migration
+    # 0151). A column of its own, not an actor: the actor stays the approver.
+    override_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Which operator action made this move and against what, where one action makes moves the
+    # operator did not make one by one: closing a document's tasks as already built names itself
+    # and its commits here (`every-task-can-always-be-moved-on` FR-6, migration 0147). Null on every
+    # other move.
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The build level that governed this move (`builds.LEVELS`), on every move of a task in a
+    # build; null for a task outside any build (migration 0152).
+    level: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     # No CHECK on `origin`, matching `actor_kind` beside it, which has none either. Two reasons,
@@ -2344,8 +2392,9 @@ class WorkerInvocation(Base):
 # Phase is the document's state, and it is the Hub's to change. It is stored here rather than in
 # the document because the document is a file the operator can edit, and a gate whose value lives
 # where the gated party can write it is not a gate. `aw-spec-status` in the rendered markup is a
-# copy for a human reading the file, never the authority.
-SPEC_PHASES = ("exploring", "proposed", "approved", "archived", "current")
+# copy for a human reading the file, never the authority. `proposed` was retired by migration 0149
+# (`exploring-ends-at-an-approved-plan`): approval goes straight from `exploring`.
+SPEC_PHASES = ("exploring", "approved", "archived", "current")
 
 # Restated from `spec_payload.KINDS` (this module does not import that one, the same way it does
 # not import `spec_lifecycle`'s phase constants) so the CHECK below can state the vocabulary
@@ -2392,9 +2441,8 @@ class SpecDocument(Base):
     # evidence accepted against the old wording. Kept in the database rather than the file for the
     # same reason as `phase`.
     requirement_digests: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    # What happens to work that ignores this document. Stated in the file as `aw-spec-rigor` for
-    # anyone reading it, and held here because it is a gate and a gate whose value lives where the
-    # gated party can write it is not a gate — the same reasoning as `phase`.
+    # Retired, unread (`amendments-main-watch-and-the-next-slice`, D3, migration 0153): approval's
+    # evidence rule is the task's level. Kept because dropping it is an SQLite table rebuild.
     rigor: Mapped[str] = mapped_column(
         String(16), default="sketch", server_default="sketch", nullable=False
     )
@@ -2885,8 +2933,14 @@ EVIDENCE_KINDS = (
     "external_reference",
 )
 
-EVIDENCE_REVIEW_STATES = ("awaiting", "accepted", "rejected")
+# `held` (`each-piece-of-evidence-is-judged-on-its-own`, migration 0149): a send-back that did not
+# name the piece as failing keeps it at its commit, neither accepted nor rejected.
+EVIDENCE_REVIEW_STATES = ("awaiting", "accepted", "rejected", "held")
+#: What one piece's own decision may be (`decide`, the `decide_evidence` tool). `held` is not one of
+#: them: only a send-back holds a piece, so it is recorded on a review but never asked for.
 EVIDENCE_DECISIONS = ("accepted", "rejected")
+#: What an `evidence_reviews` row may record.
+EVIDENCE_REVIEW_DECISIONS = (*EVIDENCE_DECISIONS, "held")
 
 # `superseded`: the requirement was reworded or retired while the candidate was open
 # (`spec_index._supersede_drift`, F435).
@@ -2992,7 +3046,7 @@ class EvidenceReview(Base):
         PrimaryKeyConstraint("sequence", name="pk_evidence_reviews"),
         UniqueConstraint("id", name="uq_evidence_reviews_id"),
         CheckConstraint(
-            "decision IN ('" + "', '".join(EVIDENCE_DECISIONS) + "')",
+            "decision IN ('" + "', '".join(EVIDENCE_REVIEW_DECISIONS) + "')",
             name="ck_evidence_reviews_decision",
         ),
         CheckConstraint(
@@ -3152,9 +3206,18 @@ class TaskIntegration(Base):
     # or for an outcome that never merged. Not the fix — the fix is an unmade design choice between
     # three shapes — just the truth about what a merge actually wrote, told rather than assumed.
     rode_along_commits: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # The merge commit this integration made (HEAD after `git merge --no-ff`), for a `merged`
+    # outcome only (migration 0154). The main watch recognises the Hub's own moves of main by it,
+    # never by author or message (`main_watch`, D4).
+    merged_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     mechanism: Mapped[str] = mapped_column(String(16), nullable=False, default="local")
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    # The landing batch that merged it, where one did (`approved-work-merges-in-batches`, 0155), and
+    # the override it landed under where its batch's checks failed only as main does (slice M's
+    # rule at batch level). Both null for every merge made before batches, and without checks.
+    batch_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
@@ -3165,6 +3228,34 @@ class TaskIntegration(Base):
         Index("ix_task_integrations_task", "task_id", "created_at"),
         Index("ix_task_integrations_project", "project_id", "created_at"),
     )
+
+
+class MainNotice(Base):
+    """Main moved outside the Hub's own integration (`amendments-main-watch-and-the-next-slice`,
+    migration 0154).
+
+    One open notice per project gathers every raised move until the operator marks it seen
+    (`seen_at`): `old_tip` is the tip last accounted for when it opened, `new_tip` the latest one
+    raised into it, and `commits` lists each commit raised (`{"sha", "subject", "author"}`, newest
+    first per move). `rewrite` is set once any gathered move rewrote history (the old tip no longer
+    an ancestor). Nothing is blocked or reverted because of a notice.
+    """
+
+    __tablename__ = "main_notices"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    branch: Mapped[str] = mapped_column(String(255), nullable=False)
+    old_tip: Mapped[str] = mapped_column(String(64), nullable=False)
+    new_tip: Mapped[str] = mapped_column(String(64), nullable=False)
+    commits: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    rewrite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    seen_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    seen_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+
+    __table_args__ = (Index("ix_main_notices_project", "project_id", "seen_at"),)
 
 
 class TaskCheckRun(Base):
@@ -3203,3 +3294,143 @@ class TaskCheckRun(Base):
         ),
         Index("ix_task_check_runs_task", "task_id", "started_at"),
     )
+
+
+class Build(Base):
+    """One build of an approved document: how it is built, by whom, within what
+    (`a-build-has-a-driver-a-level-and-its-people`, migration 0152).
+
+    The operator's choice when they press Build, recorded so it can be read back, and so the flow,
+    the lead and the mover decision can ask it. One *running* build per document (the partial index
+    below, the precedent `ux_loops_spec_document_live`); a stopped or finished one stays as the
+    record of how the document was built.
+
+    `driver` is who hands out the work: `flow` (the Hub's flow, `loop_id`), `lead` (a lead agent
+    briefed by `loop_id`'s firing) or `hand` (nobody; no loop). `level` is the gate level its tasks
+    are governed at (`builds.LEVELS`). Empty `builders`/`reviewers` mean any free agent, as before.
+    """
+
+    __tablename__ = "builds"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    # Not a ForeignKey, for the SQLite column-drop reason `Task.spec_document_id` gives.
+    document_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(16), default="running", nullable=False)
+    driver: Mapped[str] = mapped_column(String(16), nullable=False)
+    level: Mapped[str] = mapped_column(String(16), nullable=False)
+    builders: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    reviewers: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    lead: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # API-equivalent US dollars, in micros (the unit `turn_usage` records). Null: no cap.
+    budget_cap_usd_micros: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    window_start: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    window_end: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    landing: Mapped[str] = mapped_column(String(16), default="main", nullable=False)
+    loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # The lead's build conversation, where its briefs are queued (driver `lead`).
+    lead_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    stop_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    stopped_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        Index("ix_builds_project", "project_id", "created_at"),
+        Index(
+            "ux_builds_document_running",
+            "document_id",
+            unique=True,
+            sqlite_where=text("state = 'running'"),
+            postgresql_where=text("state = 'running'"),
+        ),
+    )
+
+
+class TaskLanding(Base):
+    """One approved task's work on its way to the main branch (`approved-work-merges-in-batches`,
+    migration 0155).
+
+    Approval records the verdict and queues this row with the merge targets frozen at that moment
+    (`targets`, `task_integration.Target` fields); retrying an integration, landing a mend
+    resolution and accepting evidence afterwards queue one too. `landing_queue` is the one writer
+    that moves main: without checks it lands the row right after the commit that queued it; with
+    checks it lands it in a batch (`LandingBatch`) after one check run. A new attempt is a new row,
+    so the rows are the record of every landing a task had.
+
+    `state`: `queued`, `checking` (in a batch being checked), `landing` (main is being moved for
+    it), `held` (waits on a prerequisite named by `waits_on`, or its batch waits for the operator),
+    `landed`, `not_landed` (the merge was skipped or failed: `reason`, and the integration record),
+    or `sent_back` (its batch's checks or a conflict sent the task back: `reason`).
+    """
+
+    __tablename__ = "task_landings"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), ForeignKey("tasks.id"), nullable=False)
+    # Not a ForeignKey, for the SQLite column-drop reason `Task.spec_document_id` gives.
+    batch_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    # What queued it: `approval`, `retry`, `resolution` or `evidence`.
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="approval")
+    # The frozen merge targets, `[{"commit_sha", "branch", "evidence_id", "requirement_id",
+    # "task_id"}]`; null where approval could not resolve them (no main branch, no repository), so
+    # the landing resolves them itself and records why nothing merged.
+    targets: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Queue order: when it was queued, kept when a batch puts the row back, so it keeps its place.
+    order_key: Mapped[float] = mapped_column(Float, nullable=False)
+    # The operator approved over a failed per-task check: lands alone, ahead of the queue, unchecked.
+    unchecked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    actor_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="operator")
+    actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    waits_on: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    landed_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), default=_now, onupdate=_now, nullable=False
+    )
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        Index("ix_task_landings_project_state", "project_id", "state", "order_key"),
+        Index("ix_task_landings_task", "task_id", "created_at"),
+    )
+
+
+class LandingBatch(Base):
+    """One batch of queued landings, checked once and landed together (migration 0155).
+
+    Built on main's tip `base_sha`: each task's targets merged in queue order with plumbing, each
+    task's last merge commit a prefix (`prefixes`, one per task in `task_ids`). The checks run once
+    on the last prefix (`merged_sha`), and main is fast-forwarded to exactly that commit. A failure
+    of the batch's own is narrowed over the prefixes (`narrowing`); failures main shares follow the
+    automatic override (`override_reason`, `override_by`) or wait for the operator (`held`).
+
+    `state`: `checking`, `held`, `landing` (main is being moved), `landed`, `failed` (a task was
+    sent back and the rest queued again), `superseded` (main moved under it), or `interrupted` (the
+    Hub stopped while it was checked; its tasks are queued again).
+    """
+
+    __tablename__ = "landing_batches"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    base_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="checking")
+    task_ids: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    prefixes: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    merged_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The check run recorded for the batch (a `TaskCheckRun` on its first task), where one ran.
+    check_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    results: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    narrowing: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    override_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    override_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (Index("ix_landing_batches_project", "project_id", "created_at"),)

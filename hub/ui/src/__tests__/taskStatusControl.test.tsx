@@ -154,15 +154,15 @@ describe('the task status control', () => {
       )
     })
 
-    renderCard('completed')
-    const user = await openMenu('completed')
+    renderCard('under_review')
+    const user = await openMenu('under_review')
 
     await waitFor(() => {
-      expect(screen.getByTestId('task-status-menu-task-completed-under_review')).toBeTruthy()
+      expect(screen.getByTestId('task-status-menu-task-under_review-approved')).toBeTruthy()
     })
-    await user.click(screen.getByTestId('task-status-menu-task-completed-under_review'))
+    await user.click(screen.getByTestId('task-status-menu-task-under_review-approved'))
 
-    const refusal = await screen.findByTestId('task-status-refusal-task-completed')
+    const refusal = await screen.findByTestId('task-status-refusal-task-under_review')
     expect(refusal.textContent).toContain('available transitions are: rejected, under_review')
     // Not the raw JSON body, which is what `ApiError.message` would have rendered.
     expect(refusal.textContent).not.toContain('{')

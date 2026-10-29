@@ -4,25 +4,29 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from hub import project_checks
+from hub import landing_queue, project_checks
 from hub.api.v1.tasks import update_task_for_actor
 from hub.db.engine import async_session_factory
 from hub.db.models import Task, TaskCheckRun, TaskTransition
 from hub.requirement_gate import (
     OPERATOR_ON_FAILING_CHECKS,
-    PREEXISTING_CHECKS_HOLD_REMEDY,
     REVIEWER_SENDS_BACK_CHECKS,
     GateRefusal,
-    approval_held_for_operator,
     evaluate,
 )
 from hub.schemas.tasks import TaskUpdate
 from hub.task_transitions import Actor
 
-from .test_project_checks_run import FAIL, MAIN_FAIL, PASS, PY, _project, _runs, _task_with_work
+from .test_project_checks_run import FAIL, MAIN_FAIL, PASS, _project, _runs, _task_with_work
 from .test_task_integration import commit_on_branch, commits_on, git
 
 TASKS = "/api/v1/projects/proj-test/tasks"
+
+
+@pytest.fixture(autouse=True)
+def _no_landing_timers():
+    yield
+    landing_queue.cancel_timers()
 
 
 async def _approve(app, auth_headers, task_id, **extra):
@@ -39,9 +43,21 @@ async def _approve(app, auth_headers, task_id, **extra):
 
 
 async def _checked(task_id, checks):
+    """*task_id*'s checks decided, the task left in the status it had.
+
+    Run while the task is held `under_review`: a run deciding a failure of the task's own on
+    *completed* work returns it to its builder (`checks-run-before-anyone-reviews`, D7), and these
+    tests are about what the approval gate then says about a recorded failure."""
     await _project(checks)
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        status, task.status = task.status, "under_review"
+        await session.commit()
     await project_checks.request_run("proj-test", task_id)
     await project_checks.drain()
+    async with async_session_factory() as session:
+        (await session.get(Task, task_id)).status = status
+        await session.commit()
 
 
 @pytest.mark.asyncio
@@ -71,58 +87,44 @@ async def test_a_passing_check_lets_approval_merge(app, auth_headers, tmp_path):
     approved = await _approve(app, auth_headers, task_id)
 
     assert approved.status_code == 200, approved.text
+    await landing_queue.drain()
     assert work in commits_on(tmp_path, "main")
 
 
 @pytest.mark.asyncio
-async def test_asking_without_a_result_starts_a_run_and_answers_at_once(
-    app, auth_headers, tmp_path, tmp_path_factory
+async def test_asking_without_a_result_queues_the_landing_and_answers_at_once(
+    app, auth_headers, tmp_path
 ):
+    """`approved-work-merges-in-batches` FR-1: no result holds nothing and starts no run; the
+    landing is queued, and the batch's one run is what checks it."""
     task_id, work = await _task_with_work(tmp_path)
-    # A check that cannot finish until the test releases it, after approval has answered: an
-    # approval that ran it inline could only answer once it gave up waiting, as a pass (200), so
-    # the 409 below is the proof, on any machine and under any load -- no wall-clock bound.
-    outside = tmp_path_factory.mktemp("release")
-    release = outside / "go"
-    script = outside / "wait_for_release.py"
-    script.write_text(
-        "import os, time\n"
-        "deadline = time.monotonic() + 300\n"
-        f"while not os.path.exists(r'{release}') and time.monotonic() < deadline:\n"
-        "    time.sleep(0.05)\n",
-        encoding="utf-8",
-    )
-    await _project([{**PASS, "command": f'{PY} "{script}"', "timeout_seconds": 600}])
+    await _project([PASS])
     assert await _runs(task_id) == []
 
-    refused = await _approve(app, auth_headers, task_id)
-    assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"]["checks"][0]["state"] == "running"
-    assert "still running" in refused.json()["detail"]["message"]
-    assert project_checks.is_running(task_id), "the run is in the background, waiting"
-
-    release.write_text("go", encoding="utf-8")
+    approved = await _approve(app, auth_headers, task_id)
+    assert approved.status_code == 200, approved.text
     await project_checks.drain()
-    assert [r.state for r in await _runs(task_id)] == ["passed"]
-    assert (await _approve(app, auth_headers, task_id)).status_code == 200
+    assert await _runs(task_id) == [], "approving started no per-task run"
+    assert work not in commits_on(tmp_path, "main"), "queued, not merged yet"
+
+    await landing_queue.drain()
     assert work in commits_on(tmp_path, "main")
+    assert [r.state for r in await _runs(task_id)] == ["passed"], "the batch's one run"
 
 
 @pytest.mark.asyncio
-async def test_a_result_on_an_older_main_is_stale_and_re_run(app, auth_headers, tmp_path):
+async def test_a_pass_on_an_older_main_counts(app, auth_headers, tmp_path):
+    """FR-9: a pass of the task's work counts on any main tip, and approval re-runs nothing."""
     task_id, _ = await _task_with_work(tmp_path)
     await _checked(task_id, [PASS])
     (tmp_path / "later.txt").write_text("main moved\n", encoding="utf-8")
     git(tmp_path, "add", "later.txt")
     git(tmp_path, "commit", "-q", "-m", "main moves on")
 
-    refused = await _approve(app, auth_headers, task_id)
-    assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"]["checks"][0]["state"] == "running"
+    approved = await _approve(app, auth_headers, task_id)
+    assert approved.status_code == 200, approved.text
     await project_checks.drain()
-    runs = await _runs(task_id)
-    assert [r.state for r in runs] == ["passed", "passed"]
-    assert runs[0].main_sha != runs[1].main_sha
+    assert [r.state for r in await _runs(task_id)] == ["passed"]
 
 
 @pytest.mark.asyncio
@@ -133,8 +135,7 @@ async def test_a_reading_caller_of_the_gate_starts_no_run(app, tmp_path):
     async with async_session_factory() as session:
         refusal, _ = await evaluate(session, await session.get(Task, task_id), acting_run_id=None)
     await project_checks.drain()
-    assert refusal.checks[0]["state"] == "not_run"
-    assert "have not run" in refusal.detail()
+    assert refusal.checks == [], "no result holds nothing"
     assert await _runs(task_id) == []
 
 
@@ -176,7 +177,7 @@ async def test_a_blank_reason_overrides_nothing(app, auth_headers, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_a_running_result_is_not_overridable(app, auth_headers, tmp_path):
+async def test_a_running_result_does_not_hold_approval(app, auth_headers, tmp_path):
     task_id, work = await _task_with_work(tmp_path)
     await _project([PASS])
     async with async_session_factory() as session:
@@ -193,9 +194,9 @@ async def test_a_running_result_is_not_overridable(app, auth_headers, tmp_path):
             )
         )
         await session.commit()
-    refused = await _approve(app, auth_headers, task_id, override_checks_reason="ship it")
-    assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"]["checks"][0]["state"] == "running"
+    approved = await _approve(app, auth_headers, task_id)
+    assert approved.status_code == 200, approved.text
+    assert work not in commits_on(tmp_path, "main"), "queued for its batch"
 
 
 @pytest.mark.asyncio
@@ -253,7 +254,7 @@ async def test_a_reviewer_is_told_the_checks_have_not_finished_and_none_start(ap
     await _project([PASS])
     sentence = await _sentence(task_id)
     await project_checks.drain()
-    assert "have not finished" in sentence and "`approved` will be refused" in sentence
+    assert "have not finished" in sentence and "does not hold approval" in sentence
     assert await _runs(task_id) == [], "briefing a reviewer starts no run"
 
 
@@ -265,12 +266,10 @@ async def test_nothing_is_said_without_checks(app, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_approving_over_an_errored_result_runs_the_checks_again(
-    app, auth_headers, tmp_path, monkeypatch
-):
-    """F516: on `:8010` a check run's `git worktree add` timed out and recorded `error`, and approval
-    refused on it as if it were a verdict. An error is retried by the approval that meets it."""
-    task_id, _ = await _task_with_work(tmp_path)
+async def test_an_errored_result_does_not_hold_approval(app, auth_headers, tmp_path, monkeypatch):
+    """F516 under `approved-work-merges-in-batches`: an error is the Hub failing to produce a
+    result, not a verdict. It holds no approval and approving starts no run; the batch checks it."""
+    task_id, work = await _task_with_work(tmp_path)
     real = project_checks._checkout
     calls = []
 
@@ -284,18 +283,12 @@ async def test_approving_over_an_errored_result_runs_the_checks_again(
     await _checked(task_id, [PASS])
     assert [r.state for r in await _runs(task_id)] == ["error"]
 
-    refused = await _approve(app, auth_headers, task_id)
-    assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"]["checks"][0]["state"] == "running"
-    # F613: the retry is said, with what went wrong, never "nothing is wrong yet" over an error
-    # (on the sweep every run was `error` for a merge conflict, and each Land said "still running").
-    message = refused.json()["detail"]["message"]
-    assert "git worktree add timed out" in message, message
-    assert "Nothing is wrong yet" not in message
-    await project_checks.drain()
-    assert [r.state for r in await _runs(task_id)] == ["error", "passed"]
     approved = await _approve(app, auth_headers, task_id)
     assert approved.status_code == 200, approved.text
+    await project_checks.drain()
+    assert [r.state for r in await _runs(task_id)] == ["error"]
+    await landing_queue.drain()
+    assert work in commits_on(tmp_path, "main")
 
 
 @pytest.mark.asyncio
@@ -338,26 +331,37 @@ async def test_a_check_failing_on_main_too_is_recorded_as_preexisting(app, tmp_p
 
 
 @pytest.mark.asyncio
-async def test_only_preexisting_failures_are_held_for_the_operator_without_a_send_back(
+async def test_only_preexisting_failures_hold_the_landing_for_the_operator(
     app, auth_headers, tmp_path
 ):
     """On the sweep main's defect failed every task's checks; the gate told the reviewer to send
-    each task back and nothing was addressed to the operator."""
+    each task back and nothing was addressed to the operator. Under `approved-work-merges-in-
+    batches` approval answers at once; the batch whose failures main shares (check-level, so the Hub
+    cannot override them) waits for the operator, who lands it with one reason."""
     task_id, work = await _task_with_work(tmp_path)
     await _checked(task_id, [MAIN_FAIL])
 
-    refused = await app.post(f"{TASKS}/{task_id}/land", headers=auth_headers)
+    landed = await app.post(f"{TASKS}/{task_id}/land", headers=auth_headers)
+    assert landed.status_code == 200, landed.text
+    await landing_queue.drain()
 
-    assert refused.status_code == 409, refused.text
-    detail = refused.json()["detail"]
-    assert detail["checks"][0]["state"] == "preexisting"
-    assert "fail on main too" in detail["message"]
-    assert REVIEWER_SENDS_BACK_CHECKS not in detail["message"]
+    read = await app.get(f"{TASKS}/{task_id}/checks", headers=auth_headers)
+    landing = read.json()["landing"]
+    assert landing["state"] == "held", landing
+    assert "fail on main too" in landing["reason"]
+    assert work not in commits_on(tmp_path, "main")
     async with async_session_factory() as session:
         task = await session.get(Task, task_id)
-        hold = await approval_held_for_operator(session, task, candidate="reviewer")
-    assert hold is not None and hold.remedy == PREEXISTING_CHECKS_HOLD_REMEDY
-    assert work not in commits_on(tmp_path, "main")
+        assert task.status == "approved", "nobody sends it back for main's failure"
+
+    released = await app.post(
+        f"{TASKS}/{task_id}/landing/land",
+        json={"reason": "main carries the defect"},
+        headers=auth_headers,
+    )
+    assert released.status_code == 200, released.text
+    assert work in commits_on(tmp_path, "main")
+    assert released.json()["landing"]["state"] == "landed"
 
 
 @pytest.mark.asyncio

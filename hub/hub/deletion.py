@@ -63,6 +63,8 @@ TASK_REFERENCES: List[Reference] = [
     ("task_requirement_references", "task_id", DELETE),
     ("task_transitions", "task_id", DELETE),
     ("task_check_runs", "task_id", DELETE),
+    # Its landings go with it (`approved-work-merges-in-batches`); a batch keeps its record.
+    ("task_landings", "task_id", DELETE),
     ("task_requirement_links", "task_id", DELETE),
     ("run_divergences", "task_id", CLEAR),
     ("requirement_evidence", "task_id", DELETE),
@@ -98,6 +100,8 @@ DOCUMENT_REFERENCES: List[Reference] = [
     ("spec_rigor_events", "document_id", DELETE),
     ("spec_requirement_revisions", "document_id", DELETE),
     ("spec_requirements", "document_id", DELETE),
+    # The document's builds: how it was built goes with it (slice D).
+    ("builds", "document_id", DELETE),
 ]
 
 LOOP_REFERENCES: List[Reference] = [
@@ -105,6 +109,8 @@ LOOP_REFERENCES: List[Reference] = [
     ("event_logs", "loop_id", CLEAR),
     ("checkpoints", "loop_id", CLEAR),
     ("stalls", "loop_id", CLEAR),
+    # A build whose loop is gone keeps its record and drives nothing more (slice D).
+    ("builds", "loop_id", CLEAR),
 ]
 
 JOB_REFERENCES: List[Reference] = [

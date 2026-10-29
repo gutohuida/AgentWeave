@@ -31,6 +31,12 @@ const SSE_EVENT_TYPES = [
   'question_answered',
   'stall_recorded',
   'stall_ended',
+  // Main moved outside the Hub (`main_watch`), and the operator marking it seen.
+  'main_moved',
+  'main_notice_seen',
+  // A built slice's next slice offered, taken or declined (`slice_drafting`).
+  'next_slice_offered',
+  'next_slice_answered',
   'checks_flaky',
   'agent_heartbeat',
   'agent_created',
@@ -53,6 +59,8 @@ const SSE_EVENT_TYPES = [
   'loop_control_changed',
   'loop_edit_staged',
   'loop_edit_applied',
+  'task_checks_finished',
+  'task_landing_changed',
   'run_started',
   'run_completed',
   'run_failed',
@@ -504,7 +512,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
             ...(goneId ? { predicate: (q) => q.queryKey[3] !== goneId } : {}),
           })
           // An approval merges into main and moves the ledger's lanes (slice project-ledger).
-          inv({ queryKey: ['project', pid, 'ledger'] })
+          refreshWorkSoon(queryClient, pid)
           inv({ queryKey: ['project', pid, 'status'] })
           // Neither payload carries `loop_id` (`tasks.py` broadcasts only `id`/`title`/`status`),
           // and `Task.loop_id` is write-once (design D14) so there is no reassignment to track —
@@ -526,7 +534,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           break
         }
         case 'task_integration_retried':
-          inv({ queryKey: ['project', pid, 'ledger'] })
+          refreshWorkSoon(queryClient, pid)
           // The note reads a per-task key, and a retry appends a row to exactly one of them.
           inv({
             queryKey: ['project', pid, 'task', (event.data as { task_id?: string } | null)?.task_id, 'integrations'],
@@ -536,6 +544,14 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'stall_recorded':
         case 'stall_ended':
           inv({ queryKey: ['project', pid, 'stalls'] })
+          break
+        case 'main_moved':
+        case 'main_notice_seen':
+          inv({ queryKey: ['project', pid, 'mainNotices'] })
+          break
+        case 'next_slice_offered':
+        case 'next_slice_answered':
+          inv({ queryKey: ['project', pid, 'nextSliceOffers'] })
           break
         case 'checks_flaky':
           inv({ queryKey: ['project', pid, 'checks', 'flaky'] })
@@ -559,6 +575,19 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv(agentListFilter(pid))
           inv({ queryKey: ['projects'] })
           break
+        case 'task_checks_finished':
+        case 'task_landing_changed': {
+          // The drawer's Land wait clears on this, without a reload, and the board's cards follow;
+          // a landing's state beside Land follows its batch the same way.
+          const data = event.data as { task_id?: string } | null
+          inv({
+            queryKey: data?.task_id
+              ? ['project', pid, 'task', data.task_id, 'checks']
+              : ['project', pid, 'task'],
+          })
+          inv({ queryKey: ['project', pid, 'tasks'] })
+          break
+        }
         case 'run_started':
         case 'run_completed':
         case 'run_failed':
@@ -583,7 +612,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv(agentListFilter(pid))
           inv({ queryKey: ['project', pid, 'accounting'] })
           // A run's spend and divergence are ledger lanes.
-          inv({ queryKey: ['project', pid, 'ledger'] })
+          refreshWorkSoon(queryClient, pid)
           inv({ queryKey: ['projects'] })
           // A run belongs to a task's story (its cost, its duration); an open drawer refetches it.
           invalidateTaskStories(queryClient, pid)
@@ -766,6 +795,24 @@ function invalidateCoalesced(queryClient: QueryClient, filters?: InvalidateFilte
     ...filters,
     predicate: (q) => !pending.has(q) && (own ? own(q) : true),
   })
+}
+
+/** How long the project's work tally waits before it is read again. */
+export const WORK_REFRESH_MS = 3000
+const workTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+/** The ledger and the work tally (`/stats`) are each a read over the project's whole history, and
+ *  every run and task event moves them: refetch them once per few seconds, not once per event. */
+export function refreshWorkSoon(queryClient: QueryClient, projectId: string | undefined): void {
+  if (!projectId || workTimers.has(projectId)) return
+  workTimers.set(
+    projectId,
+    setTimeout(() => {
+      workTimers.delete(projectId)
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'ledger'] })
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'stats'] })
+    }, WORK_REFRESH_MS),
+  )
 }
 
 const handledKeys = new WeakMap<SSEEvent, Set<string>>()

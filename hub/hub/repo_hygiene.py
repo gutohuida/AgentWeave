@@ -66,6 +66,10 @@ EXCLUDE_PATTERNS = [
     # same failure as the two lines above: an agent holding a task commits from one of these, and
     # `snapshot_worktree`'s `git add -A` would sweep every *other* task's checkout onto its branch.
     ".agentweave/tasks/",
+    # A mend's scratch checkout, inside the mender's own (`worktrees.mend_checkout_path`): without
+    # this the mender's checkout reads as dirty, and `snapshot_worktree`'s `git add -A` there would
+    # commit a whole second checkout onto the mender's branch.
+    ".agentweave/mends/",
     ".agentweave/logs/",
     ".agentweave/evidence/",
     # Rewritten from the canonical context on every single turn (`agent_trigger`), so it is pure

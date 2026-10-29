@@ -371,6 +371,51 @@ async def update_shared_task(
     )
 
 
+class HandOutRequest(RequestModel):
+    """The lead handing a task of its build to an agent (`a-build-has-a-driver-a-level-and-its-
+    people`, FR-5)."""
+
+    agent: str = Field(min_length=1, max_length=32)
+    review: bool = False
+
+
+@router.post("/tasks/{task_id}/hand-out")
+async def hand_out_shared_task(
+    task_id: str,
+    body: HandOutRequest,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Hand *task_id* to `agent` to build it, or (`review`) to review it, and queue that agent's
+    turn bound to the task. Answered only for the lead of the task's running lead-driven build
+    (403 otherwise), and only for an agent in the build's builders or reviewer pool (409)."""
+    from ... import builds
+    from ...turn_scheduler import schedule_accepted
+
+    try:
+        task, build, entry_id = await builds.hand_out(
+            session,
+            caller=actor.agent,
+            project_id=actor.project_id,
+            task_id=task_id,
+            agent=body.agent,
+            review=body.review,
+        )
+    except builds.HandOutRefused as exc:
+        await session.rollback()
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    result = {
+        "task_id": task.id,
+        "agent": body.agent,
+        "review": body.review,
+        "build_id": build.id,
+        "queue_entry_id": entry_id,
+    }
+    await session.commit()
+    await schedule_accepted(actor.project_id, body.agent)
+    return result
+
+
 @router.get("/tasks/{task_id}/integrations")
 async def read_shared_task_integrations(
     task_id: str,
@@ -716,6 +761,21 @@ async def granted_vault_roots(
     return [Path(root["path"]) for root in json.loads(granted)["roots"]]
 
 
+async def _agent_vault_reach(session: AsyncSession, actor: AgentActor):
+    """Where this run's paths may resolve: its workspace, the project directory and its grants."""
+    from ... import vault_intake
+    from . import vault as vault_routes
+
+    run = await session.get(Run, actor.run_id)
+    workspace = Path(run.workspace_dir) if run is not None and run.workspace_dir else None
+    project_root = await vault_routes.project_root(session, actor.project_id)
+    return vault_intake.agent_reach(
+        workspace,
+        project_root,
+        await granted_vault_roots(session, actor.project_id, actor.agent, project_root),
+    )
+
+
 @router.post("/vault/paths")
 async def add_vault_paths(
     body: VaultPathsAdd,
@@ -731,17 +791,9 @@ async def add_vault_paths(
     result per file (added, skipped as a duplicate, refused with its reason); `distil` is
     required. See `vault.add_paths` for the refusals before anything is written.
     """
-    from ... import vault_intake
     from . import vault as vault_routes
 
-    run = await session.get(Run, actor.run_id)
-    workspace = Path(run.workspace_dir) if run is not None and run.workspace_dir else None
-    project_root = await vault_routes.project_root(session, actor.project_id)
-    reach = vault_intake.agent_reach(
-        workspace,
-        project_root,
-        await granted_vault_roots(session, actor.project_id, actor.agent, project_root),
-    )
+    reach = await _agent_vault_reach(session, actor)
     answer = await vault_routes.add_paths(
         session, background, actor.project_id, body, reach=reach, added_by=actor.agent
     )
@@ -764,6 +816,164 @@ async def add_vault_paths(
             agent=actor.agent,
         )
     return answer
+
+
+class VaultPassageReplace(RequestModel):
+    old: str = Field(max_length=1_100_000)
+    new: str = Field(max_length=1_100_000)
+
+
+class VaultTextAppend(RequestModel):
+    text: str = Field(max_length=1_100_000)
+
+
+class VaultFileReplace(RequestModel):
+    path: str = Field(max_length=4096)
+
+
+async def _vault_change(
+    session: AsyncSession,
+    actor: AgentActor,
+    source_id: str,
+    action: str,
+    change,
+    *,
+    reads_files: bool = False,
+    changed: bool = True,
+):
+    """Run one vault change as this run's agent, the actor built from the credential only (never
+    from the body), and answer as the operator's route does. `change(root, private, actor)` is the
+    vault call; a refusal answers its own status and changes nothing."""
+    from ... import vault
+    from . import vault as vault_routes
+
+    root, private = await vault_routes.roots(session, actor.project_id)
+    who = vault.agent_actor(actor.agent, actor.run_id)
+    try:
+        entry = await asyncio.to_thread(change, root, private, who)
+    except vault.VaultError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    await persist_event(
+        session,
+        actor.project_id,
+        "vault_source_changed",
+        {"subject": {"source": source_id}, "action": action, "run_id": actor.run_id},
+        agent=actor.agent,
+    )
+    if not changed:
+        return entry
+    return await vault_routes.after_change(
+        actor.project_id, root, private, entry, reads_files=reads_files
+    )
+
+
+@router.post("/vault/sources/{entry_id}/replace-passage")
+async def replace_vault_passage(
+    entry_id: str,
+    body: VaultPassageReplace,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Replace the one occurrence of `old` in a text source by `new`. 400 saying whether `old`
+    occurs nowhere or more than once; 409 for a file source (changed by replacing it)."""
+    from ... import vault
+
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "replace-passage",
+        lambda root, private, who: vault.replace_passage(
+            root, private, entry_id, old=body.old, new=body.new, actor=who
+        ),
+    )
+
+
+@router.post("/vault/sources/{entry_id}/append")
+async def append_vault_text(
+    entry_id: str,
+    body: VaultTextAppend,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Add text to the end of a text source; 409 for a file source."""
+    from ... import vault
+
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "append",
+        lambda root, private, who: vault.append_text(
+            root, private, entry_id, text=body.text, actor=who
+        ),
+    )
+
+
+@router.post("/vault/sources/{entry_id}/replace-file")
+async def replace_vault_file(
+    entry_id: str,
+    body: VaultFileReplace,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Replace a PDF or image source's file with the file `path` names, reached and checked as
+    `vault_add` reaches a path (same reasons); 409 for a text source."""
+    from ... import vault, vault_intake
+
+    reach = await _agent_vault_reach(session, actor)
+    try:
+        media_type, data = await asyncio.to_thread(vault_intake.read_replacement, body.path, reach)
+    except vault_intake.IntakeError as exc:
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "replace-file",
+        lambda root, private, who: vault.replace_file(
+            root, private, entry_id, media_type=media_type, data=data, actor=who
+        ),
+        reads_files=True,
+    )
+
+
+@router.post("/vault/sources/{entry_id}/archive")
+async def archive_vault_source(
+    entry_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Archive a source: it and its facts leave the map, the turn's vault line and the checks."""
+    from ... import vault
+
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "archive",
+        lambda root, private, who: vault.archive_source(root, private, entry_id, actor=who),
+        changed=False,
+    )
+
+
+@router.post("/vault/sources/{entry_id}/restore")
+async def restore_vault_source(
+    entry_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Restore an archived source; 409 for one that is not archived."""
+    from ... import vault
+
+    return await _vault_change(
+        session,
+        actor,
+        entry_id,
+        "restore",
+        lambda root, private, who: vault.restore_source(root, private, entry_id, actor=who),
+        changed=False,
+    )
 
 
 @router.post("/mcp-adapter-online", status_code=status.HTTP_204_NO_CONTENT)
@@ -917,6 +1127,28 @@ async def _record_the_wait_and_park(
         await announce_block(session, run, task, parked_on)
 
 
+async def _asks_only_notes(session: AsyncSession, actor: AgentActor) -> bool:
+    """Is *actor* the Hub's own mender, whose every question is a note?
+
+    The mender is woken by a stall, usually while the operator is away, and a four-minute wait on a
+    sleeping person only ends in "nobody responded": on 2026-10-26/27 :8000's mender asked 27
+    blocking questions and all 27 waits ran out. So whatever `blocking` it passes, the Hub records
+    its question as a note -- nobody waits on it, no deadline is stamped, no task is parked
+    (`_record_the_wait_and_park` skips a non-blocking question) -- and its answer is delivered as a
+    later message. Decided here, in the Hub, so a model that passes `blocking: true` cannot override
+    it. No operator-presence signal exists to decide it any more finely
+    (`the-mender-wakes-only-for-real-stalls`, D3).
+    """
+    from ... import stalls
+
+    agent = (
+        await session.execute(
+            select(Agent).where(Agent.project_id == actor.project_id, Agent.name == actor.agent)
+        )
+    ).scalar_one_or_none()
+    return stalls.is_mender(agent)
+
+
 @router.post("/questions", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
 async def ask_operator_question(
     body: AgentQuestionCreate,
@@ -926,7 +1158,7 @@ async def ask_operator_question(
     question = QuestionCreate(
         from_agent=actor.agent,
         question=body.question,
-        blocking=body.blocking,
+        blocking=body.blocking and not await _asks_only_notes(session, actor),
         options=list(body.options or []),
         header=body.header,
         multi_select=body.multi_select,
@@ -961,11 +1193,12 @@ async def ask_operator_question_batch(
     batch_id = f"qbatch-{short_id()}"
     total = len(body.questions)
     created = []
+    blocking = body.blocking and not await _asks_only_notes(session, actor)
     for index, entry in enumerate(body.questions):
         question = QuestionCreate(
             from_agent=actor.agent,
             question=entry.question,
-            blocking=body.blocking,
+            blocking=blocking,
             options=list(entry.options or []),
             header=entry.header,
             multi_select=entry.multi_select,
@@ -1546,14 +1779,30 @@ class EvidenceDecision(RequestModel):
     reason: str = Field(default="", max_length=10000)
 
 
+async def _find_document(session, project_id: str, ref: str):
+    """A document by path, or by its `spdoc-…` id as `read_spec_document` takes it."""
+    from ... import spec_lifecycle
+    from ...db.models import SpecDocument
+
+    if _DOCUMENT_ID_RE.fullmatch(ref):
+        return (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.id == ref, SpecDocument.project_id == project_id
+                )
+            )
+        ).scalar_one_or_none()
+    return await spec_lifecycle.get_document(session, project_id, ref)
+
+
 async def _resolve_requirement(
     session, project_id: str, identifier: str, document: str, task_id: Optional[str] = None
 ):
-    from ... import spec_index, spec_lifecycle
+    from ... import spec_index
 
     document_row = None
     if document:
-        document_row = await spec_lifecycle.get_document(session, project_id, document)
+        document_row = await _find_document(session, project_id, document)
         if document_row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1681,7 +1930,6 @@ async def list_evidence_for_agent(
     **Who produced each row is part of the answer.** An agent may not decide evidence it produced
     itself, so one that cannot see the producer learns that rule by being refused once per row.
     """
-    from ... import spec_lifecycle
     from ...db.models import RequirementEvidence, SpecRequirement
     from .spec import _evidence_views
 
@@ -1697,7 +1945,7 @@ async def list_evidence_for_agent(
         # document read the whole project's evidence and still answered 200 — it "succeeded" by
         # not doing what it was asked. Resolved the same way `_resolve_requirement` resolves a
         # document (by path, project-scoped) and scoped to that document's own requirements.
-        document_row = await spec_lifecycle.get_document(session, actor.project_id, document)
+        document_row = await _find_document(session, actor.project_id, document)
         if document_row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1808,6 +2056,18 @@ async def decide_evidence(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, run_actor(actor.run_id, actor.agent)
     )
+    # A task closed as already built is approved once its last piece is accepted, whoever decided
+    # it (`every-task-can-always-be-moved-on` FR-6).
+    from ... import already_built
+
+    approved = await already_built.approve_what_was_waiting_for_this_evidence(
+        session, announced["evidence"], actor.agent
+    )
+    if approved is not None:
+        answer["approved_task"] = approved
+        await sse_manager.broadcast(
+            actor.project_id, "task_updated", {"id": approved, "status": "approved"}
+        )
     await run_divergence.release_held_review(session, held_review)
     # After the integration, and from the values read before it: the operator's screen shows this
     # piece, and an agent's decision moved it exactly as the operator's own would.
@@ -1874,7 +2134,7 @@ async def read_spec_document(
     agent-supplied path then cannot be reinterpreted as extra routing.
 
     Readable in **every phase**. Reading is not authoring, and every gate in this area governs
-    writing or approving. A reviewer needs a proposed document and a builder needs an approved one;
+    writing or approving. A reviewer needs a document being written and a builder needs an approved one;
     a refusal that depends on state is one an agent concludes it does not have at all.
 
     **Bounded** (`a-specification-is-read-in-results-that-fit`, F363): the whole response is fitted
@@ -1972,7 +2232,6 @@ async def read_spec_document(
         # Returned rather than enforced, so an agent can judge how settled this is instead of
         # guessing — or being refused and concluding the capability is absent.
         "phase": document.phase,
-        "rigor": document.rigor,
         "explore_closed": document.explore_closed_at is not None,
         "step": document.step,
         "size": document.size,
@@ -2276,7 +2535,7 @@ async def advance_spec_step(
                 "missing": gaps,
                 "instructions": "",
                 "message": f"{left} is the last step of this journey; the document is ready for "
-                "the operator to propose.",
+                "the operator to approve.",
             }
         await spec_journey.set_step(
             session,
@@ -2350,8 +2609,8 @@ class SpecDocumentSubmission(RequestModel):
 
     The document must already exist — call `create_spec_document` first if you
     don't have one yet. There is deliberately no phase or approval field here:
-    "propose" and "approve" are the operator's, and the tool surface offers no
-    way to express either.
+    checking and approving are the operator's, and the tool surface offers no
+    way to approve.
     """
 
     path: str = Field(max_length=255)
@@ -2359,8 +2618,9 @@ class SpecDocumentSubmission(RequestModel):
 
 
 class SpecAmendment(RequestModel):
-    """One amendment to an approved document, from a run testing one of its tasks
-    (`a-tester-drives-the-built-product-and-keeps-the-spec-true`)."""
+    """One amendment to an approved document: applied by a run testing one of its tasks
+    (`a-tester-drives-the-built-product-and-keeps-the-spec-true`), proposed by an author or the
+    running build's lead (`amendments-main-watch-and-the-next-slice`)."""
 
     path: str = Field(max_length=255)
     op: str = Field(max_length=32)
@@ -2452,7 +2712,9 @@ async def amend_spec_document(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    """Amend an approved document from a test turn. Applied at once, recorded not reviewed."""
+    """Amend an approved document. A test turn's amendment is applied at once, recorded not
+    reviewed; an author's (a content save before approval) or the running build's lead's is
+    proposed, and waits for the operator to accept or decline it. Anyone else is refused 403."""
     from ... import spec_amendments, spec_lifecycle
 
     workspace, document = await _amendable_document(session, actor, body.path)
@@ -2514,10 +2776,11 @@ async def submit_spec_document(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    """Store a submitted specification payload and return what still blocks a proposal.
+    """Store a submitted specification payload and return what still blocks its approval.
 
     Saving an incomplete document is not an error — a document under discussion is incomplete,
-    and refusing it would make exploring impossible. `blocking` says what a proposal would refuse.
+    and refusing it would make exploring impossible. `blocking` says what approval would refuse,
+    exactly as the operator's Check reports it.
     """
     from ... import project_workspace, spec_lifecycle, spec_service
     from ...spec_manifest import SpecPathError, validate_spec_path
@@ -2561,24 +2824,13 @@ async def submit_spec_document(
     await sse_manager.broadcast(
         actor.project_id, "spec_updated", {"path": result.path, "phase": result.phase}
     )
-    if isinstance(result, spec_service.ProposeResult):
-        # `contract`/`gate` rigor (design D1): nothing was written. `proposals`/`unchanged` tell
-        # the caller what was recorded instead — a different shape from `SaveResult` on purpose,
-        # so a client cannot mistake "your edit is now pending" for "your edit is live".
-        return {
-            "path": result.path,
-            "phase": result.phase,
-            "proposals": result.proposals,
-            "unchanged": result.unchanged,
-            "already_pending": result.already_pending,
-        }
     return {
         "path": result.path,
         "phase": result.phase,
         "identifiers": result.identifiers,
         "blocking": result.blocking,
         # F502: an agent read the call's success beside eight blocking findings as "ready".
-        "ready_to_propose": not result.blocking,
+        "ready_to_approve": not result.blocking,
         "divergence": result.divergence,
         "warnings": result.warnings,
     }

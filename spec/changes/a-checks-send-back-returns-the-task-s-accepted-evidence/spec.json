@@ -1,0 +1,202 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a task with evidence accepted for FR-1 and FR-2 at commit A and one awaiting piece for FR-3, completed, with a project check that fails on A",
+      "key": "ac-check-run-holds-accepted",
+      "requirement": "hold-accepted-on-checks-send-back",
+      "then": "the task is revision_needed; the FR-1, FR-2 and FR-3 pieces are all held; each held piece carries an evidence review whose reason is the send-back's report; no piece of that task is still accepted",
+      "when": "the check run fails and return_failed_work sends the task back"
+    },
+    {
+      "given": "an approved task whose evidence was all accepted at commit A, queued in a landing batch that fails on A",
+      "key": "ac-landing-holds-accepted",
+      "requirement": "hold-accepted-on-checks-send-back",
+      "then": "the task is revision_needed and every piece it recorded is held, none accepted",
+      "when": "the batch sends the task back"
+    },
+    {
+      "given": "task T1 and task T2 both serve FR-1; T2's evidence for FR-1 is accepted at a commit already on main, and T1 has accepted evidence of its own at failing commit A",
+      "key": "ac-others-untouched",
+      "requirement": "others-evidence-untouched",
+      "then": "T1's pieces are held and T2's piece is still accepted, with no new review recorded on it",
+      "when": "the checks send T1 back"
+    },
+    {
+      "given": "a task sent back by a failed check run at completion after its evidence was accepted at failing commit A, then a fix committed as B on its branch (B descends from A) with evidence recorded at B, and a check that passes on B",
+      "key": "ac-fix-is-checked",
+      "requirement": "fix-is-checked",
+      "then": "the check run's targets are [B], not A; the run passes; the task reaches under_review. Before the change the run targets A, fails, and completion is refused",
+      "when": "the task is completed again"
+    },
+    {
+      "given": "F1081's shape: an approved task whose evidence was accepted at commit A, sent back by a failing landing batch, then a fix committed as B on its branch with evidence recorded at B, and a check that passes on B",
+      "key": "ac-fix-is-checked-after-landing",
+      "requirement": "fix-is-checked",
+      "then": "the check run's targets are [B], not A; the run passes; the task reaches under_review. Before the change the run targets A and fails, as chk-2edc3a8bd93b did",
+      "when": "the task is completed again"
+    },
+    {
+      "given": "the send-back in ac-check-run-holds-accepted",
+      "key": "ac-note",
+      "requirement": "note-names-returned-pieces",
+      "then": "the note names FR-1 and FR-2 as accepted evidence returned, with commit A's short sha, and names FR-3 separately as held awaiting evidence",
+      "when": "its transition note is read from the task's history"
+    },
+    {
+      "given": "a task under review with FR-1 accepted and FR-2 awaiting",
+      "key": "ac-reviewer-unchanged",
+      "requirement": "reviewer-send-back-unchanged",
+      "then": "FR-2 is rejected and FR-1 is still accepted",
+      "when": "the reviewer sends it back with failing_pieces naming FR-2"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "ba3480eed3d9ee1a5e584086d15ec4103575d865f1ab75c6568a3cb83191b780",
+      "FR-2": "54cd8d4fa932d2cec4e42f7ee80c65a40cec0141fa5a3ffaa2ec041d84a52b4d",
+      "FR-3": "f938a99418ac654117a7c78d24b2a7fc7ef359b9a90f5c648dde45a1cbe74333",
+      "FR-4": "a237a290b4c76ff1b9295d622d5ca54de2e1db563b8ba9146d1332686fccbc4c",
+      "FR-5": "aacbe9cd1ceb16dc9a8cf97982153244e82986ce92a2ecfcef458c5d311156d9"
+    },
+    "high_water": 5,
+    "requirements": {
+      "fix-is-checked": "FR-3",
+      "hold-accepted-on-checks-send-back": "FR-1",
+      "note-names-returned-pieces": "FR-4",
+      "others-evidence-untouched": "FR-2",
+      "reviewer-send-back-unchanged": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer (Sonnet) to keep quota down; the work is a contained gate change with a precise acceptance test.",
+      "cron": "Every five minutes, the usual cadence for a flow.",
+      "mode": "One task, so a flow that stops when its queue empties builds and reviews it unattended.",
+      "reviewer": "QA (Opus), because this is the merge gate and decides what reaches main.",
+      "stop": "Stop when the queue empties: there is one task. Until F1080 is fixed, check after approval that the task actually landed."
+    },
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decision (operator, 2026-10-29: option 1 of two). A checks send-back holds the task's own accepted evidence, the same way it already holds its awaiting evidence. The send-back is the finding that the accepted work fails, so leaving it accepted is the defect. Holding it makes the existing fallback (F773, check the commit the review is given) apply on the next completion, so no second rule for picking the target is added.\n\nRejected alternative (also offered by F1081): keep the evidence accepted and add the task branch tip, or the branch's newest reviewed commit, to the completion check's targets. That adds a second rule for choosing the target beside \"accepted evidence decides what merges\". Two such rules diverging is how F680 and F773 arose.\n\nWho acts: the hold is recorded as a review by the checks, acting for the operator, as both send-backs already transition the task with operator() and origin checks. It is not a reviewer reversing a reviewer. Only the operator overturns a decision, and the checks act with the operator's authority here.\n\nHazard: this is the merge gate, so it decides what reaches main. There is no migration (held is an existing evidence state, migration 0149), and no live-data rewrite: tasks already in this state are not repaired by this change. Rollback is reverting the commit. Hub code reaches the Hub that runs it only at that Hub's next restart, after the operator merges.",
+  "evidence": {
+    "checked": [
+      "The archive case: task-28241f64fb0a's history (send-backs at 23:31 by lbat-34ab1776047f and at 23:58 by chk-b6f585386df2; the mender's reset at 04:51) and its awaiting evidence (281 rows across 5 requirements)",
+      "The vault-tab case, F1081: lbat-3bc888bd9903's send-back, then chk-2edc3a8bd93b targeting fd8aa77 after the fix a6f5617 (read from the live database read-only by the conversation that filed it)",
+      "On master: merge_targets takes accepted evidence only where evidence governs (task_integration.py:615-617); request_run falls back to review_target only when there are no targets (project_checks.py:~922-928)",
+      "On master: return_failed_work (project_checks.py:2038-2045) and landing_queue._send_back (:1804-1837) send back through apply_transition with origin checks and no failing_pieces; decide_with_verdict touches only AWAITING pieces (requirement_evidence.py:1467-1471)",
+      "That accepting evidence at the fix (6303720) by hand made it the check target and unblocked the archive task (decided 2026-10-29 08:31)"
+    ],
+    "limits": [
+      "No test currently asserts evidence states after a checks-origin or landing send-back (searched hub/tests), so today's behaviour is read from code and the two live cases, not watched in a test",
+      "Line numbers are from master at a11ae1d and may drift"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Exploring → approved by the operator → built by the flow → archived once merged, when this behaviour moves into the evidence capability's current spec.",
+  "open_questions": [
+    {
+      "question": "Should a later change stop an author from recording identical evidence again on every retry (the ~280 duplicate rows), and should the mender recognise a completion refused on a stale target? Out of this change; recorded so they are not lost.",
+      "resolved": true
+    }
+  ],
+  "problem": "This has happened twice on the flow \"Vault sources can be edited, replaced and archived\" (spdoc-ed2248eba283).\n\n1. task-28241f64fb0a (archive), 2026-10-28/29, stuck for about 9 hours. QA accepted its evidence at f7cf6d3. A landing batch sent it back because f7cf6d3 failed a check. Developer fixed it on the branch, but every completion after that was refused: the completion check ran on f7cf6d3 again. The author kept committing to force a re-run and recorded about 280 duplicate evidence rows. It was unblocked by hand, by a reviewer accepting evidence at the fix (vault note src-f2ceb873aae1).\n2. task-a80259e4ab36 (vault-tab), 2026-10-29, F1081. Landing batch lbat-3bc888bd9903 sent it back (surface ceiling 68 against 67), leaving QA's acceptance at fd8aa77 in place. Developer fixed it and completed at 09:46, auto-committing a6f5617. Check run chk-2edc3a8bd93b then targeted [\"fd8aa77\"], the commit without the fix, and failed the same way. The ceiling test passes 6/6 at a6f5617.\n\nCause (master): where evidence governs, the check's targets are the task's accepted evidence only (`merge_targets`, hub/hub/task_integration.py, `_targets(..., ACCEPTED)`, reached through `project_checks.check_targets`). `request_run` (hub/hub/project_checks.py) falls back to the commit the review is given only when nothing is accepted (the F773 path). Both checks send-backs (`return_failed_work`, project_checks.py:~2038, and `landing_queue._send_back`, landing_queue.py:~1804) decide evidence through `decide_with_verdict` (requirement_evidence.py:~1545). That touches only awaiting pieces (`verdict_pieces`, :~1467), so accepted pieces stay accepted at the failing commit.\n\nThe deadlock: the check keeps judging the commit known to fail. Newer evidence could replace it, but only a reviewer can accept it. A reviewer only sees the task after it completes, and completion is what the check refuses. Retrying, the operator's \"run checks again\" and the mender's reset all resolve the same accepted targets and check the same commit.",
+  "requirements": [
+    {
+      "key": "hold-accepted-on-checks-send-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Accepted evidence names the commits that approval merges and that the checks judge. The send-back is the finding that those commits fail. Left accepted, they stay what is checked, so no fix can ever be judged.",
+      "statement": "When the project's checks send a task back (a failed check run at completion, or a failing landing batch), every piece of evidence that task itself recorded and that is accepted MUST become held, with the send-back's report as its reason, in the same transition that moves the task to revision_needed. The awaiting pieces are held as they are today."
+    },
+    {
+      "key": "others-evidence-untouched",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The failure belongs to this task's unmerged work (F518). Another task's accepted evidence, or work already on main, is not what failed.",
+      "statement": "A checks send-back MUST NOT change evidence recorded by another task, even against a requirement the two tasks share, and MUST NOT change evidence whose commit is already reachable from the main branch."
+    },
+    {
+      "key": "fix-is-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the outcome that was impossible twice on 2026-10-28/29: the check judged f7cf6d3 again on every completion of the archive task, and fd8aa77 again on the vault-tab task's (F1081).",
+      "statement": "After a checks send-back of either kind, when the author commits a fix on the task's branch, records evidence at it and completes the task again, the completion check MUST run on the commit the review is given (that evidence's commit), and not on any commit the send-back held. When that check passes, the task MUST reach under_review."
+    },
+    {
+      "key": "note-names-returned-pieces",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The author and the next reviewer need to see that previously accepted work was returned and why. Otherwise the requirement looks like it lost its acceptance for no reason.",
+      "statement": "The send-back's evidence note MUST name the requirements whose accepted evidence it held, separately from those whose awaiting evidence it held, together with the commit that accepted evidence was at."
+    },
+    {
+      "key": "reviewer-send-back-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Only the checks' send-back is the finding that accepted work fails. A reviewer judges what is awaiting them, and overturning a decision stays the operator's.",
+      "statement": "A send-back by a reviewer (update_task to revision_needed or rejected, with or without failing_pieces) MUST continue to decide only the task's awaiting pieces, leaving accepted pieces accepted."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The two send-backs whose origin is the project's checks: a failed check run at completion (return_failed_work) and a failing landing batch (landing_queue._send_back)",
+      "Holding the sent-back task's own accepted evidence, with the send-back's report as the reason",
+      "The send-back note naming the pieces that were accepted and are now held",
+      "The next completion after either kind of send-back being checked on the commit the review is given"
+    ],
+    "non_goals": [
+      "A reviewer's send-back (update_task with revision_needed or rejected): it keeps deciding awaiting pieces only, as today",
+      "Evidence recorded by another task against a shared requirement, and evidence whose commit is already on main: never changed by a send-back",
+      "Repairing tasks already stuck in this state before the change ships (task-a80259e4ab36 today): each is unblocked by hand",
+      "F1080, a flow that ended on an empty queue not picking up a task the landing checks later send back: a separate decision, not this change unless the operator adds it",
+      "Stopping an author from recording the same evidence again on every retry (about 280 duplicate rows): an open follow-up, not this change",
+      "Teaching the mender to recognise a completion refused on a stale target: an open follow-up, not this change",
+      "Any change to how the checks themselves run, or to which failures count as the task's own"
+    ]
+  },
+  "summary": "When the project's checks send a task back, the evidence the task had accepted for the work that failed stops being accepted. The next completion is then checked on the fix, not on the commit that already failed, so the task can reach review again instead of being refused forever. This fixes F1081 and the archive task's 9-hour stall.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Write hub/tests/test_a_checks_send_back_returns_accepted_evidence.py over a real git repository and a real configured project check (in the style of test_checks_run_before_review.py). Cover ac-fix-is-checked and ac-fix-is-checked-after-landing end to end through the routes: accepted evidence at failing commit A, sent back by a failed completion check and, separately, by a failing landing batch (F1081), fix B with evidence, complete, then assert the check targets [B] and the task reaches under_review. Also add ac-check-run-holds-accepted, ac-landing-holds-accepted, ac-others-untouched, ac-note and ac-reviewer-unchanged. Run the new tests before the change and record that they fail (both fix-is-checked tests must fail by targeting A), then make them pass. Make the change in hub/hub/requirement_evidence.py, task_transition_service.py and, where needed, project_checks.py and landing_queue.py. Confirm test_evidence_judged_piece_by_piece.py, test_checks_run_before_review.py and the landing-batch suites still pass. When it lands, set F1081's Status in scripts/drive/FINDINGS.md to fixed, naming the tests.",
+      "files": [
+        "hub/tests/test_a_checks_send_back_returns_accepted_evidence.py",
+        "hub/hub/requirement_evidence.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/landing_queue.py",
+        "scripts/drive/FINDINGS.md"
+      ],
+      "from": null,
+      "key": "acceptance-test",
+      "requirements": [
+        "hold-accepted-on-checks-send-back",
+        "others-evidence-untouched",
+        "fix-is-checked",
+        "note-names-returned-pieces",
+        "reviewer-send-back-unchanged"
+      ],
+      "reviewer": null,
+      "title": "A sent-back task's fix is checked (test first, then the fix)"
+    }
+  ],
+  "title": "A checks send-back returns the task's accepted evidence"
+}

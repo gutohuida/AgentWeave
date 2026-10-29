@@ -40,6 +40,7 @@ from hub.spec_payload import (
     validate_payload,
 )
 
+from ._spec_versions import content_version
 from .test_spec_documents_api import PATH as DOC_PATH
 from .test_spec_documents_api import _create, _document
 from .test_spec_documents_api import _submit as _submit_document
@@ -176,35 +177,12 @@ def test_payload_to_dict_keeps_a_present_delivery():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_an_unchanged_resubmission_with_no_delivery_key_proposes_nothing(
-    app, auth_headers, run_headers
-):
-    path = "spec/changes/delivery-demo/spec.json"
-    document = _payload(
-        requirements=[{"key": "alpha", "statement": "It responds within 200ms", "modal": "MUST"}]
-    )
-    await app.post(f"{BASE}/documents", json={"path": path, "title": "Demo"}, headers=auth_headers)
-    write = await app.post(AGENT, json={"path": path, "document": document}, headers=run_headers)
-    assert write.status_code == 200, write.text
-    rigor = await app.post(
-        f"{BASE}/documents/{path}/rigor", json={"rigor": "gate"}, headers=auth_headers
-    )
-    assert rigor.status_code == 200, rigor.text
-
-    response = await app.post(AGENT, json={"path": path, "document": document}, headers=run_headers)
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["proposals"] == []
-    assert "metadata" in body["unchanged"]
-
-
 # ---------------------------------------------------------------------------
-# 1.2 (refusal half) — proposing a change-spec is refused while `delivery` is
-# unanswered or an incomplete flow (D4). `_document()` (test_spec_documents_api) already
-# carries a requirement, a criterion and a task that satisfy every other completeness check,
-# so the only finding these fixtures can produce is the one under test.
+# 1.2 — a change-spec whose `delivery` is unanswered or an incomplete flow is told so (D4): a
+# gap the operator's Check lists, never a refusal. `_document()` (test_spec_documents_api) already
+# carries a requirement, a criterion and a task that satisfy every other completeness check, so
+# the only finding these fixtures can produce is the one under test. (Proposing was retired by
+# `exploring-ends-at-an-approved-plan`; Check reports the same list and moves nothing.)
 # ---------------------------------------------------------------------------
 
 
@@ -215,77 +193,74 @@ async def _close_exploration(app, auth_headers, path=DOC_PATH):
     assert closed.status_code == 200, closed.text
 
 
-async def _propose(app, auth_headers, path=DOC_PATH):
-    return await app.post(f"{BASE}/documents/propose", params={"path": path}, headers=auth_headers)
+async def _check(app, auth_headers, path=DOC_PATH):
+    return await app.post(f"{BASE}/documents/check", params={"path": path}, headers=auth_headers)
 
 
 @pytest.mark.asyncio
-async def test_proposing_with_no_delivery_warns(app, auth_headers, run_headers):
+async def test_checking_with_no_delivery_warns(app, auth_headers, run_headers):
     await _create(app, auth_headers)
     await _submit_document(app, run_headers, _document(delivery=None))
-    await _close_exploration(app, auth_headers)
 
-    response = await _propose(app, auth_headers)
+    response = await _check(app, auth_headers)
 
     assert response.status_code == 200, response.text
     body = response.json()
-    # A gap (approve-lists-what-is-missing FR-3): proposal passes it and lists it.
-    assert body["phase"] == "proposed"
+    # A gap (approve-lists-what-is-missing FR-3): listed, never blocking, and nothing moved.
+    assert body["phase"] == "exploring"
     assert "delivery_unanswered" in {w["code"] for w in body["warnings"]}
 
 
 @pytest.mark.asyncio
-async def test_proposing_a_flow_with_no_agent_warns(app, auth_headers, run_headers):
+async def test_checking_a_flow_with_no_agent_warns(app, auth_headers, run_headers):
     await _create(app, auth_headers)
     await _submit_document(
         app,
         run_headers,
         _document(delivery={"mode": "flow", "stop_when_queue_empties": True}),
     )
-    await _close_exploration(app, auth_headers)
 
-    response = await _propose(app, auth_headers)
+    response = await _check(app, auth_headers)
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["phase"] == "proposed"
+    assert body["phase"] == "exploring"
     assert "delivery_flow_incomplete" in {w["code"] for w in body["warnings"]}
 
 
 @pytest.mark.asyncio
-async def test_proposing_a_flow_with_no_stop_condition_warns(app, auth_headers, run_headers):
+async def test_checking_a_flow_with_no_stop_condition_warns(app, auth_headers, run_headers):
     await _create(app, auth_headers)
     await _submit_document(
         app,
         run_headers,
         _document(delivery={"mode": "flow", "agent": "dev"}),
     )
-    await _close_exploration(app, auth_headers)
 
-    response = await _propose(app, auth_headers)
+    response = await _check(app, auth_headers)
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["phase"] == "proposed"
+    assert body["phase"] == "exploring"
     assert "delivery_flow_incomplete" in {w["code"] for w in body["warnings"]}
 
 
 # ---------------------------------------------------------------------------
-# 1.2 (remainder) — a `none` delivery proposes; a roadmap is never asked
+# 1.2 (remainder) — a `none` delivery is ready; a roadmap is never asked
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_a_none_delivery_proposes(app, auth_headers, run_headers):
+async def test_a_none_delivery_checks_clean(app, auth_headers, run_headers):
     await _create(app, auth_headers)
     await _submit_document(app, run_headers, _document(delivery={"mode": "none"}))
-    await _close_exploration(app, auth_headers)
 
-    response = await _propose(app, auth_headers)
+    response = await _check(app, auth_headers)
 
     assert response.status_code == 200, response.text
-    assert response.json()["phase"] == "proposed"
+    assert response.json()["phase"] == "exploring"
     assert response.json()["blocking"] == []
+    assert response.json()["ready"] is True
 
 
 def test_a_roadmap_with_no_delivery_gets_neither_code():
@@ -338,6 +313,8 @@ async def _set_lifecycle(name, lifecycle):
 
 
 async def _proposed(app, auth_headers, run_headers, document, *, title="Demo", path=DOC_PATH):
+    """A document written and ready for the operator (there is no `proposed` phase any more: it
+    is approved from `exploring`)."""
     created = await app.post(
         f"{BASE}/documents", json={"path": path, "title": title}, headers=auth_headers
     )
@@ -345,24 +322,19 @@ async def _proposed(app, auth_headers, run_headers, document, *, title="Demo", p
     written = await _submit_document(app, run_headers, document, path=path)
     assert written.status_code == 200, written.text
     await _close_exploration(app, auth_headers, path)
-    proposed = await _propose(app, auth_headers, path)
-    assert proposed.json()["phase"] == "proposed", proposed.text
 
 
 async def _forced_proposed(app, auth_headers, run_headers, document, path=DOC_PATH):
-    """A document at `proposed` that propose (and, with B5, `transition()`) would refuse: set in
-    the database, as a document proposed before this change was (tasks.md 1.3)."""
+    """A document a Check would list gaps for, approved over them (tasks.md 1.3): written, left in
+    `exploring`, and approved with approve_anyway."""
     await _create(app, auth_headers, path)
     written = await _submit_document(app, run_headers, document, path=path)
     assert written.status_code == 200, written.text
-    async with async_session_factory() as db:
-        row = (await db.execute(select(SpecDocument).where(SpecDocument.path == path))).scalar_one()
-        row.phase = "proposed"
-        row.explore_closed_at = datetime.now(timezone.utc)
-        await db.commit()
 
 
 async def _phase(app, auth_headers, to, path=DOC_PATH, **body):
+    if to == "approved":
+        body.setdefault("content_version", await content_version(app, auth_headers, path))
     return await app.post(
         f"{BASE}/documents/phase",
         params={"path": path, "to": to},
@@ -372,8 +344,16 @@ async def _phase(app, auth_headers, to, path=DOC_PATH, **body):
 
 
 async def _approve(app, auth_headers, path=DOC_PATH, **body):
+    """Approve and build in one action: what used to be approval starting the delivery's flow
+    (`exploring-ends-at-an-approved-plan` FR-7); the build's report is `build_outcome`."""
     body.setdefault("approve_anyway", True)
-    response = await _phase(app, auth_headers, "approved", path, **body)
+    body.setdefault("content_version", await content_version(app, auth_headers, path))
+    response = await app.post(
+        f"{BASE}/documents/approve-and-build",
+        params={"path": path},
+        json={"reason": "test", **body},
+        headers=auth_headers,
+    )
     assert response.status_code == 200, response.text
     assert response.json()["phase"] == "approved"
     return response.json()
@@ -385,8 +365,6 @@ async def _reopen_and_repropose(app, auth_headers, run_headers, document, path=D
     written = await _submit_document(app, run_headers, document, path=path)
     assert written.status_code == 200, written.text
     await _close_exploration(app, auth_headers, path)
-    proposed = await _propose(app, auth_headers, path)
-    assert proposed.json()["phase"] == "proposed", proposed.text
 
 
 async def _rows(model, *where):
@@ -417,7 +395,7 @@ async def test_1_3_approving_a_document_proposed_with_no_delivery(app, auth_head
     body = await _approve(app, auth_headers)
 
     assert len(body["tasks_created"]) == 1
-    assert body["approval_outcome"]["flow"] == {
+    assert body["build_outcome"]["flow"] == {
         "state": "none",
         "messages": ["No delivery was declared."],
     }
@@ -454,7 +432,7 @@ async def test_1_4_approving_a_flow_delivery_creates_the_flow(
         kind for kind, _ in published if kind in ("spec_updated", "task_updated", "job_created")
     ]
     assert kinds == ["spec_updated", "task_updated", "job_created"]
-    flow = body["approval_outcome"]["flow"]
+    flow = body["build_outcome"]["flow"]
     assert (flow["state"], flow["job_id"], flow["agent"]) == ("created", job.id, "dev")
     assert body["tasks_created"] == [task.id for task in tasks]
 
@@ -482,8 +460,8 @@ async def test_1_5_an_archived_delivery_agent_starts_no_flow(app, auth_headers, 
     body = await _approve(app, auth_headers)
 
     assert len(body["tasks_created"]) == 1
-    assert body["approval_outcome"]["flow"]["state"] == "not_created"
-    assert "dev is archived" in body["approval_outcome"]["flow"]["messages"][0]
+    assert body["build_outcome"]["flow"]["state"] == "not_created"
+    assert "dev is archived" in body["build_outcome"]["flow"]["messages"][0]
     assert await _rows(Loop) == []
 
 
@@ -501,7 +479,7 @@ async def test_1_5_a_name_the_project_does_not_have_starts_no_flow(
 
     body = await _approve(app, auth_headers)
 
-    assert "dev is not an agent on this project" in body["approval_outcome"]["flow"]["messages"][0]
+    assert "dev is not an agent on this project" in body["build_outcome"]["flow"]["messages"][0]
     assert await _rows(Loop) == []
 
 
@@ -519,7 +497,7 @@ async def test_1_5_the_operator_replaces_a_stale_agent_at_approval(
 
     (job,) = await _rows(AIJob)
     assert job.agent == "dev"
-    assert body["approval_outcome"]["delivery_agent"] == "dev"
+    assert body["build_outcome"]["delivery_agent"] == "dev"
     # Approving never rewrites the author's content: the file still names `old`.
     assert '"agent": "old"' in (tmp_path / DOC_PATH).read_text(encoding="utf-8")
     assert '"agent": "old"' in file_before
@@ -532,7 +510,7 @@ async def test_1_5_choosing_no_flow_at_approval(app, auth_headers, run_headers):
 
     body = await _approve(app, auth_headers, delivery_agent="")
 
-    assert body["approval_outcome"]["flow"]["messages"] == ["You chose no flow at approval."]
+    assert body["build_outcome"]["flow"]["messages"] == ["You chose no flow for this build."]
     assert await _rows(Loop) == []
 
 
@@ -555,7 +533,7 @@ async def test_1_5_a_flow_that_could_not_stop_or_already_stopped_is_not_created(
 
     body = await _approve(app, auth_headers)
 
-    assert said in body["approval_outcome"]["flow"]["messages"][0]
+    assert said in body["build_outcome"]["flow"]["messages"][0]
     assert await _rows(Loop) == []
 
 
@@ -577,7 +555,7 @@ async def test_1_6_re_approval_reports_the_flow_already_building_the_document(
     (new_task_id,) = body["tasks_created"]
     (new_task,) = await _rows(Task, Task.id == new_task_id)
     assert new_task.loop_id == loop.id
-    flow = body["approval_outcome"]["flow"]
+    flow = body["build_outcome"]["flow"]
     assert (flow["state"], flow["job_id"], flow["flow_state"]) == (
         "existing",
         flow_job.id,
@@ -610,7 +588,7 @@ async def test_1_6a_a_claim_race_is_reported_as_already_claimed(
 
     body = await _approve(app, auth_headers)
 
-    assert "already claimed by another loop" in body["approval_outcome"]["flow"]["messages"][0]
+    assert "already claimed by another loop" in body["build_outcome"]["flow"]["messages"][0]
     assert len(await _rows(Loop, Loop.archived_at.is_(None))) == 1
     assert len(await _rows(AIJob)) == 1
     assert "job_created" not in [kind for kind, _ in published]
@@ -635,7 +613,7 @@ async def test_1_6b_a_failure_after_adoption_leaves_the_approval_and_the_board(
 
     body = await _approve(app, auth_headers)
 
-    assert body["approval_outcome"]["flow"]["messages"] == ["The flow could not be created."]
+    assert body["build_outcome"]["flow"]["messages"] == ["The flow could not be created."]
     (task,) = await _rows(Task, Task.id.in_(body["tasks_created"]))
     assert task.loop_id is None
     assert await _rows(Loop) == [] and await _rows(AIJob) == []
@@ -659,7 +637,7 @@ async def test_1_6_an_ended_flow_is_not_reported_as_building(app, auth_headers, 
     body = await _approve(app, auth_headers)
 
     assert len(await _rows(Loop)) == 1
-    flow = body["approval_outcome"]["flow"]
+    flow = body["build_outcome"]["flow"]
     assert flow["flow_state"] == "ended"
     assert "has ended; the new tasks wait for it" in flow["messages"][0]
     assert "already builds" not in " ".join(flow["messages"])
@@ -692,7 +670,7 @@ async def test_1_6_a_flow_started_by_hand_is_reported_on_re_approval(
 
     body = await _approve(app, auth_headers)
 
-    flow = body["approval_outcome"]["flow"]
+    flow = body["build_outcome"]["flow"]
     assert (flow["state"], flow["name"]) == ("existing", "By hand")
 
 
@@ -708,7 +686,7 @@ async def test_1_6_a_delivery_agent_that_cannot_be_honoured_is_refused(
 
     assert response.status_code == 400, response.text
     (row,) = await _rows(SpecDocument)
-    assert row.phase == "proposed"
+    assert row.phase == "exploring"
 
 
 @pytest.mark.asyncio
@@ -729,7 +707,7 @@ async def test_1_6_a_chosen_agent_an_existing_flow_makes_moot_is_reported(
 
     (job,) = await _rows(AIJob)
     assert job.agent == "dev"
-    messages = body["approval_outcome"]["flow"]["messages"]
+    messages = body["build_outcome"]["flow"]["messages"]
     assert any("The agent you chose, qa, was not applied" in m for m in messages)
     assert f"The flow {job.name} runs as dev, not old." in messages
 
@@ -748,7 +726,7 @@ async def test_1_6c_a_failed_board_starts_no_flow(app, auth_headers, run_headers
 
     outcome = body["approval_outcome"]
     assert outcome["failed"] == "RuntimeError: board down"
-    assert outcome["flow"]["messages"] == [spec_api._NO_TASKS]
+    assert body["build_outcome"]["flow"]["messages"] == [spec_api._NO_TASKS]
     assert await _rows(Loop) == [] and await _rows(AIJob) == []
     assert await _rows(EventLog, EventLog.event_type == "job_created") == []
 
@@ -777,7 +755,7 @@ async def test_1_6c_a_board_already_served_by_hand_starts_no_flow(app, auth_head
     outcome = body["approval_outcome"]
     assert outcome["created"] == []
     assert outcome["already_served"] == [{"key": "t1", "requirements": ["alpha"]}]
-    assert outcome["flow"]["messages"] == [spec_api._NO_TASKS]
+    assert body["build_outcome"]["flow"]["messages"] == [spec_api._NO_TASKS]
     assert await _rows(Loop) == []
 
 
@@ -935,14 +913,12 @@ async def test_1_8_a_roadmap_approval_writes_a_report_too(app, auth_headers, run
     written = await _submit_document(app, run_headers, roadmap, path=path)
     assert written.status_code == 200, written.text
     await _close_exploration(app, auth_headers, path)
-    proposed = await _propose(app, auth_headers, path)
-    assert proposed.json()["phase"] == "proposed", proposed.text
 
     body = await _approve(app, auth_headers, path)
 
-    assert body["approval_outcome"]["flow"]["state"] == "not_applicable"
+    assert body["build_outcome"]["flow"]["state"] == "not_applicable"
     assert "Only a change document declares a delivery" in (
-        body["approval_outcome"]["flow"]["messages"][0]
+        body["build_outcome"]["flow"]["messages"][0]
     )
 
 
@@ -974,9 +950,9 @@ async def test_1_9_delivery_status_follows_the_roster(app, auth_headers, run_hea
 
     await _set_lifecycle("dev", "open")
     await _close_exploration(app, auth_headers)
-    await _propose(app, auth_headers)
     await _approve(app, auth_headers)
-    assert await status_of() is None, "not computed for an approved document"
+    # Still computed once approved: Build reads it (`exploring-ends-at-an-approved-plan`).
+    assert await status_of() == {"state": "ok", "agent": "dev"}
 
 
 @pytest.mark.asyncio

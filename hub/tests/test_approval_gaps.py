@@ -174,17 +174,17 @@ async def test_the_journey_steps_a_document_never_reached_are_a_gap_naming_them(
     skipped = [g for g in at_requirements.gaps if g["code"] == "steps_skipped"]
     assert len(skipped) == 1, at_requirements
     message = skipped[0]["message"]
-    for step in ("threat-model", "acceptance", "approach", "tasks", "delivery"):
+    for step in ("threat-model", "acceptance", "approach", "tasks", "build"):
         assert step in message
     assert message.index("threat-model") < message.index("acceptance")
     # F574: a document written whole meets this on every approval; the warning names the one
     # call that records it reached the end of its journey.
-    assert '"step": "delivery"' in message and "documents/journey" in message
+    assert '"step": "build"' in message and "documents/journey" in message
     # F730: the route named in full, so it can be called as written.
     assert "POST /api/v1/projects/proj-test/project/documents/journey?path=" in message
     assert not any(r["code"] == "steps_skipped" for r in at_requirements.refusals)
 
-    await _place(step="delivery", size="large")
+    await _place(step="build", size="large")
     assert "steps_skipped" not in {g["code"] for g in (await _findings()).gaps}
 
 
@@ -192,4 +192,4 @@ async def test_the_journey_steps_a_document_never_reached_are_a_gap_naming_them(
 async def test_a_document_with_no_step_has_no_skipped_steps(app, auth_headers, tmp_path):
     await _create(app, auth_headers)
     await _place(step=None, size=None)
-    assert "steps_skipped" not in {g["code"] for g in (await _findings("proposed")).gaps}
+    assert "steps_skipped" not in {g["code"] for g in (await _findings("approved")).gaps}

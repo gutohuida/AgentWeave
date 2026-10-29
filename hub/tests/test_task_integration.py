@@ -644,9 +644,6 @@ async def test_a_conflict_refuses_even_at_sketch_rigor(app, auth_headers, builde
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
 
-    document_rigor = await app.get(f"{BASE}/documents", headers=auth_headers)
-    assert document_rigor.json()["documents"][0]["rigor"] == "sketch"
-
     commit_on_branch(tmp_path, AGENT_BRANCH, "shared.txt", "agent\n")
     await accept_evidence(app, auth_headers, builder)
 

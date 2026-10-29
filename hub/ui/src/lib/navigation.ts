@@ -64,6 +64,12 @@ export const AGENT_SETTINGS_SECTIONS = [
 ] as const
 export type AgentSettingsSection = (typeof AGENT_SETTINGS_SECTIONS)[number]
 
+/** The operator's own settings, for every project on this Hub. The sections are named for what the
+ *  operator is trying to do: turn a sound off, switch to dark, point the app at another Hub. */
+export const APP_SETTINGS_SECTIONS = ['notifications', 'appearance', 'connection'] as const
+export type AppSettingsSection = (typeof APP_SETTINGS_SECTIONS)[number]
+const DEFAULT_APP_SETTINGS_SECTION: AppSettingsSection = APP_SETTINGS_SECTIONS[0]
+
 const DEFAULT_TAB: ProjectTab = 'overview'
 const DEFAULT_ENVIRONMENT_SECTION: EnvironmentSection = ENVIRONMENT_SECTIONS[0]
 const DEFAULT_AGENT_SETTINGS_SECTION: AgentSettingsSection = AGENT_SETTINGS_SECTIONS[0]
@@ -140,6 +146,10 @@ export type WorkspaceDestination =
   // subject, so they cannot say *which* agent is being configured. `agent` is non-null by
   // construction — there is no such thing as configuring no agent.
   | { kind: 'agent-settings'; projectId: string; agent: string; section: AgentSettingsSection }
+  // The operator's own settings. `projectId` is the project the operator came from, kept so the rail
+  // and the way back still know where they were; it is null with no project open, which is the
+  // point of this being a destination of its own (the app has no other settings entry there).
+  | { kind: 'app-settings'; projectId: string | null; section: AppSettingsSection }
   | { kind: 'zero' }
 
 /** Collection-shaped from day one, even while one authenticated project is visible. */
@@ -244,6 +254,19 @@ export function agentSettingsDestination(
   section: AgentSettingsSection = DEFAULT_AGENT_SETTINGS_SECTION,
 ): Extract<WorkspaceDestination, { kind: 'agent-settings' }> {
   return { kind: 'agent-settings', projectId, agent, section }
+}
+
+export function appSettingsDestination(
+  projectId: string | null,
+  section: AppSettingsSection = DEFAULT_APP_SETTINGS_SECTION,
+): Extract<WorkspaceDestination, { kind: 'app-settings' }> {
+  return { kind: 'app-settings', projectId, section }
+}
+
+/** The project a destination belongs to, or null when it belongs to none (the zero state, and App
+ *  settings opened with no project). */
+export function destinationProjectId(destination: WorkspaceDestination): string | null {
+  return destination.kind === 'zero' ? null : destination.projectId
 }
 
 /** Where the back control on the settings page goes: a *fixed* target, the agent's most recent
@@ -364,6 +387,11 @@ export function isSectionedDestination(destination: WorkspaceDestination): boole
 export function serializeDestination(destination: WorkspaceDestination): string {
   if (destination.kind === 'zero') return ''
   const params = new URLSearchParams()
+  if (destination.kind === 'app-settings') {
+    if (destination.projectId) params.set('project', destination.projectId)
+    params.set('appSettings', destination.section)
+    return `?${params.toString()}`
+  }
   params.set('project', destination.projectId)
   if (destination.kind === 'agent-settings') {
     params.set('agent', destination.agent)
@@ -421,6 +449,14 @@ export function serializeDestination(destination: WorkspaceDestination): string 
 export function parseDestination(search: string): WorkspaceDestination | null {
   const params = new URLSearchParams(search)
   const projectId = params.get('project')
+  // App settings need no project: they are the one destination a bare address can name.
+  const rawAppSection = params.get('appSettings')
+  if (rawAppSection !== null) {
+    const section: AppSettingsSection = (APP_SETTINGS_SECTIONS as readonly string[]).includes(rawAppSection)
+      ? (rawAppSection as AppSettingsSection)
+      : DEFAULT_APP_SETTINGS_SECTION
+    return appSettingsDestination(projectId || null, section)
+  }
   if (!projectId) return null
 
   const agent = params.get('agent')
@@ -492,6 +528,19 @@ export function resolveDestination(
   requested: WorkspaceDestination | null,
   { availableProjectIds, lastOpenedProjectId }: ResolveDestinationOptions,
 ): WorkspaceDestination {
+  if (requested && requested.kind === 'app-settings') {
+    // Never replaced by another destination: it works with no project. The project it names is kept
+    // while it is registered; one it does not name (a bare address) or that is gone falls back to the
+    // last-opened project, so the way back still has somewhere to go.
+    const registered = (id: string | null): id is string =>
+      id !== null && (availableProjectIds === null || availableProjectIds.includes(id))
+    const projectId = registered(requested.projectId)
+      ? requested.projectId
+      : registered(lastOpenedProjectId)
+        ? lastOpenedProjectId
+        : null
+    return projectId === requested.projectId ? requested : { ...requested, projectId }
+  }
   if (requested && requested.kind !== 'zero') {
     if (availableProjectIds === null || availableProjectIds.includes(requested.projectId)) {
       return requested

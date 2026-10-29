@@ -629,3 +629,29 @@ async def test_a_stall_reason_that_actually_changed_does_not_match(app):
         )
 
     assert counted is None
+
+
+def test_rung_3_reason_names_only_the_builds_reviewers_as_busy():
+    """B3: a build whose reviewers are [qa] stalls with dev2 and lead (not in the pool, not running)
+    listed as "running a turn" on the unfixed code. Only the pool is named, and "running a turn"
+    only for an agent that is running."""
+    from types import SimpleNamespace
+
+    from hub.scheduler import AgentAvailability, Holding, _rung_3_reason
+
+    task = SimpleNamespace(status="completed", id="task-b3")
+    booked = Holding(
+        task_id="task-471e79841cd2", status="in_progress", loop_id=None, reachable=True
+    )
+    availability = [
+        AgentAvailability("dev2", True, False, False),
+        AgentAvailability("lead", True, False, False),
+        AgentAvailability("qa", True, False, False, (booked,)),
+    ]
+
+    reason = _rung_3_reason(task, availability, {}, {"qa"})
+
+    assert "dev2" not in reason and "lead" not in reason
+    assert "running a turn" not in reason
+    assert "qa is booked for task-471e79841cd2" in reason
+    assert "[qa]" in reason

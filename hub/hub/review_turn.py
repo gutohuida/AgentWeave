@@ -339,7 +339,7 @@ async def verdict_evidence_sentence(
     *may_decide* is the reviewer's `can_accept_evidence` grant.
     """
     from . import task_integration
-    from .requirement_gate import _identifiers_for, rejected_identifiers
+    from .requirement_gate import _identifiers_for, held_identifiers, rejected_identifiers
 
     rejected = " ".join(
         part
@@ -347,6 +347,7 @@ async def verdict_evidence_sentence(
             await _dependencies_sentence(session, task),
             await _other_requirements_sentence(session, task),
             _rejected_sentence(await rejected_identifiers(session, task)),
+            _held_sentence(await held_identifiers(session, task)),
             await _checks_sentence(session, task),
         )
         if part
@@ -370,9 +371,12 @@ async def verdict_evidence_sentence(
     if own:
         parts.append(
             f"**Your verdict decides this task's evidence** ({'; '.join(named(r) for r in own)}). "
-            "Approving accepts it and merges the work; sending the task back with "
-            "`revision_needed` rejects it. Judge what each piece claims as part of the review, and "
-            "say in `notes` what you checked: your notes are the reason recorded on each piece."
+            "Approving accepts it and merges the work. Sending the task back with "
+            "`revision_needed` rejects only the pieces you name in `failing_pieces`, each with its "
+            'own reason (`[{"piece": "FR-3", "reason": "..."}]`); every piece you do not name is '
+            "held, not rejected, and its author records it again at the next commit. Judge what "
+            "each piece claims as part of the review, and say in `notes` what you checked: your "
+            "notes are the reason recorded on each piece you approve or hold."
         )
     if foreign:
         recorded = "; ".join(
@@ -512,6 +516,21 @@ def _rejected_sentence(identifiers: List[str]) -> Optional[str]:
     )
 
 
+def _held_sentence(identifiers: List[str]) -> Optional[str]:
+    """K: a served requirement whose only current evidence a send-back held refuses `approved` at
+    every rigor, as a rejection does, until its author records it again at the next commit."""
+    if not identifiers:
+        return None
+    named = ", ".join(f"`{identifier}`" for identifier in identifiers)
+    return (
+        f"**{named} {'has' if len(identifiers) == 1 else 'have'} only held evidence**: an earlier "
+        "send-back held it without naming it as failing, and a held piece is not accepted, so "
+        "`approved` will be refused until its author records it again at the next commit. "
+        "Recording it is not your work: if that is still missing when you decide, end with "
+        "`revision_needed` and notes naming it -- that returns the task to its author."
+    )
+
+
 async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
     """The task's check result, for a reviewer (`approval-runs-the-projects-checks`, agent-flows).
 
@@ -538,6 +557,14 @@ async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
         return None
     if view.state == "passed":
         passed = "**This task's checks passed** on the work approval would merge."
+        if view.run is not None and view.reused is None:
+            tip = await blocking.run(project_checks.main_tip, situation.root, situation.main_branch)
+            if tip and view.run.main_sha != tip:
+                # A pass on an earlier tip counts (`approved-work-merges-in-batches`, FR-9).
+                passed = (
+                    f"**This task's checks passed** on {view.run.main_sha[:12]}; the landing "
+                    "re-checks it on main."
+                )
         results = view.reused
         if results is None:
             results = list(view.run.results or []) if view.run is not None else []
@@ -561,18 +588,60 @@ async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
         failing = [r for r in view.run.results or [] if project_checks.failed(r)]
         names = ", ".join(f"`{r.get('name')}`" for r in failing)
         tail = str((failing[-1].get("output_tail") if failing else "") or "")[-600:].strip()
+        # The gate's own decision, so the briefing and the approval cannot disagree
+        # (`a-red-main-does-not-hold-the-night`, FR-8): failures that are main's or flakes are not
+        # the task's work, and the reviewer is not told to send it back for them.
+        from .requirement_gate import automatic_override
+
+        try:
+            decided = await automatic_override(session, task, view)
+        except Exception:  # noqa: BLE001 -- a briefing never fails over a diagnostic
+            logger.warning("could not decide the override for task %s", task.id, exc_info=True)
+            decided = None
+        if decided is not None:
+            main = str(decided.get("main_sha") or "")[:12]
+            tests = "; ".join(
+                f"`{e['test']}` ({e['check']}) "
+                + (
+                    f"fails on main at {main} too"
+                    if e["kind"] == project_checks.FAILS_ON_MAIN
+                    else "passed when rerun on its own"
+                )
+                for e in decided["failures"]
+            )
+            fixes = sorted(set((decided.get("fix_tasks") or {}).values()))
+            fix = (
+                f" Fix task {', '.join(f'`{t}`' for t in fixes)} covers them."
+                if fixes
+                else " The Hub files a fix task for them."
+            )
+            return (
+                f"**This task's checks fail ({names}), and the failure is not this task's work:** "
+                f"{tests} (check run {decided.get('run_id')}). Approving lands it with an override "
+                f"the Hub records.{fix} Judge the work itself; do not send it back for these."
+            )
+        if failing and all(project_checks.preexisting(r) for r in failing):
+            # F605: the whole check fails on main too, and the Hub cannot tell the failures apart
+            # by test (or may not override them): the approval waits on the operator.
+            return (
+                f"**This task's checks fail ({names}), and they fail on main too**, so the failure "
+                f"is not this task's work. Last output: {tail!r}. Approving queues it; its landing "
+                "waits on the operator, who lands it with an override reason or fixes main first; "
+                "do not send it back for this."
+            )
         return (
             f"**This task's checks failed** ({names}) on the work approval would merge, so "
             f"`approved` will be refused until they pass. Last output: {tail!r}. {returns_it}"
         )
     if view.state == "error" and view.run is not None:
         return (
-            f"**This task's checks could not run** ({view.run.error}). Approving runs them "
-            "again, and `approved` is refused until they pass."
+            f"**This task's checks could not run** ({view.run.error}). That does not hold "
+            "approval: approving queues the work, and its landing checks it on main."
         )
     return (
-        "**This task's checks have not finished** on the work approval would merge, so "
-        "`approved` will be refused until they pass. If they fail, " + returns_it
+        "**This task's checks have not finished** on the work approval would merge. That does "
+        "not hold approval: approving queues the work, and its landing checks it on main. If they "
+        "fail with a failure of its own, " + returns_it
     )
 
 

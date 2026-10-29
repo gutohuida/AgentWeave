@@ -38,6 +38,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import (
+    builds,
     loop_history,
     requirement_links,
     spec_identity,
@@ -419,7 +420,11 @@ async def materialise(
             spec_task_key=key,
             loop_id=owning_loop.id if owning_loop is not None else None,
             acceptance_criteria=criteria or None,
+            builder=(entry.get("builder") or None),
         )
+        # Declared while a build of the document runs (a reopened document re-approved): the
+        # task joins that build, at its level, as it joins the build's flow above (slice D).
+        await builds.join_running_build(session, task)
         session.add(task)
         await session.flush()
 

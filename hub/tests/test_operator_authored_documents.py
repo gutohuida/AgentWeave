@@ -21,6 +21,8 @@ from hub.db.models import Run, SpecDocumentEvent
 from hub.spec_documents import parse_hub, parse_stored
 from hub.spec_payload import SCHEMA_VERSION
 
+from ._spec_versions import content_version
+
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
 CAP_PATH = "spec/capabilities/demo/spec.json"
@@ -221,14 +223,10 @@ class TestNoRuleIsRelaxedForTheOperator:
         await _create(app, auth_headers, CHANGE_PATH, "change-spec")
         await _write(app, auth_headers, CHANGE_PATH, _complete_payload("change-spec"))
 
-        # The real sequence, learned the hard way: a document cannot be proposed while its
-        # exploration is open, so `close-exploration` comes first and `propose` is its own route
-        # rather than a phase transition. Only `approved` goes through `/documents/phase`.
-        #
-        # `propose` also answers 200 with a list of *blocking findings* when the document is
-        # incomplete, rather than erroring — so the status code alone proves nothing, and the empty
-        # body is the real assertion.
-        for route in ("close-exploration", "propose"):
+        # `check` answers 200 with a list of *blocking findings* when the document is incomplete,
+        # rather than erroring — so the status code alone proves nothing, and the empty body is
+        # the real assertion. Approval then goes straight from exploring.
+        for route in ("close-exploration", "check"):
             stepped = await app.post(
                 f"{BASE}/documents/{route}", params={"path": CHANGE_PATH}, headers=auth_headers
             )
@@ -237,7 +235,11 @@ class TestNoRuleIsRelaxedForTheOperator:
         moved = await app.post(
             f"{BASE}/documents/phase",
             params={"path": CHANGE_PATH, "to": "approved"},
-            json={"reason": "test", "approve_anyway": True},
+            json={
+                "content_version": await content_version(app, auth_headers, CHANGE_PATH),
+                "reason": "test",
+                "approve_anyway": True,
+            },
             headers=auth_headers,
         )
         assert moved.status_code == 200, moved.text
@@ -246,44 +248,6 @@ class TestNoRuleIsRelaxedForTheOperator:
 
         assert response.status_code == 422
         assert response.json()["detail"]["code"] == "document_approved"
-
-    async def test_the_operators_own_write_applies_at_contract_rigor(
-        self, app, auth_headers, tmp_path
-    ):
-        """F611, fix-D8: the operator's own edit applies at any rigor; proposals are for agents.
-        It used to become a pending proposal that approval neither listed nor blocked, and the
-        edit was lost (`test_spec_edit_proposals.py` keeps the agent's side)."""
-        await _create(app, auth_headers, CHANGE_PATH, "change-spec")
-        await _write(app, auth_headers, CHANGE_PATH, _payload("change-spec"))
-        raised = await app.post(
-            f"{BASE}/documents/{CHANGE_PATH}/rigor",
-            json={"rigor": "contract"},
-            headers=auth_headers,
-        )
-        assert raised.status_code == 200, raised.text
-        before = (tmp_path / CHANGE_PATH).read_text(encoding="utf-8")
-
-        response = await _write(
-            app,
-            auth_headers,
-            CHANGE_PATH,
-            _payload(
-                "change-spec",
-                requirements=[
-                    {"key": "alpha", "statement": "It responds within 50ms", "modal": "MUST"}
-                ],
-            ),
-        )
-
-        assert response.status_code == 200, response.text
-        body = response.json()
-        assert "identifiers" in body and not body.get("proposals")
-        after = (tmp_path / CHANGE_PATH).read_text(encoding="utf-8")
-        assert after != before and "It responds within 50ms" in after
-        listed = await app.get(f"{BASE}/documents/{CHANGE_PATH}/proposals", headers=auth_headers)
-        assert listed.status_code == 200, listed.text
-        rows = listed.json() if isinstance(listed.json(), list) else listed.json()["proposals"]
-        assert rows == []
 
     async def test_the_route_refuses_a_credential_that_is_not_the_operators(
         self, app, auth_headers, run_headers

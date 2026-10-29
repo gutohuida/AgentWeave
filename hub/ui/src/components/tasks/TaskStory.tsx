@@ -105,6 +105,9 @@ function short(sha: string | null | undefined): string {
 function Summary({ story }: { story: Story }) {
   const { summary, task } = story
   const { accepted, rejected, awaiting } = summary.evidence
+  // K: held at its commit by a send-back that did not name it as failing; counted apart from
+  // rejected, which it is not.
+  const held = summary.evidence.held ?? 0
   const merged = summary.merged[summary.merged.length - 1]
   const cost = costCell(summary)
   return (
@@ -135,17 +138,22 @@ function Summary({ story }: { story: Story }) {
       <div>
         <span className="aw-story-label aw-story-label-row">
           Evidence
-          {accepted + awaiting + rejected > 0 ? (
+          {accepted + awaiting + rejected + held > 0 ? (
             <EvidenceLink focus={task.id} testId={`task-story-evidence-open-${task.id}`}>
               See all
             </EvidenceLink>
           ) : null}
         </span>
         <span className="aw-counts">
-          {accepted + awaiting + rejected === 0 ? <small className="aw-tl-meta">none yet</small> : null}
+          {accepted + awaiting + rejected + held === 0 ? <small className="aw-tl-meta">none yet</small> : null}
           {accepted ? <span className="tone-green">{accepted} accepted</span> : null}
           {awaiting ? <span className="tone-amber">{awaiting} waiting</span> : null}
           {rejected ? <span className="tone-red">{rejected} rejected</span> : null}
+          {held ? (
+            <span className="tone-neutral" title="Not named as failing when the task was sent back; recorded again at the next commit">
+              {held} held
+            </span>
+          ) : null}
         </span>
       </div>
       <div>
@@ -243,9 +251,12 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           ? event.job
             ? `${event.job_kind === 'flow' ? 'Flow' : 'Loop'} ${event.job}`
             : 'A scheduled job'
-          : event.actor_kind === 'operator'
-            ? 'You'
-            : event.actor ?? 'A run'
+          : event.origin === 'checks'
+            ? // The project's checks returned work their run failed (operator's authority, not act).
+              'The project’s checks'
+            : event.actor_kind === 'operator'
+              ? 'You'
+              : event.actor ?? 'A run'
       return (
         <TimelineItem
           key={event.id}
@@ -279,9 +290,15 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           }
         >
           {event.override_reason ? (
-            <div className="aw-callout tone-amber" data-testid={`story-override-${event.id}`}>
-              <strong>Approved over failing checks.</strong> {event.override_reason}
-            </div>
+            event.override_by === 'hub' ? (
+              <div className="aw-callout tone-blue" data-testid={`story-override-${event.id}`} data-override-by="hub">
+                <strong>Approved by the Hub over failures that were not this task's.</strong> {event.override_reason}
+              </div>
+            ) : (
+              <div className="aw-callout tone-amber" data-testid={`story-override-${event.id}`} data-override-by="operator">
+                <strong>Approved over failing checks.</strong> {event.override_reason}
+              </div>
+            )
           ) : null}
         </TimelineItem>
       )

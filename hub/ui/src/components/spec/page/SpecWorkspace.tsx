@@ -1,11 +1,12 @@
 import * as React from 'react'
+import { Icon } from '@/components/common/Icon'
 import { useActiveAnchor, useDocumentNavigation, useEnterChildren } from './hooks'
 import { anchors, type BuildView, type CheckFinding, type CheckState, type DocumentFilters, type ListPreferences, type SpecAction, type SpecDocumentView, type SpecListEntry } from './model'
 import { SpecBuildsSection } from './SpecBuilds'
 import { SpecDocList, SpecDocSwitcher } from './SpecDocList'
 import { SpecDocumentBody, type BodyPart } from './SpecDocumentBody'
 import { SpecOutlineMenu, SpecOutlineRail } from './SpecOutline'
-import { SpecPageHeader } from './SpecPageHeader'
+import { SpecPageHeader, type HeaderChrome } from './SpecPageHeader'
 import { SpecPanelDocSwitcher, SpecPanelNav, type PanelListProps } from './SpecPanelNav'
 import { Segmented } from '@/components/ui/segmented'
 import '@/styles/spec-page.css'
@@ -25,11 +26,15 @@ export interface SpecSurfaceProps {
   onOpenDocument: (path: string) => void
   onCopyLink: (anchor: string | null) => void
   onCopyPath: () => void
-  onArchive: () => void
-  onDelete: () => void
+  onArchive?: () => void
+  onDelete?: () => void
   onStartBuild: () => void
   onOpenRuns: (build: BuildView) => void
   onStopBuild: (build: BuildView) => void
+  /** Under the header, above the document: what the operator has to decide (amendments, proposals), what the actions said (refusals, gaps) and the dialogs. */
+  /** Decisions the Hub's phase controls offer beyond the page's own buttons. */
+  chrome?: HeaderChrome
+  banner?: (context: { jump: (anchor: string) => void }) => React.ReactNode
 }
 
 export interface SpecWorkspaceProps extends SpecSurfaceProps {
@@ -39,6 +44,8 @@ export interface SpecWorkspaceProps extends SpecSurfaceProps {
   onNew: () => void
   /** The document list as a left column, or as a switcher above a full-width document. */
   layout: 'column' | 'switcher'
+  /** Pinned under the list (the evidence entry, the defects report). */
+  listFooter?: React.ReactNode
 }
 
 function useSurface(props: SpecSurfaceProps, scroller: React.RefObject<HTMLDivElement | null>) {
@@ -76,6 +83,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
       onNew={props.onNew}
       now={props.now}
       variant={variant}
+      footer={props.listFooter}
     />
   )
 
@@ -84,6 +92,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
       {props.layout === 'column' ? list('column') : null}
       <div className="aw-sp-main">
         <SpecPageHeader
+          chrome={props.chrome}
           doc={doc}
           check={props.check}
           runningBuild={running?.number ?? null}
@@ -106,6 +115,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           onArchive={props.onArchive}
           onDelete={props.onDelete}
         />
+        {props.banner?.({ jump: nav.jump })}
         <div className="aw-sp-scroll" ref={scroller}>
           <div className="aw-sp-columns">
             <div className="aw-sp-content" key={doc.path} ref={content}>
@@ -118,10 +128,11 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 flash={nav.flash}
                 onJump={nav.jump}
                 onCopyLink={props.onCopyLink}
+                onOpenDocument={props.onOpenDocument}
                 builds={
                   <SpecBuildsSection
                     builds={props.builds}
-                    canBuild={doc.state === 'approved' || doc.state === 'building'}
+                    canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
                     now={props.now}
                     flash={nav.flash}
                     onStartBuild={props.onStartBuild}
@@ -177,12 +188,22 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
     <div className="aw-sp aw-sp-panel" data-layout="panel">
       <div className="aw-sp-main">
         <SpecPageHeader
+          chrome={props.chrome}
           doc={doc}
           check={props.check}
           runningBuild={running?.number ?? null}
           now={props.now}
           compact
-          trailing={<SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={jump} />}
+          trailing={
+            <>
+              <SpecOutlineMenu doc={doc} findings={findings} builds={props.builds} active={active} onJump={jump} />
+              {props.onClose ? (
+                <button data-slot="icon-button" type="button" className="aw-icon-button" data-testid="spec-document-close" onClick={props.onClose} aria-label="Close document" title="Close document">
+                  <Icon name="close" size={15} />
+                </button>
+              ) : null}
+            </>
+          }
           canBack={nav.canBack}
           canForward={nav.canForward}
           onBack={nav.back}
@@ -195,6 +216,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
           onArchive={props.onArchive}
           onDelete={props.onDelete}
         />
+        {props.banner?.({ jump })}
         {props.list ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} /> : null}
         <div className="aw-sp-panel-tabs">
           <Segmented<PanelTab>
@@ -236,10 +258,11 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
               flash={nav.flash}
               onJump={jump}
               onCopyLink={props.onCopyLink}
+              onOpenDocument={props.onOpenDocument}
               builds={
                 <SpecBuildsSection
                   builds={props.builds}
-                  canBuild={doc.state === 'approved' || doc.state === 'building'}
+                  canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
                   now={props.now}
                   flash={nav.flash}
                   onStartBuild={props.onStartBuild}

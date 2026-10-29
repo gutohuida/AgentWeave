@@ -235,6 +235,7 @@ async def test_a_merge_and_an_override_reach_the_summary(app, auth_headers, buil
             )
         ).scalar_one()
         transition.override_reason = "the flaky suite fails on main too"
+        transition.override_by = "operator"
         await session.commit()
 
     body = await story(app, auth_headers, task)
@@ -246,7 +247,22 @@ async def test_a_merge_and_an_override_reach_the_summary(app, auth_headers, buil
     assert body["summary"]["merged"] == [integration["commit_sha"]]
     approved = [e for e in body["events"] if e["kind"] == "transition" and e["to"] == "approved"]
     assert approved[0]["override_reason"] == "the flaky suite fails on main too"
+    assert approved[0]["override_by"] == "operator"
     assert body["summary"]["overrides"] == 1
+
+    # story-shows-the-hub (`a-red-main-does-not-hold-the-night`, FR-11): the Hub's own override is
+    # told apart from the operator's.
+    async with async_session_factory() as session:
+        transition = (
+            await session.execute(
+                select(TaskTransition).where(TaskTransition.id == approved[0]["id"])
+            )
+        ).scalar_one()
+        transition.override_by = "hub"
+        await session.commit()
+    body = await story(app, auth_headers, task)
+    approved = [e for e in body["events"] if e["kind"] == "transition" and e["to"] == "approved"]
+    assert approved[0]["override_by"] == "hub"
 
 
 @pytest.mark.asyncio

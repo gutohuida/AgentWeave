@@ -3,8 +3,8 @@
 `a-requirement-is-checked-against-what-the-vault-recorded` (Tier 1, spdoc-e4f531e0b926). A
 requirement cites vault facts by id; the Hub derives a warning on read for a cited fact that is
 disputed, superseded, reported or missing; the manager's spec-vault-check job judges every
-requirement against the vault's facts when a document is proposed; each warning is a
-`vault_warning` gap at proposal and approval. As in `test_vault_reports.py` the worker is faked: a
+requirement against the vault's facts when the operator checks a document; each warning is a
+`vault_warning` gap at approval. As in `test_vault_reports.py` the worker is faked: a
 test hands `vault_spec_check.run_worker` what the model would answer, so what is checked is what
 the Hub keeps of it. The real spawn is the acceptance drive's
 (`scripts/drive/d1025_specs_against_vault.py`).
@@ -22,6 +22,7 @@ from hub.spec_documents import parse_stored
 from hub.spec_payload import payload_to_dict, validate_payload
 from hub.worker import WorkerResult
 
+from ._spec_versions import content_version
 from .test_spec_documents_api import (  # noqa: F401  (run_headers is a fixture)
     PATH,
     _create,
@@ -163,13 +164,11 @@ async def _enable(app, auth_headers) -> None:
     assert patched.status_code == 200, patched.text
 
 
-async def _propose(app, auth_headers):
-    await _place(step="delivery", size="large")
-    proposed = await app.post(
-        f"{DOCS}/documents/propose", params={"path": PATH}, headers=auth_headers
-    )
-    assert proposed.status_code == 200, proposed.text
-    return proposed.json()
+async def _check(app, auth_headers):
+    await _place(step="build", size="large")
+    checked = await app.post(f"{DOCS}/documents/check", params={"path": PATH}, headers=auth_headers)
+    assert checked.status_code == 200, checked.text
+    return checked.json()
 
 
 async def _check_now(app, auth_headers, path: str = PATH):
@@ -398,7 +397,7 @@ async def test_the_job_is_listed_disabled_with_nothing_chosen(app, auth_headers)
 
 
 @pytest.mark.asyncio
-async def test_proposal_fires_one_check_keeping_only_conflicts_that_name_real_ids(
+async def test_a_check_fires_one_vault_check_keeping_only_conflicts_that_name_real_ids(
     app, auth_headers, run_headers, worker, tmp_path  # noqa: F811
 ) -> None:
     january = await _source(app, auth_headers, JANUARY, "2026-01-10")
@@ -432,10 +431,10 @@ async def test_proposal_fires_one_check_keeping_only_conflicts_that_name_real_id
         on_call=phase_at_spawn,
     )
 
-    proposed = await _propose(app, auth_headers)
-    assert proposed["proposed"] is True
-    # The spawn ran after the proposal was committed: the answer did not wait on it.
-    assert seen_phases == ["proposed"]
+    checked = await _check(app, auth_headers)
+    assert checked["ready"] is True
+    # The spawn ran after the Check answered, and the Check moved nothing.
+    assert seen_phases == ["exploring"]
     assert len(fake.calls) == 1
     prompt = fake.calls[0]["prompt"]
     assert "r2" in prompt and "Refunds up to 3,000 euros need no approval." in prompt
@@ -447,7 +446,7 @@ async def test_proposal_fires_one_check_keeping_only_conflicts_that_name_real_id
     assert len(firings) == 1
     fired = firings[0]
     assert fired["trigger"] == "document_proposed" and fired["outcome"] == "written"
-    assert fired["subject"] == {"document": PATH}
+    assert fired["subject"] == {"document": PATH, "content_version": checked["content_version"]}
     assert fired["conflicts"] == [
         {
             "requirement": "r2",
@@ -509,7 +508,7 @@ async def test_check_now_with_nothing_to_compare_says_so_instead_of_queueing(
 
 
 @pytest.mark.asyncio
-async def test_a_disabled_job_spawns_nothing_on_proposal(
+async def test_a_disabled_job_spawns_nothing_on_a_check(
     app, auth_headers, run_headers, worker, tmp_path  # noqa: F811
 ) -> None:
     january = await _source(app, auth_headers, JANUARY, "2026-01-10")
@@ -517,7 +516,7 @@ async def test_a_disabled_job_spawns_nothing_on_proposal(
     fake = worker([])
     await _create(app, auth_headers)
     await _saved(app, run_headers, _requirement("r1", "Refunds up to 3,000 need none."))
-    assert (await _propose(app, auth_headers))["proposed"] is True
+    assert (await _check(app, auth_headers))["ready"] is True
     assert fake.calls == [] and await _firings() == []
 
 
@@ -637,27 +636,31 @@ async def test_each_warning_is_a_vault_warning_gap_and_approve_anyway_still_appr
     await _create(app, auth_headers)
     await _saved(app, run_headers, _requirement("alpha", "It responds within 200ms", [MISSING]))
 
-    proposed = await _propose(app, auth_headers)
-    assert proposed["proposed"] is True and proposed["blocking"] == []
-    gaps = [w for w in proposed["warnings"] if w["code"] == "vault_warning"]
-    assert [g["where"] for g in gaps] == ["requirements[0]"]
-    assert MISSING in gaps[0]["message"]
+    checked = await _check(app, auth_headers)
+    assert checked["ready"] is True and checked["blocking"] == []
 
     phase = f"{DOCS}/documents/phase"
     refused = await app.post(
-        phase, params={"path": PATH, "to": "approved"}, json={"reason": ""}, headers=auth_headers
+        phase,
+        params={"path": PATH, "to": "approved"},
+        json={"reason": "", "content_version": await content_version(app, auth_headers, PATH)},
+        headers=auth_headers,
     )
     assert refused.status_code == 409, refused.text
     detail = refused.json()["detail"]
     assert detail["code"] == "approval_warnings"
-    assert [w["where"] for w in detail["warnings"] if w["code"] == "vault_warning"] == [
-        "requirements[0]"
-    ]
+    gaps = [w for w in detail["warnings"] if w["code"] == "vault_warning"]
+    assert [g["where"] for g in gaps] == ["requirements[0]"]
+    assert MISSING in gaps[0]["message"]
 
     approved = await app.post(
         phase,
         params={"path": PATH, "to": "approved"},
-        json={"reason": "", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
     assert approved.status_code == 200, approved.text

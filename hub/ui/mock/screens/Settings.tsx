@@ -198,6 +198,7 @@ export default function Settings({ route, go, now }: ScreenProps) {
       items={SECTIONS.map((s) => ({ ...s, meta: counts[s.id] }))}
       active={section}
       onSelect={(id) => go({ kind: 'settings', section: id })}
+      footer={{ label: 'App settings', icon: 'settings', onClick: () => go({ kind: 'app-settings', section: 'notifications' }) }}
     >
       {body}
     </SettingsNavLayout>

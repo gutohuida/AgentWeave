@@ -1,0 +1,24 @@
+{
+  "id": "ctr-7828b68a6df5",
+  "kind": "contradiction",
+  "facts": [
+    "fct-7cff2b4e5a2b",
+    "fct-8525d6c240e6"
+  ],
+  "presumed": "fct-7cff2b4e5a2b",
+  "explanation": "The new hub-tests command sets a 600-second per-test timeout, while the existing fact says hub-tests uses a 300-second per-test thread timeout run from the hub directory.",
+  "status": "resolved",
+  "visibility": "tracked",
+  "holder": null,
+  "created_at": "2026-10-26T01:49:13.125900Z",
+  "found_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  },
+  "resolution": {
+    "stands": "fct-7cff2b4e5a2b",
+    "note": "The project's hub-tests check, as configured on 2026-10-28, is `py -3.11 -m pytest hub/tests -q -n auto --dist loadgroup -p no:cacheprovider --timeout=600` from the repository root, with a 3600 s timeout. The 10-24 `cd hub ... tests/ --dist loadfile --timeout=300` form was replaced by it on 10-26; checks of a task worktree still import that worktree's code and pass.",
+    "decision": "src-e7061d8f3249",
+    "resolved_at": "2026-10-28T16:00:46.169676Z"
+  }
+}

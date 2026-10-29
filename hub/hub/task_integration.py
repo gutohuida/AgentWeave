@@ -153,6 +153,13 @@ GIT_TIMEOUT_SECONDS: contextvars.ContextVar[int] = contextvars.ContextVar(
 )
 DIAGNOSTIC_GIT_TIMEOUT_SECONDS = 5
 
+#: Evidence ids read as accepted though still awaiting: the pieces an approval's verdict is about to
+#: accept, while the approval asks its git questions before its first write
+#: (`approved-work-merges-in-batches`, D3). Empty everywhere else.
+ASSUMED_ACCEPTED: contextvars.ContextVar[frozenset] = contextvars.ContextVar(
+    "assumed_accepted", default=frozenset()
+)
+
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return traces.run(
@@ -320,6 +327,12 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
     as before.
     """
     recorder = aliased(Task)
+    assumed = ASSUMED_ACCEPTED.get()
+    state_matches = RequirementEvidence.review_state == review_state
+    if assumed and review_state == requirement_evidence.ACCEPTED:
+        state_matches = or_(state_matches, RequirementEvidence.id.in_(sorted(assumed)))
+    elif assumed and review_state == requirement_evidence.AWAITING:
+        state_matches = state_matches & RequirementEvidence.id.not_in(sorted(assumed))
     rows = (
         await session.execute(
             select(EvidenceFootprint, RequirementEvidence)
@@ -335,7 +348,7 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
             .where(
                 TaskRequirementLink.task_id == task.id,
                 RequirementEvidence.project_id == task.project_id,
-                RequirementEvidence.review_state == review_state,
+                state_matches,
                 EvidenceFootprint.kind == "git",
                 EvidenceFootprint.commit_sha.is_not(None),
                 or_(
@@ -542,7 +555,8 @@ async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
 async def evidence_governs(session: AsyncSession, task: Task) -> bool:
     """Does accepted evidence decide what *task*'s approval merges (design D5, D10, D11)?
 
-    Five answers, in this order, and the order is the design:
+    Five answers, in this order, and the order is the design (after step 0 below: a fix task the
+    Hub filed merges its branch tip):
 
     1. **No loop** → yes. An ordinary task is untouched by any of this.
     2. **The loop id does not resolve** → yes. A dangling id decides nothing.
@@ -563,6 +577,12 @@ async def evidence_governs(session: AsyncSession, task: Task) -> bool:
     ask this within one approval and one session, so the PK get is answered from the identity map
     the second time and a `select` would not be.
     """
+    if getattr(task, "merges_branch_tip", False):
+        # 0. **A fix task the Hub filed** (`a-red-main-does-not-hold-the-night`): it serves no
+        # requirement, so in a flow whose document makes evidence govern it could record nothing,
+        # had no review target and merged nothing. Recorded on the task, and asked before the
+        # loop, so the Hub's own task is reviewed and landed at its branch tip in any loop.
+        return False
     if task.loop_id is None:
         return True
     from .db.models import Loop
@@ -586,7 +606,12 @@ async def review_alone_gates(session: AsyncSession, task: Task) -> bool:
     was refused as missing evidence, and its work never reached main. It merges, and is reviewed
     at, its own branch tip instead. A task with evidence keeps evidence governing (D10: the source
     is not switched once evidence exists).
+
+    A fix task the Hub filed (`merges_branch_tip`) is gated by its review alone in any loop
+    (`a-red-main-does-not-hold-the-night`).
     """
+    if getattr(task, "merges_branch_tip", False):
+        return True
     if task.loop_id is not None or await task_has_requirement_links(session, task):
         return False
     return (
@@ -727,6 +752,9 @@ class IntegrationResult:
     # Commits that landed alongside `commit_sha` because `merge --no-ff` merges a commit's whole
     # ancestry (F58). Populated only when `outcome` is `merged`; empty means nothing rode along.
     rode_along: List[str] = field(default_factory=list)
+    # The merge commit `merge --no-ff` made (HEAD after it), for a `merged` outcome: how the main
+    # watch knows this move of main was the Hub's own (`main_watch`).
+    merged_sha: Optional[str] = None
 
 
 def checkout_obstacle(
@@ -816,6 +844,14 @@ def integrate(
     base.outcome = MERGED
     base.reason = ""
     base.rode_along = rode_along
+    head = _git(root, "rev-parse", "HEAD")
+    if head.returncode == 0 and head.stdout.strip():
+        base.merged_sha = head.stdout.strip()
+        # Known to the watch at once, before the record that carries it commits: a look between
+        # the merge and that commit must not raise the Hub's own merge.
+        from . import main_watch
+
+        main_watch.note_own_merge(base.merged_sha)
     return base
 
 
@@ -838,6 +874,7 @@ def record(
         outcome=result.outcome,
         reason=result.reason,
         rode_along_commits=",".join(result.rode_along),
+        merged_sha=result.merged_sha,
         mechanism="local",
         actor_kind=actor_kind,
         actor=actor,
@@ -1003,9 +1040,15 @@ async def integrate_what_was_waiting_for_this_evidence(
             return
         waiting = await tasks_awaiting_this_commit(session, evidence)
         for task in waiting:
-            await retry_integration(session, task, actor)
+            await retry_integration(session, task, actor, kind="evidence")
         if waiting:
+            project_id = waiting[0].project_id
             await session.commit()
+            # Through the landing queue: lands now without checks (and this waits for it), in
+            # the next batch with them (`approved-work-merges-in-batches`).
+            from . import landing_queue
+
+            await landing_queue.settle(project_id)
     except Exception:  # noqa: BLE001 - never let a merge undo the decision that asked for it
         logger.warning(
             "Could not integrate the work waiting on evidence %s",

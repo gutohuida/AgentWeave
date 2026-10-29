@@ -1,0 +1,445 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a git fixture project whose single check is a script that appends the checked tree id to a counter file outside the repository, and four tasks under review, each with accepted evidence for its own commit touching its own file",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v, run on master first (fails) and then on the branch (passes); paste both outputs.",
+      "key": "four-good-tasks-one-run",
+      "requirement": "one-check-run-per-batch",
+      "then": "all four are approved with a merged integration record, main's tip tree equals the one batch's merged tree, and the counter holds exactly one execution made after the first approval. On master the first approval answers 409 'checks are still running', so the test fails there",
+      "when": "all four are approved within the gather window and the landing queue is drained"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review whose per-task check result passed on a main tip that has since moved, and a second task with no result at all",
+      "how_to_check": "Same file, test_a_stale_or_missing_result_does_not_hold_approval; py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v",
+      "key": "approval-answers-at-once",
+      "requirement": "approval-queues-without-waiting",
+      "then": "both answer 200 with status approved and a queued landing, and no per-task check run is started by either approval",
+      "when": "a reviewer approves each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose latest per-task run for its current merge targets failed on its own, with the failure confirmed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_gate.py -v (test_a_failing_check_refuses_approval_with_its_output_and_the_reviewers_move kept green; the stale/missing tests rewritten to expect queueing)",
+      "key": "own-failure-still-refuses",
+      "requirement": "approval-queues-without-waiting",
+      "then": "the approval is refused with the failing output, as today, and nothing is queued",
+      "when": "a reviewer approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a checked batch of two tasks, and separately the same batch where a commit is added to main by hand after the batch was built",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v (test_main_is_fast_forwarded_to_the_checked_commit, test_a_moved_main_rebuilds_the_batch)",
+      "key": "tree-equals-checked",
+      "requirement": "what-lands-is-what-was-checked",
+      "then": "in the first case `git rev-parse main^{tree}` equals the batch's merged tree and each task has one merged integration row per target; in the second nothing lands from the stale batch and a new batch is built on the new tip",
+      "when": "the batch lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the four-task fixture where the third task adds a file that makes one pytest test fail, the check being a plain pytest command",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_failing_batch_is_narrowed.py -v",
+      "key": "broken-one-sent-back",
+      "requirement": "a-failing-batch-sends-back-only-the-breaker",
+      "then": "only the third task is revision_needed, with a transition note naming the batch, the failing test and the tasks before it. The other three are approved and merged, and the broken file is not on main. The check ran on the whole tree at most twice, and the narrowed runs executed only the failing test node id, at most two of them",
+      "when": "all four are approved together and the queue is drained"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two queued tasks that each change the same line of one file differently",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_failing_batch_is_narrowed.py -v (test_a_conflict_in_a_batch_goes_to_its_author)",
+      "key": "conflict-taken-out",
+      "requirement": "a-conflict-in-a-batch-goes-to-its-author",
+      "then": "the first lands after the batch's check run; the second is revision_needed before any check runs, its note naming the conflicting path and the first task",
+      "when": "their batch is built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a queued task B whose branch contains task A's commit, with A queued after B, and separately with A sent back by its batch",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_failing_batch_is_narrowed.py -v (test_a_dependent_lands_after_its_prerequisite)",
+      "key": "dependent-waits",
+      "requirement": "prerequisites-land-first",
+      "then": "in the first case A lands before or in the same batch as B, never after; in the second B stays queued, is not revision_needed, and its landing names A",
+      "when": "the queue is drained"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a batch of three whose check fails on one test that fails on main's tip too",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_failing_batch_is_narrowed.py -v (test_a_failure_main_shares_follows_m)",
+      "key": "main-shares-the-failure",
+      "requirement": "failures-main-shares-follow-m",
+      "then": "with it on, all three land, each integration record and the batch carry the override, and exactly one fix task exists. With it off, nothing lands, the batch is shown waiting for the operator, and one operator landing with a reason lands all three. No narrowed run is made in either case",
+      "when": "the batch's run finishes, once with M's automatic override on and once with it off"
+    },
+    {
+      "checked_by": "agent",
+      "given": "every git process slowed by 250 ms with an event set when one starts, and a second engine on the same database file with a 100 ms busy timeout",
+      "how_to_check": "The second acceptance drive: py -3.11 -m pytest hub/tests/test_approval_holds_no_write_lock_across_git.py -v, red on master and green on the branch; py -3.11 -m pytest hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py -v stays green",
+      "key": "no-lock-during-git",
+      "requirement": "no-write-lock-across-git",
+      "then": "each write commits within 1 s. On master the write during approval's merge or release fails with 'database is locked'",
+      "when": "a task is approved (no checks configured) and, while one of its git commands is running, the second engine inserts and commits an event row; then the same during a batch landing, an integration retry and a checkout release"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two tasks under review, one whose per-task result passed and one with no result, and main's tip then moved by a landing",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_refresh_when_main_moves.py -v (its refresh test rewritten, red first)",
+      "key": "stale-pass-not-rerun",
+      "requirement": "a-passed-task-check-is-not-rerun-when-main-moves",
+      "then": "a run is started for the task with no result only, and the passed task is still offered for review and approval",
+      "when": "refresh runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the checks route's real payloads for a queued, a checking, a held, a landed and a sent-back landing",
+      "how_to_check": "cd hub/ui && npx vitest run src/components/tasks/TaskLanding.test.tsx; then on the trial Hub :8010 started from the branch, approve two tasks of a project with a check and screenshot the drawer while checking and after landing",
+      "key": "drawer-shows-landing",
+      "requirement": "the-landing-is-visible",
+      "then": "each state reads as specified next to Land without scrolling: position, elapsed and previous batch duration, what it is held on, the landed commit, the failing output. A `task_landing_changed` event updates it without a reload and raises the operator's notification",
+      "when": "the task drawer renders each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with checks, with one task queued, an approved task whose integration was skipped for a dirty checkout, and a mend resolution",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v (test_every_merge_goes_through_the_queue); py -3.11 -m pytest hub/tests/test_task_integration.py hub/tests/test_task_integration_retry.py hub/tests/test_one_action_lands_the_work.py -v stay green",
+      "key": "one-writer",
+      "requirement": "every-hub-merge-goes-through-the-queue",
+      "then": "both are queued behind the first task and land through a batch's checked commit; no `git merge` into main is made outside the landing queue (asserted by wrapping `task_integration.integrate` and the ff landing)",
+      "when": "the integration is retried and the resolution landed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a batch of two recorded checking, and another batch whose fast-forward ran but whose records were not written, then the startup reconcile",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v (test_a_restart_mid_batch_loses_and_repeats_nothing); py -3.11 -m pytest hub/tests/test_migration_0148_landing_queue.py -v for upgrade and downgrade",
+      "key": "restart-mid-batch",
+      "requirement": "a-restart-loses-and-repeats-nothing",
+      "then": "the first batch is interrupted and its two tasks are queued again in order. The second is recorded landed from main's history, with one integration row per target and no second merge",
+      "when": "the Hub's lifespan starts"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Building, checking and landing one batch",
+      "steps": [
+        "Start when the project has no batch running and the oldest queued landing has waited BATCH_GATHER_SECONDS (60). Take up to MAX_BATCH (8) queued landings in approval order, moving each prerequisite ahead of its dependents and leaving out a task whose prerequisite is neither landed nor taken.",
+        "Read main's tip T. Build the chain: base = T; for each task, merge each frozen target onto base with merge-tree and commit-tree (Hub identity, message 'Integrate approved work <sha12>'). A task that does not merge cleanly is taken out and sent back with its paths; otherwise its last commit is prefix P_k.",
+        "If the full chain's tree has passed every configured check before, record the pass; otherwise run the checks on the last prefix in a scratch worktree, stopping at the first failure that is the batch's own.",
+        "On a failure, re-run the failed tests on the same tree. A pass there records the flake and counts as a pass. Then run the failed tests on T: if every confirmed failure fails there too, apply slice M's decision and stop.",
+        "On a confirmed failure of the batch's own: binary-search k over the prefixes, running the failed tests (or the failing check) on P_k, to find the smallest failing k. Send task k back. Land P_(k-1) only if the tasks before k already had a full pass on exactly P_(k-1)'s tree; otherwise re-queue tasks 1..k-1 and k+1..n at the head as the next batch.",
+        "On a pass: under the mutation lock and with no transaction open, fast-forward main from T to the checked prefix (git merge --ff-only). If main is no longer at T, mark the batch superseded and go back to the first step.",
+        "In one short transaction, record the batch landed and one integration row per target for each landed task. After commit, broadcast, run refresh and re-drain queued turns."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "465f175d9694297cdca6b4494bdee0c27758ec30fa1722172ee6e200c088a5a4",
+      "FR-10": "9b08fc25dad9ed5a79e1048d528f65154e97bdf76c9e346eec363d773551de94",
+      "FR-11": "f8c78ea2df9bc0bbf432b8892700793fa9b9fe36963c749fcc578e33a483dec3",
+      "FR-12": "feb06a9cd53cc214a82b4372f82951d3c6f16dfdc85d186550063db2dfc3c53d",
+      "FR-2": "765e82769eebbcf836b000c63a040a94897999595c12cd1cff0e7dd524077d15",
+      "FR-3": "b1939dd0681a9b76403a16f70bbfcd907a8b82f1e3be1390bf9323c80b81802e",
+      "FR-4": "0927fd7a3cb961f3af0d6e3554a9add4bfca5bcd6404eb05fbf822265eda261f",
+      "FR-5": "c3f19b58a8f48ef77aad0fa497dc5512ec907e8e0d7dd2d4eef0144339ee5736",
+      "FR-6": "64d147b343529a1ec5440411951a537d416b9bf9e85ea48ef9c02d10bf489717",
+      "FR-7": "653277437ae36607df14ba1cf7a30dce5538d61b33d110dee2f8ede090aab098",
+      "FR-8": "b80b51ae8b0b2aa901b92a79a4d59dcbbb77834ea3efe7a918d38076ddf2e46b",
+      "FR-9": "bd0977b5beed43034790229b04795d0e3b5cde2520a0c47b330cc74bca4dca31"
+    },
+    "high_water": 12,
+    "requirements": {
+      "a-conflict-in-a-batch-goes-to-its-author": "FR-5",
+      "a-failing-batch-sends-back-only-the-breaker": "FR-4",
+      "a-passed-task-check-is-not-rerun-when-main-moves": "FR-9",
+      "a-restart-loses-and-repeats-nothing": "FR-12",
+      "approval-queues-without-waiting": "FR-1",
+      "every-hub-merge-goes-through-the-queue": "FR-11",
+      "failures-main-shares-follow-m": "FR-7",
+      "no-write-lock-across-git": "FR-8",
+      "one-check-run-per-batch": "FR-2",
+      "prerequisites-land-first": "FR-6",
+      "the-landing-is-visible": "FR-10",
+      "what-lands-is-what-was-checked": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "D1. Approved stays the verdict, and landing is a queue behind it (owner: `task_transition_service` records the approval; new `landing_queue.py` owns the queue).\n- The alternative was to keep the task `under_review` until its batch lands. That leaves reviewed work looking unattended: the flow's with-reviewer branch reports a review nobody attends as unstaffed (`scheduler.py:2212-2320`), and `no_progress` counts every open task that is not approved (`stalls.py:746-753`), so a 15-minute batch would raise stalls.\n- It would also hold dependents until landing (`dependency_gate.py:39` is met at approved). That wait is exactly what stalled T2-T4 on 2026-10-27.\n- Approved has never meant merged: integration is a separate append-only record that may skip or fail (`task_transition_service.py:1281-1287`, `task_integration.py:822-846`).\n- The Hub already moves an approved task back to `revision_needed` with the operator's authority when evidence is overturned (`api/v1/spec.py:1811`). The batch's send-back uses that edge (`task_transitions.py:151-153`) and writes its reason on the transition's note.\n- No ninth status is added (status set pinned in three places, `task_transitions.py:164-168`).\n\nD2. What approval still refuses. Conflicts with main, unaccepted or unlanded work, a live turn, git that cannot be asked, and the task's own confirmed failure for the same targets. A missing, running or stale per-task result no longer refuses (`requirement_gate.py:1113-1121` today), and approval schedules no per-task run. An operator override over a failed per-task result keeps today's meaning: that task lands alone, ahead of the queue, unchecked, with the reason recorded (`requirement_gate.py:1103-1105`).\n\nD3. No write lock across git (owners: `task_transition_service`, `landing_queue`).\n- The approval asks all its git questions before its first write, against the targets the verdict would accept: accepted (`task_integration.py:364`) plus awaiting (`:420`).\n- It then writes the verdict, the transition and a landing row holding those targets, frozen, and commits. Landing and checkout release run after the commit. Their records are written in short transactions once git returns.\n- Freezing the targets is what lets release run before landing. The ordering argument at `task_transition_service.py:1017-1026` only mattered if targets came from the branch tip, which `merge_targets` does where evidence does not govern.\n- Relation to `turn-starts-approvals-and-evidence-never-freeze-the-hub` (exploring): its approval task moved this git off the event loop (daedc77, `test_approvals_and_evidence_never_freeze_the_hub.py`). It never addressed the transaction around it. E neither absorbs nor supersedes it. E keeps the git on `blocking.run_serialized` (`blocking.py:103-124`) and that test green, and removes only the open transaction.\n\nD4. Batches (owner: `landing_queue`; `project_checks` keeps running checks).\n- The batch reuses `build_merged_commit` (`project_checks.py:200-238`). Its intermediate commits are the batch's prefixes, so narrowing builds nothing new.\n- It shares the per-Hub semaphore (`:59`), failure confirmation (`:653-705`) and tree reuse (`:441`).\n- Landing fast-forwards main to the checked commit instead of re-merging (`task_integration.py:795-806`). The landed tree is therefore the checked tree by construction, and `--ff-only` refuses a moved main by itself.\n- Gather window 60 s, at most 8 tasks per batch. A queued approval waits at most 60 s, against an 8-18 min run. Eight bounds narrowing at three narrowed runs.\n\nD5. Narrowing re-runs only the failed node ids (`narrowed_command`, `project_checks.py:598-626`), as confirmation already does. The cost for the roadmap's four-with-one-broken case is two full runs plus at most two narrowed ones, against four or more full runs today.\n\nD6. L's per-task run stays the gate before review, and E's batch run is the landing gate. The per-task run gives the builder feedback in minutes and puts blame on one task in the common case. The batch is what makes main safe. So a pass at any tip counts for review and approval, and `refresh` (`project_checks.py:1230-1266`) stops re-running passed tasks. This supersedes `checks-wait-less` FR main-moving-refreshes-waiting-results and the-gate-still-requires-a-current-result, and the project-checks requirement that approval needs a current result. The landing gate is current by construction.\n\nD7. M at batch level. All-preexisting failures go to M's decision once per batch. The override is recorded on the batch and on each integration record, because each approval transition is already written. M's per-task override at approval stops firing after E, because approval no longer refuses for a preexisting failure (D2). With M off, the batch waits for the operator, and one reason lands the whole batch.\n\nD8. One writer. Every merge path enqueues: approval, `retry_integration` (`api/v1/tasks.py:1432`, `api/v1/projects.py:800`, `api/v1/mender.py:189`), `land_resolution` (`api/v1/mender.py:184`), and `integrate_what_was_waiting_for_this_evidence` (`task_integration.py:980`, called from `api/v1/agent_actions.py:1823` and `api/v1/spec.py:1923`). Without checks the request awaits its own landing after commit, so responses keep their outcome. With checks it answers queued.\n\nD9. Order. E follows D (roadmap), and needs L and M as well: it sends back through L's check-failure path and applies M's decision. Recommend adding both to E's `builds_after`.\n\nHazard (Tier 2). This changes how and when the Hub writes the operator's main branch, what an approval response promises, and adds a migration that :8000 runs on restart.\n- Migration: two additive tables, `landing_batches` (project, base tip, ordered tasks and targets, prefix commits, state, results, narrowing log, override, times) and `task_landings` (task, batch, state, frozen targets, approver, reason, times). No existing column changes.\n- Rollback: downgrade drops both tables. A task queued at that moment is approved with no merged integration, shown 'verified, not integrated', and the existing Try again lands it.\n- Back up :8000's database with `VACUUM INTO` before the restart that migrates it (`sqlite_pragmas.py` docstring).",
+  "evidence": {
+    "checked": [
+      "hub/hub/task_transition_service.py:785-1036 (apply_transition: verdict savepoint :918-929, integrate :995, release :1027-1028, caller commits :814), :1276-1458 (_integrate_task: run_serialized merge :1421-1426), :1103-1188 (release via run_serialized, events with commit=False), :1461-1491 (refresh after a merge commits)",
+      "hub/hub/requirement_gate.py:1081-1139 (_check_checks: stale/missing schedules a run and refuses as running), :1142-1185 (gate order), :505-567 (refusal texts)",
+      "hub/hub/project_checks.py: header :1-28, build_merged_commit :200-238, narrowed_command :598-626, confirm_failure :653-705, _MainBaseline :729-757, view :798-837, request_run :902-1003, _execute :1034-1120, refresh :1230-1266, interrupt_leftover_runs :1357-1370; MAX_CONCURRENT_RUNS=2 :59",
+      "hub/hub/task_integration.py: integrate (merge --no-ff) :749-819, append-only record :822-846, targets :300-435, the evidence-arrival path :980",
+      "hub/hub/blocking.py:93-124 (one mutation lock across worktree creation, release and merges)",
+      "hub/hub/db/engine.py:42-56 and hub/hub/db/sqlite_pragmas.py:1-25 (WAL: writers wait on writers, 30 s busy timeout); hub/hub/inbound_queue.py:621-623 and hub/hub/project_workspace.py:231-237 (SQLite locks at the write; F349)",
+      "hub/hub/task_transitions.py:101-168 (approved -> revision_needed operator-only; statuses pinned); hub/hub/api/v1/spec.py:1811 (the Hub sends approved work back as operator)",
+      "hub/hub/dependency_gate.py:39 (met at approved); hub/hub/worktrees.py:673-713 (catch-up by commit sha); hub/hub/flow_advance.py:39",
+      "hub/hub/stalls.py:680-789 (no_progress counts non-approved open work); hub/hub/scheduler.py:2202-2320 (under_review attendance and unstaffed)",
+      "hub/hub/api/v1/tasks.py:1943-2047 (Land composes two transitions inside one transaction); merge paths found by grep: tasks.py:1432, projects.py:800, mender.py:184/189, agent_actions.py:1823, spec.py:1923",
+      "Commits daedc77 (approval git off the loop, not out of the transaction), bdb6e14 (tree reuse, confirm before blame); spec/changes/turn-starts-approvals-and-evidence-never-freeze-the-hub (phase exploring; durations used in the problem)",
+      "spec/capabilities/project-checks and approval-integration requirements this changes (approval needs a current result; merge in the same operation as the transition); archived changes checks-wait-less and a-check-that-fails-on-main-too-is-not-the-tasks",
+      "Grep: 24 hub test files assert an integration outcome; 107 mention 'approved'. Existing tests read: test_project_checks_gate.py (stale/missing refusals), test_approvals_and_evidence_never_freeze_the_hub.py (the lag probe and slow_git helper reused by the lock drive), test_task_release.py:287",
+      "Night of 2026-10-26/27 figures as given in the drafting brief (from :8000, read-only)"
+    ],
+    "limits": [
+      "The write-lock hold during approval was inferred from the code order and SQLite's locking rule, not measured. The acceptance drive test_approval_holds_no_write_lock_across_git.py is what proves it on master",
+      "Slices L and M are not written yet. Their send-back path, fix-task filing and override setting are assumed to exist as the drafting brief describes them, and E calls them rather than restating them",
+      "The 60 s gather window and the batch cap of 8 are judgements, not measurements. Slice H's re-run is where they get measured",
+      "Whether merge-tree's result always equals what `git merge` would produce is not re-verified here. Fast-forwarding to the checked commit makes the question moot for what lands",
+      "Every how_to_check names a test to be written; none exists yet"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2 (hazard): changes when and how the Hub writes the operator's main branch and what an approval promises, adds a migration (landing queue and batch tables) that the operator's :8000 runs on restart, and must neither lose nor double-land work across a restart mid-batch. Both acceptance drives are written and failing on master before the build. A one-off change: on completion, project-checks and approval-integration are updated through the Hub (current-result rule and same-operation merge replaced), and the checks-wait-less refresh requirement is retired.",
+  "open_questions": [
+    {
+      "question": "Does a task become approved when its reviewer approves, or only when its batch lands? Decided: when its reviewer approves. The landing is a queued record behind it, and a task that breaks its batch goes back with the operator's authority, as an overturned evidence decision already does. Keeping it under_review would raise review and no-progress stalls during every batch, and would hold dependents for a full run (design D1).",
+      "resolved": true
+    },
+    {
+      "question": "Does the per-task check run stay once batches exist? Decided: yes, as slice L's gate before review. A pass at any main tip counts, and it is no longer re-run when main moves. The batch run is the only landing gate (design D6).",
+      "resolved": true
+    },
+    {
+      "question": "A batch whose only failures also fail on main: decided to follow slice M at batch level, landing with M's automatic override recorded on the batch and on each integration, with one fix task per failing check. With M's override off, one operator reason lands the whole batch (design D7).",
+      "resolved": true
+    },
+    {
+      "question": "Build order: decided that E builds after D, L and M (it uses L's check-failure send-back and M's decision). The roadmap lists only D in E's builds_after, so the operator should add L and M when those slices join the roadmap.",
+      "resolved": true
+    }
+  ],
+  "problem": "On the night of 2026-10-26/27 slice B ran as a four-task flow for 6 h 47 min. Ten check runs took 8-18 min each (the project's hub-tests check is the whole suite: `pytest hub/tests -n auto ... --timeout=600`). T1 was approved by QA at 00:44, but the Hub refused to record the approval for 2 h 40 min because hub-tests failed on a timing test that also failed on main. T2-T4 depended on T1's approval, so the whole slice waited.\n\nThe Hub runs the full checks once per task per main tip, and every landing moves main:\n- The approval gate counts only a result for the current main tip and merge targets. A stale or missing result is refused while a new run is scheduled (`hub/hub/requirement_gate.py:1113-1121`), and the refusal counts as one (`:211`). A result is stale whenever `main_sha` differs from the tip (`hub/hub/project_checks.py:821-826`). Only an identical merged tree is reused (`:829-836`), and after another task lands the tree is never identical.\n- Each Hub merge schedules `refresh` after commit (`hub/hub/task_transition_service.py:1485-1488`). `refresh` supersedes every in-flight run and re-runs the checks of every task waiting for review (`project_checks.py:1252-1266`). With four tasks approved close together this costs about four full-suite runs back to back, at most two at a time (`MAX_CONCURRENT_RUNS = 2`, `project_checks.py:59`), and each reviewer is told to retry.\n\nApproval also holds the database write lock across git:\n- `apply_transition(..., 'approved')` accepts the evidence in a savepoint (`task_transition_service.py:918-919`). It then merges inside the same transaction (`:995` -> `_integrate_task` -> `blocking.run_serialized` merge, `:1421-1426`) and releases the checkout there too (`:1027-1028` -> `git worktree` removal via `run_serialized`, `:1142-1144`). The caller commits afterwards (docstring `:814`).\n- SQLite takes the write lock at the first write, not at the read (`hub/hub/inbound_queue.py:621-623`). So every other writer waits, up to the 30 s busy timeout (`hub/hub/db/engine.py:42-48`), for the merge (686 ms average, 2.1 s max), the release (4.2 s average, p95 10.3 s) and any wait for the mutation lock behind a worktree creation (up to 20.8 s). Those durations were measured as loop stalls on the operator's traces of 2026-10-21 to 10-25 (`spec/changes/turn-starts-approvals-and-evidence-never-freeze-the-hub`).\n- Perf slice 3 (commit daedc77) moved that git off the event loop but left it inside the transaction. F349 (`hub/hub/project_workspace.py:231-237`) is the same failure on another route: a write lock held through a git subprocess, and a concurrent request answered 500 'database is locked'.",
+  "requirements": [
+    {
+      "key": "approval-queues-without-waiting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-27: QA's approval of T1 was refused for 2 h 40 min while checks ran and re-ran. The landing check is the batch's run on the real merged result (one-check-run-per-batch), so making approval wait for a current per-task result only repeats it.",
+      "statement": "In a project with checks configured, a move to approved that is refused for no other reason is recorded at once and queues the task's work for landing. It is not refused because the task's check result is missing, still running, or was produced on an earlier main tip. Approving starts no per-task check run. Approval is still refused when the task's own confirmed check failure is recorded for the same merge targets."
+    },
+    {
+      "key": "one-check-run-per-batch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Ten full-suite runs of 8-18 min on 2026-10-26/27, most of them re-runs because another landing had moved main.",
+      "statement": "Tasks queued for landing in one project are landed together in a batch. Main's tip, with every batch task's merge targets merged in queue order, gets one run of the project's checks. When that run passes, every task in the batch reaches main and no further check run is started for any of them."
+    },
+    {
+      "key": "what-lands-is-what-was-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "After a batch lands, the tree at main's tip equals the tree the batch's checks passed on, and each landed task has one merged integration record per merge target, with the commits that rode along. If main's tip moved after the batch was built, nothing lands from the stale batch, and the batch is built and checked again on the new tip."
+    },
+    {
+      "key": "a-failing-batch-sends-back-only-the-breaker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done criterion: a deliberately broken task among four is the only one sent back.",
+      "statement": "When a batch's checks fail with a confirmed failure that is not main's, the Hub finds the first task in queue order whose work, added to the tasks before it, makes the failing tests fail. Only that task goes back to its author (approved to revision_needed), with the failing output and the tasks it was landed on. The rest of the batch is checked again as the next batch and lands if it passes. Finding the task takes at most ceil(log2(n)) narrowed runs for a batch of n, and each narrowed run executes only the failed tests when the check is a plain pytest command."
+    },
+    {
+      "key": "a-conflict-in-a-batch-goes-to-its-author",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Reconciling two pieces of work is the later author's job, as for a conflicting prerequisite (`a-conflicting-prerequisite-is-the-authors-to-merge`).",
+      "statement": "A queued task whose work does not merge cleanly onto main plus the batch tasks before it is taken out of the batch before any check runs. It is sent back to its author naming the conflicting paths and the tasks it conflicts with, and the rest of the batch proceeds without it."
+    },
+    {
+      "key": "prerequisites-land-first",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A merge brings in a commit's whole ancestry (F58, `task_integration.py:727-729`). A dependent landing first would put its prerequisite's unchecked or sent-back work on main under the dependent's name.",
+      "statement": "A queued task lands only in a batch where every task whose commit its merge targets contain has already landed or comes earlier in the same batch. If such a prerequisite is sent back, the dependent stays queued, is not sent back, and its landing names the prerequisite it waits for."
+    },
+    {
+      "key": "failures-main-shares-follow-m",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-27: a timing test that failed on main too held T1 for 2 h 40 min. A batch must not multiply that hold by the number of tasks in it.",
+      "statement": "When every confirmed failure in a batch's run also fails on the main tip the batch was built on, the batch is not narrowed. It follows slice M's rule: with M's automatic override on, the batch lands with the override recorded on the batch and on each task's integration record, and one fix task is filed per failing check, not one per task. With the override off, the batch waits for the operator, who can land it with one reason. A failure that passes when re-run on the same tree counts as a pass, and the flaky test is recorded."
+    },
+    {
+      "key": "no-write-lock-across-git",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today the merge (up to 2.1 s), the release (p95 10.3 s) and any mutation-lock wait (up to 20.8 s) run after the approval's first write and before its commit, so every other writer waits (F349 is the same shape on another route).",
+      "statement": "No approval, landing, integration retry, mend resolution or checkout release holds a database write transaction open while a git command or a check runs. A write from another database connection made while that git runs completes without waiting for it."
+    },
+    {
+      "key": "a-passed-task-check-is-not-rerun-when-main-moves",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Under slice L the per-task run gives the builder fast feedback and gates review. Landing safety comes from the batch's run on the merged result, so re-running every waiting task on each landing is spent work.",
+      "statement": "When main's tip moves, the Hub does not re-run the checks of a task waiting for review whose latest per-task result passed. That result counts as passed for review dispatch and for approval whatever tip it was produced on. A task with no result, an interrupted result or an errored result still gets a run."
+    },
+    {
+      "key": "the-landing-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice B made a check wait visible beside Land (FR a-wait-is-visible). The wait now belongs to the batch, so that is what the drawer shows.",
+      "statement": "The task's drawer and its checks route show its landing state: queued (with its position), checking (with the batch, how long it has run and how long the previous batch took), held (and on what), landed (with the commit), or sent back (with the failing check's output). The operator is notified when a batch lands or sends a task back, without reloading."
+    },
+    {
+      "key": "every-hub-merge-goes-through-the-queue",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One writer keeps a batch's base from moving under it, so every landing is checked, and the 24 hub test files that assert an integration outcome after approval keep their meaning in projects without checks.",
+      "statement": "Every merge the Hub makes into main goes through the landing queue, at most one batch at a time per project. That covers approval, retrying an integration, landing a mend resolution, and integrating approved work whose evidence was accepted afterwards. With no checks configured, the landing still runs after the approval commits, and the request that caused it answers with the integration outcome as it does today. With checks configured, the request answers at once with the task queued."
+    },
+    {
+      "key": "a-restart-loses-and-repeats-nothing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's :8000 runs this checkout and is restarted by the operator, sometimes mid-flow.",
+      "statement": "If the Hub stops while a batch is being checked or landed, then after it starts again no queued task is lost and none is merged twice. A batch left checking is recorded interrupted and its tasks are queued again in their original order. A batch that had already moved main is recorded landed from what main contains."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "approved-work-merges-in-batches"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A per-project landing queue that approved work joins at approval, with its merge targets fixed at that moment",
+      "One run of the project's checks per batch, on main's tip with every queued task's work merged in queue order, and main fast-forwarded to exactly that checked commit",
+      "Narrowing a failing batch to the first task that breaks it, by re-running only the failing tests on prefixes of the batch; that task goes back to its author and the rest land",
+      "Conflicts within a batch, and prerequisites landing before the tasks that build on them",
+      "How a batch applies slice M's rule for failures main shares, and how the per-task check run that slice L gates review on relates to the batch run",
+      "Approval, landing, integration retries, mend resolutions and checkout release running their git outside any database write transaction",
+      "Every Hub merge into main going through the queue",
+      "A queued, checking, held, landed or sent-back landing, visible on the task and announced to the operator",
+      "A migration for the queue and batch records, safe across a Hub restart mid-batch"
+    ],
+    "non_goals": [
+      "Changing the operator's rule that red checks mean no merge: a batch with a failure of its own lands nothing (roadmap non-goal)",
+      "Making the checks themselves faster, or splitting the suite (a fast-check tier gating `completed` is slice L's)",
+      "The order of checks around completion and review, and the send-back of a task whose own per-task check failed: slice L",
+      "Deciding when a failure is not the task's, the automatic override setting and the fix task it files: slice M (this document applies M's decision to a batch)",
+      "Gate levels, the build's landing target and raising a main moved outside the Hub: slice D (a batch lands on the build's landing target once D adds one, else on the project's main branch)",
+      "A new task status: `approved` keeps its meaning of 'the work was judged good'; the merge stays a separate record, as it already is",
+      "Pushing to any remote: landing stays local (`task_integration.py` module docstring)",
+      "Halting a dependent task that already started on work its batch later sends back: the shipped rule that a regressed dependency does not halt started work stays"
+    ]
+  },
+  "summary": "Approving a task stops waiting on, and re-running, the project's full checks. The approval is recorded at once and the task's work joins a per-project landing queue. The Hub merges the queued work onto main's tip in approval order, runs the checks once on that merged result, and when they pass fast-forwards main to exactly the commit it checked. If a batch fails with a failure that is not main's, the Hub runs only the failing tests on prefixes of the batch to find the first task that breaks it. That task alone goes back to its author with the output, and the rest of the batch is checked again and lands. Approval, landing and checkout release run their git outside any database write transaction. The per-task check run stays as slice L's gate before review, and a pass on it is no longer re-run every time main moves. Failures that main shares follow slice M's rule, applied to the batch.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Acceptance drive first. Write hub/tests/test_approved_work_merges_in_batches.py (four good tasks, one run) and hub/tests/test_approval_holds_no_write_lock_across_git.py, and see both fail on master: the first approval answers 409 'still running', and a concurrent write during the merge or release gets 'database is locked'. Then build these. A migration adding the landing and batch records (next free number after the slices before it). hub/hub/landing_queue.py, owning the queue, the gather window, batch building with build_merged_commit's prefix chain, the check run through project_checks' runner and semaphore, and the fast-forward landing with its integration records. The approval path asking its git before its first write, freezing targets on the landing row, and starting no per-task run. Landing and checkout release after commit, with no transaction open across git. Retry, mend resolution and evidence-arrival integration enqueueing. The startup reconcile. Rewrite the gate tests that expected a refusal for stale or missing results, and test_release_happens_after_integration (hub/tests/test_task_release.py) to assert the frozen target instead of the order.",
+      "files": [
+        "hub/hub/landing_queue.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/task_integration.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/api/v1/mender.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/main.py",
+        "hub/tests/test_approved_work_merges_in_batches.py",
+        "hub/tests/test_approval_holds_no_write_lock_across_git.py",
+        "hub/tests/test_migration_0148_landing_queue.py",
+        "hub/tests/test_project_checks_gate.py",
+        "hub/tests/test_task_release.py"
+      ],
+      "from": null,
+      "key": "batch-landing",
+      "requirements": [
+        "approval-queues-without-waiting",
+        "one-check-run-per-batch",
+        "what-lands-is-what-was-checked",
+        "no-write-lock-across-git",
+        "every-hub-merge-goes-through-the-queue",
+        "a-restart-loses-and-repeats-nothing"
+      ],
+      "reviewer": null,
+      "title": "Approval queues; a batch lands after one check run"
+    },
+    {
+      "depends_on": [
+        "batch-landing"
+      ],
+      "description": "Write hub/tests/test_a_failing_batch_is_narrowed.py first and run it red: the broken one among four, a conflict, a dependent and its prerequisite, and a failure main shares with M's override on and off. Then add to landing_queue the failure paths. A conflict drops the task before checks run. A confirmed own failure triggers a binary search over prefix commits, running only the failed node ids (narrowed_command) or the failing check when it cannot be narrowed. The culprit goes back to its author through the same send-back slice L uses for a failed check, with a note naming the batch. The remainder is re-queued at the head. Prerequisite ordering and holds come next. All-preexisting failures go to M's decision at batch level, and to an operator hold with one reason for the whole batch when M's override is off.",
+      "files": [
+        "hub/hub/landing_queue.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/task_transition_service.py",
+        "hub/tests/test_a_failing_batch_is_narrowed.py"
+      ],
+      "from": null,
+      "key": "narrow-and-hold",
+      "requirements": [
+        "a-failing-batch-sends-back-only-the-breaker",
+        "a-conflict-in-a-batch-goes-to-its-author",
+        "prerequisites-land-first",
+        "failures-main-shares-follow-m"
+      ],
+      "reviewer": null,
+      "title": "A failing batch sends back only the task that broke it"
+    },
+    {
+      "depends_on": [
+        "batch-landing",
+        "narrow-and-hold"
+      ],
+      "description": "Make refresh skip waiting tasks whose latest per-task result passed, and make the review dispatch and the approval gate count a passed result on any earlier tip. Update the reviewer's briefing sentence for a pass on an earlier tip ('passed on <tip>; the landing re-checks it on main'). Rewrite the refresh test red first.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/review_turn.py",
+        "hub/tests/test_checks_refresh_when_main_moves.py"
+      ],
+      "from": null,
+      "key": "stale-pass-counts",
+      "requirements": [
+        "a-passed-task-check-is-not-rerun-when-main-moves"
+      ],
+      "reviewer": null,
+      "title": "A passed task check is not re-run when main moves"
+    },
+    {
+      "depends_on": [
+        "batch-landing",
+        "narrow-and-hold"
+      ],
+      "description": "Return the task's landing and its batch from GET /tasks/{id}/checks, broadcast `task_landing_changed` on every state change, and show the five states beside Land in the drawer. This replaces slice B's 'waits for checks' text where the wait is now the batch's. Notify the operator when a batch lands or sends a task back. Vitest first, then rebuild the UI bundle and commit hub/ui/src and hub/hub/static/ui together.",
+      "files": [
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/landing_queue.py",
+        "hub/ui/src/components/tasks",
+        "hub/ui/src/api",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "landing-visible",
+      "requirements": [
+        "the-landing-is-visible"
+      ],
+      "reviewer": null,
+      "title": "The landing's state is shown and announced"
+    }
+  ],
+  "title": "Approved work merges in batches"
+}

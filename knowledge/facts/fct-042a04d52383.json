@@ -1,0 +1,29 @@
+{
+  "id": "fct-042a04d52383",
+  "kind": "fact",
+  "claim": "Before fixing, an acceptance drive must be written: a task with accepted evidence at failing commit A is sent back, fix B is committed with evidence at B, and on completion the check must run on B and the task reach under_review.",
+  "citations": [
+    {
+      "source": "src-f2ceb873aae1",
+      "quote": "## Acceptance drive to write first",
+      "line_start": 48,
+      "line_end": 48
+    },
+    {
+      "source": "src-f2ceb873aae1",
+      "quote": "Expected: the check runs on B\nand the task reaches under_review.",
+      "line_start": 51,
+      "line_end": 52
+    }
+  ],
+  "sources": [
+    "src-f2ceb873aae1"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T08:44:52.451374Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

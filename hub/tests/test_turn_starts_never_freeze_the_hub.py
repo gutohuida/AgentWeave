@@ -121,6 +121,11 @@ async def task_turn(app, auth_headers, bind_runner, bind_project_workspace, tmp_
         return response
 
     await _start(WARM)
+    # The warm turn's stubbed run marks itself completed in a background task, several awaits
+    # after `_start` returns. Under load it was still `running` when the measured turn started,
+    # which was then refused as "writer already has a run in progress" (failed only in the
+    # Hub's full-suite check). Wait for it, so the measured turn never starts behind it.
+    await await_background_runs()
     spawned.clear()
     return repo, spawned, _start
 

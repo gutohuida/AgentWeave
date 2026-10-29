@@ -74,6 +74,11 @@ export interface Task {
    *  the key it was declared under. */
   spec_document_id?: string | null
   spec_task_key?: string | null
+  /** The build covering this task, the level it is built at, and the builder it was declared
+   *  with (`a-build-has-a-driver-a-level-and-its-people`). All null outside a build. */
+  build_id?: string | null
+  level?: 'fast' | 'reviewed' | 'gated' | null
+  builder?: string | null
   /**
    * The requirement identifiers this task serves, in the form they are submitted in.
    *
@@ -215,12 +220,52 @@ export interface TaskCheckRun {
   ended_at: string | null
 }
 
+/** The landing batch a task's landing is in (`approved-work-merges-in-batches`). */
+export interface TaskLandingBatch {
+  id: string
+  state: 'checking' | 'held' | 'landing' | 'landed' | 'failed' | 'superseded' | 'interrupted'
+  task_ids: string[]
+  base_sha: string
+  merged_sha: string | null
+  check_run_id: string | null
+  /** How long it has run (or ran), in seconds. */
+  seconds: number
+  /** How long the project's previous finished batch took, if there is one. */
+  previous_seconds: number | null
+  override_reason: string | null
+  override_by: 'hub' | 'operator' | null
+  error: string
+}
+
+/** The task's latest landing: approved work on its way to the main branch. */
+export interface TaskLanding {
+  id: string
+  state: 'queued' | 'checking' | 'landing' | 'held' | 'landed' | 'not_landed' | 'sent_back'
+  kind: 'approval' | 'retry' | 'resolution' | 'evidence'
+  /** Why it was sent back, held or not landed; empty otherwise. */
+  reason: string
+  /** The prerequisite task it waits on, where it is held for one. */
+  waits_on: string | null
+  /** The commit main was moved to when it landed. */
+  landed_sha: string | null
+  override_reason: string | null
+  batch: TaskLandingBatch | null
+  /** Its place in the project's queue (1 is next), while queued. */
+  position: number | null
+  queued_at: string | null
+}
+
 export interface TaskChecks {
   configured: boolean
   running: boolean
   /** Newest first, as the route returns them. */
   runs: TaskCheckRun[]
+  /** Absent from a Hub older than the landing queue. */
+  landing?: TaskLanding | null
 }
+
+/** The landing states the queue is still working on, polled until they settle. */
+export const LANDING_IN_FLIGHT: ReadonlyArray<TaskLanding['state']> = ['queued', 'checking', 'landing']
 
 export function useTaskChecks(taskId: string, enabled: boolean) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
@@ -240,7 +285,28 @@ export function useTaskChecks(taskId: string, enabled: boolean) {
     enabled: isConfigured && !!projectId && enabled,
     // A run takes minutes and announces nothing, so a running one is polled until it ends.
     refetchInterval: (query) =>
-      query.state.data?.running || query.state.data?.runs[0]?.state === 'running' ? 5000 : false,
+      query.state.data?.running ||
+      query.state.data?.runs[0]?.state === 'running' ||
+      LANDING_IN_FLIGHT.includes(query.state.data?.landing?.state ?? 'landed')
+        ? 5000
+        : false,
+  })
+}
+
+/** Land the batch this task's landing is held in, over failures main shares, with one reason. */
+export function useLandHeldLanding(taskId: string) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (reason: string) =>
+      postJson<{ task_id: string; landing: TaskLanding | null }>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/landing/land`,
+        { reason },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'task'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+    },
   })
 }
 
@@ -295,7 +361,8 @@ export function useTaskTransitions(taskId: string, enabled: boolean) {
 }
 
 export interface StoryReview {
-  decision: 'accepted' | 'rejected'
+  // `held` (K): a send-back did not name the piece as failing.
+  decision: 'accepted' | 'rejected' | 'held'
   actor_kind: string
   actor: string
   reason: string | null
@@ -319,6 +386,9 @@ export type StoryEvent =
       job_kind?: 'flow' | 'loop' | null
       run_id: string | null
       override_reason: string | null
+      /** Who overrode: the operator with a reason, or the Hub over failures that were not the
+       *  task's (`a-red-main-does-not-hold-the-night`). Absent from an older Hub: the operator. */
+      override_by?: 'operator' | 'hub' | null
     }
   | {
       kind: 'run'
@@ -411,7 +481,8 @@ export interface TaskStory {
     tokens: number | null
     premium_requests: number | null
     ai_nano_aiu: number | null
-    evidence: { accepted: number; rejected: number; awaiting: number }
+    // `held` (K): a send-back kept the piece at its commit without naming it as failing.
+    evidence: { accepted: number; rejected: number; awaiting: number; held?: number }
     merged: string[]
     overrides: number
   }
@@ -629,21 +700,69 @@ export function useUpdateTask() {
   return useMutation({
     // `blocked_reason` is required by the Hub when the status is `blocked`, and ignored otherwise —
     // so it is sent only when present rather than as a null the validator would still have to
-    // reject.
+    // reject. `assignee` names who holds the task after the move: a review hand-off sends the
+    // reviewer, because moving completed work into review while its author holds it is refused.
     mutationFn: ({
       id,
       status,
       blocked_reason,
+      assignee,
     }: {
       id: string
       status: string
       blocked_reason?: string
+      assignee?: string
     }) =>
       patchJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}`, {
         status,
         ...(blocked_reason ? { blocked_reason } : {}),
+        ...(assignee ? { assignee } : {}),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] }),
+    onSuccess: (_task, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+      // The menu's moves belong to the holder, which this move may have changed.
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks', id, 'moves'] })
+    },
+  })
+}
+
+/**
+ * Link requirements to a task, added to what it serves. The remedy a landing refusal offers when
+ * accepted evidence reaches no link (`every-task-can-always-be-moved-on`, FR-11).
+ */
+export function useLinkTaskRequirements() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id, requirement_ids }: { id: string; requirement_ids: string[] }) =>
+      patchJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}`, { requirement_ids }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
+  })
+}
+
+/**
+ * Accept or reject one piece of evidence by id, from beside the refusal that waits on it. The same
+ * route the spec page's evidence chip uses; here the operator has no document open, so every key
+ * the decision can move is invalidated.
+ */
+export function useDecideEvidencePiece() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      id,
+      decision,
+      reason,
+    }: {
+      id: string
+      decision: 'accepted' | 'rejected'
+      reason: string
+    }) =>
+      postJson<unknown>(`/api/v1/projects/${projectId}/project/spec/evidence/${id}/decision`, {
+        decision,
+        reason,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId] }),
   })
 }
 
@@ -845,6 +964,31 @@ export function useStartWorkOnTask() {
 
 /** `{ from_status: [reachable...] }` for the operator, as the Hub declares it. */
 export type AllowedTransitions = Record<string, string[]>
+
+/**
+ * The moves the Hub will actually allow the operator on this task (`GET .../tasks/{id}/moves`): the
+ * mover decision's answer for this task as it is held, narrower than the map `useAllowedTransitions`
+ * reads, so a menu built from it offers nothing the Hub would refuse.
+ */
+export interface TaskMoves {
+  task_id: string
+  status: string
+  moves: string[]
+  /** Open agents the operator may hand a completed task to for review, never its author. */
+  reviewers?: string[]
+}
+
+export function useTaskMoves(taskId: string | null) {
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useQuery({
+    queryKey: ['project', projectId, 'tasks', taskId, 'moves'],
+    queryFn: () =>
+      getJson<TaskMoves>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/moves`,
+      ),
+    enabled: !!projectId && !!taskId,
+  })
+}
 
 /**
  * The transition map, fetched once for the operator rather than per task.

@@ -85,6 +85,43 @@ async def mender_on():
         await session.commit()
 
 
+async def runner_of(session, agent):
+    """`(cli, model)` of the runner the agent is bound to."""
+    runner = await session.get(Runner, agent.runner_id)
+    return runner.cli, runner.model
+
+
+async def mender_agent():
+    async with async_session_factory() as session:
+        return (
+            await session.execute(select(Agent).where(Agent.name == stalls.MENDER))
+        ).scalar_one()
+
+
+async def mender_entry(*, runner_model, model):
+    """The Manager entry on, with a Claude runner naming *runner_model* and the entry's *model*."""
+    async with async_session_factory() as session:
+        session.add(
+            Runner(
+                id="runner-pick",
+                project_id="proj-test",
+                name="Picked",
+                cli="claude",
+                model=runner_model,
+            )
+        )
+        session.add(
+            ManagerJob(
+                project_id="proj-test",
+                job=manager.MENDER,
+                enabled=True,
+                runner_id="runner-pick",
+                model=model,
+            )
+        )
+        await session.commit()
+
+
 async def mender_run():
     """A running turn of the Hub's own mender agent."""
     async with async_session_factory() as session:
@@ -183,7 +220,9 @@ async def test_a_stall_wakes_the_mender_once(app, auth_headers, builder, tmp_pat
         mender = (
             await session.execute(select(Agent).where(Agent.name == stalls.MENDER))
         ).scalar_one()
-        assert stalls.is_mender(mender) and mender.runner_id == "runner-mend"
+        assert stalls.is_mender(mender)
+        # The entry names Haiku's runner and no model: the mender runs on the catalog default.
+        assert await runner_of(session, mender) == ("claude", "claude-sonnet-5-5")
         entries = (
             (
                 await session.execute(
@@ -202,7 +241,7 @@ async def test_a_stall_wakes_the_mender_once(app, auth_headers, builder, tmp_pat
     assert [entry.origin_type for entry in entries] == ["mender"]
     brief = entries[0].content
     assert stall.id in brief and "uncommitted" in brief and "notes.txt" in brief
-    assert "ask the operator first" in brief.lower()
+    assert "leave the operator a note" in brief.lower()
     assert (conversation.origin, conversation.agent) == ("mender", stalls.MENDER)
 
 
@@ -257,7 +296,8 @@ async def test_turning_the_mender_on_makes_its_agent(app, auth_headers):
         agent = (
             await session.execute(select(Agent).where(Agent.name == stalls.MENDER))
         ).scalar_one()
-    assert stalls.is_mender(agent) and agent.runner_id == "runner-m3"
+        assert await runner_of(session, agent) == ("claude", "claude-sonnet-5-5")
+    assert stalls.is_mender(agent)
 
 
 @pytest.mark.asyncio
@@ -558,3 +598,305 @@ async def test_a_dead_run_stall_ends_once_its_run_is_live_or_over(app, executing
         "dead_run:run-a": "resolved",
         "dead_run:run-b": "resolved",
     }
+
+
+# F1048: a stall the mender gave up on is the operator's. On :8000 the same unchanged review stall
+# was raised again on every 5-minute firing after each give-up: 30 mender turns and 27 copies of one
+# question overnight, while the reason never changed.
+
+UNSTAFFED = "Approval of task-x waits on you: its checks fail on main too."
+
+
+async def _report_and_drain(text):
+    stalls.report("proj-test", cause="review_unstaffed", subject="task-x", text=text)
+    await stalls.drain()
+
+
+@pytest.mark.asyncio
+async def test_a_stall_given_up_on_is_not_raised_again_while_its_reason_holds(app):
+    await mender_on()
+    with patch("hub.turn_scheduler.schedule_accepted", new=AsyncMock()) as scheduled:
+        await _report_and_drain(UNSTAFFED)
+        async with async_session_factory() as session:
+            [stall] = (await session.execute(select(Stall))).scalars().all()
+            await stalls.end(session, stall, "gave_up", "the operator has to land it")
+        await _report_and_drain(UNSTAFFED)
+        await _report_and_drain(UNSTAFFED)
+
+    assert scheduled.await_count == 1
+    [row] = await all_stalls()
+    assert (row.outcome, row.seen_count, row.mender_turns) == ("gave_up", 3, 1)
+
+
+@pytest.mark.asyncio
+async def test_a_stall_given_up_on_is_raised_again_once_its_reason_changes(app):
+    await mender_on()
+    with patch("hub.turn_scheduler.schedule_accepted", new=AsyncMock()) as scheduled:
+        await _report_and_drain(UNSTAFFED)
+        async with async_session_factory() as session:
+            [stall] = (await session.execute(select(Stall))).scalars().all()
+            await stalls.end(session, stall, "gave_up", "the operator has to land it")
+        await _report_and_drain("QA is named on task-x as its reviewer and is not reviewing it.")
+
+    assert scheduled.await_count == 2
+    assert [row.outcome for row in await all_stalls()] == ["gave_up", "open"]
+
+
+# F1050: a stuck_task stall whose task was deleted stayed open for days (211 sightings on :8000);
+# nothing ends a stall when its task goes without a transition.
+
+
+@pytest.mark.asyncio
+async def test_a_stuck_task_stall_ends_once_its_task_is_gone_or_moved(app):
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as session:
+        for task_id in ("task-gone", "task-moved", "task-still"):
+            session.add(
+                Task(
+                    id=task_id,
+                    project_id="proj-test",
+                    title=task_id,
+                    status="in_progress",
+                    updated=now - timedelta(hours=2),
+                )
+            )
+        await session.commit()
+    async with async_session_factory() as session:
+        assert await stalls._sweep(session, now) == 3
+    await stalls.drain()
+
+    async with async_session_factory() as session:
+        await session.delete(await session.get(Task, "task-gone"))
+        (await session.get(Task, "task-moved")).status = "completed"
+        await session.commit()
+    async with async_session_factory() as session:
+        await stalls._sweep(session, now)
+    await stalls.drain()
+    assert {row.key: row.outcome for row in await all_stalls()} == {
+        "stuck_task:task-gone": "resolved",
+        "stuck_task:task-moved": "resolved",
+        "stuck_task:task-still": "open",
+    }
+
+
+# the-mender-wakes-only-for-real-stalls, task 2: an entry that names no model runs the mender on the
+# catalog's default model for its runner's CLI. On :8000 the operator chose a runner (Opus) and
+# never a model, and 42 mender turns in one night ran on Opus.
+
+
+async def _wake_the_mender():
+    with patch("hub.turn_scheduler.schedule_accepted", new=AsyncMock()):
+        await _report_and_drain(UNSTAFFED)
+
+
+async def _queued_for_the_mender():
+    async with async_session_factory() as session:
+        return (
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == stalls.MENDER)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+
+@pytest.mark.asyncio
+async def test_an_entry_with_no_model_runs_the_mender_on_sonnet(app):
+    await mender_entry(runner_model="claude-opus-5-5", model=None)
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    async with async_session_factory() as session:
+        assert await runner_of(session, agent) == ("claude", "claude-sonnet-5-5")
+    assert len(await _queued_for_the_mender()) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_existing_mender_on_opus_moves_to_sonnet_at_its_next_wake(app):
+    await mender_entry(runner_model="claude-opus-5-5", model=None)
+    async with async_session_factory() as session:
+        # What :8000 has today: the agent bound to the Opus runner, from an entry with no model.
+        session.add(
+            Agent(
+                id="ag-old-mender",
+                project_id="proj-test",
+                name=stalls.MENDER,
+                config={"hub_role": stalls.HUB_ROLE},
+                runner_id="runner-pick",
+            )
+        )
+        await session.commit()
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    assert agent.id == "ag-old-mender"
+    async with async_session_factory() as session:
+        assert await runner_of(session, agent) == ("claude", "claude-sonnet-5-5")
+
+
+@pytest.mark.asyncio
+async def test_a_model_the_operator_chose_for_the_mender_is_kept(app):
+    await mender_entry(runner_model="claude-sonnet-5-5", model="claude-opus-5-5")
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    async with async_session_factory() as session:
+        assert await runner_of(session, agent) == ("claude", "claude-opus-5-5")
+
+
+@pytest.mark.asyncio
+async def test_the_manager_names_the_mender_its_default_model_and_no_other_job(app, auth_headers):
+    await mender_entry(runner_model="claude-opus-5-5", model=None)
+
+    listed = (await app.get("/api/v1/projects/proj-test/manager/jobs", headers=auth_headers)).json()
+
+    by_key = {job["key"]: job for job in listed["jobs"]}
+    assert by_key["mender"]["default_model"] == {
+        "id": "claude-sonnet-5-5",
+        "label": "Sonnet 5.5",
+    }
+    assert all(job.get("default_model") is None for key, job in by_key.items() if key != "mender")
+
+
+# Review of slice N, defect 2: a runner with its own provider or flags is a choice about how the
+# mender runs, not only which model. An entry with no model keeps the runner's own model; a model
+# chosen for it is run on a runner that carries the same provider and flags.
+
+PROVIDER = {"type": "openai", "base_url": "http://localhost:1234/v1", "api_key_var": "LOCAL_KEY"}
+
+
+async def provider_runner_entry(*, model):
+    async with async_session_factory() as session:
+        session.add(
+            Runner(
+                id="runner-prov",
+                project_id="proj-test",
+                name="Local",
+                cli="copilot",
+                model="local-model",
+                flags=["--allow-all-tools"],
+                provider_config=PROVIDER,
+            )
+        )
+        session.add(
+            ManagerJob(
+                project_id="proj-test",
+                job=manager.MENDER,
+                enabled=True,
+                runner_id="runner-prov",
+                model=model,
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_provider_runner_with_no_model_chosen_keeps_its_runner_and_model(app, auth_headers):
+    await provider_runner_entry(model=None)
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    assert agent.runner_id == "runner-prov"
+    listed = (await app.get("/api/v1/projects/proj-test/manager/jobs", headers=auth_headers)).json()
+    assert next(j for j in listed["jobs"] if j["key"] == "mender")["default_model"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_model_chosen_for_a_provider_runner_runs_on_a_runner_with_its_provider(app):
+    await provider_runner_entry(model="other-model")
+
+    await _wake_the_mender()
+    first = await mender_agent()
+    await _wake_the_mender()  # a second wake reuses the derived runner
+
+    async with async_session_factory() as session:
+        runner = await session.get(Runner, first.runner_id)
+        derived = (
+            (await session.execute(select(Runner).where(Runner.model == "other-model")))
+            .scalars()
+            .all()
+        )
+    assert runner.id != "runner-prov" and len(derived) == 1
+    assert (runner.cli, runner.model) == ("copilot", "other-model")
+    assert runner.flags == ["--allow-all-tools"] and runner.provider_config == PROVIDER
+
+
+@pytest.mark.asyncio
+async def test_a_runner_with_other_flags_is_not_reused_for_a_chosen_model(app):
+    await mender_entry(runner_model="claude-sonnet-5-5", model="claude-opus-5-5")
+    async with async_session_factory() as session:
+        runner = await session.get(Runner, "runner-pick")
+        runner.flags = ["--effort", "high"]
+        session.add(
+            Runner(
+                id="runner-plain-opus",
+                project_id="proj-test",
+                name="Plain Opus",
+                cli="claude",
+                model="claude-opus-5-5",
+            )
+        )
+        await session.commit()
+
+    await _wake_the_mender()
+
+    agent = await mender_agent()
+    async with async_session_factory() as session:
+        runner = await session.get(Runner, agent.runner_id)
+    assert runner.id != "runner-plain-opus"
+    assert (runner.model, runner.flags) == ("claude-opus-5-5", ["--effort", "high"])
+
+
+# Review of slice N, defect 1: an operator's answer to a note is queued into the mender's thread; a
+# stall ending (the brief tells it to leave the note and end gave_up) must withdraw only the brief.
+
+
+@pytest.mark.asyncio
+async def test_ending_a_stall_withdraws_the_brief_but_not_the_operators_answer(app, auth_headers):
+    from hub.db.models import Conversation, Question
+
+    await mender_entry(runner_model="claude-sonnet-5-5", model=None)
+    await _wake_the_mender()
+    async with async_session_factory() as session:
+        [stall] = (await session.execute(select(Stall))).scalars().all()
+        conversation_id = stall.conversation_id
+        session.add(
+            Question(
+                id="q-note-asked",
+                project_id="proj-test",
+                from_agent=stalls.MENDER,
+                question="Touch notes.txt?",
+                header="Dirty checkout",
+                options=[{"label": "Leave it"}, {"label": "Stash it"}],
+                multi_select=False,
+                blocking=False,
+                conversation_id=conversation_id,
+            )
+        )
+        await session.commit()
+    with patch("hub.turn_scheduler.schedule_accepted", new=AsyncMock()):
+        answered = await app.patch(
+            "/api/v1/projects/proj-test/questions/q-note-asked",
+            headers=auth_headers,
+            json={"answer": "Leave it", "labels": ["Leave it"]},
+        )
+    assert answered.status_code == 200, answered.text
+
+    async with async_session_factory() as session:
+        stall = await session.get(Stall, stall.id)
+        await stalls.end(session, stall, "gave_up", "Left a note about notes.txt.")
+
+    entries = {(e.origin_type, e.state) for e in await _queued_for_the_mender()}
+    assert entries == {("mender", "withdrawn"), ("operator", "queued")}
+    async with async_session_factory() as session:
+        thread = (
+            await session.execute(select(Conversation).where(Conversation.id == conversation_id))
+        ).scalar_one()
+    # Still open, so the queued answer is delivered when the mender's run ends and its turn starts.
+    assert thread.lifecycle == "open"

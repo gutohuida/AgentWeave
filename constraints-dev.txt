@@ -16,7 +16,7 @@
 # nothing here may be read as narrowing them. A user installing `agentweave-ai` from PyPI never
 # sees this file; it is not packaged, and the wheel's metadata does not mention it.
 #
-# WHY TWO LINES AND NOT A LOCKFILE. Only the packages whose *observable shape* the suite reads are
+# WHY A FEW LINES AND NOT A LOCKFILE. Only the packages whose *observable shape* the suite reads are
 # pinned. A full lockfile would have to be regenerated on every upstream release of anything, would
 # be stale within days, and would freeze the transitive set the product is deliberately loose about.
 # Add a line here when a test starts depending on some package's internal structure, not before.
@@ -34,3 +34,12 @@
 # and bump the pins to match. Below is CI run 34418974316, read 2026-09-10.
 starlette==1.6.0
 fastapi==0.141.1
+#
+# pytest: 9.2.0 (2026-10-27) breaks pytest-xdist 3.8.0's `--dist loadgroup`. xdist groups a test by
+# rewriting `item._nodeid` with an `@group` suffix; under 9.2 the suffix never appears, so every
+# `xdist_group` mark -- conftest.py's per-file grouping and a static `pytestmark` alike -- is dropped
+# and a file's tests scatter over workers. CI run 40594954171 (48f93ae) was the first on 9.2.0:
+# test_each_test_gets_its_own_database.py's file-order test failed and test_scheduler.py ran on four
+# workers. Reproduced in a two-file project, 2026-10-28. Pinned to what CI run 40586423532 (18df48c,
+# green) resolved; lift it when an xdist release supports 9.2.
+pytest==9.1.1

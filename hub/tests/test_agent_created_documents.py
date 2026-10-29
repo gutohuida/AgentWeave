@@ -305,10 +305,11 @@ async def test_the_creating_agent_cannot_propose_or_approve_its_own_document(
     path = created.json()["path"]
     assert created.json()["phase"] == "exploring"
 
-    propose_as_agent = await app.post(
-        f"{BASE}/documents/propose", params={"path": path}, headers=run_headers
+    # The operator's Check (which replaced propose) is the operator's too.
+    check_as_agent = await app.post(
+        f"{BASE}/documents/check", params={"path": path}, headers=run_headers
     )
-    assert propose_as_agent.status_code == 401
+    assert check_as_agent.status_code == 401
 
     row = await _row(path)
     assert row.phase == "exploring"

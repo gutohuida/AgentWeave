@@ -1,0 +1,23 @@
+{
+  "id": "fct-639bcf4f64b3",
+  "kind": "fact",
+  "claim": "One candidate change is not enough to generalise from about Fast versus Gated.",
+  "citations": [
+    {
+      "source": "src-89dec599d69b",
+      "quote": "One candidate is not\n  enough to generalise from.",
+      "line_start": 140,
+      "line_end": 141
+    }
+  ],
+  "sources": [
+    "src-89dec599d69b"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-28T15:06:31.760620Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

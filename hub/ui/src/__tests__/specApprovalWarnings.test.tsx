@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
 import { ApiError } from '@/api/client'
+import { GapLines } from '@/components/spec/SpecPhaseParts'
 
 /**
  * Approval lists what is missing and can approve anyway (`approve-lists-what-is-missing-and-can-
@@ -12,8 +13,9 @@ import { ApiError } from '@/api/client'
  * warnings: [{code, where, message}]}}`, the gaps in the order `phase_findings` lists them — the
  * completeness findings first, `steps_skipped` last.
  */
-const propose = vi.fn()
+const check = vi.fn()
 const setPhase = vi.fn()
+const approveAndBuild = vi.fn()
 let documents: unknown[] = []
 
 vi.mock('@/api/spec', async (importOriginal) => {
@@ -22,8 +24,10 @@ vi.mock('@/api/spec', async (importOriginal) => {
     ...actual,
     useSpecDocuments: () => ({ data: { documents } }),
     useSetSpecJourney: () => ({ mutate: vi.fn(), isPending: false }),
-    useProposeSpecDocument: () => ({ mutateAsync: propose, isPending: false }),
+    useSpec: () => ({ data: { path: PATH, content: '', content_version: 'v1' }, isError: false, refetch: vi.fn() }),
+    useCheckSpecDocument: () => ({ mutateAsync: check, isPending: false }),
     useSetSpecPhase: () => ({ mutate: setPhase, isPending: false }),
+    useApproveAndBuildSpecDocument: () => ({ mutate: approveAndBuild, isPending: false }),
     useSetSpecRigor: () => ({ mutateAsync: vi.fn(), isPending: false }),
     useSpecRigorHistory: () => ({ data: { events: [] }, error: null }),
   }
@@ -46,7 +50,7 @@ function doc(overrides: Record<string, unknown> = {}) {
     path: PATH,
     title: 'Demo',
     kind: 'change-spec',
-    phase: 'proposed',
+    phase: 'exploring',
     rigor: 'contract',
     content_digest: null,
     explore_closed: true,
@@ -123,16 +127,58 @@ describe('SpecPhaseBar approval warnings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Approve anyway' }))
 
     expect(setPhase).toHaveBeenLastCalledWith(
-      { path: PATH, to: 'approved', approve_anyway: true },
+      { path: PATH, to: 'approved', content_version: 'v1', approve_anyway: true },
       expect.anything(),
     )
     expect(screen.queryByTestId('approval-warnings')).not.toBeInTheDocument()
   })
 
+  it('Approve and build is refused like approving, and its Approve anyway resends it', async () => {
+    approveAndBuild.mockImplementationOnce((_vars: unknown, options: { onError: (e: unknown) => void }) => {
+      options.onError(
+        new ApiError(
+          409,
+          JSON.stringify({
+            detail: { code: 'approval_warnings', message: 'gaps', warnings: [skipped] },
+          }),
+        ),
+      )
+    })
+    renderBar()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
+    // No recommendation to fill in: confirming approves and builds with the settings the dialog
+    // showed, by hand at Reviewed (`a-build-has-a-driver-a-level-and-its-people`).
+    await userEvent.click(await screen.findByTestId('build-confirm'))
+    const shown = {
+      driver: 'hand',
+      level: 'reviewed',
+      builders: [],
+      reviewers: [],
+      landing: 'main',
+      task_builders: {},
+    }
+    expect(approveAndBuild).toHaveBeenLastCalledWith(
+      { path: PATH, content_version: 'v1', ...shown },
+      expect.anything(),
+    )
+    await screen.findByTestId('approval-warnings')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Approve and build anyway' }))
+
+    expect(approveAndBuild).toHaveBeenLastCalledWith(
+      { path: PATH, content_version: 'v1', approve_anyway: true, ...shown },
+      expect.anything(),
+    )
+    expect(setPhase).not.toHaveBeenCalled()
+  })
+
   it('a plain Approve never sends approve_anyway', async () => {
     renderBar()
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
-    expect(setPhase).toHaveBeenCalledWith({ path: PATH, to: 'approved' }, expect.anything())
+    expect(setPhase).toHaveBeenCalledWith(
+      { path: PATH, to: 'approved', content_version: 'v1' },
+      expect.anything(),
+    )
   })
 
   it("an incomplete refusal still lists its findings and offers no Approve anyway", async () => {
@@ -158,12 +204,11 @@ describe('SpecPhaseBar approval warnings', () => {
     expect(screen.queryByRole('button', { name: 'Approve anyway' })).not.toBeInTheDocument()
   })
 
-  it("shows propose's warnings once the document is proposed", async () => {
-    documents = [doc({ phase: 'exploring' })]
-    propose.mockResolvedValue({ ...doc(), proposed: true, blocking: [], warnings: [skipped] })
+  it("shows Check's warnings, and Check offers no Approve anyway", async () => {
+    check.mockResolvedValue({ ...doc(), ready: true, blocking: [], warnings: [skipped] })
     renderBar()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Propose' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Check' }))
 
     const list = await screen.findByTestId('approval-warnings')
     expect(within(list).getByTestId('approval-warning-steps_skipped')).toBeInTheDocument()
@@ -178,6 +223,16 @@ describe('SpecPhaseBar approval warnings', () => {
     expect(
       within(overridden).getAllByTestId(/^approval-warning-/).map((line) => line.dataset.testid),
     ).toEqual(['approval-warning-requirement_without_criterion', 'approval-warning-steps_skipped'])
+  })
+
+  it('names every finding whose message differs, so both same-file pairs reach the screen (F1015)', () => {
+    const overlaps = [
+      { code: 'unordered_file_overlap', where: 'tasks', message: "tasks 't1' and 't2' both edit 'lib.py' without depends_on" },
+      { code: 'unordered_file_overlap', where: 'tasks', message: "tasks 't3' and 't4' both edit 'util.py' without depends_on" },
+    ]
+    render(<GapLines gaps={overlaps} />)
+    expect(screen.getByText(/lib\.py/)).toBeInTheDocument()
+    expect(screen.getByText(/util\.py/)).toBeInTheDocument()
   })
 
   it('shows no overridden block for an approval that overrode nothing', () => {

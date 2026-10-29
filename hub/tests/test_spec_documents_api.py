@@ -19,6 +19,7 @@ from hub.spec_documents import parse_hub, parse_stored
 from hub.spec_payload import SCHEMA_VERSION
 
 from ._routing import iter_api_routes
+from ._spec_versions import content_version
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
@@ -172,7 +173,7 @@ async def test_an_agent_submission_renders_the_document(app, auth_headers, run_h
 
 
 @pytest.mark.asyncio
-async def test_an_incomplete_submission_is_stored_and_reports_what_blocks_a_proposal(
+async def test_an_incomplete_submission_is_stored_and_reports_what_blocks_approval(
     app, auth_headers, run_headers, tmp_path
 ):
     """Saving an incomplete document is not an error. A document under
@@ -183,20 +184,18 @@ async def test_an_incomplete_submission_is_stored_and_reports_what_blocks_a_prop
 
     assert response.status_code == 200
     body = response.json()
-    # F703: these are gaps a proposal passes, so a write reports them as warnings and does not
-    # call them blocking -- the write and the propose of the same payload agree.
+    # F703: these are gaps approval lists, so a write reports them as warnings and does not
+    # call them blocking -- the write and the Check of the same payload agree.
     codes = {item["code"] for item in body["warnings"]}
     assert "requirement_without_task" in codes
     assert "requirement_without_criterion" in codes
     assert body["blocking"] == []
-    assert body["ready_to_propose"] is True
+    assert body["ready_to_approve"] is True
 
-    proposed = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
-    )
-    assert proposed.status_code == 200, proposed.text
-    assert proposed.json()["blocking"] == []
-    assert codes <= {item["code"] for item in proposed.json()["warnings"]}
+    checked = await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
+    assert checked.status_code == 200, checked.text
+    assert checked.json()["blocking"] == []
+    assert codes <= {item["code"] for item in checked.json()["warnings"]}
 
 
 @pytest.mark.asyncio
@@ -307,14 +306,18 @@ async def test_an_agent_cannot_approve_a_document(app, auth_headers, run_headers
     attempted = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "",
+            "approve_anyway": True,
+        },
         headers=run_headers,
     )
     assert attempted.status_code in (401, 403)
 
 
 @pytest.mark.asyncio
-async def test_proposing_reports_every_blocking_check_instead_of_transitioning(
+async def test_checking_reports_every_blocking_check_and_moves_nothing(
     app, auth_headers, run_headers, tmp_path
 ):
     await _create(app, auth_headers)
@@ -328,13 +331,13 @@ async def test_proposing_reports_every_blocking_check_instead_of_transitioning(
     )
 
     response = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
+        f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers
     )
 
     assert response.status_code == 200
     body = response.json()
-    assert body["phase"] == "exploring", "a blocked proposal must not transition"
-    assert body["proposed"] is False, "F528: a refused proposal says so in a field, not by omission"
+    assert body["phase"] == "exploring", "a check never moves the document"
+    assert body["ready"] is False, "F528: a blocked document says so in a field, not by omission"
     codes = {item["code"] for item in body["blocking"]}
     assert {"dependency_cycle", "depends_on_unresolved"} <= codes
     # What approval may be approved over is listed beside the refusals, not among them.
@@ -343,7 +346,7 @@ async def test_proposing_reports_every_blocking_check_instead_of_transitioning(
 
 
 @pytest.mark.asyncio
-async def test_proposing_a_document_whose_content_was_refused_says_it_did_not_propose(
+async def test_checking_a_document_whose_content_was_refused_says_whether_it_is_ready(
     app, auth_headers
 ):
     """F528: a content write refused with 422 left the document without a usable payload, and the
@@ -370,13 +373,13 @@ async def test_proposing_a_document_whose_content_was_refused_says_it_did_not_pr
     assert closed.json()["explore_closed"] is True
 
     response = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
+        f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers
     )
 
     body = response.json()
-    # An empty document is a gap (approve-lists-what-is-missing FR-3), not a refusal, so it is
-    # proposed -- and the field must say what the phase says, with the gap listed beside it.
-    assert body["proposed"] is (body["phase"] == "proposed")
+    # An empty document is a gap (approve-lists-what-is-missing FR-3), not a refusal -- and the
+    # field must say what `blocking` says, with the gap listed beside it.
+    assert body["ready"] is (body["blocking"] == [])
     assert "no_requirements" in {w["code"] for w in body["warnings"]}
 
 
@@ -388,17 +391,18 @@ async def test_the_full_operator_path_reaches_approved(app, auth_headers, run_he
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
 
-    proposed = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
-    )
-    assert proposed.json()["blocking"] == []
-    assert proposed.json()["phase"] == "proposed"
-    assert proposed.json()["proposed"] is True
+    checked = await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
+    assert checked.json()["blocking"] == []
+    assert checked.json()["ready"] is True
 
     approved = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "looks right", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "looks right",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
     assert approved.status_code == 200
@@ -420,11 +424,15 @@ async def test_an_approved_document_refuses_further_submissions(
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
 
@@ -435,7 +443,7 @@ async def test_an_approved_document_refuses_further_submissions(
 
 
 @pytest.mark.asyncio
-async def test_a_reopened_approved_document_proposes_again_without_closing_exploration(
+async def test_a_reopened_approved_document_checks_again_without_closing_exploration(
     app, auth_headers, run_headers, tmp_path
 ):
     await _create(app, auth_headers)
@@ -443,11 +451,15 @@ async def test_a_reopened_approved_document_proposes_again_without_closing_explo
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
 
@@ -461,19 +473,31 @@ async def test_a_reopened_approved_document_proposes_again_without_closing_explo
     assert reopened.json()["explore_closed"] is False
 
     # The journey step replaced the "exploration is complete" gate (step-journey FR-11).
-    again = await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+    again = await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
     assert again.status_code == 200
     assert again.json()["blocking"] == []
-    assert again.json()["phase"] == "proposed"
+    assert again.json()["blocking"] == []
 
 
 @pytest.mark.asyncio
 async def test_an_illegal_transition_is_refused(app, auth_headers, tmp_path):
+    """`archived` has no way back: approving an archived document is not a move that exists."""
     await _create(app, auth_headers)
+    archived = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "archived"},
+        json={"reason": "created by mistake"},
+        headers=auth_headers,
+    )
+    assert archived.status_code == 200, archived.text
     response = await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
     assert response.status_code == 409
@@ -584,7 +608,7 @@ async def test_document_events_are_append_only_with_no_route_to_change_or_delete
     await app.post(
         f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
     )
-    await app.post(f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers)
+    await app.post(f"{BASE}/documents/check", params={"path": PATH}, headers=auth_headers)
 
     async with async_session_factory() as session:
         result = await session.execute(
@@ -592,13 +616,17 @@ async def test_document_events_are_append_only_with_no_route_to_change_or_delete
         )
         before = list(result.scalars().all())
 
-    assert len(before) >= 3, "create, submit and propose must each leave a row"
+    assert len(before) >= 3, "create, submit and close-exploration must each leave a row"
     snapshot = {event.id: (event.kind, event.actor, event.origin, event.detail) for event in before}
 
     await app.post(
         f"{BASE}/documents/phase",
         params={"path": PATH, "to": "approved"},
-        json={"reason": "looks right", "approve_anyway": True},
+        json={
+            "content_version": await content_version(app, auth_headers, PATH),
+            "reason": "looks right",
+            "approve_anyway": True,
+        },
         headers=auth_headers,
     )
 

@@ -5,6 +5,24 @@ import type { Stall } from '@/api/stalls'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
+// The Overview reads main notices and next-slice offers (`amendments-main-watch-and-the-next-slice`).
+const mainNotices: unknown[] = []
+const nextSliceOffers: unknown[] = []
+const markSeenMutate = vi.fn()
+const takeOfferMutate = vi.fn()
+const declineOfferMutate = vi.fn()
+vi.mock('@/api/mainNotices', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/mainNotices')>()),
+  useOpenMainNotices: () => ({ data: mainNotices, error: null }),
+  useMarkMainNoticeSeen: () => ({ mutate: markSeenMutate }),
+}))
+vi.mock('@/api/nextSlice', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/nextSlice')>()),
+  useNextSliceOffers: () => ({ data: nextSliceOffers, error: null }),
+  useTakeNextSliceOffer: () => ({ mutate: takeOfferMutate }),
+  useDeclineNextSliceOffer: () => ({ mutate: declineOfferMutate }),
+}))
+
 /** What the wired Overview lists as needing the operator, running, and finished — each from the
  *  hook that owns it, in the order those routes return. */
 
@@ -15,6 +33,7 @@ let accountingData: Record<string, unknown> = { budget: { exhausted: false } }
 let queueStatuses: Array<Record<string, unknown>> = []
 let openStalls: Stall[] = []
 const answerMutate = vi.fn()
+const updateTaskMutate = vi.fn()
 
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'builder', status: 'idle', message_count: 0, active_task_count: 0, runner_id: 'r1' }], isLoading: false }),
@@ -22,6 +41,7 @@ vi.mock('@/api/agents', () => ({
 vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: questionsError ? undefined : questions, error: questionsError }),
   useAnswerQuestion: () => ({ mutate: answerMutate }),
+  useDeclineQuestion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }))
 vi.mock('@/api/tasks', () => ({
   useTasks: () => ({
@@ -33,11 +53,23 @@ vi.mock('@/api/tasks', () => ({
           status: 'approved',
           latest_integration: { outcome: 'failed', reason: 'the project folder has uncommitted changes', target_branch: 'master', created_at: '2026-10-20T09:00:00Z' },
         },
+        // The shape the tasks route returns for a task the operator alone can move on.
+        {
+          id: 'task-11',
+          title: 'Wire the exporter',
+          status: 'blocked',
+          assignee: 'builder',
+          blocked_reason: 'needs the staging credentials',
+          updated: '2026-10-20T09:30:00Z',
+          latest_integration: null,
+        },
       ],
-      total: 1,
+      total: 2,
       has_more: false,
     },
   }),
+  useUpdateTask: () => ({ mutate: updateTaskMutate }),
+  useRetryIntegration: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
@@ -64,9 +96,11 @@ vi.mock('@/api/queue', () => ({ useQueueStatuses: () => queueStatuses }))
 const endStallMutate = vi.fn()
 vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
 let flakyReport: Record<string, unknown> | null = null
+let flakyError: Error | null = null
+const flakyRefetch = vi.fn()
 const handleFlakyMutate = vi.fn()
 vi.mock('@/api/flakyTests', () => ({
-  useFlakyTests: () => ({ data: flakyReport }),
+  useFlakyTests: () => ({ data: flakyReport, error: flakyError, refetch: flakyRefetch }),
   useHandleFlakyTests: () => ({ mutate: handleFlakyMutate }),
 }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
@@ -97,6 +131,8 @@ beforeEach(() => {
   queueStatuses = []
   openStalls = []
   flakyReport = null
+  flakyError = null
+  flakyRefetch.mockClear()
   handleFlakyMutate.mockClear()
   answerMutate.mockClear()
 })
@@ -151,6 +187,29 @@ describe('the wired Overview', () => {
     expect(who('Dead ask?')).toHaveTextContent('builder is asking')
   })
 
+  it('reads the mender’s note as a note, opening the thread it was asked in', () => {
+    // A note: non-blocking, its asking turn over. The Hub delivers its answer as a later message,
+    // so nobody-is-waiting would be false. A blocking ask whose turn ended still reads as before.
+    questions = [
+      question({
+        id: 'q-note', from_agent: 'mender', question: 'Touch the operator’s notes.txt?', header: 'Dirty checkout',
+        blocking: false, asker_waiting: false, conversation_id: 'conv-stall-1',
+      }),
+      question({ id: 'q-gone', question: 'Dead ask?', blocking: true, asker_waiting: false }),
+    ]
+    const onOpenConversation = vi.fn()
+    render(<OverviewScreen onNavigate={vi.fn()} onOpenConversation={onOpenConversation} />)
+
+    const note = screen.getByText('Touch the operator’s notes.txt?').closest('li') as HTMLElement
+    expect(note).toHaveTextContent('Dirty checkout')
+    expect(note).not.toHaveTextContent(/nobody is waiting/)
+    fireEvent.click(within(note).getByRole('button', { name: 'Open conversation' }))
+    expect(onOpenConversation).toHaveBeenCalledWith('mender', 'conv-stall-1')
+
+    const gone = screen.getByText('Dead ask?').closest('li') as HTMLElement
+    expect(gone).toHaveTextContent('nobody is waiting on this answer any more')
+  })
+
   it('does not offer inline options for a multi-select question', () => {
     questions = [question({ multi_select: true })]
     render(<OverviewScreen onNavigate={vi.fn()} />)
@@ -158,12 +217,23 @@ describe('the wired Overview', () => {
   })
 
   it('lists an approved task that did not merge, and opens it on the board', () => {
+    // The Hub's own stall says it did not merge (`merge-row-follows-its-stall`): no stall, no row.
+    openStalls = [stall({ id: 'stall-9', key: 'integration_failed:task-9', cause: 'integration_failed', task_id: 'task-9', reason: 'the project folder has uncommitted changes' })]
     const onNavigate = vi.fn()
     render(<OverviewScreen onNavigate={onNavigate} />)
     expect(screen.getByText('“Rename the parser” was approved but not merged')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Open task' }))
+    const mergeRow = screen.getByText('“Rename the parser” was approved but not merged').closest('li') as HTMLElement
+    fireEvent.click(within(mergeRow).getByRole('button', { name: 'Open task' }))
     expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-9')
     expect(onNavigate).toHaveBeenCalledWith('tasks')
+  })
+
+  it('lists a blocked task as waiting on the operator, with its reason and the move that releases it (FR-2)', () => {
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const row = screen.getByText('“Wire the exporter” is waiting on you').closest('li') as HTMLElement
+    expect(within(row).getByText(/needs the staging credentials/)).toBeInTheDocument()
+    fireEvent.click(within(row).getByRole('button', { name: 'Resume work' }))
+    expect(updateTaskMutate).toHaveBeenCalledWith({ id: 'task-11', status: 'in_progress' }, expect.objectContaining({ onError: expect.any(Function) }))
   })
 
   it('shows a running conversation and opens that conversation', () => {
@@ -211,7 +281,7 @@ describe('a stalled project under Needs you', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Open task' }))
     expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-4')
     fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' }))
-    expect(endStallMutate).toHaveBeenCalledWith('stall-1')
+    expect(endStallMutate).toHaveBeenCalledWith('stall-1', expect.objectContaining({ onError: expect.any(Function) }))
   })
 
   it('says the mender is on a stall it holds, and opens its thread', () => {
@@ -243,6 +313,18 @@ describe('a query the Hub did not answer', () => {
     const notice = screen.getByTestId('query-error-notice')
     expect(notice).toHaveAttribute('role', 'alert')
     expect(notice).toHaveTextContent('Couldn’t read the questions and the ledger from the Hub')
+  })
+
+  it('offers Retry, which asks the failed read again, and the line goes once it answers', () => {
+    flakyError = new Error('500')
+    const { rerender } = render(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.getByTestId('query-error-notice')).toHaveTextContent('Couldn’t read the flaky tests from the Hub')
+    fireEvent.click(within(screen.getByTestId('query-error-notice')).getByRole('button', { name: 'Retry' }))
+    expect(flakyRefetch).toHaveBeenCalledTimes(1)
+
+    flakyError = null
+    rerender(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.queryByTestId('query-error-notice')).toBeNull()
   })
 
   it('says nothing while every query has answered', () => {

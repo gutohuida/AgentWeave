@@ -16,6 +16,7 @@ from hub.project_workspace import ProjectWorkspace
 from hub.spec_documents import parse_hub, parse_stored, serialize, write_payload
 from hub.spec_payload import PayloadError, validate_payload
 
+from ._spec_versions import content_version
 from .test_spec_documents_api import (
     AGENT,
     BASE,
@@ -45,7 +46,6 @@ async def test_a_submitted_document_is_stored_as_its_payload_and_the_hub_block(
     assert stored["title"] == "Demo"
     assert stored["hub"] == {
         "phase": "exploring",
-        "rigor": "sketch",
         "step": "intake",
         "size": None,
     }
@@ -218,11 +218,17 @@ async def test_a_phase_move_rewrites_the_hub_block(
 ):
     await _create(app, auth_headers)
     await _submit(app, run_headers, _document())
-    proposed = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
+    approved = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "approved"},
+        json={
+            "approve_anyway": True,
+            "content_version": await content_version(app, auth_headers, PATH),
+        },
+        headers=auth_headers,
     )
-    assert proposed.status_code == 200, proposed.text
-    assert _stored(tmp_path)["hub"]["phase"] == "proposed"
+    assert approved.status_code == 200, approved.text
+    assert _stored(tmp_path)["hub"]["phase"] == "approved"
 
 
 # agent-reads (FR-4)

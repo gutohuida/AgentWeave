@@ -35,6 +35,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
   return {
     ...actual,
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: transitionsMap } }),
+    useTaskMoves: () => ({ data: undefined }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
     // F9's note. Stubbed here for the same reason the three hooks above are: this file is about the
@@ -454,6 +455,54 @@ describe('deleting a task (F532)', () => {
 
     expect(await screen.findByText(/run run-1 is working on this task/)).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('one Escape closes one layer of the drawer (F1030)', () => {
+  it('cancels the delete confirm first, leaving the drawer mounted and focus on Delete; the second closes the drawer', async () => {
+    const onClose = vi.fn()
+    renderDrawer(makeTask({ id: 'task-9' }), onClose)
+
+    await userEvent.click(screen.getByTestId('task-delete-task-9'))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByTestId('task-delete-confirm-task-9')).toBeNull()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByTestId('task-delete-task-9')).toHaveFocus()
+
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('renaming a task from the keyboard (F1031)', () => {
+  it('reaches the title with Tab, opens it with Enter, saves once with Enter and keeps focus on the title', async () => {
+    renderDrawer(makeTask(), vi.fn())
+    const title = screen.getByRole('button', { name: /Rename/ })
+    // The drawer's Close is first; Tab until the title is reached.
+    for (let i = 0; i < 6 && document.activeElement !== title; i += 1) await userEvent.tab()
+    expect(title).toHaveFocus()
+
+    await userEvent.keyboard('{Enter}')
+    const input = screen.getByTestId('task-drawer-title-input-task-1')
+    expect(input).toHaveFocus()
+    renameMutate = vi.fn((_vars, opts) => opts?.onSuccess?.())
+    await userEvent.type(input, ' again{Enter}')
+
+    expect(renameMutate).toHaveBeenCalledTimes(1)
+    expect(screen.getByTestId('task-drawer-title-task-1')).toHaveFocus()
+  })
+
+  it('puts focus back on the title after Escape cancels the rename', async () => {
+    renderDrawer(makeTask(), vi.fn())
+    screen.getByTestId('task-drawer-title-task-1').focus()
+    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard('{Escape}')
+    expect(renameMutate).not.toHaveBeenCalled()
+    expect(screen.getByTestId('task-drawer-title-task-1')).toHaveFocus()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 })
 

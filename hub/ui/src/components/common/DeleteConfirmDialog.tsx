@@ -13,6 +13,7 @@ export function DeleteConfirmDialog({
   body,
   confirmLabel,
   isPending,
+  pendingLabel = 'Deleting…',
   error = null,
   onCancel,
   onConfirm,
@@ -22,6 +23,8 @@ export function DeleteConfirmDialog({
   body: string
   confirmLabel: string
   isPending: boolean
+  /** What the confirm button reads while the work is in flight. */
+  pendingLabel?: string
   error?: string | null
   onCancel: () => void
   onConfirm: () => void
@@ -71,7 +74,7 @@ export function DeleteConfirmDialog({
             onClick={onConfirm}
             disabled={isPending}
           >
-            {isPending ? 'Deleting…' : confirmLabel}
+            {isPending ? pendingLabel : confirmLabel}
           </Button>
         </div>
       </div>

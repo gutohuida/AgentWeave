@@ -50,6 +50,7 @@ from .db.models import (
     Task,
 )
 from .project_workspace import ProjectWorkspace
+from .spec_identity import natural_key
 from .spec_lifecycle import Actor
 from .subprocess_windows import no_console_kwargs
 from .utils import short_id
@@ -57,6 +58,10 @@ from .utils import short_id
 AWAITING = "awaiting"
 ACCEPTED = "accepted"
 REJECTED = "rejected"
+#: A send-back's outcome for a piece the reviewer did not name as failing
+#: (`each-piece-of-evidence-is-judged-on-its-own`): kept at its commit, neither accepted nor rejected.
+#: It never counts as accepted; the requirement it served needs a new piece at the next commit.
+HELD = "held"
 
 # Where artifacts go, beneath the project directory. A tree an operator can open, diff, move and
 # archive with ordinary tools — which is most of why the database does not hold the content.
@@ -169,8 +174,13 @@ async def record(
     command: Optional[str] = None,
     output: Optional[str] = None,
     covers: Optional[str] = None,
+    awaiting: bool = False,
 ) -> RequirementEvidence:
     """Store one piece of evidence against the requirement's *current* digest.
+
+    *awaiting* lands an operator's piece `awaiting` like an agent's, for a claim the operator wants
+    judged rather than an observation of their own: closing tasks as already built (`already_built`)
+    records that the work is on the main branch, and somebody checks it.
 
     *command*, *output* and *covers* are what it takes to judge the piece (vis-D5): the output is
     kept as its tail (`output_tail`), and *covers* is `full`, `partial` or absent (`check_covers`).
@@ -319,15 +329,16 @@ async def record(
         actor=actor.name or "",
         run_id=actor.run_id,
         task_id=task_id,
-        review_state=ACCEPTED if actor.kind == "operator" else AWAITING,
+        review_state=ACCEPTED if actor.kind == "operator" and not awaiting else AWAITING,
         command=command,
         output=output,
         covers=covers,
     )
     session.add(evidence)
     await session.flush()
+    await _serve_requirement_of_own_document(session, requirement, task_id, actor)
 
-    if actor.kind == "operator":
+    if evidence.review_state == ACCEPTED:
         session.add(
             EvidenceReview(
                 id=f"evr-{short_id()}",
@@ -345,6 +356,34 @@ async def record(
         await capture_footprint(session, evidence, workspace, taken=taken)
 
     return evidence
+
+
+async def _serve_requirement_of_own_document(
+    session: AsyncSession,
+    requirement: SpecRequirement,
+    task_id: Optional[str],
+    actor: Actor,
+) -> None:
+    """Evidence a task records against a requirement of its own document links that requirement to it.
+
+    `task_integration._targets` merges the evidence of the requirements a task is linked to, so
+    evidence for one the document gained after the task was created merged nothing (2026-10-26,
+    FR-11 and FR-12 of the spec-page mock). Linking when it is recorded, rather than widening that
+    query, leaves one rule for what a task serves, and the task's requirement links say it.
+    Evidence for another document's requirement is not the task's to serve, and is left alone.
+    """
+    if not task_id:
+        return
+    task = await session.get(Task, task_id)
+    if (
+        task is None
+        or not task.spec_document_id
+        or task.spec_document_id != requirement.document_id
+    ):
+        return
+    from . import requirement_links
+
+    await requirement_links.link(session, task, [requirement], actor=actor)
 
 
 async def duplicate_of(
@@ -387,6 +426,8 @@ async def duplicate_of(
 
     A `rejected` piece never matches. It was judged inadequate, and a re-record at the same commit
     with a better summary is the honest response to that judgement rather than a duplicate of it.
+    Nor does a `held` one: it counts for nothing, and its requirement needs a piece the next verdict
+    can judge, so refusing that piece as a copy would leave the requirement no way to be shown.
     """
     if not task_id or not commit_sha or actor is None:
         return None
@@ -398,7 +439,7 @@ async def duplicate_of(
         .where(EvidenceFootprint.commit_sha == commit_sha)
         .where(RequirementEvidence.actor_kind == actor.kind)
         .where(RequirementEvidence.actor == (actor.name or ""))
-        .where(RequirementEvidence.review_state != REJECTED)
+        .where(RequirementEvidence.review_state.notin_((REJECTED, HELD)))
     )
     if run_id is not None:
         query = query.where(RequirementEvidence.run_id == run_id)
@@ -1241,6 +1282,10 @@ async def decide(
     **A decided piece is the operator's to overturn, with a reason** (F692): an agent decides only
     `awaiting` evidence, the same decision twice is refused, and **evidence recorded for an earlier
     wording is never accepted** (its digest no longer matches the requirement's).
+
+    A `held` piece (K: a send-back did not name it as failing) is no decision to overturn: the
+    operator decides it as an awaiting one, accepting with no reason and rejecting with one; an
+    agent leaves it to be recorded again at the next commit.
     """
     if decision not in (ACCEPTED, REJECTED):
         # Names what would work, the way `model_catalog.validate_overrides` names the permitted
@@ -1274,7 +1319,15 @@ async def decide(
         )
 
     previous = evidence.review_state
-    if previous != AWAITING:
+    if previous == HELD and actor.kind != "operator":
+        raise EvidenceRefusedError(
+            f"{evidence.id} is held: its task was sent back without naming it as failing, and its "
+            "author records it again at the next commit, where the next verdict judges it. Only "
+            "the operator decides a held piece.",
+            code="held_evidence",
+            http_status=409,
+        )
+    if previous not in (AWAITING, HELD):
         # F692: a decided piece is decided. Only the operator reverses a decision, and only by
         # saying why -- the sweep's granted tester flipped a rejection to accepted in silence.
         if actor.kind != "operator":
@@ -1387,6 +1440,108 @@ async def decide(
     return review
 
 
+async def verdict_pieces(
+    session: AsyncSession,
+    task: Task,
+    *,
+    actor: Actor,
+    decision: str,
+    own_work: bool = False,
+) -> List[Tuple[RequirementEvidence, str]]:
+    """The pieces a verdict on *task* decides, oldest first, each with its requirement's identifier.
+
+    Every piece recorded for the task that is still awaiting, less three that are left as they are
+    for `decide`'s own reasons: one the acting agent recorded itself, one whose recording run is
+    still live (its commit is about to be re-pointed), and, when accepting, one recorded for an
+    earlier wording of its requirement (F751: `decide` refuses it as `evidence_stale`). Only the
+    task's own pieces (D2): another task serving the same requirement keeps its evidence for its own
+    reviewer.
+
+    *own_work* is a Fast build's approval (`a-build-has-a-driver-a-level-and-its-people`, D4): no
+    reviewer exists at that level, so the builder's approval accepts the builder's own pieces, and
+    only a run other than the acting one still being live leaves a piece as it is.
+    """
+    rows = (
+        await session.execute(
+            select(RequirementEvidence, SpecRequirement)
+            .join(SpecRequirement, SpecRequirement.id == RequirementEvidence.requirement_id)
+            .where(
+                RequirementEvidence.task_id == task.id,
+                RequirementEvidence.review_state == AWAITING,
+            )
+            .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
+        )
+    ).all()
+    pieces: List[Tuple[RequirementEvidence, str]] = []
+    for evidence, requirement in rows:
+        if (
+            not own_work
+            and actor.kind == "agent"
+            and evidence.actor_kind == "agent"
+            and actor.name == evidence.actor
+        ):
+            continue
+        if (
+            evidence.run_id
+            and not (own_work and evidence.run_id == actor.run_id)
+            and run_liveness.run_is_live(evidence.run_id)
+        ):
+            continue
+        if decision == ACCEPTED and evidence.digest != requirement.digest:
+            continue
+        pieces.append((evidence, requirement.identifier or ""))
+    return pieces
+
+
+async def failing_pieces_of(
+    session: AsyncSession, task: Task, *, actor: Actor, named: Sequence[Tuple[str, str]]
+) -> Dict[str, str]:
+    """The pieces a send-back names as failing, as `{evidence_id: its reason}`.
+
+    A piece is named by its requirement's identifier (`FR-3`: every piece of the task for it) or by
+    its evidence id. Refused, never ignored, when a name matches none of the pieces this verdict
+    decides, or comes with no reason: a reviewer told nothing would believe it had rejected
+    something, and a rejection with no reason gives its author nothing to fix.
+    """
+    pieces = await verdict_pieces(session, task, actor=actor, decision=REJECTED)
+    by_identifier: Dict[str, List[str]] = {}
+    for evidence, identifier in pieces:
+        by_identifier.setdefault(identifier, []).append(evidence.id)
+    ids = {evidence.id for evidence, _identifier in pieces}
+    failing: Dict[str, str] = {}
+    unknown: List[str] = []
+    for piece, reason in named:
+        piece, reason = (piece or "").strip(), (reason or "").strip()
+        if not reason:
+            raise EvidenceRefusedError(
+                f"{piece or 'a failing piece'} is named as failing with no reason: say what fails "
+                "in its `reason`, so its author can fix it",
+                code="failing_piece_needs_reason",
+                http_status=422,
+            )
+        matched = [piece] if piece in ids else by_identifier.get(piece, [])
+        if not matched:
+            unknown.append(piece or "''")
+        for evidence_id in matched:
+            failing[evidence_id] = (
+                f"{failing[evidence_id]}; {reason}" if evidence_id in failing else reason
+            )
+    if unknown:
+        namable = sorted(by_identifier, key=natural_key)
+        offered = (
+            f"name one by its requirement ({', '.join(namable)}) or by its evidence id"
+            if namable
+            else "it has no evidence awaiting this verdict, so name none and say why in `notes`"
+        )
+        raise EvidenceRefusedError(
+            f"{', '.join(unknown)} {'is' if len(unknown) == 1 else 'are'} not among the pieces of "
+            f"evidence this verdict decides on {task.id}; {offered}",
+            code="unknown_failing_piece",
+            http_status=422,
+        )
+    return failing
+
+
 async def decide_with_verdict(
     session: AsyncSession,
     task: Task,
@@ -1394,71 +1549,101 @@ async def decide_with_verdict(
     actor: Actor,
     decision: str,
     reason: str,
+    failing: Optional[Dict[str, str]] = None,
+    own_work: bool = False,
 ) -> List[EvidenceReview]:
     """Decide the evidence recorded for *task* with the verdict on it
-    (`the-reviewers-verdict-decides-the-tasks-evidence`, vis-D4).
+    (`the-reviewers-verdict-decides-the-tasks-evidence`, vis-D4), piece by piece
+    (`each-piece-of-evidence-is-judged-on-its-own`).
 
-    Approving a task accepts every piece recorded for it that is still awaiting; sending it back
-    rejects them. The verdict is the judgement, so the `can_accept_evidence` grant is not asked:
-    the reviewer has just judged the work the evidence demonstrates, and a second decision by
-    someone else is what stalled F672. Three pieces are left as they are, for `decide`'s own reasons:
-    one the acting agent recorded itself, one whose recording run is still live (its commit is
-    about to be re-pointed), and, when accepting, one recorded for an earlier wording of its
-    requirement (F751: `decide` refuses it as `evidence_stale`; rejecting it stays open). Only the task's own pieces (D2): another task serving the same
-    requirement keeps its evidence for its own reviewer.
+    *decision* `accepted` is an approval: every piece `verdict_pieces` returns is accepted with
+    *reason*. *decision* `rejected` is a verdict that sends the work back: only the pieces in
+    *failing* (`failing_pieces_of`: evidence id to its own reason) are rejected, each with its own
+    reason, and every other piece is **held** at its commit with *reason*, the send-back's. It was
+    not judged wrong, so it is not called rejected, and it never counts as accepted: its requirement
+    needs a new piece at the builder's next commit. The verdict is the judgement, so the
+    `can_accept_evidence` grant is not asked, and nothing waits on a second decision (F672).
 
     Stages the reviews in the caller's transaction; the caller commits, or rolls back with it.
     """
     if decision not in (ACCEPTED, REJECTED):
         raise ValueError(f"decision must be {ACCEPTED!r} or {REJECTED!r}, got {decision!r}")
+    failing = failing or {}
+    if decision == ACCEPTED and failing:
+        raise ValueError("an approval accepts every piece; it cannot name any as failing")
     reason = reason.strip()
     if not reason:
-        verdict = "approval" if decision == ACCEPTED else "sending back"
         reason = (
-            f"{'Accepted' if decision == ACCEPTED else 'Rejected'} with the {verdict} of {task.id}"
+            f"Accepted with the approval of {task.id}"
+            if decision == ACCEPTED
+            else f"Held with the sending back of {task.id}: not named as failing, so it is "
+            "recorded again at the next commit"
         )
-    pieces = (
-        (
-            await session.execute(
-                select(RequirementEvidence)
-                .where(
-                    RequirementEvidence.task_id == task.id,
-                    RequirementEvidence.review_state == AWAITING,
-                )
-                .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
-            )
-        )
-        .scalars()
-        .all()
-    )
     reviews: List[EvidenceReview] = []
-    for evidence in pieces:
-        if (
-            actor.kind == "agent"
-            and evidence.actor_kind == "agent"
-            and actor.name == evidence.actor
-        ):
-            continue
-        if evidence.run_id and run_liveness.run_is_live(evidence.run_id):
-            continue
+    for evidence, _identifier in await verdict_pieces(
+        session, task, actor=actor, decision=decision, own_work=own_work
+    ):
         if decision == ACCEPTED:
-            requirement = await session.get(SpecRequirement, evidence.requirement_id)
-            if requirement is not None and evidence.digest != requirement.digest:
-                continue
+            outcome, why = ACCEPTED, reason
+        elif evidence.id in failing:
+            outcome, why = REJECTED, failing[evidence.id]
+        else:
+            outcome, why = HELD, reason
         review = EvidenceReview(
             id=f"evr-{short_id()}",
             project_id=evidence.project_id,
             evidence_id=evidence.id,
-            decision=decision,
+            decision=outcome,
             actor_kind=actor.kind,
             actor=actor.name or "",
             run_id=actor.run_id,
-            reason=reason,
+            reason=why,
         )
         session.add(review)
-        evidence.review_state = decision
+        evidence.review_state = outcome
         reviews.append(review)
     return reviews
+
+
+async def verdict_note(session: AsyncSession, reviews: Sequence[EvidenceReview]) -> Optional[str]:
+    """What a verdict decided, piece by piece, for the task's history; None when it decided none.
+
+    A rejected piece is named with its own reason; held and accepted pieces are named together,
+    since they share the verdict's reason, which is the task's notes.
+    """
+    if not reviews:
+        return None
+    names = dict(
+        (
+            await session.execute(
+                select(RequirementEvidence.id, SpecRequirement.identifier)
+                .join(SpecRequirement, SpecRequirement.id == RequirementEvidence.requirement_id)
+                .where(RequirementEvidence.id.in_([review.evidence_id for review in reviews]))
+            )
+        ).all()
+    )
+
+    def name(review: EvidenceReview) -> str:
+        return names.get(review.evidence_id) or review.evidence_id
+
+    def together(decision: str) -> List[str]:
+        return sorted(
+            {name(review) for review in reviews if review.decision == decision}, key=natural_key
+        )
+
+    parts = [
+        f"{name(review)} rejected: {review.reason}"
+        for review in sorted(reviews, key=lambda review: natural_key(name(review)))
+        if review.decision == REJECTED
+    ]
+    if together(HELD):
+        parts.append(
+            f"{', '.join(together(HELD))} held (not named as failing; recorded again at the "
+            "next commit)"
+        )
+    if together(ACCEPTED):
+        parts.append(f"{', '.join(together(ACCEPTED))} accepted")
+    return "Evidence: " + "; ".join(parts) + "."
 
 
 async def reviews_for(session: AsyncSession, evidence_id: str) -> List[EvidenceReview]:

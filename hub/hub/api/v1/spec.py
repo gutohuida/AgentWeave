@@ -19,15 +19,18 @@ import contextlib
 import dataclasses
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from pydantic import Field
+from pydantic import Field, StringConstraints
 from sqlalchemy import func, literal_column, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
+    already_built,
     blocking,
+    builds,
     deletion,
     loop_history,
     project_workspace,
@@ -44,12 +47,12 @@ from ... import (
     spec_journey,
     spec_lifecycle,
     spec_naming,
-    spec_rigor,
     spec_service,
     spec_tasks,
     task_integration,
     task_transitions,
     vault_spec_check,
+    work_tally,
 )
 from ... import (
     spec_payload as spec_payload_module,
@@ -69,7 +72,6 @@ from ...db.models import (
     SpecDocument,
     SpecDocumentEvent,
     SpecDocumentMerge,
-    SpecEditProposal,
     SpecRequirement,
     SpecRequirementRevision,
     Task,
@@ -225,8 +227,13 @@ async def _divergence_fields(
 #: API field is `approval_outcome`, because tasks already answer an unrelated `approval_report`.
 APPROVAL_REPORT = "approval_report"
 
-#: Where a document is read for its delivery's agent: while it is being written and decided.
-_DELIVERY_PHASES = ("exploring", "proposed")
+#: `SpecDocumentEvent.kind` of the record Build leaves (`exploring-ends-at-an-approved-plan`, FR-6):
+#: an event of its own, so approval and build are two entries in the document's history.
+BUILD_REPORT = "build"
+
+#: Where a document is read for its delivery's agent: while it is being written, and once approved,
+#: where Build starts what it recommends.
+_DELIVERY_PHASES = ("exploring", "approved")
 
 
 async def delivery_agent_state(session: AsyncSession, project_id: str, name: str) -> str:
@@ -293,8 +300,11 @@ async def _delivery_status(
     return status
 
 
-async def _approval_outcome(session: AsyncSession, document) -> Optional[Dict[str, Any]]:
-    """The newest approval report, chosen by the Hub so the UI never picks (design D7).
+async def _approval_outcome(
+    session: AsyncSession, document, kind: str = APPROVAL_REPORT
+) -> Optional[Dict[str, Any]]:
+    """The newest approval report (or, with `kind=BUILD_REPORT`, build report), chosen by the Hub
+    so the UI never picks (design D7).
 
     `created_at` alone ties on this machine (a 15.625 ms wall clock), so insertion order breaks
     the tie: `spec_document_events` has a `String` primary key, so it is a rowid table.
@@ -304,7 +314,7 @@ async def _approval_outcome(session: AsyncSession, document) -> Optional[Dict[st
             select(SpecDocumentEvent.detail)
             .where(
                 SpecDocumentEvent.document_id == document.id,
-                SpecDocumentEvent.kind == APPROVAL_REPORT,
+                SpecDocumentEvent.kind == kind,
             )
             .order_by(
                 SpecDocumentEvent.created_at.desc(),
@@ -379,14 +389,23 @@ async def get_spec(
         "path": path,
         "content": page,
         "updated_at": spec_documents.document_updated_at(workspace, path),
+        # The version of what this read shows: an approval names it, and is refused when the
+        # document has changed since (`approve-what-was-seen`).
+        "content_version": spec_documents.content_version(content),
     }
     payload.update(await _divergence_fields(session, project_id, path, content))
     if document is not None:
-        status_now = await _delivery_status(
-            session, project_id, document, spec_documents.parse_stored(content)
-        )
+        stored_payload = spec_documents.parse_stored(content)
+        status_now = await _delivery_status(session, project_id, document, stored_payload)
         if status_now is not None:
             payload["delivery_status"] = status_now
+        recommended = _recommended_build(document, stored_payload)
+        if recommended is not None:
+            payload["recommended_build"] = recommended
+        # Every build of this document, newest first: how it was built, by whom, within what.
+        payload["builds"] = [
+            await builds.view(session, row) for row in await builds.builds_of(session, document.id)
+        ]
         fold_state = await _fold_state(session, document)
         if fold_state is not None:
             payload["fold_state"] = fold_state
@@ -400,11 +419,75 @@ async def get_spec(
                 "document": link.get("document"),
                 "slice": link.get("slice"),
             }
+        if document.kind == "roadmap":
+            # Which change document specifies each slice (the slice's own page, `roadmap.slice`).
+            payload["slice_documents"] = await _slice_documents(
+                session, workspace, project_id, document
+            )
         if document.phase == "approved":
             outcome = await _approval_outcome(session, document)
             if outcome is not None:
                 payload["approval_outcome"] = outcome
+            built = await _approval_outcome(session, document, BUILD_REPORT)
+            if built is not None:
+                payload["build_outcome"] = built
     return payload
+
+
+async def _slice_documents(
+    session: AsyncSession, workspace, project_id: str, roadmap
+) -> Dict[str, str]:
+    """`{slice key: path}` of the change documents that name a slice of this roadmap."""
+    found: Dict[str, str] = {}
+    for other in await spec_lifecycle.list_documents(session, project_id):
+        if other.kind != "change-spec" or other.id == roadmap.id:
+            continue
+        try:
+            link = (_read_payload(workspace, other.path) or {}).get("roadmap")
+        except (OSError, SpecPathError, project_workspace.ProjectPathError):
+            continue
+        if isinstance(link, dict) and link.get("document") == roadmap.path and link.get("slice"):
+            found.setdefault(str(link["slice"]), other.path)
+    return found
+
+
+def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """What Build and Approve and build open with (`recommend-a-build`): the delivery the document
+    recommends, with the reason given for each choice, or None on a document that declares none."""
+    if document.kind != "change-spec":
+        return None
+    delivery = _delivery_of(payload)
+    if delivery is None:
+        return None
+    return {
+        "mode": delivery.mode,
+        "agent": delivery.agent,
+        "reviewer": delivery.reviewer,
+        "tester": delivery.tester,
+        "cron": delivery.cron,
+        "stop_when_queue_empties": delivery.stop_when_queue_empties,
+        "stop_at": delivery.stop_at,
+        # The build's settings (slice D), each resolved the way Build resolves it when left out:
+        # `mode` flow/none reads as driver flow/hand, and no level as Reviewed.
+        "driver": delivery.driver or ("flow" if delivery.mode == "flow" else "hand"),
+        "level": delivery.level or builds.REVIEWED,
+        "builders": list(delivery.builders),
+        "reviewers": list(delivery.reviewers),
+        "lead": delivery.lead,
+        "budget_cap_usd": delivery.budget_cap_usd,
+        "landing": delivery.landing or builds.LANDING_MAIN,
+        "task_builders": _declared_builders(payload),
+        "reasons": dict(delivery.reasons),
+    }
+
+
+def _declared_builders(payload: Optional[Dict[str, Any]]) -> Dict[str, Optional[str]]:
+    """Each declared task's builder by key (F1046), as the document names it."""
+    return {
+        str(entry.get("key")): entry.get("builder")
+        for entry in (payload or {}).get("tasks") or []
+        if isinstance(entry, dict) and entry.get("key") and not entry.get("from")
+    }
 
 
 class DocumentCreate(RequestModel):
@@ -428,12 +511,14 @@ class DocumentCreate(RequestModel):
 
 class PhaseRequest(RequestModel):
     reason: str = Field(default="", max_length=2000)
-    # At approval, the operator's choice of agent for a flow delivery whose agent is stale (design
-    # D5b): a name, or "" for no flow. Used for this flow only; the document is never edited.
+    # Refused when sent (FR-5, approval starts nothing): the agent of a build's flow is chosen at
+    # Build or Approve and build. Kept as a field so the refusal names where it goes now.
     delivery_agent: Optional[str] = Field(default=None, max_length=32)
-    # At approval of a roadmap slice, queue a turn asking the slice's author to draft the next one
-    # (C1a D4). Honoured only with to=approved; on any other document the response says why nothing
-    # was queued.
+    # At approval, the `content_version` of the document read the operator approved
+    # (`approve-what-was-seen`): required with to=approved, refused with any other move.
+    content_version: Optional[str] = Field(default=None, max_length=64)
+    # Refused when true (`amendments-main-watch-and-the-next-slice`, D6): the next slice is offered
+    # once this slice is built. Kept as a field so the refusal names where it went.
     draft_next_slice: bool = False
     # Archiving an approved change that was folded into no capability, with `reason` saying why
     # (the archive guard in `spec_lifecycle.transition`).
@@ -444,6 +529,44 @@ class PhaseRequest(RequestModel):
     # Approving over the gaps the first attempt listed (409 `approval_warnings`). Refused on any
     # other move; a refusal (`document_incomplete`) is not a gap and is not approved over.
     approve_anyway: bool = False
+
+
+_AgentName = Annotated[str, StringConstraints(min_length=1, max_length=32)]
+
+
+class _BuildChoices(RequestModel):
+    """What the operator chooses when they press Build (`a-build-has-a-driver-a-level-and-its-
+    people`, FR-1). Each field left out takes the recommended build's value (`recommended_build`),
+    and where that says nothing, today's behaviour: the delivery's flow or none, any free agent,
+    no cap, no window, landing on main."""
+
+    # The operator's choice of agent for a flow delivery (design D5b, moved here from approval): a
+    # name, or "" for no flow. Used for this build only; the document is never edited.
+    delivery_agent: Optional[str] = Field(default=None, max_length=32)
+    driver: Optional[Literal["flow", "lead", "hand"]] = None
+    level: Optional[Literal["fast", "reviewed", "gated"]] = None
+    builders: Optional[List[_AgentName]] = Field(default=None, max_length=32)
+    reviewers: Optional[List[_AgentName]] = Field(default=None, max_length=32)
+    lead: Optional[str] = Field(default=None, max_length=32)
+    budget_cap_usd: Optional[float] = Field(default=None, gt=0, le=100_000)
+    window_start: Optional[datetime] = None
+    window_end: Optional[datetime] = None
+    landing: Optional[Literal["main", "nowhere"]] = None
+    # Each task's builder as the operator left it in the dialog, by task key; "" clears it.
+    task_builders: Optional[Dict[str, Annotated[str, StringConstraints(max_length=32)]]] = None
+
+
+class BuildRequest(_BuildChoices):
+    """Building an approved document (FR-6), with the build's settings (slice D)."""
+
+
+class ApproveAndBuildRequest(_BuildChoices):
+    """Approving and building in one action (FR-7): approval's fields, then Build's."""
+
+    reason: str = Field(default="", max_length=2000)
+    content_version: Optional[str] = Field(default=None, max_length=64)
+    approve_anyway: bool = False
+    draft_next_slice: bool = False
 
 
 class MergeRequest(RequestModel):
@@ -508,7 +631,6 @@ def _document_view(document, steps: Optional[spec_journey.ProjectSteps] = None) 
         "phase": document.phase,
         # What happens to work that ignores this document. Reported everywhere the phase is, because
         # they answer different questions and an operator reading one will assume the other.
-        "rigor": document.rigor or spec_rigor.SKETCH,
         "content_digest": document.content_digest,
         "explore_closed": document.explore_closed_at is not None,
         # Where a change's authoring stands (`spec_journey`): null on any other document.
@@ -639,6 +761,8 @@ async def list_documents(
         return found
 
     on_disk = await blocking.run(_read_all) if workspace is not None else {}
+    # The page's list marks a document with a build running and says how far it has got.
+    running = await work_tally.running_progress(session, project_id)
     views = []
     for document in documents:
         view = _document_view(document, steps)
@@ -647,6 +771,8 @@ async def list_documents(
         if document.id in amended:
             # tester-amends: what a tester changed and how much the operator has yet to review.
             view["amendments"] = amended[document.id]
+        if document.id in running:
+            view["build"] = running[document.id]
         if document.path in on_disk:
             content = on_disk[document.path]
             view["diverged"] = spec_lifecycle.divergence(document, content) is not None
@@ -750,69 +876,6 @@ class DocumentContent(RequestModel):
     document: Any
 
 
-class RigorRequest(RequestModel):
-    """The operator setting how strictly a document is enforced.
-
-    `expected_digest` is compare-and-swap: a rigor change must not land on a
-    document somebody edited underneath it, or what was promoted is not what was
-    read. Optional so a caller that has not read the document can still act, and
-    supplied by every UI path that has.
-    """
-
-    rigor: str = Field(max_length=16)
-    reason: str = Field(default="", max_length=2000)
-    expected_digest: Optional[str] = Field(default=None, max_length=64)
-
-
-@router.post("/documents/{path:path}/rigor")
-async def set_document_rigor(
-    path: str,
-    body: RigorRequest,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Raise or lower a document's rigor.
-
-    There is deliberately no agent equivalent of this route, and adding one would
-    undo the change: an agent blocked by a gate that can lower the document has
-    not been gated, it has been inconvenienced.
-    """
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    workspace = await _workspace(session, project_id)
-    content = spec_documents.read_document(workspace, document.path)
-
-    try:
-        await spec_rigor.set_rigor(
-            session,
-            document,
-            body.rigor,
-            actor=_operator(),
-            reason=body.reason,
-            expected_digest=body.expected_digest,
-            content=content,
-        )
-    except spec_rigor.RigorRefusedError as exc:
-        raise HTTPException(
-            # A rigor that does not exist is a malformed value, not a conflict (F657).
-            status_code=(
-                status.HTTP_422_UNPROCESSABLE_ENTITY
-                if exc.code == "unknown_rigor"
-                else status.HTTP_409_CONFLICT
-            ),
-            detail={"message": str(exc), "code": exc.code, "blocking": exc.blocking},
-        ) from exc
-
-    # The file states the rigor for whoever opens it, so it is rewritten to agree with the row.
-    # If this fails the row is still what governs — the copy in the document was never the gate.
-    await spec_service.rerender_phase(session, workspace, document)
-    await session.commit()
-    await sse_manager.broadcast(
-        project_id, "spec_updated", {"path": document.path, "rigor": document.rigor}
-    )
-    return await _project_document_view(session, project_id, document)
-
-
 @router.put("/documents/{path:path}/content")
 async def write_document_content(
     path: str,
@@ -833,8 +896,7 @@ async def write_document_content(
 
     No rule is relaxed for the operator. Every refusal comes from the service, unchanged: an
     invalid payload names its field, a mismatched `kind` is refused, an approved document is
-    refused until reopened, and a document at `contract` or `gate` rigor records a pending proposal
-    instead of being written — the operator accepts their own proposal, which is not a bypass.
+    refused until reopened.
     """
     project_id, _ = project
     document = await _require_document(session, project_id, path)
@@ -867,16 +929,6 @@ async def write_document_content(
         project_id, "spec_updated", {"path": result.path, "phase": result.phase}
     )
 
-    if isinstance(result, spec_service.ProposeResult):
-        # Same shape the agent route returns at `contract`/`gate` rigor, and different from a write
-        # on purpose, so a caller cannot mistake "pending" for "live".
-        return {
-            "path": result.path,
-            "phase": result.phase,
-            "proposals": result.proposals,
-            "unchanged": result.unchanged,
-            "already_pending": result.already_pending,
-        }
     return {
         "path": result.path,
         "phase": result.phase,
@@ -934,32 +986,6 @@ async def link_roadmap_slice(
     }
 
 
-@router.get("/documents/{path:path}/rigor-history")
-async def rigor_history(
-    path: str,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Every rigor change, with who made it. Demotion is legitimate *because* this exists."""
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    events = await spec_rigor.history_for(session, document.id)
-    return {
-        "events": [
-            {
-                "id": event.id,
-                "from": event.from_rigor,
-                "to": event.to_rigor,
-                "actor_kind": event.actor_kind,
-                "actor": event.actor,
-                "reason": event.reason,
-                "created_at": event.created_at.isoformat(),
-            }
-            for event in events
-        ]
-    }
-
-
 class ReconcileAsk(RequestModel):
     """The agent the operator asks to reconcile a change with its code."""
 
@@ -994,6 +1020,58 @@ async def ask_reconcile(
         project=project,
         session=session,
     )
+
+
+class AlreadyBuiltClose(RequestModel):
+    """The commit or commits on the main branch that already hold a document's work."""
+
+    commits: List[str] = Field(min_length=1, max_length=already_built.MAX_COMMITS)
+    # The level the tasks close at (slice D): `fast` approves them at once, their evidence
+    # accepted; any other level, or none, leaves them under review for their evidence, as before.
+    level: Optional[Literal["fast", "reviewed", "gated"]] = None
+
+
+@router.post("/documents/{path:path}/close-already-built")
+async def close_already_built(
+    path: str,
+    body: AlreadyBuiltClose,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Close every open task of an approved change as already built, against *commits*
+    (`every-task-can-always-be-moved-on` FR-5, FR-6).
+
+    Each open task moves to `under_review`, held by nobody, its history naming this action and the
+    commits; no run starts. Each requirement each task serves gets a piece of evidence pointing at
+    the commits, `awaiting` a decision; a task is approved once its pieces are accepted
+    (`already_built.approve_what_was_waiting_for_this_evidence`). 409 `not_approved`,
+    `no_main_branch`, `nothing_open`, `turn_running`, `move_refused`; 422 `no_commits`,
+    `commit_not_on_main`. Nothing changes on a refusal.
+    """
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    workspace = await _workspace(session, project_id)
+    try:
+        result = await already_built.close(
+            session, document, body.commits, workspace=workspace, level=body.level
+        )
+    except already_built.AlreadyBuiltRefused as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"message": str(exc), "code": exc.code, **exc.detail},
+        ) from exc
+    await session.commit()
+    # The tasks approved at fast land through the queue once this commits (`landing_queue`).
+    from ... import landing_queue
+
+    await landing_queue.settle(project_id)
+    for task in result["tasks"]:
+        await sse_manager.broadcast(
+            project_id, "task_updated", {"id": task["id"], "status": task["status"]}
+        )
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
+    return result
 
 
 class DefectRecord(RequestModel):
@@ -1183,190 +1261,99 @@ async def respond_to_report(
     }
 
 
-def _proposal_view(proposal: SpecEditProposal) -> dict:
-    return {
-        "id": proposal.id,
-        "unit_kind": proposal.unit_kind,
-        "unit_key": proposal.unit_key,
-        "change_kind": proposal.change_kind,
-        "position_after_key": proposal.position_after_key,
-        "proposed_payload": proposal.proposed_payload,
-        "previous_payload": proposal.previous_payload,
-        "status": proposal.status,
-        # The document version it was made against: two identical proposals on different versions
-        # are not duplicates, and the older one is refused as stale on accept (design D4).
-        "expected_digest": proposal.expected_digest,
-        "proposer_actor_kind": proposal.proposer_actor_kind,
-        "proposer_actor_name": proposal.proposer_actor_name,
-        "created_at": proposal.created_at.isoformat(),
-        "resolved_at": proposal.resolved_at.isoformat() if proposal.resolved_at else None,
-        "resolved_by_actor_name": proposal.resolved_by_actor_name,
-        "resolution_reason": proposal.resolution_reason,
-    }
+class AmendmentDecline(RequestModel):
+    """Why the operator declines a proposed amendment; the proposer reads it."""
+
+    reason: str = Field(max_length=2000)
 
 
-async def _require_proposal(
-    session: AsyncSession, document_id: str, proposal_id: str
-) -> SpecEditProposal:
-    proposal = await session.get(SpecEditProposal, proposal_id)
-    if proposal is None or proposal.document_id != document_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="proposal not found")
-    return proposal
+async def _told_of_decision(session: AsyncSession, project_id: str, document, decision) -> None:
+    """Queue the decision to its proposer, commit, tell every view, and start the proposer's turn
+    (a failed start is retried by the Hub, never this decision's failure)."""
+    from ... import spec_amendments
+    from ...turn_scheduler import schedule_accepted
+
+    if decision.proposer:
+        await spec_amendments.queue_note_to_reporter(
+            session, project_id, decision.proposer, decision.note
+        )
+    document_path, phase = document.path, document.phase
+    await session.commit()
+    await sse_manager.broadcast(project_id, "spec_updated", {"path": document_path, "phase": phase})
+    if decision.task_created:
+        await sse_manager.broadcast(project_id, "task_created", {"id": decision.task_created})
+    if decision.proposer:
+        await schedule_accepted(project_id, decision.proposer)
 
 
-@router.get("/documents/{path:path}/proposals")
-async def list_proposals(
+@router.post("/documents/{path:path}/amendments/{amendment_id}/accept")
+async def accept_amendment(
     path: str,
-    status_filter: str = Query("pending", alias="status", pattern="^(pending|resolved|all)$"),
+    amendment_id: str,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Proposals for one document, pending by default — F2's in-position render reads this per
-    document. `resolved` lists every decided one (accepted, rejected, withdrawn, stale) with who
-    resolved it, when and why, newest decision first (slice remaining-hidden-data)."""
+    """The operator accepts a proposed amendment (`amendments-main-watch-and-the-next-slice`, D1):
+    applied to the document as it stands now, or refused 409 `amendment_stale` naming why when it
+    no longer applies (recorded, and the proposer told). An added task joins the running build."""
+    from ... import spec_amendments
+
     project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    query = select(SpecEditProposal).where(SpecEditProposal.document_id == document.id)
-    if status_filter == "pending":
-        query = query.where(SpecEditProposal.status == "pending").order_by(
-            SpecEditProposal.created_at
-        )
-    elif status_filter == "resolved":
-        query = query.where(SpecEditProposal.status != "pending").order_by(
-            SpecEditProposal.resolved_at.desc(), SpecEditProposal.created_at.desc()
-        )
-    else:
-        query = query.order_by(SpecEditProposal.created_at)
-    result = await session.execute(query)
-    return {"proposals": [_proposal_view(row) for row in result.scalars().all()]}
-
-
-class ProposalDecision(RequestModel):
-    reason: str = Field(default="", max_length=2000)
-    # The operator's own last-seen digest — a second, independent check from the proposal's own
-    # `expected_digest` (design D4, round-3 clarification). Optional so a caller that has not read
-    # the document can still act.
-    expected_digest: Optional[str] = Field(default=None, max_length=64)
-
-
-@router.post("/documents/{path:path}/proposals/{proposal_id}/accept")
-async def accept_proposal_route(
-    path: str,
-    proposal_id: str,
-    body: Optional[ProposalDecision] = None,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Apply one pending proposal's unit, or refuse and say why. There is no agent equivalent."""
-    # F204/F210: every field of the body is optional, so a call with no body at all is a complete
-    # request; without the default FastAPI refused it as malformed before the route could run.
-    body = body or ProposalDecision()
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    proposal = await _require_proposal(session, document.id, proposal_id)
     workspace = await _workspace(session, project_id)
-
+    document = await _require_document(session, project_id, path)
     try:
-        result = await spec_service.accept_proposal(
-            session,
-            workspace,
-            document,
-            proposal,
-            actor=_operator(),
-            expected_digest=body.expected_digest,
-            reason=body.reason,
+        decision = await spec_amendments.accept_proposal(
+            session, workspace, document, amendment_id, actor=_operator()
         )
-    except spec_service.ProposalRefusedError as exc:
-        # `accept_proposal` may have marked the row `stale` before raising — that mutation must
-        # survive this response, not be rolled back with everything else an exception discards.
-        # And it leaves the pending list, so every view is told (F431).
-        await session.commit()
-        if exc.code == "proposal_stale":
-            await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
+    except spec_amendments.AmendmentRefused as exc:
+        raise HTTPException(
+            status_code=exc.status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    await _told_of_decision(session, project_id, document, decision)
+    if decision.state == spec_amendments.STALE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-    except spec_service.SaveRefusedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
-        ) from exc
-
-    await session.commit()
-    await sse_manager.broadcast(
-        project_id, "spec_updated", {"path": result.path, "phase": result.phase}
-    )
+            detail={"message": decision.message, "code": "amendment_stale"},
+        )
     return {
-        "path": result.path,
-        "phase": result.phase,
-        "identifiers": result.identifiers,
-        "blocking": result.blocking,
-        "warnings": result.warnings,
-        "proposal": _proposal_view(proposal),
+        **decision.to_dict(),
+        "amendments": [
+            amendment.to_dict()
+            for amendment in await spec_amendments.list_amendments(session, document)
+        ],
     }
 
 
-@router.post("/documents/{path:path}/proposals/{proposal_id}/reject")
-async def reject_proposal_route(
+@router.post("/documents/{path:path}/amendments/{amendment_id}/decline")
+async def decline_amendment(
     path: str,
-    proposal_id: str,
-    body: Optional[ProposalDecision] = None,
+    amendment_id: str,
+    body: AmendmentDecline,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Refuse a pending proposal. The live document is untouched — nothing to clean up."""
-    # F204/F210: every field of the body is optional, so a call with no body at all is a complete
-    # request; without the default FastAPI refused it as malformed before the route could run.
-    body = body or ProposalDecision()
+    """The operator declines a proposed amendment with a reason; the proposer is told."""
+    from ... import spec_amendments
+
     project_id, _ = project
     document = await _require_document(session, project_id, path)
-    proposal = await _require_proposal(session, document.id, proposal_id)
-
     try:
-        await spec_service.reject_proposal(session, proposal, actor=_operator(), reason=body.reason)
-    except spec_service.ProposalRefusedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-
-    await session.commit()
-    # A rejected row leaves the pending list; every view is told, as accept tells them (F428).
-    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
-    return {"proposal": _proposal_view(proposal)}
-
-
-class ProposalWithdrawal(RequestModel):
-    note: str = Field(default="", max_length=2000)
-
-
-@router.post("/documents/{path:path}/proposals/{proposal_id}/withdraw")
-async def withdraw_proposal_route(
-    path: str,
-    proposal_id: str,
-    body: Optional[ProposalWithdrawal] = None,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-):
-    """Take a pending proposal off the list without judging it -- for duplicates and proposals
-    nobody is pursuing (`a-pending-proposal-can-be-withdrawn`, D3). The document is untouched."""
-    body = body or ProposalWithdrawal()
-    project_id, _ = project
-    document = await _require_document(session, project_id, path)
-    proposal = await _require_proposal(session, document.id, proposal_id)
-
-    try:
-        await spec_service.withdraw_proposal(session, proposal, actor=_operator(), note=body.note)
-    except spec_service.ProposalRefusedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-
-    await session.commit()
-    await sse_manager.broadcast(project_id, "spec_updated", {"path": document.path})
-    return {"proposal": _proposal_view(proposal)}
+        decision = await spec_amendments.decline_proposal(
+            session, document, amendment_id, reason=body.reason, actor=_operator()
+        )
+    except spec_amendments.AmendmentRefused as exc:
+        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
+        if exc.field:
+            detail["field"] = exc.field
+        raise HTTPException(status_code=exc.status, detail=detail) from exc
+    await _told_of_decision(session, project_id, document, decision)
+    return {
+        **decision.to_dict(),
+        "amendments": [
+            amendment.to_dict()
+            for amendment in await spec_amendments.list_amendments(session, document)
+        ],
+    }
 
 
 @router.get("/spec/coverage")
@@ -1674,6 +1661,7 @@ _REVIEW_STATES = (
     requirement_evidence.AWAITING,
     requirement_evidence.ACCEPTED,
     requirement_evidence.REJECTED,
+    requirement_evidence.HELD,
 )
 
 
@@ -1816,6 +1804,19 @@ async def overturn_evidence(
     project_id, _ = project
     evidence = await _operator_evidence(session, project_id, evidence_id)
     current = evidence.review_state
+    if current == requirement_evidence.HELD:
+        # K: a held piece is decided like an awaiting one, on the piece's own Accept / Reject.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    f"{evidence.id} is held: its task was sent back without naming it as failing, "
+                    "so there is no decision to reverse. Decide it as it stands: accept it, or "
+                    "reject it with a reason."
+                ),
+                "code": "not_decided",
+            },
+        )
     if current not in (requirement_evidence.ACCEPTED, requirement_evidence.REJECTED):
         raise HTTPException(
             status_code=409,
@@ -1879,6 +1880,15 @@ async def _operator_decides(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, task_transitions.operator()
     )
+    # A task closed as already built is approved once its last piece is accepted (FR-6).
+    approved = await already_built.approve_what_was_waiting_for_this_evidence(
+        session, evidence_id, "the operator"
+    )
+    if approved is not None:
+        view["approved_task"] = approved
+        await sse_manager.broadcast(
+            project_id, "task_updated", {"id": approved, "status": "approved"}
+        )
     await run_divergence.release_held_review(session, held_review)
     # vis-D1: the operator left the evidence gate and kept the last word. Rejecting a piece whose
     # task an agent's verdict approved reopens that task (`operator-overturns`).
@@ -3026,7 +3036,7 @@ async def close_exploration(
 ):
     """The operator declaring exploration finished.
 
-    Whether an exploration is complete enough to propose from is a judgement,
+    Whether an exploration is complete enough to approve is a judgement,
     not a computation. Making it an operator action keeps every model out of the
     path of a gate.
     """
@@ -3043,61 +3053,51 @@ async def close_exploration(
     return await _project_document_view(session, project_id, document)
 
 
-@router.post("/documents/propose")
-async def propose_document(
+@router.post("/documents/check")
+async def check_document(
     background: BackgroundTasks,
     path: str = Query(...),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Move a document to `proposed`, or report every check that refuses it.
+    """Report a document's readiness and move nothing (`exploring-ends-at-an-approved-plan`, FR-1).
 
-    "Not yet" is a 200 whose `blocking` list names what is missing (F113), so the status code
-    cannot say whether the document moved. `proposed` does, in one field (F528): true only when
-    the phase is now `proposed`.
+    `blocking` and `warnings` are exactly what the agent's save of the stored payload returns
+    (`spec_service.check`), so the operator and the agent read one answer. The phase, the file and
+    the history are untouched, so an agent keeps saving while the operator looks;
+    `content_version` is the version that was checked. Starts the vault's spec check after the
+    answer is sent, a no-op while that job is off (`vault_spec_check`).
     """
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
-
     try:
-        blocking, warnings = await spec_service.propose(
-            session, workspace, document, actor=_operator()
-        )
+        found_blocking, warnings = await spec_service.check(session, workspace, document)
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
-    except spec_lifecycle.PhaseError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-
-    await session.commit()
-    if blocking:
-        return {
-            **await _project_document_view(session, project_id, document),
-            "proposed": False,
-            "blocking": blocking,
-            "warnings": warnings,
-        }
-    await sse_manager.broadcast(
-        project_id, "spec_updated", {"path": document.path, "phase": document.phase}
-    )
-    # After the answer is sent; a no-op while the spec-vault-check job is off (`vault_spec_check`).
-    background.add_task(
-        vault_spec_check.check_in_background,
-        project_id,
-        document.path,
-        trigger=vault_spec_check.TRIGGER,
-    )
+    content = spec_documents.read_document(workspace, document.path)
+    version = spec_documents.content_version(content)
+    # A model run per press would be a cost the operator cannot see (F1053): only a document with
+    # no blocking gap, and only a content version the newest firing has not already checked.
+    if not found_blocking and not await vault_spec_check.already_checked(
+        session, project_id, document.path, version
+    ):
+        background.add_task(
+            vault_spec_check.check_in_background,
+            project_id,
+            document.path,
+            trigger=vault_spec_check.TRIGGER,
+            content_version=version,
+        )
     return {
         **await _project_document_view(session, project_id, document),
-        "proposed": True,
-        "blocking": [],
+        "blocking": found_blocking,
         "warnings": warnings,
+        "ready": not found_blocking,
+        "content_version": version,
     }
 
 
@@ -3123,6 +3123,527 @@ async def _refresh_index_entry(
     return diagnostics
 
 
+def _misplaced_query(request: Request, allowed: set) -> None:
+    """F580: FastAPI drops a query parameter it does not declare without a word, so a body field
+    sent in the query string (`approve_anyway`) was ignored. Name what was misplaced instead."""
+    misplaced = sorted(set(request.query_params) - allowed)
+    if misplaced:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"{', '.join(misplaced)} sent as a query parameter; only "
+                f"{' and '.join(sorted(allowed))} go in the query string, the rest go in the JSON "
+                "request body"
+            ),
+        )
+
+
+def _require_loaded_version(workspace, document, version: Optional[str]) -> None:
+    """An approval names the content version the operator loaded, and is refused when the stored
+    content differs (`approve-what-was-seen`, FR-4): with the document editable while the operator
+    reads, an approval could otherwise accept text nobody read."""
+    if version is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "an approval names the version of the document you read: send content_version, "
+                f"the value GET /project/spec?path={document.path} returned, in the request body"
+            ),
+        )
+    current = spec_documents.content_version(spec_documents.read_document(workspace, document.path))
+    if version != current:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    "the document changed since it was loaded; reload it, read what changed, "
+                    "and approve again"
+                ),
+                "code": "document_changed",
+                "loaded": version,
+                "current": current,
+            },
+        )
+
+
+def _check_delivery_agent(
+    workspace, document, delivery_agent: Optional[str], driver: Optional[str] = None
+) -> None:
+    """D5b: `delivery_agent` is honoured only where it can be, and refused before anything moves
+    rather than ignored (`RequestModel`'s rule: honour a field or name it). A build the operator
+    gives a flow or a lead (slice D) has a flow for it to name, whatever the delivery says."""
+    if delivery_agent is None or driver in (builds.DRIVER_FLOW, builds.DRIVER_LEAD):
+        return
+    chosen_for = _delivery_of(_read_payload(workspace, document.path))
+    if chosen_for is None or chosen_for.mode != "flow":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "delivery_agent replaces a flow delivery's agent, and this document declares no flow"
+            ),
+        )
+
+
+@dataclasses.dataclass
+class _Moved:
+    """What a phase move did, read before the commit expires the rows it touched."""
+
+    report: Optional[Dict[str, Any]] = None
+    payload: Optional[Dict[str, Any]] = None
+    created_count: int = 0
+    notes: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
+
+
+def _already_built_offer(
+    project_id: str, document, payload: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """Intake recorded the work as already built: approval offers slice B's close-as-built at the
+    commits it named, instead of the tasks waiting to be built (`already-built-at-intake`)."""
+    raw = (payload or {}).get("already_built")
+    if not isinstance(raw, dict) or raw.get("built") is not True:
+        return None
+    commits = [str(commit) for commit in raw.get("commits") or []]
+    route = (
+        f"POST /api/v1/projects/{project_id}/project/documents/{document.path}/close-already-built"
+    )
+    at = f" at {', '.join(commits)}" if commits else ", naming no commit"
+    named = "against those commits" if commits else "naming the commits on main that hold it"
+    return {
+        "commits": commits,
+        "route": route,
+        "message": (
+            f"Intake recorded this work as already built{at}. Close its tasks as already built "
+            f"{named} instead of building them."
+        ),
+    }
+
+
+async def _move_phase(
+    session: AsyncSession,
+    workspace,
+    project_id: str,
+    document,
+    *,
+    to: str,
+    reason: str = "",
+    no_capability_change: bool = False,
+    absorbed_by: Optional[str] = None,
+    approve_anyway: bool = False,
+) -> _Moved:
+    """Move the document, and at approval lay its tasks out as a plan with nothing started (FR-5).
+
+    Approval is what turns a decomposition from a description into work: the board is
+    materialised and what that did is recorded. It cannot undo the approval: the board runs in its
+    own savepoint and reports a failure instead of raising. No flow is created and no run begins,
+    whatever the delivery says: that is Build's (`_build`).
+    """
+    try:
+        phase_event = await spec_lifecycle.transition(
+            session,
+            document,
+            to_phase=to,
+            actor=_operator(),
+            workspace=workspace,
+            reason=reason,
+            no_capability_change=no_capability_change,
+            absorbed_by=absorbed_by,
+            approve_anyway=approve_anyway,
+        )
+    except spec_service.SaveRefusedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc), "code": exc.code},
+        ) from exc
+    except spec_lifecycle.PhaseError as exc:
+        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
+        if exc.blocking:
+            detail["blocking"] = exc.blocking
+        if exc.warnings:
+            detail["warnings"] = exc.warnings
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+
+    moved = _Moved(notes=list((phase_event.detail or {}).get("notes") or []))
+    if document.phase != "approved":
+        return moved
+    payload = _read_payload(workspace, document.path)
+    outcome = await spec_tasks.materialise_quietly(session, document, payload, actor=_operator())
+    report: Dict[str, Any] = {
+        "created": [dataclasses.asdict(task) for task in outcome.created],
+        "already_served": [
+            {"key": entry.key, "requirements": list(entry.requirements)}
+            for entry in outcome.already_served
+        ],
+        "failed": outcome.failed,
+        # F535: what re-approval did to tasks that already existed. Empty on a failed board,
+        # which rolled any refresh back with it.
+        "refreshed": [dataclasses.asdict(task) for task in outcome.board.refreshed],
+        "closed_linking_retired": [
+            dataclasses.asdict(task) for task in outcome.board.closed_linking_retired
+        ],
+        "no_longer_declared": [
+            dataclasses.asdict(task) for task in outcome.board.no_longer_declared
+        ],
+        # When the board failed, `_materialise_edges` did not run, and the rows there are the
+        # previous approval's (design D7, R3).
+        "dependencies_not_honoured": (
+            []
+            if outcome.failed
+            else await spec_tasks.dependencies_not_honoured(session, document, payload)
+        ),
+    }
+    offer = _already_built_offer(project_id, document, payload)
+    if offer is not None:
+        report["already_built"] = offer
+    await spec_lifecycle.record_event(
+        session, document, kind=APPROVAL_REPORT, actor=_operator(), detail=report
+    )
+    moved.report = report
+    moved.payload = payload
+    moved.created_count = len(outcome.created)
+    return moved
+
+
+def _defer_phase_broadcasts(
+    session: AsyncSession, project_id: str, document, moved: _Moved
+) -> None:
+    """Staged, not sent (design D6 step 5): every frame waits for the route's one commit."""
+    defer_broadcast(
+        session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    refreshed_count = len((moved.report or {}).get("refreshed", []))
+    if moved.created_count or refreshed_count:
+        defer_broadcast(
+            session,
+            project_id,
+            "task_updated",
+            {"created": moved.created_count, "refreshed": refreshed_count},
+        )
+
+
+async def _phase_response(
+    session: AsyncSession, project_id: str, document, moved: _Moved
+) -> Dict[str, Any]:
+    """The document, the tasks approval created and its report. Read from the values captured
+    before the commit's expiry, as every other field here is."""
+    response: Dict[str, Any] = {
+        **await _project_document_view(session, project_id, document),
+        "tasks_created": [task["id"] for task in (moved.report or {}).get("created", [])],
+    }
+    if moved.report is not None:
+        response["approval_outcome"] = moved.report
+    # F704: what approval told and did not gate on (an unclaimed roadmap slice).
+    if moved.notes:
+        response["approval_notes"] = moved.notes
+    return response
+
+
+def _unprocessable(code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={"code": code, "message": message},
+    )
+
+
+def _aware(value: Optional[datetime]) -> Optional[datetime]:
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+async def _build_settings(
+    session: AsyncSession,
+    project_id: str,
+    document,
+    payload: Optional[Dict[str, Any]],
+    body: _BuildChoices,
+) -> builds.Settings:
+    """The build the operator chose, each setting left out taken from the recommended build
+    (slice D, FR-1). Refused (422) before anything moves: a lead driver naming no lead, a person
+    who is not an open agent of the project, or a window that ends before it starts or has ended.
+    """
+    delivery = _delivery_of(payload)
+
+    def recommended(name: str, default: Any = None) -> Any:
+        value = getattr(delivery, name, None) if delivery is not None else None
+        return default if value is None else value
+
+    driver = body.driver or recommended("driver")
+    if driver is None:
+        flows = delivery is not None and delivery.mode == "flow" and body.delivery_agent != ""
+        driver = builds.DRIVER_FLOW if flows else builds.DRIVER_HAND
+    level = body.level or recommended("level") or builds.REVIEWED
+    chosen_builders = body.builders if body.builders is not None else recommended("builders", [])
+    chosen_reviewers = (
+        body.reviewers if body.reviewers is not None else recommended("reviewers", [])
+    )
+    lead = (body.lead or "").strip() or recommended("lead")
+    cap = body.budget_cap_usd if body.budget_cap_usd is not None else recommended("budget_cap_usd")
+    landing = body.landing or recommended("landing") or builds.LANDING_MAIN
+    start, end = _aware(body.window_start), _aware(body.window_end)
+
+    if driver == builds.DRIVER_LEAD and not lead:
+        raise _unprocessable("lead_missing", "a lead-driven build names its lead")
+    people = [*chosen_builders, *chosen_reviewers, *([lead] if lead else [])]
+    if people:
+        known = await builds.open_agents(session, project_id)
+        unknown = sorted({name for name in people if name not in known})
+        if unknown:
+            raise _unprocessable(
+                "unknown_agent",
+                f"not an open agent of this project: {', '.join(unknown)}. A build's builders, "
+                "reviewers and lead are agents that can be given turns.",
+            )
+    if start is not None and end is not None and end <= start:
+        raise _unprocessable("window_inverted", "the build's window ends before it starts")
+    if end is not None and end <= datetime.now(timezone.utc):
+        raise _unprocessable(
+            "window_closed", f"the build's window ended at {end.isoformat()}; choose a later end"
+        )
+    return builds.Settings(
+        driver=driver,
+        level=level,
+        builders=list(dict.fromkeys(chosen_builders)),
+        reviewers=list(dict.fromkeys(chosen_reviewers)),
+        lead=lead if driver == builds.DRIVER_LEAD else (lead or None),
+        budget_cap_usd_micros=builds.micros_of(cap),
+        window_start=start,
+        window_end=end,
+        landing=landing,
+        task_builders=dict(body.task_builders or {}),
+    )
+
+
+async def _refuse_a_second_build(session: AsyncSession, document) -> None:
+    """One running build per document (FR-1): a second start is refused, naming the running one."""
+    running = await builds.running_build(session, document.id)
+    if running is not None:
+        raise _build_running(running)
+
+
+def _build_running(running) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "build_running",
+            "message": (
+                f"build {running.id} of this document is running ({running.driver}, "
+                f"{running.level}); stop it before starting another"
+            ),
+            "build_id": running.id,
+        },
+    )
+
+
+@dataclasses.dataclass
+class _Started:
+    """What a build start leaves for after its commit."""
+
+    job: Optional[AIJob] = None
+    lead: Optional[str] = None
+
+
+async def _build(
+    session: AsyncSession,
+    project_id: str,
+    document,
+    payload: Optional[Dict[str, Any]],
+    delivery_agent: Optional[str],
+    settings: Optional[builds.Settings] = None,
+) -> Tuple[Dict[str, Any], _Started]:
+    """Start building an approved document (FR-6), and record it.
+
+    Slice D: the build is a record (`builds.Build`) of the operator's choices. Its tasks record the
+    build and its level, and each declared builder that is an open agent becomes its task's
+    assignee. A flow or lead driver gets the flow it hands out the work from (`_build_flow`); a
+    hand-driven build starts nothing. The record is also an event of its own (`BUILD_REPORT`), so
+    approval and build are two entries in the document's history.
+    """
+    if settings is None:
+        settings = await _build_settings(
+            session, project_id, document, payload, _BuildChoices(delivery_agent=delivery_agent)
+        )
+    started = _Started()
+    build = builds.new_build(project_id, document.id, settings)
+    try:
+        async with session.begin_nested():
+            session.add(build)
+            await session.flush()
+    except IntegrityError:
+        # A Build that raced past `_refuse_a_second_build`: the partial unique index answers it,
+        # and the answer is the check's own 409, naming the build that won.
+        running = await builds.running_build(session, document.id)
+        if running is None:
+            raise
+        raise _build_running(running) from None
+    await builds.retire_previous_loops(session, document.id, build.id)
+    open_tasks = (
+        (
+            await session.execute(
+                select(Task)
+                .where(
+                    Task.project_id == project_id,
+                    Task.spec_document_id == document.id,
+                    Task.status.not_in(TERMINAL_STATUSES),
+                )
+                .order_by(Task.created_at, Task.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    unresolved = await builds.cover_tasks(
+        session,
+        build,
+        open_tasks,
+        _declared_builders(payload),
+        settings.task_builders,
+    )
+    if settings.driver == builds.DRIVER_HAND or document.kind != "change-spec":
+        flow = (
+            _hand_flow_entry(payload, delivery_agent)
+            if document.kind == "change-spec"
+            else (await _build_flow(session, project_id, document, payload, delivery_agent))[0]
+        )
+    else:
+        flow, started.job = await _build_flow(
+            session, project_id, document, payload, delivery_agent, settings=settings
+        )
+        if flow.get("state") in ("created", "existing") and flow.get("job_id"):
+            build.loop_id = (
+                await session.execute(select(Loop.id).where(Loop.job_id == flow["job_id"]))
+            ).scalar_one_or_none()
+        # The lead's first brief, now -- unless the window has not opened (or the cap is already
+        # spent): then its loop's first firing inside the window briefs it.
+        if (
+            settings.driver == builds.DRIVER_LEAD
+            and build.loop_id
+            and flow.get("job_id")
+            and (await builds.may_hand_out(session, build)).allowed
+            and await builds.queue_brief(
+                session, build, document.title or document.path, flow["job_id"]
+            )
+        ):
+            started.lead = build.lead
+    delivery = _delivery_of(payload)
+    view = await builds.view(session, build)
+    outcome: Dict[str, Any] = {
+        "flow": flow,
+        "delivery_agent": delivery_agent,
+        "reviewer": delivery.reviewer if delivery is not None else None,
+        "build": {**view, "unresolved_builders": unresolved},
+    }
+    await spec_lifecycle.record_event(
+        session, document, kind=BUILD_REPORT, actor=_operator(), detail=outcome
+    )
+    return outcome, started
+
+
+_CHOICE_FIELDS = (
+    "driver",
+    "level",
+    "builders",
+    "reviewers",
+    "lead",
+    "budget_cap_usd",
+    "window_start",
+    "window_end",
+    "landing",
+    "task_builders",
+)
+
+
+async def _joined_build(
+    session: AsyncSession,
+    project_id: str,
+    document,
+    payload: Optional[Dict[str, Any]],
+    body: _BuildChoices,
+    running,
+) -> Tuple[Dict[str, Any], _Started]:
+    """The report of an Approve and build whose document already has a running build: the tasks
+    approval laid out joined it (`builds.join_running_build`) and no second build was started. A
+    flow- or lead-driven build whose flow is gone gets its flow again, as the build it is."""
+    delivery = _delivery_of(payload)
+    started = _Started()
+    flow = await _existing_flow_entry(session, project_id, document, delivery, body.delivery_agent)
+    if flow is None and running.driver != builds.DRIVER_HAND and document.kind == "change-spec":
+        again = builds.Settings(
+            driver=running.driver,
+            level=running.level,
+            builders=list(running.builders or []),
+            reviewers=list(running.reviewers or []),
+            lead=running.lead,
+            budget_cap_usd_micros=running.budget_cap_usd_micros,
+            window_start=running.window_start,
+            window_end=running.window_end,
+            landing=running.landing,
+            task_builders={},
+        )
+        flow, started.job = await _build_flow(
+            session, project_id, document, payload, body.delivery_agent, settings=again
+        )
+        if started.job is not None:
+            running.loop_id = (
+                await session.execute(select(Loop.id).where(Loop.job_id == started.job.id))
+            ).scalar_one_or_none()
+    if flow is None:
+        flow = _hand_flow_entry(payload, body.delivery_agent)
+    view = await builds.view(session, running)
+    message = f"Build {running.id} is running; the new tasks joined it."
+    if any(getattr(body, name) is not None for name in _CHOICE_FIELDS):
+        message += " The settings chosen here were not applied: stop it to build anew."
+    outcome: Dict[str, Any] = {
+        "flow": flow,
+        "delivery_agent": body.delivery_agent,
+        "reviewer": delivery.reviewer if delivery is not None else None,
+        "build": {**view, "joined": True, "message": message, "unresolved_builders": []},
+    }
+    await spec_lifecycle.record_event(
+        session, document, kind=BUILD_REPORT, actor=_operator(), detail=outcome
+    )
+    return outcome, started
+
+
+def _hand_flow_entry(payload: Optional[Dict[str, Any]], delivery_agent: Optional[str]) -> Dict:
+    """The report's `flow` entry for a build nobody drives: nothing is started."""
+    delivery = _delivery_of(payload)
+    if delivery is None:
+        return {"state": "none", "messages": ["No delivery was declared."]}
+    if delivery.mode == "flow" and delivery_agent == "":
+        return _not_created("You chose no flow for this build.")
+    if delivery.mode == "flow":
+        return {
+            "state": "none",
+            "messages": [
+                "You chose to build it by hand: no flow was started, and the tasks wait on the "
+                "board with their builders assigned."
+            ],
+        }
+    has_tasks = bool((payload or {}).get("tasks"))
+    return {
+        "state": "none",
+        "messages": [
+            (
+                "The delivery says no flow: the tasks are on the board, started by hand."
+                if has_tasks
+                else "The delivery says no flow, and the document declares no tasks."
+            )
+        ],
+    }
+
+
+async def _finish_build(session: AsyncSession, project_id: str, started: _Started) -> None:
+    """After the commit: the flow's first firing is at its next cron tick, nothing fires now
+    (operator). A registration failure is logged, and the committed flow fires from the next
+    restart. A lead's first brief is queued with the build, and its turn starts now."""
+    if started.job is not None:
+        await _hand_job_to_scheduler(session, started.job.id, started.job)
+    if started.lead:
+        from ...turn_scheduler import schedule_accepted
+
+        await schedule_accepted(project_id, started.lead)
+
+
 @router.post("/documents/phase")
 async def set_phase(
     request: Request,
@@ -3132,34 +3653,30 @@ async def set_phase(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """An operator phase decision — approving a document, or reopening one.
+    """An operator phase decision — approving a document, reopening one, or archiving one.
 
     This route requires the project credential, so an agent run cannot reach it:
     a run's token authenticates against `/agent-actions`, which has no phase
     route at all.
+
+    Approval goes from `exploring`, names the `content_version` the operator read and is refused
+    when the document changed since (FR-3, FR-4), and lays the tasks out with nothing started
+    (FR-5). Building is `POST /documents/build`, or both at once `POST /documents/approve-and-build`.
     """
     # F204/F210: every field of the body is optional, so a call with no body at all is a complete
     # request; without the default FastAPI refused it as malformed before the route could run.
     body = body or PhaseRequest()
+    _misplaced_query(request, {"path", "to"})
 
-    # F580: only `path` and `to` are query parameters. FastAPI drops any other one without a word,
-    # so a body field sent in the query string (`approve_anyway`) was ignored and the caller got the
-    # same 409 back. Name what was misplaced rather than ignore it.
-    misplaced = sorted(set(request.query_params) - {"path", "to"})
-    if misplaced:
+    if to == spec_lifecycle.PROPOSED:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"{', '.join(misplaced)} sent as a query parameter; only path and to go in the "
-                "query string, the rest go in the JSON request body"
-            ),
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": spec_lifecycle.PROPOSED_RETIRED, "code": "proposed_retired"},
         )
-
     # F730: a phase that does not exist is a malformed request (422), as an unknown rigor is (F657),
     # not a conflict with the document's state (409).
     phases = (
         spec_lifecycle.EXPLORING,
-        spec_lifecycle.PROPOSED,
         spec_lifecycle.APPROVED,
         spec_lifecycle.ARCHIVED,
     )
@@ -3188,35 +3705,34 @@ async def set_phase(
             "to=approved",
         )
 
-    if body.draft_next_slice and to != "approved":
+    if body.draft_next_slice:
+        # The request is the offer now (`amendments-main-watch-and-the-next-slice`, D6).
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": slice_drafting.REQUEST_RETIRED, "code": "draft_next_slice_retired"},
+        )
+
+    if body.delivery_agent is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                "draft_next_slice starts the next roadmap slice at approval; send it only with "
-                "to=approved"
+                "delivery_agent chooses the agent of a build's flow, and approval starts nothing: "
+                f"send it to POST /api/v1/projects/{project_id}/project/documents/build?path="
+                f"{document.path}, or approve and build at once with "
+                "/documents/approve-and-build"
             ),
         )
 
-    # D5b: `delivery_agent` is honoured only where it can be, and refused before anything moves
-    # rather than ignored (`RequestModel`'s rule: honour a field or name it).
-    if body.delivery_agent is not None:
-        if to != "approved":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "delivery_agent chooses the agent of an approval's flow; send it only with "
-                    "to=approved"
-                ),
-            )
-        chosen_for = _delivery_of(_read_payload(workspace, document.path))
-        if chosen_for is None or chosen_for.mode != "flow":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "delivery_agent replaces a flow delivery's agent, and this document declares "
-                    "no flow"
-                ),
-            )
+    if body.content_version is not None and to != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "content_version names the version an approval approves; send it only with "
+                "to=approved"
+            ),
+        )
+    if to == "approved":
+        _require_loaded_version(workspace, document, body.content_version)
 
     retiring = document.kind == "capability" and to == spec_lifecycle.ARCHIVED
     absorbed_by = body.absorbed_by
@@ -3234,78 +3750,17 @@ async def set_phase(
         except SpecPathError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    try:
-        phase_event = await spec_lifecycle.transition(
-            session,
-            document,
-            to_phase=to,
-            actor=_operator(),
-            workspace=workspace,
-            reason=body.reason,
-            no_capability_change=body.no_capability_change,
-            absorbed_by=absorbed_by,
-            approve_anyway=body.approve_anyway,
-        )
-    except spec_service.SaveRefusedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"message": str(exc), "code": exc.code},
-        ) from exc
-    except spec_lifecycle.PhaseError as exc:
-        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
-        if exc.blocking:
-            detail["blocking"] = exc.blocking
-        if exc.warnings:
-            detail["warnings"] = exc.warnings
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
-
-    phase_notes = list((phase_event.detail or {}).get("notes") or [])
-
-    # Approval is what turns a decomposition from a description into work: the board is
-    # materialised, the delivery's flow is created, and what both did is recorded. Neither can undo
-    # the approval: each runs in its own savepoint and reports a failure instead of raising.
-    report: Optional[Dict[str, Any]] = None
-    created_job: Optional[AIJob] = None
-    created_count = 0
-    payload: Optional[Dict[str, Any]] = None
-    if document.phase == "approved":
-        payload = _read_payload(workspace, document.path)
-        outcome = await spec_tasks.materialise_quietly(
-            session, document, payload, actor=_operator()
-        )
-        created_count = len(outcome.created)
-        flow, created_job = await _approval_flow(
-            session, project_id, document, payload, body.delivery_agent
-        )
-        report = {
-            "created": [dataclasses.asdict(task) for task in outcome.created],
-            "already_served": [
-                {"key": entry.key, "requirements": list(entry.requirements)}
-                for entry in outcome.already_served
-            ],
-            "failed": outcome.failed,
-            # F535: what re-approval did to tasks that already existed. Empty on a failed board,
-            # which rolled any refresh back with it.
-            "refreshed": [dataclasses.asdict(task) for task in outcome.board.refreshed],
-            "closed_linking_retired": [
-                dataclasses.asdict(task) for task in outcome.board.closed_linking_retired
-            ],
-            "no_longer_declared": [
-                dataclasses.asdict(task) for task in outcome.board.no_longer_declared
-            ],
-            # When the board failed, `_materialise_edges` did not run, and the rows there are the
-            # previous approval's (design D7, R3).
-            "dependencies_not_honoured": (
-                []
-                if outcome.failed
-                else await spec_tasks.dependencies_not_honoured(session, document, payload)
-            ),
-            "flow": flow,
-            "delivery_agent": body.delivery_agent,
-        }
-        await spec_lifecycle.record_event(
-            session, document, kind=APPROVAL_REPORT, actor=_operator(), detail=report
-        )
+    moved = await _move_phase(
+        session,
+        workspace,
+        project_id,
+        document,
+        to=to,
+        reason=body.reason,
+        no_capability_change=body.no_capability_change,
+        absorbed_by=absorbed_by,
+        approve_anyway=body.approve_anyway,
+    )
 
     await spec_service.rerender_phase(session, workspace, document)
     if retiring:
@@ -3314,52 +3769,328 @@ async def set_phase(
             session, workspace, document, actor=_operator(), source=spec_index.SOURCE_HUB
         )
         await _refresh_index_entry(session, workspace, project_id, document.path)
-    # Staged, not sent (design D6 step 5): `job_created` is persisted uncommitted inside the flow's
-    # savepoint, so every frame here waits for the one commit below, in today's order.
+    _defer_phase_broadcasts(session, project_id, document, moved)
+    await session.commit()
+
+    return await _phase_response(session, project_id, document, moved)
+
+
+@router.get("/next-slice-offers")
+async def next_slice_offers(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every roadmap slice whose drafting is offered (`slice_drafting`, D6): a built slice whose
+    next slice no document claims, not yet taken or declined. Derived on read."""
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    return {"offers": await slice_drafting.list_offers(session, workspace, project_id)}
+
+
+class NextSliceTake(RequestModel):
+    """The agent that drafts the next slice; left out, the slice document's author."""
+
+    agent: Optional[_AgentName] = None
+
+
+@router.post("/documents/next-slice/take")
+async def take_next_slice_offer(
+    request: Request,
+    body: Optional[NextSliceTake] = None,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Take a document's next-slice offer: one drafting turn queued to the chosen agent, carrying
+    the slice's outcomes, in the conversation the slice was written in while it is open, else a new
+    one (F1047). 409 when there is no offer (a second take queues nothing)."""
+    from ...turn_scheduler import schedule_accepted
+
+    body = body or NextSliceTake()
+    _misplaced_query(request, {"path"})
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        taken = await slice_drafting.take_offer(session, workspace, document, agent=body.agent)
+    except slice_drafting.OfferRefused as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail={"message": str(exc), "code": "no_offer"}
+        ) from exc
+    await session.commit()
+    await schedule_accepted(project_id, taken["agent"])
+    return {"state": "queued", **taken}
+
+
+@router.post("/documents/next-slice/decline")
+async def decline_next_slice_offer(
+    request: Request,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Not now: hide a document's next-slice offer for that slice. Nothing is queued."""
+    _misplaced_query(request, {"path"})
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    try:
+        offer = await slice_drafting.decline_offer(session, workspace, document)
+    except slice_drafting.OfferRefused as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail={"message": str(exc), "code": "no_offer"}
+        ) from exc
+    await session.commit()
+    return {"state": "declined", **offer}
+
+
+@router.post("/documents/build")
+async def build_document(
+    request: Request,
+    body: Optional[BuildRequest] = None,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Build an approved document as its recommended build says (FR-6), at any time after approval.
+
+    In this slice: create and start the flow its delivery describes, or leave the tasks on the
+    board, and say which in `build_outcome`. A flow already declaring the document is reported, not
+    duplicated. 409 `not_approved` before approval; nothing changes on a refusal.
+    """
+    body = body or BuildRequest()
+    _misplaced_query(request, {"path"})
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    if document.phase != spec_lifecycle.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"this document is {document.phase}; only an approved document is built. "
+                    "Approve it, or approve and build it at once"
+                ),
+                "code": "not_approved",
+            },
+        )
+    payload = _read_payload(workspace, document.path)
+    settings = await _build_settings(session, project_id, document, payload, body)
+    _check_delivery_agent(workspace, document, body.delivery_agent, body.driver)
+    await _refuse_a_second_build(session, document)
+    build, started = await _build(
+        session, project_id, document, payload, body.delivery_agent, settings
+    )
     defer_broadcast(
         session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    refreshed_count = len((report or {}).get("refreshed", []))
-    if created_count or refreshed_count:
+    if started.job is not None:
         defer_broadcast(
-            session,
-            project_id,
-            "task_updated",
-            {"created": created_count, "refreshed": refreshed_count},
-        )
-    if created_job is not None:
-        defer_broadcast(
-            session, project_id, "job_created", {"id": created_job.id, "name": created_job.name}
+            session, project_id, "job_created", {"id": started.job.id, "name": started.job.name}
         )
     await session.commit()
-    if created_job is not None:
-        # First firing at the next cron tick; nothing fires now (operator). A registration failure
-        # is logged, and the committed flow fires from the next restart.
-        await _hand_job_to_scheduler(session, created_job.id, created_job)
+    await _finish_build(session, project_id, started)
+    return {**await _project_document_view(session, project_id, document), "build_outcome": build}
 
-    response = {
-        **await _project_document_view(session, project_id, document),
-        "tasks_created": [task["id"] for task in (report or {}).get("created", [])],
-    }
-    if report is not None:
-        response["approval_outcome"] = report
-    # F704: what approval told and did not gate on (an unclaimed roadmap slice). Read from the
-    # values captured before the commit's expiry, as every other field here is.
-    if phase_notes:
-        response["approval_notes"] = phase_notes
-    if body.draft_next_slice and document.phase == "approved":
-        # After the commit: the approval stands whatever happens here, and the response says it.
-        response["next_slice"] = await slice_drafting.request_next_slice(
-            session, project_id, workspace, document, payload, _operator()
+
+@router.post("/documents/approve-and-build")
+async def approve_and_build(
+    request: Request,
+    body: Optional[ApproveAndBuildRequest] = None,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Approve and start the build in one operator action (FR-7), with approval's refusal rules.
+
+    Refused exactly as approving alone is (a changed document, gaps without approve_anyway, a
+    refusal), with nothing created. A document intake recorded as already built is approved and
+    offered close-as-built instead of being built (`already-built-at-intake`); Build still builds
+    it if the operator wants it built anyway.
+    """
+    body = body or ApproveAndBuildRequest()
+    _misplaced_query(request, {"path"})
+    if body.draft_next_slice:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": slice_drafting.REQUEST_RETIRED, "code": "draft_next_slice_retired"},
         )
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    document = await _require_document(session, project_id, path)
+    _require_loaded_version(workspace, document, body.content_version)
+    _check_delivery_agent(workspace, document, body.delivery_agent, body.driver)
+    # A reopened document re-approved while its build still runs: approval lays the new tasks out
+    # and they join that build and its flow (`spec_tasks`), so nothing second is started -- the
+    # response names the running build instead (one build per document at a time, FR-1).
+    running = await builds.running_build(session, document.id)
+    settings = (
+        await _build_settings(
+            session, project_id, document, _read_payload(workspace, document.path), body
+        )
+        if running is None
+        else None
+    )
+
+    moved = await _move_phase(
+        session,
+        workspace,
+        project_id,
+        document,
+        to=spec_lifecycle.APPROVED,
+        reason=body.reason,
+        approve_anyway=body.approve_anyway,
+    )
+    started = _Started()
+    offer = (moved.report or {}).get("already_built")
+    if offer is not None:
+        build: Dict[str, Any] = {
+            "flow": {
+                "state": "already_built",
+                "messages": [
+                    offer["message"] + " Nothing was built; Build builds it anyway.",
+                ],
+            },
+            "delivery_agent": body.delivery_agent,
+            "reviewer": None,
+        }
+    elif running is not None:
+        build, started = await _joined_build(
+            session, project_id, document, moved.payload, body, running
+        )
+    else:
+        build, started = await _build(
+            session, project_id, document, moved.payload, body.delivery_agent, settings
+        )
+    await spec_service.rerender_phase(session, workspace, document)
+    _defer_phase_broadcasts(session, project_id, document, moved)
+    if started.job is not None:
+        defer_broadcast(
+            session, project_id, "job_created", {"id": started.job.id, "name": started.job.name}
+        )
+    await session.commit()
+    await _finish_build(session, project_id, started)
+
+    response = await _phase_response(session, project_id, document, moved)
+    response["build_outcome"] = build
     return response
+
+
+class BuildUpdate(RequestModel):
+    """Raise a build's cap or move its window (slice D, FR-10): a build these stopped resumes."""
+
+    budget_cap_usd: Optional[float] = Field(default=None, gt=0, le=100_000)
+    window_start: Optional[datetime] = None
+    window_end: Optional[datetime] = None
+
+
+async def _project_build(session: AsyncSession, project_id: str, build_id: str):
+    from ...db.models import Build
+
+    build = await session.get(Build, build_id)
+    if build is None or build.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "no_build", "message": f"there is no build {build_id!r} here"},
+        )
+    return build
+
+
+async def _after_build_change(session: AsyncSession, project_id: str, build, job) -> Dict:
+    """Commit, tell the app, hand a resumed job back to (or take a paused one out of) the live
+    scheduler, and answer with the build as it now reads."""
+    view = await builds.view(session, build)
+    defer_broadcast(session, project_id, "build_updated", {"id": build.id, "state": build.state})
+    await session.commit()
+    if job is not None:
+        await _hand_job_to_scheduler(session, job.id, job)
+    return view
+
+
+@router.patch("/builds/{build_id}")
+async def update_build(
+    build_id: str,
+    body: BuildUpdate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Raise a build's cap, or move its window. A build stopped by its cap or its window resumes
+    when the change lets it hand out work again; one the operator stopped stays stopped."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    if body.budget_cap_usd is not None:
+        build.budget_cap_usd_micros = builds.micros_of(body.budget_cap_usd)
+    if body.window_start is not None:
+        build.window_start = _aware(body.window_start)
+    if body.window_end is not None:
+        build.window_end = _aware(body.window_end)
+    start, end = _aware(build.window_start), _aware(build.window_end)
+    if start is not None and end is not None and end <= start:
+        raise _unprocessable("window_inverted", "the build's window ends before it starts")
+    job = None
+    if build.state == builds.STOPPED and build.stop_reason != builds.STOPPED_BY_OPERATOR:
+        verdict = await builds.may_hand_out(session, build)
+        if verdict.stop_reason is None:
+            other = await builds.running_build(session, build.document_id)
+            if other is not None and other.id != build.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "code": "build_running",
+                        "message": f"build {other.id} of this document is running",
+                        "build_id": other.id,
+                    },
+                )
+            job = await builds.resume(session, build)
+    return await _after_build_change(session, project_id, build, job)
+
+
+@router.get("/builds/{build_id}/figures")
+async def build_figures_of(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """What the build has taken so far: its runs, its wall time split by what it was doing, and its
+    cost split by who spent it (`build-progress-on-the-document`). Computed per read."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    # Scoped to the build: the card is polled every few seconds and must not read the whole history.
+    return work_tally.build_figures(
+        await work_tally.tally(session, project_id, build_id=build.id), build
+    )
+
+
+@router.post("/builds/{build_id}/stop")
+async def stop_build(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator stops a running build: nothing new is handed out, running turns finish."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    if build.state != builds.RUNNING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "not_running", "message": f"build {build.id} is {build.state}"},
+        )
+    job = await builds.stop(session, build, builds.STOPPED_BY_OPERATOR)
+    view = await _after_build_change(session, project_id, build, None)
+    if job is not None:
+        from ...scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        if scheduler is not None:
+            await scheduler.remove_job(job.id)
+    return view
 
 
 class _FlowWouldBeEmptyError(Exception):
     """A flow approval would create owning no open task: an outcome, not a fault (design D6 3a)."""
 
 
-_NO_TASKS = "No flow was started: the approval gave it no tasks. Start a flow… once there is work."
+_NO_TASKS = "No flow was started: it has no open tasks to work. Start a flow… once there is work."
 
 
 def _not_created(message: str, agent: Optional[str] = None) -> Dict[str, Any]:
@@ -3435,18 +4166,25 @@ async def _existing_flow_entry(
     }
 
 
-async def _approval_flow(
+async def _build_flow(
     session: AsyncSession,
     project_id: str,
     document,
     payload: Optional[Dict[str, Any]],
     delivery_agent: Optional[str],
+    *,
+    settings: Optional[builds.Settings] = None,
 ) -> Tuple[Dict[str, Any], Optional[AIJob]]:
     """Create the flow a change document's delivery asks for, or say why none was (design D6).
 
     Returns the report's `flow` entry and the job, when one was created. Everything read after a
     savepoint rolled back is a plain value captured before it: rolling back expires what was
     touched inside, and reading that raises `MissingGreenlet` (measured, R2).
+
+    *settings* is the build this flow serves (slice D): a flow or lead driver the operator chose
+    has a flow even where the delivery declares none (stopping when its queue empties), its job's
+    agent is the lead, else the operator's `delivery_agent`, else the first builder, else the
+    delivery's agent.
     """
     if document.kind != "change-spec":
         return {
@@ -3455,6 +4193,8 @@ async def _approval_flow(
         }, None
 
     delivery = _delivery_of(payload)
+    if settings is not None and (delivery is None or delivery.mode != "flow"):
+        delivery = spec_payload_module.Delivery(mode="flow", stop_when_queue_empties=True)
     existing = await _existing_flow_entry(session, project_id, document, delivery, delivery_agent)
     if existing is not None:
         return existing, None
@@ -3476,9 +4216,13 @@ async def _approval_flow(
             ],
         }, None
     if delivery_agent == "":
-        return _not_created("You chose no flow at approval."), None
+        return _not_created("You chose no flow for this build."), None
 
     agent = delivery_agent if delivery_agent is not None else delivery.agent
+    if settings is not None and settings.driver == builds.DRIVER_LEAD:
+        agent = settings.lead
+    elif settings is not None and delivery_agent is None and settings.builders:
+        agent = settings.builders[0]
     if not agent:
         return _not_created("The delivery names no agent, so no flow was started."), None
     agent_state = await delivery_agent_state(session, project_id, agent)
@@ -3513,7 +4257,11 @@ async def _approval_flow(
             request = JobCreate(
                 name=title[:256],
                 agent=agent,
-                message=f'Work the next task of "{title}".',
+                message=(
+                    f'Lead the build of "{title}": hand its tasks out with hand_out_task.'
+                    if settings is not None and settings.driver == builds.DRIVER_LEAD
+                    else f'Work the next task of "{title}".'
+                ),
                 cron=delivery.cron,
                 purpose="",
                 stop_at=stop_at,
@@ -3637,29 +4385,18 @@ async def merge_document(
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 
-    # `document.rigor` decides which shape `save_document` returned (spec_service.py:148); build
-    # the response for whichever it was BEFORE committing, so a shape this handler forgets to
-    # support fails loudly here instead of 500ing after the write is already durable.
-    if isinstance(result, spec_service.ProposeResult):
-        response = {
-            **await _project_document_view(session, project_id, document),
-            "proposals": result.proposals,
-            "unchanged": result.unchanged,
-            "already_pending": result.already_pending,
-            "applied": False,
-            "merged": 0,
-        }
-    else:
-        response = {
-            **await _project_document_view(session, project_id, document),
-            "blocking": result.blocking,
-            "warnings": result.warnings,
-            "divergence": result.divergence,
-            # F730: whether the payload was written. `merged` counts the changes folded, so an
-            # operator edit naming none answered `merged: 0` and read as nothing having happened.
-            "applied": True,
-            "merged": len(sources),
-        }
+    # Built BEFORE committing, so a failure here fails loudly instead of 500ing after the write is
+    # already durable.
+    response = {
+        **await _project_document_view(session, project_id, document),
+        "blocking": result.blocking,
+        "warnings": result.warnings,
+        "divergence": result.divergence,
+        # F730: whether the payload was written. `merged` counts the changes folded, so an
+        # operator edit naming none answered `merged: 0` and read as nothing having happened.
+        "applied": True,
+        "merged": len(sources),
+    }
 
     await session.commit()
     await sse_manager.broadcast(
@@ -3830,15 +4567,12 @@ async def fold_document(
         "archived": archived,
         "fold_state": await _fold_state(session, change),
     }
-    if isinstance(result, spec_service.ProposeResult):
-        response.update(merged=0, proposals=result.proposals)
-    else:
-        response.update(
-            merged=1,
-            blocking=result.blocking,
-            warnings=result.warnings,
-            standing_warnings=result.standing_warnings,
-        )
+    response.update(
+        merged=1,
+        blocking=result.blocking,
+        warnings=result.warnings,
+        standing_warnings=result.standing_warnings,
+    )
     await session.commit()
     for document in (capability, change):
         await sse_manager.broadcast(

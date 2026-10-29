@@ -410,8 +410,8 @@ async def test_the_operator_refusal_names_land_it_and_review_task_id(app, auth_h
 
 
 async def test_the_agent_refusal_names_no_tool_that_reassigns(app, auth_headers):
-    """4.4. Agent PATCH through `/agent-actions/tasks/{id}` with a run token, by a non-author, on a
-    completed task still held by its author: 403, naming that none of the task tools it is offered
+    """4.4. Agent PATCH through `/agent-actions/tasks/{id}` with a run token, by the author (another
+    agent may take the work, `every-task-can-always-be-moved-on`), on a completed task it holds: 403, naming that none of the task tools it is offered
     reassigns a task, and none of the operator remedy's words.
 
     *Mutation:* ignore `actor`. The test must fail.
@@ -425,7 +425,7 @@ async def test_the_agent_refusal_names_no_tool_that_reassigns(app, auth_headers)
             Run(
                 id="run-4a-nonauthor",
                 project_id="proj-test",
-                agent=NONAUTHOR_4,
+                agent=AUTHOR_4,
                 status="running",
                 turn_depth=0,
                 capability_token_hash=hash_run_token(token),

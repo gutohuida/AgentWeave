@@ -1,6 +1,6 @@
 """A spec is written one step at a time (step-journey, slice 1): the model half.
 
-A change document records its journey step and size; the journey follows the size; proposing no
+A change document records its journey step and size; the journey follows the size; approval no
 longer waits for the operator to mark exploration complete; a criterion may say how it is checked
 and by whom. The acceptance drive is `scripts/drive/d1009_step_journey.py`.
 """
@@ -19,6 +19,7 @@ from hub.spec_payload import (
     validate_payload,
 )
 
+from ._spec_versions import content_version
 from .test_spec_documents_api import (
     BASE,
     PATH,
@@ -66,10 +67,10 @@ async def test_a_roadmap_has_no_step(app, auth_headers, tmp_path):
 @pytest.mark.parametrize(
     ("size", "steps"),
     [
-        (None, ["intake", "requirements", "acceptance", "approach", "tasks", "delivery"]),
-        ("large", ["intake", "requirements", "acceptance", "approach", "tasks", "delivery"]),
-        ("small", ["intake", "requirements-and-acceptance", "tasks", "delivery"]),
-        ("fix", ["intake", "tasks", "delivery"]),
+        (None, ["intake", "requirements", "acceptance", "approach", "tasks", "build"]),
+        ("large", ["intake", "requirements", "acceptance", "approach", "tasks", "build"]),
+        ("small", ["intake", "requirements-and-acceptance", "tasks", "build"]),
+        ("fix", ["intake", "tasks", "build"]),
     ],
 )
 def test_the_journey_follows_the_size(size, steps):
@@ -79,7 +80,7 @@ def test_the_journey_follows_the_size(size, steps):
 def test_next_step_walks_the_journey_and_stops_at_its_end():
     assert spec_journey.next_step("small", "intake") == "requirements-and-acceptance"
     assert spec_journey.next_step("fix", "intake") == "tasks"
-    assert spec_journey.next_step("large", "delivery") is None
+    assert spec_journey.next_step("large", "build") is None
     # A step the size's journey does not hold (the size changed under it) moves to the journey's
     # first step after the step's place in the full order, never backwards.
     assert spec_journey.next_step("fix", "requirements") == "tasks"
@@ -132,19 +133,25 @@ async def test_an_unknown_step_or_size_is_refused_naming_the_choices(app, auth_h
 
 # no-close (FR-11)
 @pytest.mark.asyncio
-async def test_a_complete_document_proposes_without_exploration_being_closed(
+async def test_a_complete_document_is_approved_without_exploration_being_closed(
     app, auth_headers, run_headers, tmp_path  # noqa: F811
 ):
     await _create(app, auth_headers)
     submitted = await _submit(app, run_headers, _document())
     assert submitted.status_code == 200, submitted.text
 
-    proposed = await app.post(
-        f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
+    approved = await app.post(
+        f"{BASE}/documents/phase",
+        params={"path": PATH, "to": "approved"},
+        json={
+            "approve_anyway": True,
+            "content_version": await content_version(app, auth_headers, PATH),
+        },
+        headers=auth_headers,
     )
 
-    assert proposed.status_code == 200, proposed.text
-    assert (await _row()).phase == "proposed"
+    assert approved.status_code == 200, approved.text
+    assert (await _row()).phase == "approved"
 
 
 # fields-optional (FR-9)
@@ -198,7 +205,7 @@ async def test_the_operator_moves_the_journey_back_and_changes_the_size(
 
     assert forward.status_code == sized.status_code == back.status_code == 200, back.text
     assert back.json()["step"] == "intake"
-    assert back.json()["journey"] == ["intake", "requirements-and-acceptance", "tasks", "delivery"]
+    assert back.json()["journey"] == ["intake", "requirements-and-acceptance", "tasks", "build"]
     row = await _row()
     assert (row.step, row.size) == ("intake", "small")
 

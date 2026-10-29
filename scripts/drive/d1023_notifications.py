@@ -7,7 +7,7 @@ event crosses projects exactly as the Hub broadcasts it. It checks:
     counted by an init script);
   - behind (document.hasFocus() answering false): the title reads '(1) AgentWeave', and clears
     when the window is focused again;
-  - after the sound switch in Settings > General is turned off: the toast still comes, no
+  - after the sound switch in App settings (the rail's Settings control) is turned off: the toast still comes, no
     oscillator starts.
 Each question is declined afterwards.
 
@@ -125,7 +125,7 @@ def part_one(ui):
         title = page.title()
         check("focus clears the count", not title.startswith("("), repr(title))
 
-        page.goto(f"{ui}/?project={viewing}&tab=environment&section=settings", wait_until="domcontentloaded")
+        page.goto(f"{ui}/?project={viewing}&appSettings=notifications", wait_until="domcontentloaded")
         switch = page.get_by_test_id("notify-sound")
         switch.wait_for(timeout=20000)
         j.shot(page, "settings", locator=page.locator("section[aria-label='Sound and notifications']"))

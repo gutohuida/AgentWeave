@@ -39,7 +39,7 @@ from hub.db.models import (
 )
 from hub.scheduler import JobScheduler, _compose_loop_briefing, decide_firing
 from hub.task_transition_service import apply_transition
-from hub.task_transitions import run_actor
+from hub.task_transitions import operator, run_actor
 
 from .review_evidence import record_review_evidence
 from .test_review_turn import _roster
@@ -999,9 +999,8 @@ async def test_a_genuinely_empty_queue_still_blames_the_queue(app, auth_headers,
         gated = await _task(db, loop, "reallyempty-b", status="pending")
         await _depend(db, gated.id, blocker.id)
         await _completed_by(db, blocker, OWNER)
-        await apply_transition(
-            db, blocker, "under_review", run_actor(run_id="run-re-x", agent=SECOND)
-        )
+        # The operator's move: an agent's would make SECOND the holder, which is not this fixture.
+        await apply_transition(db, blocker, "under_review", operator())
         await db.commit()
 
     decision = await _decide(job.id, loop.id)

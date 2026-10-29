@@ -1,0 +1,23 @@
+{
+  "id": "fct-d15e9e8e843e",
+  "kind": "fact",
+  "claim": "In the flow lifecycle, evidence survives clean prerequisite merges, the mender is never staffed, the mender can hand finished work to review, and flows advance on transitions with a 3-second debounce while the tick remains a backstop.",
+  "citations": [
+    {
+      "source": "src-17aeb9aea81f",
+      "quote": "Evidence survives clean prerequisite merges; the mender is never staffed; the mender can hand finished work to review; flows advance on transitions (3 s debounce), with the tick as backstop",
+      "line_start": 93,
+      "line_end": 93
+    }
+  ],
+  "sources": [
+    "src-17aeb9aea81f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-26T01:48:53.839444Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

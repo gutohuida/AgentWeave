@@ -1126,17 +1126,35 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="update_task",
-            args="task_id, status=None, notes=None, requirement_ids=None, spec_document=None",
+            args=(
+                "task_id, status=None, notes=None, requirement_ids=None, spec_document=None, "
+                "failing_pieces=None"
+            ),
             method="PATCH",
             path="/tasks/{task_id}",
-            fields=("status", "notes", "requirement_ids", "spec_document"),
+            fields=("status", "notes", "requirement_ids", "spec_document", "failing_pieces"),
             required=(),
             text=(
                 f"move status (one of {values(TaskStatus)}), leave notes for whoever looks at "
                 "this task next, and link it to the requirements it serves with requirement_ids "
                 "(spec_document names which document to resolve them in, when that is "
-                "ambiguous). Omit a field to leave it alone. Who holds a task, its priority and "
-                "its description are the operator's."
+                "ambiguous). A send-back names the evidence that fails in failing_pieces "
+                '([{"piece": "FR-3", "reason": "..."}]): only those pieces are rejected, and the '
+                "rest are held for their author to record again. Omit a field to leave it alone. "
+                "Who holds a task, its priority and its description are the operator's."
+            ),
+        ),
+        _Operation(
+            tool="hand_out_task",
+            args="task_id, agent, review=False",
+            method="POST",
+            path="/tasks/{task_id}/hand-out",
+            fields=("agent", "review"),
+            required=("agent",),
+            text=(
+                "a build's lead only (others are refused): hand one of its tasks to `agent`, one "
+                "of its builders, or with `review` true hand completed work to one of its "
+                "reviewer pool; that agent's turn on the task starts."
             ),
         ),
         _Operation(
@@ -1223,7 +1241,7 @@ def _operations() -> List[_Operation]:
             args=(
                 "path, title, kind, summary, problem, design, lifecycle, scope, requirements, "
                 "acceptance_criteria, tasks, algorithms, evidence, open_questions, delivery, "
-                "slices, roadmap"
+                "slices, roadmap, already_built"
             ),
             method="POST",
             path="/spec/documents",
@@ -1241,12 +1259,15 @@ def _operations() -> List[_Operation]:
                 "is no argument that sets a phase or approves — those are the operator's. "
                 '`delivery` is how a change-spec document will be built: `{"mode": "flow", '
                 '"agent": ..., "stop_when_queue_empties": ..., "stop_at": ..., "cron": '
-                '...}` or `{"mode": "none"}`. Include it in every later submission — a '
-                "submission replaces the whole document, so one without it drops the answer. "
+                '...}` or `{"mode": "none"}`, with `reasons` for each choice: it is a '
+                "recommendation the operator decides on when they build. Include it in every "
+                "later submission — a submission replaces the whole document, so one without it "
+                "drops the answer. `already_built` is intake's answer to whether the work exists: "
+                '`{"built": true, "commits": [<sha>, ...]}` or `{"built": false}`. '
                 "`slices` are a `roadmap`'s slices in build order (`key`, `title`, `intent`, "
                 "`done`, `builds_after`); a roadmap carries no requirements or tasks. `roadmap` "
                 '(`{"document": <roadmap path>, "slice": <key>}`) names the roadmap slice a '
-                "change document specifies; it is proposable once that roadmap is approved. Each "
+                "change document specifies; it can be approved once that roadmap is. Each "
                 "entry in `tasks` lists the repo-relative paths it will edit in `files`, and "
                 "names sibling task keys in `depends_on`: chain any two tasks that share a path."
             ),
@@ -1254,7 +1275,8 @@ def _operations() -> List[_Operation]:
                 "This is the one operation whose request is not flat: everything after `path` — "
                 "`title`, `kind`, `summary`, `problem`, `design`, `lifecycle`, `scope`, "
                 "`requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, "
-                "`open_questions`, `delivery`, `slices`, `roadmap` — goes inside the `document` "
+                "`open_questions`, `delivery`, `slices`, `roadmap`, `already_built` — goes inside "
+                "the `document` "
                 "object, and a key you "
                 "have nothing for is left out rather than sent as null."
             ),
@@ -1551,6 +1573,59 @@ def _operations() -> List[_Operation]:
                 "a paid model call per source. The answer is one result per file: added, skipped "
                 "as a duplicate, or refused with the reason. What you add is marked as yours."
             ),
+        ),
+        _Operation(
+            tool="vault_replace_passage",
+            args="entry_id, old, new",
+            method="POST",
+            path="/vault/sources/{entry_id}/replace-passage",
+            fields=("old", "new"),
+            required=("old", "new"),
+            text=(
+                "change a text source by replacing one passage: `old` must occur exactly once in its text, else the call is refused saying whether it occurs nowhere or more than once. The source is distilled again in the background. Recorded with your name and run."
+            ),
+        ),
+        _Operation(
+            tool="vault_append",
+            args="entry_id, text",
+            method="POST",
+            path="/vault/sources/{entry_id}/append",
+            fields=("text",),
+            required=("text",),
+            text=(
+                "add text to the end of a text source. The source is distilled again in the background. Recorded with your name and run."
+            ),
+        ),
+        _Operation(
+            tool="vault_replace_file",
+            args="entry_id, path",
+            method="POST",
+            path="/vault/sources/{entry_id}/replace-file",
+            fields=("path",),
+            required=("path",),
+            text=(
+                "replace a PDF or image source's file with the file `path` names (the paths and refusals of vault_add); a text source is changed with vault_replace_passage or vault_append."
+            ),
+        ),
+        _Operation(
+            tool="vault_archive",
+            args="entry_id",
+            method="POST",
+            path="/vault/sources/{entry_id}/archive",
+            fields=(),
+            required=(),
+            text=(
+                "archive a source: it and the facts citing only archived sources leave the map and the turn's vault line, and stay readable by id."
+            ),
+        ),
+        _Operation(
+            tool="vault_restore",
+            args="entry_id",
+            method="POST",
+            path="/vault/sources/{entry_id}/restore",
+            fields=(),
+            required=(),
+            text=("restore an archived source and its facts."),
         ),
         _Operation(
             tool="request_agent",
@@ -1976,10 +2051,6 @@ SPEC_PHASE_DUTIES = {
         "agent in the task's `reviewer`, else to the document's `delivery.reviewer`, else to any "
         "free agent. Set `delivery.reviewer` for who reviews the document's work, and a task's "
         "`reviewer` only where it differs; saying who reviews in the design text sets nothing."
-    ),
-    "proposed": (
-        "- This document is proposed and awaiting the operator's decision. Do not implement it, "
-        "and do not treat it as approved."
     ),
     "approved": (
         "- This document is approved. Implement against it; a material change to what was approved "
@@ -2489,30 +2560,31 @@ async def _render_hub_agent_context(
                     )
                 else:
                     lines.append(_phase_duty(phase, row.kind if row is not None else None))
-                if is_change_spec and phase in ("exploring", "proposed"):
+                if is_change_spec and phase == "exploring":
                     open_names = ", ".join(peer.name for peer in roster)
                     lines.append(f"- Open agents on this project: {open_names}.")
                 if is_change_spec and phase == "exploring" and not on_journey:
                     lines.append(
-                        "- Before the document is ready to propose, ask how it will be built. "
-                        "Recommend a flow when the work splits into tasks: a flow starts every "
-                        "task whose prerequisites are met, has finished work reviewed by another "
-                        "agent when there is another agent, and can stop when its queue empties. "
-                        "If the operator wants a flow, ask which agent works it by default (from "
-                        "the open agents listed here), when it stops, and how often it fires "
-                        "(every 5 minutes unless they say otherwise). Record the answer as "
-                        "`delivery`, and include `delivery` in every later submission of this "
-                        "document: a submission replaces the whole document, so one without it "
-                        "drops the answer. 'No flow' is a valid answer: the tasks still go on the "
-                        "board."
+                        "- Before the document is ready to approve, recommend how it will be "
+                        "built; the operator decides when they build it. Recommend a flow when "
+                        "the work splits into tasks: a flow starts every task whose prerequisites "
+                        "are met, has finished work reviewed by another agent when there is "
+                        "another agent, and can stop when its queue empties. Recommend which "
+                        "agent works it (from the open agents listed here), who reviews, when it "
+                        "stops, and how often it fires (every 5 minutes unless the operator says "
+                        "otherwise), with a reason for each. Record the recommendation as "
+                        "`delivery` with its `reasons`, and include `delivery` in every later "
+                        "submission of this document: a submission replaces the whole document, "
+                        "so one without it drops the answer. 'No flow' is a valid recommendation: "
+                        "the tasks still go on the board."
                     )
                 lines.append(
                     "- Write the document with `submit_spec_document`. Never write specification "
                     "HTML yourself; the Hub renders it and assigns requirement identifiers."
                 )
                 lines.append(
-                    "- You cannot propose or approve. Those are the operator's, and there is no "
-                    "argument that does either."
+                    "- You cannot approve or build a document. Those are the operator's, and "
+                    "there is no argument that does either."
                 )
                 # The exit condition, stated as one (F38). Measured 2026-08-25: the author
                 # diagnosed the bug correctly and unprompted, then asked four well-judged questions
@@ -2523,7 +2595,7 @@ async def _render_hub_agent_context(
                 #
                 # Not while exploring (F545, `overhaul-exploring-interview`): an exploring turn
                 # interviews in its reply and stops, as its turn notice says, and a turn told both
-                # obeys one by disobeying the other. Proposed and approved keep it word for word.
+                # obeys one by disobeying the other. Approved keeps it word for word.
                 if phase == "exploring":
                     lines.append(f"- {EXPLORING_ASKS_IN_REPLY}")
                 else:

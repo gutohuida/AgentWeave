@@ -54,4 +54,4 @@ async def test_a_phase_that_does_not_exist_is_a_malformed_request(
     assert response.status_code == 422, response.text
     detail = response.json()["detail"]
     assert detail["code"] == "unknown_phase"
-    assert "exploring, proposed, approved, archived" in detail["message"]
+    assert "exploring, approved, archived" in detail["message"]

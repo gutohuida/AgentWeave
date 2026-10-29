@@ -32,7 +32,15 @@ ACCEPTANCE = "acceptance"
 REQUIREMENTS_AND_ACCEPTANCE = "requirements-and-acceptance"
 APPROACH = "approach"
 TASKS = "tasks"
-DELIVERY = "delivery"
+#: The last step: it recommends a build, with a reason for each choice, and the operator decides
+#: when they press Build (`exploring-ends-at-an-approved-plan`, FR-10). It was called `delivery`;
+#: that name is still read wherever a step is named (`OLD_NAMES`), so a project's
+#: `spec/journey.json` written before the rename keeps working, and migration 0149 moved the
+#: documents standing at it.
+BUILD = "build"
+
+#: Step names a project file, a stored document or a caller may still use, and the step each is now.
+OLD_NAMES: Dict[str, str] = {"delivery": BUILD}
 
 #: Every step, in the order any journey visits them. A step one journey lacks still has a place
 #: here, which is how `next_step` moves forward from a step the size no longer holds.
@@ -43,7 +51,7 @@ STEP_ORDER = (
     ACCEPTANCE,
     APPROACH,
     TASKS,
-    DELIVERY,
+    BUILD,
 )
 
 SIZES = ("fix", "small", "large")
@@ -51,11 +59,16 @@ SIZES = ("fix", "small", "large")
 #: The journey by size (FR-2). No size yet is briefed as large (FR-12): ceremony is dropped by a
 #: decision, never by default.
 JOURNEYS: Dict[Optional[str], List[str]] = {
-    None: [INTAKE, REQUIREMENTS, ACCEPTANCE, APPROACH, TASKS, DELIVERY],
-    "large": [INTAKE, REQUIREMENTS, ACCEPTANCE, APPROACH, TASKS, DELIVERY],
-    "small": [INTAKE, REQUIREMENTS_AND_ACCEPTANCE, TASKS, DELIVERY],
-    "fix": [INTAKE, TASKS, DELIVERY],
+    None: [INTAKE, REQUIREMENTS, ACCEPTANCE, APPROACH, TASKS, BUILD],
+    "large": [INTAKE, REQUIREMENTS, ACCEPTANCE, APPROACH, TASKS, BUILD],
+    "small": [INTAKE, REQUIREMENTS_AND_ACCEPTANCE, TASKS, BUILD],
+    "fix": [INTAKE, TASKS, BUILD],
 }
+
+
+def current_name(step: Optional[str]) -> Optional[str]:
+    """The step's name today: an old name (`OLD_NAMES`) read as the step it became."""
+    return OLD_NAMES.get(step, step) if step is not None else None
 
 
 class JourneyError(ValueError):
@@ -126,6 +139,7 @@ class ProjectSteps:
         return [step.key for step in self.steps]
 
     def get(self, key: Optional[str]) -> Optional[Step]:
+        key = current_name(key)
         return next((step for step in self.steps if step.key == key), None)
 
 
@@ -159,6 +173,9 @@ def parse(document: Any) -> Tuple[ProjectSteps, List[str]]:
         if not isinstance(key, str) or not key:
             problems.append(f"steps[{index}] needs a key")
             continue
+        # A built-in's old name is that built-in (`OLD_NAMES`): a file written before a rename is
+        # still valid, and saving it again writes the current name.
+        key = OLD_NAMES.get(key, key)
         where = f"step {key!r}"
         if key in seen:
             problems.append(f"{where}: duplicate key")
@@ -278,6 +295,7 @@ def next_step(
     has at all is refused (FR-8): there is no forward from it, so the operator names where to resume.
     """
     steps = steps or BUILT_IN
+    step = current_name(step)
     path = journey(size, steps)
     if step in path:
         index = path.index(step)
@@ -304,6 +322,7 @@ def skipped(
     if step is None:
         return []
     steps = steps or BUILT_IN
+    step = current_name(step)
     path = journey(size, steps)
     if step in path:
         return path[path.index(step) + 1 :]
@@ -333,6 +352,7 @@ async def set_step(
     """Move the document to `step`, recorded with the actor's run. Any of the project's steps, back
     or forward."""
     _require_journey(document)
+    step = OLD_NAMES.get(step, step)
     if step not in (steps or BUILT_IN).order():
         raise JourneyError(
             f"unknown step {step!r}; this document's journey is "
@@ -365,6 +385,7 @@ def step_for_size(
     step the project no longer has, or no step, is left as it is.
     """
     steps = steps or BUILT_IN
+    step = current_name(step)
     path = journey(size, steps)
     order = steps.order()
     if step is None or step in path or step not in order:
@@ -417,7 +438,7 @@ def marker(step: str) -> str:
     return f"[step: {step}]"
 
 
-#: Appended to every step's duty but delivery's: the agent proposes advancing, the operator decides
+#: Appended to every step's duty but the build step's: the agent asks to advance, the operator decides
 #: (FR-4). Asked in the reply and acted on at the operator's next message, like every question an
 #: exploring turn asks (F545, `night-1010-5`).
 ASK_TO_ADVANCE = (
@@ -469,7 +490,12 @@ STEP_DUTIES: Dict[str, str] = {
         "outcome is a `roadmap` plus the first slice's change document instead.\n"
         "- Ask the operator to confirm the size in your reply: the options `fix`, `small` and "
         "`large`, your recommendation first with its reason. When they answer, record it with "
-        "`set_spec_size(path, size, reason)`."
+        "`set_spec_size(path, size, reason)`.\n"
+        "- **Ask whether the work is already built**, naming any commits on the main branch you "
+        "found that hold it. Record the answer as `already_built` with `submit_spec_document`: "
+        '`{"built": true, "commits": ["<sha>"]}` when it is, `{"built": false}` when it is not. '
+        "Approving a document recorded as built offers to close its tasks as already built "
+        "instead of building them."
     ),
     REQUIREMENTS: (
         f"{marker(REQUIREMENTS)} **Requirements: say what must be true.** Do not implement "
@@ -498,23 +524,31 @@ STEP_DUTIES: Dict[str, str] = {
     ),
     TASKS: (
         f"{marker(TASKS)} **Tasks: split the work.** Write `tasks` with `submit_spec_document`.\n"
+        "- **One task per independently demonstrable piece**, built by one agent: a piece someone "
+        "can see working on its own, not one task per layer (model, route, UI) or per file. Every "
+        "task costs a turn, a review and a check run, so split only where the pieces can be shown "
+        "working apart.\n"
         "- **Task 1 writes the acceptance drive and records it failing** on today's code; the other "
         "tasks depend on it. A fix's one task carries its own failing check.\n"
         "- A test and its fix are one task, so every task leaves the project's checks green.\n"
-        "- For each task list in `files` the paths it will edit, and chain any two tasks that share "
-        "a path with `depends_on`. Link each task to the requirements it serves.\n"
+        "- For each task list in `files` the paths it will edit, and in `depends_on` the tasks it "
+        "waits on; chain any two tasks that share a path. Link each task to the requirements it "
+        "serves.\n"
         "- Set a task's `reviewer` only where it differs from `delivery.reviewer`."
     ),
-    DELIVERY: (
-        f"{marker(DELIVERY)} **Delivery: say how it will be built.** Recommend a flow when the work "
-        "splits into tasks: a flow starts every task whose prerequisites are met, has finished work "
-        "reviewed when there is another agent, and can stop when its queue empties. If the "
-        "operator wants one, ask which agent works it, who reviews, when it stops and how often it "
-        "fires (every 5 minutes unless they say otherwise). Each review also tests the running "
-        "product unless the operator turns it off (`tester: false`); ask whether a particular "
-        "agent should test (`tester`). Record the answer as `delivery`, and "
-        "include `delivery` in every later submission. 'No flow' is a valid answer. The document is "
-        "then ready for the operator to propose."
+    BUILD: (
+        f"{marker(BUILD)} **Build: recommend how it will be built.** You recommend; the operator "
+        "decides when they press Build, which opens with your recommendation filled in. Recommend "
+        "a flow when the work splits into tasks: a flow starts every task whose prerequisites are "
+        "met, has finished work reviewed when there is another agent, and can stop when its queue "
+        "empties. Recommend which agent works it, who reviews, when it stops and how often it "
+        "fires (every 5 minutes unless the operator says otherwise). Each review also tests the "
+        "running product unless that is turned off (`tester: false`); say whether a particular "
+        "agent should test (`tester`). 'No flow' is a valid recommendation. Ask in your reply "
+        "about any choice that is the operator's to make. Record the recommendation as "
+        "`delivery`, with `reasons`: one sentence for each choice, keyed `mode`, `agent`, "
+        "`reviewer`, `tester`, `stop` and `cron`. Include `delivery` in every later submission. "
+        "The document is then ready for the operator to approve."
     ),
 }
 
@@ -538,7 +572,7 @@ def duty(step: Optional[str], steps: Optional[ProjectSteps] = None) -> str:
         text = STEP_DUTIES[entry.key]
     if entry.append:
         text += "\n- **This project adds to this step:** " + entry.append
-    return text if step == DELIVERY else text + "\n" + ASK_TO_ADVANCE
+    return text if entry.key == BUILD else text + "\n" + ASK_TO_ADVANCE
 
 
 def removed(step: str, size: Optional[str], steps: Optional[ProjectSteps] = None) -> str:
@@ -555,6 +589,7 @@ def journey_line(
     size: Optional[str], step: Optional[str], steps: Optional[ProjectSteps] = None
 ) -> str:
     """One line naming the journey and the current step (FR-3)."""
+    step = current_name(step)
     named = [f"**{s}**" if s == step else s for s in journey(size, steps)]
     sized = f"size {size}" if size else "not sized yet, so every step"
     return f"- Journey ({sized}): " + " → ".join(named) + f". You are at **{step}**."
@@ -567,9 +602,12 @@ def missing(step: Optional[str], payload: Optional[Dict], size: Optional[str]) -
     requirements = [r for r in payload.get("requirements") or [] if isinstance(r, dict)]
     criteria = [c for c in payload.get("acceptance_criteria") or [] if isinstance(c, dict)]
     gaps: List[str] = []
+    step = current_name(step)
     if step == INTAKE:
         if not payload.get("problem"):
             gaps.append("problem")
+        if payload.get("already_built") is None:
+            gaps.append("already_built")
         if not scope.get("non_goals"):
             gaps.append("scope.non_goals")
         if size is None:
@@ -592,6 +630,10 @@ def missing(step: Optional[str], payload: Optional[Dict], size: Optional[str]) -
         gaps.append("design")
     if step == TASKS and not payload.get("tasks"):
         gaps.append("tasks")
-    if step == DELIVERY and not payload.get("delivery"):
-        gaps.append("delivery")
+    if step == BUILD:
+        delivery = payload.get("delivery")
+        if not delivery:
+            gaps.append("delivery")
+        elif isinstance(delivery, dict) and not delivery.get("reasons"):
+            gaps.append("delivery.reasons")
     return gaps

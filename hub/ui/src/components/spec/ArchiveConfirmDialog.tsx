@@ -25,7 +25,7 @@ export function ArchiveConfirmDialog({
    *  for one. */
   reasonPrompt?: string | null
   /** The Hub's refusal, shown in the dialog that asked for the archive (F205: archiving an
-   *  exploring or proposed document is refused once it has produced work). */
+   *  exploring document is refused once it has produced work). */
   error?: string | null
   onCancel: () => void
   onConfirm: (reason: string) => void

@@ -1,0 +1,230 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Vault src-17aeb9aea81f (performance retrospective) and the 23-25 October notes",
+      "hub/hub/spec_lifecycle.py TRANSITIONS and hub/hub/api/v1/spec.py /documents/propose and /documents/phase: propose is a readiness check that moves the phase; approve materialises tasks and starts a flow when delivery is a flow",
+      "hub/hub/spec_journey.py JOURNEYS and the delivery step's text ending 'ready for the operator to propose'",
+      "hub/hub/requirement_gate.py and submit_spec_document: document rigor both relaxes the evidence gate and, at contract or gate, turns an agent's edits into proposals",
+      "hub/hub/requirement_evidence.py decide_with_verdict (called from task_transition_service.py:1023): approving accepts every awaiting piece of the task, sending back rejects every one, with one reason; designed so the verdict needs no second decision (F672)",
+      "Vault src-109565ec0558: QA's slice-1 rejection said FR-4, FR-7, FR-8 and FR-12 'held ... but are rejected with this verdict because they come from the same commit'",
+      "The builder-never-approves rule is enforced in about 16 places across 7 files",
+      "hub/ui/src/components/spec: SpecPage, SpecDocumentPanel (sandboxed SpecFrame of the rendered HTML), used by the Spec tab and the conversation's panel",
+      ":8000 read-only, 2026-10-27: task_transitions, runs, turn_usage, task_check_runs, evidence_reviews and stalls for loop-cee87801ae6a (the night's flow); findings F1047-F1050 in scripts/drive/FINDINGS.md"
+    ],
+    "limits": [
+      "Nothing re-driven for this rework",
+      "The 16-place count is a grep, not a spike; slice B confirms it"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "F1044 'ordering for the spec': the operator asked on 2026-10-26 for better navigation, filtering and ordering on the spec page; the exact orderings are settled on slice F's mock.",
+      "resolved": true
+    },
+    {
+      "question": "Documents in the proposed phase when it is retired: moved back to exploring (operator, 2026-10-26).",
+      "resolved": true
+    },
+    {
+      "question": "Approving while an agent is still editing: refused when the document changed since the operator loaded it (operator, 2026-10-26).",
+      "resolved": true
+    },
+    {
+      "question": "Changes after approval: the author and the lead propose amendments, the operator accepts (operator, 2026-10-26).",
+      "resolved": true
+    },
+    {
+      "question": "Slice K: pieces that held are recorded again at the builder's next commit; carrying forward waits for slice H's measurement (operator, 2026-10-26, option B).",
+      "resolved": true
+    },
+    {
+      "question": "How is this roadmap built? Operator 2026-10-27: every slice is implemented by Claude Code subagents outside the Hub's flows; the documents live in the Hub with delivery none, and their tasks are closed as already built against the merged commits once their acceptance drives pass.",
+      "resolved": true
+    },
+    {
+      "question": "Slice A: the Hub falls back to a junction when a symlink is refused, and a mend happens in a separate scratch checkout (operator, 2026-10-27).",
+      "resolved": true
+    }
+  ],
+  "problem": "The responsiveness flow of 2026-10-25 took 7 h 26 min for 6 tasks and about $52: one declared reviewer (3.3 h waiting), a full check gate on every approval attempt, rules that combined into dead ends, and no view of where the time went. Every spec was built with the same ceremony whatever its risk, and nobody in the middle exercised judgement. The spec flow itself mixes decisions: 'propose' is only a readiness check that freezes the document, and 'approve' accepts the intent, creates the tasks and starts the flow in one click. A send-back rejects every piece of evidence the task had, with one reason, including the ones that held (requirement_evidence.decide_with_verdict), so the record cannot say which requirement actually failed, and per-model verdict counts mostly measure rounds times requirements. Separately, 23-25 October recorded worktree removal emptying the main checkout's node_modules (F1038), the mender stranding its own checkout, an operator's 'nothing merges' silently undone (F1016), and tasks nobody could close.\n\nThe night of 2026-10-26/27 (slice B's flow, 22:57 to 05:44, about $44): the mender cost $15.9 (36%), 30 of its 40 stalls the same review stall re-raised every five minutes after it gave up (F1048, fixed) and all 6 'loop stalled' stalls raised in the seconds before a review was dispatched (F1049). T2's ruff check failed 12 s after completion and QA was dispatched 26 s later to find the same two imports; three reviews (about 52 min of Opus) found only what the checks found. The project checks had no UI check, so a change with 24 failing vitest tests passed them. A timing test that also failed on main held QA's approval of T1 for 2 h 40 min while the operator slept, and the fix, filed outside the flow, sat assigned for 1.5 h because nothing starts a task outside a flow.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Worktree and merge-target safety (F1038, mender checkout, F1016)",
+      "One explicit decision of who may move which task, at every level, with a test that no task can get stuck",
+      "Exploring ends at an approved plan: Check never freezes the document, the proposed phase is retired, approve accepts the plan, build is a separate action",
+      "Builds: a driver (Hub flow, lead agent, by hand), a gate level (Fast, Reviewed, Gated, with the evidence half of document rigor folded in), builders, a reviewer pool, a lead, budget, window and where the work lands",
+      "Amendments after approval proposed by the author and the lead and accepted by the operator",
+      "Each piece of evidence judged on its own in a verdict, with its own reason",
+      "The Hub noticing and raising main moving by anything other than its own integration",
+      "A merge queue so checks run once per batch",
+      "A redesigned spec page and side panel: native rendering, navigation, filtering, ordering (F1044), and the runs, cost and progress of each build",
+      "Project-wide stats from the same records, by spec, agent, model and level",
+      "A measured re-run comparing a slice-sized build with 2026-10-25",
+      "Overview notices, settings navigation and keyboard findings; runner rebind (F1023, F1024)",
+      "Checks before review: fast checks gate completion, review waits for the task's check run, a failed check returns the task without a review turn, and a UI check (slice L)",
+      "Failures that are not the task's own (failing on main too, or flaky) land with a recorded automatic override and a fix task at the head of the flow; tasks assigned outside a flow are started (slice M)",
+      "The mender's waking rules, default model and questions while the operator is away (slice N)"
+    ],
+    "non_goals": [
+      "Rewriting the engine: tasks, runs, worktrees, evidence and the transition table stay; only the policy of who may move what becomes explicit and configurable",
+      "A project-wide god agent: the mender stays a narrow maintenance role; the lead's authority is scoped to one build",
+      "Preventing agents from touching the main checkout: the Hub notices and raises it (operator, 2026-10-26), it does not block it",
+      "The Hub's own responsiveness: done by the 2026-10-25/26 overhaul",
+      "Changing the operator's rule that approval runs the checks: at every level red checks mean no merge, except slice M's automatic override, recorded on the transition, for a failure that is not the task's own (it fails on main at the same base, or passes rerun on its own), which slice D allows at Fast and Reviewed and never at Gated",
+      "Agents changing an approved spec directly: after approval every change is an amendment the operator accepts (operator, 2026-10-26)",
+      "Carrying evidence that held forward to the builder's next commit: deferred until slice H shows what re-recording costs (operator, 2026-10-26)"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "A task whose commit fails ruff is refused at completion with the ruff output; a task whose suite fails goes back to its builder without a review turn; a UI regression fails the project's checks; and on a clean task the review starts within a minute of the checks passing.",
+      "intent": "A builder cannot mark a task completed while the project's fast checks fail on its commit, and is shown their output; a reviewer is dispatched only once the task's check run has passed, and a check that fails returns the task to its builder with the output and no reviewer turn; the project's checks include the UI (lint, types and unit tests) for changes under hub/ui.",
+      "key": "checks-run-before-review",
+      "title": "L. Checks run before anyone reviews"
+    },
+    {
+      "builds_after": [],
+      "done": "Over a night like 2026-10-26, the mender wakes zero times for hand-off gaps, its turns run on Sonnet, and the operator finds its open questions as notes rather than expired waits.",
+      "intent": "The mender is not woken for a flow that is between a completed task and its review dispatch, runs on Sonnet by default, and asks nothing that waits on an absent operator: such questions become a note the operator reads in the morning.",
+      "key": "the-mender-wakes-only-for-real-stalls",
+      "title": "N. The mender wakes only for real stalls"
+    },
+    {
+      "builds_after": [],
+      "done": "A drive removes a worktree holding links, runs a mend followed by a mender turn, and reopens a project with no main branch, and each leaves the checkout, the mender and the setting as they were.",
+      "intent": "Removing a task worktree leaves whatever its links point to intact, a mend leaves the mender able to run its next turn, and clearing the main branch stays cleared after the folder is reopened.",
+      "key": "worktrees-never-destroy-or-strand",
+      "title": "A. Worktrees never destroy or strand anything"
+    },
+    {
+      "builds_after": [],
+      "done": "The invariant test passes over every status and holder, and the two recorded dead ends close without the operator moving a task by hand.",
+      "intent": "Who may move which task is one explicit decision taking the role (builder, reviewer, mender, operator), answered the same by every path that moves a task, and a test proves no unfinished task lacks a mover; any agent but the author takes completed work into review outside a flow, and a spec whose work is already built closes its tasks in one step, approved once their evidence is accepted.",
+      "key": "every-task-can-move-on",
+      "title": "B. Every task can always be moved on"
+    },
+    {
+      "builds_after": [],
+      "done": "The operator checks a document while an agent edits it, approval is refused once after the agent saves and accepted after reloading, the approved document shows its tasks as a plan with nothing running, and a build is then started from the page with the recommended settings filled in.",
+      "intent": "Propose becomes a Check button that shows the readiness the agent already sees and never freezes the document, so the agent keeps editing; the proposed phase is retired and documents now proposed return to exploring; approve is refused when the document changed since the operator loaded it; approving lays the tasks out as a plan with nothing running; building is a separate action with an 'approve and build' shortcut. The exploring steps follow: intake asks whether the work is already built (offering slice B's close-as-built at approval), the tasks step guides toward coarser tasks, the last step (delivery, kept as an alias in spec/journey.json) recommends a build with reasons instead of deciding it, and the step texts, tool descriptions and the spec author's charter stop speaking of proposing.",
+      "key": "check-approve-build",
+      "title": "C. Exploring ends at an approved plan; check, approve and build are separate"
+    },
+    {
+      "builds_after": [
+        "every-task-can-move-on"
+      ],
+      "done": "A reviewer sends back a task with four pieces, naming one as failing; the record shows one rejected with its reason and three held, the builder's next commit records all four again for the reviewer, and the per-model counts in the stats count one rejection, not four.",
+      "intent": "A reviewer's verdict says, per piece of evidence, whether it held or failed and why; a send-back rejects only the pieces named as failing, each with its own reason, and the pieces that held are kept as held at that commit rather than rejected; on the builder's next commit those are recorded again and judged again (no carrying forward in this slice). The record, the task's history and the spec page show which requirement failed and why. The verdict stays one action, so no second decision is needed (F672).",
+      "key": "evidence-judged-piece-by-piece",
+      "title": "K. Each piece of evidence is judged on its own"
+    },
+    {
+      "builds_after": [
+        "checks-run-before-review"
+      ],
+      "done": "A drive with a test that fails on main lands an approved task with a recorded automatic override, the fix task is worked next in the flow, and a task assigned outside a flow starts within one firing.",
+      "intent": "When a task's only failing checks also fail on main at its base, or pass when rerun on their own, its approval lands with an override the Hub records itself, naming the failures and the main commit; the Hub files a fix task for them at the head of the running flow; and a task assigned outside any flow is started rather than left waiting.",
+      "key": "a-red-main-does-not-hold-the-night",
+      "title": "M. A red main or a flake does not hold the night"
+    },
+    {
+      "builds_after": [],
+      "done": "Every Overview notice offers an action or a dismiss, the operator finds notification settings without help, and the dialogs in F1027-F1032 keep focus where it belongs.",
+      "intent": "Overview notices can always be acted on or dismissed (F1045), settings have a findable home split by app, project and agent, and the keyboard findings F1027-F1032 are fixed.",
+      "key": "app-surfaces-make-sense",
+      "title": "I. The app's other surfaces make sense"
+    },
+    {
+      "builds_after": [],
+      "done": "Rebinding a Claude agent to Copilot and back runs each turn without a failed resume, with the recorded model matching what ran.",
+      "intent": "An agent moved to a runner of another CLI starts a fresh session and uses that runner's model, and the Hub records the model actually run.",
+      "key": "runner-rebind-starts-clean",
+      "title": "J. Rebinding an agent's runner starts clean"
+    },
+    {
+      "builds_after": [
+        "every-task-can-move-on",
+        "check-approve-build",
+        "a-red-main-does-not-hold-the-night"
+      ],
+      "done": "The same spec is built once at Fast with a lead and once at Gated with a flow, both recorded with their level, and a task that names its builder is built by that agent and no other.",
+      "intent": "Starting a build chooses who hands out the work (the Hub's flow, a lead agent, or by hand), the gate level (Fast: the builder or lead approves; Reviewed: anyone but the builder; Gated: as today, evidence accepted per requirement), the builders, a reviewer pool, a lead, a budget cap, a window and where the work lands; a task may name its builder (F1046); every task records the level it was built under. Amendments, watching main and offering the next slice are D2.",
+      "key": "builds-driver-level-people",
+      "title": "D. A build has a driver, a level and its people"
+    },
+    {
+      "builds_after": [
+        "builds-driver-level-people"
+      ],
+      "done": "The lead's amendment, once accepted, adds a task to the running build; a commit made to main by hand is raised to the operator within a minute; and finishing a slice's build offers its next slice's drafting, which starts only when the operator takes the offer.",
+      "intent": "After approval the author and the lead propose amendments, which the operator accepts, an accepted one adding tasks to the running or next build (the 'edits become proposals' half of document rigor moves here and the rigor setting retires); the Hub raises main moving by anything other than its own integration within a minute; and when a slice's build finishes, drafting the roadmap's next slice is offered rather than queued.",
+      "key": "amendments-main-watch-next-slice",
+      "title": "D2. Amendments after approval, main watched, the next slice offered"
+    },
+    {
+      "builds_after": [
+        "builds-driver-level-people",
+        "checks-run-before-review",
+        "a-red-main-does-not-hold-the-night"
+      ],
+      "done": "Four tasks approved together reach main after one check run, and a deliberately broken one among them is the only one sent back.",
+      "intent": "Approved tasks queue, the checks run once per batch on the merged result, a failing batch is narrowed to the task that broke it, and approval no longer holds the database write lock across git.",
+      "key": "approved-work-merges-in-batches",
+      "title": "E. Approved work merges in batches"
+    },
+    {
+      "builds_after": [
+        "check-approve-build"
+      ],
+      "done": "The operator approves the mock, and the shipped page shows a finished build's numbers (time building, waiting for review, checks, cost by role) without SQL.",
+      "intent": "The spec page and the conversation's side panel are rebuilt in AgentWeave's aesthetic: better buttons and motion, navigation within and between documents, filtering and ordering of documents, requirements and tasks (F1044), amendments waiting on the operator, each requirement's evidence with its own verdict and reason, and each build's progress, runs, cost and waiting time shown live on the document.",
+      "key": "spec-page-overhaul",
+      "title": "F. The spec page, redesigned"
+    },
+    {
+      "builds_after": [
+        "spec-page-overhaul",
+        "builds-driver-level-people",
+        "evidence-judged-piece-by-piece"
+      ],
+      "done": "The project view lists cost, time and send-backs per model and per level, and its totals equal the sum of the spec pages.",
+      "intent": "Project-wide views total the spec page's numbers by spec, agent, model and level, so builders and levels can be compared from the same source, counting evidence verdicts piece by piece.",
+      "key": "project-stats",
+      "title": "G. Project stats from the same records"
+    },
+    {
+      "builds_after": [
+        "approved-work-merges-in-batches",
+        "project-stats"
+      ],
+      "done": "The comparison is recorded in the vault and read from the app's own views.",
+      "intent": "A slice-sized change is built with the new builds and compared with 2026-10-25 on wall time, cost and real defects caught, at Fast and at Gated; it also measures what re-recording held evidence costs, to decide whether to carry it forward.",
+      "key": "measured-re-run",
+      "title": "H. The measured re-run"
+    }
+  ],
+  "summary": "Reworked 2026-10-26 after the operator's discussion of gate levels, the lead and the spec flow. The work converges on one idea: a spec is explored and checked while it is written, approved as a plan, and then built by one or more builds, each with a driver (the Hub's flow, a lead agent, or by hand), a level (Fast, Reviewed, Gated) and its people, while everything is recorded and shown on a redesigned spec page. After approval the author and the lead propose amendments, which the operator accepts. Each piece of evidence is judged on its own, so the record says which ones failed and why. Wave 1 runs A, B and C in parallel (disjoint code); K follows B; D follows B and C; E follows D; F is mocked now and wired as C and D land; H, the measured re-run, closes the roadmap. I and J stay independent. Amended 2026-10-27 after the night of 26/27 October, when slice B's flow took 6 h 47 min for 4 tasks: every send-back was something a check catches, three reviews ran beside checks that had already failed, one test failing on main too blocked every approval for 2 h 40 min, and the mender spent 36% of the cost re-raising one stall. Three slices are added and built first: L (checks run before anyone reviews) and N (the mender wakes only for real stalls) in Wave 0, M (a red main or a flake does not hold the night) after L. D is split in two: D (builds) and D2 (amendments, main watched, the next slice offered). Build order: Wave 0 L, N; Wave 1 A, C, K, M, I, J; Wave 2 D, then D2; Wave 3 E and F's wiring; Wave 4 G, then H. B is built.",
+  "tasks": [],
+  "title": "Flows that do not stall: the work after the 2026-10-25 retrospective"
+}

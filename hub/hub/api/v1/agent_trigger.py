@@ -69,10 +69,14 @@ from ...conversations import (
     conversation_for_provider_session,
     conversation_id_for_run,
     conversation_unavailable_reason,
+    foreign_session_cli,
     get_conversation_by_id,
     get_open_conversation,
+    model_withheld_sentence,
     name_conversation,
     new_conversation,
+    session_not_carried_sentence,
+    set_provider_session,
 )
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner, Task
@@ -101,6 +105,7 @@ from ...launchability import (
 from ...model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
     PERMISSION_MODE_CONTROL,
+    model_applies_to_cli,
     render_control_config,
     validate_overrides,
 )
@@ -826,10 +831,7 @@ async def review_dispatch_refusal(
     """
     # Imported here, not at module scope: this module is imported back by `task_transitions`'s
     # neighbours, and the service imports nothing from the API layer.
-    from ...task_transition_service import (
-        agent_that_completed,
-        agents_that_recorded_evidence_for,
-    )
+    from ...task_transition_service import authorship_reason
 
     if task.status not in (REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES):
         return (
@@ -838,21 +840,14 @@ async def review_dispatch_refusal(
             f"A review begins from work that is awaiting one. Staffing a reviewer onto this task "
             f"would take it from whoever holds it and move it nowhere.",
         )
-    completing_agent = await agent_that_completed(session, task.id)
-    if completing_agent is not None and completing_agent == reviewer:
-        return (
-            status.HTTP_403_FORBIDDEN,
-            f"Cannot review task {task.id} as {reviewer!r}: that is the agent recorded as "
-            f"completing it, so the review would claim its own author is reviewing it. "
-            f"{own_review_remedy(task)}",
-        )
-    if reviewer in await agents_that_recorded_evidence_for(session, task.id):
+    reason = await authorship_reason(session, task, reviewer)
+    if reason is not None:
         # F505: whether or not another agent completed it -- the verdict guard's rule, read alike.
+        # One clause, `authorship_reason`, shared with the transition guards (FR-8).
         return (
             status.HTTP_403_FORBIDDEN,
-            f"Cannot review task {task.id} as {reviewer!r}: that agent recorded evidence for this "
-            f"task, which claims the work as its own. Its verdict would be refused, so the "
-            f"review could never end. {own_review_remedy(task)}",
+            f"Cannot review task {task.id} as {reviewer!r}: {reason}, so its verdict would be "
+            f"refused and the review could never end. {own_review_remedy(task)}",
         )
     # F654: after the author rules, so an author asking to review is told that, not who holds it.
     if (
@@ -1204,8 +1199,20 @@ async def _trigger_agent_directly(
         # catalog id the provider's API does not know. Left in place, not applied, so rebinding
         # back restores it (design D7, R3).
         model = config.get("model")
+        withheld_model = None
     else:
-        model = conversation_overrides.get("model") or config.get("model")
+        # A stored model the bound CLI does not offer is not passed to it (F1024: Copilot was
+        # launched with Claude's `haiku`, ran its own default, and the Hub recorded `haiku`). It
+        # stays on the conversation, so the composer's next send is not refused for re-sending it
+        # and rebinding back to its CLI applies it again (`rebinding-an-agents-runner-starts-clean`
+        # D4).
+        stored_model = conversation_overrides.get("model")
+        withheld_model = (
+            stored_model
+            if stored_model and not model_applies_to_cli(runner_row.cli, stored_model)
+            else None
+        )
+        model = (None if withheld_model else stored_model) or config.get("model")
     control_overrides = {k: v for k, v in conversation_overrides.items() if k != "model"}
     # The agent's default posture sits between the conversation's own choice and the built-in
     # fallback. It has to be applied here rather than only in the composer, because a run
@@ -1284,7 +1291,14 @@ async def _trigger_agent_directly(
         task_id=task_id,
     )
     yolo = bool(config.get("yolo"))
-    resume_session_id = conversation.provider_session_id
+    # A session is resumed only by the CLI that made it. One known to be another CLI's is given up
+    # and a new one started: Copilot alone survives being handed a foreign id, and a Claude launch
+    # handed Copilot's failed the operator's turn twice (F1023). The decision is made here, where
+    # every turn passes (manual, queued, job, peer), and not at the rebind, which an unbind or a
+    # deleted runner leaves with no previous CLI to compare. A session of unknown CLI is resumed as
+    # before (`rebinding-an-agents-runner-starts-clean` D1, D3).
+    crossed_from = foreign_session_cli(conversation, runner)
+    resume_session_id = None if crossed_from else conversation.provider_session_id
     session_mode = "resume" if resume_session_id else "new"
     env = resolve_agent_env(runner, config)
 
@@ -1766,8 +1780,45 @@ async def _trigger_agent_directly(
     # the agent here and recorded on the run below (`setup_events`), with the reason and the
     # remedy, rather than found by the agent as a build that fails for no reason it can see.
     setup_events: List[Any] = []
+    # The crossing is said to the operator (a diagnostic recorded before anything the runner emits,
+    # on all three transports) and to the agent (the head of its prompt) in the same words: the
+    # conversation it is shown continuing is one it has no memory of (`the-crossing-is-said`).
+    # The withheld model is said on a turn that starts a session only, so once per session.
+    if crossed_from is not None:
+        crossing_sentence = session_not_carried_sentence(agent, crossed_from, runner)
+        notices.insert(0, crossing_sentence)
+        setup_events.append(
+            diagnostic_event(
+                stream="runner",
+                severity="info",
+                summary=crossing_sentence,
+                code="runner.session_not_carried",
+                facts={"agent": agent, "from_cli": crossed_from, "to_cli": runner},
+            )
+        )
+    if withheld_model is not None and resume_session_id is None:
+        setup_events.append(
+            diagnostic_event(
+                stream="runner",
+                severity="info",
+                summary=model_withheld_sentence(agent, withheld_model, runner, model),
+                code="runner.model_withheld",
+                facts={
+                    "agent": agent,
+                    "stored_model": withheld_model,
+                    "cli": runner,
+                    "ran_model": model,
+                },
+            )
+        )
     if isolated_workspace is not None:
-        link_failures = worktrees.shared_dependency_link_failures(repo_root, isolated_workspace)
+        # Off the loop: it asks git which `package.json` files are tracked, like every other git
+        # call of a turn start (`turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+        # Off the loop: it asks git which `package.json` files are tracked, like every other git
+        # call of a turn start (`turn-starts-approvals-and-evidence-never-freeze-the-hub`).
+        link_failures = await blocking.run(
+            worktrees.shared_dependency_link_failures, repo_root, isolated_workspace
+        )
         if link_failures:
             link_sentence = worktrees.dependency_link_failure_sentence(link_failures)
             notices.append(f"[AgentWeave] {link_sentence}")
@@ -2014,6 +2065,12 @@ async def _trigger_agent_directly(
         )
     except Exception:  # noqa: BLE001 -- a defect in the bookkeeping never refuses the turn
         logger.warning("starting the trace of run %s failed", run_id, exc_info=True)
+
+    if crossed_from is not None:
+        # The old session is given up in the commit that creates the run (the next lines), not
+        # before: a start that is refused changes nothing. It has to go, or the first-writer rule
+        # (`_bind` below) would refuse the new CLI's session after the turn had already run.
+        set_provider_session(conversation, None, None)
 
     delivered = []
     if queue_entry_ids:
@@ -2269,7 +2326,8 @@ async def trigger_agent(
             conversation = new_conversation(
                 project_id=project_id, agent=body.agent, origin="operator"
             )
-            conversation.provider_session_id = body.session_id
+            # Typed by the operator: which CLI made it is not known.
+            set_provider_session(conversation, body.session_id, None)
             session.add(conversation)
     else:
         if body.task_id:
@@ -3477,10 +3535,13 @@ async def _execute_run(
                     if conversation is None:
                         binding_conflict = "Conversation disappeared during provider binding"
                     elif conversation.provider_session_id is None:
-                        conversation.provider_session_id = parsed.session_id
+                        set_provider_session(conversation, parsed.session_id, runner)
                         conversation.updated_at = datetime.now(timezone.utc)
                         session_id = parsed.session_id
                     elif conversation.provider_session_id == parsed.session_id:
+                        if conversation.provider_session_cli is None:
+                            # This CLI just named the session as its own: now it is known.
+                            set_provider_session(conversation, parsed.session_id, runner)
                         session_id = parsed.session_id
                     else:
                         binding_conflict = (
@@ -4456,7 +4517,7 @@ async def _execute_rpc_run(
             async with async_session_factory() as db:
                 conversation = await get_conversation_by_id(db, conversation_id)
                 if conversation is not None and conversation.provider_session_id == old_id:
-                    conversation.provider_session_id = None
+                    set_provider_session(conversation, None, None)
                     conversation.updated_at = datetime.now(timezone.utc)
                     await db.commit()
             if session_id == old_id:
@@ -4474,10 +4535,13 @@ async def _execute_rpc_run(
                 if conversation is None:
                     binding_conflict = "Conversation disappeared during provider binding"
                 elif conversation.provider_session_id is None:
-                    conversation.provider_session_id = thread_id
+                    set_provider_session(conversation, thread_id, runner)
                     conversation.updated_at = datetime.now(timezone.utc)
                     session_id = thread_id
                 elif conversation.provider_session_id == thread_id:
+                    if conversation.provider_session_cli is None:
+                        # This CLI just named the session as its own: now it is known.
+                        set_provider_session(conversation, thread_id, runner)
                     session_id = thread_id
                 else:
                     binding_conflict = (

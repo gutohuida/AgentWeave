@@ -17,11 +17,21 @@ requirement cannot be verified, whatever evidence it holds (`requirement_coverag
 criterion, accepts the report, or rejects it (`respond_to_report`), and each answer does something
 -- the criterion changes, the blocked task resumes, or the reporter is told why not. The answer
 rides the `amendment_reviewed` event's detail, so the report's row says what was done.
+
+**The authors and the lead propose** (`amendments-main-watch-and-the-next-slice`, D1): an agent
+that wrote the document's content before its first approval, or the lead of its running build,
+calls the same `amend` and records an `amendment_proposed` event instead, which changes neither the
+document nor the board. The operator accepts it (`accept_proposal`: the operation applied to the
+document as it stands then, recorded as an `amendment` born reviewed and carrying `proposal`, or
+refused as stale when it no longer applies) or declines it with a reason (`decline_proposal`); the
+proposer is told either way (`queue_note_to_reporter`). A task an accepted amendment adds joins the
+document's running build, or waits on the board for the next one (`spec_tasks.materialise`).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from sqlalchemy import select
@@ -32,13 +42,28 @@ from .utils import short_id
 
 EVENT = "amendment"
 REVIEWED_EVENT = "amendment_reviewed"
+PROPOSED_EVENT = "amendment_proposed"
+DECLINED_EVENT = "amendment_declined"
+ALL_EVENTS = (EVENT, REVIEWED_EVENT, PROPOSED_EVENT, DECLINED_EVENT)
+
+# A row's state in the listing: applied at once (a tester's, an operator's answer), proposed and
+# waiting for the operator, accepted by the operator, declined, or refused as stale at acceptance.
+APPLIED = "applied"
+PROPOSED = "proposed"
+ACCEPTED = "accepted"
+DECLINED = "declined"
+STALE = "stale"
 
 ADD_TASK = "add_task"
+ADD_REQUIREMENT = "add_requirement"
 ADD_CRITERION = "add_criterion"
 CHANGE_CRITERION = "change_criterion"
 REMOVE_CRITERION = "remove_criterion"
 CANNOT_SATISFY = "cannot_satisfy"
-OPS = (ADD_TASK, ADD_CRITERION, CHANGE_CRITERION, REMOVE_CRITERION)
+OPS = (ADD_TASK, ADD_REQUIREMENT, ADD_CRITERION, CHANGE_CRITERION, REMOVE_CRITERION)
+#: What a tester applies at once: a new requirement is only ever proposed (non-goals: the tester's
+#: amendments are unchanged).
+TESTER_OPS = (ADD_TASK, ADD_CRITERION, CHANGE_CRITERION, REMOVE_CRITERION)
 # The operator's answers to a `cannot_satisfy` report (F700), and how the report's row names each.
 RESPONSES = {"amend": "amended", "accept": "accepted", "reject": "rejected"}
 # Structural, never judged by reading (D3): a change can be called a tightening by the agent it lets
@@ -81,10 +106,21 @@ class Amendment:
     response: Optional[str] = None
     response_reason: Optional[str] = None
     answered_by: Optional[str] = None
+    # D2's proposals: the row's state, who decided it and when, and a decline's (or staleness's)
+    # reason. `applied` for everything recorded at once.
+    state: str = APPLIED
+    decided_by: Optional[str] = None
+    decided_at: Optional[str] = None
+    decided_reason: Optional[str] = None
 
     @property
     def relaxing(self) -> bool:
         return self.op in RELAXING
+
+    @property
+    def recorded(self) -> bool:
+        """Whether the change is in the document: applied at once, or accepted."""
+        return self.state in (APPLIED, ACCEPTED)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -109,6 +145,10 @@ class Amendment:
             "response_reason": self.response_reason,
             "answered_by": self.answered_by,
             "responds_to": self.detail.get("responds_to"),
+            "state": self.state,
+            "decided_by": self.decided_by,
+            "decided_at": self.decided_at,
+            "decided_reason": self.decided_reason,
         }
 
 
@@ -161,6 +201,44 @@ async def worked_task(
     if task is None or task.spec_document_id != document.id:
         return None
     return task
+
+
+async def authors(session: AsyncSession, document: SpecDocument) -> List[str]:
+    """The agents that wrote *document*'s content before its first approval (D1), in order of first
+    save. Not its creator: most documents are created by the operator and written by an agent."""
+    rows = (
+        await session.execute(
+            select(SpecDocumentEvent.actor, SpecDocumentEvent.created_at)
+            .where(
+                SpecDocumentEvent.document_id == document.id,
+                SpecDocumentEvent.kind == "content",
+                SpecDocumentEvent.actor_kind == "agent",
+            )
+            .order_by(SpecDocumentEvent.created_at)
+        )
+    ).all()
+    approved_at = _aware(document.first_approved_at)
+    names: List[str] = []
+    for actor_name, at in rows:
+        if approved_at is not None and at is not None and _aware(at) > approved_at:
+            continue
+        if actor_name and actor_name not in names:
+            names.append(actor_name)
+    return names
+
+
+def _aware(value: Optional[datetime]) -> Optional[datetime]:
+    if value is not None and value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+async def running_lead(session: AsyncSession, document: SpecDocument) -> Optional[str]:
+    """The lead of *document*'s running build, or None (`builds.py`)."""
+    from . import builds
+
+    build = await builds.running_build(session, document.id)
+    return build.lead if build is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +351,42 @@ def apply(
             "from": None,
             "reviewer": task.get("reviewer") if isinstance(task.get("reviewer"), str) else None,
         }
+        # Its declared builder (slice D), carried into the build it joins (`builds`).
+        if isinstance(task.get("builder"), str) and task["builder"].strip():
+            entry["builder"] = task["builder"].strip()
         new["tasks"] = [*tasks, entry]
         detail["change"] = entry
         return new, key, names[0], detail
+
+    if op == ADD_REQUIREMENT:
+        # Proposed only (D1): an added task must trace to a requirement the document holds.
+        if not isinstance(change, dict):
+            raise AmendmentRefused(
+                "add_requirement needs the requirement under change",
+                code="amendment_invalid",
+                field="change",
+            )
+        key = _text(requirement or change.get("key"), "requirement")
+        if key in _requirement_keys(payload):
+            raise AmendmentRefused(
+                f"this document already has a requirement {key!r}",
+                code="duplicate_key",
+                field="requirement",
+            )
+        entry = {
+            "key": key,
+            "statement": _text(change.get("statement"), "change.statement"),
+            "modal": _text(change.get("modal"), "change.modal"),
+        }
+        rationale = _text(change.get("rationale"), "change.rationale", required=False)
+        if rationale:
+            entry["rationale"] = rationale
+        new["requirements"] = [
+            *[r for r in payload.get("requirements") or [] if isinstance(r, dict)],
+            entry,
+        ]
+        detail["change"] = entry
+        return new, key, key, detail
 
     if op == ADD_CRITERION:
         if not isinstance(change, dict):
@@ -359,9 +470,15 @@ async def amend(
     task: Optional[Dict[str, Any]] = None,
     change: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Apply one amendment to an approved document and record it. The caller commits.
+    """Amend an approved document. The caller commits.
 
-    Returns the amendment's view, plus `task_created` (the board task's id) for an `add_task`.
+    A run testing a task of the document applies the amendment at once (recorded not reviewed);
+    an author of the document or the lead of its running build proposes it instead (D1), which
+    changes nothing until the operator accepts it (`propose`). Anyone else is refused 403, naming
+    who may propose.
+
+    Returns the amendment's view, plus `task_created` (the board task's id) for an applied
+    `add_task`, or `state: proposed` for a proposal.
     """
     from . import spec_documents, spec_identity, spec_lifecycle, spec_service, spec_tasks
     from .spec_payload import PayloadError, validate_payload
@@ -380,10 +497,36 @@ async def amend(
         )
 
     tested = await tested_task(session, getattr(actor, "run_id", None), document)
-    if actor.kind != "agent" or tested is None or not testing_on(stored_before):
+    if (
+        actor.kind != "agent"
+        or tested is None
+        or not testing_on(stored_before)
+        or op not in TESTER_OPS
+    ):
+        writers = await authors(session, document) if actor.kind == "agent" else []
+        lead = await running_lead(session, document) if actor.kind == "agent" else None
+        if actor.kind == "agent" and (actor.name in writers or (lead and actor.name == lead)):
+            return await propose(
+                session,
+                document,
+                stored_before,
+                op=op,
+                reason=reason,
+                how_to_check=how_to_check,
+                actor=actor,
+                criterion=criterion,
+                requirement=requirement,
+                task=task,
+                change=change,
+            )
         raise AmendmentRefused(
-            "only a run testing a task of this document may amend it, while its testing is on; "
-            "the builder never amends (report a criterion it cannot meet with report_cannot_satisfy)",
+            "only a run testing a task of this document amends it at once, while its testing is "
+            "on; after approval its authors ("
+            + (", ".join(writers) or "none recorded")
+            + ") and the lead of its running build ("
+            + (lead or "no build is running")
+            + ") propose amendments for the operator to accept; the builder never amends (report "
+            "a criterion it cannot meet with report_cannot_satisfy)",
             code="amend_not_tester",
             status=403,
         )
@@ -449,6 +592,320 @@ async def amend(
             (row.id for row in created if row.spec_task_key == target), None
         )
     return view
+
+
+def _arguments(
+    criterion: Optional[str],
+    requirement: Optional[str],
+    task: Optional[Dict[str, Any]],
+    change: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """The operation's arguments as a proposal stores them, to re-apply at acceptance (D1)."""
+    return {"criterion": criterion, "requirement": requirement, "task": task, "change": change}
+
+
+def _validated(new_payload: Dict[str, Any]) -> Dict[str, Any]:
+    from .spec_payload import PayloadError, validate_payload
+
+    try:
+        return validate_payload(new_payload)
+    except PayloadError as exc:
+        raise AmendmentRefused(str(exc), code="payload_invalid", field=exc.field) from exc
+
+
+def _without_identity(stored: Dict[str, Any]) -> Dict[str, Any]:
+    from . import spec_identity
+
+    return {k: v for k, v in stored.items() if k != spec_identity.IDENTITY_FIELD}
+
+
+async def propose(
+    session: AsyncSession,
+    document: SpecDocument,
+    stored: Dict[str, Any],
+    *,
+    op: str,
+    reason: Any,
+    how_to_check: Any,
+    actor: Any,
+    criterion: Optional[str] = None,
+    requirement: Optional[str] = None,
+    task: Optional[Dict[str, Any]] = None,
+    change: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Record an author's or the lead's amendment as proposed (D1). Changes neither the document
+    nor the board: the operation is checked against the document as it stands now, so a proposal
+    that could not apply is refused at once, and applied again at acceptance."""
+    from . import spec_lifecycle
+
+    reason_text = _text(reason, "reason")
+    check_text = _text(how_to_check, "how_to_check")
+    new_payload, target, req_key, detail = apply(
+        _without_identity(stored),
+        op,
+        criterion=criterion,
+        requirement=requirement,
+        task=task,
+        change=change,
+    )
+    _validated(new_payload)
+    amendment_id = f"amd-{short_id()}"
+    event = await spec_lifecycle.record_event(
+        session,
+        document,
+        kind=PROPOSED_EVENT,
+        actor=actor,
+        detail={
+            "id": amendment_id,
+            "op": op,
+            "target": target,
+            "requirement": req_key,
+            "reason": reason_text,
+            "how_to_check": check_text,
+            "arguments": _arguments(criterion, requirement, task, change),
+            **detail,
+        },
+    )
+    return {
+        "id": amendment_id,
+        "op": op,
+        "target": target,
+        "requirement": req_key,
+        "state": PROPOSED,
+        "reviewed": False,
+        "event_id": event.id,
+    }
+
+
+@dataclass
+class Decision:
+    """What the operator's decision on a proposal did, and what the proposer is told."""
+
+    id: str
+    state: str
+    proposer: str
+    note: str
+    message: str = ""
+    task_created: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "state": self.state,
+            "message": self.message,
+            "task_created": self.task_created,
+        }
+
+
+async def _open_proposal(
+    session: AsyncSession, document: SpecDocument, amendment_id: str
+) -> SpecDocumentEvent:
+    events = await _events(session, [document.id], ALL_EVENTS)
+    proposal = next(
+        (
+            e
+            for e in events
+            if e.kind == PROPOSED_EVENT and (e.detail or {}).get("id") == amendment_id
+        ),
+        None,
+    )
+    if proposal is None:
+        if any((e.detail or {}).get("id") == amendment_id for e in events if e.kind == EVENT):
+            raise AmendmentRefused(
+                f"{amendment_id} was applied when it was made; only a proposal is accepted or "
+                "declined",
+                code="not_a_proposal",
+                status=409,
+            )
+        raise AmendmentRefused(
+            f"this document has no amendment {amendment_id}", code="unknown_amendment", status=404
+        )
+    for e in events:
+        if (e.detail or {}).get("id") != amendment_id:
+            continue
+        if e.kind == EVENT:
+            raise AmendmentRefused(
+                f"{amendment_id} was already accepted by {e.actor or 'the operator'}",
+                code="proposal_decided",
+                status=409,
+            )
+        if e.kind == DECLINED_EVENT:
+            how = "refused as stale" if (e.detail or {}).get("stale") else "declined"
+            raise AmendmentRefused(
+                f"{amendment_id} was already {how} by {e.actor or 'the operator'}",
+                code="proposal_decided",
+                status=409,
+            )
+    return proposal
+
+
+async def accept_proposal(
+    session: AsyncSession,
+    workspace: Any,
+    document: SpecDocument,
+    amendment_id: str,
+    *,
+    actor: Any,
+) -> Decision:
+    """The operator accepts a proposal (D1): its operation is applied to the document as it stands
+    now and recorded as an `amendment` born reviewed, carrying `proposal`; an added task joins the
+    running build or waits for the next. When the operation no longer applies the proposal is
+    recorded stale with why, and the returned decision says so (`state: stale`). The caller
+    commits, then queues `note` to the proposer."""
+    from . import spec_documents, spec_lifecycle, spec_service, spec_tasks
+
+    if actor.kind != "operator":
+        raise AmendmentRefused(
+            "accepting a proposed amendment is the operator's", code="not_operator", status=403
+        )
+    proposal = await _open_proposal(session, document, amendment_id)
+    detail = dict(proposal.detail or {})
+    proposer = proposal.actor or ""
+    op = str(detail.get("op") or "")
+    arguments = detail.get("arguments") or {}
+
+    async def stale(why: str) -> Decision:
+        await spec_lifecycle.record_event(
+            session,
+            document,
+            kind=DECLINED_EVENT,
+            actor=actor,
+            detail={"id": amendment_id, "stale": True, "reason": why},
+        )
+        message = f"{amendment_id} no longer applies to {document.path}: {why}"
+        return Decision(
+            id=amendment_id,
+            state=STALE,
+            proposer=proposer,
+            message=message,
+            note=(
+                f"Your proposed amendment {amendment_id} ({op} {detail.get('target')}) to "
+                f"{document.path} could not be accepted: it no longer applies to the document as "
+                f"it stands ({why}). Read the document again and propose afresh if it is still "
+                "needed."
+            ),
+        )
+
+    if document.phase != spec_lifecycle.APPROVED:
+        return await stale(f"the document is {document.phase}, not approved")
+    content = spec_documents.read_document(workspace, document.path)
+    stored_before = spec_documents.parse_stored(content)
+    if not isinstance(stored_before, dict):
+        raise AmendmentRefused(
+            "this document has no readable payload", code="payload_unreadable", status=409
+        )
+    try:
+        new_payload, target, req_key, applied = apply(
+            _without_identity(stored_before),
+            op,
+            criterion=arguments.get("criterion"),
+            requirement=arguments.get("requirement"),
+            task=arguments.get("task"),
+            change=arguments.get("change"),
+        )
+        payload = _validated(new_payload)
+    except AmendmentRefused as exc:
+        return await stale(str(exc))
+
+    result = await spec_service._apply_and_write(
+        session,
+        workspace,
+        document,
+        payload,
+        stored_before,
+        content,
+        actor=actor,
+        extra_detail={"amendment": amendment_id},
+    )
+    await spec_lifecycle.record_event(
+        session,
+        document,
+        kind=EVENT,
+        actor=actor,
+        detail={
+            "id": amendment_id,
+            "op": op,
+            "target": target,
+            "requirement": req_key,
+            "identifier": result.identifiers.get(req_key) if req_key else None,
+            "reason": detail.get("reason", ""),
+            "how_to_check": detail.get("how_to_check", ""),
+            "proposal": amendment_id,
+            "proposed_by": proposer,
+            "proposed_run_id": proposal.run_id,
+            **applied,
+        },
+    )
+    # Accepted by the operator, so reviewed in the same step: a relaxing change the operator
+    # accepted holds no requirement back (`unreviewed_relaxing`).
+    await spec_lifecycle.record_event(
+        session,
+        document,
+        kind=REVIEWED_EVENT,
+        actor=actor,
+        detail={"ids": [amendment_id], "accepted": True},
+    )
+    stored_after = spec_documents.read_payload(workspace, document.path)
+    created = await spec_tasks.materialise(session, document, stored_after, actor=actor)
+    task_created = (
+        next((row.id for row in created if row.spec_task_key == target), None)
+        if op == ADD_TASK
+        else None
+    )
+    where = ""
+    if task_created:
+        row = next(row for row in created if row.id == task_created)
+        where = (
+            f" It is task {task_created} on the board, in build {row.build_id} at level {row.level}."
+            if row.build_id
+            else f" It is task {task_created} on the board, waiting for the next build."
+        )
+    return Decision(
+        id=amendment_id,
+        state=ACCEPTED,
+        proposer=proposer,
+        task_created=task_created,
+        note=(
+            f"The operator accepted your proposed amendment {amendment_id} ({op} {target}) to "
+            f"{document.path}; it is now part of the document.{where}"
+        ),
+    )
+
+
+async def decline_proposal(
+    session: AsyncSession,
+    document: SpecDocument,
+    amendment_id: str,
+    *,
+    reason: Any,
+    actor: Any,
+) -> Decision:
+    """The operator declines a proposal with a reason (D1). The document is untouched."""
+    from . import spec_lifecycle
+
+    if actor.kind != "operator":
+        raise AmendmentRefused(
+            "declining a proposed amendment is the operator's", code="not_operator", status=403
+        )
+    reason_text = _text(reason, "reason")
+    proposal = await _open_proposal(session, document, amendment_id)
+    detail = proposal.detail or {}
+    await spec_lifecycle.record_event(
+        session,
+        document,
+        kind=DECLINED_EVENT,
+        actor=actor,
+        detail={"id": amendment_id, "reason": reason_text},
+    )
+    return Decision(
+        id=amendment_id,
+        state=DECLINED,
+        proposer=proposal.actor or "",
+        note=(
+            f"The operator declined your proposed amendment {amendment_id} ({detail.get('op')} "
+            f"{detail.get('target')}) to {document.path}. Their reason: {reason_text}"
+        ),
+    )
 
 
 async def report_cannot_satisfy(
@@ -549,29 +1006,75 @@ def _reviews(events: List[SpecDocumentEvent]) -> Dict[str, SpecDocumentEvent]:
 
 
 async def list_amendments(session: AsyncSession, document: SpecDocument) -> List[Amendment]:
-    """Every amendment of `document`, oldest first, each with whether it has been reviewed."""
-    events = await _events(session, [document.id], (EVENT, REVIEWED_EVENT))
+    """Every amendment of `document`, oldest first, each with whether it has been reviewed.
+
+    A proposal (D1) is listed once: as `proposed`, `declined` or `stale` at the time it was made,
+    or, once accepted, as the `amendment` its acceptance recorded (`accepted`, authored by its
+    proposer, decided by the operator)."""
+    events = await _events(session, [document.id], ALL_EVENTS)
     reviewed = _reviews(events)
+    recorded = {(e.detail or {}).get("id") for e in events if e.kind == EVENT}
+    declined = {(e.detail or {}).get("id"): e for e in events if e.kind == DECLINED_EVENT}
     out: List[Amendment] = []
     for event in events:
-        if event.kind != EVENT:
+        if event.kind not in (EVENT, PROPOSED_EVENT):
             continue
         detail = dict(event.detail or {})
-        review = reviewed.get(detail.get("id", ""))
+        amendment_id = detail.get("id", event.id)
+        created = event.created_at.isoformat() if event.created_at else ""
+        if event.kind == PROPOSED_EVENT:
+            if amendment_id in recorded:
+                continue  # listed as the amendment its acceptance recorded
+            decision = declined.get(amendment_id)
+            out.append(
+                Amendment(
+                    id=amendment_id,
+                    op=detail.get("op", ""),
+                    target=detail.get("target", ""),
+                    requirement=detail.get("requirement"),
+                    identifier=None,
+                    reason=detail.get("reason", ""),
+                    how_to_check=detail.get("how_to_check", ""),
+                    author=event.actor,
+                    run_id=event.run_id,
+                    created_at=created,
+                    reviewed=False,
+                    reviewed_at=None,
+                    reviewed_by=None,
+                    detail=detail,
+                    state=(
+                        PROPOSED
+                        if decision is None
+                        else (STALE if (decision.detail or {}).get("stale") else DECLINED)
+                    ),
+                    decided_by=decision.actor if decision is not None else None,
+                    decided_at=(
+                        decision.created_at.isoformat()
+                        if decision is not None and decision.created_at
+                        else None
+                    ),
+                    decided_reason=(
+                        (decision.detail or {}).get("reason") if decision is not None else None
+                    ),
+                )
+            )
+            continue
+        review = reviewed.get(amendment_id)
         answer = (review.detail or {}) if review is not None else {}
-        answered = answer.get("report") == detail.get("id")
+        answered = answer.get("report") == amendment_id
+        accepted = bool(detail.get("proposal"))
         out.append(
             Amendment(
-                id=detail.get("id", event.id),
+                id=amendment_id,
                 op=detail.get("op", ""),
                 target=detail.get("target", ""),
                 requirement=detail.get("requirement"),
                 identifier=detail.get("identifier"),
                 reason=detail.get("reason", ""),
                 how_to_check=detail.get("how_to_check", ""),
-                author=event.actor,
-                run_id=event.run_id,
-                created_at=event.created_at.isoformat() if event.created_at else "",
+                author=(detail.get("proposed_by") or event.actor) if accepted else event.actor,
+                run_id=detail.get("proposed_run_id") if accepted else event.run_id,
+                created_at=created,
                 reviewed=review is not None,
                 reviewed_at=review.created_at.isoformat() if review and review.created_at else None,
                 reviewed_by=review.actor if review else None,
@@ -579,6 +1082,9 @@ async def list_amendments(session: AsyncSession, document: SpecDocument) -> List
                 response=answer.get("response") if answered else None,
                 response_reason=answer.get("reason") if answered else None,
                 answered_by=answer.get("amendment") if answered else None,
+                state=ACCEPTED if accepted else APPLIED,
+                decided_by=event.actor if accepted else None,
+                decided_at=created if accepted else None,
             )
         )
     return out
@@ -603,12 +1109,22 @@ async def mark_reviewed(
     amendments = await list_amendments(session, document)
     known = {a.id: a for a in amendments}
     if ids is None:
-        wanted = [a.id for a in amendments if not a.reviewed and a.op != CANNOT_SATISFY]
+        wanted = [
+            a.id for a in amendments if a.recorded and not a.reviewed and a.op != CANNOT_SATISFY
+        ]
     else:
         missing = [i for i in ids if i not in known]
         if missing:
             raise AmendmentRefused(
                 f"this document has no amendment {missing[0]}", code="unknown_amendment", status=404
+            )
+        proposals = [i for i in ids if not known[i].recorded]
+        if proposals:
+            raise AmendmentRefused(
+                f"{proposals[0]} is a proposal ({known[proposals[0]].state}): accept or decline it "
+                "rather than mark it reviewed",
+                code="proposal_needs_decision",
+                status=409,
             )
         reports = [i for i in ids if known[i].op == CANNOT_SATISFY and not known[i].reviewed]
         if reports:
@@ -647,14 +1163,27 @@ async def unreviewed_relaxing(
 
 
 async def counts(session: AsyncSession, document_ids: Iterable[str]) -> Dict[str, Dict[str, int]]:
-    """{document id: {"total", "unreviewed"}} for the documents holding any amendment; one query."""
-    events = await _events(session, document_ids, (EVENT, REVIEWED_EVENT))
+    """{document id: {"total", "unreviewed", "proposed"}} for the documents holding any amendment
+    or proposal; one query. `proposed` counts the proposals waiting for the operator (D1)."""
+    events = await _events(session, document_ids, ALL_EVENTS)
     reviewed = _reviews(events)
+    decided = {
+        (e.document_id, (e.detail or {}).get("id"))
+        for e in events
+        if e.kind in (EVENT, DECLINED_EVENT)
+    }
     out: Dict[str, Dict[str, int]] = {}
     for event in events:
+        if event.kind == PROPOSED_EVENT:
+            if (event.document_id, (event.detail or {}).get("id")) not in decided:
+                entry = out.setdefault(
+                    event.document_id, {"total": 0, "unreviewed": 0, "proposed": 0}
+                )
+                entry["proposed"] += 1
+            continue
         if event.kind != EVENT:
             continue
-        entry = out.setdefault(event.document_id, {"total": 0, "unreviewed": 0})
+        entry = out.setdefault(event.document_id, {"total": 0, "unreviewed": 0, "proposed": 0})
         entry["total"] += 1
         if (event.detail or {}).get("id") not in reviewed:
             entry["unreviewed"] += 1

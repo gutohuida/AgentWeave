@@ -4,13 +4,17 @@ import { conversationLabel, useProjectConversations } from '@/api/agentChat'
 import { useAgents } from '@/api/agents'
 import { useProjectLedger } from '@/api/ledger'
 import { useQueueStatuses } from '@/api/queue'
-import { useAnswerQuestion, useQuestions } from '@/api/questions'
+import { readableApiError } from '@/api/client'
+import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
 import { useFlakyTests, useHandleFlakyTests } from '@/api/flakyTests'
+import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
+import { offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
 import { isWaitedOn } from '@/lib/pendingQuestions'
-import { useTasks, type Task } from '@/api/tasks'
+import { useRetryIntegration, useTasks, useUpdateTask, type Task } from '@/api/tasks'
 import { accountingDisplayLabel, formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
+import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
 import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
 import { getStatusConfig } from '@/lib/agentStatusConfig'
 import { formatAgoLong } from '@/lib/format'
@@ -36,7 +40,7 @@ const STALL_TITLE: Record<Stall['cause'], string> = {
 
 /** `latest_integration` rides on the task list response but is not on the `Task` type yet. */
 type TaskWithIntegration = Task & {
-  latest_integration?: { outcome: string; reason: string; target_branch: string | null; created_at: string } | null
+  latest_integration?: { outcome: string; reason: string; target_branch: string | null; created_at: string; retryable?: boolean } | null
 }
 
 function sentence(text: string): string {
@@ -59,26 +63,34 @@ export function OverviewScreen({
   onOpenConversation?: (agent: string, conversationId: string) => void
 }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
-  const { data: agents = [], isLoading: agentsLoading, error: agentsError } = useAgents()
-  const { data: questions = [], error: questionsError } = useQuestions(false)
-  const { data: openStalls = [], error: stallsError } = useOpenStalls()
+  const { data: agents = [], isLoading: agentsLoading, error: agentsError, refetch: refetchAgents } = useAgents()
+  const { data: questions = [], error: questionsError, refetch: refetchQuestions } = useQuestions(false)
+  const { data: openStalls = [], error: stallsError, refetch: refetchStalls } = useOpenStalls()
   const endStall = useEndStall()
-  const { data: flakyReport, error: flakyError } = useFlakyTests()
+  const { data: flakyReport, error: flakyError, refetch: refetchFlaky } = useFlakyTests()
   const handleFlaky = useHandleFlakyTests()
+  const { data: mainNotices = [], error: mainNoticesError, refetch: refetchMainNotices } = useOpenMainNotices()
+  const markSeen = useMarkMainNoticeSeen()
+  const { data: offers = [], error: offersError, refetch: refetchOffers } = useNextSliceOffers()
+  const takeOffer = useTakeNextSliceOffer()
+  const declineOffer = useDeclineNextSliceOffer()
+  const [offerAgent, setOfferAgent] = React.useState<Record<string, string>>({})
   const flaky = flakyReport?.flaky ?? []
-  const { data: taskPage, error: tasksError } = useTasks()
-  const { data: conversationPage, error: conversationsError } = useProjectConversations(projectId || null)
-  const { data: ledger, error: ledgerError } = useProjectLedger()
-  const { data: accounting, error: accountingError } = useAccounting()
+  const { data: taskPage, error: tasksError, refetch: refetchTasks } = useTasks()
+  const { data: conversationPage, error: conversationsError, refetch: refetchConversations } = useProjectConversations(projectId || null)
+  const { data: ledger, error: ledgerError, refetch: refetchLedger } = useProjectLedger()
+  const { data: accounting, error: accountingError, refetch: refetchAccounting } = useAccounting()
   const failures: QueryFailure[] = [
-    ['the agents', agentsError],
-    ['the questions', questionsError],
-    ['the stalls', stallsError],
-    ['the flaky tests', flakyError],
-    ['the tasks', tasksError],
-    ['the conversations', conversationsError],
-    ['the ledger', ledgerError],
-    ['the budget', accountingError],
+    ['the agents', agentsError, refetchAgents],
+    ['the questions', questionsError, refetchQuestions],
+    ['the stalls', stallsError, refetchStalls],
+    ['the flaky tests', flakyError, refetchFlaky],
+    ['the tasks', tasksError, refetchTasks],
+    ['the conversations', conversationsError, refetchConversations],
+    ['the ledger', ledgerError, refetchLedger],
+    ['the budget', accountingError, refetchAccounting],
+    ['the main branch notices', mainNoticesError, refetchMainNotices],
+    ['the next-slice offers', offersError, refetchOffers],
   ]
   // Turns the budget is holding: the queue's own reason, per agent, never inferred from the total.
   const queueStatuses = useQueueStatuses(agents.map((a) => a.name))
@@ -86,7 +98,16 @@ export function OverviewScreen({
     ? queueStatuses.reduce((n, s) => n + (/budget/i.test(s.waiting_reason ?? '') ? s.waiting_count : 0), 0)
     : 0
   const answer = useAnswerQuestion()
+  const decline = useDeclineQuestion()
+  const retryIntegration = useRetryIntegration()
+  const updateTask = useUpdateTask()
   const now = new Date()
+  const [confirmingDeclineAll, setConfirmingDeclineAll] = React.useState(false)
+  const [decliningAll, setDecliningAll] = React.useState(false)
+  const [declineAllError, setDeclineAllError] = React.useState<string | null>(null)
+  /** A refused action says so, with the Hub's reason; the row stays, since nothing changed. */
+  const refusal = (title: string) => (error: unknown) =>
+    toast({ title, description: readableApiError(error, error instanceof Error ? error.message : 'The Hub refused it.'), tone: 'error' })
 
   const tasks = React.useMemo(() => (taskPage?.tasks ?? []) as TaskWithIntegration[], [taskPage])
   const conversations = React.useMemo(() => conversationPage?.conversations ?? [], [conversationPage])
@@ -112,27 +133,75 @@ export function OverviewScreen({
         colorIndex: colorOf(q.from_agent),
         title: q.question,
         waiting: isWaitedOn(q),
-        detail: q.asker_waiting === false ? 'The turn that asked has ended; nobody is waiting on this answer any more.' : (q.header ?? null),
+        // Only a blocking question whose asking turn ended has lost its waiter. A non-blocking one
+        // is a note — the mender's always are — and nobody ever waited: its answer is delivered as
+        // a later message, so saying nobody is waiting would be false.
+        detail: q.blocking && q.asker_waiting === false ? 'The turn that asked has ended; nobody is waiting on this answer any more.' : (q.header ?? null),
         at: q.created_at,
         // A multi-select or open-ended question is answered where it can be composed in full.
         options: q.multi_select ? undefined : q.options,
+        // The thread it was asked in when the Hub says which: the answer is delivered there.
         primary: q.from_agent
-          ? { label: 'Open conversation', onClick: () => onNavigate(`agent:${q.from_agent}`) }
+          ? {
+              label: 'Open conversation',
+              onClick: () => (q.conversation_id ? openConversation(q.from_agent, q.conversation_id) : onNavigate(`agent:${q.from_agent}`)),
+            }
           : { label: 'Answer', onClick: () => onNavigate('questions') },
+        // Closed without an answer, through the same route the Questions page uses. The row goes
+        // when the questions come back without it.
+        secondary: {
+          label: 'Decline',
+          onClick: () => decline.mutate({ id: q.id }, { onError: refusal('The question was not declined') }),
+        },
       })),
+    // A task whose only mover is the operator (`blocked`, `every-task-can-always-be-moved-on`): it
+    // waits on them whether or not a question sits beside it, so it is listed with its reason and
+    // the move that releases it.
     ...tasks
-      .filter((t) => t.status === 'approved' && t.latest_integration && t.latest_integration.outcome !== 'merged')
-      .map<NeedItem>((t) => {
-        const mending = openStalls.find((st) => st.task_id === t.id && st.conversation_id)
+      .filter((t) => t.status === 'blocked')
+      .map<NeedItem>((t) => ({
+        id: `blocked-${t.id}`,
+        kind: 'blocked',
+        agent: t.assignee || null,
+        colorIndex: t.assignee ? colorOf(t.assignee) : null,
+        title: `“${t.title}” is waiting on you`,
+        detail: t.blocked_reason ? sentence(t.blocked_reason) : null,
+        at: t.updated,
+        primary: {
+          label: 'Resume work',
+          onClick: () => updateTask.mutate({ id: t.id, status: 'in_progress' }, { onError: refusal('The task was not resumed') }),
+        },
+        secondary: { label: 'Open task', onClick: () => openTask(t.id) },
+      })),
+    // Approved work that did not reach the product is the Hub's own stall (`integration_skipped` /
+    // `integration_failed`, raised for every skip or failure except "already in the target" and ended
+    // when the work merges), so the row follows that stall instead of a second rule here: it clears
+    // itself on a merge, is never listed for work already in main, and Dismiss means what it does
+    // for every other stall (`merge-row-follows-its-stall`).
+    ...openStalls
+      .filter((st) => st.cause.startsWith('integration_') && tasks.some((t) => t.id === st.task_id))
+      .map<NeedItem>((st) => {
+        const t = tasks.find((task) => task.id === st.task_id)!
+        const mending = st.conversation_id
+        const retryable = t.latest_integration?.retryable === true
         return {
           id: `merge-${t.id}`,
           kind: 'merge',
           agent: null,
           title: `“${t.title}” was approved but not merged`,
-          detail: t.latest_integration!.reason ? sentence(t.latest_integration!.reason) : null,
-          at: t.latest_integration!.created_at,
-          primary: { label: 'Open task', onClick: () => openTask(t.id) },
-          secondary: mending ? { label: 'The mender is on it', onClick: () => openConversation(MENDER, mending.conversation_id!) } : undefined,
+          detail: sentence(st.reason || t.latest_integration?.reason || '') || null,
+          at: t.latest_integration?.created_at ?? st.last_seen_at,
+          primary: retryable
+            ? {
+                label: 'Try again',
+                onClick: () => retryIntegration.mutate(t.id, { onError: refusal('The merge was not retried') }),
+              }
+            : { label: 'Open task', onClick: () => openTask(t.id) },
+          secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id, { onError: refusal('The notice was not dismissed') }) },
+          more: [
+            ...(retryable ? [{ label: 'Open task', onClick: () => openTask(t.id) }] : []),
+            ...(mending ? [{ label: 'The mender is on it', onClick: () => openConversation(MENDER, mending) }] : []),
+          ],
         }
       }),
     // Every other stall (`hub/hub/stalls.py`); a merge stall is the merge row above.
@@ -152,8 +221,60 @@ export function OverviewScreen({
             ? { label: 'Open task', onClick: () => openTask(st.task_id!) }
             : { label: 'Open tasks', onClick: () => onNavigate('tasks') },
         // Ended by hand: what the operator says when they have dealt with it themselves.
-        secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id) },
+        secondary: { label: 'Dismiss', onClick: () => endStall.mutate(st.id, { onError: refusal('The notice was not dismissed') }) },
       })),
+    // A built roadmap slice whose next slice's drafting is offered (`hub/hub/slice_drafting.py`):
+    // Draft queues it to the chosen agent (the author preselected), Not now hides it.
+    ...offers.map<NeedItem>((offer) => {
+      const names = agents.map((a) => a.name)
+      const options = offer.agent && !names.includes(offer.agent) ? [offer.agent, ...names] : names
+      const agent = offerAgent[offer.document] ?? offer.agent ?? options[0] ?? ''
+      return {
+        id: `offer-${offer.document_id}`,
+        kind: 'offer',
+        agent: null,
+        title: offerTitle(offer),
+        detail: sentence(`${offer.title} (${offer.document}) has no open task, and no document claims ${offer.next_slice.key} yet`),
+        at: new Date().toISOString(),
+        picker: {
+          label: 'Agent that drafts the next slice',
+          options,
+          value: agent,
+          onChange: (value: string) => setOfferAgent((current) => ({ ...current, [offer.document]: value })),
+        },
+        primary: {
+          label: 'Draft',
+          onClick: () =>
+            takeOffer.mutate(
+              { path: offer.document, agent },
+              {
+                onSuccess: () => toast({ title: `Asked ${agent} to draft ${offer.next_slice.title || offer.next_slice.key}`, tone: 'success' }),
+                onError: refusal('The drafting turn was not queued'),
+              },
+            ),
+        },
+        secondary: {
+          label: 'Not now',
+          onClick: () => declineOffer.mutate({ path: offer.document }, { onError: refusal('The offer was not dismissed') }),
+        },
+      }
+    }),
+    // Main moved outside the Hub's own integration (`hub/hub/main_watch.py`): one row per open
+    // notice, naming the commits so the operator recognises their own merges at a glance.
+    ...mainNotices.map<NeedItem>((notice) => ({
+      id: `main-${notice.id}`,
+      kind: 'main',
+      agent: null,
+      title: notice.rewrite
+        ? `The history of ${notice.branch} was rewritten outside the Hub`
+        : `${notice.branch} moved outside the Hub`,
+      detail: describeMainNotice(notice),
+      at: notice.updated_at,
+      primary: {
+        label: 'Seen',
+        onClick: () => markSeen.mutate(notice.id, { onError: refusal('The notice was not marked seen') }),
+      },
+    })),
     // Tests the approval checks saw fail and then pass when re-run (`hub/hub/flaky_tests.py`):
     // approval went on, so nothing else asks anyone to fix them. One row for the whole list,
     // handed to a task as a round of fixing.
@@ -179,9 +300,10 @@ export function OverviewScreen({
                     toast({ title: 'Made a task to fix the flaky tests', tone: 'success' })
                     if (r.task_id) openTask(r.task_id)
                   },
+                  onError: refusal('The fix task was not made'),
                 }),
             },
-            secondary: { label: 'Dismiss', onClick: () => handleFlaky.mutate(false) },
+            secondary: { label: 'Dismiss', onClick: () => handleFlaky.mutate(false, { onError: refusal('The flaky tests were not dismissed') }) },
           } satisfies NeedItem,
         ]
       : []),
@@ -263,7 +385,7 @@ export function OverviewScreen({
   const unpriced = project?.unpriced_turns ?? 0
   const display = accounting?.preferred_display
   const spend = {
-    usd: project ? (project.api_equivalent_usd_micros != null ? project.api_equivalent_usd_micros / 1_000_000 : null) : (ledger?.spend.total_usd ?? 0),
+    usd: project ? (project.api_equivalent_usd_micros != null ? project.api_equivalent_usd_micros / 1_000_000 : null) : (ledger?.spend.total_usd ?? null),
     tokens: ledger?.spend.total_tokens ?? 0,
     period: project && project.api_equivalent_usd_micros != null ? 'API-equivalent so far' : 'so far',
     credits: formatAiCredits(project?.ai_nano_aiu ?? null),
@@ -273,9 +395,34 @@ export function OverviewScreen({
     ].filter((note): note is string => !!note),
   }
 
+  // Questions whose asker has gone (or never waited): the section declines them in one go. A
+  // question an agent still holds a call open for is never in this set.
+  const unwaited = questions.filter((q) => !q.answered && !q.declined && !isWaitedOn(q))
+  const declineAll = async () => {
+    setDecliningAll(true)
+    setDeclineAllError(null)
+    const results = await Promise.allSettled(unwaited.map((q) => decline.mutateAsync({ id: q.id })))
+    setDecliningAll(false)
+    const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    if (failed.length === 0) {
+      setConfirmingDeclineAll(false)
+      toast({ title: `Declined ${unwaited.length} ${unwaited.length === 1 ? 'question' : 'questions'}`, tone: 'success' })
+      return
+    }
+    setDeclineAllError(
+      `${failed.length} of ${unwaited.length} could not be declined: ${readableApiError(failed[0].reason, failed[0].reason instanceof Error ? failed[0].reason.message : 'the Hub refused it')}`,
+    )
+  }
+
   return (
+    <>
     <OverviewView
       loading={agentsLoading}
+      needsAction={
+        unwaited.length >= 2
+          ? { label: `Decline ${unwaited.length} questions nobody is waiting on`, onClick: () => setConfirmingDeclineAll(true) }
+          : null
+      }
       needs={needs}
       running={running}
       finished={finished}
@@ -318,5 +465,18 @@ export function OverviewScreen({
       }}
       now={now}
     />
+    {confirmingDeclineAll ? (
+      <DeleteConfirmDialog
+        heading={`Decline ${unwaited.length} ${unwaited.length === 1 ? 'question' : 'questions'}?`}
+        body={`Nobody is waiting on the answers to these ${unwaited.length}. Declining closes each one without an answer.`}
+        confirmLabel={`Decline ${unwaited.length} ${unwaited.length === 1 ? 'question' : 'questions'}`}
+        isPending={decliningAll}
+        pendingLabel="Declining…"
+        error={declineAllError}
+        onCancel={() => setConfirmingDeclineAll(false)}
+        onConfirm={() => void declineAll()}
+      />
+    ) : null}
+    </>
   )
 }

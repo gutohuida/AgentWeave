@@ -20,14 +20,42 @@ function groupGaps(gaps: SpecBlockingFinding[]): Array<[string, SpecBlockingFind
 /** One line per code: its count, the first gap's message, and up to three places. */
 export function GapLines({ gaps }: { gaps: SpecBlockingFinding[] }) {
   return (
-    <ul className="flex flex-col gap-0.5">
+    <ul className="flex min-w-0 max-w-full flex-col gap-0.5">
       {groupGaps(gaps).map(([code, group]) => {
         const places = group.map((gap) => gap.where).filter(Boolean)
         const more = places.length - PLACES_SHOWN
+        const differ = group.some((gap) => gap.message !== group[0].message)
+        if (differ && new Set(places).size < group.length) {
+          // The messages differ and the places cannot tell the findings apart (each same-file pair
+          // sits at `tasks` and names its own path only in its message): show each message.
+          return (
+            <li key={code} data-testid={`approval-warning-${code}`} className="flex min-w-0 items-start gap-1.5">
+              <Icon name="warning" size={13} className="shrink-0" />
+              <div className="min-w-0 [overflow-wrap:anywhere]">
+                <code>{code}</code>
+                {` ×${group.length}`}
+                <ul className="flex flex-col gap-0.5">
+                  {group.map((gap, index) => (
+                    <li key={`${gap.where}:${index}`}>
+                      {gap.message}
+                      {gap.where ? (
+                        <>
+                          {' ('}
+                          <code>{gap.where}</code>
+                          {')'}
+                        </>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </li>
+          )
+        }
         return (
-          <li key={code} data-testid={`approval-warning-${code}`} className="flex items-start gap-1.5">
-            <Icon name="warning" size={13} />
-            <span>
+          <li key={code} data-testid={`approval-warning-${code}`} className="flex min-w-0 items-start gap-1.5">
+            <Icon name="warning" size={13} className="shrink-0" />
+            <span className="min-w-0 [overflow-wrap:anywhere]">
               <code>{code}</code>
               {group.length > 1 ? ` ×${group.length}` : ''} — {group[0].message}
               {places.length > 0 && (

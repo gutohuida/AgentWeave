@@ -33,12 +33,22 @@
 .aw-settings-nav-item[data-active="true"] .aw-settings-nav-icon { color: var(--text); }
 .aw-settings-nav-meta { font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .aw-settings-scroll { min-height: 0; overflow-y: auto; }
+/* The link that ends a section list, to settings of another scope. */
+.aw-settings-nav-footer {
+  display: flex; align-items: center; gap: 9px; width: 100%; height: 30px; margin-top: 10px; padding: 0 8px;
+  border-top: 1px solid var(--border-region); border-radius: 0 0 var(--radius-md) var(--radius-md);
+  font-size: 12.5px; color: var(--text-3); text-align: left;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.aw-settings-nav-footer:hover { background: var(--row-hover); color: var(--text); }
+.aw-settings-nav-footer:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
 @media (max-width: 860px) {
   .aw-settings-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   .aw-settings-nav { flex-direction: row; align-items: center; overflow-x: auto; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--border-region); }
   .aw-settings-nav-head, .aw-settings-back { display: none; }
   .aw-settings-nav-list { flex-direction: row; }
   .aw-settings-nav-item { width: auto; white-space: nowrap; }
+  .aw-settings-nav-footer { width: auto; margin-top: 0; border-top: 0; white-space: nowrap; }
 }
 
 /* A field with a unit after it */

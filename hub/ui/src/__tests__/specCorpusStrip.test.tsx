@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import { ApiError } from '@/api/client'
 import type { ReindexResult, SpecListResponse } from '@/api/spec'
-import { SpecDocumentBrowser } from '@/components/spec/SpecDocumentBrowser'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { SpecPickerContainer } from '@/components/spec/page/SpecPanelContainer'
 import { SpecCorpusStrip } from '@/components/spec/SpecCorpusStrip'
 import { SpecPlaceUnder } from '@/components/spec/SpecPlaceUnder'
-import { buildInventory } from '@/components/spec/specNavigation'
 
 /* `the-corpus-is-indexed-arranged-and-adopted-from-the-app` (F206): reindex, adopt one, adopt all and
  * arrange had no caller in the app. Each mutation is mocked to answer what the route answers, in the
@@ -37,6 +37,8 @@ vi.mock('@/api/spec', async (importOriginal) => {
     useAdoptSpecCorpus: hook('adoptAll'),
     useAdoptSpecDocument: hook('adopt'),
     useArrangeSpecDocument: hook('arrange'),
+    useSpecList: () => ({ data: list(), isLoading: false, refetch: () => undefined }),
+    useSpecDocuments: () => ({ data: { documents: [] } }),
   }
 })
 
@@ -289,8 +291,11 @@ describe('Adopt beside an untracked document', () => {
   })
 
   function browser(specList = list()) {
+    void specList
     return render(
-      <SpecDocumentBrowser inventory={buildInventory(specList)} onSelect={vi.fn()} specList={specList} />,
+      <QueryClientProvider client={new QueryClient()}>
+        <SpecPickerContainer onOpen={vi.fn()} onNew={vi.fn()} />
+      </QueryClientProvider>,
     )
   }
 

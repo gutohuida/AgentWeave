@@ -27,6 +27,7 @@ from .conversations import (
     inherit_runtime_overrides,
     name_conversation,
     new_conversation,
+    set_provider_session,
 )
 from .db.engine import async_session_factory
 from .db.models import (
@@ -591,7 +592,7 @@ def _loop_queue_order() -> tuple:
     """How a loop's queue is ordered when picking the current item (design D3).
 
     An active task, most recently touched, beats an untouched pending one; among pending tasks the
-    **oldest** wins. Shared with `api/v1/jobs.py`'s `_batch_loop_summaries` so the board and the
+    **highest priority**, then the **oldest**, wins. Shared with `api/v1/jobs.py`'s `_batch_loop_summaries` so the board and the
     firing cannot disagree about which item is current — they are the two halves of human-only
     check 13.1, and a shared helper is the only way that check means anything.
 
@@ -610,6 +611,17 @@ def _loop_queue_order() -> tuple:
     return (
         (Task.status != "pending").desc(),
         case((Task.status != "pending", Task.updated), else_=None).desc(),
+        # Pending tasks by priority before age (`a-red-main-does-not-hold-the-night`, FR-7): a fix
+        # task the Hub files mid-flow is `critical` and is staffed ahead of every other pending
+        # task. Spec materialisation writes `medium` for every task, so a spec flow's own order is
+        # unchanged. Non-pending rows tie here (their `updated` above already ordered them).
+        case(
+            (Task.status != "pending", 0),
+            (Task.priority == "critical", 0),
+            (Task.priority == "high", 1),
+            (Task.priority == "low", 3),
+            else_=2,
+        ).asc(),
         Task.created_at.asc(),
     )
 
@@ -1270,14 +1282,48 @@ class FiringFacts:
 
     async def loops(self, project_id: str) -> "list[Loop]":
         async def read() -> "list[Loop]":
+            from .db.models import Build
+
             await self.project(project_id)
-            return list(
-                (await self._session.execute(select(Loop).where(Loop.project_id == project_id)))
-                .scalars()
-                .all()
-            )
+            # Each loop with the build it serves, if any (`builds.py`), in the same statement: a
+            # build's flow staffs only its people, and the board must not pay a read for it.
+            rows = (
+                await self._session.execute(
+                    select(Loop, Build)
+                    .outerjoin(Build, Build.loop_id == Loop.id)
+                    .where(Loop.project_id == project_id)
+                )
+            ).all()
+            loops: "list[Loop]" = []
+            for loop, build in rows:
+                if loop not in loops:
+                    loops.append(loop)
+                if build is not None:
+                    self._memo.setdefault(("builds", project_id), []).append(build)
+            return loops
 
         return await self._once(("loops", project_id), read)
+
+    async def _builds(self, project_id: str) -> "list[Any]":
+        """The builds the project's loops serve, read with the loops."""
+        await self.loops(project_id)
+        return list(self._memo.get(("builds", project_id), []))
+
+    async def build_of_loop(self, loop: Loop) -> Any:
+        """The build *loop* serves, or None (a loop no build owns runs as before)."""
+        return next(
+            (row for row in await self._builds(loop.project_id) if row.loop_id == loop.id), None
+        )
+
+    async def build_by_id(self, project_id: str, build_id: Optional[str]) -> Any:
+        if not build_id:
+            return None
+        found = next((row for row in await self._builds(project_id) if row.id == build_id), None)
+        if found is None:
+            from .db.models import Build
+
+            found = await self._session.get(Build, build_id)
+        return found
 
     async def live_loop_ids(self, project_id: str) -> "Set[str]":
         """Loops that have not ended: `ending_state IS NULL` and `archived_at IS NULL` (design D2
@@ -1722,7 +1768,13 @@ async def _agents_a_loop_may_staff(
     facts = facts or FiringFacts(session)
     free = await _agents_that_are_free(session, loop.project_id, facts)
     withheld = await _agents_withheld_from_fresh_work(session, loop, facts)
-    return [name for name in free if name not in withheld]
+    pool = [name for name in free if name not in withheld]
+    # A build's flow hands fresh work only to its builders (`the-flow-staffs-the-builds-people`):
+    # T3 of 2026-10-27 went to the free Architect because this pool knew no list of builders.
+    build = await facts.build_of_loop(loop)
+    if build is not None and build.builders:
+        pool = [name for name in pool if name in build.builders]
+    return pool
 
 
 async def _agents_withheld_from_fresh_work(
@@ -1836,7 +1888,10 @@ def _rung_3_join(
 
 
 def _rung_3_reason(
-    task: Task, availability: "Sequence[AgentAvailability]", exclude: "Mapping[str, str]"
+    task: Task,
+    availability: "Sequence[AgentAvailability]",
+    exclude: "Mapping[str, str]",
+    pool: "Optional[set[str]]" = None,
 ) -> str:
     """Design D2/D3's rung-3 sentence, bound to `_RUNG_3_REASON_BOUND` characters (tasks 2.3, 2.4).
 
@@ -1844,6 +1899,17 @@ def _rung_3_reason(
     what `test_resolve_reviewer_reads_the_roster_once` pins.
     """
     remedy = _capitalize_first(own_review_remedy(task))
+    if pool is not None:
+        # A build's reviewers are the only agents that could take this (rung 2 skips the rest), so
+        # only they are named as busy; an agent outside the pool is not a reviewer who is busy.
+        names = ", ".join(sorted(pool))
+        availability = [record for record in availability if record.name in pool]
+        remedy = f"Only the build's reviewers [{names}] can take it. {remedy}"
+        if not availability:
+            return (
+                f"{_RUNG_3_PREFIX}None of the build's reviewers [{names}] is on the project's "
+                f"roster. {remedy}"
+            )
     if not availability:
         # Task 2.3, R8: no "; ".join of an empty clause list, and no REJECT -- rejecting a task
         # frees nobody when nobody is on the roster to free.
@@ -1987,6 +2053,19 @@ async def resolve_reviewer(
     # point) -- never `_agents_that_are_free` here, which would take its own, independent read of
     # the same tables and let the two drift.
     availability = await _roster_availability(session, project_id, facts)
+    # A build's reviewer pool narrows rung 2 (`the-flow-staffs-the-builds-people`); a declaration
+    # above still wins, and an empty pool means any free agent, as before.
+    pool: "Optional[set[str]]" = None
+    if task.build_id:
+        from .db.models import Build
+
+        build = (
+            await facts.build_by_id(project_id, task.build_id)
+            if facts is not None
+            else await session.get(Build, task.build_id)
+        )
+        if build is not None and build.reviewers:
+            pool = set(build.reviewers)
 
     only_taken = False
     for record in availability:
@@ -1998,6 +2077,8 @@ async def resolve_reviewer(
         ):
             continue
         if record.name in exclude:
+            continue
+        if pool is not None and record.name not in pool:
             continue
         if record.name in unavailable:
             # Eligible in every way that lasts, and merely spoken for by this same firing. Held so
@@ -2020,7 +2101,9 @@ async def resolve_reviewer(
             ),
         )
 
-    return ReviewerChoice(rung="unstaffed", reason=_rung_3_reason(task, availability, exclude))
+    return ReviewerChoice(
+        rung="unstaffed", reason=_rung_3_reason(task, availability, exclude, pool)
+    )
 
 
 @dataclass(frozen=True)
@@ -2081,6 +2164,17 @@ class FiringDecision:
     #: burying `loop-notices-and-reacts` design D6 exists to stop. Nothing is wrong here and the
     #: next tick resolves it, so this is carried for tests and the log and no further.
     deferred: "tuple[tuple[str, str], ...]" = ()
+    #: `(task_id, wait)` for every completed task whose review waits for its check run
+    #: (`project_checks.ReviewWait`, `checks-run-before-anyone-reviews` D6). Each is also in
+    #: `deferred`, with the wait's sentence. The decision writes nothing, so the *firing* acts on
+    #: these: a run is requested where none is current, and a task its own failure failed is
+    #: returned to its builder (D7's backstop). A firing waiting only on these is not a stall.
+    checks_waits: "tuple[tuple[str, Any], ...]" = ()
+    #: Completed tasks of a flow-driven Fast build whose checks have passed (or that have none):
+    #: the firing approves each, as the flow, instead of staging a review
+    #: (`a-build-has-a-driver-a-level-and-its-people`, D4). The decision writes nothing, so the
+    #: firing acts on these; a firing with only these to do is not a stall.
+    approvals: "tuple[str, ...]" = ()
 
 
 async def decide_firing(
@@ -2135,6 +2229,8 @@ async def decide_firing(
     unstaffed: "list[tuple[str, str]]" = []
     deferred: "list[tuple[str, str]]" = []
     in_flight: "list[tuple[str, str]]" = []
+    checks_waits: "list[tuple[str, Any]]" = []
+    approvals: "list[str]" = []
     selections: "list[LoopSelection]" = []
     # The tasks a documentless loop finished and will not review (design D5). Not `unstaffed`:
     # nothing here failed to be staffed, and the walk did not try. It is carried out of the walk
@@ -2162,10 +2258,29 @@ async def decide_firing(
     # narrows that pool to empty for a documentless loop (design D1, D2) — resumption is untouched
     # because it never reads `free` at all.
     facts = facts or FiringFacts(session)
+    # **A lead-driven build's loop selects no work** (slice D, D6): its lead hands the work out and
+    # the firing only briefs it (`JobScheduler._build_firing`). Its tasks are the lead's to move,
+    # so the board reads them as attended -- held where somebody holds them -- and never as a
+    # stall the mender is woken for.
+    lead_build = await facts.build_of_loop(loop)
+    if lead_build is not None and lead_build.driver == "lead":
+        return FiringDecision(
+            kind=DECISION_IN_FLIGHT,
+            _cannot_staff=tuple(
+                (task.id, task.assignee)
+                for task in await facts.loop_candidates(loop)
+                if task.assignee
+            ),
+        )
     free = await _agents_a_loop_may_staff(session, loop, facts)
     # The default agent is a judge the flow names (F864): the pool withholds judges, and so must
     # the arm that offers the job's own agent first, or one agent builds what it must then review.
     default_withheld = default_agent in await _agents_withheld_from_fresh_work(session, loop, facts)
+    # A build's flow gives fresh work to its builders only, its job's own agent included (slice D):
+    # an operator who chose another agent for the flow did not add it to the builders.
+    build = await facts.build_of_loop(loop)
+    if build is not None and build.builders and default_agent not in build.builders:
+        default_withheld = True
     # Agents that hold no task's work (F425): the dispatch refuses a read-only agent's work turn,
     # so staffing one would stage a step that cannot start. Narrows only fresh work below -- the
     # pool and the job's own default -- never the reviewer ladder, because reviewing is what a
@@ -2558,15 +2673,19 @@ async def decide_firing(
         # fired 23:00:00, the author's snapshot landed 23:00:08 -- and the reviewer was handed the
         # branch's base commit, master's previous integrate, and reviewed nothing. Deferred, so the
         # next firing offers it once the work is on the branch.
+        #
+        # **In flight, not deferred** (F1049, `the-mender-wakes-only-for-real-stalls`). The turn
+        # really is on the task -- `task_attribution` reads it as `working` -- so the task is being
+        # attended, and a firing that finds nothing else claimable must not call that a stall.
+        # `deferred` is "not an event, and not a stall", but the stall path never consulted it:
+        # on :8000's night of 2026-10-26/27 six `loop_stalled` stalls, each woken to an Opus mender,
+        # were this three-second gap (the flow fires 3 s after `completed`, while the turn runs).
+        # The end of that turn requests the firing that offers the review (`flow_advance.after_run`);
+        # a turn that never ends is the stall sweep's (`dead_run`, `no_progress`), which does not
+        # read this decision.
         still_running = await facts.agent_running_on(loop.project_id, task.id)
         if still_running is not None and not wedged_review:
-            deferred.append(
-                (
-                    task.id,
-                    f"{still_running}'s turn on it is still running; its work is committed to the "
-                    f"task branch when that turn ends, and only then is there something to review",
-                )
-            )
+            in_flight.append((task.id, still_running))
             continue
 
         # **Can a review turn be provisioned for this at all?** Asked before a reviewer is
@@ -2595,6 +2714,34 @@ async def decide_firing(
                     f"reviewer can be given anything to look at.",
                 )
             )
+            continue
+
+        # **Not while the task's check run is undecided** (`checks-run-before-anyone-reviews`, D6).
+        # On :8000's night of 2026-10-26/27 three reviews ran beside a failing suite and found what
+        # the checks found (about 52 min of Opus). Deferred, naming the run and how long it has run,
+        # and the walk goes on; a run is requested by the firing where none is current, a pass asks
+        # for this firing again (`project_checks._after_decided`), and a failure of the task's own
+        # returns it to its builder instead of to a reviewer. A wedged review is already
+        # `under_review`: its reviewer is replaced as before, and briefed with the checks as today.
+        #
+        # **Not a stall**, the same way the author's turn above is in flight and not one (F1049,
+        # slice N): the checks are the Hub attending the task, and a wait of the suite's 8-16 min
+        # must not wake the mender. Kept in `deferred` -- what it says is "not yet, and why" -- and
+        # in `checks_waits`, which the end of the walk reads instead of the stall path.
+        if not wedged_review:
+            from . import project_checks
+
+            wait = await project_checks.review_wait(session, task)
+            if wait is not None:
+                deferred.append((task.id, wait.reason))
+                checks_waits.append((task.id, wait))
+                continue
+
+        # **A flow-driven Fast build stages no review** (`fast-approves-without-a-reviewer`, D4):
+        # its checks have passed (or it has none), so the flow approves it as the operator's job.
+        # Approval still runs the checks and every gate (slice L applies unchanged).
+        if not wedged_review and task.build_id and task.level == "fast":
+            approvals.append(task.id)
             continue
 
         if attribution.agent is not None:
@@ -2657,9 +2804,15 @@ async def decide_firing(
             _cannot_staff=tuple(in_flight),
             unstaffed=tuple(unstaffed),
             deferred=tuple(deferred),
+            checks_waits=tuple(checks_waits),
+            approvals=tuple(approvals),
         )
 
-    if in_flight and any(task_id not in surfaced_rows for task_id, _ in in_flight):
+    if (
+        checks_waits
+        or approvals
+        or (in_flight and any(task_id not in surfaced_rows for task_id, _ in in_flight))
+    ):
         # **Checked before the stall, and that order is the fix** (finding F23). A queue whose work
         # is being done is not waiting on anything; asking `_stall_reason_from_walk` here would
         # count those very tasks as "open" and report the flow stalled at its busiest.
@@ -2675,11 +2828,18 @@ async def decide_firing(
         # teeth: the ordinary-work arm records in flight from `agent in running` as well as from
         # `held`, so a run bound to no task at all is still work being done. A decision that
         # re-asked a per-task question here would report three agents mid-turn as a stall.
+        #
+        # **A review waiting for its task's check run is the same case** (`checks-run-before-
+        # anyone-reviews`, D6): the Hub is checking that work right now, and its end asks for this
+        # firing. Not `in_flight` -- no agent holds it, and `task_attribution` must not say one
+        # does -- but the firing has nothing to start and nothing wrong to report.
         return FiringDecision(
             kind=DECISION_IN_FLIGHT,
             _cannot_staff=tuple(in_flight),
             unstaffed=tuple(unstaffed),
             deferred=tuple(deferred),
+            checks_waits=tuple(checks_waits),
+            approvals=tuple(approvals),
         )
 
     stall_reason = await _stall_reason_from_walk(session, loop, gated, facts)
@@ -2732,6 +2892,37 @@ async def decide_firing(
         unstaffed=tuple(unstaffed),
         deferred=tuple(deferred),
     )
+
+
+async def _approve_at_fast(
+    session: AsyncSession, job: AIJob, loop: Loop, task_ids: "Sequence[str]"
+) -> None:
+    """Approve each of *task_ids* as *job* (origin `job`, the operator's authority), each in its own
+    savepoint and committed: a refusal -- the checks moved, a conflict -- leaves that task
+    completed for the next firing and is logged, never raised. A task approved here hands work on,
+    so the flow is asked to fire again once this commits (its own moves never ask for themselves).
+    """
+    from .task_transition_service import TransitionRefusedError
+    from .task_transitions import operator as operator_actor
+
+    approved = 0
+    for task_id in task_ids:
+        task = await session.get(Task, task_id)
+        if task is None or task.status != "completed":
+            continue
+        try:
+            async with session.begin_nested():
+                await apply_transition(
+                    session, task, "approved", operator_actor(), origin=ORIGIN_JOB, job_id=job.id
+                )
+            approved += 1
+        except TransitionRefusedError as refusal:
+            logger.info("Job %s did not approve %s at Fast: %s", job.id, task_id, refusal)
+    await session.commit()
+    if approved:
+        from . import flow_advance
+
+        flow_advance.request(loop.id)
 
 
 async def _loop_stall_reason(session: AsyncSession, loop: Loop, *, agent: str) -> Optional[str]:
@@ -4108,6 +4299,14 @@ class JobScheduler:
                 # be refused on that agent's hold every tick. Its emit follows each return below.
                 pending_edit_payload = await _apply_staged_edit_if_idle(session, loop, job)
                 acting_agent = job.agent
+                # A build's loop asks its build first (`a-build-has-a-driver-a-level-and-its-
+                # people`, D6/D7): its window and its cap, and a lead-driven build's firing briefs
+                # its lead instead of selecting work. Records no `JobRun`, as the busy guard does.
+                if await self._build_firing(session, job, loop):
+                    if pending_edit_payload is not None:
+                        await _emit_loop_edit_applied(session, pending_edit_payload)
+                        pending_edit_payload = None
+                    return False
 
             resume_session_id = job.last_session_id if job.session_mode == "resume" else None
             conversation = None
@@ -4341,6 +4540,21 @@ class JobScheduler:
                     # defers on every tick by design, and an event for that would bury
                     # `review_unstaffed` under the healthy case. See `FiringDecision.deferred`.
                     logger.debug(f"Job {job.id} deferred {deferred_task_id}: {deferred_reason}")
+                if decision.checks_waits:
+                    # What the decision could not do itself, since it writes nothing (D6): a run
+                    # where none is current, and the return of work its own failure failed (D7's
+                    # backstop, for a run that decided while its task could not yet be returned).
+                    from . import project_checks
+
+                    for waiting_task_id, wait in decision.checks_waits:
+                        if wait.needs_a_run:
+                            project_checks.schedule(job.project_id, waiting_task_id)
+                        elif wait.state == "failed":
+                            project_checks.schedule_return(waiting_task_id)
+                if decision.approvals:
+                    # A flow-driven Fast build's finished work, its checks passed: approved by the
+                    # flow, as the operator's job, with no review staged (slice D, D4).
+                    await _approve_at_fast(session, job, loop, decision.approvals)
                 # The firing's own selection is the first; `extra_selections` are staged after this
                 # one is fully away, each with its own `JobRun` and conversation (design D13). The
                 # split keeps every path below -- stall, skip, resume, briefing -- exactly the shape
@@ -4505,7 +4719,8 @@ class JobScheduler:
                     project_id=job.project_id, agent=acting_agent, origin="job"
                 )
                 if resume_session_id:
-                    conversation.provider_session_id = resume_session_id
+                    # A job's stored last_session_id: nothing recorded which CLI made it.
+                    set_provider_session(conversation, resume_session_id, None)
                 session.add(conversation)
                 await inherit_runtime_overrides(session, conversation)
             # Named from the job, not its message: a schedule fires the same message repeatedly,
@@ -4707,6 +4922,65 @@ class JobScheduler:
             await session.commit()
             await self._announce_edit_after_failure(session, pending_edit_payload)
             return False
+
+    async def _build_firing(self, session: AsyncSession, job: AIJob, loop: Loop) -> bool:
+        """What a build's loop does before anything else, or `False` for a loop no build owns (and
+        for a flow-driven build free to hand out work, whose firing then proceeds as any flow's).
+
+        * Outside its window, or over its cap, nothing new is handed out and running turns are left
+          alone: before the window opens the firing just waits; once it has closed, or the cap is
+          reached, the build stops with the reason, its job is paused and the operator is told.
+          Raising the cap or moving the window resumes it (`PATCH /builds/{id}`).
+        * A lead-driven build's firing selects no work: it queues one brief to the lead, unless the
+          previous one is still unread.
+
+        Returns `True` when the firing is done (it committed what it changed).
+        """
+        from . import builds
+        from .db.models import Build, SpecDocument
+        from .turn_scheduler import schedule_accepted
+
+        build = (
+            (await session.execute(select(Build).where(Build.loop_id == loop.id))).scalars().first()
+        )
+        if build is None:
+            return False
+        if build.state == builds.FINISHED:
+            # Every task closed: the loop ends as a drained queue's does, once (a backstop for a
+            # finish recorded before its loop could be ended).
+            await builds.end_loop_of(session, build)
+            await session.commit()
+            await self.remove_job(job.id)
+            return True
+        if build.state != builds.RUNNING:
+            await session.commit()
+            return True
+        if await _loop_stop_reason(session, job):
+            # The loop's own stop conditions (its stop time, a drained queue) are the firing's
+            # ordinary path, which ends it; a build's window and cap are asked only of a live loop.
+            return False
+        verdict = await builds.may_hand_out(session, build, builds.now())
+        if not verdict.allowed:
+            if verdict.stop_reason:
+                await builds.stop(session, build, verdict.stop_reason)
+                await session.commit()
+                await builds.notify_stopped(session, build, verdict.stop_reason)
+                await self.remove_job(job.id)
+                logger.info(f"Build {build.id} stopped: {verdict.stop_reason}")
+            else:
+                await session.commit()
+                logger.debug(f"Build {build.id} waits: {verdict.wait_reason}")
+            return True
+        if build.driver != builds.DRIVER_LEAD:
+            return False
+        document = await session.get(SpecDocument, build.document_id)
+        title = (document.title or document.path) if document is not None else build.document_id
+        entry_id = await builds.queue_brief(session, build, title, job.id)
+        lead = build.lead
+        await session.commit()
+        if entry_id is not None and lead:
+            await schedule_accepted(job.project_id, lead)
+        return True
 
     async def _announce_edit_after_failure(
         self, session: AsyncSession, pending_edit_payload: Optional[dict]

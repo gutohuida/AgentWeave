@@ -224,11 +224,21 @@ def _readable_detail(detail: Any) -> str:
     return str(detail)
 
 
+#: How long the adapter waits for the Hub to answer one call.
+HUB_REQUEST_TIMEOUT_SECONDS = 10
+#: How long `update_task(status="completed")` waits: the Hub runs the project's fast checks before it
+#: records a completion, for up to `project_checks.COMPLETION_BUDGET_SECONDS` (120 s), plus the
+#: snapshot and the merged commit. Restated here because this file imports only the stdlib;
+#: `test_checks_run_before_review.py` asserts it exceeds the Hub's budget.
+COMPLETION_REQUEST_TIMEOUT_SECONDS = 150
+
+
 def _hub_request(
     method: str,
     path: str,
     body: Optional[Dict[str, Any]] = None,
     params: Optional[Dict[str, Any]] = None,
+    timeout: float = HUB_REQUEST_TIMEOUT_SECONDS,
 ) -> Any:
     """Make one authenticated request to the Hub API with bound run attribution."""
     base_url = _hub_address()
@@ -244,7 +254,7 @@ def _hub_request(
     request.add_header("Content-Type", "application/json")
     request.add_header("Accept", "application/json")
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read()
         return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
@@ -427,8 +437,15 @@ def update_task(
     notes: Optional[str] = None,
     requirement_ids: Optional[List[str]] = None,
     spec_document: Optional[str] = None,
+    failing_pieces: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     """Update a task's lifecycle status, notes, or the requirements it serves.
+
+    Moving a task to "completed" runs the project's fast checks (lint, format) on your committed
+    work, merged onto the main branch; your uncommitted changes are committed to the task branch
+    first. This can take up to two minutes. When a fast check fails, the completion is refused with
+    their output: fix what it reports and complete the task again. The project's other checks run
+    after, and a review starts only once they pass.
 
     Args:
         task_id: The task's ID.
@@ -442,6 +459,12 @@ def update_task(
             prior round that still matters.
         requirement_ids: Requirement IDs this task serves, added to whatever it already serves.
         spec_document: Which spec document to resolve requirement_ids in, when it is ambiguous.
+        failing_pieces: With "revision_needed" (or "rejected"), the evidence that fails, each as
+            {"piece": "FR-3" (or an evidence id), "reason": "what fails"}. Only those pieces are
+            rejected, each with its own reason; every other awaiting piece is held (not rejected)
+            with your notes as its reason, and its author records it again at the next commit.
+            Name none when nothing in the evidence fails (a lint error, a failing check), and say
+            why in notes. Refused with "approved", which accepts every piece.
     """
     body: Dict[str, Any] = {}
     if status is not None:
@@ -452,7 +475,29 @@ def update_task(
         body["requirement_ids"] = requirement_ids
     if spec_document is not None:
         body["spec_document"] = spec_document
+    if failing_pieces is not None:
+        body["failing_pieces"] = failing_pieces
+    if status == "completed":
+        # The Hub waits for the project's fast checks before it records a completion.
+        return _hub_request(
+            "PATCH", f"/tasks/{task_id}", body, timeout=COMPLETION_REQUEST_TIMEOUT_SECONDS
+        )
     return _hub_request("PATCH", f"/tasks/{task_id}", body)
+
+
+@_tool()
+def hand_out_task(task_id: str, agent: str, review: bool = False) -> Dict[str, Any]:
+    """A build's lead only: hand one of its tasks to an agent, and start that agent's turn on it.
+
+    Answered only for the lead of the task's running lead-driven build; any other caller gets 403.
+
+    Args:
+        task_id: The task, from your brief.
+        agent: One of the build's builders (to build it), or of its reviewer pool (to review it);
+            any open agent where the build names none.
+        review: True to hand completed work to `agent` for review rather than to build.
+    """
+    return _hub_request("POST", f"/tasks/{task_id}/hand-out", {"agent": agent, "review": review})
 
 
 # The mender's tools (`a-stalled-project-wakes-a-doctor-that-unblocks-it`). Served to every run,
@@ -471,7 +516,8 @@ def mend_task_branch(task_id: str, commit: str = "") -> Dict[str, Any]:
 
     Args:
         task_id: The approved task whose merge is stuck.
-        commit: Your resolution, committed in your own workspace: a branch cut from the task's
+        commit: Your resolution, committed in the mend's scratch checkout (the one your brief
+            names, never your own workspace): a branch cut from the task's
             work (its `agentweave/task/<task_id>` branch, or the commit its merge names) with the
             main branch merged in and the conflict resolved. It must contain that work. The Hub
             runs the project's checks on it and merges it. Omit it to only retry the merge, once
@@ -544,8 +590,10 @@ def ask_user(
               answer comes back as a list. False when exactly one applies.
         blocking: Leave this alone to wait for the answers, which is almost always what you
             want. Set it False only to ask something you genuinely do not need answered before
-            continuing — you must then poll `get_answer` yourself, and a turn that ends first
-            loses the questions.
+            continuing. The questions stay with the operator as a note and the call returns at
+            once; the answer arrives later as a message in this conversation, so there is no need
+            to poll `get_answer` (though you may). The Hub can also record your questions as a
+            note whatever you pass, and the result then says so.
 
     Returns a list under "answers", one entry per question, in the order you asked them. Each entry
     says which of three things happened, and they mean different things:
@@ -573,6 +621,23 @@ def ask_user(
     }
     if not blocking:
         return {"success": True, "question_ids": question_ids, "answered": False}
+    if rows and all(row.get("blocking") is False for row in rows):
+        # The Hub's record decides, not this argument: it recorded every question as a note (the
+        # mender's always are -- the operator is usually away when it asks, and a wait on a sleeping
+        # person only ends in "nobody responded"). Nobody is waiting on a note, so polling for its
+        # answer would only hold this turn open until the deadline. A Hub that predates `blocking`
+        # in this response omits it, and keeps the wait below.
+        return {
+            "success": True,
+            "question_ids": question_ids,
+            "answered": False,
+            "note": (
+                f"Your {len(question_ids)} question(s) were recorded as a note for the operator, "
+                "not a wait. Do not poll for the answer: it arrives later as a message in this "
+                "conversation, whenever the operator gives it. Carry on without it, and do not "
+                "take any action that needed the answer."
+            ),
+        }
 
     answers: Dict[str, Dict[str, Any]] = {}
 
@@ -807,8 +872,9 @@ def vault_read(entry_id: str, offset: int = 0) -> Dict[str, Any]:
     """One vault entry by its id (`src-…`), with up to 50,000 characters of its text.
 
     `content` is the text from `offset`. When `next_offset` is not null there is more: call again
-    with `offset=next_offset`. You cannot edit the vault: if an entry looks wrong or contradicts
-    what you know, report it with `vault_report(entry_id, message)` rather than working around it.
+    with `offset=next_offset`. If an entry looks wrong or contradicts what you know, change it with
+    `vault_replace_passage` or `vault_append` (text sources), or report it with
+    `vault_report(entry_id, message)` when you are not sure.
     """
     return _hub_request("GET", f"/vault/entries/{entry_id}", params={"offset": offset or None})
 
@@ -851,6 +917,59 @@ def save_chapters(chapters: List[Dict[str, Any]], reason: str) -> Dict[str, Any]
     user asks you to organise the thread.
     """
     return _hub_request("POST", "/chapters", {"chapters": chapters, "reason": reason})
+
+
+@_tool()
+def vault_replace_passage(entry_id: str, old: str, new: str) -> Dict[str, Any]:
+    """Change a text source (`src-…`) by replacing one passage of its text.
+
+    `old` must occur exactly once in the source's text, copied exactly; a passage that occurs
+    nowhere or more than once is refused (400) saying which, and nothing changes. A PDF or image
+    source is refused (409): its file is changed with `vault_replace_file`. The source is distilled
+    again in the background; its earlier facts are superseded by the new ones. Recorded with your
+    name and run.
+    """
+    return _hub_request(
+        "POST",
+        f"/vault/sources/{entry_id}/replace-passage",
+        {"old": old, "new": new},
+    )
+
+
+@_tool()
+def vault_append(entry_id: str, text: str) -> Dict[str, Any]:
+    """Add `text` to the end of a text source (`src-…`); a PDF or image source is refused (409).
+
+    The source is distilled again in the background. Recorded with your name and run.
+    """
+    return _hub_request("POST", f"/vault/sources/{entry_id}/append", {"text": text})
+
+
+@_tool()
+def vault_replace_file(entry_id: str, path: str) -> Dict[str, Any]:
+    """Replace a PDF or image source's file with the file `path` names; the Hub reads it.
+
+    `path` is relative to your working directory or absolute, inside your workspace or the project
+    directory, and is refused with the reasons `vault_add` gives. A text source is refused (409):
+    change it with `vault_replace_passage` or `vault_append`. Its transcription is discarded and
+    the source is distilled again in the background.
+    """
+    return _hub_request("POST", f"/vault/sources/{entry_id}/replace-file", {"path": path})
+
+
+@_tool()
+def vault_archive(entry_id: str) -> Dict[str, Any]:
+    """Archive a source (`src-…`): it and the facts that cite only archived sources leave
+    `vault_map` and the Knowledge vault line, and stay readable by id (`archived: true`).
+    `vault_restore` undoes it.
+    """
+    return _hub_request("POST", f"/vault/sources/{entry_id}/archive", {})
+
+
+@_tool()
+def vault_restore(entry_id: str) -> Dict[str, Any]:
+    """Restore an archived source (`src-…`): it and its facts are listed and checked as before."""
+    return _hub_request("POST", f"/vault/sources/{entry_id}/restore", {})
 
 
 # Restated from `hub/hub/vault.py` (this module imports nothing from the Hub);
@@ -5061,8 +5180,8 @@ def create_spec_document(
     returns for everything after, including `submit_spec_document`.
 
     There is no `path` argument: the Hub always mints the path. `kind` is `change-spec` (the
-    default) or `roadmap` — the two kinds whose lifecycle (exploring, proposed, approved,
-    archived) is meant to be filled in by you and then gated by the operator. `title` is optional
+    default) or `roadmap` — the two kinds whose lifecycle (exploring, approved, archived) is
+    meant to be filled in by you and then gated by the operator. `title` is optional
     and only cosmetic — it shows in the operator's list before the rename lands, and does not
     affect the path.
 
@@ -5073,7 +5192,7 @@ def create_spec_document(
     built.
 
     A roadmap carries `slices` and no requirements or tasks. Each slice's change document names it
-    with `roadmap: {"document": <roadmap path>, "slice": <key>}`, and can be proposed only once
+    with `roadmap: {"document": <roadmap path>, "slice": <key>}`, and can be approved only once
     the operator has approved the roadmap.
 
     Returns the minted `path` and the `phase` it starts in (`exploring`).
@@ -5121,6 +5240,7 @@ def submit_spec_document(
     delivery: Optional[Dict[str, Any]] = None,
     slices: Optional[List[Dict[str, Any]]] = None,
     roadmap: Optional[Dict[str, Any]] = None,
+    already_built: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Write a specification document. You supply structure; the Hub renders the document.
 
@@ -5135,20 +5255,14 @@ def submit_spec_document(
 
     The document must already exist — call `create_spec_document` first if you don't have one yet.
     Submitting repeatedly is normal and expected — a document under discussion is incomplete, and
-    saving an incomplete one is not an error. The response lists what still blocks it from being
-    proposed.
+    saving an incomplete one is not an error. The response lists what still blocks its approval,
+    exactly as the operator's Check shows it; the operator may check while you keep writing.
 
-    You cannot approve a document, propose it, or set its phase. There is no argument here that
+    You cannot approve a document, build it, or set its phase. There is no argument here that
     does so. Approval is the operator's decision and is taken elsewhere.
 
-    At `sketch` rigor (the default) this writes the document immediately, as above. At `contract`
-    or `gate` rigor it does not: your submission is diffed against what is stored and recorded as
-    one pending proposal per changed requirement plus one for everything else, for an operator to
-    accept or reject. The response then carries `proposals`/`unchanged`/`already_pending` instead
-    of `identifiers`/`divergence` — check which shape came back rather than assuming a write
-    happened. A unit you submit again unchanged is recorded once: it is named in `already_pending`,
-    not proposed twice. A different edit to a unit replaces your earlier pending proposal for it,
-    and a unit you put back as stored withdraws yours.
+    Before approval every save is written at once. After approval a document is not saved: an
+    author or the lead of its running build makes a proposal with `amend_spec_document`.
 
     `requirements` — objects with:
       `key`      stable handle, lowercase and hyphenated, unique in this document. Keep it across
@@ -5178,7 +5292,7 @@ def submit_spec_document(
       in order rather than in parallel. `files` optionally lists the repo-relative paths (never
       empty or absolute; a directory covers what is beneath it) a task expects to edit; two tasks
       with overlapping `files` and no `depends_on` path between them draw a `warnings` entry in
-      the response, which never blocks a proposal. A test and its fix are one task: approval runs
+      the response, which never blocks approval. A test and its fix are one task: approval runs
       the project's checks, so a task whose work is a test left red for a later task can never
       pass them, and draws a `warnings` entry too.
 
@@ -5186,7 +5300,7 @@ def submit_spec_document(
       rather than in a paragraph, where the order has to be guessed at.
 
     `scope` — `{"in_scope": [...], "non_goals": [...]}`. Non-goals are required before a document
-      can be proposed: omission is silence, not a non-goal.
+      is ready to approve: omission is silence, not a non-goal.
 
     `evidence` — `{"checked": [...], "limits": [...]}`. What you inspected and what it validates,
       and what remains untested or inferred. A green suite says the code satisfies the tests that
@@ -5196,16 +5310,23 @@ def submit_spec_document(
       document: a guess written in the voice of a requirement is built on as though it were a
       decision.
 
-    `delivery` — how the work gets built, for a change-spec document only. Either
+    `delivery` — the build you recommend, for a change-spec document only; the operator decides
+      when they build it, and Build opens with it filled in. Either
       `{"mode": "flow", "agent": "<name>", "reviewer": "<name>", "stop_when_queue_empties": true,
       "stop_at": None, "cron": "*/5 * * * *"}` (a flow: at least one of
       `stop_when_queue_empties`/`stop_at` must be set, `agent` is the default agent's name from the
       open roster, `reviewer` is the agent that reviews every task whose own `reviewer` is empty --
       leave it out and any free agent reviews -- and `stop_at` is an ISO-8601 timestamp carrying a
       timezone) or `{"mode": "none"}` (no flow: the tasks go on the board and
-      are started by hand). **Include `delivery` in every later submission of this document**, not
-      only the first one that answers it: a submission replaces the whole document, so one without
-      it drops the answer and proposing is refused again.
+      are started by hand). Add `reasons`, one sentence per choice keyed `mode`, `agent`,
+      `reviewer`, `tester`, `stop` or `cron`, saying why you recommend it. **Include `delivery`
+      in every later submission of this document**, not only the first one that answers it: a
+      submission replaces the whole document, so one without it drops the answer.
+
+    `already_built` — intake's answer to whether the work is already built:
+      `{"built": true, "commits": ["<sha>", ...]}` naming the commits on the main branch that hold
+      it, or `{"built": false}`. Approving a document recorded as built offers the operator to
+      close its tasks as already built instead of building them.
 
     `slices` — a `roadmap` document's slices, in the order they are built: objects with `key`
       (lowercase, hyphenated, unique), `title`, `intent` (the outcome the operator could see
@@ -5215,12 +5336,13 @@ def submit_spec_document(
       `tasks` — those go in each slice's change document.
 
     `roadmap` — on a change document that specifies a roadmap slice:
-      `{"document": "<roadmap path>", "slice": "<slice key>"}`. Proposing it is refused until that
+      `{"document": "<roadmap path>", "slice": "<slice key>"}`. Approving it is refused until that
       roadmap is approved and holds that slice. Include it in every later submission.
 
     Returns the path, the phase, the identifier assigned to each requirement key, `blocking` —
-    what would refuse a proposal right now — and `ready_to_propose`, which is false while anything
-    blocks. A saved document is not a ready one: say it is ready only when that field is true.
+    what would refuse its approval right now — and `ready_to_approve`, which is false while
+    anything blocks. A saved document is not a ready one: say it is ready only when that field is
+    true.
     """
     document: Dict[str, Any] = {
         "schema_version": schema_version,
@@ -5244,6 +5366,7 @@ def submit_spec_document(
         "delivery": delivery,
         "slices": slices,
         "roadmap": roadmap,
+        "already_built": already_built,
     }
     # Before anything is sent. These are annotated `Any` so that a wrong shape reaches this check
     # rather than being refused by the framework's own validator, whose message was the finding
@@ -5366,7 +5489,7 @@ def read_spec_document(
     marked `section_truncated` is refused, because resubmitting it would delete what the read cut:
     read it whole first.
 
-    Also returns `phase` and `rigor`, which say how settled this document is. Readable at any phase
+    Also returns `phase`, which says how settled this document is. Readable at any phase
     — an unapproved document is still worth reading, and its phase tells you not to build on it yet.
 
     A `diagnostics` entry appears where the document and the Hub's index disagree, or where the
@@ -5458,34 +5581,37 @@ def amend_spec_document(
     task: Optional[Dict[str, Any]] = None,
     change: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Amend an approved specification document with what testing it found. Test turns only.
+    """Amend an approved specification document: a tester at once, an author or the lead by proposal.
 
-    Only a turn testing a task of this document may call this: the builder never amends, because it
-    is the work being judged. The amendment is applied at once, recorded with you as its author and
-    this run, and stays **not reviewed** until the operator reviews it.
+    A turn testing a task of this document amends it at once: recorded with you as its author and
+    this run, **not reviewed** until the operator reviews it. The builder never amends.
+    An agent that wrote the document before approval, or the lead of its running build, makes a
+    **proposal** instead: nothing changes until the operator accepts (applied then, or refused as
+    stale) or declines it with a reason, and you are told either way. Anyone else is refused.
 
-    Stay within the document's stated requirements and criteria. A defect the work under review
-    introduces sends that task back (`revision_needed`), never into the spec. A problem that was
-    there before it is a side finding: `create_task` with no loop, naming the requirement it bears
-    on with `requirement_ids` and `spec_document`.
+    Stay within the document's requirements. A defect the work under review introduces sends that
+    task back (`revision_needed`), never into the spec; an older problem is a side finding
+    (`create_task` with no loop, naming `requirement_ids` and `spec_document`).
 
     Args:
         path: The document, e.g. `spec/changes/<name>/spec.json`.
         op: One of
-            `add_task` — a fix the product needs to meet a criterion; `task` is
-              `{key, title, description, requirements: [<requirement key>], depends_on?, files?}`.
-              It joins the flow at once and the implementer picks it up.
+            `add_task` — work the document lacks; `task` is `{key, title, description,
+              requirements: [<requirement key>], depends_on?, files?, builder?}`. Once in, it
+              joins the running build (or waits for the next) and is handed out like any other.
+            `add_requirement` — proposals only; `requirement` its key, `change` is
+              `{statement, modal, rationale?}`.
             `add_criterion` — a check the document lacks; `requirement` is its requirement key,
               `criterion` its new key, `change` is `{given, when, then, how_to_check?, checked_by?}`.
             `change_criterion` — `criterion` and the fields to change in `change`.
             `remove_criterion` — `criterion`.
-          A change or removal of a criterion means its requirement cannot be verified until the
-          operator has reviewed it. Do not use it to make work pass.
+          A change or removal of a criterion holds its requirement unverifiable until reviewed.
         reason: What you found and how — what you ran and what it showed.
         how_to_check: How somebody else checks the amendment holds (a command, a click path).
         criterion, requirement, task, change: As the op needs them.
 
-    Returns the amendment's `id`, `op`, `target` and, for `add_task`, `task_created`.
+    Returns the amendment's `id`, `op`, `target`, and `task_created` for an applied `add_task`
+    or the `state` of a proposal, which waits for the operator.
     """
     return _hub_request(
         "POST",
@@ -5559,8 +5685,9 @@ def list_evidence(
     Args:
         identifier: Narrow to one requirement, as `FR-1`.
         document: Only needed when the same identifier exists in more than one document.
-        review_state: Narrow to `awaiting`, `accepted` or `rejected`. `awaiting` is what is waiting
-            on somebody.
+        review_state: Narrow to `awaiting`, `accepted`, `rejected` or `held`. `awaiting` is what is
+            waiting on somebody; `held` is a piece a send-back did not name as failing, which counts
+            for nothing until it is recorded again.
 
     Returns `{"evidence": [...]}`.
     """

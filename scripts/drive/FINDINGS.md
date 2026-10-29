@@ -40098,7 +40098,7 @@ Cause (verified): `GapLines` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:20-
 
 ## F1016 (B) -- an operator's "nothing merges" (Main branch cleared) is silently undone the next time the folder is opened: the Hub re-adopts `master`, records no settings change, and drains the approved work that was waiting
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, inline probe after `scripts/drive/s1023_pj_api.py branch`).
+**Status:** fixed 2026-10-27 (slice A: a cleared main branch survives reopen and the Hub's own adoption is a settings event; test_project_main_branch_reopen); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Projects row; scratch Hub :8116, profile pj1023, proj-19b3a5f0a902, inline probe after `scripts/drive/s1023_pj_api.py branch`).
 **Source:** drive
 **Theme:** Projects
 **Ready:** yes
@@ -40233,7 +40233,7 @@ Settings -> Delete project... -> type the name -> Enter. `DELETE` 204, the priva
 
 ## F1023 (C) -- rebinding an agent to a runner of another CLI resumes the conversation's old provider session on the new CLI: Copilot starts over with a notice, Claude fails the turn twice ("No conversation found with session ID") before the queue drops the session and silently starts a fresh one
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_rebind.py`, Chromium `scripts/drive/s1023_rm_ui2.py`, shot `testbed/ui-judge/s1023-rm/140238/13_conversation_after_cli_rebind.png`).
+**Status:** fixed 2026-10-27 (slice J, rebinding-an-agents-runner-starts-clean: a session is resumed only by the CLI that created it (migration 0148); test_rebinding_an_agents_runner_starts_clean); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_rebind.py`, Chromium `scripts/drive/s1023_rm_ui2.py`, shot `testbed/ui-judge/s1023-rm/140238/13_conversation_after_cli_rebind.png`).
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
@@ -40261,7 +40261,7 @@ Cause (verified): the agent PATCH changes `runner_id` and leaves every conversat
 
 ## F1024 (C) -- a conversation's per-run model survives the agent's rebind to another CLI and is handed to it as is: Copilot was launched with `--model haiku`, ran `claude-sonnet-5` on a premium request, and the Hub recorded the run as model `haiku`
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_turn.py` then `scripts/drive/s1023_rm_rebind.py`).
+**Status:** fixed 2026-10-27 (slice J: a foreign stored model is withheld and the recorded model is what ran; same test file); opened 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Runners & models row; scratch Hub :8117, profile rm1023, proj-8717fc708877, `scripts/drive/s1023_rm_turn.py` then `scripts/drive/s1023_rm_rebind.py`).
 **Source:** drive
 **Theme:** Runners & models
 **Ready:** yes
@@ -40328,7 +40328,7 @@ Cause (verified): the sentence is a constant (`hub/hub/api/v1/agents.py:3449-345
 
 ## F1027 (C) -- one Escape on the Add-agent dialog's open Provider list closes the whole dialog and throws away the typed name; the list takes no arrow keys
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_layers.py popover`, shot `testbed/ui-judge/s1023-kb/layers_add_agent_provider_open.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the Provider list is the `MenuSelect` the Vault dialogs use (arrows and Enter pick; Escape closes only the list and focus stays on Provider). Test: `the Provider list is one layer (F1027)` in `agentCreateDialogFocusRestore.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_layers.py popover`, shot `testbed/ui-judge/s1023-kb/layers_add_agent_provider_open.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40344,7 +40344,7 @@ Cause (verified): `ProviderPicker` (`hub/ui/src/components/agents/AgentCreateDia
 
 ## F1028 (C) -- Ctrl+K over an open dialog or the task drawer: the palette opens on top, but the first Tab moves focus into the dialog behind it, and typing goes into a field the operator cannot see
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_palette_over.py`, shots `testbed/ui-judge/s1023-kb/palette_over_add_agent.png`, `palette_over_task_drawer.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): `useDialogFocus` stands down on Tab when focus is inside a dialog that does not contain its panel, and `useModalLayer` lets the command palette take a place in the layer stack. Tests: `useDialogFocus.test.tsx` (`F1028`). The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_palette_over.py`, shots `testbed/ui-judge/s1023-kb/palette_over_add_agent.png`, `palette_over_task_drawer.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40362,7 +40362,7 @@ Cause (verified): `CommandPalette` (`hub/ui/src/components/palette/CommandPalett
 
 ## F1029 (C) -- the Vault's Add and Vault storage dialogs drop keyboard focus to `<body>` on every close: Escape, Cancel and the X alike
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_dialogs.py vault`, shots `testbed/ui-judge/s1023-kb/dlg_vault-add_open.png`, `dlg_vault-storage_open.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the shared `DialogContent` reads what had focus when it opened and restores it on close (Radix had no Trigger to restore to). Test: `returns focus to %s after closing its dialog` in `vaultTab.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_dialogs.py vault`, shots `testbed/ui-judge/s1023-kb/dlg_vault-add_open.png`, `dlg_vault-storage_open.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40378,7 +40378,7 @@ Cause (verified): both are controlled Radix dialogs with no `DialogTrigger`: `Va
 
 ## F1030 (C) -- in the task drawer, Escape on the inline "Delete this task?" confirm closes the whole drawer, not just the confirm
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle at 1440 and 760 px, `scripts/drive/s1023_kb_tasks.py`, shot `testbed/ui-judge/s1023-kb/task_delete_confirm_1440.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the delete confirm claims Escape with `preventDefault`, cancels itself and returns focus to Delete; the second Escape closes the drawer. Test: `one Escape closes one layer of the drawer (F1030)` in `taskDetailDrawer.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle at 1440 and 760 px, `scripts/drive/s1023_kb_tasks.py`, shot `testbed/ui-judge/s1023-kb/task_delete_confirm_1440.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40394,7 +40394,7 @@ Cause (verified): the confirm (`hub/ui/src/components/tasks/TaskDetailDrawer.tsx
 
 ## F1031 (C) -- a task can be renamed only with a mouse: the drawer's title is a click-only heading, and after Enter or Escape in the title field focus falls to `<body>`
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tasks.py`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the drawer title is a heading holding a `Rename` button (a Tab stop, Enter opens the input), and focus returns to it after save or Escape. Tests: `renaming a task from the keyboard (F1031)` in `taskDetailDrawer.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tasks.py`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40410,7 +40410,7 @@ Cause (verified): `TaskDetailDrawer.tsx:491-502` is `<h2 ... title="Click to ren
 
 ## F1032 (C) -- the pane resizers are tab stops with no visible focus: the line meant to light up on focus is pinned to its resting colour by an inline style
 
-**Status:** open 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tabwalk.py`, `s1023_kb_rings.py`, shots `testbed/ui-judge/s1023-kb/ring_light_pane-resizer.png`, `ring_dark_pane-resizer.png`).
+**Status:** fixed in code 2026-10-27 (Tier 0, built with slice I): the resizer line's resting colour is a class (`bg-[var(--border-region)]`), so the `--ring` focus and hover colours win. Test: `draws its line from classes` in `PaneResizer.test.tsx`. The browser re-drive (`scripts/drive/s1023_kb_*.py`) is still to be run against the rebuilt bundle. Found 2026-10-23. Found by the day sweep `sweep-projects-sweep` (Keyboard & dialogs row; scratch Hub :8118, profile kb1023, proj-f7897cfb459c, Chromium against the served bundle, `scripts/drive/s1023_kb_tabwalk.py`, `s1023_kb_rings.py`, shots `testbed/ui-judge/s1023-kb/ring_light_pane-resizer.png`, `ring_dark_pane-resizer.png`).
 **Source:** drive
 **Theme:** Keyboard & dialogs
 **Ready:** yes
@@ -40428,7 +40428,7 @@ Cause (verified): `hub/ui/src/components/layout/PaneResizer.tsx:139-160` sets `f
 
 ## F1038 (B) -- removing a task worktree that holds a `node_modules` junction empties the main checkout's `node_modules`: `git worktree remove --force` follows the junction
 
-**Status:** open 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks.
+**Status:** fixed 2026-10-27 (slice A, worktrees-never-destroy-or-strand-anything: every removal unlinks links first, the Hub links nested node_modules itself with a junction fallback; tests test_worktree_removal_links, test_dependency_links_fall_back_to_junctions); opened 2026-10-23. Found while building `agentweave-calls-you-with-its-own-sound` interactively: `hub/ui/node_modules` was emptied twice in 20 minutes (20:36 and 20:51) while the `:8000` Hub ran this repo's flow tasks. **Recurred 2026-10-27 05:44** on `:8000`: the main checkout's `hub/ui/node_modules` was found empty with that mtime (T4's merge and worktree removal); restored with `npm ci`. Slice A (`worktrees-never-destroy-or-strand-anything`) is being built in Wave 0.
 **Source:** drive
 **Theme:** Worktrees
 **Ready:** yes
@@ -40506,6 +40506,339 @@ Recorded in the operator's words only. Before any work, ask what is to be ordere
 
 Seen on the operator's `:8000` Hub. Not yet looked at: which notices they are, what raises them, and whether each should carry an action, clear itself when its cause ends, or be dismissable. Start by asking the operator for a screenshot or by reading the Overview's notice sources read-only.
 
+## F1047 (A) -- input queued into an archived conversation wedges the agent's whole queue
+
+**Status:** fixed 2026-10-27 (Tier 0): the scheduler holds input whose conversation no turn can start in, records why and the repair on it ("conversation … is archived. Unarchive it to deliver this input, or withdraw it"), and runs the agent's other conversations; Unarchive now schedules the agent, so the named repair delivers; a roadmap's next-slice turn opens a new conversation when the one it was asked from is no longer open. Tests: `hub/tests/test_input_in_a_closed_conversation_holds_nothing_else.py`, `test_spec_roadmaps.py::test_a_slice_whose_conversation_was_archived_is_drafted_in_a_new_one`. Raised by the operator ("I've written a checkpoint for architect but it seems stuck … Never started a turn"); confirmed on `:8000` read-only.
+**Source:** drive
+**Theme:** Queue
+**Ready:** yes
+**Tier:** 0
+
+On `:8000`, 2026-10-27: approving slice B of the "Flows that do not stall" roadmap with `draft_next_slice` (22:57 on 10-26) recorded the slice author's conversation `conv-a2c7eee14525`, which the operator had archived at 22:14. When the slice's last task was approved (05:44:45) `slice_drafting._queue_if_built` queued the drafting turn into it, unchecked. The entry was the Architect's queue head, and `turn_scheduler._attempt_turn`'s "conversation is unavailable" early return ended every pass on it without recording a reason, counting an attempt or giving up -- so the checkpoint successor (06:40, auto-continue on) and the operator's own message (06:46), in open conversations, sat `queued` with 0 attempts and no reason, and nothing told anyone why. The archive route's own refusal ("nothing delivers into an archived conversation") guards only input queued *before* the archive. The repair the reason would have named, Unarchive, did not re-schedule the agent either. The other early return of the same shape ("queued entry has no conversation") is held the same way.
+
+## F1048 (A) -- a stall the mender gave up on is raised again on the next firing, and the mender is woken again: 30 turns overnight on one unchanged situation
+
+**Status:** fixed 2026-10-27 (Tier 0): `stalls.record` counts a report on the latest stall of its key when that one ended `gave_up` with the same reason, and wakes no one; a changed reason opens a new stall. Tests: `test_a_stall_given_up_on_is_not_raised_again_while_its_reason_holds` and `…_raised_again_once_its_reason_changes` (`hub/tests/test_a_stalled_project_wakes_the_mender.py`). Found reading `:8000` read-only after the operator said "it seems that the mender had a lot of problems this night".
+**Source:** drive
+**Theme:** Mender
+**Ready:** yes
+**Tier:** 0
+
+The night of 10-26/27 (AgentWeave project): 40 stalls, 42 mender runs, all Opus, 15.2M tokens, about $15.9 API-equivalent. 30 of the 40 were `review_unstaffed:task-8618731d065d`, one every 5 minutes from 00:44 to 03:16, all with the same reason text ("Approval of task-8618731d065d … waits on you: its checks fail on main too …"), and every one ended `gave_up` with the same diagnosis: the operator has to land it with an override, or master has to be fixed first. Each also asked the operator the same blocking question, 27 in all, none answered (4-minute waits while the operator slept). The cause: `stalls.record` (`hub/hub/stalls.py:190-224`) counts again only an *open* stall with the key. A stall ended `gave_up` matches nothing, so the next firing's `stalls.report` (`scheduler.py:4331`, every tick of the loop's job) opens a new one and `wake` sends the mender again, though nothing has changed. `gave_up` means "this is the operator's now", so the same key with the same reason should be counted on the stall that gave up (`seen_count`, `last_seen_at`) and not wake anyone. A changed reason is a new situation and should open a new stall; at 03:25 the text changed and the mender fixed it in one turn. **Test:** in the stall tests: record → end `gave_up` → record with the same key and text creates no stall and wakes nothing; with a different text, it does.
+
+## F1049 (B) -- `loop_stalled` fires in the seconds between a task finishing and the flow handing it on
+
+**Status:** fixed 2026-10-27 (Tier 1, slice `the-mender-wakes-only-for-real-stalls`): `decide_firing`'s fresh-review arm records a completed task whose author's turn is still running as in flight, not deferred, so the firing is not a stall; the end of that turn requests the firing that offers the review, and a turn that never ends stays the sweep's (`dead_run`, `no_progress`). Not a timer or a second sighting. Tests: `hub/tests/test_the_mender_wakes_only_for_real_stalls.py`, `test_review_waits_for_the_authors_turn.py`. Same read of `:8000`; the night-after check (no `loop_stalled` within 10 s after a `completed` transition) is the operator's.
+**Source:** drive
+**Theme:** Mender
+**Ready:** yes
+**Tier:** 1
+
+All 6 `loop_stalled` stalls that night were false alarms of one shape. A flow's last claimable task reached `completed`, and the firing in the next ~3 seconds found "no claimable task" or "awaiting a prerequisite's approval" (`scheduler.py:4405-4412`) before the flow moved the task to `under_review` and started the review. The mender then read the situation, found the review running, changed nothing and ended `fixed` (23:42, 23:53, 00:15, 04:20, 04:53, 05:24). Each is one Opus turn spent finding nothing. A completed task that is about to be handed to review is the flow working. Either a stall should need to be seen on a second firing before it wakes the mender, or a just-completed task awaiting its review dispatch should not count as a stall.
+
+## F1050 (C) -- a `stuck_task` stall for a task that no longer exists stays open forever
+
+**Status:** fixed 2026-10-27 (Tier 0): each sweep ends an open `stuck_task` stall whose task is gone or no longer `in_progress` (`stalls._end_stuck_task_stalls_that_moved`). Test: `test_a_stuck_task_stall_ends_once_its_task_is_gone_or_moved`. Same read of `:8000`.
+**Source:** drive
+**Theme:** Mender
+**Ready:** yes
+**Tier:** 0
+
+`stall-119d728f8da6` (`stuck_task:task-ca661c1265b8`, "Flaky: test_the_continuation_uses_the_remaining_deadline …") has been open since 10-25 21:32, was seen 211 times, and was last seen 10-26 18:35. The task row no longer exists, so the sweep has stopped seeing it (`stalls.py:701-716` reads only existing `in_progress` tasks), but nothing ends the stall: `resolve_task` runs on transitions, and deleting a task goes through none. The stall shows as open, with an open mender conversation, about nothing. Like the `dead_run` fix in F1043, the sweep should end an open `stuck_task` stall whose task is gone or no longer `in_progress`.
+
+## F1051 (B) -- the newest integration row is chosen by timestamp alone, and one approval writes several rows with the same timestamp
+
+**Status:** fixed 2026-10-27 (Tier 0, built with slice I): `_latest_integrations_by_task` orders by `created_at` desc, then the outcome that matters (`failed`, then `merged`, then `skipped`), then insertion (`task_integrations.rowid`), so a tie cannot be left to SQLite. Tests: `hub/tests/test_the_newest_integration_is_decided_without_a_tie.py` (merged before or after skipped both report `merged`; a failure is not hidden by a merge; equal rows resolve to the last inserted). Found while drafting slice I (`the-apps-other-surfaces-make-sense`), confirmed on `:8000` read-only.
+**Source:** code
+**Theme:** Integration
+**Ready:** yes
+**Tier:** 0
+
+`_latest_integrations_by_task` (`hub/hub/api/v1/tasks.py:557-578`) orders by `(task_id, created_at desc)` and keeps the first row per task. One approval can write more than one `task_integrations` row in the same transaction with an identical `created_at`: on `:8000`, task-8618731d065d has `merged` and `skipped` ("09617d3b6920 is already in master") both at `2026-10-27 03:39:29.548442`, and 26 task/timestamp pairs tie. Which row wins is then up to SQLite, so a task that merged can read "approved but not merged" on the Overview and in its drawer (part of what F1045 shows). **Expected:** the newest is decided by an order that cannot tie (the row's insertion sequence, or the outcome that matters for the approval: a `merged` row in the same approval wins over a `skipped` one). **Test:** two rows for one task with the same `created_at`, `merged` inserted before `skipped`: the route reports `merged`.
+
+## F1052 (C) -- approval drops a declared task whose requirements a hand-made task already serves, even when it is different work
+
+**Status:** open 2026-10-27. Found approving slice F (`the-spec-page-redesigned`) on `:8000`.
+**Source:** drive
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+`spec_tasks.materialise` (`hub/hub/spec_tasks.py:398-405`) skips a declared task when every requirement it names is already served by a hand-made task, and approval reports it as `already_served`. Slice F declares two tasks, `mock` and `wire`, over the same twelve requirements; the mock was done on 2026-10-26 as hand-made task-dadec899cc91 linked to all twelve, so approving F on 2026-10-27 created nothing (`approval_report`: `created: []`, `already_served: [mock, wire]`). The wiring work is not on the board, and nothing but the report says so. The rule is right for the task a hand-made task *is* (the mock), wrong for a different declared task that happens to serve the same requirements. **Expected:** a declared task is treated as served only when a hand-made task is matched to it (the same key, or a link the operator made), not when the requirement sets merely overlap; the report says which hand-made task served which entry. **Test:** a document with two declared tasks over the same requirements and one hand-made task linked to all of them: approval creates the second.
+
+## F1053 (C) -- every press of Check starts the vault's spec check, a model run, even for unchanged or blocked content
+
+**Status:** fixed 2026-10-27 (Tier 0): the route starts the check only for a document with no blocking gap whose content version the newest firing (not a failed one) has not recorded in its subject; the firing now records `content_version` (`hub/tests/test_check_starts_the_vault_check_once_per_version.py`).
+**Source:** code
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+`POST /documents/check` (`hub/hub/api/v1/spec.py:3182-3187`) schedules `vault_spec_check.check_in_background` on every call. The old propose started it only after a successful move. Check is meant to be pressed freely while an agent edits, and on `:8000` the `spec-vault-check` Manager job is enabled (Sonnet), so each press spawns a model run, including presses on a document with blocking gaps and repeated presses on content that was already checked (nothing in `vault_spec_check.py` compares the content to the newest firing's). **Expected:** the check starts only for a document with no blocking gaps, and not again for a content version whose newest firing already checked it. **Test:** Check twice on unchanged ready content starts one check; Check on a document with a blocking gap starts none; Check after an edit starts one.
+
+## F1054 (C) -- a flake the task itself introduces lands with the Hub's automatic override
+
+**Status:** won't fix 2026-10-28 -- by design. The operator decided: yes, a flake the task itself introduces still gets the Hub's automatic override (the fix task M files keeps it visible). Found by the review of slice M (`a-red-main-does-not-hold-the-night`), adversarial run.
+**Source:** code
+**Theme:** Checks
+**Ready:** no -- needs a decision on how much evidence of flakiness on main is required
+**Tier:** 1
+
+Slice M treats a failed test id that passes when rerun on its own as a flake, lands the approval with the Hub's recorded override, and files a fix task, without asking main (its FR-2). The reviewer changed `lib.py` (not a test file, so the touched-file rule does not fire) so that `test_lib.py::test_ok` failed once and then passed on the serial rerun: approval returned 200 with "passed when rerun on its own" and a fix task blamed the flake. A flake the task introduced through code it changed is the task's own defect. **Options:** require the id to have flaked before on main (the flaky-test records already kept, `flaky_tests.py`), or rerun the id on main's tree as well and count it a flake only when it is unstable there too; or treat a flake as the task's own when any file the task changed is imported by the test (costlier to compute). Not fixed in M: the operator decides.
+
+## F1055 (C) -- the Hub's acceptance-drive rule and its test-only-task rule cannot both be met: `no_acceptance_drive` asks for a first task every other task waits on, and `test_only_task` says that task fails the project's checks at its own approval
+
+**Status:** open 2026-10-28. Found authoring slice H's candidate (`every-same-file-overlap-reaches-the-operator`, spdoc-19cff1fe73b3) on :8000.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** no -- needs a decision on which shape the Hub recommends
+**Tier:** 1
+
+A first task holding only the three repro tests, with the two fix tasks depending on it, saved with `test_only_task` ("edits only tests and ... depends on it, so it is red until they land and fails the project's checks at approval; put the failing test and the fix that turns it green in one task", `spec_completeness.py:520-546`). Folding each test into its fix task, as that warning asks, then drew `no_acceptance_drive` at approval ("the first task ... is not an acceptance drive every other task waits on", `spec_completeness.py:~395-415`). Every Tier 1/2 document written to CLAUDE.md's "acceptance drive first" rule hits one or the other, and with slice L's checks-before-review the first shape is sent back by the checks. **Options:** count a task whose description and files put its test first as the drive (drop `no_acceptance_drive` when every task carries a test path), or exempt a drive task from the approval checks until its dependents land. Seam: Spec documents x Worktrees & integration (checks at approval).
+
+## F1056 (B) -- a build can land only on `main` or `nowhere`, and on a project whose checkout the Hub runs from, landing anywhere but `master` means switching that checkout's branch
+
+**Status:** open 2026-10-28. Found preparing slice H (`the-measured-re-run`, FR-4 `lands-off-master`) on :8000.
+**Source:** code
+**Theme:** Worktrees & integration
+**Ready:** no -- design gap between slice D (D8: "A named branch is not offered") and slice H (FR-4)
+**Tier:** 1
+
+Slice H requires each build to land its approved work on its own branch cut from the base commit. `builds.LANDINGS` is `("main", "nowhere")` (`hub/hub/builds.py:47-49`), and integration merges into the project's own checkout and refuses unless that checkout is on the target branch (`task_integration.py:75-79`, `checkout_obstacle` :760). So the only way to land a build off `master` is to point the project's main branch elsewhere and switch the checkout -- which for this repository is the checkout :8000 serves its code and UI bundle from. H therefore runs with `landing: nowhere` and assembles each build's branch afterwards from the task branches, which skips slice E's merge queue. **Expected:** a build may name a landing branch, created from its base commit and merged into in a worktree of its own, never in the project's checkout. Seam: Worktrees & integration x builds.
+
+## F1057 (C) -- the build record and the project view lack the figures a measured comparison needs: no base commit, no landing branch, no runs or models per build, no list of runs in a window, no per-task wall time
+
+**Status:** open 2026-10-28. Found writing slice H's acceptance drive (`scripts/drive/measured_rerun_check.py`) against :8000.
+**Source:** code
+**Theme:** Accounting & allowance
+**Ready:** yes
+**Tier:** 1
+
+H's FR-2/FR-3/FR-10 read from the app's views. What no route answers today (the drive falls back to approximations, marked "from a query"): (1) a build's base commit -- `builds.view` has no field; (2) its landing branch and tip (only `main`/`nowhere`, F1056); (3) the runs and their models per build -- no route ties a run or turn to a build, and `/accounting` `recent_turns` is a capped project-wide list; (4) the runs in a time window (no list-runs route); (5) real defects, escaped defects and operator actions per build; (6) FR-7's approval hours held by a failure not the task's, the mender's model, mender wakes with no stalled work and expired mender questions; (7) a "judged again" flag on held evidence; (8) wall time and cost per task (`spend.by_task` is cost only). Also: for flows that predate builds the project view's `wall` is 0 in every part (both H baselines, `GET /stats` groups.spec rows for loop-df5f74816122 and loop-cee87801ae6a), so the baselines' wall-time split comes only from queries. Seam: Accounting x builds x the spec page's build panel.
+
+## F1058 (C) -- a document can be built once: a second build covers only its open tasks, so after one build approves them the next has nothing to build, and a re-run needs a copy of the document
+
+**Status:** open 2026-10-28. Found preparing slice H, whose FR-2 builds one candidate document twice (Fast, then Gated).
+**Source:** code
+**Theme:** Spec documents
+**Ready:** no -- design gap: H assumes a re-build; D defines a build over the document's open tasks
+**Tier:** 1
+
+`POST /documents/build` covers the document's tasks whose status is not terminal (`hub/hub/api/v1/spec.py:3479-3494`, then `builds.cover_tasks`); a build whose every task is approved or rejected has finished (`builds.finish_if_done`). After the Fast build approves the candidate's three tasks, a Gated build of the same document would cover none. H's Gated build therefore runs on a twin document with the same payload (`spec/changes/every-same-file-overlap-reaches-the-operator-at-gated`, spdoc on :8000), and `measured_rerun_check.py --gated-document` reads its builds beside the Fast one's. **Expected (if re-building is wanted):** a build may re-run a document from its base commit with fresh tasks, its earlier tasks kept as the earlier build's record. Seam: Spec documents x builds.
+
+## F1059 (B) -- inside a flow, a builder's completion is recorded without waiting for the fast checks: two flow tasks completed in ~0.4 s and their first check run started 5-20 s afterwards
+
+**Status:** fixed 2026-10-28 in b513303 (merge 4aebe4a) (Tier 0, slice L's own defect; a test failing before the fix, then the fix). Found by the scoped drive of slices L/M/J (scratch Hub :8031, profile drivelmj, project aw-drive-lmj, Haiku runners).
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+Outside a flow the fast check ran before the completion was recorded (task-7973: run 09:20:41, completed 09:20:51; task-222e: run 09:21:53.9, completed 09:21:54.5). In the flow, `shout` (task-0356) completed 09:33:06.67 with its first run chk-f272e33e44ac starting 09:33:11.18, and `title_case` (task-e0e7) completed 09:34:17.3 with chk-7fb9fec82c6e starting 09:34:37.6; the Hub-filed fix task (task-a8340) in the same flow did get its run first. A fast-check failure on those tasks would have reached `completed` and been caught only after. Evidence: `task_check_runs.started_at` vs `task_transitions.created_at`, read-only, and the agents' update_task call times. Path: `api/v1/tasks.py:1947` -> `run_fast_checks_before_completion` -> `project_checks.fast_checks_at_completion` (silent `return None` exits). Area: Worktrees & integration (project checks) x Flows & review.
+
+## F1060 (B) -- a re-completion of unchanged work is refused with the earlier run's output and never says the work is unchanged or which checkout is checked; the builder, editing its agent worktree, retried ~10 times and decided the checks were a "stale cached result"
+
+**Status:** fixed 2026-10-28 in b513303 (merge 4aebe4a) (Tier 0, slice L's own defect; a test failing before the fix, then the fix). Found by the scoped drive of slices L/M/J (:8031, aw-drive-lmj).
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+Task-222e was sent back with origin `checks`. The next builder turn was an empty-queue flow firing with no task checkout bound; it edited `.agentweave/worktrees/dev` instead of `.agentweave/tasks/task-222e...`, then called `update_task(completed)` about ten times, each answered 409 "check unit failed on b872798b33c5 ... check run chk-f3ef5307ba17" (a non-fast check, quoted from the earlier run). The agent's words: "The check system seems to be showing a stale cached result." Refusing unchanged work with its recorded verdict is by design (`fast_checks_at_completion` docstring); the refusal must say the work is unchanged since that run and where the task's checkout is. Area: Worktrees & integration x Runs.
+
+## F1061 (C) -- returning a task to its builder after its own check failure neither wakes nor tells the builder
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices L/M/J (:8031, aw-drive-lmj).
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 1
+
+Task-222e went to `revision_needed` (origin `checks`, note "the project's checks failed on check run chk-f3ef5307ba17" with the output) at 09:26:57; no builder turn and no queue entry followed. It was picked up only because the tester fired the flow at 09:27:58 and the builder's empty-queue firing found it. Outside a flow nothing would pick it up. Slice L does not promise a wake; the send-back is otherwise silent. Area: Worktrees & integration x Inbound queue.
+
+## F1062 (D) -- the checks' return of a task to its builder is recorded as `actor_kind='operator'`; only `origin='checks'` says otherwise
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices L/M/J (:8031): `task_transitions` sequence 5 of task-222e, `actor_kind='operator'`, `origin='checks'`. Whether the task's history names the checks on screen (`history-names-the-checks`) was not driven.
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+Drive record (what held, 16 Haiku turns + 2 Copilot-stub turns): fast-check validation (a fast check over 120 s is 422 with the reason); completion refused on an uncommitted ruff failure with the check, merged sha, run id and output, after the Hub snapshotted the agent's uncommitted work; one run per work; review refused 409 `checks_pending` while a slow check ran; own failure sent back with no review; reviews staged 3 s and 6 s after checks passed (the minute held); M's red-main flow landed with `override_by='hub'` and a named reason, one critical fix task filed, staffed at once, landed, and the next check ran on the fixed main; an assigned task outside a flow started in under 1 s; J's rebind claude -> copilot (stub) -> claude started a new session at each crossing with one legible diagnostic, kept the session on a same-runner turn, and usage named the model. Not reached: all UI criteria, Codex, a real Copilot turn, the 120 s budget, the hub-ui check, migration backfills, M's setting-off behaviour live.
+
+## F1063 (B) -- at Fast a builder's approval is refused because its evidence is unjudged, so "Fast approves without a reviewer" never fires
+
+**Status:** fixed 2026-10-28 in 2d7ed79 (merge 12050fd) (Tier 0, slice D's own defect; a test failing before the fix, then the fix). Found by the scoped drive of slices D/D2/E (scratch Hub :8032, profile drivedde, project aw-drive-dde, Haiku runners).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+At a Fast build the builder completed its task (evidence `awaiting`) and called `update_task(approved)`: 409 "This task's work has been recorded and nobody has judged it: FR-5 at 4b5ac3a5b3db. Approving now would record that the work is good and merge none of it, because only accepted evidence is merged. To land it, accept the evidence, or grant an agent the capability to accept it...". A builder cannot accept its own evidence; the operator's approval accepted it in the same act ("Accepted with the approval of task-..."). Slice D's D4 promises completed -> approved at Fast for the builder, the lead and the flow. The flow's own Fast approval after checks pass was not driven. Area: Tasks x Requirements, evidence & coverage.
+
+## F1064 (B) -- the Hub's own batched landings raise "main moved" notices, and join an open one, because their integration rows carry no merge sha
+
+**Status:** fixed 2026-10-28 in bd55d7a (merge 139f6d5) (Tier 0, slices D2/E's own defect; a test failing before the fix, then the fix). Found by the scoped drive of slices D/D2/E (:8032).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Every `task_integrations` row the batch wrote had `merged_sha = NULL`, so the main watch could not tell the Hub's "Integrate approved work..." merges from a hand commit: after the first notice was marked seen, a batch of Hub merges alone produced `mnot-9c494088cdc7`, and the genuine notice (a hand commit) absorbed the Hub's merges as its list grew; `main_moved` events at 09:25:26, 09:30:57, 09:43:28. The operator is notified after every landing. Area: Worktrees & integration x Logs, events & SSE.
+
+## F1065 (B) -- a "no reviewer free" stall names agents outside the build's reviewer pool as "running a turn" when they are not running
+
+**Status:** fixed 2026-10-28 in 2d7ed79 (merge 12050fd) (Tier 0, slice D; a test failing before the fix, then the fix). Found by the scoped drive of slices D/D2/E (:8032).
+**Source:** drive
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+`review_unstaffed` at 09:24:40 with reviewers `[qa]`: "dev2 is running a turn; lead is running a turn; qa is booked for task-471e79841cd2"; no dev2 or lead run was active. `scheduler._rung_3_clause_text`'s fallback label is applied to out-of-pool agents. Area: Flows & review.
+
+## F1066 (C) -- a resubmission without `roadmap` silently unlinks a document from its roadmap slice
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices D/D2/E (:8032).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+The lead's first `submit_spec_document` carried the roadmap link; its third and fourth resubmissions dropped it and the stored document ended with no `roadmap`, with no warning. With D2's next-slice offer, an unlinked slice reads as unclaimed and can be offered again. Expected: a save that drops the link of a document that had one warns (or keeps it). Area: Spec documents.
+
+## F1067 (C) -- three small refusal/field defects in slices D and D2: `next-slice/take` with an unknown agent answers code `no_offer`; `builds/{id}/stop` ignores a `reason` body; `amendments[].task_id` stays null after an accepted add_task
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices D/D2/E (:8032).
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+`POST .../next-slice/take` naming `ghost` -> 422 `code: "no_offer"`, message "ghost is not an open agent" (wrong code for the refusal). `POST .../builds/{id}/stop {"reason": ...}` -> stored reason always "stopped by the operator". PATCH of cap and window on a `finished` build is accepted as a no-op. After an accepted add_task, the response's `task_created` names the task but `amendments[].task_id` stays null. Area: Spec documents x builds.
+
+## F1068 (C) -- on a hand-driven build each amendment decision queues a paid turn for the proposing lead, and those unbound lead runs are not counted in the build's spend
+
+**Status:** open 2026-10-28. Found by the scoped drive of slices D/D2/E (:8032). Possibly by design for the decision input; the uncounted spend is not.
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** no -- decide whether a hand build's lead is told by a turn
+**Tier:** 1
+
+Hand "starts no turn at all", but each amendment decision queued input for the lead; `run-3895d6d08359` ran ($0.006) and two more entries were queued. Runs not bound to a build task are not in the build's `spent_usd` or figures (`cost.lead` 0.0), so a cap cannot see them. Also (D): lowering a hand build's cap below its spend ($0.01 vs $0.92) changes nothing and says nothing. Area: Inbound queue x Accounting.
+
+Drive record D/D2/E (what held, 20 Haiku turns, $2.26): D -- build recorded with every setting, a second Build 409 naming the running one, legible refusals (unknown agent, inverted window, bad level), level on tasks and transitions, declared builders applied and `ghost` reported unresolved, the flow staffed only builders and reviewers, the build finished and its job disabled, `spent_usd` equal to turn_usage. D2 -- a lead's add_task proposal left the board unchanged and accepted joined the running build at its level and builder; `proposal_decided`, `amendment_stale`, decline-needs-reason, non-author 403, `draft_next_slice_retired` all legible; the next-slice offer raised and taken once; a hand commit raised a notice in ~14 s and a `reset --hard` as a rewrite in ~15 s; rigor retired. E -- four approvals answered ~1 s each, one ~60 s gather, a conflicting task removed before the check naming the file and the other task, the breaker found by one narrowed run and sent back alone with output, the rest landed, sent-back work cannot land or be re-approved, landing state on the checks route with position and seconds, a restart mid-gather lost and repeated nothing. Not reached: every UI criterion, the lead driver, Gated, budget-cap stop on a flow, lands-nowhere, M's override inside a batch, dependent-waits-for-prerequisite.
+
+## F1069 (B) -- the composer's "Open an existing specification document" picker overflows its dialog: 697 px of content in a 558 px dialog, "+ New", "Roadmap" and the phase filter cut off (Ctrl+Shift+K the same)
+
+**Status:** fixed 2026-10-28 in 9826951 (Tier 0, slice F's own defect; a test failing before the fix, then the fix). Found by the scoped browser drive of slices F/G/I (scratch Hub :8033, profile drivefgi, Haiku runners); shots `testbed/ui-judge/drive1028-fgi/open_existing.png`, `ctrlshiftk.png`.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+`spec-picker` scrollWidth/clientWidth 697/557: the corpus strip takes a wide left column and pushes the picker to the right edge. The panel's Specs tab renders the same picker cleanly (`panel_specs_tab.png`). Area: Spec documents x Keyboard & dialogs.
+
+## F1070 (B) -- the side panel at 360 px clips the spec page's approval-gaps block (scrollWidth 392 vs 360), against `side-panel-parity`
+
+**Status:** fixed 2026-10-28 in 9826951 (Tier 0, slice F; a test failing before the fix, then the fix). Found by the scoped browser drive of slices F/G/I (:8033); shot `panel_narrow.png`.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+The right edge of the gap text is lost ("at s", "whic", "th"). Area: Spec documents (side panel).
+
+## F1071 (C) -- Ctrl+Shift+K opens the spec picker on top of the command palette: two layers, two Escapes
+
+**Status:** fixed 2026-10-28 in 9826951 (Tier 0, slice F; a test failing before the fix, then the fix). Found by the scoped browser drive of slices F/G/I (:8033): dialogs `['Command palette', 'Search documents']`, then `['Command palette']`, then `[]`.
+**Source:** drive
+**Theme:** Keyboard & dialogs
+**Ready:** yes
+**Tier:** 0
+
+Area: Keyboard & dialogs.
+
+## F1072 (C) -- slice F/G/I friction: Ctrl+K's "Spec documents" is a flat list while the real picker lives on Ctrl+Shift+K; a running build's header offers "Close 1 open task as already built"; agent/model groupings put wall time under synthetic rows; Check's warnings vanish after a refused Approve; palette "settings" ranks a conversation first
+
+**Status:** open 2026-10-28. Found by the scoped browser drive of slices F/G/I (:8033); shots `run1_full.png`, `activity_Agent.png`, `activity_Model.png`, `check_after.png`, `approve_click.png`, `palette_settings.png`.
+**Source:** drive
+**Theme:** Spec documents
+**Ready:** no -- each needs a small decision
+**Tier:** 1
+
+(1) `picker-everywhere` names "the Ctrl/Cmd+K picker", but Ctrl+K's Spec documents section has no filters, order or shortcuts; the picker is Ctrl+Shift+K. (2) A running build's header shows the close-as-built strip for the task the build is working. (3) In G's by-agent and by-model groupings, wall time and checks sit under rows named "checks and wall time" and "no model recorded"; totals are right, labels mislead. (4) After Approve is refused (steps_skipped) the inline Check marks and the "N warnings" chip disappear. (5) Palette "settings" puts a conversation titled "Reply with exactly the word OK..." first; Enter opens it. Also seen, pre-existing: Add-agent and Vault Add dialogs open with focus on Close (F931 family); Overview "Running now" says no agent works while a run is parked on ask_user; the approval report quotes a raw `POST /api/v1/.../journey?path=...` to the operator (F574 family). The drive also saw F1064 independently: the Hub's own "Integrate approved work 63e3bd59605b" raised "master moved outside the Hub" on Overview (event 09:47:58).
+
+Drive record F/G/I (what held, 8 Haiku turns): F -- the header offers exactly each state's actions (writing: Check; checked: Approve with Approve-and-build; approved: Build; building: running chip, Stop, Raise cap; finished: Fold), Check never moves the phase, warnings inline and in the outline, Approve anyway carries into the build, build figures (3m3s = 1m40s building + 1m16s reviewing + 7s waiting; $0.43) match the DB, the list marks a running build, filters persist across reload, anchors and Back/Forward restore position, no literal colours and no transitions under reduced motion. G -- `turn_usage`, `/accounting`, `/stats`, `/ledger` and the Activity view agree to the micro-dollar ($0.729663); spec rows sum to the project; a build's figures read only that build; wall parts sum to the total; four groupings agree; `since` works; 12 task events gave 2 stats fetches. I -- App settings from rail and palette with notifications moved out of Project settings; decline-one and the ended-wait question row; F1027-F1032 re-drives hold (F1027 partly). Not reached: the mock server, archived header, the mender on the spec page, G's send-back/verdict/beside-failing figures, decline-all, merge-row retry, zero-project rail.
+
+## F1073 (B) -- the mender offers answers it cannot carry out and misstates the evidence gate: "Approve without the check -- operator approval overrides the partial-evidence gate", which neither it nor the operator can do
+
+**Status:** open 2026-10-28. Found by slice H's Gated build on :8000 (`build-cee80c298887`), question `q-96041fe49960`.
+**Source:** drive
+**Theme:** Questions
+**Ready:** yes
+**Tier:** 1
+
+At 13:53 the mender asked about `task-a2437846eb7f` (reviewed, approval refused on FR-3's partial evidence) and offered "Approve without the check". The operator chose it. The mender's next turn (`run-f8b79cd509be`) replied "I can't act on that answer. Approving the task isn't one of my powers", and the operator's own `PATCH status=approved` was refused 409 `gate_unsatisfied`: there is no override for an evidence gate, only for checks (`override_checks_reason`). So the option was false twice: the mender cannot approve, and nobody can approve over the gate. A mender option should be an action the Hub will take on that answer, or say plainly that the operator must act and how. At 14:27 it asked the same question again (`q-527c404bf04f`), 21 s before the operator approved. Area: Questions x Flows & review.
+
+## F1074 (B) -- at Gated, a criterion checked by the operator blocks approval until the operator records full evidence, and nothing says so before it happens or names the screen to do it on
+
+**Status:** open 2026-10-28. Found by slice H's Gated build (:8000).
+**Source:** drive
+**Theme:** Requirements, evidence & coverage
+**Ready:** no -- decide whether Gated should ask for operator checks up front (at Build) or offer them on the task when review ends
+**Tier:** 1
+
+FR-3 of the candidate had a `checked_by: operator` criterion. At Gated, QA's evidence covered it partially, and approval was refused: "record evidence that demonstrates all of it, with covers: full, and have it accepted ... or build the task at a level that does not gate them". The refusal names no screen; the route that works is the operator's `POST /project/spec/evidence` (`ev-f59cdc2a15c5` here). Starting the build said nothing about the operator check it would need. Fast approved the same task over the criterion with no question. The drive did the real check in a browser on a scratch Hub served from the build's branches. Area: Requirements, evidence & coverage x Flows & review.
+
+## F1075 (C) -- a build's checks queue two at a time, with no view of queue time, and the side-by-side suites make timing tests fail; Fast spent 70 of its 89 minutes in checks
+
+**Status:** open 2026-10-28. Found by slice H's Fast build (:8000, `build-f7c5b7855dbc`).
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** no -- decide the policy (serial checks, a per-task subset, or a slot count)
+**Tier:** 1
+
+The builder's three turns ended by 11:19. Each task's Hub suite then ran 40 to 45 min side by side (about 12 min alone). The third task's run (`chk-a6633ef823ea`, started 11:17) began its suite only at 11:50, when a slot freed. The build panel's `checks` (4214 s) counts the wait and the run together. The load made `test_a_busy_project_opens_inside_a_second` (1.009 s against 1.0) and `test_more_operator_streams_than_the_pool_holds_all_open` fail. The Hub approved over them as not the task's and opened follow-up `task-c9d09a9fd379` ($0.18, in no build's cost). Area: Worktrees & integration x Accounting & allowance.
+
+## F1076 (C) -- the mender woke on a "no progress" stall while a healthy check run was queued, called it possibly hung and recommended killing it
+
+**Status:** open 2026-10-28. Found by slice H's Fast build (:8000), stall `stall-c6e926fdf51d`, question `q-3985f03c03f5`.
+**Source:** drive
+**Theme:** Jobs & loops
+**Ready:** yes
+**Tier:** 0
+
+At 12:27 the loop had nothing moving since 11:52 because two check runs were in progress; the stall detector raised `no_progress`. The mender's question said `chk-a6633ef823ea` was "at 70 min (previous run 41 min)" and "may be hung", with "Restart checks" recommended. The run was healthy: it had waited 33 min for a slot and finished at 12:29. A loop whose tasks are in running checks is not stalled. The mender also reads a check's age from when it was queued, not from when it started. Area: Jobs & loops (mender).
+
+## F1077 (C) -- a build record's `spent_usd`, which the cap reads, leaves out the mender turns its own figures count ($0.87 vs $1.05 at Fast, $2.47 vs $2.87 at Gated)
+
+**Status:** open 2026-10-28. Found by slice H (:8000). Related to F1068.
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** no -- decide whether mender turns count toward a build's cap
+**Tier:** 1
+
+`builds[].spent_usd` = building + reviewing. The build panel's `figures.cost` and `GET /stats`'s build row add `mend`. The two disagree on one screen, and a cap cannot see mender spend. A follow-up task the build's checks opened (`task-c9d09a9fd379`) is in neither. Area: Accounting & allowance.
+
+## F1078 (C) -- a check run with failing tests that were approved over as not the task's is recorded as `passed`
+
+**Status:** open 2026-10-28. Found by slice H's Fast build (:8000), `chk-2cbb324baa52` on `task-e50d0d42e298`.
+**Source:** drive
+**Theme:** Worktrees & integration
+**Ready:** yes
+**Tier:** 0
+
+Two tests failed in the run and passed alone. The Hub classified them as flaky, approved and opened a follow-up. The run's `state` is `passed` and `figures.checks` counts 3 passed, 0 failed, so any count of failed check runs (FR-8 of slice H, the build panel) misses it. A "passed with N failures not the task's" state, or a count beside it, would keep it visible. Area: Worktrees & integration.
+
+## F1079 (C) -- slice H: numbers no view shows: a build's base commit, the per-run model, operator actions, escaped defects, mender wakes with nothing stalled, expired mender questions, and any wall split for flows before builds
+
+**Status:** open 2026-10-28. Found by slice H's comparison (`.agentweave/vault-notes/2026-10-28-the-measured-re-run.md`), whose cells marked "from a query" are these.
+**Source:** drive
+**Theme:** Accounting & allowance
+**Ready:** no -- the build view needs `base_sha` (FR-2 of slice H fails on it today); the rest are a decision on what the project view should carry
+**Tier:** 1
+
+`measured_rerun_check.py` builds-match fails only on "the build record names no base commit". The models come from `/accounting recent_turns` (latest turns only, not tied to a build). Also seen: the build's start answer reads `reviewer: null` while `reviewers: ["QA"]` (the flow's delivery reviewer, not the build's), which reads as "no reviewer". Area: Accounting & allowance x Spec documents.
 ## F1046 (C) -- a spec document's task can name its reviewer but not who builds it
 
 **Status:** open 2026-10-25. Found authoring `the-app-stays-responsive-while-agents-run`, when the operator asked to define each task to a specific agent by capability and let the rest be picked up free.

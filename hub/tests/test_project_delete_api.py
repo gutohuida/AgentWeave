@@ -24,6 +24,7 @@ from hub.db.models import (
     AIJob,
     ApiKey,
     Base,
+    Build,
     ChapterVersion,
     Charter,
     Checkpoint,
@@ -34,7 +35,9 @@ from hub.db.models import (
     EvidenceReview,
     InboundQueueEntry,
     JobRun,
+    LandingBatch,
     Loop,
+    MainNotice,
     ManagerJob,
     Message,
     PermissionRequest,
@@ -59,6 +62,7 @@ from hub.db.models import (
     TaskDependency,
     TaskDependencyReference,
     TaskIntegration,
+    TaskLanding,
     TaskRequirementLink,
     TaskRequirementReference,
     TaskTransition,
@@ -95,6 +99,9 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "task_requirement_references",
     "task_integrations",
     "task_check_runs",
+    "task_landings",
+    "landing_batches",
+    "builds",
     "spec_rigor_events",
     "spec_requirements",
     "spec_document_events",
@@ -131,6 +138,8 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "ai_jobs",
     "agent_heartbeats",
     "agent_job_deletions",
+    "builds",
+    "main_notices",
 ]
 
 
@@ -154,6 +163,19 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     session.add(Runner(id=f"runner-{tag}", project_id=project_id, name="Runner", cli="claude"))
     session.add(Agent(id=f"agent-{tag}", project_id=project_id, name=f"agent-{tag}"))
     session.add(Task(id=f"task-{tag}", project_id=project_id, title="Task"))
+    session.add(
+        Build(
+            id=f"build-{tag}",
+            project_id=project_id,
+            document_id=f"doc-{tag}",
+            state="running",
+            driver="hand",
+            level="reviewed",
+            builders=[],
+            reviewers=[],
+            landing="main",
+        )
+    )
     session.add(
         Stall(
             id=f"stall-{tag}",
@@ -458,6 +480,16 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(
+        MainNotice(
+            id=f"mnot-{tag}",
+            project_id=project_id,
+            branch="main",
+            old_tip="0" * 40,
+            new_tip="1" * 40,
+            commits=[],
+        )
+    )
+    session.add(
         TaskCheckRun(
             id=f"checkrun-{tag}",
             project_id=project_id,
@@ -469,6 +501,15 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             error="",
         )
     )
+    session.add(
+        TaskLanding(
+            id=f"landing-{tag}",
+            project_id=project_id,
+            task_id=f"task-{tag}",
+            order_key=1.0,
+        )
+    )
+    session.add(LandingBatch(id=f"batch-{tag}", project_id=project_id, base_sha="0" * 40))
     session.add(
         TaskTransition(
             id=f"transition-{tag}",

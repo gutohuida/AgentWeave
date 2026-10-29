@@ -254,10 +254,12 @@ async def test_a_refused_approval_keeps_no_acceptance(
 
 
 @pytest.mark.asyncio
-async def test_sending_back_rejects_the_tasks_evidence(
+async def test_sending_back_holds_the_tasks_evidence(
     app, auth_headers, builder, reviewer, tmp_path
 ):
-    """Criterion sendback: the notes are the author's signal of what to fix."""
+    """Criterion sendback, as K (`each-piece-of-evidence-is-judged-on-its-own`) has it: the notes
+    are the author's signal of what to fix, and a piece not named as failing is held, not rejected
+    (`test_evidence_judged_piece_by_piece.py` drives the named case)."""
     await ready(app, auth_headers, builder, tmp_path)
     task, evidence, _work = await a_task_with_awaiting_evidence(
         app, auth_headers, builder, tmp_path
@@ -272,14 +274,16 @@ async def test_sending_back_rejects_the_tasks_evidence(
 
     assert sent.status_code == 200, sent.text
     assert await reviews_of(evidence) == [
-        ("rejected", "agent", "reviewer", "feature.py prints the wrong word")
+        ("held", "agent", "reviewer", "feature.py prints the wrong word")
     ]
 
 
 @pytest.mark.asyncio
-async def test_sending_back_without_notes_still_gives_a_reason(
+async def test_the_operator_sending_back_without_notes_still_gives_a_reason(
     app, auth_headers, builder, reviewer, tmp_path
 ):
+    """The app's status menu sends a status alone; an agent's reasonless send-back is refused
+    (K, FR-3), the operator's holds the piece with a reason naming the send-back."""
     await ready(app, auth_headers, builder, tmp_path)
     task, evidence, _work = await a_task_with_awaiting_evidence(
         app, auth_headers, builder, tmp_path
@@ -287,13 +291,13 @@ async def test_sending_back_without_notes_still_gives_a_reason(
     await under_review(app, auth_headers, task)
 
     sent = await app.patch(
-        f"{AGENT_TASKS}/{task}", json={"status": "revision_needed"}, headers=reviewer
+        f"{TASKS}/{task}", json={"status": "revision_needed"}, headers=auth_headers
     )
 
     assert sent.status_code == 200, sent.text
     [(decision, _kind, actor, reason)] = await reviews_of(evidence)
-    assert (decision, actor) == ("rejected", "reviewer")
-    assert reason.strip(), reason
+    assert (decision, actor) == ("held", "operator")
+    assert task in reason, reason
 
 
 @pytest.mark.asyncio
@@ -346,37 +350,40 @@ async def test_the_operator_rejecting_an_accepted_piece_reopens_the_task(
 
 
 @pytest.mark.asyncio
-async def test_approval_with_checks_starts_a_run_on_the_evidence_the_verdict_accepts(
-    app, auth_headers, builder, reviewer, tmp_path
+async def test_approval_with_checks_lands_the_evidence_the_verdict_accepts(
+    app, auth_headers, builder, reviewer, tmp_path, monkeypatch
 ):
-    """F680: the verdict accepts the evidence inside the PATCH transaction, then the gate finds no
-    check result and schedules a run. That run must check the work the verdict just accepted; read
-    from its own session it saw no accepted evidence, started nothing, and the 409 rolled the
-    acceptance back -- so "checks are still running" while no run existed, on every retry."""
-    from hub import project_checks
+    """F680, under `approved-work-merges-in-batches`: the verdict accepts the evidence inside the
+    PATCH transaction, and approval no longer waits for a check result. The landing it queues
+    freezes the work the verdict just accepted, and the batch's one check run checks exactly that.
+    """
+    from hub import landing_queue, project_checks
 
     from .test_project_checks_run import PASS, _project, _runs
 
+    monkeypatch.setattr(landing_queue, "BATCH_GATHER_SECONDS", 3600.0)
     await ready(app, auth_headers, builder, tmp_path)
     task, evidence, work = await a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path)
     await _project([PASS])
     await under_review(app, auth_headers, task)
 
-    refused = await app.patch(
-        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
-    )
-    assert refused.status_code == 409, refused.text
-    assert refused.json()["detail"]["checks"][0]["state"] == "running"
+    try:
+        approved = await app.patch(
+            f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+        )
+        assert approved.status_code == 200, approved.text
+        assert await state_of(evidence) == "accepted"
+        await landing_queue.drain()
+    finally:
+        landing_queue.cancel_timers()
     await project_checks.drain()
-    runs = await _runs(task)
-    assert [r.state for r in runs] == ["passed"], [(r.state, r.error) for r in runs]
-    assert runs[0].target_shas == [work]
+    from hub.db.models import LandingBatch
 
-    approved = await app.patch(
-        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
-    )
-    assert approved.status_code == 200, approved.text
-    assert await state_of(evidence) == "accepted"
+    async with async_session_factory() as session:
+        [batch] = (await session.execute(select(LandingBatch))).scalars().all()
+    [checked] = [r for r in await _runs(task) if r.id == batch.check_run_id]
+    assert checked.state == "passed", (checked.state, checked.error)
+    assert checked.target_shas == [work], "the batch checked the work the verdict accepted"
     assert work in commits_on(tmp_path, "main")
 
 
@@ -464,7 +471,7 @@ async def reword_the_requirement(app, builder):
     assert reworded.status_code == 200, reworded.text
 
 
-async def verdict(task, decision):
+async def verdict(task, decision, failing=None):
     from hub import requirement_evidence
 
     async with async_session_factory() as session:
@@ -474,6 +481,7 @@ async def verdict(task, decision):
             actor=Actor(kind="agent", name="reviewer", run_id="run-verdict-r"),
             decision=decision,
             reason="ok",
+            failing=failing,
         )
         await session.commit()
     return decided
@@ -504,7 +512,8 @@ async def test_an_approval_leaves_a_piece_recorded_for_an_earlier_wording(
 async def test_sending_back_still_rejects_a_piece_for_an_earlier_wording(
     app, auth_headers, builder, reviewer, tmp_path
 ):
-    """Control: `decide` leaves rejecting a stale piece open, so the verdict does too."""
+    """Control: `decide` leaves rejecting a stale piece open, so the verdict does too -- when it
+    names the piece as failing (K); one it does not name is held."""
     from hub import requirement_evidence
 
     await ready(app, auth_headers, builder, tmp_path)
@@ -513,6 +522,6 @@ async def test_sending_back_still_rejects_a_piece_for_an_earlier_wording(
     )
     await reword_the_requirement(app, builder)
 
-    await verdict(task, requirement_evidence.REJECTED)
+    await verdict(task, requirement_evidence.REJECTED, failing={evidence: "an older wording"})
 
     assert await state_of(evidence) == "rejected"

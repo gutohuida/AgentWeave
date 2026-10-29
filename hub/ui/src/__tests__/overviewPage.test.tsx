@@ -5,6 +5,24 @@ import type { AgentSummary } from '@/api/agents'
 // @ts-expect-error Vitest runs in Node; the browser bundle never includes this test.
 import { readFileSync } from 'node:fs'
 
+// The Overview reads main notices and next-slice offers (`amendments-main-watch-and-the-next-slice`).
+const mainNotices: unknown[] = []
+const nextSliceOffers: unknown[] = []
+const markSeenMutate = vi.fn()
+const takeOfferMutate = vi.fn()
+const declineOfferMutate = vi.fn()
+vi.mock('@/api/mainNotices', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/mainNotices')>()),
+  useOpenMainNotices: () => ({ data: mainNotices, error: null }),
+  useMarkMainNoticeSeen: () => ({ mutate: markSeenMutate }),
+}))
+vi.mock('@/api/nextSlice', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/nextSlice')>()),
+  useNextSliceOffers: () => ({ data: nextSliceOffers, error: null }),
+  useTakeNextSliceOffer: () => ({ mutate: takeOfferMutate }),
+  useDeclineNextSliceOffer: () => ({ mutate: declineOfferMutate }),
+}))
+
 /** The Overview's agent list (formerly the agent health grid; re-targeted to the wired
  *  `OverviewScreen` in ui-finesse). Identity colour is on the dot, state is on the row's words. */
 
@@ -20,8 +38,13 @@ vi.mock('@/api/agents', () => ({
 vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: [] }),
   useAnswerQuestion: () => ({ mutate: vi.fn() }),
+  useDeclineQuestion: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }))
-vi.mock('@/api/tasks', () => ({ useTasks: () => ({ data: { tasks: [], total: 0, has_more: false } }) }))
+vi.mock('@/api/tasks', () => ({
+  useTasks: () => ({ data: { tasks: [], total: 0, has_more: false } }),
+  useUpdateTask: () => ({ mutate: vi.fn() }),
+  useRetryIntegration: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
   return { ...actual, useProjectConversations: () => ({ data: { conversations: [] } }) }

@@ -225,6 +225,7 @@ HUB_MCP_TOOLS = frozenset(
         "decide_evidence",
         "get_answer",
         "get_task",
+        "hand_out_task",
         "list_checkpoints",
         "list_evidence",
         "list_tasks",
@@ -252,9 +253,14 @@ HUB_MCP_TOOLS = frozenset(
         "toggle_job",
         "update_task",
         "vault_add",
+        "vault_append",
+        "vault_archive",
         "vault_map",
         "vault_read",
+        "vault_replace_file",
+        "vault_replace_passage",
         "vault_report",
+        "vault_restore",
     }
 )
 

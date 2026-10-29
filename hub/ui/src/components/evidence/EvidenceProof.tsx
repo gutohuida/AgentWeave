@@ -22,7 +22,20 @@ export function EvidenceReviews({ reviews }: { reviews: StoryReview[] }) {
       {reviews.map((review, index) => {
         const who = review.actor_kind === 'operator' ? 'you' : review.actor
         // An acceptance is the expected end and reads quietly; a rejection is what someone has to
-        // act on, so it is the one that gets a callout.
+        // act on, so it is the one that gets a callout. A held piece (K) was not named as failing
+        // when the task was sent back: not wrong, so never shown as a rejection.
+        if (review.decision === 'held') {
+          return (
+            <li key={index} className="aw-review-line tone-neutral" data-testid="evidence-review-held">
+              <Icon name="pause" size={12} aria-hidden="true" />
+              <span>
+                Held by <strong>{who}</strong>
+                {review.reason ? <> — {review.reason}</> : null} · not rejected; recorded again at the
+                next commit
+              </span>
+            </li>
+          )
+        }
         return review.decision === 'accepted' ? (
           <li key={index} className="aw-review-line tone-green">
             <Icon name="check" size={12} aria-hidden="true" />

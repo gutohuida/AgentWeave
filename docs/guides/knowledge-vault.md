@@ -59,7 +59,7 @@ fact stands, or refers it to you under **Review → Reports**.
 
 ## Checking specifications against the vault
 
-With the **spec vault check** turned on, each proposed specification is read against the vault's
+With the **spec vault check** turned on, each specification you check is read against the vault's
 facts, and a requirement that contradicts one gets a warning on the specification's health line.
 It is a warning, never a refusal. You decide.
 
@@ -73,7 +73,7 @@ settings → Manager**:
 |---|---|---|
 | **Vault distillation** | a source is added | Extracts facts with line citations, then checks them for contradictions. |
 | **Vault reports** | an agent reports an entry | Corrects, answers, or refers the report to you. |
-| **Spec vault check** | a specification is proposed | Warns about requirements that contradict vault facts. |
+| **Spec vault check** | a specification is checked | Warns about requirements that contradict vault facts. |
 | **Conversation titles** | a turn completes | Names a conversation after its first exchange. |
 
 Manager jobs are background calls. They never make an agent look busy, their spend counts towards

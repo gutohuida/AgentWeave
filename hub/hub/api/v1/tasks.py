@@ -2,11 +2,11 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
-from sqlalchemy import func, select
+from sqlalchemy import case, func, literal_column, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,11 +70,12 @@ from ...task_transition_service import (
     GateUnsatisfiedError,
     TransitionRefusedError,
     apply_transition,
-    evaluate_approval,
+    ask_approval_git_first,
     guard_entry_status,
     history_for,
     hub_written_documents,
     retry_integration,
+    run_fast_checks_before_completion,
 )
 from ...task_transitions import (
     ACTOR_OPERATOR,
@@ -561,16 +562,32 @@ async def _latest_integrations_by_task(
 
     Same shape as `_latest_heartbeats_by_agent`: one query for the whole page rather than one per
     task, ordered newest-first so the first row seen per task is the one kept.
+
+    One approval of a task with several commits writes several rows in one transaction, so they
+    share a `created_at` (F1051). The tie is broken by what the approval did, not by whichever row
+    SQLite returns first: a failure is what the operator must see, a merge means work landed, and a
+    skip ("already in master") is the least informative; rows still tied are ordered by insertion
+    (`task_integrations` has a String key, so it is a rowid table).
     """
     if not task_ids:
         return {}
+    outcome_rank = case(
+        (TaskIntegration.outcome == "failed", 0),
+        (TaskIntegration.outcome == "merged", 1),
+        else_=2,
+    )
     result = await session.execute(
         select(TaskIntegration)
         .where(
             TaskIntegration.project_id == project_id,
             TaskIntegration.task_id.in_(task_ids),
         )
-        .order_by(TaskIntegration.task_id, TaskIntegration.created_at.desc())
+        .order_by(
+            TaskIntegration.task_id,
+            TaskIntegration.created_at.desc(),
+            outcome_rank,
+            literal_column("task_integrations.rowid").desc(),
+        )
     )
     latest: dict[str, TaskIntegration] = {}
     for row in result.scalars().all():
@@ -793,7 +810,12 @@ async def create_task_for_actor(
     actor: Actor,
     session: AsyncSession,
     record_addition: bool = True,
+    before_commit: Optional[Callable[[Task], Awaitable[None]]] = None,
 ) -> TaskResponse:
+    """Create a task as *actor*. *before_commit*, a Hub-internal caller's own staging (never a
+    request's), runs on the new task before the task's commit, so what it writes lands in the same
+    commit: the Hub's fix task records `merges_branch_tip` and its dedup event this way
+    (`a-red-main-does-not-hold-the-night`)."""
     # Honor a client-supplied id when present so the MCP `create_task` tool
     # can return the same id the Hub stored. Falls back to a fresh short id
     # for clients that don't supply one (e.g. direct API users).
@@ -865,6 +887,8 @@ async def create_task_for_actor(
             ),
             source=loop_history.SOURCE_CREATE_TASK,
         )
+    if before_commit is not None:
+        await before_commit(task)
     try:
         await session.commit()
     except IntegrityError as e:
@@ -890,6 +914,12 @@ async def create_task_for_actor(
     await session.commit()
 
     await sse_manager.broadcast(project_id, "task_created", {"id": task.id, "title": body.title})
+    if task.status == "assigned" and task.loop_id is None:
+        # Created `assigned` outside any flow: started for its assignee now
+        # (`a-red-main-does-not-hold-the-night`, FR-9). The rule decides; this only asks.
+        from ... import assigned_task_start
+
+        assigned_task_start.request(task.id, created_by_run_id)
     await persist_event(
         session,
         project_id,
@@ -1366,8 +1396,11 @@ async def task_checks(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """This task's check runs, newest first (`approval-runs-the-projects-checks`). Read-only."""
-    from ... import project_checks
+    """This task's check runs, newest first (`approval-runs-the-projects-checks`), and its latest
+    landing with its batch (`approved-work-merges-in-batches`, FR the-landing-is-visible): queued
+    with its position, checking with the batch's elapsed and previous durations, held and on what,
+    landed with the commit, or sent back with the failing output. Read-only."""
+    from ... import landing_queue, project_checks
     from ...db.models import Project, TaskCheckRun
 
     task = await session.get(Task, task_id)
@@ -1391,7 +1424,51 @@ async def task_checks(
         ),
         "running": project_checks.is_running(task_id),
         "runs": [project_checks.run_view(run) for run in runs],
+        "landing": await landing_queue.view(session, task_id),
     }
+
+
+class LandHeldRequest(RequestModel):
+    """The operator's one reason for landing a batch held over failures main shares."""
+
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+@router.post("/{task_id}/landing/land")
+async def land_held_landing(
+    task_id: str,
+    body: LandHeldRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Land the batch this task's landing is held in, over failures that also fail on main, with
+    one reason for the whole batch (`approved-work-merges-in-batches`, FR-7). Operator-only: the
+    route sits on the project credential. 409 where the task's landing is not held."""
+    from ... import landing_queue
+
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project[0]:
+        raise HTTPException(status_code=404, detail="Task not found")
+    reason = body.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=422, detail="A reason is required to land over checks.")
+    landing = await landing_queue.latest_landing(session, task_id)
+    if landing is None or landing.state != landing_queue.HELD or not landing.batch_id:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Task {task_id}'s landing is not held for the operator; nothing to land.",
+        )
+    batch_id = landing.batch_id
+    await session.commit()
+    if not await landing_queue.land_held_batch(batch_id, reason):
+        raise HTTPException(
+            status_code=409,
+            detail="The batch could not be landed as it was checked (main moved); it is queued "
+            "again and is checked on the new tip.",
+        )
+    await session.commit()
+    await sse_manager.broadcast(project[0], "task_updated", {"id": task_id, "status": task.status})
+    return {"task_id": task_id, "landing": await landing_queue.view(session, task_id)}
 
 
 @router.post("/{task_id}/checks/run", status_code=202)
@@ -1433,6 +1510,10 @@ async def retry_task_integration(
     except TransitionRefusedError as exc:
         raise HTTPException(status_code=exc.http_status, detail=exc.detail) from exc
     await session.commit()
+    # Through the landing queue: merged now without checks, queued for the next batch with them.
+    from ... import landing_queue
+
+    await landing_queue.settle(project_id)
 
     view = await _integration_view(session, task_id)
     # After the commit: `persist_event` commits, so an event emitted before it would publish a
@@ -1564,6 +1645,102 @@ def _verdict_text(notes) -> Optional[str]:
     return json.dumps(notes, ensure_ascii=False)[:2000]
 
 
+#: The verdicts that send work back, and so decide its evidence piece by piece.
+_SEND_BACK_STATUSES = ("revision_needed", "rejected")
+
+
+async def _failing_pieces_for(
+    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
+) -> Optional[Dict[str, str]]:
+    """The evidence a send-back names as failing, as `{evidence_id: reason}`; None for any other move.
+
+    `each-piece-of-evidence-is-judged-on-its-own`. Refused, with nothing written: naming failing
+    pieces while approving (approval accepts every awaiting piece, so the two contradict), naming
+    them with any move but a send-back, a name that matches none of the pieces the verdict decides,
+    and an agent's send-back that names none and gives no reason while it would hold evidence --
+    a held piece then says nothing about why, and its author has nothing to fix. The operator is not
+    refused that last: the app's status menu sends a status alone, and the hold records that the
+    operator sent it back. The reason checks wait until the move is legal, so an impossible move is
+    answered by the transition map rather than by a request for a reason (F201). Who may make the
+    move at all is asked first: an author naming its own pieces is told it cannot judge its own
+    work, not that its pieces are unknown (they are not the verdict's to decide).
+    """
+    from ... import requirement_evidence
+    from ...task_transition_service import decide_move, evidence_actor
+
+    named = [(piece.piece, piece.reason) for piece in body.failing_pieces or []]
+    if (named or body.status in _SEND_BACK_STATUSES) and body.status and body.status != task.status:
+        # The same read `apply_transition` makes first; it writes nothing.
+        verdict = await decide_move(session, task, body.status, actor)
+        if verdict.refusal is not None:
+            raise verdict.refusal
+    if named and body.status == "approved":
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Approving {task.id} accepts every piece of its evidence awaiting a decision, "
+                    f"so naming {', '.join(piece for piece, _ in named)} as failing contradicts "
+                    "it. Send it back with revision_needed to reject those pieces, or approve "
+                    "without failing_pieces."
+                ),
+                "code": "approval_names_failing_pieces",
+            },
+        )
+    sending_back = (
+        body.status in _SEND_BACK_STATUSES
+        and body.status != task.status
+        and body.status in allowed_targets(task.status, actor.kind)
+    )
+    if named and body.status not in _SEND_BACK_STATUSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    "failing_pieces goes with a send-back (status revision_needed or rejected): "
+                    "it names the evidence that verdict rejects."
+                ),
+                "code": "failing_pieces_without_send_back",
+            },
+        )
+    if not sending_back:
+        return None
+    deciding = evidence_actor(actor)
+    failing: Dict[str, str] = {}
+    if named:
+        try:
+            failing = await requirement_evidence.failing_pieces_of(
+                session, task, actor=deciding, named=named
+            )
+        except requirement_evidence.EvidenceRefusedError as exc:
+            raise HTTPException(
+                status_code=exc.http_status or 422,
+                detail={"message": str(exc), "code": exc.code},
+            ) from exc
+    if (
+        body.status == "revision_needed"
+        and not failing
+        and not actor.is_operator
+        and not _verdict_text(body.notes)
+        and await requirement_evidence.verdict_pieces(
+            session, task, actor=deciding, decision=requirement_evidence.REJECTED
+        )
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Sending {task.id} back names no failing piece and gives no reason, so its "
+                    "evidence would be held with nothing to say why. Name the pieces that fail in "
+                    "failing_pieces, each with its reason, or say in notes what must change (a "
+                    "defect outside any requirement, a failing check)."
+                ),
+                "code": "send_back_needs_a_reason",
+            },
+        )
+    return failing
+
+
 async def _run_may_write_notes(
     session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
 ) -> bool:
@@ -1659,11 +1836,16 @@ async def update_task_for_actor(
                     f"notes on the task it holds; to tell the holder something, send it a message."
                 ),
             )
+    # The verdict's failing pieces, resolved and refused before any write
+    # (`each-piece-of-evidence-is-judged-on-its-own`).
+    failing_pieces = await _failing_pieces_for(session, task, body, actor)
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
     approval_report: List[Any] = []
     withdrawn_reviews: List[Dict[str, str]] = []
+    # What an agent's completion found when it waited for the fast checks, or `None`.
+    completion_checks: Any = None
     # **Before the transition, not after it** (finding F70). `_guard_reviewer_is_not_the_author`
     # refuses `-> under_review` while the task still names the agent that completed it, and
     # reassigning to a different reviewer in the same PATCH is the most natural way past it.
@@ -1756,6 +1938,13 @@ async def update_task_for_actor(
                     "asking to."
                 ),
             )
+        if body.status == "completed":
+            # The project's fast checks, on the work this completion hands to review, before the
+            # completion is recorded (`checks-run-before-anyone-reviews`, D4). Here, with nothing
+            # staged for a run actor (the operator-only fields are refused above, notes are written
+            # below), so a wait of up to two minutes never holds the database's write lock. Raises
+            # `ChecksFailedError` (409, with the checks' output) when one fails.
+            completion_checks = await run_fast_checks_before_completion(session, task, actor)
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
         # exception handler turns into 409/403. A refusal cannot leave a half-applied update behind:
         # the assignee written above is *staged*, not committed, and `get_session` closes the session
@@ -1768,8 +1957,10 @@ async def update_task_for_actor(
             body.status,
             actor,
             override_checks_reason=body.override_checks_reason,
-            # The verdict's notes are the reason its evidence decision records (vis-D4).
+            # The verdict's notes are the reason its evidence decision records (vis-D4); a
+            # send-back rejects only its failing pieces, each with its own reason, and holds the rest.
             verdict_reason=_verdict_text(body.notes),
+            failing_pieces=failing_pieces,
             # An assignee the operator wrote in this same PATCH is who holds the rework (F743).
             holder_named="assignee" in body.model_fields_set,
         )
@@ -1846,17 +2037,32 @@ async def update_task_for_actor(
                 run_id=actor.run_id,
             ),
         )
+    if "assignee" in body.model_fields_set and task.status == "assigned" and not task.loop_id:
+        # A new holder of a task already `assigned` outside a flow is started too (FR-9); the rule
+        # finds nothing to do where its turn is already queued.
+        from ... import assigned_task_start
+
+        assigned_task_start.start_after_commit(session, task.id, actor.run_id)
     task.updated = datetime.now(timezone.utc)
     # Kept as the materialised latest writer (D4 of the proposal's impact notes). The rules read the
     # append-only history instead; this stays for existing consumers and is not what governs.
     task.updated_by_run_id = actor.run_id
-    return await _commit_and_render(
+    rendered = await _commit_and_render(
         session,
         task,
         project_id=project_id,
         approval_report=approval_report,
         withdrawn_reviews=withdrawn_reviews,
     )
+    if completion_checks is not None:
+        # A run that decided a failure of the task's own while this completion committed -- past
+        # the budget (D5), or a slow check failing between the fast prefix and this commit -- found
+        # the task not yet `completed` and could not return it. Asked again now that it is;
+        # `return_failed_work` acts only on the latest run, on this work, failed by the task.
+        from ...project_checks import schedule_return
+
+        schedule_return(task.id)
+    return rendered
 
 
 async def _commit_and_render(
@@ -1878,6 +2084,12 @@ async def _commit_and_render(
     for both callers. A second copy would be a second place for that to stop being true.
     """
     await session.commit()
+    # What the commit queued lands now in a project without checks, and this answers with its
+    # outcome; with checks the landing is queued and this answers at once
+    # (`approved-work-merges-in-batches`). The checkout of a finished task is released here too.
+    from ... import landing_queue
+
+    await landing_queue.settle(project_id)
     await session.refresh(task)
     await sse_manager.broadcast(project_id, "task_updated", {"id": task.id, "status": task.status})
     for payload in withdrawn_reviews or ():
@@ -2013,12 +2225,11 @@ async def land_task(
     # refusal joins the sequence — not the response, which the transaction already covers.
     # F605: the approval PATCH's override, in the one action that lands; operator-only by the route.
     override = ((body.override_checks_reason if body else None) or "").strip() or None
-    refusal, _policy = await evaluate_approval(
-        session,
-        task,
-        acting_run_id=None,
-        start_checks=True,
-        override_checks_reason=override,
+    # Asked before anything is written, every git answer kept for the approval below to read: the
+    # move to `under_review` is this transaction's first write, and no git runs after it
+    # (`approved-work-merges-in-batches`, D3).
+    answers, refusal = await ask_approval_git_first(
+        session, task, actor, override_checks_reason=override
     )
     if refusal.refuses:
         refusal.for_operator = True  # F731 (6): Land is the operator's door
@@ -2028,7 +2239,7 @@ async def land_task(
     task.assignee = None
     await apply_transition(session, task, "under_review", actor)
     transition = await apply_transition(
-        session, task, "approved", actor, override_checks_reason=override
+        session, task, "approved", actor, override_checks_reason=override, git_answers=answers
     )
     approval_report = list(getattr(transition, "reported_advisories", None) or [])
     # The same two the PATCH route does after a terminal transition, for the same reasons: a reason
@@ -2075,8 +2286,14 @@ def _transition_view(
         # requirements held. Written on every gated transition and, until this route, readable by
         # nobody (F203).
         "policy_digest": row.policy_digest,
+        # The build level that governed the move, or null outside a build (slice D).
+        "level": row.level,
         # Why the operator approved over failing checks (`approval-runs-the-projects-checks`).
         "override_reason": row.override_reason,
+        # Who overrode: the operator, or the Hub over failures not the task's (slice M).
+        "override_by": row.override_by,
+        # The operator action behind a move it made, and its commits (closing as already built).
+        "note": row.note,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -2101,6 +2318,76 @@ async def task_story(
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
     return await story_module.story_for(session, task)
+
+
+@router.get("/{task_id}/moves")
+async def task_moves(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The moves the mover decision allows the operator on this task, now.
+
+    `decide_move`'s own answer (`every-task-can-always-be-moved-on`, FR-8), so the board offers
+    exactly what the Hub would not refuse: the map's `/transitions/allowed` says what the edges are,
+    this says what this task, held as it is held, can actually do.
+    """
+    from ...task_transition_service import decide_move
+
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    actor = Actor(kind=ACTOR_OPERATOR)
+    moves = []
+    targets = set(allowed_targets(task.status, ACTOR_OPERATOR))
+    if task.status == "completed" and task.build_id:
+        # A level's own edge (slice D): at Fast, completed work is approved without a review.
+        targets.add("approved")
+    for target in sorted(targets):
+        if (await decide_move(session, task, target, actor)).allowed:
+            moves.append(target)
+    reviewers: List[str] = []
+    if task.status == "completed":
+        # Review is entered by naming who reviews, so the menu offers it whenever somebody can: the
+        # holder alone, as the author, is exactly the move the Hub refuses (2026-10-26).
+        reviewers = await _reviewers_for(session, task, actor)
+        if reviewers and "under_review" not in moves:
+            moves = sorted([*moves, "under_review"])
+    return {"task_id": task.id, "status": task.status, "moves": moves, "reviewers": reviewers}
+
+
+async def _reviewers_for(session: AsyncSession, task: Task, actor: Actor) -> List[str]:
+    """Every open agent the operator may hand this completed task to, by the mover decision itself.
+
+    Each candidate is tried as the holder the way the PATCH does it (the assignee is written, then the
+    move is decided), and the row is restored after, so the list is the decision's answer and not a
+    second statement of the author rule.
+    """
+    from ...task_transition_service import decide_move
+
+    names = (
+        (
+            await session.execute(
+                select(Agent.name)
+                .where(Agent.project_id == task.project_id, Agent.lifecycle != "archived")
+                .order_by(Agent.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    holder = task.assignee
+    reviewers: List[str] = []
+    try:
+        with session.no_autoflush:
+            for name in names:
+                task.assignee = name
+                if (await decide_move(session, task, "under_review", actor)).allowed:
+                    reviewers.append(name)
+    finally:
+        task.assignee = holder
+    return reviewers
 
 
 @router.get("/{task_id}/transitions")

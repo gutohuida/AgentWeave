@@ -21,7 +21,7 @@ import asyncio
 import logging
 import subprocess
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Dict, Iterable, Optional
 
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -430,6 +430,89 @@ async def agents_that_may_have_authored(session: AsyncSession, task: Task) -> "s
     return worked | bound | evidenced | ({task.assignee} if task.assignee else set())
 
 
+async def authorship_reason(
+    session: AsyncSession, task: Task, agent: Optional[str]
+) -> Optional[str]:
+    """Why *agent* may not review *task*, as one clause, or `None` where it may.
+
+    The one statement of the author rule every path that moves a task quotes: the transition
+    guards, the review dispatch the flow and the mender's hand-off share, and `decide_move`. The
+    agent recorded as completing it is its author; so is any agent that recorded evidence for it,
+    including a mender that re-recorded some (F505). Read alone, never the union
+    `agents_that_may_have_authored`, for the reason `agents_that_recorded_evidence_for` gives.
+    """
+    if not agent:
+        return None
+    if await agent_that_completed(session, task.id) == agent:
+        return f"{agent!r} is the agent recorded as completing it"
+    if agent in await agents_that_recorded_evidence_for(session, task.id):
+        return f"{agent!r} recorded evidence for this task, which claims the work as its own"
+    return None
+
+
+@dataclass(frozen=True)
+class MoveVerdict:
+    """The answer to "may this actor make this move?": allowed, or refused with the error to raise."""
+
+    allowed: bool
+    refusal: Optional[TransitionRefusedError] = None
+    #: Who holds the task afterwards, where the move changes that (a reviewer taking completed work).
+    holder: Optional[str] = None
+
+    @property
+    def reason(self) -> Optional[str]:
+        return str(self.refusal) if self.refusal is not None else None
+
+
+async def decide_move(
+    session: AsyncSession, task: Task, to_status: str, actor: Actor
+) -> MoveVerdict:
+    """The one decision of who may move a task where, consulted by every path that moves one.
+
+    The map's edge, then author/reviewer separation. An agent other than the author may take a `completed` task into review and becomes its holder; the
+    author, and a mender that re-recorded its evidence, may not (`every-task-can-always-be-moved-on`).
+    This does not check for a flow: inside one, an agent other than the author may take completed
+    work the same way, which the spec's FR-3 does not forbid.
+    Reads only; `apply_transition` makes the move this allows, and adds the checks that ask about
+    the state of the work rather than who is asking.
+    """
+    if to_status == task.status:
+        return MoveVerdict(allowed=True)
+    if task.status == "completed" and to_status == "approved" and task.build_id:
+        # The one edge a level adds (`a-build-has-a-driver-a-level-and-its-people`, D4): at Fast,
+        # the task's builder, its build's lead and the operator approve completed work without a
+        # review. Not a map edge -- the map is the same for every task -- and so no author ever
+        # holds its own task under review at any level. Refused elsewhere naming the level.
+        from .builds import fast_approval_refusal
+
+        refused = await fast_approval_refusal(session, task, actor)
+        if refused is None:
+            return MoveVerdict(allowed=True)
+        error = ActorNotPermittedError if task.level == "fast" else IllegalTransitionError
+        return MoveVerdict(allowed=False, refusal=error(refused))
+    if not is_allowed(task.status, to_status, actor.kind):
+        return MoveVerdict(
+            allowed=False,
+            refusal=IllegalTransitionError(refusal_detail(task.status, to_status, actor.kind)),
+        )
+    holder: Optional[str] = None
+    if (
+        not actor.is_operator
+        and task.status == "completed"
+        and to_status == "under_review"
+        and actor.agent != task.assignee
+    ):
+        holder = actor.agent
+    try:
+        await _guard_author_is_not_reviewer(session, task, to_status, actor)
+        await _guard_reviewer_is_not_the_author(
+            session, task, to_status, actor, holder=holder or task.assignee
+        )
+    except TransitionRefusedError as refusal:
+        return MoveVerdict(allowed=False, refusal=refusal)
+    return MoveVerdict(allowed=True, holder=holder)
+
+
 async def _guard_author_is_not_reviewer(
     session: AsyncSession, task: Task, to_status: str, actor: Actor
 ) -> None:
@@ -460,34 +543,33 @@ async def _guard_author_is_not_reviewer(
     """
     if actor.is_operator or to_status not in _REVIEW_OUTCOMES:
         return
-    completing_agent = await agent_that_completed(session, task.id)
-    if completing_agent is not None and completing_agent == actor.agent:
-        raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to {to_status!r}: agent {actor.agent!r} recorded the "
-            f"task's move to 'completed', and approving, rejecting or requesting revision of work "
-            f"requires a different actor. Another agent or the operator must review it. Starting a "
-            f"new run does not make you a different actor."
-        )
-    # F505 (operator, 2026-10-06): an evidence author is barred whether or not another agent
-    # completed the task. An agent that resolved a task's conflict in a work run and recorded
-    # evidence for it is a co-author, and approving its own resolution is a self-approval.
-    if actor.agent and actor.agent in await agents_that_recorded_evidence_for(session, task.id):
+    reason = await authorship_reason(session, task, actor.agent)
+    if reason is not None:
+        completing_agent = await agent_that_completed(session, task.id)
         whose = (
-            "No agent is recorded as completing it, so the evidence is the record of who wrote it."
-            if completing_agent is None
-            else f"{completing_agent!r} completed it, and an agent that recorded evidence for it "
-            f"wrote part of what is being judged."
+            ""
+            if completing_agent == actor.agent
+            else (
+                "No agent is recorded as completing it, so the evidence is the record of who "
+                "wrote it. "
+                if completing_agent is None
+                else f"{completing_agent!r} completed it, and an agent that recorded evidence for "
+                f"it wrote part of what is being judged. "
+            )
         )
         raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to {to_status!r}: agent {actor.agent!r} recorded "
-            f"evidence for this task, which claims the work as its own, and approving, rejecting "
-            f"or requesting revision of work requires a different actor. {whose} Another agent or "
+            f"Cannot move task {task.id} to {to_status!r}: {reason}, and approving, rejecting "
+            f"or requesting revision of work requires a different actor. {whose}Another agent or "
             f"the operator must review it. Starting a new run does not make you a different actor."
         )
 
 
 async def _guard_reviewer_is_not_the_author(
-    session: AsyncSession, task: Task, to_status: str, actor: Actor
+    session: AsyncSession,
+    task: Task,
+    to_status: str,
+    actor: Actor,
+    holder: Optional[str] = None,
 ) -> None:
     """A task entering `under_review` may not still name its author as the one holding it.
 
@@ -544,7 +626,8 @@ async def _guard_reviewer_is_not_the_author(
     turn); an agent holds no tool that reassigns a task, so its remedy names the operator instead
     of a PATCH it cannot make.
     """
-    if to_status != "under_review" or not task.assignee:
+    holder = holder or task.assignee
+    if to_status != "under_review" or not holder:
         return
     remedy = (
         "Land it, on the task, to review it yourself, or dispatch a different agent's "
@@ -553,24 +636,12 @@ async def _guard_reviewer_is_not_the_author(
         else "None of the task tools you are offered reassigns a task; the operator can move "
         "it on."
     )
-    completing_agent = await agent_that_completed(session, task.id)
-    if completing_agent is not None and completing_agent == task.assignee:
+    reason = await authorship_reason(session, task, holder)
+    if reason is not None:
         raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to 'under_review' with {task.assignee!r} as its "
-            f"holder: it is the agent recorded as completing this task, so the move would "
-            f"claim its own author is reviewing it. {remedy}"
-        )
-    if task.assignee in await agents_that_recorded_evidence_for(session, task.id):
-        # F505: whether or not another agent completed it -- `_guard_author_is_not_reviewer`.
-        whose = (
-            "with no completer recorded, the evidence is the record of who wrote it, and "
-            if completing_agent is None
-            else ""
-        )
-        raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to 'under_review' with {task.assignee!r} as its "
-            f"holder: it recorded evidence for this task and claims the work as its own; "
-            f"{whose}an author may not review its own work. {remedy}"
+            f"Cannot move task {task.id} to 'under_review' with {holder!r} as its holder: "
+            f"{reason}, so the move would claim its own author is reviewing it; an author may "
+            f"not review its own work. {remedy}"
         )
 
 
@@ -720,7 +791,140 @@ ORIGIN_RUNTIME = "runtime"
 #: cause, recorded with the job's id (`a-flows-own-moves-are-recorded-as-the-flows`). The operator
 #: created the job, so it acts as them, as `runtime` acts as the run.
 ORIGIN_JOB = "job"
-ORIGINS = frozenset({ORIGIN_ACTOR, ORIGIN_RUNTIME, ORIGIN_JOB})
+#: The project's checks made the move: a completed task whose check run failed with its own failure
+#: went back to its builder (`checks-run-before-anyone-reviews`, D7). The operator's authority, as
+#: a job's is -- the operator configured the checks -- so the actor stays the operator.
+ORIGIN_CHECKS = "checks"
+ORIGINS = frozenset({ORIGIN_ACTOR, ORIGIN_RUNTIME, ORIGIN_JOB, ORIGIN_CHECKS})
+
+#: Who overrode failing checks on an approval (`task_transitions.override_by`): the operator with a
+#: typed reason, or the Hub over failures that were not the task's (`a-red-main-does-not-hold-the-
+#: night`, D3).
+OVERRIDE_BY_OPERATOR = "operator"
+OVERRIDE_BY_HUB = "hub"
+
+
+class _ChecksRefusal:
+    """The structured body of a refusal over the project's checks (main.py's handler sends
+    `to_dict()`; the MCP adapter returns its `message`)."""
+
+    def __init__(self, code: str, message: str, **fields) -> None:
+        self.code, self.message, self.fields = code, message, fields
+
+    def detail(self) -> str:
+        return self.message
+
+    def to_dict(self) -> dict:
+        return {"code": self.code, "message": self.message, **self.fields}
+
+
+class ChecksFailedError(TransitionRefusedError):
+    """An agent's completion whose fast checks failed with the task's own failure (FR-3, D4).
+
+    409: the asker may complete the task, the *work* is what forbids it. Carries each failing
+    check's output, the merged commit and the run, so the agent fixes it in the same turn.
+    """
+
+    http_status = 409
+
+    def __init__(self, task: Task, outcome) -> None:
+        from .project_checks import failure_report
+
+        report = failure_report(
+            outcome.failing, run_id=outcome.run_id, merged_sha=outcome.merged_sha
+        )
+        message = (
+            f"Task {task.id} was not completed. {report}\n\nFix what the check reports and move "
+            f"the task to completed again; the fast checks run again on the new work."
+        )
+        if getattr(outcome, "unchanged_checkout", None):
+            message = (
+                f"Task {task.id} was not completed. Its work is unchanged since check run "
+                f"{outcome.run_id} (commit {outcome.unchanged_commit}), so that run's verdict "
+                f"stands and nothing ran again; this is not a stale cache. {report}\n\n"
+                f"The checks run on the task's checkout at {outcome.unchanged_checkout} (relative "
+                f"to the project root), not on your own agent worktree. Make the fix there and "
+                f"commit it in that checkout, then move the task to completed again; the fast "
+                f"checks run again on the new commit."
+            )
+        self.refusal = _ChecksRefusal(
+            "checks_failed",
+            message,
+            task_id=task.id,
+            run_id=outcome.run_id,
+            merged_sha=outcome.merged_sha,
+            checks=[
+                {
+                    key: result.get(key)
+                    for key in (
+                        "name",
+                        "exit_code",
+                        "timed_out",
+                        "output_tail",
+                        "failure_excerpt",
+                    )
+                }
+                for result in outcome.failing
+            ],
+        )
+        super().__init__(message)
+
+
+class ChecksPendingError(TransitionRefusedError):
+    """An agent taking completed work into review while its checks are undecided or have failed
+    with the task's own failure (FR-9, D8). 409: the work's state forbids it, not the asker."""
+
+    http_status = 409
+
+    def __init__(self, task: Task, wait) -> None:
+        message = (
+            f"Task {task.id} cannot be taken into review yet: {wait.reason}. The review waits for "
+            f"the project's checks."
+        )
+        self.refusal = _ChecksRefusal(
+            "checks_pending", message, task_id=task.id, run_id=wait.run_id, state=wait.state
+        )
+        super().__init__(message)
+
+
+async def completion_refusal(
+    session: AsyncSession, task: Task, actor: Actor
+) -> Optional[TransitionRefusedError]:
+    """What `apply_transition` would refuse *actor* completing *task* for, before anything about the
+    work: the map, author/reviewer separation, and that the run holds the task. Reads only."""
+    verdict = await decide_move(session, task, "completed", actor)
+    if verdict.refusal is not None:
+        return verdict.refusal
+    try:
+        await _guard_run_holds_the_task(session, task, "completed", actor)
+    except TransitionRefusedError as refusal:
+        return refusal
+    return None
+
+
+async def run_fast_checks_before_completion(session: AsyncSession, task: Task, actor: Actor):
+    """An agent's move to `completed` waits for the project's fast checks on the work its review
+    would be given, and is refused with their output when one fails (FR-2..FR-4, D4).
+
+    Called by the route before `apply_transition`, with nothing staged, so the wait never holds the
+    database's write lock. Not inside `apply_transition`, which stages and runs inside other
+    transactions; not in `decide_move`, which answers only who may move. A move this actor may not
+    make is left for `apply_transition` to refuse, so nothing runs for it. Returns what the wait
+    found (`None` where no fast check applies), for the caller to act on once it commits."""
+    if actor.is_operator or task.status == "completed":
+        return None
+    if await completion_refusal(session, task, actor) is not None:
+        return None
+    from . import project_checks
+
+    outcome = await project_checks.fast_checks_at_completion(session, task, actor.agent)
+    if outcome is None:
+        return None
+    if outcome.failing:
+        raise ChecksFailedError(task, outcome)
+    # The wait may have been long: what is applied is the task as it stands now.
+    await session.refresh(task)
+    return outcome
 
 
 async def apply_transition(
@@ -733,16 +937,33 @@ async def apply_transition(
     override_checks_reason: Optional[str] = None,
     verdict_reason: Optional[str] = None,
     holder_named: bool = False,
+    note: Optional[str] = None,
+    closing_with: frozenset = frozenset(),
+    failing_pieces: Optional[Dict[str, str]] = None,
+    git_answers: Optional[traces.GitAnswers] = None,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
+
+    A move to `approved` asks its git before its first write and its gate reads those answers
+    (`approved-work-merges-in-batches`, D3), queues the task's work for landing with its merge
+    targets frozen, and leaves the merge and the checkout release to run once the caller commits
+    (`landing_queue`). *git_answers* are answers a caller already asked before it wrote anything
+    (`ask_approval_git_first`; the land route, which moves the task through `under_review` first).
+
+    *note* is written on the history row: which operator action made this move, and against what
+    (`already_built`). *closing_with* names the tasks one operator action is closing together as
+    already built; a prerequisite among them does not hold this task back from `in_progress`, because
+    no work is starting -- it is already on the main branch, and so is the prerequisite's.
 
     *holder_named* says the caller has just written `task.assignee` on the operator's instruction
     (the same PATCH that sends the work back, F743), so the send-back does not return it to its
     author over the top of that.
 
-    A verdict decides the task's evidence (`the-reviewers-verdict-decides-the-tasks-evidence`):
-    `approved` accepts the pieces recorded for it, `revision_needed` and `rejected` reject them, with
-    *verdict_reason* (the verdict's notes) as the review's reason.
+    A verdict decides the task's evidence (`the-reviewers-verdict-decides-the-tasks-evidence`),
+    piece by piece (`each-piece-of-evidence-is-judged-on-its-own`): `approved` accepts the pieces
+    recorded for it with *verdict_reason* (the verdict's notes); `revision_needed` and `rejected`
+    reject only *failing_pieces* (evidence id to its own reason, `failing_pieces_of`) and hold every
+    other piece with *verdict_reason*. What it decided is written on the history row's note.
 
     Raises `TransitionRefusedError` (or a subclass) instead of mutating when the move is not permitted.
     The caller commits; this function stages the change and the history row together so a refusal
@@ -771,16 +992,12 @@ async def apply_transition(
     if to_status == from_status:
         return None
 
-    if not is_allowed(from_status, to_status, actor.kind):
-        raise IllegalTransitionError(refusal_detail(from_status, to_status, actor.kind))
-
-    await _guard_author_is_not_reviewer(session, task, to_status, actor)
-
-    # Beside the author/reviewer guard for the same reason `_guard_run_holds_the_task` is: it asks
-    # whether this actor may make this move, not whether the work is ready. It runs on the other
-    # end of the review — the entry rather than the verdict — and F70 is what the missing half
-    # cost.
-    await _guard_reviewer_is_not_the_author(session, task, to_status, actor)
+    verdict = await decide_move(session, task, to_status, actor)
+    if verdict.refusal is not None:
+        raise verdict.refusal
+    if verdict.holder is not None:
+        # A reviewer taking completed work becomes its holder, in this same move.
+        task.assignee = verdict.holder
 
     # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
     # author/reviewer guard because it answers the same kind of question — is this actor entitled to
@@ -822,8 +1039,28 @@ async def apply_transition(
         from .dependency_gate import evaluate as evaluate_dependencies
 
         dependency_refusal = await evaluate_dependencies(session, task)
+        if closing_with:
+            dependency_refusal.unmet = [
+                entry for entry in dependency_refusal.unmet if entry["id"] not in closing_with
+            ]
         if dependency_refusal.refuses:
             raise DependencyUnmetError(dependency_refusal)
+
+    # The work-state gate on taking finished work into review (`checks-run-before-anyone-reviews`,
+    # D8): an agent waits for the project's checks, as the flow does, and a failure of the task's
+    # own sends it back to its builder rather than to a reviewer. Beside the dependency gate, for
+    # the same reason: it asks about the state of the work, not who is asking. The operator's own
+    # dispatch is not gated (warn, don't gate); its reviewer is briefed as today.
+    if from_status == "completed" and to_status == "under_review" and not actor.is_operator:
+        from . import project_checks
+
+        wait = await project_checks.review_wait(session, task)
+        if wait is not None:
+            if wait.needs_a_run:
+                project_checks.schedule(task.project_id, task.id)
+            elif wait.state == "failed":
+                project_checks.schedule_return(task.id)
+            raise ChecksPendingError(task, wait)
 
     # The gate, on this one edge. Inside the service and before the history row, so it cannot be
     # bypassed by a caller reaching the row a different way — which is also why every surface
@@ -833,7 +1070,10 @@ async def apply_transition(
     # is the one every status write already passes through.
     policy = ""
     reported: list = []
+    approval_gate = None
     overridden: Optional[str] = None
+    decided: Optional[str] = None
+    override_by: Optional[str] = None
     if to_status == "approved":
         # The acting run, excluded from the gate's liveness check: a turn is never blocked by
         # itself (design D10). `None` for the operator, which excludes nothing.
@@ -845,23 +1085,43 @@ async def apply_transition(
                 "Only the operator can approve over failing checks; send the task back to its "
                 "author with revision_needed instead."
             )
+        # Git is asked before the first write, with the evidence the verdict is about to accept
+        # read as accepted; the gate below reads those answers, so no git runs while this
+        # transaction holds the write lock (`approved-work-merges-in-batches`, D3).
+        if git_answers is None:
+            git_answers, _ = await ask_approval_git_first(
+                session, task, actor, override_checks_reason=reason
+            )
         # The approval accepts the task's evidence in the same savepoint the gate reads it in
         # (design D1): the gate judges the state it will merge from, and a refusal for any other
         # reason -- a conflict, failing checks -- rolls the acceptances back with it, so nothing is
         # recorded as accepted by an approval that did not happen.
         async with session.begin_nested():
-            await _decide_evidence_with_verdict(session, task, actor, "approved", verdict_reason)
-            refusal, policy = await evaluate_approval(
-                session,
-                task,
-                acting_run_id=actor.run_id,
-                start_checks=True,
-                override_checks_reason=reason,
+            decided = await _decide_evidence_with_verdict(
+                session, task, actor, "approved", verdict_reason
             )
+            with traces.answering_from(git_answers):
+                refusal, policy = await evaluate_approval(
+                    session,
+                    task,
+                    acting_run_id=actor.run_id,
+                    override_checks_reason=reason,
+                )
             if refusal.refuses:
                 refusal.for_operator = actor.is_operator
                 raise GateUnsatisfiedError(refusal)
+        approval_gate = refusal
         overridden = reason if refusal.checks_overridden else None
+        if overridden is not None:
+            override_by = OVERRIDE_BY_OPERATOR
+        elif refusal.automatic_override is not None:
+            # Failures that are not the task's -- main's, or flakes -- land with the Hub's override
+            # (`a-red-main-does-not-hold-the-night`, D3). Who overrode is a column of its own: the
+            # actor stays the approver, and there is no third actor kind.
+            from .requirement_gate import override_reason_for
+
+            overridden = override_reason_for(refusal.automatic_override)
+            override_by = OVERRIDE_BY_HUB
         # `contract` never refuses, so its unmet and rejected requirements have nowhere to surface
         # unless this call carries them out. Not persisted — a transient attribute on the returned
         # row rather than a column, because this is a report at the moment of approval, not an
@@ -883,7 +1143,15 @@ async def apply_transition(
     if to_status == "revision_needed" and not (holder_named and actor.is_operator):
         task.assignee = await _holder_of_sent_back_work(session, task, actor)
     if to_status in ("revision_needed", "rejected"):
-        await _decide_evidence_with_verdict(session, task, actor, to_status, verdict_reason)
+        decided = await _decide_evidence_with_verdict(
+            session, task, actor, to_status, verdict_reason, failing_pieces
+        )
+    if decided:
+        # Its own sentence after the caller's note, which may not end in one (L's check return).
+        lead = (note or "").rstrip()
+        if lead and not lead.endswith((".", "!", "?")):
+            lead += "."
+        note = f"{lead} {decided}" if lead else decided
 
     task.status = to_status
     transition = TaskTransition(
@@ -901,6 +1169,10 @@ async def apply_transition(
         # than a gap in it.
         policy_digest=policy or None,
         override_reason=overridden,
+        override_by=override_by,
+        note=note,
+        # The build level that governed this move; none outside a build (slice D, FR-2).
+        level=task.level if task.build_id else None,
     )
     # Not a column — see the comment where `reported` is built. `TaskResponse` reads this off the
     # object this same call returns; nothing else looks for it, and nothing persists it.
@@ -911,6 +1183,12 @@ async def apply_transition(
     # (`flow_advance`). Never for the job's own moves -- a firing does not re-fire itself.
     if task.loop_id and to_status in flow_advance.HANDOFF_STATUSES and origin != ORIGIN_JOB:
         flow_advance.advance_after_commit(session, task.loop_id)
+    # A task moved to `assigned` outside any flow is started for its assignee once this commits
+    # (`a-red-main-does-not-hold-the-night`, FR-9): nothing else starts it.
+    if to_status == "assigned" and not task.loop_id:
+        from . import assigned_task_start
+
+        assigned_task_start.start_after_commit(session, task.id, actor.run_id)
 
     if origin != ORIGIN_RUNTIME:
         # A divergence is an open condition, not a verdict: work reaching the ledger closes it,
@@ -925,7 +1203,23 @@ async def apply_transition(
         await resolve_divergences_for_task(session, task.id)
 
     if to_status == "approved":
-        await integrate_task(session, task, actor)
+        # The work joins the landing queue with what the gate resolved, frozen; it lands once this
+        # commits (`landing_queue`). An operator's reason over the task's own failed check lands
+        # it alone, ahead of the queue, unchecked (D2).
+        from . import landing_queue
+
+        unchecked = bool(approval_gate is not None and approval_gate.overrode_own_failure)
+        landing_queue.stage(
+            session,
+            task,
+            actor_kind=actor.kind,
+            actor=actor.agent or ("operator" if actor.is_operator else ""),
+            kind="approval",
+            targets=approval_gate.will_merge if approval_gate is not None else None,
+            unchecked=unchecked,
+            override_reason=overridden if unchecked else None,
+            override_by=override_by if unchecked else None,
+        )
         # The last open task of a document approved is a major event of the project's story: the
         # chapters job fires once this commits, if it is on with automatic firing.
         from . import chapters_job
@@ -938,6 +1232,13 @@ async def apply_transition(
                 {"task": task.id, "document": task.spec_document_id},
             )
 
+    # Work that leaves `approved` before it landed (the operator sends it back) leaves the queue, in
+    # this same transaction: no batch lands it.
+    if from_status == "approved" and to_status != "approved":
+        from . import landing_queue
+
+        await landing_queue.withdraw(session, task)
+
     # A task completed outside a turn has its work committed already, so its checks can start now
     # (approval-runs-the-projects-checks D4). One completed by a run is checked at that run's end,
     # after the snapshot that commits its work (`project_checks.after_run`). Never raises.
@@ -947,24 +1248,25 @@ async def apply_transition(
         if await project_checks.configured_for(session, task.project_id):
             project_checks.schedule(task.project_id, task.id)
 
-    # **After** integration (design D5). Release snapshots any uncommitted change onto the task
-    # branch, so releasing first would advance the branch past the evidence commit before the merge
-    # reads it.
-    #
-    # Honest about what that costs today: `integration_targets` resolves the commit from the
-    # accepted evidence *footprint*, a database row, so the merged sha is the same under either
-    # order and nothing observable changes. The order is defence against the change that would make
-    # it matter — resolving the target from the branch tip instead — which is the exact shape of
-    # F58. `test_release_happens_after_integration` observes the order directly for that reason,
-    # rather than through the merged sha, which cannot discriminate it.
+    # The checkout is released once this commits, its git outside any transaction
+    # (`approved-work-merges-in-batches`, D3). Release snapshots uncommitted changes onto the task
+    # branch, which used to be why it had to follow the merge (F58's shape: a target read from the
+    # branch tip after the snapshot). The landing's targets are frozen above, so the order no longer
+    # matters; `test_release_does_not_move_the_frozen_target` holds that.
     if to_status in TERMINAL_STATUSES:
-        await release_task_workspace(session, task)
+        from . import landing_queue
+
+        landing_queue.release_after_commit(session, task)
         # The last open task of a slice whose approval asked for the next slice queues its drafting
         # (C1a D4a, F496). In a savepoint, and it never raises. Imported locally: it reads the spec
         # lifecycle, which is built on the models this module already holds.
         from .slice_drafting import on_task_closed
 
         await on_task_closed(session, task)
+        # A build whose every task is closed has finished (slice D).
+        from .builds import finish_if_done
+
+        await finish_if_done(session, task)
 
     return transition
 
@@ -1010,27 +1312,44 @@ async def _decide_evidence_with_verdict(
     actor: Actor,
     to_status: str,
     verdict_reason: Optional[str],
-) -> None:
-    """The verdict on *task* decides the evidence recorded for it (vis-D4)."""
+    failing_pieces: Optional[Dict[str, str]] = None,
+) -> Optional[str]:
+    """The verdict on *task* decides the evidence recorded for it (vis-D4), piece by piece: a
+    send-back rejects only *failing_pieces* and holds the rest. Returns the history's account of
+    what it decided, or None when it decided nothing."""
     from . import requirement_evidence
-    from .spec_lifecycle import Actor as EvidenceActor
 
-    deciding = (
-        EvidenceActor(kind="operator", name="operator")
-        if actor.is_operator
-        else EvidenceActor(kind="agent", name=actor.agent or "", run_id=actor.run_id)
-    )
-    await requirement_evidence.decide_with_verdict(
+    reviews = await requirement_evidence.decide_with_verdict(
         session,
         task,
-        actor=deciding,
+        actor=evidence_actor(actor),
         decision=(
             requirement_evidence.ACCEPTED
             if to_status == "approved"
             else requirement_evidence.REJECTED
         ),
         reason=verdict_reason or "",
+        failing=failing_pieces,
+        # A Fast build has no reviewer (slice D, D4): its builder, lead or flow approving completed
+        # work accepts the builder's own evidence, which a reviewer-less approval would otherwise
+        # leave awaiting and refuse as "nobody has judged it".
+        own_work=bool(
+            to_status == "approved"
+            and task.build_id
+            and task.level == "fast"
+            and task.status == "completed"
+        ),
     )
+    return await requirement_evidence.verdict_note(session, reviews)
+
+
+def evidence_actor(actor: Actor):
+    """*actor* as the evidence record names a decider (`spec_lifecycle.Actor`)."""
+    from .spec_lifecycle import Actor as EvidenceActor
+
+    if actor.is_operator:
+        return EvidenceActor(kind="operator", name="operator")
+    return EvidenceActor(kind="agent", name=actor.agent or "", run_id=actor.run_id)
 
 
 #: The statuses at which a task stops being worked, and so stops needing a checkout on disk. Neither
@@ -1077,8 +1396,7 @@ async def _release_task_workspace(session: AsyncSession, task: Task) -> None:
         )
     except Exception as exc:  # noqa: BLE001 - any release failure is recorded, never a rollback
         logger.warning("Could not release task %s's checkout", task.id, exc_info=True)
-        # `commit=False`: this runs inside `apply_transition`, whose caller commits. Committing
-        # here would land the transition row early, ahead of the contract this module states.
+        # `commit=False`: the caller (`landing_queue`'s release, after the move committed) commits.
         await persist_event(
             session,
             task.project_id,
@@ -1121,8 +1439,10 @@ async def _release_task_workspace(session: AsyncSession, task: Task) -> None:
     )
 
 
-async def retry_integration(session: AsyncSession, task: Task, actor: Actor) -> list:
-    """Attempt integration again for a task that is already approved.
+async def retry_integration(
+    session: AsyncSession, task: Task, actor: Actor, *, kind: str = "retry"
+):
+    """Queue integration again for a task that is already approved; returns the `TaskLanding`.
 
     Integration runs on the transition *into* `approved`, and restating a status is deliberately a
     no-op (D7 of the previous change) — so a merge that was skipped can never be attempted again by
@@ -1130,21 +1450,38 @@ async def retry_integration(session: AsyncSession, task: Task, actor: Actor) -> 
     never chosen, a checkout with uncommitted changes, a checkout parked elsewhere. Without a second
     entry point the remediation the system asked for accomplishes nothing, which was observed live.
 
-    A second entry point to the same coroutine, rather than a second path through the transition:
-    the early return that makes restating a no-op is correct and stays, because manufacturing an
-    `approved -> approved` row would make "who approved this" start returning the retrying run.
+    Through the landing queue, as every merge into main is (`approved-work-merges-in-batches`,
+    FR every-hub-merge-goes-through-the-queue): the targets are resolved now, asking git before
+    anything is staged, and frozen on the landing; the caller commits, then `landing_queue.settle`
+    lands it (at once without checks, in the next batch with them).
 
-    No refusal when the work is already merged. `task_integration.integrate` self-guards with
-    `ALREADY_INTEGRATED`, which asks the repository whether the commit is reachable — a fact — rather
-    than reading the attempt log, which records only what was tried. So a retry after a merge
-    honestly records one skip and merges nothing.
+    No refusal when the work is already merged: the landing asks the repository and records
+    `ALREADY_INTEGRATED`, a fact, rather than reading the attempt log.
     """
     if task.status != "approved":
         raise IntegrationRetryRefusedError(
             f"Cannot retry integration for a task in {task.status!r}: "
             "only an approved task has work to integrate."
         )
-    return await integrate_task(session, task, actor)
+    from . import landing_queue
+
+    # One open landing per task: a second would be a second claim on the same work, and the first
+    # to land would leave the other's record behind it.
+    open_landing = await landing_queue.open_landing(session, task.id)
+    if open_landing is not None:
+        raise IntegrationRetryRefusedError(
+            f"Task {task.id} already has an open landing ({open_landing.id}, "
+            f"{open_landing.state}): it lands without being asked again."
+        )
+    targets = await landing_queue.resolve_targets(session, task)
+    return landing_queue.stage(
+        session,
+        task,
+        actor_kind=actor.kind,
+        actor=actor.agent or ("operator" if actor.is_operator else ""),
+        kind=kind,
+        targets=targets,
+    )
 
 
 async def hub_written_documents(session: AsyncSession, workspace, project_id: str) -> set:
@@ -1179,11 +1516,6 @@ async def hub_written_documents(session: AsyncSession, workspace, project_id: st
     return await blocking.run(_still_written)
 
 
-async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> list:
-    async with traces.work("task_integration", task.project_id, **{"aw.task.id": task.id}):
-        return await _integrate_task(session, task, actor)
-
-
 def _is_ancestor(root, ancestor: Optional[str], descendant: str) -> Optional[bool]:
     """`True` when *ancestor* is in *descendant*'s history (the same question `integrate` asks)."""
     from . import requirement_evidence
@@ -1197,198 +1529,81 @@ class ResolutionRefusedError(Exception):
     """A resolution commit that does not carry the work approval would merge."""
 
 
-async def land_resolution(session: AsyncSession, task: Task, actor: Actor, commit: str) -> list:
-    """Merge *commit* in place of the approved task's own targets: the mender's resolution of a
-    conflict (`stalls.py`). *commit* must contain every commit approval would merge, so nothing
-    accepted is dropped; everything after the merge -- the record, reachability, the re-drain, the
-    task's stalls -- is `integrate_task`'s own. Raises `ResolutionRefusedError`."""
-    async with traces.work("task_integration", task.project_id, **{"aw.task.id": task.id}):
-        return await _integrate_task(session, task, actor, resolution=commit)
+async def land_resolution(session: AsyncSession, task: Task, actor: Actor, commit: str):
+    """Queue *commit* to land in place of the approved task's own targets: the mender's resolution
+    of a conflict (`stalls.py`). *commit* must contain every commit approval would merge, so nothing
+    accepted is dropped; asked of git before anything is staged. Returns the `TaskLanding`; the
+    caller commits and settles. Raises `ResolutionRefusedError`."""
+    from . import landing_queue, task_integration
 
-
-async def _integrate_task(
-    session: AsyncSession, task: Task, actor: Actor, *, resolution: Optional[str] = None
-) -> list:
-    """Put the approved work in the product, and record what happened either way.
-
-    **After** the transition row, and never able to undo it. Approval is a judgement that the work
-    is good; a git failure is not a reason to reverse a judgement. Where the merge does not happen,
-    coverage already has the words for it — `verified, not integrated` — so the product's account
-    stays true without anything new being invented.
-
-    Mergeability was tested before the transition (`requirement_gate`), so a failure here means the
-    world moved in between. That is rare, recorded, and not fatal.
-    """
-    from . import project_workspace, task_integration
-    from .db.models import Project
-
-    project = await session.get(Project, task.project_id)
-    if project is None:
-        return []
-
-    def _record(result: task_integration.IntegrationResult) -> list:
-        by = actor.agent or ("operator" if actor.is_operator else "")
-        task_integration.record(
-            session,
-            task,
-            result,
-            actor_kind=actor.kind,
-            # Who integrated, by name: the operator carries no agent, and "" read as nobody (F731).
-            actor=by,
+    open_landing = await landing_queue.open_landing(session, task.id)
+    if open_landing is not None:
+        raise ResolutionRefusedError(
+            f"Task {task.id} already has an open landing ({open_landing.id}, "
+            f"{open_landing.state}); a resolution lands once it has ended."
         )
-        _note_stall(result, by)
-        return [result]
+    targets = await landing_queue.resolve_targets(session, task)
+    if targets:
+        from . import project_workspace
 
-    def _note_stall(result: task_integration.IntegrationResult, by: str) -> None:
-        # Approved work that did not reach the product is a stall (`stalls.py`); work that did
-        # ends the task's merge stalls. A skip because it is already in the main branch is neither.
-        from . import stalls
-
-        if result.outcome == task_integration.MERGED:
-            stalls.resolve_task_after_commit(session, task.project_id, task.id, by=by)
-        elif result.outcome in (task_integration.SKIPPED, task_integration.FAILED) and (
-            result.reason
-            != task_integration.ALREADY_INTEGRATED.format(
-                commit=(result.commit_sha or "")[:12], target=result.target_branch
-            )
-        ):
-            cause = (
-                "integration_failed"
-                if result.outcome == task_integration.FAILED
-                else "integration_skipped"
-            )
-            stalls.report_after_commit(
-                session,
-                task.project_id,
-                cause=cause,
-                subject=task.id,
-                text=(
-                    f"{task.id} ({task.title!r}) was approved, but its merge into "
-                    f"{result.target_branch or 'the main branch'} {result.outcome}: "
-                    f"{(result.reason or '').strip()[:1500]}"
-                ),
-                task_id=task.id,
-            )
-
-    if not project.main_branch:
-        return _record(
-            task_integration.IntegrationResult(
-                outcome=task_integration.SKIPPED, reason=task_integration.NO_MAIN_BRANCH
-            )
-        )
-
-    try:
-        workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
-    except Exception as exc:  # noqa: BLE001 - any workspace failure is a skip, never a rollback
-        return _record(
-            task_integration.IntegrationResult(
-                outcome=task_integration.SKIPPED,
-                reason=task_integration.WORKSPACE_UNAVAILABLE.format(error=exc),
-                target_branch=project.main_branch,
-            )
-        )
-
-    root = workspace.root
-    fault = await blocking.run(task_integration.repository_fault, root)
-    if fault is not None:
-        if await task_integration.repository_proof(session, task, root):
-            # F820: git failed for a project the Hub has worked in through git. A passing fault
-            # must not become the permanent fact "this is not a repository"; `failed` is retryable.
-            return _record(
-                task_integration.IntegrationResult(
-                    outcome=task_integration.FAILED,
-                    reason=task_integration.GIT_UNREADABLE.format(error=fault),
-                    target_branch=project.main_branch,
-                )
-            )
-        return _record(
-            task_integration.IntegrationResult(
-                outcome=task_integration.SKIPPED,
-                reason=task_integration.NOT_A_REPOSITORY,
-                target_branch=project.main_branch,
-            )
-        )
-
-    targets = await task_integration.merge_targets(session, task, root)
-    if not targets:
-        # Two reasons, not one. `NOTHING_TO_MERGE` is a statement about evidence and is only true
-        # where evidence governs this task's merge; for a task whose merge comes from its own
-        # branch, the honest answer is that it has no branch. Collapsing them would tell the
-        # operator to accept evidence that could never exist.
-        return _record(
-            task_integration.IntegrationResult(
-                outcome=task_integration.SKIPPED,
-                reason=(
-                    task_integration.NOTHING_TO_MERGE
-                    if await task_integration.evidence_governs(session, task)
-                    else task_integration.NO_TASK_BRANCH
-                ),
-                target_branch=project.main_branch,
-            )
-        )
-
-    if resolution is not None:
+        root = (await project_workspace.resolve_project_workspace(session, task.project_id)).root
         missing = await blocking.run(
             lambda: [
                 target.commit_sha
                 for target in targets
-                if _is_ancestor(root, target.commit_sha, resolution) is not True
+                if _is_ancestor(root, target.commit_sha, commit) is not True
             ]
         )
         if missing:
             raise ResolutionRefusedError(
-                f"{resolution[:12]} does not contain {', '.join(sha[:12] for sha in missing)}, "
+                f"{commit[:12]} does not contain {', '.join(sha[:12] for sha in missing)}, "
                 "which approving this task merges: branch from that work, then merge the main "
                 "branch into it."
             )
-        targets = [
-            task_integration.Target(
-                commit_sha=resolution, branch=f"mend/{task.id}", task_id=task.id
-            )
-        ]
-
-    hub_written = await hub_written_documents(session, workspace, task.project_id)
-    # The merge into the main branch, off the loop and serialized with every other worktree change
-    # and merge, as it was while it ran on the loop (`blocking.run_serialized`, D5).
-    main_branch = project.main_branch
-    results = await blocking.run_serialized(
-        lambda: [
-            task_integration.integrate(root, target, main_branch, hub_written=hub_written)
-            for target in targets
-        ]
+    return landing_queue.stage(
+        session,
+        task,
+        actor_kind=actor.kind,
+        actor=actor.agent or ("operator" if actor.is_operator else ""),
+        kind="resolution",
+        targets=[
+            task_integration.Target(commit_sha=commit, branch=f"mend/{task.id}", task_id=task.id)
+        ],
     )
-    newest = await task_integration.newest_per_target(session, task.id)
-    for result in results:
-        previous = newest.get((result.commit_sha, result.target_branch))
-        already = task_integration.ALREADY_INTEGRATED.format(
-            commit=(result.commit_sha or "")[:12], target=result.target_branch
-        )
-        if (
-            result.outcome == task_integration.SKIPPED
-            and result.reason == already
-            and previous is not None
-            and (previous.outcome, previous.reason) == (task_integration.SKIPPED, already)
-        ):
-            # F715: the newest record for this commit already says it is in the main branch, so a
-            # repeat press appends an identical row that adds nothing true.
-            continue
-        _record(result)
 
-    # Re-answer "has this reached the main line?" across the project, not only for what just merged.
-    # Bringing in one requirement's commit genuinely brings in every earlier commit on the same
-    # branch, and coverage should say so rather than reporting work as unintegrated because its own
-    # evidence predates the merge that carried it.
-    if any(result.outcome == task_integration.MERGED for result in results):
-        from . import requirement_evidence
 
-        await requirement_evidence.refresh_reachability(
-            session, task.project_id, root, main_branch=project.main_branch
-        )
-        # F835: a turn refused because this work was not on the main line yet sits `queued`, and
-        # nothing else re-tries it when the work arrives.
-        _redrain_after_commit(session, task.project_id)
+async def ask_approval_git_first(
+    session: AsyncSession,
+    task: Task,
+    actor: Actor,
+    *,
+    override_checks_reason: Optional[str] = None,
+):
+    """`(answers, refusal)`: approval's gate asked before anything is written, with the evidence the
+    verdict would accept read as accepted, every git answer kept for the transaction to read
+    (`approved-work-merges-in-batches`, D3). *refusal* is what the gate would say; a git that could
+    not be asked raises `GitUnavailableError` here, before anything is staged."""
+    from . import requirement_evidence, task_integration
 
-    return results
+    answers = traces.GitAnswers()
+    pieces = await requirement_evidence.verdict_pieces(
+        session,
+        task,
+        actor=evidence_actor(actor),
+        decision=requirement_evidence.ACCEPTED,
+    )
+    token = task_integration.ASSUMED_ACCEPTED.set(frozenset(evidence.id for evidence, _ in pieces))
+    try:
+        with traces.asking_git_first(answers):
+            refusal, _ = await evaluate_approval(
+                session,
+                task,
+                acting_run_id=actor.run_id,
+                override_checks_reason=override_checks_reason,
+            )
+    finally:
+        task_integration.ASSUMED_ACCEPTED.reset(token)
+    return answers, refusal
 
 
 _REDRAIN_KEY = "integration_redrain_projects"

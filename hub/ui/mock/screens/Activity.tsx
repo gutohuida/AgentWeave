@@ -1,12 +1,15 @@
 import * as React from 'react'
 import type { EventLogEntry } from '@/api/logs'
 import type { AccountingSnapshot } from '@/api/accounting'
+import type { Grouping } from '@/api/stats'
 import { ActivityDigest } from '@/components/activity/ActivityDigest'
+import { WorkView } from '@/components/activity/ProjectWork'
 import { Segmented } from '@/components/ui/segmented'
 import { buildDigest } from '@/lib/activityDigest'
 import logsJson from '../fixtures/logs.json'
 import accountingJson from '../fixtures/accounting.json'
 import { agents, conversations, tasks } from '../fixtures'
+import { NIGHT_TALLY } from '../workFixture'
 import type { ScreenProps } from '../routes'
 import '@/styles/activity.css'
 
@@ -17,6 +20,8 @@ const accounting = accountingJson as unknown as AccountingSnapshot
  *  sub-view control drawn its own way); Ledger and Logs are unchanged in this mock. */
 export default function Activity({ go, now }: ScreenProps) {
   const [view, setView] = React.useState<'ledger' | 'activity' | 'logs'>('activity')
+  const [grouping, setGrouping] = React.useState<Grouping>('spec')
+  const [since, setSince] = React.useState('')
   const days = React.useMemo(
     () =>
       buildDigest(logs, {
@@ -41,7 +46,11 @@ export default function Activity({ go, now }: ScreenProps) {
         />
         <span className="aw-activity-note">The last 200 events</span>
       </div>
-      {view === 'activity' ? (
+      {view === 'ledger' ? (
+        <div className="aw-evidence-page">
+          <WorkView tally={NIGHT_TALLY} grouping={grouping} onGrouping={setGrouping} since={since} onSince={setSince} />
+        </div>
+      ) : view === 'activity' ? (
         <ActivityDigest
           days={days}
           agents={agents.map((a) => a.name)}
@@ -51,7 +60,7 @@ export default function Activity({ go, now }: ScreenProps) {
         />
       ) : (
         <p className="aw-activity-note" style={{ padding: '48px 0', textAlign: 'center' }}>
-          The {view === 'ledger' ? 'Ledger' : 'Logs'} view is unchanged in this mock. The Ledger is already the model the rest of the app follows.
+          The Logs view is unchanged in this mock.
         </p>
       )}
     </div>

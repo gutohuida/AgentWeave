@@ -1,0 +1,381 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an agent on a Claude runner with one completed turn in a conversation whose session is 'claude-sess-1'",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k claude_to_copilot (PtySession.spawn, shutil.which and copilot_acp.run_turn stubbed as in test_agent_trigger_overrides.py and test_copilot_trigger.py)",
+      "key": "claude-to-copilot-loads-no-claude-session",
+      "requirement": "a-session-is-resumed-only-by-its-cli",
+      "then": "the fake copilot_acp.run_turn is called with resume_session_id None; on master it is called with 'claude-sess-1'",
+      "when": "the agent is rebound (PATCH runner_id) to a Copilot runner and the conversation is triggered again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same conversation after the Copilot turn bound 'cop-sess-1'",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k copilot_to_claude",
+      "key": "copilot-to-claude-carries-no-resume",
+      "requirement": "a-session-is-resumed-only-by-its-cli",
+      "then": "the spawned Claude command has no --resume argument and the run completes; on master it carries '--resume cop-sess-1'",
+      "when": "the agent is rebound back to its Claude runner and triggered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation whose session was bound by a Claude turn",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k codex",
+      "key": "codex-carries-no-foreign-resume",
+      "requirement": "a-session-is-resumed-only-by-its-cli",
+      "then": "the spawned codex command contains no 'resume'",
+      "when": "the agent is rebound to a Codex exec runner and triggered (PipeSession.spawn stubbed)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the crossing Copilot turn ran and its fake reported session 'cop-sess-1'",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k binds_and_resumes",
+      "key": "new-session-binds-and-resumes",
+      "requirement": "the-new-session-becomes-the-conversations",
+      "then": "conversation.provider_session_id is 'cop-sess-1' with its CLI recorded as copilot, the crossing run completed with no 'binding conflict' error, and the second turn is called with resume_session_id 'cop-sess-1'",
+      "when": "a second turn is triggered on the same Copilot runner"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with a completed Claude turn whose session is 'claude-sess-1'",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k same_cli",
+      "key": "same-cli-rebind-resumes",
+      "requirement": "a-same-cli-session-is-kept",
+      "then": "the spawned command carries '--resume claude-sess-1' and the conversation records no runner.session_not_carried diagnostic",
+      "when": "it is rebound to a second Claude runner with another model and triggered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation whose provider_session_id is set and whose session CLI is NULL",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k unknown_cli",
+      "key": "unknown-cli-resumes",
+      "requirement": "a-same-cli-session-is-kept",
+      "then": "the turn is called with that session id to load, as on master",
+      "when": "an agent on a Copilot runner is triggered in it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the crossing turn of claude-to-copilot-loads-no-claude-session",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k notice",
+      "key": "crossing-notice-recorded-and-prompted",
+      "requirement": "the-crossing-is-said",
+      "then": "exactly one diagnostic with code runner.session_not_carried precedes the runner's first output, its summary names the agent, 'claude' and 'copilot', the run_turn prompt starts with the same sentence, and the following resumed turn has none",
+      "when": "its agent output and its prompt are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation with runtime_overrides {'model': 'haiku'} set while the agent was on Claude",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k haiku",
+      "key": "haiku-not-sent-to-copilot",
+      "requirement": "a-foreign-model-is-withheld",
+      "then": "run_turn is called with model 'claude-haiku-4.5', runtime_overrides still holds 'haiku', and after rebinding back to Claude the spawned command carries '--model haiku'; on master Copilot is called with 'haiku'",
+      "when": "the agent is rebound to a Copilot runner whose model is 'claude-haiku-4.5' and triggered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Copilot conversation storing 'claude-sonnet-5' (declared by both Claude and Copilot), and another storing a model no CLI declares",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k shared_and_retired",
+      "key": "shared-and-retired-models-applied",
+      "requirement": "a-foreign-model-is-withheld",
+      "then": "each stored model is passed to run_turn as stored",
+      "when": "each is triggered on a Copilot runner"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose newest conversation stores {'model': 'haiku'}, now bound to a Copilot runner",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k inherited",
+      "key": "inherited-haiku-withheld-in-a-job",
+      "requirement": "a-foreign-model-is-withheld",
+      "then": "run_turn is called with the runner's model, not 'haiku', and one runner.model_withheld diagnostic is recorded",
+      "when": "a turn is triggered with no conversation, so inherit_runtime_overrides copies 'haiku' into a new one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the crossing Copilot turn of haiku-not-sent-to-copilot, followed by a resumed second turn",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k withheld_once",
+      "key": "withheld-said-once",
+      "requirement": "a-withheld-model-is-said",
+      "then": "exactly one runner.model_withheld diagnostic names 'haiku', 'copilot' and 'claude-haiku-4.5'",
+      "when": "the conversation's diagnostics are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the crossing Copilot turn of haiku-not-sent-to-copilot, whose fake reports an accounting sample with model 'claude-haiku-4.5'",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k recorded_model",
+      "key": "run-started-and-usage-name-what-ran",
+      "requirement": "the-recorded-model-is-what-ran",
+      "then": "run_started's model is 'claude-haiku-4.5', the timeline reads 'Run started (copilot, claude-haiku-4.5)', and turn_usage.model is 'claude-haiku-4.5'; on master run_started's model is 'haiku'",
+      "when": "its run_started event, the agent timeline and its turn_usage row are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Claude agent with one completed turn in a conversation storing {'model': 'haiku'}",
+      "how_to_check": "The acceptance drive, written first and run on master to fail: py -3.11 -m pytest hub/tests/test_rebinding_an_agents_runner_starts_clean.py -v -k rebind_and_back",
+      "key": "acceptance-drive-rebind-and-back",
+      "requirement": "rebind-and-back-runs-clean",
+      "then": "the three runs are completed, every queue entry has delivery_attempts 0 or 1 and none was redelivered, and each turn_usage.model is the model that turn's fake reported; on master the Claude turn after the rebind back fails",
+      "when": "it is rebound to Copilot, sent one message, rebound to Claude, and sent one message, all through PATCH and POST /agent/trigger with the CLIs stubbed"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a scratch Hub started from source on a fresh profile (as :8117 was for F1023), with the real Claude CLI (runner model haiku) and the real Copilot CLI",
+      "how_to_check": "Operator drive with real CLIs on a scratch Hub (never :8000 and never the Hub being edited); paste the run ids and statuses, and the conversation screenshot",
+      "key": "operator-drive-real-clis",
+      "requirement": "rebind-and-back-runs-clean",
+      "then": "every run is completed on its first attempt, the conversation shows one 'not carried' notice per crossing, no 'No conversation found with session ID' and no 'Copilot ran ... instead of the requested haiku', and each turn's usage names a model its CLI offers",
+      "when": "the operator repeats scripts/drive/s1023_rm_rebind.py: two Claude turns, a rebind to Copilot and one turn, a rebind back to Claude and one turn, then opens the conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at 0147 holding a conversation whose latest completed run bound its session and has turn_usage.runner 'copilot', a conversation whose only runs failed, and one with no session",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_migrations.py -v -k provider_session_cli",
+      "key": "migration-backfills-and-downgrades",
+      "requirement": "existing-sessions-are-attributed",
+      "then": "after upgrade their session CLIs are 'copilot', NULL and NULL; after downgrade the column is gone and every other value is unchanged",
+      "when": "the new revision is applied and then downgraded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation storing {'model': 'haiku'} for an agent bound to a Copilot runner whose model is 'claude-haiku-4.5'",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/composerWithheldModel.test.tsx",
+      "key": "pill-shows-runners-model",
+      "requirement": "the-composer-shows-what-will-run",
+      "then": "the model pill reads 'claude-haiku-4.5' with a line saying 'haiku' is not offered by Copilot, and a sent message does not remove 'haiku' from the stored overrides",
+      "when": "the conversation is opened"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "3529beae12f101ab6d68ffebf1d14457f4867c35e595954f23210756a0d2b3dc",
+      "FR-10": "5be1985d1e0801672c21d076be5bc2c47e5d523a275f385774969e71ec86efeb",
+      "FR-2": "cc3ff199ead5da0ecd7bb536b19054ca47de282d3730062f8b9ba9bdb74a8410",
+      "FR-3": "a99e6122168783acb2944b34a0795afc7696e80973e9871b6d4a60ceb2cfe6f2",
+      "FR-4": "f604d615a0319015de94f9231fdd6f8744fb1b518e6c97eff2bd6177fc73b40e",
+      "FR-5": "6829f90107b8e8e95402cb659bd83ba73eb8bb051901aca62a1122fb2a87cd1f",
+      "FR-6": "3276c96feae5fef87800e3f5318dd147777cb11731bac09ca05d8622b5ba1d4c",
+      "FR-7": "c2c9d41d2cf81ad2bdf8113f8c39931062dcf159d240440b9d5ff70b4d2c1d0f",
+      "FR-8": "0c6c20561db4f968ac11de776e16a690bba523448d25b4f0a5ec1e58726eea60",
+      "FR-9": "ce3982cb8da0241a14b9ed9ad3900849c1d2878cc418a385ad620d1eff4351f9"
+    },
+    "high_water": 10,
+    "requirements": {
+      "a-foreign-model-is-withheld": "FR-5",
+      "a-same-cli-session-is-kept": "FR-3",
+      "a-session-is-resumed-only-by-its-cli": "FR-1",
+      "a-withheld-model-is-said": "FR-6",
+      "existing-sessions-are-attributed": "FR-9",
+      "rebind-and-back-runs-clean": "FR-8",
+      "the-composer-shows-what-will-run": "FR-10",
+      "the-crossing-is-said": "FR-4",
+      "the-new-session-becomes-the-conversations": "FR-2",
+      "the-recorded-model-is-what-ran": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": null,
+    "cron": "*/5 * * * *",
+    "mode": "none",
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": false
+  },
+  "design": "Tier 2: one nullable column with a backfill, applied to the operator's :8000 database at its next restart.\n\nD1. The decision is made at launch, in trigger_agent_directly, not in the rebind. Every turn passes through it: manual, queued, job and peer (agent_trigger.py:1124-1131). The CLI can also change without PATCH seeing the old one: a PATCH may set runner_id to null (agents.py:3245-3251), and deleting a runner unbinds the archived agents that held it (runners.py:295-305), so the later bind has no previous CLI to compare with. And conversations the PATCH never looks at (a job's, an inherited one) carry the same state. agents.py:3244-3251 is unchanged. A runner's CLI cannot change after it is created (runners.py:196-227 reads runner.cli), so the CLI is the right thing to compare.\n\nD2. Which CLI a session belongs to is recorded, not derived: a new conversations.provider_session_cli (String(32), nullable) beside provider_session_id. It is written only with that column, through one helper in conversations.py (set_provider_session(conversation, session_id, cli)). Every current writer goes through it: agent_trigger.py:2262 (typed session, cli unknown), :3470 and :4467 (binding at a run, the run's CLI), :4449 and inbound_queue.py:502 (clears), output_recording.py:114 (self-reported, unknown) and scheduler.py:4508 (a job's stored id, unknown). A ratchet test refuses `.provider_session_id =` anywhere else. Rejected: deriving it from turn_usage.runner, which makes an accounting row decide execution and depends on which runs completed; F1023's two failed Claude runs recorded runner claude while the session was Copilot's. Rejected: clearing every conversation's session at PATCH (D1).\n\nD3. A crossing is when a session is set, its CLI is known and it differs from the bound runner's cli. The launch then uses no resume id and session_mode 'new', and clears the session through the helper in the same commit as the Run row (agent_trigger.py:2020-2032), so a refused start changes nothing. The old id has to be cleared, because the first-writer rule (agent_trigger.py:3469-3479, :4466-4476) would otherwise refuse the new session after the turn ran. The sentence goes into setup_events (recorded before the runner's output on all three transports, agent_trigger.py:3245, :3272, :3545) and into the prompt's notices, the shape the dependency-link notice uses (agent_trigger.py:1758-1772). An unknown CLI is resumed as today, and Copilot's -32002 rescue and the queue's give-up stay as the backstop.\n\nD4. Model: model_catalog.py gains one function answering whether a stored model applies to a CLI: it does when that CLI declares it (ProviderDescriptor.model, which accepts aliases, model_catalog.py:149-155) or when no CLI declares it. agent_trigger.py:1197-1198 uses it on the non-provider branch; the provider branch (:1191-1196, D7) is unchanged. A withheld model is kept on the conversation, not removed. The composer re-sends the stored overrides with each message (AgentOutputPanel.tsx:323-333), and validate_overrides accepts an undeclared model only when it equals the stored one (model_catalog.py:688-694), so removing it would get the operator's next message refused with a 400. Keeping it also means rebinding back restores the model. The 'declared by no CLI' clause keeps a retired model working where it is stored (the-copilot-catalog-tracks-the-cli, D2). Shared ids such as claude-sonnet-5, which both Claude and Copilot declare, simply apply. The runner.model_withheld diagnostic is recorded on new-session turns only, so it is said once per session.\n\nD5. Nothing new is recorded about the model. run_started already carries the launch's model (agent_trigger.py:3378-3386, :4420-4429) and turn_usage.model is the CLI's report (usage_accounting.py:58; runner_parsing.py:166-190 for Claude; copilot_usage.py for Copilot). Once D4 stops passing a foreign model, the two agree.\n\nD6. Migration (next free revision after 0147; slices C and K also touch hub/hub/db, so take the number at build time). It adds the column, guarded for a missing table, and backfills it for conversations holding a session: the turn_usage.runner of the latest run in that conversation with status 'completed' and session_id equal to the conversation's provider_session_id, else NULL. Hazard: it writes to every row of the operator's conversations table at their next :8000 restart. Back up the database first (operator authorised migrations on 2026-10-27, with a backup). Rollback: the downgrade drops the column in a batch; a reverted Hub never reads it, and no other value is changed.\n\nD7. UI (task 2): the composer applies D4's rule from the model catalog it already loads, next to overridesForRunner (runnerProvider.ts:27-35, which already hides a model a provider runner ignores). It is a display rule only, and the backend stays the authority.",
+  "evidence": {
+    "checked": [
+      "scripts/drive/FINDINGS.md F1023 and F1024 (open 2026-10-23, Tier 1 and Tier 0): the drive, run ids, causes and suggested tests",
+      "hub/hub/api/v1/agents.py:3244-3251: the PATCH sets runner_id and reads no conversation; :3330-3333 rewrites the Copilot home; :3335-3354 redrains",
+      "hub/hub/api/v1/agent_trigger.py:1186-1199: model = conversation_overrides.get('model') or config.get('model') for non-provider runners, with a comment saying overrides are trusted at launch",
+      "hub/hub/api/v1/agent_trigger.py:1277-1278: resume_session_id = conversation.provider_session_id; session_mode is 'resume' whenever it is set",
+      "hub/hub/api/v1/agent_trigger.py:3469-3479 and :4466-4476: the first-writer rule raises 'Provider session binding conflict' when a different id is stored",
+      "hub/hub/inbound_queue.py:404 (RESUME_RETRY_LIMIT = 2) and :496-502: the generic give-up that clears the session on the second failed delivery, which is why F1023 saw two failed Claude runs",
+      "hub/hub/copilot_acp.py:2700-2721: Copilot's -32002 rescue, the only reason the Copilot leg recovers",
+      "hub/hub/db/models.py:439-470 (Conversation: provider_session_id, runtime_overrides; no record of the CLI), :1417-1470 (Run: no runner column), :1567-1590 (TurnUsage.runner, TurnUsage.model)",
+      "hub/hub/usage_accounting.py:51-62: turn_usage.model is sample.model, the CLI's report; runner_parsing.py:166-190 picks the Claude model from modelUsage",
+      "hub/hub/api/v1/agents.py:777-781: the timeline's 'Run started (runner, model)' reads the run_started event",
+      "hub/hub/conversations.py:66-111 inherit_runtime_overrides and checkpoint_cutover.py:182 copy runtime_overrides into new conversations",
+      "grep of 'provider_session_id =' outside comparisons: seven assignment sites plus the constructor at agent_trigger.py:2256 (listed in D2)",
+      "Catalog read with py -3.11 on 2026-10-27: claude declares haiku as an alias of claude-haiku-5-5; copilot declares 'auto' and 'claude-haiku-4.5' but not 'haiku'; claude-sonnet-5 is declared by both; effort and permission_mode have the same values on all three CLIs except that codex has no 'max'",
+      "hub/tests/test_copilot_trigger.py:41-58 (fake copilot_acp.run_turn driving on_session, on_session_missing) and test_agent_trigger_overrides.py:90-108 (PtySession.spawn and shutil.which patched, argv read from call_args): the stubbing the acceptance drive reuses",
+      "hub/tests/test_migrations.py:40 HEAD_REVISION = '0147'"
+    ],
+    "limits": [
+      "The failure was reproduced by the 2026-10-23 drive, not re-run for this document; the acceptance drive's first run on master is the re-check.",
+      "Sessions of unknown CLI (not backfilled, typed, a job's stored id, self-reported) keep today's behaviour, so a rebind across CLIs in such a conversation still costs the queue's two failed deliveries.",
+      "'Declared by no CLI' is the catalog's word on vocabulary: a Claude model retired from Claude's catalog, stored, and then sent to Copilot would still be passed; Copilot reports the substitution (a-substituted-copilot-model-is-reported).",
+      "Codex is covered by a stubbed test only; it cannot be driven on this machine.",
+      "Whether the composer's stored-override round trip drops the model on a send that changes only effort (conversation.runtime_overrides = accepted replaces the whole map, agent_trigger.py:2405) was not traced; task 2's test pins it."
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "rigor": "sketch",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Tier 2 (hazard): a migration adds and backfills conversations.provider_session_cli on the operator's live :8000 database at its next restart, and task 2's UI bundle reaches their app on reload. A one-off change; F1023 and F1024's Status lines are set when it closes.",
+  "open_questions": [
+    {
+      "question": "Should a stored model the new CLI does not offer be removed from the conversation or kept? Decided: kept and withheld, as the provider branch's D7 does. Removing it would get the composer's next message refused (D4).",
+      "resolved": true
+    },
+    {
+      "question": "Should the rebind (PATCH) clear the agent's conversations' sessions instead of the launch deciding? Decided: the launch decides, because an unbind or a deleted runner followed by a new bind gives the PATCH no previous CLI and jobs and inherited conversations bypass it (D1).",
+      "resolved": true
+    }
+  ],
+  "problem": "Found by the day sweep of 2026-10-23 on scratch Hub :8117 (scripts/drive/s1023_rm_rebind.py, s1023_rm_turn.py, s1023_rm_jobdoor2.py). F1023: agent a-run had two Claude turns in conv-f45e1b5b2180; rebound to a Copilot runner it was asked to load Claude's session 62f1c78b (Copilot alone recovers, copilot_acp.py:2700-2721); rebound back to Claude, run-48eb218457b6 and run-e6eee0b7e373 failed with 'No conversation found with session ID: b36d6aef...' (Copilot's id) and only run-d079343e0501 succeeded, on a fresh session nobody was told about. The operator sent one message and saw two failed turns and four copies of an error naming an id Claude never issued. F1024: the same conversation stored runtime_overrides {'model': 'haiku'}; after the rebind the Copilot run started with model 'haiku' (run_started), Copilot ran claude-sonnet-5 on a premium request, and the timeline reads 'Run started (copilot, haiku)'. The operator chose the cheapest model and paid for the plan default. The same stored value is copied into a job's or a peer message's new conversation (conversations.py:66-111), so the job door reproduces it with no rebind in sight. Moving agents between Claude and Copilot is how the operator balances the weekly Claude window against Copilot's premium requests, so this is hit by ordinary use, not by an edge case.",
+  "requirements": [
+    {
+      "key": "a-session-is-resumed-only-by-its-cli",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1023: the launch resumes conversation.provider_session_id whatever CLI wrote it (agent_trigger.py:1277-1278), and only Copilot survives being handed a foreign id.",
+      "statement": "A turn resumes the conversation's provider session only when that session is recorded as created by the CLI of the agent's bound runner. When it is recorded as another CLI's, the turn starts a new session: a Claude launch carries no --resume, a Codex exec launch no 'resume <id>', and a Copilot turn is given no session to load."
+    },
+    {
+      "key": "the-new-session-becomes-the-conversations",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The first-writer rule refuses a second session while the old id is stored (agent_trigger.py:3469-3479 for the stream path, :4466-4476 for app-server and Copilot), so skipping the resume without clearing the old id would fail the turn after it ran.",
+      "statement": "On a turn that starts a new session because the session was another CLI's, the conversation gives up that session before the run starts, so the session the new CLI creates becomes the conversation's without a binding conflict, and the next turn on the same CLI resumes it."
+    },
+    {
+      "key": "a-same-cli-session-is-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Only a session known to be another CLI's is given up; an unknown one keeps today's path, whose failure the queue's give-up already ends (inbound_queue.py:496-502).",
+      "statement": "A turn resumes the conversation's session as today when the agent was rebound to another runner of the same CLI (for example a Claude runner with another model) or to the same runner, and when the session's CLI is unknown (not backfilled, typed by the operator, a job's stored id, or self-reported)."
+    },
+    {
+      "key": "the-crossing-is-said",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1023: the third run answered from an empty session and nothing said so. The agent needs it as much as the operator: the conversation it is shown continuing is one it has no memory of.",
+      "statement": "A turn that starts a new session because the agent now runs on another CLI records one info diagnostic (code runner.session_not_carried) in the conversation, before anything the runner emits, and prepends the same sentence to the agent's prompt. The sentence names the agent, the CLI the earlier turns ran on and the CLI it runs on now, and says the earlier turns are not in the new session. A turn that resumes records none."
+    },
+    {
+      "key": "a-foreign-model-is-withheld",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1024. The 'declared by no CLI' clause keeps a retired model working where it is stored (the-copilot-catalog-tracks-the-cli, D2). Kept, as the provider branch already keeps one (agent_trigger.py:1191-1196, design D7).",
+      "statement": "On a runner with no model provider, a model stored on the conversation is applied only when the bound runner's CLI declares it (by id or alias) or when no CLI in the model catalog declares it. Otherwise the turn launches with the runner's own model, and the stored model stays on the conversation, so a turn after rebinding back to its CLI applies it again."
+    },
+    {
+      "key": "a-withheld-model-is-said",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Said once per session, not on every turn: the composer's pill (the-composer-shows-what-will-run) carries it after that.",
+      "statement": "A turn that starts a new session while a stored model is withheld records one info diagnostic (code runner.model_withheld) naming the stored model, the CLI that does not offer it and the model the turn runs on. Resumed turns of that session do not repeat it."
+    },
+    {
+      "key": "the-recorded-model-is-what-ran",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1024: the Hub's own record said 'haiku' for a turn Copilot ran on claude-sonnet-5.",
+      "statement": "A turn's run_started event, and the timeline's 'Run started (runner, model)' line, name the model the CLI was launched with, and its turn_usage row names the model the CLI reported. After a rebind to another CLI, neither names a model that only the previous CLI declares."
+    },
+    {
+      "key": "rebind-and-back-runs-clean",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done sentence for slice J.",
+      "statement": "In one conversation, a Claude agent rebound to a Copilot runner and then back to Claude runs one turn on each binding, each completing on its first delivery: no run fails, no queue entry is redelivered, and each turn's recorded model is one its own CLI ran."
+    },
+    {
+      "key": "existing-sessions-are-attributed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Without a backfill every conversation on the operator's Hub would be unknown, and the first rebind after the upgrade would still fail as F1023 did.",
+      "statement": "The migration records, for each existing conversation that holds a provider session, the runner recorded on that conversation's latest completed run that bound the same session id. It leaves the CLI unknown when there is no such run. Its downgrade removes the column and changes nothing else."
+    },
+    {
+      "key": "the-composer-shows-what-will-run",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "F1024 expected: 'the composer's model pill reads what will run'. The pill is seeded from the stored overrides (AgentOutputPanel.tsx:323-333).",
+      "statement": "When the conversation's stored model would be withheld on the agent's bound runner, the composer's model pill shows the runner's model and says the conversation's model is not offered by that CLI. Sending a message from the composer leaves the stored model on the conversation."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+    "slice": "runner-rebind-starts-clean"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Recording, beside conversations.provider_session_id, the CLI whose session it is, through one helper used by every writer, and a migration that adds and backfills it",
+      "The launch decision in trigger_agent_directly: a session of another CLI is given up and a new one started, said once in the conversation and in the agent's prompt",
+      "The launch's model resolution for runners without a model provider: a stored model the bound CLI does not declare is withheld (kept on the conversation), said on a new-session turn",
+      "The composer's model pill showing the model the next turn runs on when the stored one is withheld",
+      "Stubbed tests through POST /agent/trigger for Claude, Copilot and Codex, and an operator drive with the real Claude and Copilot CLIs"
+    ],
+    "non_goals": [
+      "Carrying the earlier turns' content into the new CLI's session (a transcript replay or an automatic checkpoint hand-off). The new session starts empty and both the operator and the agent are told; the operator can take a checkpoint before rebinding.",
+      "Stored control overrides (effort, permission_mode): the catalog read on 2026-10-27 gives all three CLIs both controls with the same values, except that Codex has no 'max' effort. They are unchanged.",
+      "Changing what PATCH /agents/{name} does or answers (agents.py:3244-3251), F1026's unarchive message (slice I) and F1025's Manager model menu: a rebind stays a binding change, and the conversation decision is the launch's.",
+      "Removing Copilot's -32002 rescue (copilot_acp.py:2700-2721) or the queue's resume give-up (inbound_queue.py:404, :496-502): they stay as the backstop for sessions whose CLI is unknown.",
+      "Attributing a session the operator types (POST /agent/trigger session_mode 'resume', agent_trigger.py:2251-2263), a job's stored last_session_id (scheduler.py:4504-4509) or a self-reporting agent's session (output_recording.py:107-116): their CLI stays unknown, and they resume as today.",
+      "Driving Codex for real: it cannot be driven on this machine, so it is covered by the stubbed test only."
+    ]
+  },
+  "summary": "A conversation's provider session is resumed only by the CLI that created it, and a per-conversation model is applied only when the bound runner's CLI offers it. Today a rebind to another CLI leaves both in place: Copilot is asked to load a Claude session and run Claude's 'haiku', and after the rebind back Claude fails the operator's turn twice on Copilot's session id before the queue silently drops it (F1023, F1024). The Hub records which CLI a conversation's session belongs to (one nullable column, backfilled), decides at launch, the one point every turn passes through, whether the session can be resumed, and withholds a stored model the bound CLI does not offer, saying both in the conversation and to the agent. The turn's recorded model is then the one the CLI was launched with, and its usage row keeps the model the CLI reported.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "The acceptance drive first: write hub/tests/test_rebinding_an_agents_runner_starts_clean.py (every agent-checked criterion except the migration and the pill), entering through PATCH /agents/{name} and POST /agent/trigger with PtySession.spawn, PipeSession.spawn, shutil.which and copilot_acp.run_turn stubbed, and run it on master: rebind_and_back, claude_to_copilot, copilot_to_claude, haiku and recorded_model must fail there. Then: add conversations.provider_session_cli and its migration with the backfill and downgrade (bump HEAD in test_migrations.py and test_project_persistence.py, back up :8000's database before its next restart); route every write of provider_session_id through one helper in conversations.py that writes both, with a ratchet test refusing a direct assignment elsewhere; in trigger_agent_directly decide the crossing (give up a session known to be another CLI's, in the same commit as the Run row, and say it through setup_events and the prompt notices), and withhold a stored model the bound CLI does not declare, using a model_catalog function. Before completing, run the whole hub suite.",
+      "files": [
+        "hub/tests/test_rebinding_an_agents_runner_starts_clean.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/hub/conversations.py",
+        "hub/hub/api/v1/agent_trigger.py",
+        "hub/hub/model_catalog.py",
+        "hub/hub/inbound_queue.py",
+        "hub/hub/output_recording.py",
+        "hub/hub/scheduler.py",
+        "hub/tests/test_migrations.py",
+        "hub/tests/test_project_persistence.py"
+      ],
+      "from": null,
+      "key": "a-rebind-crosses-clean",
+      "requirements": [
+        "a-session-is-resumed-only-by-its-cli",
+        "the-new-session-becomes-the-conversations",
+        "a-same-cli-session-is-kept",
+        "the-crossing-is-said",
+        "a-foreign-model-is-withheld",
+        "a-withheld-model-is-said",
+        "the-recorded-model-is-what-ran",
+        "rebind-and-back-runs-clean",
+        "existing-sessions-are-attributed"
+      ],
+      "reviewer": null,
+      "title": "A rebind to another CLI starts a fresh session on its own model"
+    },
+    {
+      "depends_on": [
+        "a-rebind-crosses-clean"
+      ],
+      "description": "Write hub/ui/src/__tests__/composerWithheldModel.test.tsx and see it fail on master, then apply the backend's rule in the UI: beside overridesForRunner (hub/ui/src/lib/runnerProvider.ts), decide from the model catalog whether the stored model is withheld on the bound runner's CLI; when it is, the pill shows the runner's model and a line naming the withheld one, and a send does not drop it from the stored overrides. Refresh the bundle (make ui) and commit hub/ui/src and hub/hub/static/ui together; it reaches :8000 on the operator's next reload.",
+      "files": [
+        "hub/ui/src/lib/runnerProvider.ts",
+        "hub/ui/src/components/agents/AgentOutputPanel.tsx",
+        "hub/ui/src/components/agents/Composer.tsx",
+        "hub/ui/src/__tests__/composerWithheldModel.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "composer-shows-what-will-run",
+      "requirements": [
+        "the-composer-shows-what-will-run"
+      ],
+      "reviewer": null,
+      "title": "The composer's model pill shows the model that will run"
+    }
+  ],
+  "title": "An agent moved to a runner of another CLI starts a fresh session on that runner's model, and the Hub records the model that ran"
+}

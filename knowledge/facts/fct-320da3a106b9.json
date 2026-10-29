@@ -1,0 +1,23 @@
+{
+  "id": "fct-320da3a106b9",
+  "kind": "fact",
+  "claim": "Approval held its write transaction across git merge-tree, the merge into main and a snapshot.",
+  "citations": [
+    {
+      "source": "src-17aeb9aea81f",
+      "quote": "approval also held its write transaction across git merge-tree, the merge into main and a\n   snapshot (`task_transition_service.py:816–924`).",
+      "line_start": 53,
+      "line_end": 54
+    }
+  ],
+  "sources": [
+    "src-17aeb9aea81f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-26T01:48:53.786044Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
