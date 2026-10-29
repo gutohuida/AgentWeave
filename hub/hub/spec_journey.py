@@ -534,7 +534,8 @@ STEP_DUTIES: Dict[str, str] = {
         "- For each task list in `files` the paths it will edit, and in `depends_on` the tasks it "
         "waits on; chain any two tasks that share a path. Link each task to the requirements it "
         "serves.\n"
-        "- Set a task's `reviewer` only where it differs from `delivery.reviewer`."
+        "- Name one checker: `delivery.checker` for every task, and a task's own `checker` (or "
+        "`builder`) only where it differs from the delivery's."
     ),
     BUILD: (
         f"{marker(BUILD)} **Build: recommend how it will be built.** You recommend; the operator "

@@ -17,7 +17,7 @@ migration recorded a level for it (an open task of a `contract`/`gate` document)
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -166,13 +166,18 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
 async def view(session: AsyncSession, build: Build) -> Dict[str, Any]:
     """The build as the document read and the app show it."""
     spent, unpriced = await spend(session, build)
+    people = await people_of(session, build)
     return {
         "id": build.id,
+        "chosen_by": CHOSEN_BY_OPERATOR,
         "state": build.state,
         "driver": build.driver,
         "level": build.level,
+        "builder": people["builder"],
+        "checker": people["checker"],
         "builders": list(build.builders or []),
         "reviewers": list(build.reviewers or []),
+        "tasks": people["tasks"],
         "lead": build.lead,
         "budget_cap_usd": usd(build.budget_cap_usd_micros),
         "spent_usd": usd(spent),
@@ -185,6 +190,152 @@ async def view(session: AsyncSession, build: Build) -> Dict[str, Any]:
         "created_at": _iso(build.created_at),
         "stopped_at": _iso(build.stopped_at),
     }
+
+
+async def people_of(session: AsyncSession, build: Build) -> Dict[str, Any]:
+    """Who *build* was given to: its default builder and checker, and each task's own builder and
+    checker by key (`one-checker`). A build recorded before migration 0156 has no people of its own,
+    so its tasks' recorded builders stand in, with no checker."""
+    if isinstance(build.people, dict):
+        return {
+            "builder": build.people.get("builder"),
+            "checker": build.people.get("checker"),
+            "tasks": dict(build.people.get("tasks") or {}),
+        }
+    rows = (
+        await session.execute(
+            select(Task.spec_task_key, Task.builder).where(Task.build_id == build.id)
+        )
+    ).all()
+    return {
+        "builder": None,
+        "checker": None,
+        "tasks": {key: {"builder": builder, "checker": None} for key, builder in rows if key},
+    }
+
+
+# --- the build in the spec document (`choices-in-the-spec`, `build-end-shown`) -------------------
+
+#: Who made the choices a document's `hub.builds` records: the operator, at Build. The author's
+#: recommendation is the payload's `delivery`, which a build never edits.
+CHOSEN_BY_OPERATOR = "operator"
+
+#: Said beside the builds wherever an agent reads them, so the two are never taken for each other.
+OPERATOR_NOTE = (
+    "The operator's choices when they pressed Build, recorded by the Hub. They are the decision; "
+    "the document's `delivery` is the author's recommendation and may differ."
+)
+
+
+async def document_entry(session: AsyncSession, build: Build) -> Dict[str, Any]:
+    """*build* as the spec document carries it: every choice the operator made, labelled as theirs,
+    and when it started and ended. No spend: the tracked file must not change on every turn."""
+    people = await people_of(session, build)
+    return {
+        "id": build.id,
+        "chosen_by": CHOSEN_BY_OPERATOR,
+        "state": build.state,
+        "driver": build.driver,
+        "level": build.level,
+        "builder": people["builder"],
+        "checker": people["checker"],
+        "builders": list(build.builders or []),
+        "checkers": list(build.reviewers or []),
+        "tasks": people["tasks"],
+        "lead": build.lead,
+        "budget_cap_usd": usd(build.budget_cap_usd_micros),
+        "window_start": _iso(build.window_start),
+        "window_end": _iso(build.window_end),
+        "landing": build.landing,
+        "started_at": _iso(build.created_at),
+        "ended_at": _iso(build.stopped_at) if build.state != RUNNING else None,
+        "stop_reason": build.stop_reason,
+    }
+
+
+async def document_builds(session: AsyncSession, document_id: str) -> List[Dict[str, Any]]:
+    """The builds a document carries (FR-6): the running build, if any, then the most recent
+    ended one. Older ended builds stay on their build record only."""
+    rows = await builds_of(session, document_id)
+    running = next((row for row in rows if row.state == RUNNING), None)
+    ended = next((row for row in rows if row.state != RUNNING), None)
+    return [await document_entry(session, row) for row in (running, ended) if row is not None]
+
+
+def split_builds(entries: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """The document's builds as an agent reads them: `running` and `last_ended`, apart from
+    `delivery`, with the note saying whose choices they are (`agents-read-the-build`)."""
+    return {
+        "running": next((e for e in entries if e.get("state") == RUNNING), None),
+        "last_ended": next((e for e in entries if e.get("state") != RUNNING), None),
+        "note": OPERATOR_NOTE,
+    }
+
+
+async def turn_lines(session: AsyncSession, task_id: Optional[str]) -> List[str]:
+    """What a turn on one of a build's tasks is told about the build (`agents-read-the-build`):
+    its driver and level, and that task's builder and checker, each the task's own or the build's
+    default. Empty for a task outside any build."""
+    task = await session.get(Task, task_id) if task_id else None
+    build = await build_of_task(session, task) if task is not None else None
+    if task is None or build is None:
+        return []
+    people = await people_of(session, build)
+    own = people["tasks"].get(task.spec_task_key or "") or {}
+    builder = own.get("builder") or people["builder"] or task.builder
+    checker = own.get("checker") or people["checker"]
+    state = "running" if build.state == RUNNING else f"{build.state}, no longer running"
+    return [
+        "### The build this task belongs to",
+        f"- Build `{build.id}` ({state}), as the operator chose it when they pressed Build: "
+        f"driver **{build.driver}**, level **{build.level}**. The document's `delivery` is the "
+        "author's recommendation; where the two differ, this is the decision.",
+        f"- `{task.id}`'s builder: **{builder or 'none named'}**; its checker: "
+        f"**{checker or 'none named'}**.",
+        "",
+    ]
+
+
+async def record_in_document(session: AsyncSession, document_id: str) -> None:
+    """Write the document's builds into its stored file's Hub block (`hub.builds`).
+
+    The build rows are the authority; the file carries a copy for whoever reads it, as it carries
+    the phase. Called when a build starts, stops, resumes or finishes. The payload is not touched,
+    so the approved content version does not move; the recorded digest follows the new bytes, so
+    the Hub's own write is not mistaken for an edit made outside it. A file that cannot be written
+    leaves the build as it is: it is logged, not raised. Announcing it is the caller's.
+    """
+    from . import spec_documents, spec_lifecycle
+    from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
+    from .spec_manifest import SpecPathError
+
+    document = await session.get(SpecDocument, document_id)
+    if document is None:
+        return
+    try:
+        workspace = await resolve_project_workspace(session, document.project_id)
+        content = spec_documents.read_document(workspace, document.path)
+        stored = spec_documents.parse_stored(content)
+        if stored is None:
+            return
+        hub = dict(spec_documents.parse_hub(content))
+        entries = await document_builds(session, document_id)
+        if entries:
+            hub[spec_documents.HUB_BUILDS] = entries
+        else:
+            hub.pop(spec_documents.HUB_BUILDS, None)
+        rewritten = spec_documents.serialize(stored, hub)
+        if rewritten != content:
+            # A file already changed outside the Hub stays reported as changed: only a digest that
+            # matched what the Hub last wrote follows this write.
+            matched = spec_lifecycle.divergence(document, content) is None
+            spec_documents.write_document(workspace, document.path, rewritten)
+            if matched:
+                document.content_digest = spec_lifecycle.digest(rewritten)
+    except (ProjectWorkspaceError, SpecPathError, OSError):
+        logger.warning(
+            "could not write the builds of %s into its document", document_id, exc_info=True
+        )
 
 
 # --- starting ------------------------------------------------------------------------------------
@@ -204,6 +355,12 @@ class Settings:
     window_end: Optional[datetime]
     landing: str
     task_builders: Dict[str, str]
+    #: The default builder and checker the operator chose (`one-checker`); None takes the
+    #: document's (`spec_payload.default_builder`, `default_checker`).
+    builder: Optional[str] = None
+    checker: Optional[str] = None
+    #: Each task's checker as the operator left it in the dialog, by task key; "" clears it.
+    task_checkers: Dict[str, str] = field(default_factory=dict)
 
 
 def new_build(project_id: str, document_id: str, settings: Settings) -> Build:
@@ -241,12 +398,21 @@ async def open_agents(session: AsyncSession, project_id: str) -> set:
     )
 
 
+def _person(value: Optional[str]) -> Optional[str]:
+    return (value or "").strip() or None
+
+
 async def cover_tasks(
     session: AsyncSession,
     build: Build,
     tasks: Iterable[Task],
     declared: Dict[str, Optional[str]],
     chosen: Dict[str, str],
+    *,
+    declared_checkers: Optional[Dict[str, Optional[str]]] = None,
+    chosen_checkers: Optional[Dict[str, str]] = None,
+    default_builder: Optional[str] = None,
+    default_checker: Optional[str] = None,
 ) -> List[Dict[str, str]]:
     """Mark *tasks* as the build's, at its level, and apply each one's builder (FR-2, FR-3).
 
@@ -255,15 +421,26 @@ async def cover_tasks(
     the assignee of a task nobody holds yet; one that is not is kept on the task and returned as
     unresolved, and the task is left for the driver to hand out. Approval assigns nobody (slice C:
     approval is a plan), so this is the first place a builder is applied.
+
+    Each task's checker is resolved the same way (*declared_checkers*, *chosen_checkers*), and the
+    build records the people it was given (`Build.people`, `one-checker`): the defaults, and each
+    task's own builder and checker, empty where the task takes the default.
     """
     agents = await open_agents(session, build.project_id)
+    declared_checkers = declared_checkers or {}
+    chosen_checkers = chosen_checkers or {}
     unresolved: List[Dict[str, str]] = []
+    people: Dict[str, Dict[str, Optional[str]]] = {}
     for task in tasks:
         task.build_id = build.id
         task.level = build.level
         key = task.spec_task_key or ""
-        builder = chosen[key] if key in chosen else declared.get(key)
-        builder = (builder or "").strip() or None
+        builder = _person(chosen[key] if key in chosen else declared.get(key))
+        checker = _person(
+            chosen_checkers[key] if key in chosen_checkers else declared_checkers.get(key)
+        )
+        if key:
+            people[key] = {"builder": builder, "checker": checker}
         task.builder = builder
         if builder is None:
             continue
@@ -272,6 +449,11 @@ async def cover_tasks(
             continue
         if task.assignee is None and task.status in ("pending", "assigned"):
             task.assignee = builder
+    build.people = {
+        "builder": _person(default_builder),
+        "checker": _person(default_checker),
+        "tasks": people,
+    }
     return unresolved
 
 
@@ -426,6 +608,8 @@ async def stop(session: AsyncSession, build: Build, reason: str) -> Optional[AIJ
     build.state = STOPPED
     build.stop_reason = reason
     build.stopped_at = now()
+    # The document shows it ended, with when (`build-end-shown`).
+    await record_in_document(session, build.document_id)
     if not build.loop_id:
         return None
     loop = await session.get(Loop, build.loop_id)
@@ -445,6 +629,7 @@ async def resume(session: AsyncSession, build: Build) -> Optional[AIJob]:
     build.state = RUNNING
     build.stop_reason = None
     build.stopped_at = None
+    await record_in_document(session, build.document_id)
     if not build.loop_id:
         return None
     loop = await session.get(Loop, build.loop_id)
@@ -495,6 +680,8 @@ async def finish_if_done(session: AsyncSession, task: Task) -> None:
         build.state = FINISHED
         build.stopped_at = datetime.now(timezone.utc)
         await end_loop_of(session, build)
+        # The document shows it finished (`build-end-shown`).
+        await record_in_document(session, build.document_id)
         # The page that shows this build reads it again and stops polling its figures.
         document = await session.get(SpecDocument, build.document_id)
         if document is not None:

@@ -431,6 +431,13 @@ def render_read(view: Dict[str, Any]) -> str:
         lines.extend(["", "## Divergence", *_wrapped(view["divergence"].get("detail"))])
     if view.get("diagnostics"):
         lines.extend(["", "## Diagnostics", *_structured(view["diagnostics"])])
+    build = view.get("build")
+    if isinstance(build, dict):
+        lines.extend(["", "## Build (the operator's choices, not the recommendation)"])
+        lines.extend(_wrapped(build.get("note")))
+        for name in ("running", "last_ended"):
+            lines.extend(["", f"### {name.replace('_', ' ').capitalize()}"])
+            lines.extend(_structured(build.get(name)) if build.get(name) else ["none"])
     for name in PREAMBLE_FIELDS:
         value = view.get(name)
         if value in (None, "", [], {}):
@@ -532,6 +539,7 @@ def render_tasks(tasks: List[Dict[str, Any]]) -> str:
 
 
 _ANSWER_FIELDS = (
+    "build",
     "id",
     "path",
     "title",
