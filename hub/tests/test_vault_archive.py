@@ -203,22 +203,7 @@ def test_the_archive_routes_have_a_client() -> None:
 # Re-run 2026-10-29: hub-tests ratchet passes at HEAD (19 == ceiling); new commit for the check.
 # Re-measured at acc4569 (turn 2026-10-29): 19 clientless routes, none of them archive routes.
 # Re-run 02:00 2026-10-29: 12 ratchet+archive tests pass, 179 vault tests pass at d565e59.
-# Re-run at da2d908: 25 archive/agent/changes tests and 6 surface-ceiling tests pass; new commit for the check.
-# Re-run at 444ecf2: surface-ceilings 6 pass (clientless routes within ceiling 19); new commit so hub-tests re-checks.
-# Re-run at 92ee106 (turn 2026-10-29): 25 tests pass, surface ceilings 6 pass; fresh commit for hub-tests.
-# Re-run at 667287d: ratchet measured 19 == ceiling, 34 archive/contradiction/spec-check tests pass.
-# Re-run at 5a05f1f (turn 2026-10-29, 3rd): 13 archive/agent-change tests pass, route ratchet 19 == ceiling; left uncommitted for the Hub snapshot.
-# Re-run at a9f9ee1: surface-ceilings 6 pass (19 clientless routes); archive+agent-change tests 13 pass.
 # Re-run 2026-10-29 (Developer turn): ratchet 6 passed and vault archive/changes 25 passed at 98189bc; touching so hub-tests re-runs on a new commit.
-# Re-run at 45480e4 (master now a11ae1d, branch based on it): surface ceilings 6 pass locally; fresh commit for hub-tests.
-# Re-run at af05398 (turn 2026-10-29): 19 clientless routes == ceiling, branch base equals master a11ae1d; fresh commit so hub-tests re-checks.
-# Re-run at 236b157 (2026-10-29): ratchet 6 pass, vault tests 13 pass; fresh commit so hub-tests re-checks.
-# Re-run at 19b681a (2026-10-29): ratchet 6 pass, 69 vault tests pass; fresh commit so hub-tests re-checks.
-# Re-run at 37075b8 (2026-10-29): ratchet 6 pass (19 == ceiling), 53 vault tests pass; hooks in vault.ts postdate failed run f7cf6d.
-# Re-run at 81fa19a (2026-10-29): ratchet 6 pass (19 == ceiling), 25 archive/agent/changes tests pass; fresh commit so hub-tests re-checks.
-# Re-run at da75b8e (2026-10-29): ratchet 6 pass, 25 vault tests pass; Hub snapshot at turn end gives hub-tests a new commit.
-# Re-run at 85f8fcd (2026-10-29): ratchet 6 pass (19 == ceiling), 25 vault tests pass; the failed run chk-b6f585 was on f7cf6d, before the hooks in vault.ts.
-# Re-run at 630d8c5 (2026-10-29): ratchet 6 pass (19 == ceiling), archive/agent tests 13 pass; new commit for hub-tests.
 
 
 def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
@@ -228,4 +213,5 @@ def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
     )
     for hook in ("useArchiveVaultSource", "useRestoreVaultSource", "useArchivedVaultSources"):
         assert f"export function {hook}" in src
-# Re-run at 8188cc1 (2026-10-29): ratchet 6 pass (19 == ceiling), vault suite 180 pass; new commit for hub-tests.
+    for route in ("/archive`", "/restore`", "/vault/archived`"):
+        assert route in src
