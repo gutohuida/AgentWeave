@@ -40515,3 +40515,13 @@ Seen on the operator's `:8000` Hub. Not yet looked at: which notices they are, w
 **Tier:** 1
 
 `spec_payload.Task` (`hub/hub/spec_payload.py:136-170`) carries `reviewer` but no builder. The flow already honours a task's assignee: it resumes a task with an `assignee` only on that agent, and staffs unassigned tasks on the default agent and then any free one (`hub/hub/scheduler.py:2031-2125`). So per-task capability routing works, but only if the operator sets every assignee by hand on the board after approval. The author, who knows which tasks need the stronger model, has nowhere to write it down. Proposed shape: an optional per-task builder name, resolved against the roster when the task is materialised, kept rather than refused when it does not resolve (the same rule `reviewer` follows).
+
+## F1047 (B) -- a flow that stops on an empty queue stays stopped when the landing checks send one of its tasks back
+
+**Status:** open 2026-10-29. Reported by the operator ("another thing stopped the flow") on `Vault sources can be edited, replaced and archived` (`spdoc-ed2248eba283`).
+**Source:** drive
+**Theme:** Flows x Worktrees & integration
+**Ready:** yes
+**Tier:** 1
+
+Repro, read from the live database (read-only): QA approved the last task, `task-a80259e4ab36` (vault-tab), at 09:14:53. At that same moment flow `loop-5d6bd866f424` (`job-953637bb694f`, `stop_when_queue_empties`) ended: `ending_state: completed`, `stop_reason: "loop queue is empty"`. At 09:29:33 landing batch `lbat-3bc888bd9903` ran the project's checks on master and sent the task back to `revision_needed` (transition origin `checks`). The reason was the `hub-tests` surface-ceiling ratchet: 68 query call sites ignore their error, against a ceiling of 67. The task is still assigned to Developer, but its flow has ended, so no firing ever picks it up. Its document is half-landed with no signal on the flow, and the operator only notices because the work did not arrive. Cause: the flow's stop condition counts `approved` as done, but approval comes before landing. **Expected:** one of two behaviours (the operator chooses): (a) the flow does not end while any of its approved tasks is still waiting to land; or (b) a landing send-back of an ended flow's task reopens the flow, or at least triggers the task's assignee and records a `loop_task_reopened` event on the flow. **Test:** a flow with `stop_when_queue_empties`, its last task approved and then sent back by a landing batch. Today the loop stays `completed` and no run starts. Seam: Flows x landing queue.
