@@ -216,6 +216,7 @@ def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
         assert f"export function {hook}" in src
     for route in ("/archive`", "/restore`", "/vault/archived`"):
         assert route in src
+    assert src.count("/api/v1/projects/${projectId}/vault/") >= 3
 
 
 # Re-run at 1028d51 (2026-10-29): ratchet passes on the branch and on its merge with master; new commit for hub-tests.
