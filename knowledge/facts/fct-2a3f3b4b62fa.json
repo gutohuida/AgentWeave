@@ -1,0 +1,29 @@
+{
+  "id": "fct-2a3f3b4b62fa",
+  "kind": "fact",
+  "claim": "A finished agent turn (run_completed) is deliberately ignored by the notifier, and the spec's acceptance criterion requires nothing for run_completed.",
+  "citations": [
+    {
+      "source": "src-2b03004b41d7",
+      "quote": "A finished agent turn (`run_completed`) is ignored on purpose.",
+      "line_start": 41,
+      "line_end": 41
+    },
+    {
+      "source": "src-2b03004b41d7",
+      "quote": "The spec's acceptance criterion\nsays \"nothing for run_completed\".",
+      "line_start": 41,
+      "line_end": 42
+    }
+  ],
+  "sources": [
+    "src-2b03004b41d7"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:17.906416Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

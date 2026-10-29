@@ -1,0 +1,29 @@
+{
+  "id": "fct-016363860be3",
+  "kind": "fact",
+  "claim": "A mend commits its work on a branch named `mend/<task-id>`, which is then integrated into master.",
+  "citations": [
+    {
+      "source": "src-945b5f2468b8",
+      "quote": "The mend flow switches the mender's own checkout to `mend/<task-id>` and never switches it back.",
+      "line_start": 23,
+      "line_end": 23
+    },
+    {
+      "source": "src-945b5f2468b8",
+      "quote": "`hub/hub/task_transition_service.py` around line 1282: builds the merge with\n  `branch=f\"mend/{task.id}\"`.",
+      "line_start": 36,
+      "line_end": 37
+    }
+  ],
+  "sources": [
+    "src-945b5f2468b8"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:23:52.013666Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

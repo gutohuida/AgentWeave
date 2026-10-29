@@ -5,9 +5,9 @@
   "citations": [
     {
       "source": "src-cb168bd3373f",
-      "quote": "the\n  mender's `mend_reset_task` only goes back to `assigned` or `pending`.",
-      "line_start": 20,
-      "line_end": 20
+      "quote": "the mender's `mend_reset_task` only goes back to `assigned` or `pending`",
+      "line_start": 22,
+      "line_end": 22
     }
   ],
   "sources": [

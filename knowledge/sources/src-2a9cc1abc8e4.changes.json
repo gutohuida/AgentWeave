@@ -1,0 +1,12 @@
+[
+  {
+    "action": "edit",
+    "at": "2026-10-29T15:55:40.725494Z",
+    "by": {
+      "kind": "agent",
+      "agent": "Architect",
+      "run_id": "run-7d8d00af0b46"
+    },
+    "detail": "passage"
+  }
+]

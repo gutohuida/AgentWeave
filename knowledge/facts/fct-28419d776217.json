@@ -1,0 +1,23 @@
+{
+  "id": "fct-28419d776217",
+  "kind": "fact",
+  "claim": "After the fix, a checks or landing send-back holds the task's accepted evidence, so the next completion is checked on the fix commit.",
+  "citations": [
+    {
+      "source": "src-f2ceb873aae1",
+      "quote": "a checks or landing send-back holds the task's accepted evidence, so the next completion is checked on the fix.",
+      "line_start": 3,
+      "line_end": 3
+    }
+  ],
+  "sources": [
+    "src-f2ceb873aae1"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:23:51.742486Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

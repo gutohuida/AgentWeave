@@ -1,5 +1,7 @@
 # Bug: a reviewer named in a task cannot move it into review while its author holds it
 
+**Status: fixed** (checked on master 2026-10-29) by `every-task-can-always-be-moved-on`: FR `a-reviewer-takes-completed-work` (any agent but the author can move completed work to under_review and becomes its holder; `task_transition_service.py:473`), `board-hands-to-a-reviewer`, and `evidence-tools-take-spdoc-ids` for the related 404. Archived as done.
+
 Found 2026-10-24 by Architect, reviewing task-5d4cf0a5006d ("Checks wait less (one shot)"). The
 operator asked for this to be filed.
 

@@ -1,0 +1,23 @@
+{
+  "id": "fct-01253d4353d6",
+  "kind": "fact",
+  "claim": "The operator requires that ordering be created for the spec (F1044).",
+  "citations": [
+    {
+      "source": "src-f03f0eb99589",
+      "quote": "The operator: \"We need to create ordering for the spec.\"",
+      "line_start": 11,
+      "line_end": 11
+    }
+  ],
+  "sources": [
+    "src-f03f0eb99589"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:15.872035Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

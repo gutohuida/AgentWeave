@@ -6,8 +6,8 @@
     {
       "source": "src-f2ceb873aae1",
       "quote": "`request_run` in hub/hub/project_checks.py falls back to the reviewed commit\n  (`review_target`) only when there are **no** accepted targets (the F773 path).",
-      "line_start": 30,
-      "line_end": 31
+      "line_start": 31,
+      "line_end": 32
     }
   ],
   "sources": [

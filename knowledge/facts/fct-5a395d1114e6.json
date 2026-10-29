@@ -1,0 +1,23 @@
+{
+  "id": "fct-5a395d1114e6",
+  "kind": "fact",
+  "claim": "Before the fix, the mender blocked itself after any successful mend because its checkout was left on the mend branch and later deliveries were refused.",
+  "citations": [
+    {
+      "source": "src-945b5f2468b8",
+      "quote": "So the mender blocks itself after any successful mend.",
+      "line_start": 24,
+      "line_end": 24
+    }
+  ],
+  "sources": [
+    "src-945b5f2468b8"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:23:52.030889Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

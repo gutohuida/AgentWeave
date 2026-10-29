@@ -1,7 +1,8 @@
 # A checks send-back leaves stale accepted evidence as what gets checked, so the task can never complete
 
-Recorded 2026-10-29 by Architect at the operator's request, to fix later. Not yet in
-scripts/drive/FINDINGS.md.
+**Status: fixed** 2026-10-29 as F1081 by `a-checks-send-back-returns-the-task-s-accepted-evidence` (commit 8f05f16, on master): a checks or landing send-back holds the task's accepted evidence, so the next completion is checked on the fix. The race in its own test is still open as F1084. Archived as done.
+
+Recorded 2026-10-29 by Architect at the operator's request.
 
 ## What happened
 

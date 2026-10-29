@@ -1,0 +1,29 @@
+{
+  "id": "fct-96df0b2c2c38",
+  "kind": "fact",
+  "claim": "A task in pending state can only move to assigned or in_progress, not directly to completed or rejected.",
+  "citations": [
+    {
+      "source": "src-28d4bff83265",
+      "quote": "**From `pending` the only moves are `assigned` and `in_progress`.**",
+      "line_start": 30,
+      "line_end": 30
+    },
+    {
+      "source": "src-28d4bff83265",
+      "quote": "A task cannot go straight to\n  completed or rejected.",
+      "line_start": 30,
+      "line_end": 31
+    }
+  ],
+  "sources": [
+    "src-28d4bff83265"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:23:41.227235Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

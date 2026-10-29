@@ -1,0 +1,29 @@
+{
+  "id": "fct-d5163d82cced",
+  "kind": "fact",
+  "claim": "The spec header occupies too much vertical space, leaving little to no room for the body of the spec, and this is worse in the side panel and worse again when a warning or message is showing.",
+  "citations": [
+    {
+      "source": "src-2a9cc1abc8e4",
+      "quote": "occupies too much\nspace, leaving little to no room for the actual body of the spec.",
+      "line_start": 7,
+      "line_end": 8
+    },
+    {
+      "source": "src-2a9cc1abc8e4",
+      "quote": "It is worse in the side panel, and worse\nagain when a warning or message is showing.",
+      "line_start": 8,
+      "line_end": 9
+    }
+  ],
+  "sources": [
+    "src-2a9cc1abc8e4"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:55:48.675306Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

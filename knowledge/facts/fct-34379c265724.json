@@ -1,0 +1,23 @@
+{
+  "id": "fct-34379c265724",
+  "kind": "fact",
+  "claim": "There is a fourth notification kind, 'reply', which is on by default and has its own switch in Sound and notifications.",
+  "citations": [
+    {
+      "source": "src-2b03004b41d7",
+      "quote": "A fourth kind, `reply`, **on by default**, with its own switch in Sound and notifications.",
+      "line_start": 12,
+      "line_end": 12
+    }
+  ],
+  "sources": [
+    "src-2b03004b41d7"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:17.854586Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

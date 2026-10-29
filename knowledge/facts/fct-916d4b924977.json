@@ -1,0 +1,23 @@
+{
+  "id": "fct-916d4b924977",
+  "kind": "fact",
+  "claim": "The acceptance check for the fix is a test that runs a mend and then prepares the mender's workspace for the next turn.",
+  "citations": [
+    {
+      "source": "src-945b5f2468b8",
+      "quote": "Acceptance check: a test that runs a mend and then prepares the mender's workspace for the next\nturn, which fails today.",
+      "line_start": 52,
+      "line_end": 53
+    }
+  ],
+  "sources": [
+    "src-945b5f2468b8"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:23:52.102399Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

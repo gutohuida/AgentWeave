@@ -1,0 +1,29 @@
+{
+  "id": "fct-50e88eb0f9c1",
+  "kind": "fact",
+  "claim": "Agents cannot approve their own evidence; closed tasks still need a reviewer or the operator.",
+  "citations": [
+    {
+      "source": "src-28d4bff83265",
+      "quote": "**Agents cannot approve their own evidence.**",
+      "line_start": 33,
+      "line_end": 33
+    },
+    {
+      "source": "src-28d4bff83265",
+      "quote": "Even the closed tasks still need a reviewer or the operator.",
+      "line_start": 33,
+      "line_end": 34
+    }
+  ],
+  "sources": [
+    "src-28d4bff83265"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:23:41.254402Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
