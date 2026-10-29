@@ -485,7 +485,7 @@ async def list_archived_vault_sources(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """The archived sources, newest first; the map does not list them (listArchivedVaultSources in hub/ui/src/api/vault.ts calls this)."""
+    """The archived sources, newest first; the map does not list them (useArchivedVaultSources in hub/ui/src/api/vault.ts calls this)."""
     root, private = await roots(session, project[0])
     return {"sources": await asyncio.to_thread(vault.list_archived, root, private)}
 
