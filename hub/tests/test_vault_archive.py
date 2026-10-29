@@ -5,7 +5,7 @@ vault line and both checks, stay readable by id, and come back on restore.
 `vault-sources-can-be-edited-replaced-and-archived` (Tier 2), the operator's half of ac-archive,
 ac-out-of-checks, ac-archived-read and ac-restore (the agent tools' half is with those tools).
 
-Client reach: the archive routes are called by hub/ui/src/api/vault.ts (the clientless-route ratchet holds at its ceiling of 19; checked at 6 passed on 2026-10-29).
+Client reach: the archive routes are called by hub/ui/src/api/vault.ts (the clientless-route ratchet holds at its ceiling of 19; re-checked 2026-10-29 after the ratchet fix).
 """
 
 import json
