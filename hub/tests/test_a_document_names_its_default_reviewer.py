@@ -176,7 +176,8 @@ async def test_a_default_reviewer_quiets_the_undeclared_warning(app, planner):  
 async def test_the_undeclared_warning_names_the_default_field(app, planner):  # noqa: F811
     body = await _submit(app, planner, _flow(("a", {"files": ["x.py"]})))
     (warning,) = _warned(body)
-    assert "delivery.reviewer" in warning["message"]
+    # One checker per task (`one-checker`): the default field a new document sets is `checker`.
+    assert "delivery.checker" in warning["message"]
 
 
 def test_the_exploring_duty_names_the_default_field():
@@ -221,4 +222,6 @@ def test_the_submit_tool_says_delivery_takes_a_reviewer():
     from hub.mcp_server import submit_spec_document
 
     doc = submit_spec_document.__doc__ or ""
-    assert '"reviewer"' in doc
+    # `one-checker`: delivery names its default checker; an older document's reviewer still reads.
+    assert '"checker"' in doc
+    assert "`reviewer`" in doc

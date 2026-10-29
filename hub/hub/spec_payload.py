@@ -29,7 +29,7 @@ import json
 import posixpath
 import re
 from datetime import datetime
-from typing import Annotated, Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import (
     BaseModel,
@@ -180,6 +180,11 @@ class Task(_Part):
         max_length=32,
         description="Agent name that should build this task (F1046). Applied when a build starts, not at approval: an open agent of that name becomes the task's assignee unless the operator chose another in the Build dialog. Optional, and kept rather than refused when it names no agent, for the reason `reviewer` is: the start's response names it as unresolved and the task waits for the driver to hand it out.",
     )
+    checker: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="Agent name that checks this task once it is built: the one agent who both tests it and records its verdict (`one-checker`). Optional: empty means the document's default checker (`delivery.checker`). Replaces the task's `reviewer`, which an older document may still name and which is read as its checker; naming both, differently, is refused.",
+    )
 
 
 class Algorithm(_Part):
@@ -212,6 +217,8 @@ class Evidence(_Part):
 BUILD_CHOICES = (
     "mode",
     "agent",
+    "builder",
+    "checker",
     "reviewer",
     "tester",
     "stop",
@@ -242,6 +249,16 @@ class Delivery(_Part):
 
     mode: Literal["flow", "none"] = Field(
         description="'flow' to have the Hub keep working this document's tasks once it is built, one at a time as their prerequisites clear; 'none' to leave them on the board only."
+    )
+    builder: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="The default builder (`one-checker`): who builds every task that names no `builder` of its own, by name. Empty: the flow's `agent`.",
+    )
+    checker: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="The default checker (`one-checker`): who checks every task that names no `checker` of its own, by name; the checker both tests the work and records its verdict. Replaces `reviewer` and `tester`, which an older document may still name: its tester, else its reviewer, is read as its default checker. Naming `checker` beside a different `reviewer` or `tester` is refused.",
     )
     agent: Optional[str] = Field(
         default=None,
@@ -684,6 +701,25 @@ def validate_payload(raw: Any) -> SpecPayload:
                     field=f"tasks[{index}].files[{position}]",
                 )
 
+    # One checker (`one-checker`): a task, or the delivery, that names its checker beside an older
+    # name for a different agent names two, and which one checks is not the reader's to guess.
+    for index, task in enumerate(payload.tasks):
+        if task.checker and task.reviewer and task.checker != task.reviewer:
+            raise PayloadError(
+                f"task {task.key!r} names checker {task.checker!r} and reviewer "
+                f"{task.reviewer!r}; a task has one checker, so name it as `checker` alone",
+                field=f"tasks[{index}].checker",
+            )
+    if payload.delivery is not None and payload.delivery.checker:
+        for name in ("reviewer", "tester"):
+            other = getattr(payload.delivery, name)
+            if isinstance(other, str) and other and other != payload.delivery.checker:
+                raise PayloadError(
+                    f"delivery names checker {payload.delivery.checker!r} and {name} {other!r}; "
+                    "a build has one default checker, so name it as `checker` alone",
+                    field="delivery.checker",
+                )
+
     for collection, label in (
         (payload.acceptance_criteria, "acceptance_criteria"),
         (payload.tasks, "tasks"),
@@ -746,8 +782,9 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     # An unset tester (on by default, tester-amends D4) must not change the bytes of every stored
     # delivery either, nor may a recommendation written without reasons.
     if isinstance(data.get("delivery"), dict):
-        if data["delivery"].get("tester") is None:
-            data["delivery"].pop("tester", None)
+        for key in ("tester", "builder", "checker"):
+            if data["delivery"].get(key) is None:
+                data["delivery"].pop(key, None)
         if not data["delivery"].get("reasons"):
             data["delivery"].pop("reasons", None)
         # Nor may the build's settings a recommendation does not name (slice D).
@@ -777,6 +814,8 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
         # A task naming no builder (slice D) stores as it did before the field existed.
         if task.get("builder") is None:
             task.pop("builder", None)
+        if task.get("checker") is None:
+            task.pop("checker", None)
     # An uncited requirement stores as before, with no facts key.
     for requirement in data.get("requirements") or []:
         if requirement.get("facts") is None:
@@ -787,6 +826,66 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
             if criterion.get(key) is None:
                 criterion.pop(key, None)
     return data
+
+
+# ---------------------------------------------------------------------------
+# Who builds and checks (`one-checker`, `old-names-still-build`)
+# ---------------------------------------------------------------------------
+
+
+def _named(value: Any) -> Optional[str]:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def default_builder(payload: Optional[Dict[str, Any]]) -> Optional[str]:
+    """The document's default builder: `delivery.builder`, else the flow's `agent`."""
+    delivery = (payload or {}).get("delivery")
+    if not isinstance(delivery, dict):
+        return None
+    return _named(delivery.get("builder")) or _named(delivery.get("agent"))
+
+
+def default_checker(payload: Optional[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+    """The document's default checker and the field that named it: `checker`, else an older
+    document's `tester`, else its `reviewer` (the tester wins: the checker drives the product,
+    operator 2026-10-29). `(None, None)` when the document names none."""
+    delivery = (payload or {}).get("delivery")
+    if not isinstance(delivery, dict):
+        return None, None
+    for field in ("checker", "tester", "reviewer"):
+        name = _named(delivery.get(field))
+        if name:
+            return name, field
+    return None, None
+
+
+def task_checker(
+    payload: Optional[Dict[str, Any]], key: str
+) -> Tuple[Optional[str], Optional[str]]:
+    """*key*'s checker and who named it: `task` (its own `checker`, or an older document's own
+    `reviewer`), else the default checker's field (`checker`, `tester`, `reviewer`). `(None, None)`
+    for a key the document does not declare, or a document naming no checker at all."""
+    for entry in (payload or {}).get("tasks") or []:
+        if not isinstance(entry, dict) or entry.get("key") != key:
+            continue
+        own = _named(entry.get("checker")) or _named(entry.get("reviewer"))
+        if own:
+            return own, "task"
+        return default_checker(payload)
+    return None, None
+
+
+def declared_people(payload: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Optional[str]]]:
+    """Each declared task's own builder and checker by key, as the document names them (an older
+    task's `reviewer` read as its checker); a task naming neither is listed with both empty."""
+    return {
+        str(entry.get("key")): {
+            "builder": _named(entry.get("builder")),
+            "checker": _named(entry.get("checker")) or _named(entry.get("reviewer")),
+        }
+        for entry in (payload or {}).get("tasks") or []
+        if isinstance(entry, dict) and entry.get("key") and not entry.get("from")
+    }
 
 
 # ---------------------------------------------------------------------------

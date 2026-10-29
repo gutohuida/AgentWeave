@@ -127,7 +127,8 @@ async def resolve_declared_reviewer(
     # The task's own field, or its document's `delivery.reviewer` standing in for it (F508). Both
     # are declarations and get the same never-substitute rule; only the sentence says which.
     whose = {
-        "task": "this task's reviewer",
+        "task": "this task's checker",
+        "checker": "this document's default checker",
         "tester": "this document's tester",
     }.get(named_by or "", "this document's default reviewer")
 
@@ -196,48 +197,41 @@ async def named_reviewers(session: AsyncSession, project_id: str, document_id: s
     if payload is None:
         return set()
     names = [
-        entry.get("reviewer") for entry in payload.get("tasks") or [] if isinstance(entry, dict)
+        name
+        for entry in payload.get("tasks") or []
+        if isinstance(entry, dict)
+        for name in (entry.get("checker"), entry.get("reviewer"))
     ]
     delivery = payload.get("delivery")
     if isinstance(delivery, dict):
-        names += [delivery.get("reviewer"), delivery.get("tester")]
+        names += [delivery.get("checker"), delivery.get("reviewer"), delivery.get("tester")]
     return {name for name in map(_name, names) if name}
 
 
 async def _declared_reviewer_name(
     session: AsyncSession, task: Task
 ) -> Tuple[Optional[str], Optional[str]]:
-    """The reviewer *task*'s document declares for it, and who declared it: `task` or `document`.
+    """The checker *task*'s document declares for it, and who declared it: `task`, `checker`,
+    `tester` or `document` (its default reviewer).
 
-    The task entry's own `reviewer` first; failing that, the document's `delivery.reviewer`, its
-    default for every task that names none (F508). `(None, None)` for a hand-made task, a task
-    whose document is gone, or a document whose payload no longer carries the entry — all
-    ordinary states, none of them worth an error.
+    The task entry's own `checker` (or an older entry's own `reviewer`) first; failing that, the
+    document's default checker: `delivery.checker`, else an older document's `tester`, else its
+    `reviewer` (F508, `old-names-still-build`; `spec_payload.task_checker`). `(None, None)` for a
+    hand-made task, a task whose document is gone, or a document whose payload no longer carries
+    the entry — all ordinary states, none of them worth an error.
     """
+    from .spec_payload import task_checker
+
     nobody: Tuple[Optional[str], Optional[str]] = (None, None)
     if not task.spec_document_id or not task.spec_task_key:
         return nobody
     payload = await _document_payload(session, task.project_id, task.spec_document_id)
     if payload is None:
         return nobody
-
-    for entry in payload.get("tasks") or []:
-        if not isinstance(entry, dict):
-            continue
-        if entry.get("key") != task.spec_task_key:
-            continue
-        reviewer = _name(entry.get("reviewer"))
-        if reviewer:
-            return reviewer, "task"
-        delivery = payload.get("delivery")
-        # tester-amends D4: a named tester tests every task that names no reviewer of its own,
-        # ahead of the document's default reviewer.
-        tester = _name(delivery.get("tester")) if isinstance(delivery, dict) else None
-        if tester:
-            return tester, "tester"
-        default = _name(delivery.get("reviewer")) if isinstance(delivery, dict) else None
-        return (default, "document") if default else nobody
-    return nobody
+    name, field = task_checker(payload, task.spec_task_key)
+    if not name:
+        return nobody
+    return name, ("document" if field == "reviewer" else field)
 
 
 def findings_lines(task: Optional[Task]) -> List[str]:
