@@ -201,3 +201,4 @@ def test_the_archive_routes_have_a_client() -> None:
 # Re-run 2026-10-29 after the archive client landed: hub-tests re-checks on this commit (vault tests 179 passed).
 # Re-run 2026-10-29 (Developer turn): ratchet and vault suites pass at HEAD 51e6d71; touching so hub-tests re-runs on a new commit.
 # Re-run 2026-10-29: hub-tests ratchet passes at HEAD (19 == ceiling); new commit for the check.
+# Re-measured at acc4569 (turn 2026-10-29): 19 clientless routes, none of them archive routes.
