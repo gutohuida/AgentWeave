@@ -425,7 +425,8 @@ async def test_no_agent_route_writes_to_the_vault(app) -> None:
     """Only the operator and the manager write knowledge: every agent-actions vault route is a GET,
     except filing a report (`a-working-agent-tells-the-manager-an-entry-is-wrong`), which writes
     only the report, and adding sources by path (`agents-add-files-to-the-vault-by-path`), which
-    adds sources marked as the agent's and never edits one."""
+    adds sources marked as the agent's, and the source-change routes of
+    `vault-sources-can-be-edited-replaced-and-archived`, whose actor is the credential's."""
     from hub.main import app as fastapi_app
 
     from ._routing import iter_api_routes
@@ -440,6 +441,11 @@ async def test_no_agent_route_writes_to_the_vault(app) -> None:
     assert methods and writes == {
         ("/api/v1/agent-actions/vault/reports", "POST"),
         ("/api/v1/agent-actions/vault/paths", "POST"),
+        ("/api/v1/agent-actions/vault/sources/{entry_id}/replace-passage", "POST"),
+        ("/api/v1/agent-actions/vault/sources/{entry_id}/append", "POST"),
+        ("/api/v1/agent-actions/vault/sources/{entry_id}/replace-file", "POST"),
+        ("/api/v1/agent-actions/vault/sources/{entry_id}/archive", "POST"),
+        ("/api/v1/agent-actions/vault/sources/{entry_id}/restore", "POST"),
     }
 
 

@@ -446,6 +446,50 @@ async def add_vault_paths(
     )
 
 
+@router.post("/sources/{source_id}/archive")
+async def archive_vault_source(
+    source_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The operator archives a source: it and its facts leave the map, the turn's vault line and
+    the checks, and stay readable by id. 404 for an unknown source, 409 for one already archived
+    or held on another machine."""
+    root, private = await roots(session, project[0])
+    try:
+        return await asyncio.to_thread(
+            vault.archive_source, root, private, source_id, actor=vault.OPERATOR
+        )
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc
+
+
+@router.post("/sources/{source_id}/restore")
+async def restore_vault_source(
+    source_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The operator restores an archived source; 409 for one that is not archived."""
+    root, private = await roots(session, project[0])
+    try:
+        return await asyncio.to_thread(
+            vault.restore_source, root, private, source_id, actor=vault.OPERATOR
+        )
+    except vault.VaultError as exc:
+        raise _refused(exc) from exc
+
+
+@router.get("/archived")
+async def list_archived_vault_sources(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The archived sources, newest first; the map does not list them."""
+    root, private = await roots(session, project[0])
+    return {"sources": await asyncio.to_thread(vault.list_archived, root, private)}
+
+
 @router.get("/sources/{source_id}/file")
 async def get_vault_file(
     source_id: str,
