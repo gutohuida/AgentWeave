@@ -1472,8 +1472,8 @@ def restore_source(
     return _set_archived(project_root, private_root, source_id, archive=False, actor=actor)
 
 
-    """The archived sources, newest first, for the Vault tab (GET /vault/archived-sources); they are not in the map."""
-    """The archived sources, newest first, for the Vault tab; they are not in the map."""
+def list_archived(project_root: Path, private_root: Path) -> List[Dict[str, Any]]:
+    """The archived sources, newest first, for the Vault tab (GET /vault/archived); they are not in the map."""
     return _newest_first(
         [r.listed(r.text()) for r in _records(project_root, private_root).values() if r.archived]
     )
