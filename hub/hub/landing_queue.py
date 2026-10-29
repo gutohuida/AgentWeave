@@ -1801,6 +1801,24 @@ def _failure_report(
     )
 
 
+async def _own_accepted_on_main(session, task_id: str) -> frozenset:
+    """The commits *task_id*'s own accepted evidence names that are already on the main branch;
+    empty when the project, its main branch or its workspace cannot be resolved (then every
+    accepted piece of the task is held, which is the safe side of a send-back)."""
+    from . import project_workspace
+    from .requirement_evidence import own_accepted_commits_on_main
+
+    task = await session.get(Task, task_id)
+    project = await session.get(Project, task.project_id) if task is not None else None
+    if task is None or project is None or not project.main_branch:
+        return frozenset()
+    try:
+        root = (await project_workspace.resolve_project_workspace(session, task.project_id)).root
+    except Exception:  # noqa: BLE001 -- unresolved: hold every accepted piece, the safe side
+        return frozenset()
+    return await own_accepted_commits_on_main(session, task, root, project.main_branch)
+
+
 async def _send_back(landing_id: str, batch_id: str, report: str) -> bool:
     """The task goes back to its author (approved -> revision_needed, the operator's edge, origin
     `checks`, as slice L returns failed work), its landing recorded sent back with *report*."""
@@ -1813,6 +1831,10 @@ async def _send_back(landing_id: str, batch_id: str, report: str) -> bool:
         landing = await session.get(TaskLanding, landing_id)
         if landing is None:
             return False
+        # Read before the first write, so no git runs under the write lock: the send-back holds the
+        # task's accepted evidence, less what already landed
+        # (`a-checks-send-back-returns-the-task-s-accepted-evidence`, FR-2).
+        on_main = await _own_accepted_on_main(session, landing.task_id)
         landing.state, landing.reason, landing.ended_at = SENT_BACK, report, _now()
         landing.batch_id = batch_id
         claimed = await session.execute(
@@ -1834,6 +1856,7 @@ async def _send_back(landing_id: str, batch_id: str, report: str) -> bool:
                     origin=ORIGIN_CHECKS,
                     verdict_reason=report,
                     note=f"landing batch {batch_id} sent it back",
+                    accepted_on_main=on_main,
                 )
                 task.notes = report
                 await withdraw_review_entries_for(session, task)
