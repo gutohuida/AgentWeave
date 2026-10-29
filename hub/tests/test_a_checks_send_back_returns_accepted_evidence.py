@@ -147,7 +147,12 @@ async def _last_note(app, auth_headers, task) -> str:
 
 async def _check_run_and_drain(task):
     """Ask for the task's check run and wait for it. Not asserted started: where the targets are a
-    commit already judged, no new run starts and the latest run stays the one on that commit."""
+    commit already judged, no new run starts and the latest run stays the one on that commit.
+
+    Drained first: the completion schedules a request of its own before its transaction commits,
+    which can read the task before it is completed and start nothing, and while it is starting it
+    refuses this one (`request_run`'s `_starting`; F1084)."""
+    await project_checks.drain()
     await project_checks.request_run("proj-test", task)
     await project_checks.drain()
 
@@ -195,6 +200,11 @@ async def _sent_back_by_a_landing(app, auth_headers, builder, tmp_path, tmp_path
 
     flag.touch()  # the batch's check now fails on A, as the surface ceiling failed on fd8aa77
     await landing_queue.drain()
+    # The batch's failure is confirmed by a second run on A, which can still be executing when the
+    # task is sent back; a completion requested meanwhile starts no run of its own
+    # (`project_checks.request_run` refuses while one executes). Waited for, as the author's next
+    # turn would be.
+    await project_checks.drain()
 
     assert await _status(task) == "revision_needed"
     assert sha_a not in git(tmp_path, "rev-list", "main").stdout.split()
