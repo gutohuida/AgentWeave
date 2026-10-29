@@ -217,3 +217,4 @@ def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
         assert route in src
 # Re-run at 1028d51 (2026-10-29): ratchet passes on the branch and on its merge with master; new commit for hub-tests.
 # Re-run at b8eaaae (2026-10-29): 26 vault tests and test_surface_ceilings pass; new commit so hub-tests re-checks.
+# Re-run at 153f814 (2026-10-29): 7 archive tests and test_surface_ceilings (6) pass; new commit so hub-tests re-checks.
