@@ -1,53 +1,112 @@
 {
   "acceptance_criteria": [
     {
+      "checked_by": "agent",
       "given": "a task with evidence accepted for FR-1 and FR-2 at commit A and one awaiting piece for FR-3, completed, with a project check that fails on A",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k check_run_holds_accepted",
       "key": "ac-check-run-holds-accepted",
       "requirement": "hold-accepted-on-checks-send-back",
       "then": "the task is revision_needed; the FR-1, FR-2 and FR-3 pieces are all held; each held piece carries an evidence review whose reason is the send-back's report; no piece of that task is still accepted",
       "when": "the check run fails and return_failed_work sends the task back"
     },
     {
+      "checked_by": "agent",
       "given": "an approved task whose evidence was all accepted at commit A, queued in a landing batch that fails on A",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k landing_holds_accepted",
       "key": "ac-landing-holds-accepted",
       "requirement": "hold-accepted-on-checks-send-back",
       "then": "the task is revision_needed and every piece it recorded is held, none accepted",
       "when": "the batch sends the task back"
     },
     {
+      "checked_by": "agent",
       "given": "task T1 and task T2 both serve FR-1; T2's evidence for FR-1 is accepted at a commit already on main, and T1 has accepted evidence of its own at failing commit A",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k others_untouched",
       "key": "ac-others-untouched",
       "requirement": "others-evidence-untouched",
       "then": "T1's pieces are held and T2's piece is still accepted, with no new review recorded on it",
       "when": "the checks send T1 back"
     },
     {
+      "checked_by": "agent",
       "given": "a task sent back by a failed check run at completion after its evidence was accepted at failing commit A, then a fix committed as B on its branch (B descends from A) with evidence recorded at B, and a check that passes on B",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k fix_is_checked_after_check_run (real git repository and real configured check; recorded failing before the change)",
       "key": "ac-fix-is-checked",
       "requirement": "fix-is-checked",
       "then": "the check run's targets are [B], not A; the run passes; the task reaches under_review. Before the change the run targets A, fails, and completion is refused",
       "when": "the task is completed again"
     },
     {
+      "checked_by": "agent",
       "given": "F1081's shape: an approved task whose evidence was accepted at commit A, sent back by a failing landing batch, then a fix committed as B on its branch with evidence recorded at B, and a check that passes on B",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k fix_is_checked_after_landing (real git repository and real configured check; recorded failing before the change)",
       "key": "ac-fix-is-checked-after-landing",
       "requirement": "fix-is-checked",
       "then": "the check run's targets are [B], not A; the run passes; the task reaches under_review. Before the change the run targets A and fails, as chk-2edc3a8bd93b did",
       "when": "the task is completed again"
     },
     {
+      "checked_by": "agent",
       "given": "the send-back in ac-check-run-holds-accepted",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k note (reads the transition note through the task history route)",
       "key": "ac-note",
       "requirement": "note-names-returned-pieces",
       "then": "the note names FR-1 and FR-2 as accepted evidence returned, with commit A's short sha, and names FR-3 separately as held awaiting evidence",
       "when": "its transition note is read from the task's history"
     },
     {
+      "checked_by": "agent",
       "given": "a task under review with FR-1 accepted and FR-2 awaiting",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k reviewer_unchanged, and hub/tests/test_evidence_judged_piece_by_piece.py still passes",
       "key": "ac-reviewer-unchanged",
       "requirement": "reviewer-send-back-unchanged",
       "then": "FR-2 is rejected and FR-1 is still accepted",
       "when": "the reviewer sends it back with failing_pieces naming FR-2"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow with stop_when_queue_empties whose last task has just been approved, with its landing queued",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k stays_open (recorded failing before the change)",
+      "key": "ac-flow-stays-open",
+      "requirement": "flow-open-while-landing",
+      "then": "the flow has not ended (no 'loop queue is empty' stop) and its job is still enabled. Before the change it ends on this firing",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the flow in ac-flow-stays-open, after the task's landing has landed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k ends_after_landing",
+      "key": "ac-flow-ends-after-landing",
+      "requirement": "flow-open-while-landing",
+      "then": "it ends with the queue-empty stop reason, as today",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow with stop_when_queue_empties in a project with no checks configured (no landing waits), whose last task is approved",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k no_landing",
+      "key": "ac-no-landing-ends-at-approval",
+      "requirement": "flow-open-while-landing",
+      "then": "it ends as today",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the flow in ac-flow-stays-open with its only task's landing checking",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k landing_wait, and hub/tests/test_the_mender_wakes_only_for_real_stalls.py still passes",
+      "key": "ac-landing-wait-quiet",
+      "requirement": "landing-wait-is-not-a-stall",
+      "then": "the firing is recorded as in progress; no stall is recorded and the mender is not woken",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "F1080's shape: a flow with stop_when_queue_empties, its last task approved, then sent back to revision_needed by a failing landing batch",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k resumed_after_landing_send_back (end to end through approval, the landing batch and the next firing; recorded failing before the change)",
+      "key": "ac-resumed-after-landing-send-back",
+      "requirement": "sent-back-task-resumed",
+      "then": "a turn starts for the task's assignee on that task. Before the change the flow has already ended and no turn starts",
+      "when": "the flow next fires"
     }
   ],
   "algorithms": [],
@@ -62,15 +121,21 @@
       "FR-2": "54cd8d4fa932d2cec4e42f7ee80c65a40cec0141fa5a3ffaa2ec041d84a52b4d",
       "FR-3": "f938a99418ac654117a7c78d24b2a7fc7ef359b9a90f5c648dde45a1cbe74333",
       "FR-4": "a237a290b4c76ff1b9295d622d5ca54de2e1db563b8ba9146d1332686fccbc4c",
-      "FR-5": "aacbe9cd1ceb16dc9a8cf97982153244e82986ce92a2ecfcef458c5d311156d9"
+      "FR-5": "aacbe9cd1ceb16dc9a8cf97982153244e82986ce92a2ecfcef458c5d311156d9",
+      "FR-6": "8eca4b9ec94d8dc7041af79c1ccb1e310b211e79af2e47516e55955ee45def9e",
+      "FR-7": "bf19f4e992b0d5b61069376372306008ef6353050ed21d31c9162ce2d05800c0",
+      "FR-8": "c2d5c2e2e97192f8a108a90df0ce3489c2e23355e0659d7e9cbd2dc2d44e77a6"
     },
-    "high_water": 5,
+    "high_water": 8,
     "requirements": {
       "fix-is-checked": "FR-3",
+      "flow-open-while-landing": "FR-6",
       "hold-accepted-on-checks-send-back": "FR-1",
+      "landing-wait-is-not-a-stall": "FR-7",
       "note-names-returned-pieces": "FR-4",
       "others-evidence-untouched": "FR-2",
-      "reviewer-send-back-unchanged": "FR-5"
+      "reviewer-send-back-unchanged": "FR-5",
+      "sent-back-task-resumed": "FR-8"
     },
     "retired": {}
   },
@@ -79,44 +144,48 @@
     "cron": "*/5 * * * *",
     "mode": "flow",
     "reasons": {
-      "agent": "Developer (Sonnet) to keep quota down; the work is a contained gate change with a precise acceptance test.",
+      "agent": "Developer (Sonnet) to keep quota down; each task is contained and has a precise test written first.",
       "cron": "Every five minutes, the usual cadence for a flow.",
-      "mode": "One task, so a flow that stops when its queue empties builds and reviews it unattended.",
-      "reviewer": "QA (Opus), because this is the merge gate and decides what reaches main.",
-      "stop": "Stop when the queue empties: there is one task. Until F1080 is fixed, check after approval that the task actually landed."
+      "mode": "Two chained tasks, so a flow that stops when its queue empties builds and reviews them unattended.",
+      "reviewer": "QA (Opus), because this changes the merge gate and when flows end.",
+      "stop": "Stop when the queue empties. Until this change itself lands, check after approval that both tasks actually landed: this flow has the F1080 defect it fixes."
     },
     "reviewer": "QA",
     "stop_at": null,
     "stop_when_queue_empties": true
   },
-  "design": "Decision (operator, 2026-10-29: option 1 of two). A checks send-back holds the task's own accepted evidence, the same way it already holds its awaiting evidence. The send-back is the finding that the accepted work fails, so leaving it accepted is the defect. Holding it makes the existing fallback (F773, check the commit the review is given) apply on the next completion, so no second rule for picking the target is added.\n\nRejected alternative (also offered by F1081): keep the evidence accepted and add the task branch tip, or the branch's newest reviewed commit, to the completion check's targets. That adds a second rule for choosing the target beside \"accepted evidence decides what merges\". Two such rules diverging is how F680 and F773 arose.\n\nWho acts: the hold is recorded as a review by the checks, acting for the operator, as both send-backs already transition the task with operator() and origin checks. It is not a reviewer reversing a reviewer. Only the operator overturns a decision, and the checks act with the operator's authority here.\n\nHazard: this is the merge gate, so it decides what reaches main. There is no migration (held is an existing evidence state, migration 0149), and no live-data rewrite: tasks already in this state are not repaired by this change. Rollback is reverting the commit. Hub code reaches the Hub that runs it only at that Hub's next restart, after the operator merges.",
+  "design": "**D1. A checks send-back holds the task's own accepted evidence** (operator, 2026-10-29: option 1 of two). It does this the same way it already holds its awaiting evidence. The send-back is the finding that the accepted work fails, so leaving it accepted is the defect. Holding it makes the existing fallback (F773, check the commit the review is given) apply on the next completion, so no second rule for picking the target is added.\n- Rejected alternative (also offered by F1081): keep the evidence accepted and add the branch tip, or its newest reviewed commit, to the completion check's targets. That adds a second rule for choosing the target beside \"accepted evidence decides what merges\". Two such rules diverging is how F680 and F773 arose.\n- Who acts: the hold is recorded as a review by the checks, acting for the operator, as both send-backs already transition the task with operator() and origin checks. Only the operator overturns a decision, and the checks act with the operator's authority here.\n\n**D2. A flow's queue is not empty while any of its approved tasks is still waiting to land** (operator, 2026-10-29: option (a) of two). \"Waiting to land\" means the task's latest landing is in one of the landing queue's open states (queued, checking, landing, held).\n- An approved task with no landing (a build that lands nowhere, or a project without checks, where the landing runs inside the approval) is done at approval, as today.\n- While the only open work is landings in progress (queued, checking, landing), a firing is work in progress, not a stall, and does not wake the mender. That is the same rule F1049 gave a completed task whose review is about to start, and the same as a review waiting on its check run.\n- A landing held for the operator keeps the flow open. What a firing reports about it is left to the existing rules for work waiting on the operator.\n- Rejected alternative (b): a landing send-back reopens a flow that already ended. It adds a way to un-end a flow, and a reopened flow's stop_at or spend cap may already have passed. D2 keeps the stop condition honest instead: a flow ends when its work has landed.\n\n**Hazard.** D1 is the merge gate, so it decides what reaches main. D2 changes when flows end. There is no migration (held evidence exists since 0149, and landing states exist), and no live-data rewrite: tasks and flows already in either state are not repaired by this change. Rollback is reverting the commits. Hub code reaches the Hub that runs it only at that Hub's next restart, after the operator merges.",
   "evidence": {
     "checked": [
       "The archive case: task-28241f64fb0a's history (send-backs at 23:31 by lbat-34ab1776047f and at 23:58 by chk-b6f585386df2; the mender's reset at 04:51) and its awaiting evidence (281 rows across 5 requirements)",
       "The vault-tab case, F1081: lbat-3bc888bd9903's send-back, then chk-2edc3a8bd93b targeting fd8aa77 after the fix a6f5617 (read from the live database read-only by the conversation that filed it)",
+      "F1080: flow loop-5d6bd866f424 ended at 09:14:53 with 'loop queue is empty' as its last task was approved; the landing sent that task back at 09:29:33 (same read)",
       "On master: merge_targets takes accepted evidence only where evidence governs (task_integration.py:615-617); request_run falls back to review_target only when there are no targets (project_checks.py:~922-928)",
       "On master: return_failed_work (project_checks.py:2038-2045) and landing_queue._send_back (:1804-1837) send back through apply_transition with origin checks and no failing_pieces; decide_with_verdict touches only AWAITING pieces (requirement_evidence.py:1467-1471)",
+      "On master: _loop_stop_reason (scheduler.py:~430) ends a stop_when_queue_empties flow once no task is outside TERMINAL_FOR_BINDING; the landing queue's open states are QUEUED, CHECKING, LANDING, HELD (landing_queue.py:~57-64); decide_firing's in-progress branch already covers checks waits and approvals (scheduler.py:~2812)",
       "That accepting evidence at the fix (6303720) by hand made it the check target and unblocked the archive task (decided 2026-10-29 08:31)"
     ],
     "limits": [
-      "No test currently asserts evidence states after a checks-origin or landing send-back (searched hub/tests), so today's behaviour is read from code and the two live cases, not watched in a test",
-      "Line numbers are from master at a11ae1d and may drift"
+      "No test currently asserts evidence states after a checks-origin or landing send-back, or a flow's state across a landing send-back (searched hub/tests), so today's behaviour is read from code and the live cases, not watched in a test",
+      "The how_to_check commands name test files and -k selectors the tasks will create: they are proposed coverage until those tests exist and pass",
+      "Line numbers are from master at a11ae1d and may drift",
+      "Whether a firing on a landing held for the operator should be reported differently is left to the existing operator-wait rules, not examined here"
     ]
   },
   "hub": {
-    "phase": "exploring",
+    "phase": "approved",
     "size": "small",
-    "step": "intake"
+    "step": "build"
   },
   "kind": "change-spec",
-  "lifecycle": "Exploring → approved by the operator → built by the flow → archived once merged, when this behaviour moves into the evidence capability's current spec.",
+  "lifecycle": "Exploring → approved by the operator → built by the flow → archived once merged, when D1 moves into the evidence capability's current spec and D2 into the flows capability's.",
   "open_questions": [
     {
       "question": "Should a later change stop an author from recording identical evidence again on every retry (the ~280 duplicate rows), and should the mender recognise a completion refused on a stale target? Out of this change; recorded so they are not lost.",
       "resolved": true
     }
   ],
-  "problem": "This has happened twice on the flow \"Vault sources can be edited, replaced and archived\" (spdoc-ed2248eba283).\n\n1. task-28241f64fb0a (archive), 2026-10-28/29, stuck for about 9 hours. QA accepted its evidence at f7cf6d3. A landing batch sent it back because f7cf6d3 failed a check. Developer fixed it on the branch, but every completion after that was refused: the completion check ran on f7cf6d3 again. The author kept committing to force a re-run and recorded about 280 duplicate evidence rows. It was unblocked by hand, by a reviewer accepting evidence at the fix (vault note src-f2ceb873aae1).\n2. task-a80259e4ab36 (vault-tab), 2026-10-29, F1081. Landing batch lbat-3bc888bd9903 sent it back (surface ceiling 68 against 67), leaving QA's acceptance at fd8aa77 in place. Developer fixed it and completed at 09:46, auto-committing a6f5617. Check run chk-2edc3a8bd93b then targeted [\"fd8aa77\"], the commit without the fix, and failed the same way. The ceiling test passes 6/6 at a6f5617.\n\nCause (master): where evidence governs, the check's targets are the task's accepted evidence only (`merge_targets`, hub/hub/task_integration.py, `_targets(..., ACCEPTED)`, reached through `project_checks.check_targets`). `request_run` (hub/hub/project_checks.py) falls back to the commit the review is given only when nothing is accepted (the F773 path). Both checks send-backs (`return_failed_work`, project_checks.py:~2038, and `landing_queue._send_back`, landing_queue.py:~1804) decide evidence through `decide_with_verdict` (requirement_evidence.py:~1545). That touches only awaiting pieces (`verdict_pieces`, :~1467), so accepted pieces stay accepted at the failing commit.\n\nThe deadlock: the check keeps judging the commit known to fail. Newer evidence could replace it, but only a reviewer can accept it. A reviewer only sees the task after it completes, and completion is what the check refuses. Retrying, the operator's \"run checks again\" and the mender's reset all resolve the same accepted targets and check the same commit.",
+  "problem": "Both gaps showed up on the flow \"Vault sources can be edited, replaced and archived\" (spdoc-ed2248eba283), 2026-10-28/29.\n\n**Gap 1: the fix is never checked (F1081).**\n- task-28241f64fb0a (archive) was stuck for about 9 hours. QA accepted its evidence at f7cf6d3. A landing batch sent it back because f7cf6d3 failed a check. Developer fixed it on the branch, but every completion after that was refused: the completion check ran on f7cf6d3 again. The author kept committing to force a re-run and recorded about 280 duplicate evidence rows. It was unblocked by hand, by a reviewer accepting evidence at the fix (vault note src-f2ceb873aae1).\n- task-a80259e4ab36 (vault-tab) hit the same thing. Landing batch lbat-3bc888bd9903 sent it back (surface ceiling 68 against 67), leaving QA's acceptance at fd8aa77 in place. Developer fixed it and completed at 09:46, auto-committing a6f5617. Check run chk-2edc3a8bd93b then targeted [\"fd8aa77\"] and failed the same way.\n- Cause (master): where evidence governs, the check's targets are the task's accepted evidence only (`merge_targets`, hub/hub/task_integration.py, reached through `project_checks.check_targets`). `request_run` (hub/hub/project_checks.py) falls back to the commit the review is given only when nothing is accepted (the F773 path). Both checks send-backs (`return_failed_work`, project_checks.py:~2038, and `landing_queue._send_back`, landing_queue.py:~1804) decide evidence through `decide_with_verdict` (requirement_evidence.py:~1545). That touches only awaiting pieces (`verdict_pieces`, :~1467), so accepted pieces stay accepted at the failing commit. The check keeps judging the commit known to fail. Only a reviewer could accept newer evidence, and a reviewer only sees the task once completion passes the check. Retrying, the operator's \"run checks again\" and the mender's reset all check the same commit.\n\n**Gap 2: nobody picks the task up (F1080).**\n- QA approved the flow's last task, task-a80259e4ab36, at 09:14:53. At that moment flow loop-5d6bd866f424 (stop_when_queue_empties) ended with stop_reason \"loop queue is empty\".\n- At 09:29:33 the landing batch sent that task back to revision_needed. Its flow had ended, so no firing picked it up. The document was half-landed with nothing on the flow saying so.\n- Cause (master): `_loop_stop_reason` (scheduler.py:~430) ends the flow once no task of the loop is outside `TERMINAL_FOR_BINDING`, and `approved` is terminal. With checks configured, approval only queues the task's landing (landing_queue.py: approval \"queues the task's work here\"), and the landing can still send it back minutes later.",
   "requirements": [
     {
       "key": "hold-accepted-on-checks-send-back",
@@ -152,31 +221,56 @@
       "party": null,
       "rationale": "Only the checks' send-back is the finding that accepted work fails. A reviewer judges what is awaiting them, and overturning a decision stays the operator's.",
       "statement": "A send-back by a reviewer (update_task to revision_needed or rejected, with or without failing_pieces) MUST continue to decide only the task's awaiting pieces, leaving accepted pieces accepted."
+    },
+    {
+      "key": "flow-open-while-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approval only queues the landing; the landing can still send the task back. A flow that has already ended cannot pick that task up (F1080).",
+      "statement": "A flow with stop_when_queue_empties MUST NOT end on an empty queue while any of its approved tasks has a landing in an open state (queued, checking, landing or held). It MUST end on its next firing once every approved task's landing has landed or the task has no landing."
+    },
+    {
+      "key": "landing-wait-is-not-a-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A landing in progress is the Hub doing the work. Reporting it as a stall would repeat the false alarms F1049 removed for reviews about to start.",
+      "statement": "A firing whose flow has no claimable work and whose only open work is approved tasks with a landing queued, checking or landing MUST be recorded as work in progress and MUST NOT raise a stall or wake the mender."
+    },
+    {
+      "key": "sent-back-task-resumed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the outcome F1080 was missing: the send-back reaches an author who can act on it.",
+      "statement": "When a landing batch sends back a task of a flow that is still open, the flow's next firing MUST resume that task on its assignee, as it resumes any revision_needed task."
     }
   ],
   "schema_version": 1,
   "scope": {
     "in_scope": [
       "The two send-backs whose origin is the project's checks: a failed check run at completion (return_failed_work) and a failing landing batch (landing_queue._send_back)",
-      "Holding the sent-back task's own accepted evidence, with the send-back's report as the reason",
-      "The send-back note naming the pieces that were accepted and are now held",
-      "The next completion after either kind of send-back being checked on the commit the review is given"
+      "Holding the sent-back task's own accepted evidence, with the send-back's report as the reason, and naming it in the send-back note",
+      "The next completion after either kind of send-back being checked on the commit the review is given",
+      "A flow with stop_when_queue_empties staying open while any of its approved tasks is waiting to land, without reporting a stall while the landing is in progress",
+      "A task the landing sends back being resumed by its flow's next firing"
     ],
     "non_goals": [
       "A reviewer's send-back (update_task with revision_needed or rejected): it keeps deciding awaiting pieces only, as today",
       "Evidence recorded by another task against a shared requirement, and evidence whose commit is already on main: never changed by a send-back",
-      "Repairing tasks already stuck in this state before the change ships (task-a80259e4ab36 today): each is unblocked by hand",
-      "F1080, a flow that ended on an empty queue not picking up a task the landing checks later send back: a separate decision, not this change unless the operator adds it",
+      "Repairing tasks or flows already stuck in either state before the change ships: each is unblocked by hand",
+      "Reopening a flow that has already ended (option (b), rejected)",
+      "What a flow reports about a landing held for the operator: unchanged, the existing rules for operator waits apply",
+      "stop_at and the spend cap: a flow still ends at its stop time or cap even with landings open",
+      "F1082 (an auto-snapshot committing the main checkout's files onto master): fixed separately, as task-2001145cd944",
       "Stopping an author from recording the same evidence again on every retry (about 280 duplicate rows): an open follow-up, not this change",
       "Teaching the mender to recognise a completion refused on a stale target: an open follow-up, not this change",
       "Any change to how the checks themselves run, or to which failures count as the task's own"
     ]
   },
-  "summary": "When the project's checks send a task back, the evidence the task had accepted for the work that failed stops being accepted. The next completion is then checked on the fix, not on the commit that already failed, so the task can reach review again instead of being refused forever. This fixes F1081 and the archive task's 9-hour stall.",
+  "summary": "A task the project's checks send back finds its way back to review. Two gaps stop that today. (1) The send-back leaves the evidence the task had accepted for the failing work in place, so the next completion is checked on the commit that already failed and is refused forever (F1081, and the archive task's 9-hour stall). (2) A flow that stops on an empty queue counts approved as done, so it has ended by the time the landing checks send a task back, and nobody picks the task up (F1080). After this change the held evidence lets the fix be checked, and the flow stays open until its approved work has landed.",
   "tasks": [
     {
       "depends_on": [],
-      "description": "Write hub/tests/test_a_checks_send_back_returns_accepted_evidence.py over a real git repository and a real configured project check (in the style of test_checks_run_before_review.py). Cover ac-fix-is-checked and ac-fix-is-checked-after-landing end to end through the routes: accepted evidence at failing commit A, sent back by a failed completion check and, separately, by a failing landing batch (F1081), fix B with evidence, complete, then assert the check targets [B] and the task reaches under_review. Also add ac-check-run-holds-accepted, ac-landing-holds-accepted, ac-others-untouched, ac-note and ac-reviewer-unchanged. Run the new tests before the change and record that they fail (both fix-is-checked tests must fail by targeting A), then make them pass. Make the change in hub/hub/requirement_evidence.py, task_transition_service.py and, where needed, project_checks.py and landing_queue.py. Confirm test_evidence_judged_piece_by_piece.py, test_checks_run_before_review.py and the landing-batch suites still pass. When it lands, set F1081's Status in scripts/drive/FINDINGS.md to fixed, naming the tests.",
+      "description": "Write hub/tests/test_a_checks_send_back_returns_accepted_evidence.py over a real git repository and a real configured project check (in the style of test_checks_run_before_review.py). Cover ac-fix-is-checked and ac-fix-is-checked-after-landing end to end through the routes: accepted evidence at failing commit A, sent back by a failed completion check and, separately, by a failing landing batch (F1081), fix B with evidence, complete, then assert the check targets [B] and the task reaches under_review. Also add ac-check-run-holds-accepted, ac-landing-holds-accepted, ac-others-untouched, ac-note and ac-reviewer-unchanged. Name the tests so each criterion's how_to_check -k selector picks them. Run the new tests before the change and record that they fail (both fix-is-checked tests must fail by targeting A), then make them pass. Make the change in hub/hub/requirement_evidence.py, task_transition_service.py and, where needed, project_checks.py and landing_queue.py. Confirm test_evidence_judged_piece_by_piece.py, test_checks_run_before_review.py and the landing-batch suites still pass. When it lands, set F1081's Status in scripts/drive/FINDINGS.md to fixed, naming the tests.",
       "files": [
         "hub/tests/test_a_checks_send_back_returns_accepted_evidence.py",
         "hub/hub/requirement_evidence.py",
@@ -186,7 +280,7 @@
         "scripts/drive/FINDINGS.md"
       ],
       "from": null,
-      "key": "acceptance-test",
+      "key": "evidence-held",
       "requirements": [
         "hold-accepted-on-checks-send-back",
         "others-evidence-untouched",
@@ -196,6 +290,26 @@
       ],
       "reviewer": null,
       "title": "A sent-back task's fix is checked (test first, then the fix)"
+    },
+    {
+      "depends_on": [
+        "evidence-held"
+      ],
+      "description": "Write hub/tests/test_a_flow_stays_open_until_its_work_lands.py covering ac-flow-stays-open, ac-flow-ends-after-landing, ac-no-landing-ends-at-approval, ac-landing-wait-quiet and ac-resumed-after-landing-send-back (F1080's shape end to end: last task approved, landing batch sends it back, next firing starts the assignee's turn). Name the tests so each criterion's how_to_check -k selector picks them. Run them before the change and record that ac-flow-stays-open and ac-resumed-after-landing-send-back fail, then make them pass. The change is in hub/hub/scheduler.py: `_loop_stop_reason` does not report the queue drained while a loop task's latest landing is in landing_queue.OPEN, and `decide_firing` records a firing whose only open work is landings queued/checking/landing as in progress, not stalled. Confirm the existing flow-stop, stall and mender suites still pass (test_the_mender_wakes_only_for_real_stalls.py among them). When it lands, set F1080's Status in scripts/drive/FINDINGS.md to fixed, naming the tests.",
+      "files": [
+        "hub/tests/test_a_flow_stays_open_until_its_work_lands.py",
+        "hub/hub/scheduler.py",
+        "scripts/drive/FINDINGS.md"
+      ],
+      "from": null,
+      "key": "flow-waits-for-landing",
+      "requirements": [
+        "flow-open-while-landing",
+        "landing-wait-is-not-a-stall",
+        "sent-back-task-resumed"
+      ],
+      "reviewer": null,
+      "title": "A flow stays open until its approved work has landed (test first, then the fix)"
     }
   ],
   "title": "A checks send-back returns the task's accepted evidence"

@@ -1,0 +1,29 @@
+{
+  "id": "fct-49e363ce16f1",
+  "kind": "fact",
+  "claim": "An author who fills the document in one submission without walking the steps never sees spec_journey.missing, so ready_to_approve can be true when approval will not be clean.",
+  "citations": [
+    {
+      "source": "src-8693b5e4fc65",
+      "quote": "In practice an author who fills the document in one\n  submission without walking the steps never sees `spec_journey.missing`.",
+      "line_start": 35,
+      "line_end": 36
+    },
+    {
+      "source": "src-8693b5e4fc65",
+      "quote": "The `ready_to_approve`\n  field then says true when approval will not be clean.",
+      "line_start": 36,
+      "line_end": 37
+    }
+  ],
+  "sources": [
+    "src-8693b5e4fc65"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T11:25:16.026693Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
