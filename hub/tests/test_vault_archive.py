@@ -175,3 +175,20 @@ async def test_ac_out_of_checks(
     assert live in prompt and "Live claim about refunds." in prompt
     assert old not in prompt and "Old archived claim" not in prompt
     assert vault_spec_check is not None and PROJECT
+
+
+def test_the_archive_routes_have_a_client() -> None:
+    """The operator's archive, restore and list-archived routes are reached from hub/ui/src."""
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[2] / "scripts" / "drive" / "n10_route_reachability.py"
+    spec = importlib.util.spec_from_file_location("n10_route_reachability", path)
+    n10 = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(n10)
+    try:
+        rows = n10.route_rows()
+    except SystemExit as exc:
+        pytest.skip(f"the Hub route table is not readable here: {exc}")
+    orphans = {r["path"] for r in n10.clientless_routes(rows)}
+    mine = {p for p in orphans if "/vault/sources/" in p or p.endswith("/vault/archived")}
+    assert not mine, f"vault archive routes with no client: {sorted(mine)}"
