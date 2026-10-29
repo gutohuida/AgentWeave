@@ -40900,3 +40900,13 @@ Repro: the operator pressed Build with driver **hand**, level **fast**, builders
 **Tier:** 0
 
 Repro: `task_transition_service.py:1259` calls `project_checks.schedule` for a task moved to `completed` with no run, inside the transaction that moves it. The scheduled `request_run` can run before that commit, read the task as `in_progress`, resolve no targets (`check_targets`: `awaiting_review` is false, and a sent-back task's evidence is held), and return `None` with no run recorded. While it is between `_starting.add` and its return, a second `request_run` for the task returns `None` at `project_checks.py:1199`. Both requests end with no run on the fix. Measured with 24 copies of the test under `-n auto`: 18 failed before the test's drain, 0 of 75 in three runs after. In a flow the firing's `checks_waits` backstop requests again; for a hand-driven task nothing does until someone asks for review. Fix direction: schedule after commit, as `landing_queue.release_after_commit` does.
+
+## F1085 (C) -- a document whose default checker is named `checker` reads on its spec page as "the document names no reviewer"
+
+**Status:** open 2026-10-29. Found by QA2 driving the Build dialog for `the-build-plan-lives-in-the-spec-and-every-task-goes-to-its-people` (task-a85075abe995, `scripts/drive/d1029_build_dialog_browser.py`, artefacts `%TEMP%/drive1029-build-plan-in-spec/211931-dialog/no_build_button.png`).
+**Source:** drive
+**Theme:** Builds
+**Ready:** yes
+**Tier:** 0
+
+Repro: approve a change document whose delivery is `{"mode": "flow", "agent": "Developer", "builder": "Developer", "checker": "QA"}` and open it on the spec page. The approval bar's `ReviewerLine` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:93`) reads "Reviewed by any free agent: the document names no reviewer." Yet the Build dialog for the same document pre-selects QA as the default checker, and the build sends t1's check to QA. The delivery status only looks at the old field: `hub/hub/api/v1/spec.py:295` sets `status["reviewer"]` from `delivery.reviewer` alone. The build outcome's `reviewer` key does the same (`spec.py:3563`, `:3634`). The change brought in `delivery.checker` (FR-1 `one-checker`) without updating these readers. **Expected:** the status names the default checker as `spec_payload.default_checker(payload)` resolves it (checker, else tester, else reviewer), with the same not-an-open-agent warning. **Test:** a document with `delivery.checker: "QA"` and no `reviewer`; the delivery status read carries `reviewer` (or `checker`) `QA` with state `ok`.
