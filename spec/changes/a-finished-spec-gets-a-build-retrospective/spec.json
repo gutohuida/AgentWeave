@@ -1,0 +1,422 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a trial Hub (:8010) serving a throwaway project in testbed/ that is not AgentWeave's repository, the build retrospective job on with a Haiku-bound runner, and a two-task document built by a flow where the first task was sent back once",
+      "how_to_check": "scripts/drive/ acceptance drive against the trial Hub, real Haiku turns",
+      "key": "acceptance-drive",
+      "requirement": "fires-when-the-last-task-is-approved",
+      "then": "within the drive's timeout one retrospective of that document appears on its spec page, its send-backs section names the real sent-back task id, its transcripts list includes the sent-back run, and that project's vault gains one tracked source naming the document; the drive fails at any step that does not fire for real",
+      "when": "the operator approves the document's last task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with no row for the build retrospective job",
+      "how_to_check": "hub test over GET /manager/jobs and the approval path",
+      "key": "job-listed-and-off-by-default",
+      "requirement": "job-on-the-manager-page",
+      "then": "the page lists 'Build retrospective' turned off with no runner, and no manager_job_fired event for it is recorded",
+      "when": "the operator opens the Manager page and a document's last task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the job on with automatic firing and a document with three tasks",
+      "how_to_check": "hub test on the approval transition",
+      "key": "fires-exactly-once",
+      "requirement": "fires-when-the-last-task-is-approved",
+      "then": "no retrospective fires after the first two, and exactly one fires after the third",
+      "when": "the first two tasks are approved, then the third"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with one task approved and one stuck in revision_needed, the job with a runner but automatic firing off",
+      "how_to_check": "hub test on the run route",
+      "key": "request-on-unfinished-build",
+      "requirement": "operator-asks-for-one",
+      "then": "one retrospective fires covering both tasks, and the second press starts nothing and answers that one is in progress",
+      "when": "the operator presses Review this build, then presses it again before the first finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded build with a transition, run, note, evidence decision, gate run, stall, checkpoint, amendment, reconcile gap and ask_user question for its tasks",
+      "how_to_check": "hub test on the input builder with seeded rows",
+      "key": "input-holds-every-record",
+      "requirement": "reads-the-whole-record",
+      "then": "each seeded record appears in the input under its id, and the ask_user question carries its wait time",
+      "when": "the retrospective's input is assembled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with one run per flag (send-back, stall, failed, mender, over twice the median) and three ordinary runs",
+      "how_to_check": "hub test on the input builder",
+      "key": "only-and-all-flagged-transcripts",
+      "requirement": "transcripts-of-flagged-runs",
+      "then": "all five flagged runs' transcripts are included, no ordinary run's transcript is, and the report lists exactly the five",
+      "when": "the input is assembled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded four-task build whose input is larger than the model's limit (a test limit set low) but each task's records fit, and a second build that fits",
+      "how_to_check": "hub test with a stubbed worker recording its inputs",
+      "key": "split-when-too-large",
+      "requirement": "large-builds-are-reviewed-in-parts",
+      "then": "the first makes more than one part call, no task's records appear in two parts, then one final call whose input holds the part reviews, and its report states the number of parts; the second makes exactly one call",
+      "when": "each is reviewed with a stubbed worker"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded build whose task transitions and usage rows give known durations and costs",
+      "how_to_check": "hub test with a stubbed model answer carrying wrong numbers",
+      "key": "figures-equal-records",
+      "requirement": "figures-come-from-the-records",
+      "then": "the report's per-task times, per-agent and per-task costs and totals equal the values computed from the seeded rows",
+      "when": "a retrospective is written, whatever figures the model's answer contains"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a retrospective written from a stubbed answer",
+      "how_to_check": "hub test on the stored report plus UI component test",
+      "key": "sections-present",
+      "requirement": "report-covers-what-worked-and-what-did-not",
+      "then": "every listed section is present, empty ones saying there was nothing, each send-back carries one of the three causes, and each improvement carries one of the four labels",
+      "when": "it is shown on the spec page"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a retrospective of a real finished build on one of the operator's projects",
+      "how_to_check": "operator reads the first real retrospective",
+      "key": "useful-to-the-operator",
+      "requirement": "report-covers-what-worked-and-what-did-not",
+      "then": "the operator judges that it names at least one thing they would change in how the project's next build is specced or run",
+      "when": "the operator reads it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a stubbed answer whose report has one finding citing a real task id of the build, one citing a task id of another document, and one citing nothing",
+      "how_to_check": "hub test",
+      "key": "ungrounded-dropped",
+      "requirement": "every-claim-is-grounded",
+      "then": "only the first finding is kept and the report says two were dropped",
+      "when": "the retrospective is stored"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with two written retrospectives and a third firing that failed",
+      "how_to_check": "UI component test fed real route payloads, in the order the route returns them",
+      "key": "spec-page-shows-newest-and-failures",
+      "requirement": "readable-on-the-spec-page",
+      "then": "the page shows the failure with its reason and a run-again action, the newer written retrospective with its time, trigger, model, part count and cost, and the older one reachable",
+      "when": "the operator opens its spec page"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the distillation job on",
+      "how_to_check": "hub test over the vault map",
+      "key": "vault-source-added",
+      "requirement": "lessons-go-to-the-vault",
+      "then": "exactly one dated vault source with tracked visibility naming the document appears in that project's vault map and is queued for distillation; a failed or empty firing adds none",
+      "when": "a retrospective is written"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the job on with a runner whose spawn fails",
+      "how_to_check": "hub test with a failing worker",
+      "key": "failure-does-not-block",
+      "requirement": "never-blocks-the-work",
+      "then": "both succeed with no added delay waiting on the job, and a manager_job_fired event with outcome failed is recorded",
+      "when": "the last task is approved and the document is then archived"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "853e09096e2d4bc1c4fa4585643493bd6a4bee9e64c46afe44c45797cbe861ee",
+      "FR-10": "346dc18f670506349fed850047c34a3ab3a259b3083c1df0d601841a3a793ef2",
+      "FR-11": "876e449e322033f37d0f3c00714fffafbcc0d1094c99a000c9a461eff6921d6d",
+      "FR-12": "6a3c8a1174098ed010ae29d57af3b167cfc2313e0a59d716fb23198eb854f913",
+      "FR-13": "597e0d637d3004e5afbae5a3ba0969e399b5e6db3277fa40dfb411c6a95f2e28",
+      "FR-14": "8c6d50b775a230755700aac6330f0cd960debf78682d829c401c7b03c1168a61",
+      "FR-2": "888a1fca4470613548a3623fbb51a8167403a9ea3ed8ea8bebebfb0a893b9fe8",
+      "FR-3": "e9881b1cd920b90d63775e4f94e45ae077401980ce56435295b96fa203010c71",
+      "FR-4": "6675e0508c5850aa6fdece4cacfd0e330cd2620d84ec7888eceb7edf5d11bd2f",
+      "FR-5": "f9493673f634af96721dec103928af7a0a826f8b32455c03d1eb1a04ded86bc1",
+      "FR-6": "822301fd92b43096baa7894da9693b1cdf187613dd27db325ef42fd238b58b65",
+      "FR-7": "d6b3de66d62c728a2ed97c37abd0a7d97a5614406009eeeb77402731f78b2766",
+      "FR-8": "7776b6ac1956cd36b00fdc9cf591c45134016654fd6ecf521f5a2688f829f76b",
+      "FR-9": "2685e2e85ba4f4734aacfca53ce99dbdde9714bdd8fdb28379ee22f4867348b5"
+    },
+    "high_water": 14,
+    "requirements": {
+      "every-claim-is-grounded": "FR-8",
+      "figures-come-from-the-records": "FR-6",
+      "fires-when-the-last-task-is-approved": "FR-2",
+      "job-on-the-manager-page": "FR-1",
+      "large-builds-are-reviewed-in-parts": "FR-14",
+      "lessons-go-to-the-vault": "FR-10",
+      "never-blocks-the-work": "FR-12",
+      "operator-asks-for-one": "FR-3",
+      "readable-on-the-spec-page": "FR-9",
+      "reads-the-whole-record": "FR-4",
+      "report-covers-what-worked-and-what-did-not": "FR-7",
+      "transcripts-of-flagged-runs": "FR-13"
+    },
+    "retired": {
+      "suggested-tasks-wait-for-the-operator": "FR-11",
+      "transcripts-of-flagged-runs-only": "FR-5"
+    }
+  },
+  "delivery": {
+    "agent": "Developer",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Sonnet by default for build work, per the quota guidance; nothing here touches main's data or a migration hazard that needs Opus (operator agreed 2026-10-29).",
+      "cron": "The 5-minute tick is the backstop; flows already advance on transitions.",
+      "mode": "Four chained tasks on one self-contained Hub feature suit a flow, and the operator is dogfooding flows one slice at a time.",
+      "reviewer": "QA reviews; the tasks are chained, so one reviewer is not the bottleneck it was on 10-25.",
+      "stop": "Stop when the queue empties so the flow does not idle once the slice is built.",
+      "tester": "QA tests the running product within its reviews; task 4's acceptance drive is the main live check, and a separate tester would add a hand-off per task."
+    },
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true,
+    "tester": "QA"
+  },
+  "design": "Grounding, not decisions: the manager registry (hub/hub/manager.py JOBS) is where the job is listed; the last-open-task moment is already detected in task_transition_service.py:1237 (chapters_job.is_last_open_task + fire_after_commit), which this job can hook beside; spec-vault-check (hub/hub/vault_spec_check.py) is the precedent for a one-shot no-tools spawn whose answer names ids the Hub validates and whose result lives on its manager_job_fired event; vault.add_source (hub/hub/vault.py:1069) adds a source. Whether the report needs its own table or lives on the event is the builder's call; if it needs a migration, the migration rules in .claude/rules/ apply.",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "How deeply does it read conversations? Resolved by the operator 2026-10-29: records and checkpoints for every run, the full transcript of every flagged run, no budget.",
+      "resolved": true
+    },
+    {
+      "question": "Suggested tasks created from the retrospective: dropped by the operator 2026-10-29; an agent asked to read the retrospective does that.",
+      "resolved": true
+    },
+    {
+      "question": "Vault source visibility: tracked (operator, 2026-10-29).",
+      "resolved": true
+    },
+    {
+      "question": "A build too large for one model call: the Hub splits the input and reviews it in parts (operator, 2026-10-29).",
+      "resolved": true
+    }
+  ],
+  "problem": "When a spec's build ends, nothing learns from it. In any project AgentWeave builds, the tasks, runs, send-backs, stalls, evidence, gate results and conversations are all recorded, but nobody reads them as a whole, so the same pitfalls come back on the project's next build: a single overloaded reviewer, work waiting to be picked up, send-backs caused by the process rather than the work, flaky checks, specs whose criteria had to be amended mid-build.\n\nThe one time this was done (a 2026-10-25 flow on AgentWeave's own repository, vault src-17aeb9aea81f) it took an agent turn and a separate Claude Code session writing SQL against the live database, and its own conclusion was that the post-mortem \"should be one screen, not SQL\". That retrospective produced the improvements of the following days; without a routine one, those lessons depend on the operator noticing a build went badly and asking.\n\nAffected: the operator of any project, who wants to improve how that project is conducted (how its specs are written, how its builds are staffed and run, what in its code and checks keeps costing time), and the agents writing that project's next specs, who today have no record of what the last build taught.",
+  "requirements": [
+    {
+      "key": "job-on-the-manager-page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Every model the Hub spawns on its own is the operator's to switch on and pay for; the manager registry is where that choice lives today (hub/hub/manager.py JOBS).",
+      "statement": "The Manager page lists a 'Build retrospective' job that the operator can turn on or off and give a runner and a model per project, like the other manager jobs; it needs a runner, and with no row or turned off it never fires automatically."
+    },
+    {
+      "key": "fires-when-the-last-task-is-approved",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub already detects this moment for the chapters job (chapters_job.py LAST_TASK_APPROVED); a build that finished is the one whose lessons are cheapest to miss.",
+      "statement": "While the job is on with automatic firing, approving the last open task of a spec document in any project fires exactly one retrospective of that document's build."
+    },
+    {
+      "key": "operator-asks-for-one",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The builds most worth reviewing are often the ones that stalled and never finished, like the 2026-10-25 flow.",
+      "statement": "A 'Review this build' action on a spec document's page fires a retrospective of that document's build whenever the job has a runner, whether or not every task is approved and whatever the automatic choice; while one is running for that document a second request starts nothing and says one is in progress."
+    },
+    {
+      "key": "reads-the-whole-record",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A retrospective's input holds, for every task of the document: its status transitions with who and when, its runs with agent, model, duration, outcome and cost, its notes, its evidence and every decision on it, its check-gate runs and results, the stalls and mender interventions naming it, the checkpoint summaries of its runs, and the document's amendments, reconcile gaps and the ask_user questions raised in its runs with how long each waited for an answer."
+    },
+    {
+      "key": "transcripts-of-flagged-runs",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Transcripts are needed to explain why a flagged event happened; unflagged transcripts are mostly file reads and test runs. The operator chose no budget on flagged transcripts (2026-10-29).",
+      "statement": "A run's full transcript is included exactly when the run is flagged: it ended in a send-back, a stall names it, it failed or was stopped, it is a mender run, or its duration is more than twice the median of the build's runs. Every flagged run's transcript is included, with no budget, and the report lists the runs whose transcripts it read."
+    },
+    {
+      "key": "large-builds-are-reviewed-in-parts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With no transcript budget, the builds most worth reviewing (long, troubled ones) are the ones that will not fit; a retrospective that fails on exactly those is worth little (operator, 2026-10-29).",
+      "statement": "When a build's input does not fit one call to the chosen model, the Hub splits it into parts that each fit, with no task's records divided across parts, reviews each part separately, and then writes one report from the part reviews and the build-wide figures; the report says how many parts it was reviewed in. A build that fits is reviewed in one call."
+    },
+    {
+      "key": "figures-come-from-the-records",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A model's arithmetic over dozens of runs is a guess, and in a build reviewed in parts no single call sees every run.",
+      "statement": "Every time and cost figure in the report (per task: time building, waiting for review, in the check gate, and waiting to be started; per agent and per task: cost and tokens; build totals) is computed by the Hub from the records, not estimated by the model, and equals what the records give."
+    },
+    {
+      "key": "report-covers-what-worked-and-what-did-not",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The report has these sections: where the time went; send-backs, each classified as a defect in the work, caused by the tooling or process, or a spec that was wrong; what the spec missed (amended or added criteria, tasks added mid-build, criteria reported as unsatisfiable, requirements without accepted evidence, reconcile gaps); staffing; cost; friction (stalls, flaky gate tests, operator waits); what worked; what to improve, each improvement labelled as about the project's code and checks, how its specs are written, how its builds are staffed and run, or the tooling itself; and the runs whose transcripts it read."
+    },
+    {
+      "key": "every-claim-is-grounded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An ungrounded review finding cannot be checked or acted on; the Hub checking ids is how spec-vault-check already keeps a model honest.",
+      "statement": "Every finding, lesson and improvement in a retrospective, whether from a part review or the final report, cites at least one task, run, event or evidence id belonging to that document's build; the Hub drops any that cites none or cites an id outside the build, and the report shows how many were dropped."
+    },
+    {
+      "key": "readable-on-the-spec-page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The document's spec page shows its newest retrospective with when it was made, what triggered it, the model, how many parts it was reviewed in and its cost; earlier retrospectives of the same document stay reachable; a failed firing shows as failed with the reason and a way to run it again."
+    },
+    {
+      "key": "lessons-go-to-the-vault",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents writing the next spec read the vault, not old spec pages; tracked so every machine working the project gets the same lessons (operator, 2026-10-29).",
+      "statement": "Each retrospective that is written adds one dated, tracked source to that project's vault holding its lessons, naming the document it reviewed, so the project's later turns on any machine find it through the vault map; it is queued for distillation when the distillation job is on."
+    },
+    {
+      "key": "never-blocks-the-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A retrospective that is off, running, failed or empty never delays or refuses approving a task or approving or archiving a document; each firing, and each part of a firing, is recorded as a manager_job_fired event with its outcome and usage, like the other jobs."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A new manager job, the build retrospective, configured per project on the Manager page like the other jobs (on/off, runner, model)",
+      "Works for a spec document of any project the Hub serves, not only AgentWeave's own",
+      "Triggered automatically when the last task of a spec document is approved, and by a 'Review this build' action on the spec page, which also works on a build that stalled or never finished",
+      "Reads everything recorded about one document's build: its tasks and their transitions, runs, task notes, evidence and decisions, checkpoints, stalls and mender interventions, check-gate results, amendments, reconcile gaps, ask_user questions, cost, and the full transcripts of the runs the records flag",
+      "A build too large to review in one model call is split by the Hub into parts and reviewed part by part, then brought together into one report",
+      "Covers: time per task (building, waiting for review, gating, waiting to be started); send-backs classified by cause (defect in the work, caused by the tooling or process, spec was wrong); what the spec missed; staffing; cost per agent and task; friction (stalls, flaky tests, operator waits); what worked; what to improve",
+      "Every claim cites the task, run or event it rests on; the Hub drops claims whose cited ids do not belong to the build",
+      "The report is readable on the spec document's page",
+      "Its lessons are added to the project's vault as a tracked source, so that project's later spec and build turns on any machine can find them"
+    ],
+    "non_goals": [
+      "Creating tasks from a retrospective, or offering to: the operator asks an agent to read it and do that when they want (operator, 2026-10-29)",
+      "Trends or comparisons across several builds or retrospectives, or across projects (a later slice)",
+      "Changing charters, delivery settings, project rules or specs on its own: its improvements are written for the operator to act on",
+      "Judging individual agents' or models' quality as a ranking or score",
+      "Reviewing work that is not a spec document's build (loops without a document, ad-hoc tasks, interactive sessions outside the Hub)",
+      "Re-running tests, drives or the check gate: it reads what was recorded and runs nothing",
+      "Reading the project's code or git history beyond what the build's records hold",
+      "Blocking approval or archiving of a document on the retrospective",
+      "Reading the full transcript of runs the records do not flag"
+    ]
+  },
+  "summary": "A new manager job reviews a spec document's whole build, in whatever project it was built, once it finishes (or when the operator asks): where the time went, what worked, what did not, what the spec missed, and what to improve. It produces a grounded report on the spec page and writes its lessons to the project's vault as a tracked source.",
+  "tasks": [
+    {
+      "depends_on": [],
+      "description": "Write the acceptance drive scripts/drive/d1029_build_retrospective.py per the acceptance-drive criterion: on the trial Hub (:8010) with a throwaway testbed/ project (not this repository), a Haiku-bound runner, a two-task document built by a flow with one send-back; approve the last task; assert a retrospective appears for the document, names the sent-back task id in send-backs, lists the sent-back run among transcripts read, and the project's vault gains one tracked source naming the document. Run it on today's code and record it failing (it must fail because no retrospective fires, not for a setup error). The drive is not part of the project's checks, so the suite stays green.",
+      "files": [
+        "scripts/drive/d1029_build_retrospective.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "fires-when-the-last-task-is-approved",
+        "transcripts-of-flagged-runs",
+        "lessons-go-to-the-vault"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "Register the Build retrospective manager job; fire it after the last open task of a document is approved (beside the chapters hook) and from an operator run route for a document (refusing a second while one runs); assemble the input from every record of the document's tasks plus the full transcripts of flagged runs; compute all time and cost figures from the records; spawn the model once, validate its answer, drop findings citing no id or an id outside the build and count them; store the report so it can be listed per document (newest first) with time, trigger, model, cost and outcome; add one dated tracked vault source with its lessons; record each firing as a manager_job_fired event and never delay approval or archive. Hub tests for each criterion of the listed requirements, with stubbed workers.",
+      "files": [
+        "hub/hub/build_retrospective.py",
+        "hub/hub/manager.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/api/v1/manager.py",
+        "hub/tests/test_build_retrospective.py"
+      ],
+      "from": null,
+      "key": "retrospective-job",
+      "requirements": [
+        "job-on-the-manager-page",
+        "fires-when-the-last-task-is-approved",
+        "operator-asks-for-one",
+        "reads-the-whole-record",
+        "transcripts-of-flagged-runs",
+        "figures-come-from-the-records",
+        "report-covers-what-worked-and-what-did-not",
+        "every-claim-is-grounded",
+        "lessons-go-to-the-vault",
+        "never-blocks-the-work"
+      ],
+      "reviewer": null,
+      "title": "The retrospective job writes a grounded report"
+    },
+    {
+      "depends_on": [
+        "retrospective-job"
+      ],
+      "description": "When the assembled input does not fit one call to the chosen model, split it into parts by whole task, review each part, then write the one report from the part reviews and the Hub's build-wide figures, stating the part count; grounding applies to every part and the final report; each part is recorded as a manager_job_fired event. A build that fits still makes one call. Hub tests with a stubbed worker and a low test limit.",
+      "files": [
+        "hub/hub/build_retrospective.py",
+        "hub/tests/test_build_retrospective_parts.py"
+      ],
+      "from": null,
+      "key": "review-in-parts",
+      "requirements": [
+        "large-builds-are-reviewed-in-parts",
+        "every-claim-is-grounded",
+        "never-blocks-the-work"
+      ],
+      "reviewer": null,
+      "title": "Large builds are reviewed in parts"
+    },
+    {
+      "depends_on": [
+        "retrospective-job",
+        "review-in-parts"
+      ],
+      "description": "On a spec document's page, show its newest retrospective (time, trigger, model, part count, cost, every report section), earlier ones reachable, a failed firing with its reason and run-again, and a Review this build action that answers when one is already in progress. UI component tests fed the real route payload in the order the route returns it; refresh the UI bundle (commit hub/ui/src and hub/hub/static/ui together). Then run the acceptance drive against the trial Hub and record it passing.",
+      "files": [
+        "hub/ui/src/components/spec/page",
+        "hub/ui/src/api",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "spec-page-retrospective",
+      "requirements": [
+        "readable-on-the-spec-page",
+        "operator-asks-for-one",
+        "report-covers-what-worked-and-what-did-not"
+      ],
+      "reviewer": null,
+      "title": "Retrospective on the spec page"
+    }
+  ],
+  "title": "A finished spec gets a build retrospective"
+}

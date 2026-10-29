@@ -1,0 +1,355 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with tasks in specs A (3 tasks) and B (1 task), 2 tasks with no spec, and an approved spec C with no tasks",
+      "how_to_check": "UI test on the board fed the task list route's payload in the order the route returns it",
+      "key": "ac-picker-lists",
+      "requirement": "scope-picker",
+      "then": "the picker offers All, No spec, A (3) and B (1), not C; after typing it offers only A",
+      "when": "the operator opens the board's scope picker and then types part of A's title"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an archived spec A with one completed and one pending task, and spec B with two tasks",
+      "how_to_check": "UI test plus a Hub test on the list route's filter",
+      "key": "ac-one-spec",
+      "requirement": "one-spec-exact",
+      "then": "the board shows A's two tasks and nothing else",
+      "when": "the operator chooses A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with 1005 tasks where spec A's two tasks are the newest",
+      "how_to_check": "Hub test on the list route with the board's parameters for one spec",
+      "key": "ac-past-the-page",
+      "requirement": "one-spec-exact",
+      "then": "both of A's tasks are shown",
+      "when": "the operator chooses A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two tasks with no spec and three tasks in spec A",
+      "how_to_check": "UI test plus a Hub test on the list route's no-spec filter",
+      "key": "ac-no-spec",
+      "requirement": "no-spec-exact",
+      "then": "the board shows the two tasks with no spec and nothing else",
+      "when": "the operator chooses No spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project from ac-one-spec",
+      "how_to_check": "UI test",
+      "key": "ac-all",
+      "requirement": "all-unchanged",
+      "then": "B's two tasks and A's pending task show, and A's completed task does not",
+      "when": "the operator chooses All"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec A chosen, with 2 tasks",
+      "how_to_check": "UI test",
+      "key": "ac-says",
+      "requirement": "says-what-it-shows",
+      "then": "it reads A's title and 2 tasks, and one click on its action shows All again",
+      "when": "the board is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec A with tasks held by Developer (2) and QA (1), and spec B with a task held by Developer",
+      "how_to_check": "UI test",
+      "key": "ac-combined",
+      "requirement": "combines-with-filters",
+      "then": "the Developer chip reads 2 before it is clicked, and after it only A's two Developer tasks show",
+      "when": "the operator chooses A and then the Developer chip"
+    },
+    {
+      "checked_by": "agent",
+      "given": "project P scoped to spec A and project Q scoped to No spec",
+      "how_to_check": "UI test over local storage, plus a step in the drive that reloads the page",
+      "key": "ac-remembers",
+      "requirement": "remembers-scope",
+      "then": "P's board shows spec A's scope and Q's shows No spec",
+      "when": "the operator reloads the app and opens P's board, then Q's"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a remembered scope of spec A, whose tasks have since all been deleted",
+      "how_to_check": "UI test",
+      "key": "ac-stale-scope",
+      "requirement": "remembers-scope",
+      "then": "it shows All",
+      "when": "the board opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the board scoped to No spec, and a coverage row of spec A naming two of A's five tasks",
+      "how_to_check": "UI test",
+      "key": "ac-override",
+      "requirement": "task-list-overrides",
+      "then": "the board first shows exactly those two tasks, then shows the No spec scope again, and No spec is still what it reopens in",
+      "when": "the operator follows the coverage row's link, then clears the narrowing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec A's page, with A holding three tasks",
+      "how_to_check": "UI test, plus a step in the drive",
+      "key": "ac-spec-link",
+      "requirement": "spec-page-opens-its-scope",
+      "then": "the board shows A's scope with its three tasks, names A, and reopens in A's scope after a reload",
+      "when": "the operator chooses 'Show these on the board'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub :8010 with a project holding tasks in two specs and two tasks with no spec",
+      "how_to_check": "Browser drive script under scripts/drive/, written first and failing on master because the picker does not exist",
+      "key": "ac-drive",
+      "requirement": "acceptance-drive",
+      "then": "each scope shows exactly its tasks and names itself, the reload keeps the last scope, and the spec link opens that spec's scope",
+      "when": "the drive opens the Tasks board, chooses each scope in turn, reloads, and then follows a spec page's 'Show these on the board'"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "c3196f50dba2340241deeb662e85a083d91dacf3f23e52d82ca80655be0a62e5",
+      "FR-10": "517d6c0a95aca8ab8fd747e52af241afba7fae9f82ca15f7ead52dbfb5f98136",
+      "FR-2": "9f07d52a7eaa4fe8719a63eccf40b464d6d8c61844798c474aca382994ec8098",
+      "FR-3": "4fd02b78ddb77b62d72c7da4a7dea4b8f619e879eece8320ba6a6b7c005d7a13",
+      "FR-4": "f17ab0a4d2827d02c09257d6f362d67a7f3fa0554be86c05b1459e39a05fb494",
+      "FR-5": "3d87e80cb304b01fd42864412f2e9f5b8f58f3946e0a80ac457d3755fa25082e",
+      "FR-6": "df93264cd44761fb89ae26056a8762961d701b71f81dd0ed204bc868e167cd0a",
+      "FR-7": "cdce87eb1fb370eb13b7684fe730466c03e96a2834a5d9eadfea1831f06e581e",
+      "FR-8": "cd39fab0c4fd7179939977431826636d51ecee2dcbd416b0367c0815adffa19d",
+      "FR-9": "f74d02e2cc813b4214528e9bf1dfc94b2a147d69906fc89bcab226c16251cdea"
+    },
+    "high_water": 10,
+    "requirements": {
+      "acceptance-drive": "FR-7",
+      "all-unchanged": "FR-4",
+      "combines-with-filters": "FR-6",
+      "no-spec-exact": "FR-3",
+      "one-spec-exact": "FR-2",
+      "remembers-scope": "FR-8",
+      "says-what-it-shows": "FR-5",
+      "scope-picker": "FR-1",
+      "spec-page-opens-its-scope": "FR-10",
+      "task-list-overrides": "FR-9"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builders": [
+      "Developer",
+      "QA2"
+    ],
+    "cron": "*/5 * * * *",
+    "driver": "flow",
+    "landing": "main",
+    "level": "reviewed",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Routine UI work with at most a small route filter: Sonnet, to save quota.",
+      "cron": "Every five minutes, the default.",
+      "mode": "Two tasks in order, drive first; a flow runs them without hand-offs, alongside slice 1's flow.",
+      "reviewer": "QA checks both and tests in the browser; it builds neither.",
+      "stop": "Stop when both tasks are done.",
+      "tester": "No separate tester: the checker tests."
+    },
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decided with the operator on 2026-10-29:\n- **Scope is a third filter beside agent and search, not a replacement.** All three apply together.\n- **The board remembers its scope** per project, in this window, as the board's column folds already are (`TasksScreen.tsx`, `FOLDS_KEY`) and as the spec page will remember its document. Not stored on the Hub. A remembered spec that no longer has tasks falls back to All.\n- **A list of task ids stays a separate narrowing.** A coverage row or a loop link still narrows the board to exactly the tasks it names, which is often narrower than a spec (one requirement's tasks). While it is set it overrides the scope; clearing it returns to the scope, which it never changes.\n- **A spec page opens the board on its spec.** Its existing \"Show these on the board\" (`SpecHealthLine.tsx:208`) sets the one-spec scope instead of a list of task ids, so the board then reads as that spec and keeps reading so.\n- **One spec shows that spec's whole history.** The board's default hides completed tasks of archived specs (`exclude_archived_completed`); choosing an archived spec on purpose shows them.\n- **What the board can show is not capped by the page it loads.** The board loads the oldest 1000 tasks (`PAGE_SIZE`, `api/tasks.ts:593`); a narrowed board must show every task in its scope even in a project past that.\n- Not mocked first: the control is one picker in the existing filter row, in the existing chip style.",
+  "evidence": {
+    "checked": [
+      "BoardView.tsx:90-96: the board filters only by agent and by title/id search",
+      "TasksScreen.tsx:66 and api/tasks.ts:593-615: the board loads up to 1000 tasks, oldest first, hiding archived specs' completed tasks unless a task-id scope is set",
+      "TasksScreen.tsx: column folds are already remembered per project in local storage (FOLDS_KEY)",
+      "App.tsx:539, :564: a coverage row and a loop link narrow the board via activeTaskIds",
+      "SpecHealthLine.tsx:208 and SpecDocumentFacts.tsx:118: a spec page's 'Show these on the board' sends all of the document's task ids",
+      "api/v1/tasks.py:969-1009: the list route filters by one spec_document_id, but has no 'no spec' filter",
+      ":8000 database, read-only: proj-d85a82bf4216 has 101 tasks from 27 specs, 8 with no spec"
+    ],
+    "limits": [
+      "Nothing driven yet; the drive task establishes the failing baseline"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Does the chosen scope stick? Answer: yes, per project in this window (operator, 2026-10-29).",
+      "resolved": true
+    },
+    {
+      "question": "Does a coverage row's or loop link's list of task ids become the spec scope? Answer: no, it stays a separate narrowing that overrides until cleared (operator, 2026-10-29).",
+      "resolved": true
+    },
+    {
+      "question": "Should a spec page link to its tasks on the board? Answer: yes; its existing 'Show these on the board' opens the board scoped to the spec (operator, 2026-10-29).",
+      "resolved": true
+    }
+  ],
+  "problem": "The board shows every task of the project in one set of columns. The live project holds 101 tasks from 27 specs (84 from approved specs, 9 from archived ones, 8 with no spec; read from the :8000 database, 2026-10-29), so following one build means reading past every other spec's cards. The only narrowing today is by agent and by a text search on title or id (`BoardView.tsx:90-96`), plus a one-off list of task ids a coverage row, a loop link or a spec's \"Show these on the board\" sets (`activeTaskIds`, `App.tsx:539`, `:564`; `SpecHealthLine.tsx:208`), which says only \"linked from the specification\" and cannot be chosen from the board. Every task already records its spec (`spec_document_id`, null for a hand-made task), and the Hub's task list can already filter by one spec (`api/v1/tasks.py:983`), so the information is there and the board does not offer it.",
+  "requirements": [
+    {
+      "key": "scope-picker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "27 specs carry tasks in the live project; a list that cannot be narrowed by typing is a scroll hunt.",
+      "statement": "The Tasks board offers a scope of All, No spec, or one spec. The spec choices are every spec in the project that has at least one task, each shown by title with its number of tasks, and the list narrows as the operator types part of a title."
+    },
+    {
+      "key": "one-spec-exact",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With one spec chosen, the board shows exactly the tasks whose spec is that document, in every status, including the completed tasks of an archived spec, however many tasks the project holds."
+    },
+    {
+      "key": "no-spec-exact",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With No spec chosen, the board shows exactly the tasks that belong to no spec, however many tasks the project holds."
+    },
+    {
+      "key": "all-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With All chosen, the board shows the same tasks it shows today, including hiding the completed tasks of archived specs."
+    },
+    {
+      "key": "says-what-it-shows",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While the scope is not All, the board names it (the spec's title, or No spec) and how many tasks it holds, and offers one action that returns to All."
+    },
+    {
+      "key": "combines-with-filters",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The scope, the agent filter and the search apply together: a task shows only if it is in the scope, matches the agent filter and matches the search. The agent filter's counts count only tasks in the scope."
+    },
+    {
+      "key": "remembers-scope",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: the board should remember my choice. Kept in the window, as the board's column folds are, not on the Hub.",
+      "statement": "The board reopens in the scope the operator last chose in that project, in the same browser window profile, after leaving the Tasks tab, switching project and back, or reloading the app. Each project remembers its own scope. A remembered spec that no longer has any task opens as All."
+    },
+    {
+      "key": "task-list-overrides",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: keep it separate. A coverage row names one requirement's tasks, narrower than a spec.",
+      "statement": "A list of task ids sent to the board by a coverage row or a loop link narrows it to exactly those tasks while it is set, whatever the scope, and says so as it does today. Clearing it shows the board in the scope it was in before, and setting or clearing it never changes the remembered scope."
+    },
+    {
+      "key": "spec-page-opens-its-scope",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: a spec page should link to its board. The link already exists and sends a list of task ids; scoping instead makes the board read as the spec and keeps it so.",
+      "statement": "A spec page's 'Show these on the board' opens the Tasks board scoped to that spec, and that scope becomes the remembered one."
+    },
+    {
+      "key": "acceptance-drive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "On the trial Hub, in a browser, choosing a spec on the board shows exactly its tasks, choosing No spec shows exactly the unbound ones, All shows what the board showed before, the choice survives a reload, and a spec page's link opens the board on that spec."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/building-a-spec-ties-together-from-plan-to-board/spec.json",
+    "slice": "board-by-spec"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A scope on the Tasks board: All, No spec, or one spec",
+      "The board naming its scope and the number of tasks in it, with one action back to All",
+      "Scope combined with the existing agent filter and search",
+      "The scope remembered per project in this window",
+      "A list of task ids from a coverage row or loop link kept as a separate, overriding narrowing",
+      "A spec page's 'Show these on the board' opening the board on that spec's scope"
+    ],
+    "non_goals": [
+      "Finding why tasks were reported vanishing from the board (no repro; truncation ruled out, 101 tasks against a 1000 cap)",
+      "Filtering by roadmap, slice, build or requirement",
+      "Storing the scope on the Hub or sharing it between windows or machines",
+      "Readable task ids (slice readable-task-ids)",
+      "Changing the dependency-list view",
+      "Redesigning the board or the spec header (slice compact-spec-header)"
+    ]
+  },
+  "summary": "The Tasks board can be narrowed to one spec's tasks, or to the tasks that belong to no spec, or show every task; it says which, remembers the choice per project, and a spec page opens the board on its own tasks.",
+  "tasks": [
+    {
+      "builder": "QA2",
+      "depends_on": [],
+      "description": "Write a browser drive under scripts/drive/ against the trial Hub :8010: seed a project with tasks in two specs and two with no spec, open the Tasks board, choose each scope and assert exactly its tasks show and the board names the scope, reload and assert the scope stuck, then follow a spec page's 'Show these on the board' and assert the board opens on that spec. Run it on master and record that it fails at the picker.",
+      "files": [
+        "scripts/drive/d1029_board_by_spec.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "acceptance-drive"
+      ],
+      "reviewer": "QA",
+      "title": "Write the board-scope drive, failing on master"
+    },
+    {
+      "builder": "Developer",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add the scope picker to the Tasks board, combined with the agent filter and search, naming the scope with one action back to All, remembered per project in local storage. Keep the task-id narrowing separate and overriding. Make the spec page's 'Show these on the board' set the one-spec scope. One spec and No spec must show every task in scope however many tasks the project holds (add a no-spec filter to the task list route if that is what it takes). UI tests fed the route's real ordering, Hub tests for any route change, rebuild and commit the bundle, then run the drive until it passes.",
+      "files": [
+        "hub/ui/src/components/tasks/TasksScreen.tsx",
+        "hub/ui/src/components/tasks/BoardView.tsx",
+        "hub/ui/src/store/taskFilterStore.ts",
+        "hub/ui/src/api/tasks.ts",
+        "hub/ui/src/App.tsx",
+        "hub/ui/src/components/spec/page/SpecDocumentFacts.tsx",
+        "hub/ui/src/__tests__/boardScope.test.tsx",
+        "hub/hub/api/v1/tasks.py",
+        "hub/tests/test_the_board_shows_one_spec.py",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "build",
+      "requirements": [
+        "scope-picker",
+        "one-spec-exact",
+        "no-spec-exact",
+        "all-unchanged",
+        "says-what-it-shows",
+        "combines-with-filters",
+        "remembers-scope",
+        "task-list-overrides",
+        "spec-page-opens-its-scope",
+        "acceptance-drive"
+      ],
+      "reviewer": "QA",
+      "title": "Board scope: one spec, no spec, or all"
+    }
+  ],
+  "title": "The board shows one spec, no spec, or all"
+}

@@ -1,0 +1,516 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a change document whose task t1 names builder DeveloperOpus and checker QA, and whose default checker is QA2",
+      "how_to_check": "Hub test: submit, then read_spec_document; assert the fields round-trip",
+      "key": "ac-one-checker",
+      "requirement": "one-checker",
+      "then": "t1 carries exactly one builder and one checker, and the document carries one default builder and one default checker",
+      "when": "it is saved and read back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a stored document whose delivery names reviewer QA and tester QA2, and whose task t2 names its own reviewer Architect",
+      "how_to_check": "Hub test seeded with the old payload shape; assert the checker staffed for each task",
+      "key": "ac-old-reviewer",
+      "requirement": "old-names-still-build",
+      "then": "t2's check goes to Architect and every other task's check goes to QA2",
+      "when": "it is built as a flow at Reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose delivery names default builder Developer and default checker QA, and whose task t1 names builder DeveloperOpus and checker QA2",
+      "how_to_check": "UI test on BuildDialog, fed the payload shape the Hub returns for a recommended build; run-drive also opens the dialog on the trial Hub",
+      "key": "ac-dialog-prefill",
+      "requirement": "dialog-opens-with-the-spec",
+      "then": "Developer and QA are selected as the defaults, t1 shows DeveloperOpus and QA2, and confirming without changes sends exactly those people",
+      "when": "the operator opens Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose recommendation is a flow with Developer",
+      "how_to_check": "Hub test: POST the build, then read the document's file and its read route",
+      "key": "ac-choices-written",
+      "requirement": "choices-in-the-spec",
+      "then": "the document shows a build marked as the operator's, with driver hand, builder Architect and landing main, and its delivery still reads flow with Developer",
+      "when": "the operator builds it by hand with builder Architect and landing main"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the hand build from ac-choices-written",
+      "how_to_check": "Hub test over the MCP read and the rendered turn context",
+      "key": "ac-agent-reads-build",
+      "requirement": "agents-read-the-build",
+      "then": "the read returns the build with driver hand and the operator's people, apart from delivery, and Architect's turn prompt names driver hand and t1's builder and checker",
+      "when": "an agent calls read_spec_document, and when Architect is started on t1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build of a document",
+      "how_to_check": "Hub test: call the stop route, then read",
+      "key": "ac-build-ended",
+      "requirement": "build-end-shown",
+      "then": "the document shows the build as stopped, with the time, and read_spec_document reports no running build",
+      "when": "the operator stops it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose first build was stopped and whose second build was then started and stopped, and a third build started",
+      "how_to_check": "Hub test: three builds in sequence, then read the document and the builds table",
+      "key": "ac-two-builds-kept",
+      "requirement": "build-end-shown",
+      "then": "it shows the third build as running and the second as stopped, and the first is not in the document but its build record still exists",
+      "when": "the document is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with a running hand build whose two tasks have no loop",
+      "how_to_check": "Hub test reproducing F1083",
+      "key": "ac-one-driver",
+      "requirement": "one-driver",
+      "then": "the call is refused with 409 naming the build and driver hand, no loop or job is created, and both tasks still have no loop",
+      "when": "an agent calls create_flow on that document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with no running build",
+      "how_to_check": "Hub test: POST the build with driver flow; assert the loop exists",
+      "key": "ac-build-flow-still-made",
+      "requirement": "one-driver",
+      "then": "the build's flow is created and its tasks carry its loop",
+      "when": "the operator builds it with driver flow"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow build with builders [Developer], whose task t1 names builder DeveloperOpus, with both agents having runners",
+      "how_to_check": "Hub test in the style of test_the_flow_staffs_only_the_builds_people",
+      "key": "ac-flow-builder-outside-list",
+      "requirement": "flow-gives-task-to-its-builder",
+      "then": "the first firing gives t1 to nobody, and the second gives t1 to DeveloperOpus",
+      "when": "the flow fires with DeveloperOpus busy, then again with DeveloperOpus free"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow build whose task t4 names builder Ghost, who is not an agent, and whose builders list holds a free Developer",
+      "how_to_check": "Hub test on the flow's staffing decision",
+      "key": "ac-builder-not-open",
+      "requirement": "flow-gives-task-to-its-builder",
+      "then": "t4 is given to nobody and says its builder Ghost is not an open agent",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub :8010 with Haiku-bound agents, and a small approved document whose t1 names a checker and a builder outside the build-wide builders list",
+      "how_to_check": "Acceptance drive on the trial Hub, written before the build (task write-drive); it fails on master at the create_flow and staffing steps",
+      "key": "ac-drive",
+      "requirement": "flow-gives-task-to-its-builder",
+      "then": "t1 is worked by its builder and checked by its checker, the spec page shows the build as the operator's, and an agent's create_flow on the document is refused, naming the build",
+      "when": "the operator builds it as a flow at Reviewed from the app and lets it run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Reviewed flow build where t1 names checker QA2, t2 names no checker, the default checker is QA, and t3 names checker Ghost, who is not an agent",
+      "how_to_check": "Hub test on the flow's staffing decision",
+      "key": "ac-check-to-checker",
+      "requirement": "check-goes-to-its-checker",
+      "then": "t1's check goes to QA2, t2's to QA, and t3's to nobody, with the task saying its checker Ghost is not an open agent",
+      "when": "each task is completed by its builder and the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Fast flow build whose t1 names checker QA",
+      "how_to_check": "Hub test on the flow's staffing decision",
+      "key": "ac-fast-no-check",
+      "requirement": "check-goes-to-its-checker",
+      "then": "no check is handed to QA or anyone else",
+      "when": "t1 is completed and the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose t1 names builder Developer and checker QA",
+      "how_to_check": "Hub test: the runs, inbound queue and messages are all empty after the build and after completion",
+      "key": "ac-hand-board",
+      "requirement": "hand-only-places-on-the-board",
+      "then": "the board shows t1 in Pending with Developer as its builder and QA as its checker; after completion there is still no run, queued input or message for QA",
+      "when": "the operator builds it by hand, and later Developer completes t1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a lead build with lead Architect whose t1 names builder Developer and checker QA",
+      "how_to_check": "Hub test on the brief text and task_history",
+      "key": "ac-lead-brief",
+      "requirement": "lead-told-the-people",
+      "then": "the brief names Developer and QA for t1, and t1's history records that it went to DeveloperOpus",
+      "when": "the lead is briefed, and the lead hands t1 to DeveloperOpus"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1115789c4012da4ad31ccd7aa9d384670336ae0a9222f651b2571b806c33d0c6",
+      "FR-10": "bb7ff7ce194fe897f901ba92f4c340ba59f1f813c5217b45ecf6e3525856bad7",
+      "FR-11": "52156755c4ae365b6d399b020dd93aa941b7528c9b25e5b033aea6f151a7dbc6",
+      "FR-2": "09e8edbf5aa2f14de686e37ea86cb53fbb16a986ebb5950b9e88fc7cfce67226",
+      "FR-3": "0f6a819a038ece3659026b13ae1decc17bc12d868d52c826456ee7639aa70332",
+      "FR-4": "641e8448018a61709a6015ebd9f2b57b9acb087dd832389ca546c72233ad60ea",
+      "FR-5": "8687c6880e5203535233ce64232a7f4b8abf2c815b77339e1cf91e2fdf53b806",
+      "FR-6": "02d3e14adeafef1381b54b2c3d0390ab4ffdc8b47d4fd1d4c87cc5d550c417d7",
+      "FR-7": "faf826c3247e58b33388d6e89fd5b85179ce77c0a5cafaf96791fe5bc79e5769",
+      "FR-8": "a0a3154872fab5b8a74d86adba630b0721d1c0ad5c9bf98d0fbdb8907a50313d",
+      "FR-9": "72def55e2dfa02cfec00ff965c1631b64afda71298891db76d57e850b7b25587"
+    },
+    "high_water": 11,
+    "requirements": {
+      "agents-read-the-build": "FR-5",
+      "build-end-shown": "FR-6",
+      "check-goes-to-its-checker": "FR-9",
+      "choices-in-the-spec": "FR-4",
+      "dialog-opens-with-the-spec": "FR-3",
+      "flow-gives-task-to-its-builder": "FR-8",
+      "hand-only-places-on-the-board": "FR-10",
+      "lead-told-the-people": "FR-11",
+      "old-names-still-build": "FR-2",
+      "one-checker": "FR-1",
+      "one-driver": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builders": [
+      "DeveloperOpus",
+      "Developer",
+      "QA2"
+    ],
+    "cron": "*/5 * * * *",
+    "driver": "flow",
+    "landing": "main",
+    "level": "reviewed",
+    "mode": "flow",
+    "reasons": {
+      "agent": "The two Hub tasks change flow staffing and a payload other parts rely on. That is Tier 2 work, so Opus builds them.",
+      "builders": "DeveloperOpus for the Hub tasks; Developer (Sonnet) for the small F1083 refusal and the UI pre-fill, to save quota; QA2 for the two drive tasks. QA2 is named as a checker nowhere, so today's flow does not withhold it from fresh work.",
+      "cron": "Every five minutes, the default; a task waiting on a check is picked up within that.",
+      "level": "Reviewed: someone other than the builder approves, and missing evidence is reported rather than blocking.",
+      "mode": "Six tasks in a clear order: write-drive first, then one-driver and plan-in-spec in parallel; a flow runs them as their prerequisites clear.",
+      "reviewer": "QA checks every task, and its review also tests the running product. It builds none of them, so it never checks its own work.",
+      "stop": "Stop when the six tasks are done. Restart :8000 only after that (see the hazard in the design).",
+      "tester": "No separate tester: QA, the checker, tests as part of its review (one checker per task, operator 2026-10-29)."
+    },
+    "reviewer": "QA",
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decided with the operator on 2026-10-29:\n- **One checker per task.** The checker both drives the product and gives the verdict. New documents are no longer offered separate reviewer and tester roles. In an old document that names both a reviewer and a tester, the tester becomes the checker, because the checker is the one who drives the product.\n- **Checks follow the level.** At Fast the builder or the lead approves and no check is handed out (`builds.py:5`, `fast_approval_refusal`); at Reviewed and Gated the check goes to the checker.\n- **The spec carries the plan.** The recommendation the author wrote stays as written. Starting a build adds the operator's choices to the document beside it, labelled as the operator's. Agents read both and can tell them apart. The document holds the running build and the most recent ended one; older builds stay on the build record only, so the tracked file does not grow with every restart.\n- **A named person who is gone holds the work.** A task whose builder or checker is not an open agent is held, saying so on the task, rather than handed to someone else: the plan named a person, and quietly substituting another hides that the plan is broken.\n- **By hand means the operator starts the work.** A hand build only places tasks on the board under their builders. A task stays in Pending with its builder named, because a move to Assigned starts that agent automatically today (`assigned_task_start`). The operator also sends each check by hand.\n- **The driver that started a build is the only one.** Nothing else attaches a flow or loop while the build runs. The refusal lives on the job-creation route (`POST /jobs`, `api/v1/jobs.py:839`), which `create_flow` and `create_loop` call; the build's own flow must still be creatable.\n\n**Hazard (Tier 2).** `people-get-their-tasks` changes how a flow staffs work (`scheduler.py`). The operator's `:8000` Hub runs this checkout, so once that task merges to master the new staffing takes effect at that Hub's next restart, including for any flow it is then running. Restart `:8000` only after the flow building this slice has finished. Rollback: revert the merge and restart; the document payload change is additive (old reviewer/tester names keep building), so no data migration is needed.",
+  "evidence": {
+    "checked": [
+      "BuildDialog.tsx, read in full: it ticks only builders/reviewers, prints delivery.reviewer as text, and never reads tester or a task's reviewer",
+      "api/v1/spec.py _recommended_build and _declared_builders: tester is sent to the dialog, task reviewers are not",
+      "builds.cover_tasks (builds.py:244): a task's builder becomes its assignee if the builder is an open agent and nobody holds the task",
+      "scheduler._agents_a_loop_may_staff (scheduler.py:1836): a build's flow draws fresh work only from build.builders",
+      "scheduler._agents_withheld_from_fresh_work: agents the document names to judge are withheld from fresh work while someone else can build (F767)",
+      "builds.py:5 and fast_approval_refusal: at Fast the builder or lead approves; no reviewer is involved",
+      "mcp_server.create_flow/create_loop post to /jobs (api/v1/jobs.py:839), where the one-driver refusal belongs",
+      "assigned_task_start.py:129: a task in assigned with an assignee and no loop starts its agent, hence Pending for hand builds",
+      "test_a_build_has_a_driver_a_level_and_its_people.py: per-task builders are tested only for a hand build"
+    ],
+    "limits": [
+      "Nothing was driven. Whether a flow gives a pre-assigned task to an agent outside build.builders is inferred from reading, not observed; write-drive establishes it on master before the build"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "When an old document names both a reviewer and a tester, which becomes the checker? Answer: the tester (operator, 2026-10-29).",
+      "resolved": true
+    },
+    {
+      "question": "In a hand build, does a task with a builder sit in Pending or Assigned? Answer: Pending with the builder named (operator accepted, 2026-10-29).",
+      "resolved": true
+    },
+    {
+      "question": "A task whose builder is not an open agent: hold it or give it to the builders list? Answer: hold it and say so (operator, 2026-10-29).",
+      "resolved": true
+    },
+    {
+      "question": "How many builds does the document keep? Answer: the running build and the most recent ended one (operator, 2026-10-29).",
+      "resolved": true
+    },
+    {
+      "question": "Who sends the check in a hand build? Answer: the operator, by hand (operator, 2026-10-29).",
+      "resolved": true
+    }
+  ],
+  "problem": "Today a spec names the people who build and check it in seven overlapping places: `delivery.agent`, `builders`, `reviewer`, `reviewers`, `tester`, `tasks[].builder` and `tasks[].reviewer`. The Build dialog pre-selects only two of them. It shows `delivery.reviewer` as a line of text, and never shows `tester` or a task's own reviewer. So the agent the spec chose to check the work is not pre-selected (operator, 2026-10-29).\n\nThe operator's choices at Build are kept only on the build record. An agent told to build reads the recommendation as though it were the decision. On 2026-10-29 Architect started a flow on a document the operator was building by hand, and the Hub accepted it (F1083).\n\nAt Build, a task's builder becomes its assignee (`builds.cover_tasks`, `builds.py:244`). But a flow draws fresh work only from the build-wide `builders` list (`scheduler.py:1836`), and it withholds fresh work from any agent the document names to judge work (`_agents_withheld_from_fresh_work`, F767). So a task given to an agent outside that list, or to an agent who also checks, may never be worked, and no test covers this. The only test of per-task builders covers a hand build (`test_a_declared_builder_is_assigned_when_the_build_starts`).",
+  "requirements": [
+    {
+      "key": "one-checker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: one person checks it. Having two roles that each judge the work is what left the dialog with fields nobody filled.",
+      "statement": "A change document names, for each task, at most one builder and at most one checker, plus a build-wide default builder and default checker; the checker of a task is the single agent who both tests it and records its verdict."
+    },
+    {
+      "key": "old-names-still-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approved documents are not reopened just to rename a field, and a build of one must not lose its reviewer. The tester wins because the single checker drives the product (operator, 2026-10-29).",
+      "statement": "A document saved before this change that names `reviewer`, `tester` or a task's own `reviewer` builds with those agents as its checkers, without the document being edited. A task's own reviewer is that task's checker; otherwise the tester, if named, is the default checker, else the reviewer."
+    },
+    {
+      "key": "dialog-opens-with-the-spec",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "The Build dialog opens with every person the document names already selected: the default builder, the default checker, and each task's builder and checker. No person the document names is shown only as text, or left out."
+    },
+    {
+      "key": "choices-in-the-spec",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Starting a build writes the operator's choices into the spec document: the driver, the level, the default builder and checker, each task's builder and checker, the lead, the budget cap, the window and the landing. They sit beside the author's recommendation, labelled as the operator's, and the recommendation is left unchanged."
+    },
+    {
+      "key": "agents-read-the-build",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "`read_spec_document` returns the document's running build, with every choice listed in choices-in-the-spec, marked as the operator's choice and kept apart from `delivery`. A turn started to work on or check one of the build's tasks names the build's driver and that task's builder and checker."
+    },
+    {
+      "key": "build-end-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: the last ended build explains the latest change of plan; a full history would grow the tracked file on every restart.",
+      "statement": "When a build stops or finishes, the spec document shows that build as ended, stopped or finished, with when, and `read_spec_document` no longer reports it as running. The document holds at most the running build and the most recent ended build; an older ended build leaves the document and stays on the build record."
+    },
+    {
+      "key": "one-driver",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1083: a second driver re-pointed a hand build's tasks at a flow the operator never chose.",
+      "statement": "Creating a flow or a loop for a document whose build is running is refused with 409, and the refusal names the build and its driver. No task's flow or loop changes as a result. Starting a build that is driven by a flow still creates that flow."
+    },
+    {
+      "key": "flow-gives-task-to-its-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: hold rather than hand to someone else, so a broken plan shows instead of being quietly substituted.",
+      "statement": "In a flow-driven build, a task whose builder is an open agent is worked only by that agent, whether or not the agent is in the build-wide builders list or is named as a checker elsewhere. While that builder is busy, the task waits for them and is not given to anyone else. A task whose builder is not an open agent is held, given to nobody, and says on the task that its builder is not an open agent."
+    },
+    {
+      "key": "check-goes-to-its-checker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a flow- or lead-driven build at Reviewed or Gated, a finished task's check goes to that task's checker, or to the default checker when the task names none, and never to the agent that built it. A checker that is not an open agent holds the check and says so on the task, rather than passing the check to someone else. At Fast no check is handed out."
+    },
+    {
+      "key": "hand-only-places-on-the-board",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: by hand is for me to start it, and I send the check myself. Pending rather than Assigned, because a move to Assigned starts the agent today.",
+      "statement": "In a hand-driven build, every task whose builder is an open agent shows on the board in Pending with that agent named as its builder, and its checker named. No run is started and no message or queued input reaches any agent until the operator asks one to pick up a task or a check."
+    },
+    {
+      "key": "lead-told-the-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a lead-driven build, the lead's brief names each task's builder and checker, and a task the lead hands to anyone other than its named builder is recorded with who it went to."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/building-a-spec-ties-together-from-plan-to-board/spec.json",
+    "slice": "build-plan-in-spec"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "One builder and one checker per task, plus a build-wide default builder and default checker",
+      "Existing documents that name a reviewer and/or tester still build",
+      "The Build dialog pre-selects every person the document names (data only; the redesign is slice build-dialog-overhaul)",
+      "The operator's build choices written into the spec document and readable by agents",
+      "Refusing a second driver on a document whose build is running",
+      "Each driver (flow, lead, hand) gives each task to its builder and its check to its checker",
+      "A task whose named builder or checker is not an open agent is held and says so"
+    ],
+    "non_goals": [
+      "Recommending who builds and checks each task (slice recommended-people)",
+      "Redesigning the Build dialog's layout or style (slice build-dialog-overhaul)",
+      "Board filters or readable task ids (slices board-by-spec, readable-task-ids)",
+      "Changing what the levels Fast, Reviewed and Gated decide",
+      "Changing a running build's people after it starts; to change them, the build is stopped and started again",
+      "Starting agents automatically in a hand build, or sending a hand build's checks automatically",
+      "Keeping more than the running and the most recent ended build in the document"
+    ]
+  },
+  "summary": "Each task names one builder and one checker. Build opens with exactly the people the spec names. Whatever the operator chooses at Build is written into the spec, where agents read it. Every driver gives each task to its builder and its check to its checker. A second driver on a running build is refused (F1083).",
+  "tasks": [
+    {
+      "builder": "QA2",
+      "depends_on": [],
+      "description": "Write the acceptance drive for ac-drive as a script under scripts/drive/, against the trial Hub :8010 with Haiku-bound agents: build a small approved document as a flow at Reviewed whose t1 names a builder outside the builders list and a checker, watch who works and checks t1, read the spec page's build, and call create_flow on the document as an agent. Run it on master and record, as evidence, that it fails at the create_flow and staffing steps.",
+      "files": [
+        "scripts/drive/d1029_build_plan_in_spec.py"
+      ],
+      "from": null,
+      "key": "write-drive",
+      "requirements": [
+        "flow-gives-task-to-its-builder",
+        "check-goes-to-its-checker",
+        "choices-in-the-spec",
+        "one-driver"
+      ],
+      "reviewer": "QA",
+      "title": "Write the acceptance drive, failing on master"
+    },
+    {
+      "builder": "Developer",
+      "depends_on": [
+        "write-drive"
+      ],
+      "description": "On job creation (POST /jobs, api/v1/jobs.py), refuse a flow or loop for a document whose build is running with 409, naming the build and its driver, without changing any task's loop. The build's own flow must still be created. Hub tests for both criteria; set F1083's status in FINDINGS when done.",
+      "files": [
+        "hub/hub/api/v1/jobs.py",
+        "hub/tests/test_one_driver_per_build.py"
+      ],
+      "from": null,
+      "key": "one-driver",
+      "requirements": [
+        "one-driver"
+      ],
+      "reviewer": "QA",
+      "title": "Refuse a second driver (F1083)"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "depends_on": [
+        "write-drive"
+      ],
+      "description": "Model one builder and one checker per task, plus the defaults. Map old reviewer/tester names to checkers. When a build starts, write the operator's choices into the document; mark the build ended when it stops, keeping only the running and the most recent ended build in the document. Expose the build through read_spec_document. Write Hub tests for each.",
+      "files": [
+        "hub/hub/spec_payload.py",
+        "hub/hub/builds.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/tests/test_the_build_plan_lives_in_the_spec.py"
+      ],
+      "from": null,
+      "key": "plan-in-spec",
+      "requirements": [
+        "one-checker",
+        "old-names-still-build",
+        "choices-in-the-spec",
+        "agents-read-the-build",
+        "build-end-shown"
+      ],
+      "reviewer": "QA",
+      "title": "Plan in the spec"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "depends_on": [
+        "write-drive",
+        "plan-in-spec"
+      ],
+      "description": "Make the flow give each task to its own builder, even one outside the build-wide list or named as a checker, and hold a task whose builder is not an open agent. Send each check to its checker at Reviewed and Gated, none at Fast, and hold a check whose checker is not an open agent. Keep a hand build to placing tasks on the board with builder and checker named. Name each task's people in the lead's brief and in the turn prompt. Write Hub tests for each.",
+      "files": [
+        "hub/hub/scheduler.py",
+        "hub/hub/builds.py",
+        "hub/tests/test_every_task_goes_to_its_people.py"
+      ],
+      "from": null,
+      "key": "people-get-their-tasks",
+      "requirements": [
+        "flow-gives-task-to-its-builder",
+        "check-goes-to-its-checker",
+        "hand-only-places-on-the-board",
+        "lead-told-the-people",
+        "agents-read-the-build"
+      ],
+      "reviewer": "QA",
+      "title": "Each driver gives tasks to their people"
+    },
+    {
+      "builder": "Developer",
+      "depends_on": [
+        "write-drive",
+        "plan-in-spec",
+        "one-driver"
+      ],
+      "description": "Make the Build dialog pre-select the default builder and checker, and each task's builder and checker, from the document. Replace the separate reviewer/tester fields with one checker, and send exactly what is shown. Write UI tests, then rebuild and commit the bundle.",
+      "files": [
+        "hub/ui/src/components/spec/BuildDialog.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/ui/src/__tests__/buildDialog.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "dialog-prefill",
+      "requirements": [
+        "dialog-opens-with-the-spec"
+      ],
+      "reviewer": "QA",
+      "title": "Build dialog pre-selects the spec's people"
+    },
+    {
+      "builder": "QA2",
+      "depends_on": [
+        "write-drive",
+        "one-driver",
+        "people-get-their-tasks",
+        "dialog-prefill"
+      ],
+      "description": "Run the drive from write-drive on the trial Hub :8010 against the merged work (start the trial Hub from this branch's hub/). It must pass end to end: t1 worked by its builder and checked by its checker, the spec page showing the build as the operator's, the Build dialog pre-selected, and create_flow refused naming the build. Record the run as evidence, and file a finding for anything that breaks.",
+      "files": [
+        "scripts/drive/d1029_build_plan_in_spec.py",
+        "scripts/drive/FINDINGS.md"
+      ],
+      "from": null,
+      "key": "run-drive",
+      "requirements": [
+        "flow-gives-task-to-its-builder",
+        "check-goes-to-its-checker",
+        "choices-in-the-spec",
+        "one-driver",
+        "dialog-opens-with-the-spec"
+      ],
+      "reviewer": "QA",
+      "title": "Run the acceptance drive on the build"
+    },
+    {
+      "depends_on": [
+        "dialog-prefill"
+      ],
+      "description": "Task responses now carry a derived `checker` field (TaskResponse.checker, computed from the build's people by builds.checkers_by_task at task-dac742f3f922). The board UI does not display it yet: TaskCardCompact.tsx:122 and TaskDetailDrawer.tsx:755 name only `builder`. Show the checker beside the builder on the board card and in the task drawer (e.g. 'builder @Developer · checker @QA'), add a UI test, and refresh the committed bundle (hub/ui/src and hub/hub/static/ui together). Coordinate with the dialog-prefill task's bundle rebuild.",
+      "files": [
+        "hub/ui/src/components/tasks/TaskCardCompact.tsx",
+        "hub/ui/src/components/tasks/TaskDetailDrawer.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "board-shows-checker",
+      "requirements": [
+        "hand-only-places-on-the-board"
+      ],
+      "reviewer": null,
+      "title": "Board card names each build task's checker"
+    }
+  ],
+  "title": "The build plan lives in the spec, and every task goes to its people"
+}

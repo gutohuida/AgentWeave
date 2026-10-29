@@ -1,0 +1,21 @@
+{
+  "id": "rpt-f3cd6f900172",
+  "kind": "report",
+  "entry": "fct-bfdeee9417b9",
+  "entry_kind": "fact",
+  "message": "This describes behaviour that has since been replaced. Up to 2026-10-27, a send-back rejected every piece of evidence from the commit with one copied reason; evidence_reviews in proj-d85a82bf4216 shows, for example, run-ebcd966c87db with 13 rejections and 1 distinct reason. Since 2026-10-28, after \"Verdicts judge each piece\" (task-980250864260) shipped, a send-back rejects only the pieces named in failing_pieces, each with its own reason, and every other piece is recorded as 'held'. For example, run-c830ab15f653 has 3 rejections with 3 distinct reasons, and 2026-10-29 has 1 rejection and 7 held. The fact should be dated to before 2026-10-28, or replaced with the current rule.",
+  "reporter": {
+    "agent": "Architect",
+    "run_id": "run-5e30d227efdd"
+  },
+  "status": "referred",
+  "visibility": "tracked",
+  "created_at": "2026-10-29T20:35:39.686224Z",
+  "answer": "The entry matches the source: the source (written 2026-10-24) says that when the reviewer sends a task back, it rejects every piece of evidence from that commit, including the ones that held up. The report does not say the entry misstates the source. It says the behaviour was changed on 2026-10-28 by task-980250864260 ('Verdicts judge each piece'), so send-backs now reject only the pieces named in failing_pieces and record the rest as 'held'. The source predates that change and does not hold it, so it cannot settle the report. Whether the fact should be dated to before 2026-10-28 or replaced with the current rule is for the operator to decide, ideally after checking the evidence_reviews data and the shipped task.",
+  "replaced_by": null,
+  "reviewed_by": {
+    "job": "vault-reports",
+    "model": "claude-sonnet-5-5"
+  },
+  "close": null
+}
