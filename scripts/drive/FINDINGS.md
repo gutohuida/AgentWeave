@@ -40932,3 +40932,23 @@ Repro: `task-94d59bc7214d` was approved at 17:02. Its integration was `skipped` 
 **Tier:** 0
 
 Repro: approve a change document whose delivery is `{"mode": "flow", "agent": "Developer", "builder": "Developer", "checker": "QA"}` and open it on the spec page. The approval bar's `ReviewerLine` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:93`) reads "Reviewed by any free agent: the document names no reviewer." Yet the Build dialog for the same document pre-selects QA as the default checker, and the build sends t1's check to QA. The delivery status only looks at the old field: `hub/hub/api/v1/spec.py:295` sets `status["reviewer"]` from `delivery.reviewer` alone. The build outcome's `reviewer` key does the same (`spec.py:3563`, `:3634`). The change brought in `delivery.checker` (FR-1 `one-checker`) without updating these readers. **Expected:** the status names the default checker as `spec_payload.default_checker(payload)` resolves it (checker, else tester, else reviewer), with the same not-an-open-agent warning. **Test:** a document with `delivery.checker: "QA"` and no `reviewer`; the delivery status read carries `reviewer` (or `checker`) `QA` with state `ok`.
+
+## F1089 (B) -- a spec whose build finished reads `approved`, the same as one never built, so the operator cannot tell which specs are done
+
+**Status:** open 2026-10-29. Operator report ("When a spec finished building it goes back to approved. We don't know which spec finished building").
+**Source:** operator
+**Theme:** Builds
+**Ready:** no (needs the operator's call on where "built" shows and whether it is a phase)
+**Tier:** 1
+
+Repro: `spdoc-a7d41f10be14`'s build `build-c68972449bdc` ended `finished` at 2026-10-29 21:49. The document reads `phase: approved, step: build`, exactly as it did before Build was pressed. The finished state lives only in `build.last_ended` (and the header's `BuildStatusStrip`, `useSpecPhaseControls.tsx:598`, which only shows once the document is open). Nothing in the UI reads `last_ended`. The spec list and search show phase alone, and no notice says a build finished. To find the specs that are done, you have to open each approved one. **Expected (to be decided):** every place a document is listed says built / building / not built, and a build finishing raises a notice that names the document and what is left before it can be folded (see F1090). **Test:** a Hub test where a build finishes, then the document listing carries the build state `finished`; plus a UI test that the list shows it.
+
+## F1090 (B) -- side-finding tasks bound to a finished spec keep it from folding, and a duplicate pending task cannot be rejected
+
+**Status:** open 2026-10-29. Found when the operator tried to fold `spdoc-a7d41f10be14` after its build finished.
+**Source:** operator
+**Theme:** Builds
+**Ready:** yes
+**Tier:** 0
+
+Repro: after the build finished, two tasks outside the build's plan stayed bound to the document. One was `task-0e655f8ddc47`, filed by QA during review for F1088, with no assignee. The other was `task-5f4335f3826b`, Architect's replacement for it, assigned to Developer and pending. Folding refuses `fold_tasks_open` (`spec_service.py:881`) while any task is open. Neither task is in the build (`build_id: null`), so nothing starts it and the spec stays unfoldable until someone notices. Rejecting the duplicate also fails: `PATCH /tasks/task-0e655f8ddc47 {status: rejected}` answers 409 "From 'pending' the available transitions are: assigned, in_progress". **Expected:** a pending task can be withdrawn as a duplicate. The fold refusal and the finished-build notice name each open task and whether a build will ever start it. **Test:** reject a pending task -> 200, and the document's open-task list no longer names it.
