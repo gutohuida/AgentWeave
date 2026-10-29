@@ -223,7 +223,7 @@
     "limits": []
   },
   "hub": {
-    "phase": "approved",
+    "phase": "archived",
     "size": "large",
     "step": "build"
   },
