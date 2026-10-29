@@ -152,10 +152,12 @@ describe('SpecPhaseBar approval warnings', () => {
     const shown = {
       driver: 'hand',
       level: 'reviewed',
+      builder: '',
+      checker: '',
       builders: [],
-      reviewers: [],
       landing: 'main',
       task_builders: {},
+      task_checkers: {},
     }
     expect(approveAndBuild).toHaveBeenLastCalledWith(
       { path: PATH, content_version: 'v1', ...shown },
