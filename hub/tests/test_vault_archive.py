@@ -192,3 +192,6 @@ def test_the_archive_routes_have_a_client() -> None:
     orphans = {r["path"] for r in n10.clientless_routes(rows)}
     mine = {p for p in orphans if "/vault/sources/" in p or p.endswith("/vault/archived")}
     assert not mine, f"vault archive routes with no client: {sorted(mine)}"
+
+
+# Archive client reach: hub/ui/src/api/vault.ts calls archive, restore and /vault/archived.
