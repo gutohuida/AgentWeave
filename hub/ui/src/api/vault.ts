@@ -310,11 +310,13 @@ export function useRestoreVaultSource() {
 
 /** The archived sources, newest first; the map does not list them (`GET /vault/archived`).
  *  The client for the list-archived route; no component calls it yet. */
+export type ArchivedVaultSources = { sources: VaultEntry[] }
+
 export function useArchivedVaultSources() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<{ sources: VaultEntry[] }>({
+  return useQuery<ArchivedVaultSources>({
     queryKey: ['project', projectId, 'vault', 'archived'],
-    queryFn: () => getJson<{ sources: VaultEntry[] }>(`/api/v1/projects/${projectId}/vault/archived`),
+    queryFn: () => getJson<ArchivedVaultSources>(`/api/v1/projects/${projectId}/vault/archived`),
     enabled: isConfigured && !!projectId,
   })
 }
