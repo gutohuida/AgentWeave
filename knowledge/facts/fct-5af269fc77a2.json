@@ -1,0 +1,23 @@
+{
+  "id": "fct-5af269fc77a2",
+  "kind": "fact",
+  "claim": "Notification settings apply to the whole app, not to a single project.",
+  "citations": [
+    {
+      "source": "src-049fbd45e9da",
+      "quote": "even though they apply to the whole app, not to a\nproject.",
+      "line_start": 17,
+      "line_end": 18
+    }
+  ],
+  "sources": [
+    "src-049fbd45e9da"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:27.783780Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

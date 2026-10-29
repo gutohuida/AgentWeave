@@ -1,0 +1,21 @@
+[
+  {
+    "action": "edit",
+    "at": "2026-10-29T15:23:29.574827Z",
+    "by": {
+      "kind": "agent",
+      "agent": "Architect",
+      "run_id": "run-2f2bb3bf3a9a"
+    },
+    "detail": "passage"
+  },
+  {
+    "action": "archive",
+    "at": "2026-10-29T15:23:44.945080Z",
+    "by": {
+      "kind": "agent",
+      "agent": "Architect",
+      "run_id": "run-2f2bb3bf3a9a"
+    }
+  }
+]

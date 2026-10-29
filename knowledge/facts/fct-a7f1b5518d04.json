@@ -1,0 +1,23 @@
+{
+  "id": "fct-a7f1b5518d04",
+  "kind": "fact",
+  "claim": "In a flow, the review turn takes a task from completed to under_review and becomes its holder.",
+  "citations": [
+    {
+      "source": "src-cb168bd3373f",
+      "quote": "let the agent asked to review take `completed → under_review` itself, becoming the holder, as\n  a flow's review turn already does.",
+      "line_start": 37,
+      "line_end": 38
+    }
+  ],
+  "sources": [
+    "src-cb168bd3373f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:23:38.047666Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

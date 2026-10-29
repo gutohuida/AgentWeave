@@ -2243,6 +2243,12 @@ async def read_spec_document(
         "open_questions": (payload or {}).get("open_questions"),
         "diagnostics": diagnostics,
     }
+    # The operator's build, apart from `delivery` (`agents-read-the-build`): the running build and
+    # the most recent ended one, from the build rows rather than the file's copy of them.
+    if document.kind == "change-spec":
+        from ... import builds
+
+        view["build"] = builds.split_builds(await builds.document_builds(session, document.id))
     # A roadmap's slices, and the roadmap slice a change document specifies (C1a D7). Only when
     # present, so a document that is neither reads exactly as before.
     for planned in ("slices", "roadmap"):

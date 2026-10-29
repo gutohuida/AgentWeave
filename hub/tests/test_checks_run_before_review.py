@@ -742,21 +742,39 @@ async def test_ending_a_run_on_older_work_counts_against_the_budget(app, tmp_pat
     monkeypatch.setattr(project_checks, "COMPLETION_BUDGET_SECONDS", 2.0)
     monkeypatch.setattr(pty_runner, "terminate_process_tree", lambda pid: None)
     await _builder_task(tmp_path, content="x = 1\n")
-    sleeper = _script(tmp_path, "sleeper", "import time\ntime.sleep(12)\n")
-    await _configure([{"name": "lint", "command": sleeper, "timeout_seconds": 60, "fast": True}])
+    # The check holds until the test releases it, so a completion held by the older run is a hang
+    # the wait below turns into a failure, not a duration compared against the machine's load.
+    inside, release = _scripts(tmp_path) / "inside", _scripts(tmp_path) / "release"
+    sleeper = _script(
+        tmp_path,
+        "sleeper",
+        "import pathlib, time\n"
+        f"pathlib.Path({str(inside)!r}).touch()\n"
+        "end = time.monotonic() + 120\n"
+        f"while not pathlib.Path({str(release)!r}).exists() and time.monotonic() < end:\n"
+        "    time.sleep(0.05)\n",
+    )
+    await _configure([{"name": "lint", "command": sleeper, "timeout_seconds": 150, "fast": True}])
     older = git(tmp_path, "rev-parse", worktrees.task_branch_name(TASK)).stdout.strip()
     assert await project_checks.request_run("proj-test", TASK, targets=[older])
-    await asyncio.sleep(1.5)  # the older run is inside its check now, which ignores being ended
-    commit_on_branch(tmp_path, worktrees.task_branch_name(TASK), "more.py", "y = 2\n", create=False)
-    git(tmp_path, "checkout", "-q", "main")
+    try:
+        for _ in range(1200):  # until the older run is inside its check, which ignores being ended
+            if inside.exists():
+                break
+            await asyncio.sleep(0.05)
+        assert inside.exists(), "the older run never reached its check"
+        commit_on_branch(
+            tmp_path, worktrees.task_branch_name(TASK), "more.py", "y = 2\n", create=False
+        )
+        git(tmp_path, "checkout", "-q", "main")
 
-    started = time.monotonic()
-    completed = await _complete(app)
-    elapsed = time.monotonic() - started
-    await project_checks.drain()
+        completed = await asyncio.wait_for(_complete(app), timeout=60)
 
-    assert completed.status_code == 200, completed.text
-    assert elapsed < 2.0 + 5.0, elapsed
+        assert completed.status_code == 200, completed.text
+        assert project_checks.is_running(TASK), "the completion waited for the older run to end"
+    finally:
+        release.touch()
+        await project_checks.drain()
 
 
 async def _put_in_a_flow(*, evidence_governs=True):

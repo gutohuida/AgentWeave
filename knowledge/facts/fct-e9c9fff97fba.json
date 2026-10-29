@@ -31,5 +31,7 @@
   "made_by": {
     "job": "vault-distillation",
     "model": "claude-opus-5-5"
-  }
+  },
+  "superseded_by": "src-f03f0eb99589",
+  "superseded_at": "2026-10-29T15:24:15.890161Z"
 }

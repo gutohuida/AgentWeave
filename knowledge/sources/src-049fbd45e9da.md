@@ -5,8 +5,11 @@ settings UI. It's hard to find the settings. We need to review all of that. The 
 confusing. Either create more classifications or make things easier to navigate. Both general
 settings and agent settings."
 
-Not yet specified. Needs an exploring spec with the operator before anything is built: the
-direction (more categories, or easier navigation) is still open.
+**Status (checked 2026-10-29): partly done.** Slice I `app-settings` (ed6251f) added App
+settings (`AppSettingsScreen.tsx`), reached from the rail's footer on every screen, with sound and
+notifications, theme and Hub in it. That covers problem 1 below. Problems 2–5 (General as a
+catch-all, hidden entry points, overlapping layers / an effective-settings view, search) are still
+**open** and still need an exploring spec with the operator.
 
 ## What prompted it
 

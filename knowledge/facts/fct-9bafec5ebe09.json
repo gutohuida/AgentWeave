@@ -1,0 +1,23 @@
+{
+  "id": "fct-9bafec5ebe09",
+  "kind": "fact",
+  "claim": "When the operator is elsewhere or the window is behind, the reply notification behaves like the other kinds: toast, quiet or normal sound, title count and taskbar flash.",
+  "citations": [
+    {
+      "source": "src-2b03004b41d7",
+      "quote": "Elsewhere, or with\n  the window behind, it behaves like the other kinds (toast, quiet or normal sound, title count,\n  taskbar flash).",
+      "line_start": 14,
+      "line_end": 16
+    }
+  ],
+  "sources": [
+    "src-2b03004b41d7"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:17.867642Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-d9b6d58204d9",
+  "kind": "fact",
+  "claim": "The UI overhaul did not substantially address the side panel.",
+  "citations": [
+    {
+      "source": "src-2a9cc1abc8e4",
+      "quote": "The UI overhaul did not tackle the side panel much.",
+      "line_start": 12,
+      "line_end": 12
+    }
+  ],
+  "sources": [
+    "src-2a9cc1abc8e4"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:55:48.681177Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

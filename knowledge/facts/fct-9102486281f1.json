@@ -1,0 +1,23 @@
+{
+  "id": "fct-9102486281f1",
+  "kind": "fact",
+  "claim": "The brand sound set contains ask, done and fail sounds, defined in brand/sound/agentweave-sound.js.",
+  "citations": [
+    {
+      "source": "src-2b03004b41d7",
+      "quote": "The brand set has ask, done and fail (`brand/sound/agentweave-sound.js`).",
+      "line_start": 67,
+      "line_end": 67
+    }
+  ],
+  "sources": [
+    "src-2b03004b41d7"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:17.915466Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

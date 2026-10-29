@@ -1,0 +1,11 @@
+[
+  {
+    "action": "archive",
+    "at": "2026-10-29T15:23:46.156644Z",
+    "by": {
+      "kind": "agent",
+      "agent": "Architect",
+      "run_id": "run-2f2bb3bf3a9a"
+    }
+  }
+]

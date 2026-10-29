@@ -1,0 +1,23 @@
+{
+  "id": "fct-3cb54961479f",
+  "kind": "fact",
+  "claim": "The opening-sound switch is mirrored to ~/.agentweave/hub/app-window/sound.json.",
+  "citations": [
+    {
+      "source": "src-049fbd45e9da",
+      "quote": "The opening-sound switch is mirrored to `~/.agentweave/hub/app-window/sound.json`.",
+      "line_start": 43,
+      "line_end": 43
+    }
+  ],
+  "sources": [
+    "src-049fbd45e9da"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:27.797891Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

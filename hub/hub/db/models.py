@@ -3327,6 +3327,9 @@ class Build(Base):
     window_start: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     window_end: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     landing: Mapped[str] = mapped_column(String(16), default="main", nullable=False)
+    # The people the operator chose (migration 0156): `{"builder", "checker", "tasks": {key:
+    # {"builder", "checker"}}}`. Null on a build recorded before it.
+    people: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # The lead's build conversation, where its briefs are queued (driver `lead`).
     lead_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

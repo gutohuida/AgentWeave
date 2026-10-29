@@ -1,0 +1,23 @@
+{
+  "id": "fct-7ff15f82feff",
+  "kind": "fact",
+  "claim": "The run_completed event payload carries agent, run_id, conversation_id, session_id and exit_code, and is stamped with project_id.",
+  "citations": [
+    {
+      "source": "src-2b03004b41d7",
+      "quote": "Its payload carries `agent`, `run_id`, `conversation_id`, `session_id` and `exit_code`\n  (`agent_trigger.py:3735-3744`), stamped with `project_id`.",
+      "line_start": 54,
+      "line_end": 55
+    }
+  ],
+  "sources": [
+    "src-2b03004b41d7"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:17.910946Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

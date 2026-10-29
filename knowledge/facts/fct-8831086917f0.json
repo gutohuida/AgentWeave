@@ -1,0 +1,23 @@
+{
+  "id": "fct-8831086917f0",
+  "kind": "fact",
+  "claim": "The notifier sounds for the 'fail' kind on stall_recorded, run_failed, queue_chain_suspended and loop_stopped events.",
+  "citations": [
+    {
+      "source": "src-2b03004b41d7",
+      "quote": "**fail:** stall_recorded, run_failed, queue_chain_suspended, loop_stopped",
+      "line_start": 38,
+      "line_end": 38
+    }
+  ],
+  "sources": [
+    "src-2b03004b41d7"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-10-29T15:24:17.897853Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
