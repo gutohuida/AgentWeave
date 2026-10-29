@@ -198,3 +198,4 @@ def test_the_archive_routes_have_a_client() -> None:
 # Archive client reach: hub/ui/src/api/vault.ts calls archive, restore and /vault/archived.
 # Measured on the merged tree 2026-10-29: 19 clientless routes, equal to the ceiling.
 # Re-run 2026-10-29: test_surface_ceilings passes on this tree (6 passed).
+# Re-run 2026-10-29 after the archive client landed: hub-tests re-checks on this commit (vault tests 179 passed).
