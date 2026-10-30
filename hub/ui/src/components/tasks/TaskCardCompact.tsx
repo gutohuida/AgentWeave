@@ -130,9 +130,19 @@ export function TaskCardCompact({
             <span
               className="aw-task-card-age"
               data-testid={`task-checker-${task.id}`}
-              title={`Checked by @${task.checker}`}
+              title={`Checked by @${task.checker}${task.checker_by_default ? ' (by default)' : ''}`}
             >
               checks @{task.checker}
+              {task.checker_by_default ? ' · by default' : ''}
+            </span>
+          ) : null}
+          {task.builder && task.builder_by_default ? (
+            <span
+              className="aw-task-card-age"
+              data-testid={`task-builder-default-${task.id}`}
+              title={`Built by @${task.builder} (by default)`}
+            >
+              builds @{task.builder} · by default
             </span>
           ) : null}
           {task.priority === 'high' || task.priority === 'critical' ? (
