@@ -1861,6 +1861,30 @@ async def _agents_withheld_from_fresh_work(
     return judges
 
 
+async def _default_builder_must_check(
+    task: Task,
+    build: Any,
+    default_builder: str,
+    withheld_judges: "Set[str]",
+    facts: "FiringFacts",
+) -> bool:
+    """Whether *task*'s review needs the build's default builder, while somebody else could build.
+
+    The build's record of who checks the task decides, so a dialog choice counts as a document's
+    does; a task the record does not list falls back to the judges its document names. With nobody
+    else on the roster who has a runner the default keeps the work (F767's reason: a flow with no
+    builder is not a flow)."""
+    from .builds import checker_of
+
+    recorded = checker_of(build, task)
+    if recorded is None:
+        return default_builder in withheld_judges
+    if recorded[0] != default_builder:
+        return False
+    roster = await facts.roster(build.project_id)
+    return any(record.has_runner and record.name != default_builder for record in roster)
+
+
 #: Design D2/D3's rung-3 prefix (task 2.3, R8) -- "reviewer", not the pre-REV "nobody is free.",
 #: because rung 3 is reached only while resolving a reviewer, never for ordinary work.
 _RUNG_3_PREFIX = "could not staff this step: no reviewer is free. "
@@ -2377,7 +2401,8 @@ async def decide_firing(
     free = await _agents_a_loop_may_staff(session, loop, facts)
     # The default agent is a judge the flow names (F864): the pool withholds judges, and so must
     # the arm that offers the job's own agent first, or one agent builds what it must then review.
-    default_withheld = default_agent in await _agents_withheld_from_fresh_work(session, loop, facts)
+    withheld_judges = await _agents_withheld_from_fresh_work(session, loop, facts)
+    default_withheld = default_agent in withheld_judges
     # A build's flow gives fresh work to its builders only, its job's own agent included (slice D):
     # an operator who chose another agent for the flow did not add it to the builders.
     build = await facts.build_of_loop(loop)
@@ -2596,6 +2621,17 @@ async def decide_firing(
             if holder is not None:
                 in_flight.append((task.id, holder))
                 continue
+            # The default builder this task's review needs: nobody reviews their own work, so it
+            # builds nothing here and the paths below find somebody else (F1092, F767, F864).
+            judging_default = (
+                build_default
+                if build_default
+                and not task.assignee
+                and await _default_builder_must_check(
+                    task, build, build_default, withheld_judges, facts
+                )
+                else None
+            )
             if task.assignee:
                 # Already staffed; this firing is *resuming* it, not staffing it. Overwriting the
                 # assignee with the job's default here is the defect group 5's spec review found:
@@ -2665,7 +2701,7 @@ async def decide_firing(
                         )
                     )
                     continue
-            elif (task.build_id and task.builder) or build_default:
+            elif (task.build_id and task.builder) or (build_default and not judging_default):
                 # **A build's task goes to its own builder, and to nobody else**
                 # (`flow-gives-task-to-its-builder`). Before the default and the pool, which are
                 # for work nobody was named for: the builder need not be among the build's
@@ -2719,6 +2755,7 @@ async def decide_firing(
                 and default_agent not in running
                 and default_agent not in held_agents
                 and default_agent not in taken
+                and default_agent != judging_default
             ):
                 # D2's default, still first in line for the first unstaffed task.
                 #
@@ -2734,7 +2771,12 @@ async def decide_firing(
                 default_taken = True
             else:
                 candidate = next(
-                    (name for name in free if name not in taken and name not in read_only), None
+                    (
+                        name
+                        for name in free
+                        if name not in taken and name not in read_only and name != judging_default
+                    ),
+                    None,
                 )
                 if candidate is None:
                     # Width is bounded by available agents (design D5) and this is that bound

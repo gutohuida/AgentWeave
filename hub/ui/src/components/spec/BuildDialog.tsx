@@ -338,7 +338,7 @@ export function BuildDialog({
 
           <div>
             <span className={label} style={{ color: 'var(--text-3)' }}>
-              Builders {builders.length ? '' : '(none chosen: any free agent)'}
+              Builders {builders.length ? '' : builder ? `(none chosen: @${builder} builds)` : '(none chosen: any free agent)'}
             </span>
             {people('build-builders', builders, setBuilders)}
             {why('builders', 'build-reason-builders')}
@@ -357,6 +357,12 @@ export function BuildDialog({
             </span>
             {personSelect('build-checker', checker, setChecker, 'Any free agent but the builder')}
             {why(reasons.checker ? 'checker' : 'reviewer', 'build-reason-checker')}
+            {builder && builder === checker ? (
+              <p className="mt-1" style={{ color: 'var(--amber)' }} data-testid="build-same-person">
+                @{builder} is both the default builder and the default checker. Nobody checks their own
+                work, so another agent will build and @{builder} will check.
+              </p>
+            ) : null}
           </div>
 
           {taskKeys.length ? (

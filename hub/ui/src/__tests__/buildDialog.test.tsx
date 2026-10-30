@@ -219,6 +219,23 @@ describe('BuildDialog', () => {
     fireEvent.change(screen.getByTestId('build-cap'), { target: { value: 'lots' } })
     expect(screen.getByTestId('build-confirm')).toBeDisabled()
   })
+
+  it('warns when one agent is the default builder and checker, without blocking the build', () => {
+    renderDialog(() => {})
+    expect(screen.queryByTestId('build-same-person')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByTestId('build-checker'), { target: { value: 'dev' } })
+    expect(screen.getByTestId('build-same-person')).toHaveTextContent('another agent will build')
+    expect(screen.getByTestId('build-confirm')).not.toBeDisabled()
+  })
+
+  it('says any free agent builds only when no default builder is set', () => {
+    const { container } = renderDialog(() => {})
+    fireEvent.click(screen.getByTestId('build-builders-dev'))
+    expect(container).toHaveTextContent('(none chosen: @dev builds)')
+    expect(container).not.toHaveTextContent('any free agent)')
+    fireEvent.change(screen.getByTestId('build-builder'), { target: { value: '' } })
+    expect(container).toHaveTextContent('(none chosen: any free agent)')
+  })
 })
 
 function renderPhaseBar() {
