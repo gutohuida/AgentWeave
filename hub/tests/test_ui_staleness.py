@@ -13,7 +13,19 @@ from pathlib import Path
 
 import pytest
 
+import hub.main as hub_main
 from hub.main import _compute_ui_staleness_warning, _git_last_commit_iso
+
+
+@pytest.fixture(autouse=True)
+def _no_git_timeout(monkeypatch):
+    """These tests assert on the warning's answer, so git is given as long as it takes.
+
+    The Hub's own bound is a startup guard that turns a slow git into silence. On a machine running
+    the whole suite across many workers a `git log` can outlast it, and the test then reads that
+    silence as "not stale" and fails for a reason that has nothing to do with the comparison.
+    """
+    monkeypatch.setattr(hub_main, "UI_STALENESS_GIT_TIMEOUT_SECONDS", None)
 
 
 def _commit(path: Path, commit_date: str) -> None:

@@ -60,6 +60,12 @@ UI_BUILD_STAMP = UI_DIST / "ui-build-stamp.json"
 #: rebuild needed a Hub restart before the warning would clear.
 UI_STALENESS_TTL_SECONDS = 30.0
 
+#: How long each git query behind the staleness warning may take before the check gives up and
+#: stays silent. A guard against a hung git delaying startup, not a judgement about the answer —
+#: tests that assert on the answer set it to None, because a loaded machine (a full suite on many
+#: workers) can take longer than this and the warning then silently reads as "not stale".
+UI_STALENESS_GIT_TIMEOUT_SECONDS: Optional[float] = 5.0
+
 
 class UTF8JSONResponse(JSONResponse):
     """Starlette's default `JSONResponse` sends `Content-Type: application/json` with no
@@ -90,7 +96,7 @@ def _git_last_commit_iso(path: Path, *, exclude: Sequence[str] = ()) -> Optional
             cwd=path,
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=UI_STALENESS_GIT_TIMEOUT_SECONDS,
             **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
@@ -142,7 +148,7 @@ def ui_source_fingerprint(
             cwd=ui_src,
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=UI_STALENESS_GIT_TIMEOUT_SECONDS,
             **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
@@ -279,7 +285,7 @@ def _has_uncommitted_ui_source(ui_src: Path) -> bool:
             cwd=ui_src,
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=UI_STALENESS_GIT_TIMEOUT_SECONDS,
             **no_console_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
