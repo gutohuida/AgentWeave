@@ -424,7 +424,9 @@ async def materialise(
         )
         # Declared while a build of the document runs (a reopened document re-approved): the
         # task joins that build, at its level, as it joins the build's flow above (slice D).
-        await builds.join_running_build(session, task)
+        await builds.join_running_build(
+            session, task, checker=entry.get("checker") or entry.get("reviewer")
+        )
         session.add(task)
         await session.flush()
 

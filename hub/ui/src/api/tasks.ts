@@ -82,6 +82,10 @@ export interface Task {
   /** Who checks it, where its build names a checker: the task's own, else the build's default
    *  (`hand-only-places-on-the-board`). Derived by the Hub per request; null outside a build. */
   checker?: string | null
+  /** True when the builder / checker is the build's default rather than one the task names
+   *  (`added-task-people`); the board marks each 'by default'. */
+  builder_by_default?: boolean
+  checker_by_default?: boolean
   /**
    * The requirement identifiers this task serves, in the form they are submitted in.
    *
