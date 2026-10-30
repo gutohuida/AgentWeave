@@ -40952,3 +40952,12 @@ Repro: `spdoc-a7d41f10be14`'s build `build-c68972449bdc` ended `finished` at 202
 **Tier:** 0
 
 `_send_back` (`hub/hub/landing_queue.py:1850`) sets the landing to `SENT_BACK` before calling `apply_transition`, and its `except TransitionRefusedError` (`:1878`) only logs, then commits (`:1880`). If the approved -> revision_needed transition is refused, the task stays `approved`, its work is not on main, and nothing is left to land it. The work cannot land this way, so this is a stuck task and not bad code on main. **Expected:** a refused send-back leaves a state that someone is told about and can act on, not an approved task that never lands. **Test:** make `apply_transition` raise `TransitionRefusedError` in `_send_back`; the task must not read as approved with a sent-back landing and no signal.
+
+## F1092 (C) -- a capability's header reads `Approved` with a change's stepper, though its phase is `current`
+**Status:** Open. Found driving New capability (task-bf5ebb75161c) on 2026-10-30; true of every capability, not only a new one.
+**Source:** found by driving
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+`stateOf` (`hub/ui/src/components/spec/page/adapt.ts:107`) and the list's mapping (`:223`) send every phase but `exploring` and `archived` to `approved`, so a capability the Hub reports as `phase: current` shows an `Approved` pill and the Writing/Approved/Building/Done ribbon, and its Builds section says a build can start once the document is approved. **Expected:** a capability reads as current, with no change journey. **Test:** render the header from a record with `kind: capability, phase: current`; it must not read `Approved` or show the ribbon.
