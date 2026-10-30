@@ -52,12 +52,12 @@ def _window(monkeypatch):
     landing_queue.cancel_timers()
 
 
-def _check(tmp_path_factory, flag=None) -> dict:
-    """The suite: fails where `feature.py` holds `# BAD` -- and, given *flag*, only once *flag*
-    exists, so an approval can pass its gate and the batch after it fail."""
+def _check(tmp_path_factory, needs=None) -> dict:
+    """The suite: fails where `feature.py` holds `# BAD` -- and, given *needs*, only in a tree that
+    also holds that file, so the work can pass alone and fail merged with what main gained after."""
     outside = tmp_path_factory.mktemp("check")
     script = outside / "suite.py"
-    gate = f"if not os.path.exists({str(flag)!r}):\n    sys.exit(0)\n" if flag else ""
+    gate = f"if not os.path.exists({needs!r}):\n    sys.exit(0)\n" if needs else ""
     script.write_text(
         "import os, sys\n"
         f"{gate}"
@@ -190,15 +190,22 @@ async def _sent_back_by_a_landing(app, auth_headers, builder, tmp_path, tmp_path
     await a_document(app, auth_headers, builder, 3)
     task = await _task(app, auth_headers, THREE)
     sha_a, pieces = await _record_at(app, builder, tmp_path, task, THREE, BAD, create=True)
-    flag = tmp_path_factory.mktemp("flag") / "red"
-    await _configure([_check(tmp_path_factory, flag=flag)])
+    await _configure([_check(tmp_path_factory, needs="moved.py")])
     walked = await drive_to(
         app, auth_headers, task, "assigned", "in_progress", "completed", "under_review", "approved"
     )
     assert walked.status_code == 200, walked.text
     assert set((await _states(pieces)).values()) == {"accepted"}
 
-    flag.touch()  # the batch's check now fails on A, as the surface ceiling failed on fd8aa77
+    # The completion's run may have started, and may pass; it must end before main moves. Main then
+    # gains what the batch's check fails on A with, as the surface ceiling failed on fd8aa77. A new
+    # tree, so that the batch runs its check: a pass of the tree it would merge is reused, and it
+    # lands (`project_checks.passes_on_tree`), so a check changed behind an unchanged tree tests
+    # nothing but whether the completion's run got to start.
+    await project_checks.drain()
+    (tmp_path / "moved.py").write_text("x = 1\n", encoding="utf-8")
+    git(tmp_path, "add", "moved.py")
+    git(tmp_path, "commit", "-q", "-m", "main moves under the approval")
     await landing_queue.drain()
     # The batch's failure is confirmed by a second run on A, which can still be executing when the
     # task is sent back; a completion requested meanwhile starts no run of its own
@@ -208,6 +215,7 @@ async def _sent_back_by_a_landing(app, auth_headers, builder, tmp_path, tmp_path
 
     assert await _status(task) == "revision_needed"
     assert sha_a not in git(tmp_path, "rev-list", "main").stdout.split()
+    assert "failed" in {run.state for run in await _runs(task)}, "the batch's check ran and failed"
     return task, sha_a, pieces
 
 
