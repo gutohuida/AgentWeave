@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { MenuSelect } from '@/components/ui/menu'
 import { formatAgo } from '@/lib/format'
 import { arrangeList, SHOWN_LABEL, type ListOrder, type ListPreferences, type SpecListEntry } from './model'
+import { NewCapabilityAction } from './NewCapability'
 import '@/styles/spec-page.css'
 
 const ORDERS: Array<{ value: ListOrder; label: string; detail: string }> = [
@@ -106,6 +107,7 @@ export function SpecDocList({
             ]}
           />
         </span>
+        {prefs.kind === 'capability' ? <NewCapabilityAction onOpen={onOpen} /> : null}
       </div>
 
       <div className="aw-sp-list-body">
@@ -230,10 +232,12 @@ function OrderMenu({ value, onChange }: { value: ListOrder; onChange: (value: Li
 export function SpecDocSwitcher({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false)
   const root = React.useRef<HTMLDivElement>(null)
+  // A document opened from inside the popover without a row click: New capability's dialog.
+  React.useEffect(() => setOpen(false), [title])
   React.useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('.aw-menu')) setOpen(false)
+      if (root.current && !root.current.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('.aw-menu, [role="dialog"]')) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     document.addEventListener('mousedown', onDown)
