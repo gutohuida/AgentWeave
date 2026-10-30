@@ -57,10 +57,14 @@ def state_of(section: str) -> str:
     if match is None:
         return "none"
     status = match.group(1).lstrip("~*` ").lower()
-    if re.match(r"(fixed|closed|built|retired|superseded|won|resolved|done)", status):
+    if re.match(r"(not a defect|noted)", status):
+        return "not a defect"
+    if re.match(r"(fixed|closed|built|both halves fixed|retired|superseded|won|resolved)", status):
+        return "closed"
+    if re.match(r"\(\d{4}-\d\d-\d\d[^)]*\) fixed", status):
         return "closed"
     if status.startswith("open"):
-        return "open"
+        return "deferred" if "deferred by the operator" in status else "open"
     if re.match(r"(part|still)", status):
         return "partly"
     return "unclear"
@@ -134,7 +138,7 @@ def main() -> int:
         if state == "none" and fid in with_status:
             state = "addendum"
         hint = ""
-        if state in ("open", "partly", "unclear", "none") and fid in fixed:
+        if state in ("open", "deferred", "partly", "unclear", "none") and fid in fixed:
             hint = "stale? " + " ".join(fixed[fid][:3])
         rows.append(
             {
@@ -147,14 +151,14 @@ def main() -> int:
         )
 
     def is_open(row: dict[str, str]) -> bool:
-        return row["state"] in ("open", "partly", "unclear", "none")
+        return row["state"] in ("open", "deferred", "partly", "unclear", "none")
 
     open_rows = [r for r in rows if r["id"] and is_open(r)]
     closed_rows = [r for r in rows if r["id"] and not is_open(r)]
     note_rows = [r for r in rows if not r["id"]]
 
     # What a reader must look at first: no clear state, or a commit that says it was fixed.
-    open_rows.sort(key=lambda r: (not (r["hint"] or r["state"] != "open"), r["sev"] or "Z"))
+    open_rows.sort(key=lambda r: (not (r["hint"] or r["state"] not in ("open", "deferred")), r["sev"] or "Z"))
 
     notes = [f"<!-- followed {r['after']} in FINDINGS.md -->\n{r['text']}" for r in note_rows]
     files: dict[str, list[str]] = {
@@ -167,6 +171,12 @@ def main() -> int:
     counts = collections.Counter(r["state"] for r in rows)
     lines = [
         "# Findings index\n\n",
+        "**A snapshot, not the ledger.** New findings and status changes still go in "
+        "scripts/drive/FINDINGS.md until the cutover: the backlog page, classify_findings.py "
+        "and the skills read that file, and editing a vault source re-distils all of it. "
+        "Regenerate with scripts/drive/findings_to_vault.py.
+
+",
         f"Generated from scripts/drive/FINDINGS.md: {len(rows)} sections. "
         + ", ".join(f"{k} {v}" for k, v in counts.most_common())
         + ".\n\n`stale?` means a commit subject on master names the finding as fixed while its "
