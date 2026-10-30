@@ -3313,7 +3313,8 @@ class Build(Base):
 
     `driver` is who hands out the work: `flow` (the Hub's flow, `loop_id`), `lead` (a lead agent
     briefed by `loop_id`'s firing) or `hand` (nobody; no loop). `level` is the gate level its tasks
-    are governed at (`builds.LEVELS`). Empty `builders`/`reviewers` mean any free agent, as before.
+    are governed at (`builds.LEVELS`). Empty `builders` mean the default builder in `people`, else
+    any free agent (F1092); empty `reviewers` mean any free agent, as before.
     """
 
     __tablename__ = "builds"
