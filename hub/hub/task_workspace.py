@@ -48,7 +48,9 @@ class TurnWorkspace(NamedTuple):
 
     task_id: Optional[str]
     base: Optional[str]
-    prerequisites: Tuple[str, ...]
+    #: `(prerequisite task id, commit)`: what a *new* branch takes in, each commit the work of the
+    #: task named beside it, which its merge commit names (FR-4).
+    prerequisites: Tuple[Tuple[str, str], ...]
     #: `(prerequisite task id, commit)` for prerequisites at `approved` only: what an *existing*
     #: branch takes in (F158). Unlike `prerequisites`, no unapproved prerequisite's evidence.
     approved: Tuple[Tuple[str, str], ...] = ()
@@ -193,9 +195,14 @@ async def integration_base(session: AsyncSession, project_id: str, repo_root: Pa
 
 async def _prerequisite_commits(
     session: AsyncSession, task: Task, repo_root: Path
-) -> Tuple[Tuple[str, ...], Tuple[Tuple[str, str], ...]]:
-    """Every commit *task*'s direct prerequisites contributed, in a stable order — and, second,
-    the `(prerequisite, commit)` pairs of those at `approved`, which an existing branch takes in.
+) -> Tuple[Tuple[Tuple[str, str], ...], Tuple[Tuple[str, str], ...]]:
+    """Every `(prerequisite, commit)` *task*'s direct prerequisites contributed, in a stable order —
+    and, second, those of prerequisites at `approved`, which an existing branch takes in.
+
+    **Each commit is the prerequisite's own** (`a-task-s-checks-and-merges-use-its-own-work-...`,
+    FR-3): `merge_targets` names only evidence the prerequisite recorded, so a commit of a task the
+    dependent does not depend on -- one serving a requirement with the prerequisite -- is never
+    brought in, nor required at approval. The pair carries the producing task to the merge's label.
 
     **Direct only, and that is sufficient rather than approximate.** If A → B → C and each link was
     provisioned under this scheme, B's branch already carries A's work, so merging B's commits into
@@ -253,7 +260,7 @@ async def _prerequisite_commits(
         .scalars()
         .all()
     )
-    commits: List[str] = []
+    commits: List[Tuple[str, str]] = []
     approved: List[Tuple[str, str]] = []
     for prerequisite in prerequisites:
         governed = await task_integration.evidence_governs(session, prerequisite)
@@ -261,8 +268,8 @@ async def _prerequisite_commits(
         if not governed and not is_approved:
             continue
         for target in await task_integration.merge_targets(session, prerequisite, repo_root):
-            if target.commit_sha and target.commit_sha not in commits:
-                commits.append(target.commit_sha)
+            if target.commit_sha and target.commit_sha not in {sha for _, sha in commits}:
+                commits.append((prerequisite.id, target.commit_sha))
             if is_approved and target.commit_sha:
                 pair = (prerequisite.id, target.commit_sha)
                 if pair not in approved:

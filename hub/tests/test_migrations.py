@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0156"
+HEAD_REVISION = "0157"
 
 
 # ---------------------------------------------------------------------------
@@ -1304,6 +1304,9 @@ def test_task_transitions_lands_on_the_real_startup_path(tmp_path) -> None:
             "note",
             # The build level that governed the move, 0152 (slice D).
             "level",
+            # Why a send-back was made: its class and sentence, 0157.
+            "reason_class",
+            "reason",
             "created_at",
         }
 

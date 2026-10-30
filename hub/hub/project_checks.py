@@ -850,6 +850,22 @@ def own_failure(results: Optional[Sequence[Dict[str, Any]]]) -> bool:
     return any(failed(result) and not preexisting(result) for result in results or [])
 
 
+def send_back_class(results: Optional[Sequence[Dict[str, Any]]]) -> str:
+    """Why the Hub sends work back for these check *results* (FR-9): `flaky` when every failure that
+    is the task's passed its confirming re-run (it still counts as the task's: a flaky test in a
+    file the task changes, FR-4), else `broken-check`."""
+    from .task_transitions import SEND_BACK_BROKEN_CHECK, SEND_BACK_FLAKY
+
+    own = [r for r in results or [] if failed(r) and not preexisting(r)]
+    confirmed = [r.get("confirmed") for r in own]
+    if own and all(
+        isinstance(c, dict) and c.get("exit_code") == 0 and not c.get("timed_out")
+        for c in confirmed
+    ):
+        return SEND_BACK_FLAKY
+    return SEND_BACK_BROKEN_CHECK
+
+
 #: The two kinds of failure that are not the task's (`a-red-main-does-not-hold-the-night`).
 FAILS_ON_MAIN = "fails on main"
 FLAKY = "flaky"
@@ -1010,9 +1026,9 @@ class CheckView:
 
 
 def unmerged(root: Path, tip: str, target_shas: Sequence[str]) -> List[str]:
-    """The targets not already in the main tip (F518). A task serving requirements another task
-    already landed carries that task's accepted evidence among its merge targets; checking it would
-    re-check the main branch and blame its failures on this task. Unknown reachability is kept."""
+    """The targets not already in the main tip (F518): a commit of the task's own that already
+    landed (a re-approval, an earlier landing of the same work) would re-check the main branch and
+    blame its failures on this task. Unknown reachability is kept."""
     from .requirement_evidence import is_reachable_from
 
     return [sha for sha in target_shas if is_reachable_from(root, sha, tip) is not True]
@@ -1022,18 +1038,47 @@ async def check_targets(
     session: AsyncSession, task: Task, root: Path, *, awaiting_review: bool
 ) -> List[str]:
     """The commits a run for *task* checks: what approval would merge, or, for work waiting for
-    its review, the commit the review is given. One answer for every reader -- the run, the
-    completion's fast checks, and the review's wait for them -- so they check the same work."""
-    from . import task_integration
+    its review, the commit the review is given and the newest commit on its own branch. One answer
+    for every reader -- the run, the completion's fast checks, and the review's wait for them -- so
+    they check the same work.
+
+    Every commit here is the task's own (`a-task-s-checks-and-merges-use-its-own-work-...`, FR-1):
+    `merge_targets` names only evidence the task recorded, so a sibling serving the same requirement
+    can no longer stand in for this task's work, nor, once that stand-in has landed, leave nothing to
+    check (FR-2). Work waiting for review that names a commit adds its branch tip, so a completion
+    after a send-back is checked on the commit it completes even where its evidence still names an
+    older one; a commit another target already contains is dropped, so the run checks each line of
+    work once. Naming none, the answer stays empty: the completion checks its branch tip itself
+    (`fast_checks_at_completion`), and a turn's end without evidence starts no run (F773)."""
+    from . import task_integration, task_workspace
 
     targets = [t.commit_sha for t in await task_integration.merge_targets(session, task, root)]
-    if not targets and awaiting_review:
-        # Where evidence governs, `merge_targets` names accepted evidence only, and a task waiting
-        # for its reviewer has none yet: the check ran first at the approval gate, after the
-        # verdict (F773). Check the commit the review is given.
-        reviewed = await task_integration.review_target(session, task, root)
-        targets = [reviewed.commit_sha] if reviewed.resolved and reviewed.commit_sha else []
+    if awaiting_review:
+        if not targets:
+            # Where evidence governs, `merge_targets` names accepted evidence only, and a task
+            # waiting for its reviewer has none yet: the check ran first at the approval gate,
+            # after the verdict (F773). Check the commit the review is given.
+            reviewed = await task_integration.review_target(session, task, root)
+            if reviewed.resolved and reviewed.commit_sha:
+                targets = [reviewed.commit_sha]
+        if targets and task_workspace.takes_own_checkout(task):
+            tip = await asyncio.to_thread(task_integration.task_branch_tip, root, task.id)
+            if tip and tip not in targets:
+                targets = await asyncio.to_thread(_newest_of, root, [*targets, tip])
     return targets
+
+
+def _newest_of(root: Path, targets: List[str]) -> List[str]:
+    """*targets* less any commit another of them contains, in order. Unknown reachability keeps."""
+    from .requirement_evidence import is_reachable_from
+
+    return [
+        sha
+        for sha in targets
+        if not any(
+            other != sha and is_reachable_from(root, sha, other) is True for other in targets
+        )
+    ]
 
 
 async def view(
@@ -1731,6 +1776,17 @@ class CompletionChecks:
     unchanged_commit: Optional[str] = None
 
 
+@dataclass
+class ChecksSkipped:
+    """Why an agent's completion recorded no check run (FR-2): written on its history row."""
+
+    reason: str
+
+    @property
+    def note(self) -> str:
+        return f"No check ran at this completion: {self.reason}."
+
+
 async def _stop_run_on_older_work(task_id: str, timeout: float) -> None:
     """A run still in flight for *task_id* checks work the completion is replacing: end it, recorded
     `superseded`, so the completion's run checks what it completes (one per task, D4)."""
@@ -1764,13 +1820,18 @@ async def _snapshot_task_checkout(root: Path, task: Task, agent: Optional[str]) 
 
 async def fast_checks_at_completion(
     session: AsyncSession, task: Task, agent: Optional[str]
-) -> Optional[CompletionChecks]:
+) -> CompletionChecks | ChecksSkipped:
     """Start *task*'s check run on the work its review would be given and wait, at most
-    `COMPLETION_BUDGET_SECONDS`, for its fast checks (FR-2, D2-D5). `None` where no fast check is
-    configured, nothing is checkable, or no run could be started: the completion is as before.
+    `COMPLETION_BUDGET_SECONDS`, for its fast checks (FR-2, D2-D5). `ChecksSkipped` where no fast
+    check is configured, nothing is checkable, or no run could be started: the completion is
+    recorded as before, saying why no check ran.
 
     Reads through the caller's session (nothing is staged in it) and starts the run with the targets
     passed explicitly (F680's pattern): the completing transaction has not committed.
+
+    Where no run is recorded for this completion the answer is `ChecksSkipped`, saying why, which
+    the completion writes on its history row (`a-task-s-checks-and-merges-use-its-own-work-...`,
+    FR-2): a completion never goes unchecked without saying so.
 
     **One deadline for all of it**: the snapshot, the merged commit, ending a run on older work and
     the fast checks all count against the budget, so the Hub answers inside the MCP client's
@@ -1784,12 +1845,17 @@ async def fast_checks_at_completion(
     deadline = time.monotonic() + COMPLETION_BUDGET_SECONDS
     project = await session.get(Project, task.project_id)
     checks = configured_checks(project)
-    if project is None or not project.main_branch or not any(c["fast"] for c in checks):
-        return None
+    if project is None or not project.main_branch:
+        return ChecksSkipped("the project has no main branch set, so no check can run")
+    if not any(c["fast"] for c in checks):
+        return ChecksSkipped(
+            "the project configures no fast check"
+            + ("; its other checks run before the review" if checks else "")
+        )
     try:
         root = (await resolve_project_workspace(session, task.project_id)).root
-    except ProjectWorkspaceError:
-        return None
+    except ProjectWorkspaceError as exc:
+        return ChecksSkipped(f"the project's repository could not be located ({exc})")
     await _snapshot_task_checkout(root, task, agent)
     targets = await check_targets(session, task, root, awaiting_review=True)
     if not targets:
@@ -1800,12 +1866,18 @@ async def fast_checks_at_completion(
 
         branch_tip = await asyncio.to_thread(task_integration.task_branch_tip, root, task.id)
         targets = [branch_tip] if branch_tip else []
+    if not targets:
+        return ChecksSkipped("the task has no commit of its own to check: its branch has none")
     tip = await asyncio.to_thread(main_tip, root, project.main_branch)
     if tip is None:
-        return None
+        return ChecksSkipped(f"the main branch {project.main_branch} does not resolve to a commit")
+    found = targets
     targets = await asyncio.to_thread(unmerged, root, tip, targets)
     if not targets:
-        return None
+        return ChecksSkipped(
+            f"its work ({', '.join(sha[:12] for sha in found)}) is already on "
+            f"{project.main_branch}"
+        )
     recorded = await latest_run(session, task.id)
     if is_running(task.id):
         current = await latest_run(session, task.id)
@@ -1823,7 +1895,10 @@ async def fast_checks_at_completion(
         ):
             # Nothing to wait on for this work: a run on older work outlived the stop's share of
             # the budget. The completion is recorded; the review waits for a run on this work.
-            return None
+            return ChecksSkipped(
+                "a check run on older work did not end in time; its review waits for a run on "
+                f"{', '.join(sha[:12] for sha in targets)}"
+            )
         run_id = current.id  # the run already in flight on exactly this work
     decided = True
     event = _fast_waiters.get(run_id)
@@ -1835,7 +1910,7 @@ async def fast_checks_at_completion(
     async with async_session_factory() as fresh:
         run = await fresh.get(TaskCheckRun, run_id)
     if run is None:
-        return None
+        return ChecksSkipped(f"check run {run_id} could not be read back")
     fast = {check["name"] for check in checks if check["fast"]}
     failing = [
         result
@@ -2048,6 +2123,8 @@ async def return_failed_work(run_id: str) -> bool:
                     verdict_reason=report,
                     note=f"the project's checks failed on check run {run.id}",
                     accepted_on_main=on_main,
+                    reason_class=send_back_class(run.results),
+                    reason=f"The project's checks failed on check run {run.id}.",
                 )
             except TransitionRefusedError:
                 logger.warning("could not return %s for its failed checks", task.id, exc_info=True)

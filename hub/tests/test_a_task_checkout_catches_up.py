@@ -148,7 +148,7 @@ def test_uncommitted_changes_are_snapshotted_then_the_prerequisite_comes_in(repo
 def test_a_dirty_checkout_whose_prerequisite_is_already_in_starts(repo):
     """1.8 (review LOW): nothing to merge means no refusal, dirty or not."""
     a_commit = _commit_on_new_branch(repo, "agentweave/task/" + A, "a.txt", "a's work\n")
-    checkout = ensure_task_worktree(repo, B, "main", (a_commit,))
+    checkout = ensure_task_worktree(repo, B, "main", ((A, a_commit),))
     (checkout / "scratch.txt").write_text("not committed\n")
 
     again = ensure_task_worktree(repo, B, "main", (), approved=((A, a_commit),))
@@ -243,5 +243,5 @@ async def test_only_approved_prerequisites_are_offered_for_the_top_up(app, monke
             session, project_id="proj-test", repo_root=tmp_path, task=task
         )
 
-    assert set(inputs.prerequisites) == {"a" * 40, "c" * 40}
+    assert set(inputs.prerequisites) == {(A, "a" * 40), ("task-c0c0c0c0c0c0", "c" * 40)}
     assert inputs.approved == (("task-c0c0c0c0c0c0", "c" * 40),)

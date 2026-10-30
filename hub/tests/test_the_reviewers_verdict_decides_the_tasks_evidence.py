@@ -268,7 +268,11 @@ async def test_sending_back_holds_the_tasks_evidence(
 
     sent = await app.patch(
         f"{AGENT_TASKS}/{task}",
-        json={"status": "revision_needed", "notes": "feature.py prints the wrong word"},
+        json={
+            "status": "revision_needed",
+            "reason_class": "defect",
+            "notes": "feature.py prints the wrong word",
+        },
         headers=reviewer,
     )
 

@@ -82,6 +82,10 @@ export interface Task {
   /** Who checks it, where its build names a checker: the task's own, else the build's default
    *  (`hand-only-places-on-the-board`). Derived by the Hub per request; null outside a build. */
   checker?: string | null
+  /** True when the builder / checker is the build's default rather than one the task names
+   *  (`added-task-people`); the board marks each 'by default'. */
+  builder_by_default?: boolean
+  checker_by_default?: boolean
   /**
    * The requirement identifiers this task serves, in the form they are submitted in.
    *
@@ -343,6 +347,10 @@ export interface TaskTransition {
   job_name?: string | null
   job_kind?: 'flow' | 'loop' | null
   policy_digest: string | null
+  /** Why a move to `revision_needed` was made: one of the six send-back classes and a sentence
+   *  (FR-8). Null on every other move, and on a send-back recorded before the Hub kept them. */
+  reason_class?: string | null
+  reason?: string | null
   created_at: string | null
 }
 

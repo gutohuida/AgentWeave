@@ -1,0 +1,22 @@
+{
+  "id": "ttr-sendback1",
+  "sequence": 5,
+  "task_id": "task-sendback1",
+  "from_status": "under_review",
+  "to_status": "revision_needed",
+  "actor_kind": "run",
+  "actor_agent": "reviewer",
+  "run_id": "run-sendback-r",
+  "origin": "actor",
+  "job_id": null,
+  "job_name": null,
+  "job_kind": null,
+  "policy_digest": null,
+  "level": null,
+  "override_reason": null,
+  "override_by": null,
+  "note": null,
+  "reason_class": "merge-needed",
+  "reason": "The work is right; main moved under it, so merge main into the branch and complete again.",
+  "created_at": "2026-10-30T04:00:00+00:00"
+}

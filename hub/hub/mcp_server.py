@@ -81,6 +81,16 @@ TaskStatus = Literal[
     "approved",
     "rejected",
 ]
+# Why a task is sent back: `task_transitions.SEND_BACK_CLASSES`, restated because this module may
+# not import the Hub; `test_every_send_back_says_why.py` pins the two together.
+SendBackClass = Literal[
+    "defect",
+    "regression",
+    "broken-check",
+    "merge-needed",
+    "evidence-only",
+    "flaky",
+]
 TaskPriority = Literal["low", "medium", "high", "critical"]
 JobSessionMode = Literal["new", "resume"]
 
@@ -438,6 +448,7 @@ def update_task(
     requirement_ids: Optional[List[str]] = None,
     spec_document: Optional[str] = None,
     failing_pieces: Optional[List[Dict[str, str]]] = None,
+    reason_class: Optional[SendBackClass] = None,
 ) -> Dict[str, Any]:
     """Update a task's lifecycle status, notes, or the requirements it serves.
 
@@ -465,6 +476,9 @@ def update_task(
             with your notes as its reason, and its author records it again at the next commit.
             Name none when nothing in the evidence fails (a lint error, a failing check), and say
             why in notes. Refused with "approved", which accepts every piece.
+        reason_class: Required with "revision_needed": why the work goes back, one of "defect",
+            "regression", "broken-check", "merge-needed", "evidence-only" or "flaky", with the
+            sentence of reason in notes. A send-back without it is refused, naming the classes.
     """
     body: Dict[str, Any] = {}
     if status is not None:
@@ -477,6 +491,8 @@ def update_task(
         body["spec_document"] = spec_document
     if failing_pieces is not None:
         body["failing_pieces"] = failing_pieces
+    if reason_class is not None:
+        body["reason_class"] = reason_class
     if status == "completed":
         # The Hub waits for the project's fast checks before it records a completion.
         return _hub_request(

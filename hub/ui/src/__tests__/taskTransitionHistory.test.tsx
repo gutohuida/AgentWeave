@@ -3,6 +3,8 @@ import { cleanup, render, screen } from '@testing-library/react'
 
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 
+import sendBack from './fixtures/taskTransitionSendBack.json'
+
 /**
  * F203: `task_transitions` recorded every accepted move — who asked, from what, under which
  * policy — and nothing could read it. The drives opened sqlite to answer "who moved this?".
@@ -127,6 +129,30 @@ describe('a task’s transition history', () => {
 
     expect(text).toContain('The project’s checks moved completed → revision_needed')
     expect(text).not.toContain('You')
+  })
+
+  it('shows why a task was sent back: its class and sentence, as the route returns them', () => {
+    // FR-8. `fixtures/taskTransitionSendBack.json` is held to the route's real row by
+    // `hub/tests/test_every_send_back_says_why.py`.
+    rows = [ROWS[0], sendBack] as typeof ROWS
+    render(<TaskTransitionHistory taskId="task-1" open />)
+    const reason = screen.getByTestId(`task-transition-reason-${sendBack.id}`).textContent ?? ''
+
+    expect(reason).toContain('merge-needed')
+    expect(reason).toContain(sendBack.reason)
+    expect(screen.getByTestId('task-transitions-task-1').textContent).toContain(
+      'reviewer moved under_review → revision_needed',
+    )
+  })
+
+  it('says a send-back recorded no reason, and adds nothing to other moves', () => {
+    rows = [ROWS[0], { ...sendBack, reason_class: null, reason: null }] as typeof ROWS
+    render(<TaskTransitionHistory taskId="task-1" open />)
+
+    expect(screen.getByTestId(`task-transition-reason-${sendBack.id}`).textContent).toBe(
+      'no reason recorded',
+    )
+    expect(screen.queryByTestId('task-transition-reason-ttr-1')).toBeNull()
   })
 
   it('renders nothing for a task whose history predates the table', () => {

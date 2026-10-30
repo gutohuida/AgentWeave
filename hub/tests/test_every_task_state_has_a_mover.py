@@ -120,7 +120,12 @@ async def _move(task_id: str, to_status: str, agent: str):
         try:
             await update_task_for_actor(
                 task_id,
-                TaskUpdate(status=to_status),
+                # A reviewer's send-back names why (FR-9, `every send-back says why`).
+                (
+                    TaskUpdate(status=to_status, reason_class="defect", notes="It is wrong.")
+                    if to_status == "revision_needed"
+                    else TaskUpdate(status=to_status)
+                ),
                 project_id="proj-test",
                 actor=run_actor(f"run-act-{next(_ids)}", agent),
                 session=session,
