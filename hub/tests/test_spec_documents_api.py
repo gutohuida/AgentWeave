@@ -569,28 +569,6 @@ async def test_the_placeholder_never_becomes_the_title(app, auth_headers, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_creating_over_a_file_the_hub_has_no_record_of_is_refused(
-    app, auth_headers, tmp_path
-):
-    """It answered 201 and wrote the empty scaffold over the file, found driving New capability."""
-    path = "spec/capabilities/handmade/spec.json"
-    target = tmp_path / path
-    target.parent.mkdir(parents=True)
-    target.write_text('{"title": "KEEP ME"}', encoding="utf-8")
-
-    response = await app.post(
-        f"{BASE}/documents",
-        json={"path": path, "title": "Handmade", "kind": "capability"},
-        headers=auth_headers,
-    )
-
-    assert response.status_code == 409, response.text
-    assert response.json()["detail"]["code"] == "file_exists"
-    assert path in response.json()["detail"]["message"]
-    assert target.read_text(encoding="utf-8") == '{"title": "KEEP ME"}'
-
-
-@pytest.mark.asyncio
 async def test_an_explicit_path_is_still_honoured(app, auth_headers, tmp_path):
     created = await _create(app, auth_headers)
     assert created["path"] == PATH

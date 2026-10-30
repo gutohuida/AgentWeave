@@ -308,6 +308,7 @@ class TestReindexRoute:
     async def test_reindex_writes_an_index_that_files_the_documents(
         self, app, auth_headers, tmp_path
     ):
+        _write(tmp_path, "spec/spec.json")
         created = await app.post(
             f"{BASE}/documents",
             json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},
@@ -350,6 +351,7 @@ class TestReindexRoute:
         self, app, auth_headers, tmp_path
     ):
         for name in ("a", "b"):
+            _write(tmp_path, f"spec/{name}.json")
             await app.post(
                 f"{BASE}/documents",
                 json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
@@ -365,6 +367,7 @@ class TestReindexRoute:
 
     async def test_the_operator_can_name_the_home(self, app, auth_headers, tmp_path):
         for name in ("a", "b"):
+            _write(tmp_path, f"spec/{name}.json")
             await app.post(
                 f"{BASE}/documents",
                 json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
@@ -383,6 +386,7 @@ class TestReindexRoute:
     async def test_rebuilding_twice_leaves_the_file_byte_identical(
         self, app, auth_headers, tmp_path
     ):
+        _write(tmp_path, "spec/spec.json")
         await app.post(
             f"{BASE}/documents",
             json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},
@@ -446,6 +450,7 @@ class TestReindexCorpusRerender:
         self, app, auth_headers, tmp_path
     ):
         for name in ("home", "area", "other"):
+            _write(tmp_path, f"spec/{name}.json")
             created = await app.post(
                 f"{BASE}/documents",
                 json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
@@ -522,6 +527,7 @@ class TestReindexCorpusRerender:
         assert (tmp_path / "spec" / "other.json").read_bytes() == other_bytes
 
     async def test_a_rebuild_that_changes_nothing_writes_no_file(self, app, auth_headers, tmp_path):
+        _write(tmp_path, "spec/spec.json")
         await app.post(
             f"{BASE}/documents",
             json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},
@@ -547,6 +553,7 @@ class TestReindexCorpusRerender:
             (home_path, "Home", "capability"),
             (child_path, "Approved demo", "change-spec"),
         ):
+            _write(tmp_path, path)
             created = await app.post(
                 f"{BASE}/documents",
                 json={"path": path, "title": title, "kind": kind},
@@ -624,6 +631,7 @@ class TestReindexCorpusRerender:
         home_path = "spec/home.json"
         child_path = "spec/child.json"
         for path, title in ((home_path, "Home"), (child_path, "Child")):
+            _write(tmp_path, path)
             created = await app.post(
                 f"{BASE}/documents",
                 json={"path": path, "title": title, "kind": "capability"},
@@ -690,6 +698,7 @@ class TestArrangeRoute:
 
     async def _seed(self, app, auth_headers, tmp_path, *names):
         for name in names:
+            _write(tmp_path, f"spec/{name}.json")
             created = await app.post(
                 f"{BASE}/documents",
                 json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
@@ -850,6 +859,7 @@ class TestArrangeRoute:
 async def _three_filed(app, auth_headers, tmp_path):
     """home, area and other, filed with `home` as the corpus's home."""
     for name in ("home", "area", "other"):
+        _write(tmp_path, f"spec/{name}.json")
         created = await app.post(
             f"{BASE}/documents",
             json={"path": f"spec/{name}.json", "title": name.upper(), "kind": "capability"},
@@ -884,6 +894,7 @@ async def test_reindex_broadcasts_after_the_index_is_written(app, auth_headers, 
     """1.1 (D5). An open tab could not learn that a rebuild happened."""
     from unittest.mock import AsyncMock, patch
 
+    _write(tmp_path, "spec/spec.json")
     await app.post(
         f"{BASE}/documents",
         json={"path": "spec/spec.json", "title": "Only", "kind": "capability"},

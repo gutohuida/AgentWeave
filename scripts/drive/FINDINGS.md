@@ -40953,7 +40953,7 @@ Repro: `spdoc-a7d41f10be14`'s build `build-c68972449bdc` ended `finished` at 202
 
 `_send_back` (`hub/hub/landing_queue.py:1850`) sets the landing to `SENT_BACK` before calling `apply_transition`, and its `except TransitionRefusedError` (`:1878`) only logs, then commits (`:1880`). If the approved -> revision_needed transition is refused, the task stays `approved`, its work is not on main, and nothing is left to land it. The work cannot land this way, so this is a stuck task and not bad code on main. **Expected:** a refused send-back leaves a state that someone is told about and can act on, not an approved task that never lands. **Test:** make `apply_transition` raise `TransitionRefusedError` in `_send_back`; the task must not read as approved with a sent-back landing and no signal.
 
-## F1092 (C) -- a capability's header reads `Approved` with a change's stepper, though its phase is `current`
+## F1094 (C) -- a capability's header reads `Approved` with a change's stepper, though its phase is `current`
 **Status:** Open. Found driving New capability (task-bf5ebb75161c) on 2026-10-30; true of every capability, not only a new one.
 **Source:** found by driving
 **Theme:** Spec documents
@@ -40961,3 +40961,12 @@ Repro: `spdoc-a7d41f10be14`'s build `build-c68972449bdc` ended `finished` at 202
 **Tier:** 0
 
 `stateOf` (`hub/ui/src/components/spec/page/adapt.ts:107`) and the list's mapping (`:223`) send every phase but `exploring` and `archived` to `approved`, so a capability the Hub reports as `phase: current` shows an `Approved` pill and the Writing/Approved/Building/Done ribbon, and its Builds section says a build can start once the document is approved. **Expected:** a capability reads as current, with no change journey. **Test:** render the header from a record with `kind: capability, phase: current`; it must not read `Approved` or show the ribbon.
+
+## F1095 (B) -- creating a document over a file the Hub has no row for answers 201 and destroys the file
+**Status:** Open. Found driving New capability (task-bf5ebb75161c) on 2026-10-30; its fix was taken out of that task as a contract change that needs its own look.
+**Source:** found by driving
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 1
+
+Repro: write `{"title": "KEEP ME"}` to `spec/capabilities/handmade/spec.json` with no document row, then `POST /project/documents` with that path, title `Handmade`, kind `capability`. It answers 201 and the file now holds the empty scaffold; `KEEP ME` is gone (run against a test client on 2026-10-30). The content really is lost: `create_document` (`hub/hub/spec_lifecycle.py:238`) checks only for an existing row, the Hub keeps no copy of a file it never read, and only git can bring it back, if the file was ever committed. New capability reaches this from the UI, because its path comes from the title: a title that folds to a loose capability's folder overwrites it with no warning. **Expected:** a create over a file the Hub has no record of is refused and the file is untouched, with adopting (`hub/hub/spec_adoption.py:297`) named as the way to take it in. **Mind when fixing:** today's behaviour has callers. `TestReindexRoute` and its neighbours in `hub/tests/test_spec_index_writer.py` write a file and POST over it expecting 201 (`:311` onward), and `scripts/migrate_openspec_corpus.py:335` POSTs then PUTs and treats any 409 as "already imported", so a refusal there must not read as success. A refusal needs its own code, distinct from `document_exists`. **Test:** the repro above must answer 409 and leave the file byte-identical.

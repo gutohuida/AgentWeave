@@ -2842,21 +2842,6 @@ async def create_document(
             path = validate_spec_path(body.path)
         except SpecPathError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-        # A file with no row is somebody's work the Hub has never read: the save below would write
-        # the empty scaffold over it. Adopting is what takes it in.
-        if spec_documents.document_exists(workspace, path) and not (
-            await spec_lifecycle.get_document(session, project_id, path)
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "message": (
-                        f"a file already exists at {path} that the Hub has no record of; "
-                        "adopt it, or choose another name"
-                    ),
-                    "code": "file_exists",
-                },
-            )
 
     try:
         document = await spec_lifecycle.create_document(
