@@ -1829,13 +1829,17 @@ async def _agents_a_loop_may_staff(
     facts = facts or FiringFacts(session)
     free = await _agents_that_are_free(session, loop.project_id, facts)
     withheld = await _agents_withheld_from_fresh_work(session, loop, facts)
-    pool = [name for name in free if name not in withheld]
-    # A build's flow hands fresh work only to its builders (`the-flow-staffs-the-builds-people`):
-    # T3 of 2026-10-27 went to the free Architect because this pool knew no list of builders.
     build = await facts.build_of_loop(loop)
-    if build is not None and build.builders:
-        pool = [name for name in pool if name in build.builders]
-    return pool
+    return [name for name in free if _pool_admits(name, withheld, build)]
+
+
+def _pool_admits(name: str, withheld: "Set[str]", build: Any) -> bool:
+    """Whether a flow's pool may hold *name* when free: not a judge withheld from fresh work, and
+    among a build's builders where it lists any (`the-flow-staffs-the-builds-people`): T3 of
+    2026-10-27 went to the free Architect because this pool knew no list of builders."""
+    if name in withheld:
+        return False
+    return build is None or not build.builders or name in build.builders
 
 
 async def _agents_withheld_from_fresh_work(
@@ -1868,21 +1872,30 @@ async def _default_builder_must_check(
     withheld_judges: "Set[str]",
     facts: "FiringFacts",
 ) -> bool:
-    """Whether *task*'s review needs the build's default builder, while somebody else could build.
+    """Whether *task*'s review needs the build's default builder, while the pool could build it.
 
     The build's record of who checks the task decides, so a dialog choice counts as a document's
-    does; a task the record does not list falls back to the judges its document names. With nobody
-    else on the roster who has a runner the default keeps the work (F767's reason: a flow with no
-    builder is not a flow)."""
+    does; a task the record does not list falls back to the judges its document names. The default
+    steps aside only for somebody the pool would take by its own rule, judged against the roster so
+    a busy builder is waited for. With nobody, it builds and the review's stall says why (F767's
+    reason: a flow with no builder is not a flow)."""
     from .builds import checker_of
 
     recorded = checker_of(build, task)
-    if recorded is None:
-        return default_builder in withheld_judges
-    if recorded[0] != default_builder:
+    needed = (
+        default_builder in withheld_judges if recorded is None else (recorded[0] == default_builder)
+    )
+    if not needed:
         return False
-    roster = await facts.roster(build.project_id)
-    return any(record.has_runner and record.name != default_builder for record in roster)
+    for record in await facts.roster(build.project_id):
+        if (
+            record.has_runner
+            and record.name != default_builder
+            and _pool_admits(record.name, withheld_judges, build)
+            and not await facts.is_read_only(build.project_id, record.name)
+        ):
+            return True
+    return False
 
 
 #: Design D2/D3's rung-3 prefix (task 2.3, R8) -- "reviewer", not the pre-REV "nobody is free.",

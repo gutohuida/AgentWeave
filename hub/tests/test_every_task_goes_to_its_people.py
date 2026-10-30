@@ -342,10 +342,20 @@ async def test_a_build_with_no_default_and_no_list_leaves_any_free_agent(
 )
 @pytest.mark.asyncio
 async def test_a_default_builder_who_must_check_leaves_the_build_to_another(
-    app, auth_headers, bind_runner, reviewable, delivery, choices, builder, checker
+    app,
+    auth_headers,
+    bind_runner,
+    bind_project_workspace,
+    tmp_path,
+    reviewable,
+    delivery,
+    choices,
+    builder,
+    checker,
 ):
     """QA2's wedge: the default built, could then never review its own work, and the task stopped.
     Another free agent builds and the default checks, through to the review being staffed."""
+    await bind_project_workspace(tmp_path)
     await _roster(app, auth_headers, bind_runner, "dev", "opus", "other")
     await _approved(app, auth_headers, _document([{"key": "t1"}], **delivery))
     await _build(app, auth_headers, driver="flow", level="reviewed", **choices)
@@ -380,6 +390,62 @@ async def test_a_default_builder_checking_one_task_still_builds_the_others(
 
     assert picks[tasks["t1"].id] == "opus"
     assert picks[tasks["t2"].id] != "opus"
+
+
+@pytest.mark.asyncio
+async def test_the_default_builds_when_the_only_other_agent_is_read_only(
+    app, auth_headers, bind_runner, reviewable
+):
+    """QA2's shape (a): holding the default back left the task pending with nobody to staff it. The
+    default builds, and the review's stall says why."""
+    await app.post(
+        f"/api/v1/projects/{P}/session/sync",
+        json={
+            "data": {
+                "agents": {
+                    "dev": {"runner": "claude"},
+                    "reader": {"runner": "claude", "read_only": True},
+                }
+            }
+        },
+        headers=auth_headers,
+    )
+    for name in ("dev", "reader"):
+        await bind_runner(name, cli="claude")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], checker="dev"))
+    await _build(app, auth_headers, driver="flow", level="reviewed")
+    t1 = (await _tasks())["t1"]
+
+    assert _picks(await _decide()) == [(t1.id, "dev", False)]
+
+    await _fire()
+    await _work(t1.id, "dev")
+    stalled = await _decide()
+
+    assert _picks(stalled) == []
+    assert "'dev' as its reviewer" in str(stalled.unstaffed), stalled
+
+
+@pytest.mark.asyncio
+async def test_the_default_builds_when_the_only_other_agent_is_withheld_as_a_judge(
+    app, auth_headers, bind_runner, bind_project_workspace, reviewable, tmp_path
+):
+    """QA2's shape (b): the document names qa to check and the dialog chose dev for both. The pool
+    still withholds qa by its own rule, so dev builds and the review's stall says why."""
+    await bind_project_workspace(tmp_path)
+    await _roster(app, auth_headers, bind_runner, "dev", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], checker="qa"))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="dev", checker="dev")
+    t1 = (await _tasks())["t1"]
+
+    assert _picks(await _decide()) == [(t1.id, "dev", False)]
+
+    await _fire()
+    await _work(t1.id, "dev")
+    stalled = await _decide()
+
+    assert _picks(stalled) == []
+    assert "'dev' as its reviewer" in str(stalled.unstaffed), stalled
 
 
 @pytest.mark.asyncio
