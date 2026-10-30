@@ -40969,7 +40969,7 @@ Repro: after the build finished, two tasks outside the build's plan stayed bound
 **Area:** Flows & review. Driven 2026-10-30 on :8010 at 4dba06e (`scripts/drive/d1030_own_work_replay.py`). A flow built with `builder: Builder`, `checker: Checker`, no per-task people and an idle agent `Other` on the roster: `Other` built "Add the report" while Builder was busy. This is what the real build-7450d5263aed did (default DeveloperOpus; Developer and Architect each took a task). The Build dialog shows a default builder, so the operator reads it as a choice that will be kept.
 **Cause, read:** the flow's pool narrows only by `build.builders` (`hub/hub/scheduler.py:1836`); the default builder is stored apart from that list and the pool never reads it. A task naming a builder is held for that builder (slice 1's drive passes 24/24), and a task added mid-build is assigned to the default, so the plan's own unnamed tasks are the ones left open to anybody.
 **Default checker held:** every review in the drive went to Checker.
-**Status:** Fixed 2026-10-30 in cbb38ab and 03e783e: with no builders list, `decide_firing` holds a task naming nobody for the build's default builder, unless that task's review needs the default and somebody else could build, when somebody else builds.
+**Status:** Fixed 2026-10-30 in cbb38ab, 03e783e and c020592: with no builders list, `decide_firing` holds a task naming nobody for the build's default builder. Where that task's review needs the default, it steps aside only for somebody the pool could staff; otherwise it builds and the review's stall says why.
 
 ## F1093 (C) -- Run now on a build past its window answers a bare 500 "Failed to fire job" although the stop worked
 
