@@ -57,8 +57,10 @@ def state_of(section: str) -> str:
     if match is None:
         return "none"
     status = match.group(1).lstrip("~*` ").lower()
-    if re.match(r"(not a defect|noted)", status):
+    if re.match(r"(not a defect|noted|confirms)", status):
         return "not a defect"
+    if status.startswith(("expectation 1 fixed", "arguments-file half fixed")):
+        return "partly"
     if re.match(r"(fixed|closed|built|both halves fixed|retired|superseded|won|resolved)", status):
         return "closed"
     if re.match(r"\(\d{4}-\d\d-\d\d[^)]*\) fixed", status):
@@ -158,7 +160,9 @@ def main() -> int:
     note_rows = [r for r in rows if not r["id"]]
 
     # What a reader must look at first: no clear state, or a commit that says it was fixed.
-    open_rows.sort(key=lambda r: (not (r["hint"] or r["state"] not in ("open", "deferred")), r["sev"] or "Z"))
+    open_rows.sort(
+        key=lambda r: (not (r["hint"] or r["state"] not in ("open", "deferred")), r["sev"] or "Z")
+    )
 
     notes = [f"<!-- followed {r['after']} in FINDINGS.md -->\n{r['text']}" for r in note_rows]
     files: dict[str, list[str]] = {
@@ -174,9 +178,7 @@ def main() -> int:
         "**A snapshot, not the ledger.** New findings and status changes still go in "
         "scripts/drive/FINDINGS.md until the cutover: the backlog page, classify_findings.py "
         "and the skills read that file, and editing a vault source re-distils all of it. "
-        "Regenerate with scripts/drive/findings_to_vault.py.
-
-",
+        "Regenerate with scripts/drive/findings_to_vault.py.\n\n",
         f"Generated from scripts/drive/FINDINGS.md: {len(rows)} sections. "
         + ", ".join(f"{k} {v}" for k, v in counts.most_common())
         + ".\n\n`stale?` means a commit subject on master names the finding as fixed while its "
