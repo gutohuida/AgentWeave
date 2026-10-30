@@ -337,6 +337,11 @@ class Hub:
         )
         if status not in (201, 409):
             return False, f"create failed ({status}): {body}"
+        # The other 409 means the document exists, which is what a re-run wants. This one means a
+        # file with no row, and the PUT below would only answer that the document is not found.
+        detail = body.get("detail") if isinstance(body, dict) else None
+        if isinstance(detail, dict) and detail.get("code") == "file_exists":
+            return False, f"not imported: {detail['message']}"
 
         status, body = self._call(
             "PUT", f"/documents/{capability.path}/content", {"document": payload}
