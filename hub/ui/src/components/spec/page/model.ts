@@ -463,3 +463,15 @@ export const anchors = {
   task: (key: string) => `task-${key}`,
   build: (id: string) => `build-${id}`,
 }
+
+/** Where a capability titled so lives, or null when the title holds nothing a path can be made of.
+ *  The same folding as the Hub's `spec_naming.slugify`, under its `CAPABILITY_ROOT`. */
+export function capabilityPathFor(title: string): string | null {
+  const slug = title
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug ? `spec/capabilities/${slug}/spec.json` : null
+}

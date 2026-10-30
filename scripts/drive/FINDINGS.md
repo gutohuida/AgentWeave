@@ -40980,3 +40980,21 @@ Repro: after the build finished, two tasks outside the build's plan stayed bound
 
 **Area:** Worktrees & integration. Seen 2026-10-30 on task-bf5ebb75161c. DeveloperOpus reports moving the task to completed with changes uncommitted, and HEAD still at 95bc0b1 straight after, although `update_task`'s description says uncommitted changes are committed first. Check run chk-48a8b37428a3 spent 25 minutes on 95bc0b1 and passed. The Hub then ran chk-cb53562db0a8 on the tip c0b79c3 (14:22 to 14:48, passed), and review opened only after that, so the tip was checked: the cost is the wasted run, not a gap. Not established: why this completion did not commit the worktree.
 **Status:** open 2026-10-30.
+
+## F1094 (C) -- a capability's header reads `Approved` with a change's stepper, though its phase is `current`
+**Status:** Open. Found driving New capability (task-bf5ebb75161c) on 2026-10-30; true of every capability, not only a new one.
+**Source:** found by driving
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+`stateOf` (`hub/ui/src/components/spec/page/adapt.ts:107`) and the list's mapping (`:223`) send every phase but `exploring` and `archived` to `approved`, so a capability the Hub reports as `phase: current` shows an `Approved` pill and the Writing/Approved/Building/Done ribbon, and its Builds section says a build can start once the document is approved. **Expected:** a capability reads as current, with no change journey. **Test:** render the header from a record with `kind: capability, phase: current`; it must not read `Approved` or show the ribbon.
+
+## F1095 (B) -- creating a document over a file the Hub has no row for answers 201 and destroys the file
+**Status:** Open. Found driving New capability (task-bf5ebb75161c) on 2026-10-30; its fix was taken out of that task as a contract change that needs its own look.
+**Source:** found by driving
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 1
+
+Repro: write `{"title": "KEEP ME"}` to `spec/capabilities/handmade/spec.json` with no document row, then `POST /project/documents` with that path, title `Handmade`, kind `capability`. It answers 201 and the file now holds the empty scaffold; `KEEP ME` is gone (run against a test client on 2026-10-30). The content really is lost: `create_document` (`hub/hub/spec_lifecycle.py:238`) checks only for an existing row, the Hub keeps no copy of a file it never read, and only git can bring it back, if the file was ever committed. New capability reaches this from the UI, because its path comes from the title: a title that folds to a loose capability's folder overwrites it with no warning. **Expected:** a create over a file the Hub has no record of is refused and the file is untouched, with adopting (`hub/hub/spec_adoption.py:297`) named as the way to take it in. **Mind when fixing:** today's behaviour has callers. `TestReindexRoute` and its neighbours in `hub/tests/test_spec_index_writer.py` write a file and POST over it expecting 201 (`:311` onward), and `scripts/migrate_openspec_corpus.py:335` POSTs then PUTs and treats any 409 as "already imported", so a refusal there must not read as success. A refusal needs its own code, distinct from `document_exists`. **Test:** the repro above must answer 409 and leave the file byte-identical.
