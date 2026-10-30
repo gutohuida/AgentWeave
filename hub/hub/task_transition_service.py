@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from . import blocking, flow_advance, traces
 from .db.models import RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
+    SEND_BACK_CLASSES,
     STATUS_BLOCKED,
     Actor,
     allowed_targets,
@@ -949,6 +950,8 @@ async def apply_transition(
     failing_pieces: Optional[Dict[str, str]] = None,
     git_answers: Optional[traces.GitAnswers] = None,
     accepted_on_main: frozenset = frozenset(),
+    reason_class: Optional[str] = None,
+    reason: Optional[str] = None,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
 
@@ -981,6 +984,11 @@ async def apply_transition(
     The caller commits; this function stages the change and the history row together so a refusal
     after a partial write is not possible.
 
+    *reason_class* and *reason* say why a move to `revision_needed` was made (FR-8): one of
+    `SEND_BACK_CLASSES` and a sentence, written on the history row. A class outside the set raises
+    `ValueError`; on any other move both are ignored. Whether a caller must give one is the
+    caller's to ask (a reviewer must, `update_task_for_actor`; the Hub always does).
+
     `origin` defaults to `actor` because that is what almost every caller is, and because a default
     of `runtime` would let a forgotten argument quietly exempt a real transition from the divergence
     check. Only the run→task binding passes `runtime`, and a source scan in
@@ -996,6 +1004,10 @@ async def apply_transition(
     if origin == ORIGIN_JOB and not actor.is_operator:
         raise ValueError("origin 'job' acts as the operator; a run actor cannot carry it")
 
+    if reason_class is not None and reason_class not in SEND_BACK_CLASSES:
+        raise ValueError(
+            f"reason_class must be one of {list(SEND_BACK_CLASSES)}, got {reason_class!r}"
+        )
     from_status = task.status
 
     # D7: restating the current status is a no-op that records nothing. An agent plane retry would
@@ -1209,6 +1221,8 @@ async def apply_transition(
         note=note,
         # The build level that governed this move; none outside a build (slice D, FR-2).
         level=task.level if task.build_id else None,
+        reason_class=reason_class if to_status == "revision_needed" else None,
+        reason=((reason or "").strip()[:2000] or None) if to_status == "revision_needed" else None,
     )
     # Not a column — see the comment where `reported` is built. `TaskResponse` reads this off the
     # object this same call returns; nothing else looks for it, and nothing persists it.

@@ -950,6 +950,12 @@ class TaskTransition(Base):
     # The build level that governed this move (`builds.LEVELS`), on every move of a task in a
     # build; null for a task outside any build (migration 0152).
     level: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Why a move to `revision_needed` was made: one of `task_transitions.SEND_BACK_CLASSES` and a
+    # sentence, required of a reviewer and set by the Hub on its own send-backs (`a-task-s-checks-
+    # and-merges-use-its-own-work-and-a-live-run-is-never-reset` FR-8/FR-9, migration 0157). Null
+    # on every other move, and on a send-back recorded before the columns existed.
+    reason_class: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     # No CHECK on `origin`, matching `actor_kind` beside it, which has none either. Two reasons,

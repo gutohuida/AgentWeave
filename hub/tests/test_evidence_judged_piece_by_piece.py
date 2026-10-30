@@ -129,8 +129,21 @@ async def a_completed_task(app, auth_headers, builder, tmp_path, identifiers):
     return task, pieces
 
 
-async def send_back(app, reviewer, task, *, notes=None, failing=None, status="revision_needed"):
+async def send_back(
+    app,
+    reviewer,
+    task,
+    *,
+    notes=None,
+    failing=None,
+    status="revision_needed",
+    reason_class="defect",
+):
     body = {"status": status}
+    if status == "revision_needed" and reason_class is not None:
+        # A reviewer's send-back names why (FR-9 of `a-task-s-checks-and-merges-use-its-own-work-
+        # and-a-live-run-is-never-reset`); what these tests judge is the evidence, not the class.
+        body["reason_class"] = reason_class
     if notes is not None:
         body["notes"] = notes
     if failing is not None:

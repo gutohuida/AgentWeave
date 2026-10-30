@@ -79,6 +79,7 @@ from ...task_transition_service import (
 )
 from ...task_transitions import (
     ACTOR_OPERATOR,
+    SEND_BACK_CLASSES,
     STATUS_BLOCKED,
     WITH_REVIEWER_STATUSES,
     Actor,
@@ -1763,6 +1764,69 @@ async def _failing_pieces_for(
     return failing
 
 
+def _send_back_reason(
+    task: Task, body: TaskUpdate, actor: Actor, failing_pieces: Optional[Dict[str, str]]
+) -> Tuple[Optional[str], Optional[str]]:
+    """Why this move sends *task* back: `(reason_class, sentence)`, or `(None, None)` for any other
+    move (FR-8/FR-9). Asked after `_failing_pieces_for`, so the move is already known to be legal and
+    this actor's to make: an impossible move is answered by the map, not by a request for a class.
+
+    The sentence is the verdict's notes, else the failing pieces' own reasons. An agent's send-back
+    without a class from `SEND_BACK_CLASSES`, or with no sentence, is refused naming what is missing
+    and nothing is written. The operator is not refused either: the app's status menu sends a status
+    alone, and the row then reads as no reason recorded.
+    """
+    if not (
+        body.status == "revision_needed"
+        and body.status != task.status
+        and body.status in allowed_targets(task.status, actor.kind)
+    ):
+        return None, None
+    named = (body.reason_class or "").strip() or None
+    classes = ", ".join(SEND_BACK_CLASSES)
+    if named is not None and named not in SEND_BACK_CLASSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"{named!r} is not a send-back class. Name why {task.id} goes back as one of: "
+                    f"{classes}."
+                ),
+                "code": "send_back_class_unknown",
+            },
+        )
+    sentence = _verdict_text(body.notes)
+    if not sentence and failing_pieces:
+        sentence = " ".join(reason for reason in failing_pieces.values() if reason) or None
+    if actor.is_operator:
+        return named, sentence
+    if named is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Sending {task.id} back needs a reason class saying why: one of {classes} "
+                    "(reason_class), with a sentence of reason in notes. Nothing was changed; send "
+                    "it back again with both."
+                ),
+                "code": "send_back_needs_a_class",
+                "classes": list(SEND_BACK_CLASSES),
+            },
+        )
+    if not sentence:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Sending {task.id} back as {named} needs a sentence of reason: say in notes "
+                    "what must change."
+                ),
+                "code": "send_back_needs_a_reason",
+            },
+        )
+    return named, sentence
+
+
 async def _run_may_write_notes(
     session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
 ) -> bool:
@@ -1861,6 +1925,8 @@ async def update_task_for_actor(
     # The verdict's failing pieces, resolved and refused before any write
     # (`each-piece-of-evidence-is-judged-on-its-own`).
     failing_pieces = await _failing_pieces_for(session, task, body, actor)
+    # Why it goes back, required of a reviewer (FR-9) and refused before any write.
+    reason_class, send_back_reason = _send_back_reason(task, body, actor, failing_pieces)
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
@@ -1992,6 +2058,8 @@ async def update_task_for_actor(
             # An assignee the operator wrote in this same PATCH is who holds the rework (F743).
             holder_named="assignee" in body.model_fields_set,
             note=completion_note,
+            reason_class=reason_class,
+            reason=send_back_reason,
         )
         approval_report = list(getattr(transition, "reported_advisories", None) or [])
         # Every exit from the waiting status drops the text, whichever exit it was — released,
@@ -2323,6 +2391,9 @@ def _transition_view(
         "override_by": row.override_by,
         # The operator action behind a move it made, and its commits (closing as already built).
         "note": row.note,
+        # Why a send-back was made: its class and sentence (FR-8). Null on every other move.
+        "reason_class": row.reason_class,
+        "reason": row.reason,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 

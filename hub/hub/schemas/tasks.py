@@ -167,6 +167,10 @@ class TaskUpdate(RequestModel):
     # A send-back's failing pieces: only these are rejected, each with its own reason, and every
     # other awaiting piece of the task is held. Refused with any move but a send-back.
     failing_pieces: Optional[List[FailingPiece]] = Field(default=None, max_length=200)
+    # Why a move to `revision_needed` is made: one of `task_transitions.SEND_BACK_CLASSES`, with
+    # `notes` as its sentence (FR-8). Required of an agent's send-back, refused by name when absent
+    # (FR-9); the operator may give one. Ignored on any other move.
+    reason_class: Optional[str] = Field(default=None, max_length=32)
     # The operator's reason for approving over failing checks (`approval-runs-the-projects-checks`
     # D7). Refused from any agent; ignored unless the move is to `approved`.
     override_checks_reason: Optional[str] = Field(default=None, max_length=2000)
