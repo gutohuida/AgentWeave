@@ -108,6 +108,26 @@ describe('New capability', () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
+  it('shows the refusal for a file the Hub has no row for, naming the path and adoption (F1095)', async () => {
+    answer = {
+      status: 409,
+      body: {
+        detail: {
+          message: `${PATH} already holds a document the Hub has no record of; creating here would replace it. Adopt it (POST /documents/adopt) to track it, or choose another path`,
+          code: 'untracked_file_exists',
+        },
+      },
+    }
+    const { onOpen } = renderList()
+    await userEvent.click(screen.getByTestId('new-capability'))
+    await userEvent.type(screen.getByTestId('new-capability-title'), 'Spec builds')
+    await userEvent.click(screen.getByTestId('new-capability-confirm'))
+    const error = await screen.findByTestId('new-capability-error')
+    expect(error).toHaveTextContent(PATH)
+    expect(error).toHaveTextContent('Adopt it')
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
   it('is listed in Fold into capability once created, with no reload', async () => {
     const { client } = renderList()
     render(

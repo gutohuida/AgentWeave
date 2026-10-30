@@ -2843,6 +2843,25 @@ async def create_document(
         except SpecPathError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    # A document file the Hub has no row for is somebody's work: creating over it would replace it
+    # with an empty scaffold (F1095). A tracked path keeps its `document_exists` answer from
+    # `create_document`; only a file that holds a stored payload and no row is refused here.
+    if (
+        await spec_lifecycle.get_document(session, project_id, path) is None
+        and spec_documents.parse_stored(spec_documents.read_document(workspace, path)) is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"{path} already holds a document the Hub has no record of; creating here "
+                    "would replace it. Adopt it (POST /documents/adopt) to track it, or choose "
+                    "another path"
+                ),
+                "code": "untracked_file_exists",
+            },
+        )
+
     try:
         document = await spec_lifecycle.create_document(
             session, project_id, path, actor=_operator(), title=body.title, kind=body.kind
