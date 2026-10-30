@@ -1023,6 +1023,7 @@ def _operations() -> List[_Operation]:
     from ...mcp_server import (
         JobSessionMode,
         MessageType,
+        SendBackClass,
         SpecKind,
         TaskPriority,
         TaskStatus,
@@ -1128,11 +1129,18 @@ def _operations() -> List[_Operation]:
             tool="update_task",
             args=(
                 "task_id, status=None, notes=None, requirement_ids=None, spec_document=None, "
-                "failing_pieces=None"
+                "failing_pieces=None, reason_class=None"
             ),
             method="PATCH",
             path="/tasks/{task_id}",
-            fields=("status", "notes", "requirement_ids", "spec_document", "failing_pieces"),
+            fields=(
+                "status",
+                "notes",
+                "requirement_ids",
+                "spec_document",
+                "failing_pieces",
+                "reason_class",
+            ),
             required=(),
             text=(
                 f"move status (one of {values(TaskStatus)}), leave notes for whoever looks at "
@@ -1140,7 +1148,9 @@ def _operations() -> List[_Operation]:
                 "(spec_document names which document to resolve them in, when that is "
                 "ambiguous). A send-back names the evidence that fails in failing_pieces "
                 '([{"piece": "FR-3", "reason": "..."}]): only those pieces are rejected, and the '
-                "rest are held for their author to record again. Omit a field to leave it alone. "
+                "rest are held for their author to record again. A move to revision_needed "
+                f"needs reason_class (one of {values(SendBackClass)}) and a sentence in notes "
+                "saying why; it is refused without one. Omit a field to leave it alone. "
                 "Who holds a task, its priority and its description are the operator's."
             ),
         ),

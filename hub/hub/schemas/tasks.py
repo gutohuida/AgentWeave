@@ -167,6 +167,10 @@ class TaskUpdate(RequestModel):
     # A send-back's failing pieces: only these are rejected, each with its own reason, and every
     # other awaiting piece of the task is held. Refused with any move but a send-back.
     failing_pieces: Optional[List[FailingPiece]] = Field(default=None, max_length=200)
+    # Why a move to `revision_needed` is made: one of `task_transitions.SEND_BACK_CLASSES`, with
+    # `notes` as its sentence (FR-8). Required of an agent's send-back, refused by name when absent
+    # (FR-9); the operator may give one. Ignored on any other move.
+    reason_class: Optional[str] = Field(default=None, max_length=32)
     # The operator's reason for approving over failing checks (`approval-runs-the-projects-checks`
     # D7). Refused from any agent; ignored unless the move is to `approved`.
     override_checks_reason: Optional[str] = Field(default=None, max_length=2000)
@@ -421,6 +425,10 @@ class TaskResponse(BaseModel):
     # Who checks it, where its build names a checker (`hand-only-places-on-the-board`): the task's
     # own, else the build's default. Derived per request from the build's people, never stored.
     checker: Optional[str] = Field(default=None, max_length=64)
+    # Whether the builder / checker came from the build's defaults rather than the task's own
+    # (`added-task-people`); the board marks each 'by default'.
+    builder_by_default: bool = False
+    checker_by_default: bool = False
     # The most recent attempt to integrate this task's approved work, or null where none has ever
     # been made (every non-`approved` task, and one whose approval predates this field existing on
     # older rows the migration never touched). The full history stays at

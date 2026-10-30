@@ -79,6 +79,7 @@ from ...task_transition_service import (
 )
 from ...task_transitions import (
     ACTOR_OPERATOR,
+    SEND_BACK_CLASSES,
     STATUS_BLOCKED,
     WITH_REVIEWER_STATUSES,
     Actor,
@@ -252,6 +253,10 @@ async def _attach_requirements(
         checkers = await builds.checkers_by_task(session, build_tasks)
         for response in responses:
             response.checker = checkers.get(response.id)
+        marks = await builds.default_marks_by_task(session, build_tasks)
+        for response in responses:
+            response.builder_by_default = marks.get(response.id, {}).get("builder", False)
+            response.checker_by_default = marks.get(response.id, {}).get("checker", False)
     return responses
 
 
@@ -872,6 +877,12 @@ async def create_task_for_actor(
         spec_document_id=spec_document_id,
         loop_id=body.loop_id,
     )
+    if spec_document_id:
+        # Against a document whose build runs: the task joins the build and takes its people
+        # (`a-task-s-checks-and-merges-use-its-own-work...`, FR-7).
+        from ... import builds
+
+        await builds.join_running_build(session, task)
     session.add(task)
     if body.depends_on:
         # Written in the task's own commit, so a refusal cannot leave the task without its edges.
@@ -1753,6 +1764,69 @@ async def _failing_pieces_for(
     return failing
 
 
+def _send_back_reason(
+    task: Task, body: TaskUpdate, actor: Actor, failing_pieces: Optional[Dict[str, str]]
+) -> Tuple[Optional[str], Optional[str]]:
+    """Why this move sends *task* back: `(reason_class, sentence)`, or `(None, None)` for any other
+    move (FR-8/FR-9). Asked after `_failing_pieces_for`, so the move is already known to be legal and
+    this actor's to make: an impossible move is answered by the map, not by a request for a class.
+
+    The sentence is the verdict's notes, else the failing pieces' own reasons. An agent's send-back
+    without a class from `SEND_BACK_CLASSES`, or with no sentence, is refused naming what is missing
+    and nothing is written. The operator is not refused either: the app's status menu sends a status
+    alone, and the row then reads as no reason recorded.
+    """
+    if not (
+        body.status == "revision_needed"
+        and body.status != task.status
+        and body.status in allowed_targets(task.status, actor.kind)
+    ):
+        return None, None
+    named = (body.reason_class or "").strip() or None
+    classes = ", ".join(SEND_BACK_CLASSES)
+    if named is not None and named not in SEND_BACK_CLASSES:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"{named!r} is not a send-back class. Name why {task.id} goes back as one of: "
+                    f"{classes}."
+                ),
+                "code": "send_back_class_unknown",
+            },
+        )
+    sentence = _verdict_text(body.notes)
+    if not sentence and failing_pieces:
+        sentence = " ".join(reason for reason in failing_pieces.values() if reason) or None
+    if actor.is_operator:
+        return named, sentence
+    if named is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Sending {task.id} back needs a reason class saying why: one of {classes} "
+                    "(reason_class), with a sentence of reason in notes. Nothing was changed; send "
+                    "it back again with both."
+                ),
+                "code": "send_back_needs_a_class",
+                "classes": list(SEND_BACK_CLASSES),
+            },
+        )
+    if not sentence:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Sending {task.id} back as {named} needs a sentence of reason: say in notes "
+                    "what must change."
+                ),
+                "code": "send_back_needs_a_reason",
+            },
+        )
+    return named, sentence
+
+
 async def _run_may_write_notes(
     session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
 ) -> bool:
@@ -1851,6 +1925,8 @@ async def update_task_for_actor(
     # The verdict's failing pieces, resolved and refused before any write
     # (`each-piece-of-evidence-is-judged-on-its-own`).
     failing_pieces = await _failing_pieces_for(session, task, body, actor)
+    # Why it goes back, required of a reviewer (FR-9) and refused before any write.
+    reason_class, send_back_reason = _send_back_reason(task, body, actor, failing_pieces)
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
@@ -1858,6 +1934,7 @@ async def update_task_for_actor(
     withdrawn_reviews: List[Dict[str, str]] = []
     # What an agent's completion found when it waited for the fast checks, or `None`.
     completion_checks: Any = None
+    completion_note: Optional[str] = None
     # **Before the transition, not after it** (finding F70). `_guard_reviewer_is_not_the_author`
     # refuses `-> under_review` while the task still names the agent that completed it, and
     # reassigning to a different reviewer in the same PATCH is the most natural way past it.
@@ -1957,6 +2034,11 @@ async def update_task_for_actor(
             # below), so a wait of up to two minutes never holds the database's write lock. Raises
             # `ChecksFailedError` (409, with the checks' output) when one fails.
             completion_checks = await run_fast_checks_before_completion(session, task, actor)
+            from ...project_checks import ChecksSkipped
+
+            if isinstance(completion_checks, ChecksSkipped):
+                # FR-2: a completion that records no check run says why on its history row.
+                completion_note, completion_checks = completion_checks.note, None
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
         # exception handler turns into 409/403. A refusal cannot leave a half-applied update behind:
         # the assignee written above is *staged*, not committed, and `get_session` closes the session
@@ -1975,6 +2057,9 @@ async def update_task_for_actor(
             failing_pieces=failing_pieces,
             # An assignee the operator wrote in this same PATCH is who holds the rework (F743).
             holder_named="assignee" in body.model_fields_set,
+            note=completion_note,
+            reason_class=reason_class,
+            reason=send_back_reason,
         )
         approval_report = list(getattr(transition, "reported_advisories", None) or [])
         # Every exit from the waiting status drops the text, whichever exit it was — released,
@@ -2306,6 +2391,9 @@ def _transition_view(
         "override_by": row.override_by,
         # The operator action behind a move it made, and its commits (closing as already built).
         "note": row.note,
+        # Why a send-back was made: its class and sentence (FR-8). Null on every other move.
+        "reason_class": row.reason_class,
+        "reason": row.reason,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 

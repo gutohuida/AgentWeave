@@ -212,7 +212,7 @@ def test_a_prerequisite_not_reachable_from_the_base_is_merged_in(repo):
         repo, worktrees.task_branch_name(OTHER), "dep.py", "def dep():\n    return 1\n"
     )
 
-    path = ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
+    path = ensure_task_worktree(repo, TASK, base="main", prerequisites=[(OTHER, prerequisite)])
 
     assert (path / "dep.py").read_text() == "def dep():\n    return 1\n"
     assert (
@@ -242,7 +242,7 @@ def test_a_prerequisite_already_reachable_from_the_base_is_not_merged_twice(repo
     prerequisite = _git(repo, "rev-parse", "HEAD").stdout.strip()
     commits_on_main = _count_commits(repo, "main")
 
-    path = ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
+    path = ensure_task_worktree(repo, TASK, base="main", prerequisites=[(OTHER, prerequisite)])
 
     assert (path / "dep.py").exists()
     assert _count_commits(path, "HEAD") == commits_on_main
@@ -260,7 +260,7 @@ def test_a_conflicting_prerequisite_leaves_no_checkout_and_no_branch(repo):
     _git(repo, "commit", "-q", "-m", "main moves too")
 
     with pytest.raises(worktrees.IsolationUnavailableError) as excinfo:
-        ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
+        ensure_task_worktree(repo, TASK, base="main", prerequisites=[(OTHER, prerequisite)])
 
     message = str(excinfo.value)
     assert prerequisite[:12] in message
@@ -280,7 +280,7 @@ def test_a_prerequisite_commit_missing_from_the_repository_says_so(repo):
     missing = "0" * 40
 
     with pytest.raises(worktrees.IsolationUnavailableError) as excinfo:
-        ensure_task_worktree(repo, TASK, base="main", prerequisites=[missing])
+        ensure_task_worktree(repo, TASK, base="main", prerequisites=[(OTHER, missing)])
 
     message = str(excinfo.value)
     assert missing[:12] in message

@@ -954,7 +954,9 @@ async def test_an_unapproved_evidence_free_prerequisite_contributes_nothing(
         resolved = await task_workspace.resolve_turn_workspace_inputs(
             session, project_id="proj-test", repo_root=repo, task=bound
         )
-    assert resolved.prerequisites == (_rev(repo, worktrees.task_branch_name(PREREQUISITE_TASK)),)
+    assert resolved.prerequisites == (
+        (PREREQUISITE_TASK, _rev(repo, worktrees.task_branch_name(PREREQUISITE_TASK))),
+    )
 
 
 @pytest.mark.asyncio
@@ -1015,7 +1017,7 @@ async def test_a_conflicting_evidence_free_prerequisite_refuses_the_turn_and_lea
             base=resolved.base,
             prerequisites=resolved.prerequisites,
         )
-    assert resolved.prerequisites[0][:8] in str(refusal.value)
+    assert resolved.prerequisites[0][1][:8] in str(refusal.value)
 
     branches = _git(repo, "branch", "--format=%(refname:short)").stdout.split()
     assert worktrees.task_branch_name(BOUND_TASK) not in branches

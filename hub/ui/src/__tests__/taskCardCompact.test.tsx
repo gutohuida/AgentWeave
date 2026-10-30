@@ -145,6 +145,28 @@ describe("a build task's people (hand-only-places-on-the-board)", () => {
     expect(screen.getByTestId('task-level-task-1')).toHaveAttribute('title', 'Built at level reviewed, builder @Developer, checker @QA')
   })
 
+  it("marks the builder and checker 'by default' when the build's own were taken (added-task-people)", () => {
+    render(
+      <TaskCardCompact
+        task={makeTask({ build_id: 'build-1', level: 'reviewed', assignee: 'Developer', builder: 'Developer', checker: 'QA', builder_by_default: true, checker_by_default: true })}
+        onOpen={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('task-checker-task-1')).toHaveTextContent('checks @QA · by default')
+    expect(screen.getByTestId('task-builder-default-task-1')).toHaveTextContent('builds @Developer · by default')
+  })
+
+  it("does not mark a person the task names itself", () => {
+    render(
+      <TaskCardCompact
+        task={makeTask({ build_id: 'build-1', level: 'reviewed', builder: 'Developer', checker: 'QA', builder_by_default: false, checker_by_default: false })}
+        onOpen={vi.fn()}
+      />,
+    )
+    expect(screen.getByTestId('task-checker-task-1')).not.toHaveTextContent('by default')
+    expect(screen.queryByTestId('task-builder-default-task-1')).toBeNull()
+  })
+
   it('names no checker where the build names none', () => {
     render(<TaskCardCompact task={makeTask({ build_id: 'build-1', level: 'fast', builder: 'Developer' })} onOpen={vi.fn()} />)
     expect(screen.queryByTestId('task-checker-task-1')).toBeNull()

@@ -40883,7 +40883,7 @@ Repro: Architect's review turn on `task-a80259e4ab36`. The turn ran in `.agentwe
 
 ## F1083 (B) -- a hand-driven build's builder sees only the document's recommended delivery, and `create_flow` on that document is not refused
 
-**Status:** part (2) fixed 2026-10-29 -- `POST /jobs` refuses a flow or loop on a document with a running build, 409 naming build and driver (`hub/tests/test_one_driver_per_document.py`); part (1), the agent-readable build, is open. Found when the operator built `a-checks-send-back-returns-the-task-s-accepted-evidence` (`spdoc-ed413679f369`) by hand.
+**Status:** part (2) fixed 2026-10-29 -- `POST /jobs` refuses a flow or loop on a document with a running build, 409 naming build and driver (`hub/tests/test_one_driver_per_document.py`); part (1), the agent-readable build, fixed 2026-10-29 (task-799357e3e80e: `read_spec_document` returns the running build as the operator's choice, FR-5); the finding is fixed. Found when the operator built `a-checks-send-back-returns-the-task-s-accepted-evidence` (`spdoc-ed413679f369`) by hand.
 **Source:** drive
 **Theme:** Spec flow x Flows
 **Ready:** yes
@@ -40925,7 +40925,7 @@ Repro: `task-94d59bc7214d` was approved at 17:02. Its integration was `skipped` 
 
 ## F1088 (C) -- a document whose default checker is named `checker` reads on its spec page as "the document names no reviewer"
 
-**Status:** open 2026-10-29 (filed as a second F1085; renumbered F1088). Found by QA2 driving the Build dialog for `the-build-plan-lives-in-the-spec-and-every-task-goes-to-its-people` (task-a85075abe995, `scripts/drive/d1029_build_dialog_browser.py`, artefacts `%TEMP%/drive1029-build-plan-in-spec/211931-dialog/no_build_button.png`).
+**Status:** fixed 2026-10-29 (task-5f4335f3826b; filed as a second F1085, renumbered F1088): the delivery status and the build outcome's `reviewer` resolve through `spec_payload.default_checker` (`hub/tests/test_a_document_names_its_default_reviewer.py`). Opened 2026-10-29. Found by QA2 driving the Build dialog for `the-build-plan-lives-in-the-spec-and-every-task-goes-to-its-people` (task-a85075abe995, `scripts/drive/d1029_build_dialog_browser.py`, artefacts `%TEMP%/drive1029-build-plan-in-spec/211931-dialog/no_build_button.png`).
 **Source:** drive
 **Theme:** Builds
 **Ready:** yes

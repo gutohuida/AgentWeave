@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from . import blocking, flow_advance, traces
 from .db.models import RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
+    SEND_BACK_CLASSES,
     STATUS_BLOCKED,
     Actor,
     allowed_targets,
@@ -88,6 +89,12 @@ class ActorNotPermittedError(TransitionRefusedError):
     """The move is a legal edge, but not for this actor — author/reviewer separation."""
 
     http_status = 403
+
+
+class LiveRunResetRefusedError(TransitionRefusedError):
+    """An `in_progress` task was asked back to `assigned` or `pending` while a run on it executes."""
+
+    http_status = 409
 
 
 class InvalidEntryStatusError(TransitionRefusedError):
@@ -910,7 +917,8 @@ async def run_fast_checks_before_completion(session: AsyncSession, task: Task, a
     database's write lock. Not inside `apply_transition`, which stages and runs inside other
     transactions; not in `decide_move`, which answers only who may move. A move this actor may not
     make is left for `apply_transition` to refuse, so nothing runs for it. Returns what the wait
-    found (`None` where no fast check applies), for the caller to act on once it commits."""
+    found, for the caller to act on once it commits: `ChecksSkipped` where no check ran, whose note
+    the completion's history row carries (FR-2), and `None` where nothing was asked."""
     if actor.is_operator or task.status == "completed":
         return None
     if await completion_refusal(session, task, actor) is not None:
@@ -918,8 +926,8 @@ async def run_fast_checks_before_completion(session: AsyncSession, task: Task, a
     from . import project_checks
 
     outcome = await project_checks.fast_checks_at_completion(session, task, actor.agent)
-    if outcome is None:
-        return None
+    if isinstance(outcome, project_checks.ChecksSkipped):
+        return outcome
     if outcome.failing:
         raise ChecksFailedError(task, outcome)
     # The wait may have been long: what is applied is the task as it stands now.
@@ -942,6 +950,8 @@ async def apply_transition(
     failing_pieces: Optional[Dict[str, str]] = None,
     git_answers: Optional[traces.GitAnswers] = None,
     accepted_on_main: frozenset = frozenset(),
+    reason_class: Optional[str] = None,
+    reason: Optional[str] = None,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
 
@@ -974,6 +984,11 @@ async def apply_transition(
     The caller commits; this function stages the change and the history row together so a refusal
     after a partial write is not possible.
 
+    *reason_class* and *reason* say why a move to `revision_needed` was made (FR-8): one of
+    `SEND_BACK_CLASSES` and a sentence, written on the history row. A class outside the set raises
+    `ValueError`; on any other move both are ignored. Whether a caller must give one is the
+    caller's to ask (a reviewer must, `update_task_for_actor`; the Hub always does).
+
     `origin` defaults to `actor` because that is what almost every caller is, and because a default
     of `runtime` would let a forgotten argument quietly exempt a real transition from the divergence
     check. Only the run→task binding passes `runtime`, and a source scan in
@@ -989,6 +1004,10 @@ async def apply_transition(
     if origin == ORIGIN_JOB and not actor.is_operator:
         raise ValueError("origin 'job' acts as the operator; a run actor cannot carry it")
 
+    if reason_class is not None and reason_class not in SEND_BACK_CLASSES:
+        raise ValueError(
+            f"reason_class must be one of {list(SEND_BACK_CLASSES)}, got {reason_class!r}"
+        )
     from_status = task.status
 
     # D7: restating the current status is a no-op that records nothing. An agent plane retry would
@@ -1003,6 +1022,25 @@ async def apply_transition(
     if verdict.holder is not None:
         # A reviewer taking completed work becomes its holder, in this same move.
         task.assignee = verdict.holder
+
+    # A live run is never reset (`a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-
+    # never-reset`, FR-6). Taking an `in_progress` task back to `assigned` or `pending` while a run
+    # on it is executing hands the work to someone else under the run's feet: the mender did that to
+    # task-799357e3e80e mid-turn on 2026-10-29. Alive means in this process's registry (D3), never a
+    # quiet worktree. Every caller is covered, the operator's too: stop the run first. A run moving
+    # its own task is not blocked by itself.
+    if from_status == "in_progress" and to_status in ("assigned", "pending"):
+        from .run_liveness import live_turn_for_task
+
+        turn = await live_turn_for_task(session, task, acting_run_id=actor.run_id)
+        if turn is not None:
+            started = (
+                f"{turn.started_at:%Y-%m-%d %H:%M} UTC" if turn.started_at else "an unknown time"
+            )
+            raise LiveRunResetRefusedError(
+                f"{task.id} is not reset: {turn.agent}'s run {turn.run_id} (started {started}) is "
+                "executing on it. Stop that run, or wait for it to end, before handing the task back."
+            )
 
     # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
     # author/reviewer guard because it answers the same kind of question — is this actor entitled to
@@ -1183,6 +1221,8 @@ async def apply_transition(
         note=note,
         # The build level that governed this move; none outside a build (slice D, FR-2).
         level=task.level if task.build_id else None,
+        reason_class=reason_class if to_status == "revision_needed" else None,
+        reason=((reason or "").strip()[:2000] or None) if to_status == "revision_needed" else None,
     )
     # Not a column — see the comment where `reported` is built. `TaskResponse` reads this off the
     # object this same call returns; nothing else looks for it, and nothing persists it.

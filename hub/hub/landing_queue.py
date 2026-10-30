@@ -44,6 +44,7 @@ from sqlalchemy.orm import Session
 from . import blocking, project_checks, task_integration
 from .db.engine import async_session_factory
 from .db.models import LandingBatch, Project, Task, TaskCheckRun, TaskLanding
+from .task_transitions import SEND_BACK_MERGE_NEEDED
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -1013,6 +1014,8 @@ async def _run_one_batch(
             by_task[task_id].id,
             batch_id,
             _conflict_report(task_id, paths, earlier, batch_id),
+            SEND_BACK_MERGE_NEEDED,
+            f"Its work conflicts with the main branch in landing batch {batch_id}: merge it again.",
         )
     # A task built on one taken out does not land without it.
     removed = {task_id for task_id, _, _ in chain.conflicts}
@@ -1734,7 +1737,13 @@ async def _narrow(
         await session.commit()
     before = tasks[: culprit - 1]
     report = _failure_report(batch_id, outcome, failing, tasks[culprit - 1], before)
-    await _send_back(landings[culprit - 1].id, batch_id, report)
+    await _send_back(
+        landings[culprit - 1].id,
+        batch_id,
+        report,
+        project_checks.send_back_class([failing]),
+        f"The project's checks failed on its work in landing batch {batch_id}.",
+    )
     after = landings[culprit:]
     # A task after the culprit built on its work waits for it.
     dependents = await blocking.run(
@@ -1819,9 +1828,12 @@ async def _own_accepted_on_main(session, task_id: str) -> frozenset:
     return await own_accepted_commits_on_main(session, task, root, project.main_branch)
 
 
-async def _send_back(landing_id: str, batch_id: str, report: str) -> bool:
+async def _send_back(
+    landing_id: str, batch_id: str, report: str, reason_class: str, reason: str
+) -> bool:
     """The task goes back to its author (approved -> revision_needed, the operator's edge, origin
-    `checks`, as slice L returns failed work), its landing recorded sent back with *report*."""
+    `checks`, as slice L returns failed work), its landing recorded sent back with *report*, its
+    history row with *reason_class* and the sentence *reason* (FR-8/FR-9)."""
     from .run_task_binding import withdraw_review_entries_for
     from .sse import sse_manager
     from .task_transition_service import ORIGIN_CHECKS, TransitionRefusedError, apply_transition
@@ -1857,6 +1869,8 @@ async def _send_back(landing_id: str, batch_id: str, report: str) -> bool:
                     verdict_reason=report,
                     note=f"landing batch {batch_id} sent it back",
                     accepted_on_main=on_main,
+                    reason_class=reason_class,
+                    reason=reason,
                 )
                 task.notes = report
                 await withdraw_review_entries_for(session, task)

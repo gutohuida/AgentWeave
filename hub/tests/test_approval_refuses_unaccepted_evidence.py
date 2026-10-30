@@ -580,12 +580,14 @@ async def test_the_refusal_names_the_requirement_and_both_remedies(
 
 
 @pytest.mark.asyncio
-async def test_the_refusal_names_the_task_that_recorded_the_evidence(
+async def test_an_approved_siblings_waiting_evidence_does_not_refuse_this_task(
     app, auth_headers, builder, tmp_path
 ):
-    """A requirement may be served by more than one task. Once the other task is approved, this
-    task's integration is what would merge its commit (F520: not before) — so the reader needs a
-    route back to the cause."""
+    """A requirement may be served by more than one task. This test used to assert the opposite:
+    that once the other task was approved its waiting evidence refused this task's approval, named
+    as the other task's (F520's "or by tasks already approved"). That clause is retired
+    (`a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset`, FR-1): another
+    task's evidence is never this task's work, approved or not."""
     from hub.db.models import Task
 
     make_repo(tmp_path)
@@ -597,19 +599,13 @@ async def test_the_refusal_names_the_task_that_recorded_the_evidence(
     await record_evidence(app, builder, task_id=other)
     git(tmp_path, "checkout", "-q", "main")
     async with async_session_factory() as session:
-        # Approved with its evidence still awaiting, constructed directly: only an approved
-        # recorder's evidence is this task's to merge, and so this task's to wait on.
         (await session.get(Task, other)).status = "approved"
         await session.commit()
 
     task = await linked_task(app, auth_headers, title="This one")
-    refused = await approve(app, auth_headers, task)
-    assert refused.status_code == 409, refused.text
-    detail = refused.json()["detail"]
-
-    assert detail["unaccepted"][0]["recorded_by_task"] == other
-    assert detail["unaccepted"][0]["recorded_by_another_task"] is True
-    assert other in detail["message"], detail["message"]
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    assert not (tmp_path / "feature.py").exists()
 
 
 @pytest.mark.asyncio

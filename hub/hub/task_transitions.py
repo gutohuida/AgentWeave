@@ -161,6 +161,26 @@ TRANSITIONS: Mapping[str, Mapping[str, FrozenSet[str]]] = {
 #: of them ends up spelled differently and silently never matching.
 STATUS_BLOCKED = "blocked"
 
+#: Why a task was sent back (`a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-
+#: reset` FR-8, D5): every move to `revision_needed` records one of these with a sentence. A reviewer
+#: must name one; the Hub names `broken-check` or `flaky` (or `merge-needed` for a landing conflict,
+#: `evidence-only` for a rejection that reopens approved work) on its own send-backs. Not derived
+#: from the failing pieces: the send-backs that lost their reason named none.
+SEND_BACK_DEFECT = "defect"
+SEND_BACK_REGRESSION = "regression"
+SEND_BACK_BROKEN_CHECK = "broken-check"
+SEND_BACK_MERGE_NEEDED = "merge-needed"
+SEND_BACK_EVIDENCE_ONLY = "evidence-only"
+SEND_BACK_FLAKY = "flaky"
+SEND_BACK_CLASSES: Tuple[str, ...] = (
+    SEND_BACK_DEFECT,
+    SEND_BACK_REGRESSION,
+    SEND_BACK_BROKEN_CHECK,
+    SEND_BACK_MERGE_NEEDED,
+    SEND_BACK_EVIDENCE_ONLY,
+    SEND_BACK_FLAKY,
+)
+
 #: Every status the machine knows. Pinned to the two independent declarations in
 #: `src/agentweave/constants.py` and `hub/hub/schemas/tasks.py` by
 #: `hub/tests/test_task_transitions.py`, so a ninth status cannot be added anywhere without
