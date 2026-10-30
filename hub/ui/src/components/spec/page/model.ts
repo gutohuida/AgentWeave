@@ -73,6 +73,7 @@ export interface SpecDocumentView {
   kind: SpecKind
   phase: SpecPhase
   state: DocState
+  shown: ShownState
   summary: string
   problem: string
   inScope: string[]
@@ -240,8 +241,8 @@ export const JOURNEY: Array<{ key: string; label: string }> = [
   { key: 'done', label: 'Done' },
 ]
 
-export function journeyIndex(state: DocState): number {
-  return { writing: 0, ready: 0, approved: 1, building: 2, archived: 3 }[state]
+export function journeyIndex(state: ShownState): number {
+  return { writing: 0, ready: 0, approved: 1, building: 2, done: 3, archived: 3 }[state]
 }
 
 export const STATE_LABEL: Record<DocState, string> = {
@@ -250,6 +251,18 @@ export const STATE_LABEL: Record<DocState, string> = {
   approved: 'Approved',
   building: 'Building',
   archived: 'Archived',
+}
+
+/** What a document reads as to the operator (F1089): its state, except a built change that has
+ *  nothing open reads `done`. The Hub decides it (`display_phase`); the actions still follow
+ *  `DocState`, because they depend on whether a build is *running*. */
+export type ShownState = DocState | 'done'
+
+export const SHOWN_LABEL: Record<ShownState, string> = { ...STATE_LABEL, done: 'Done' }
+
+export function shownOf(state: DocState, displayPhase?: string | null): ShownState {
+  if (state !== 'approved' && state !== 'building') return state
+  return displayPhase === 'done' || displayPhase === 'building' || displayPhase === 'approved' ? displayPhase : state
 }
 
 // ── Within a document ──────────────────────────────────────────────────
@@ -358,6 +371,7 @@ export interface SpecListEntry {
   kind: SpecKind
   phase: SpecPhase
   state: DocState
+  shown: ShownState
   updatedAt: string
   /** A slice: the roadmap's path and its position in the roadmap's build order. */
   roadmap?: { path: string; order: number } | null
@@ -380,7 +394,7 @@ export interface ListPreferences {
 
 export const DEFAULT_LIST_PREFERENCES: ListPreferences = { query: '', kind: 'all', phase: 'any', buildingOnly: false, order: 'roadmap' }
 
-const PHASE_RANK: Record<DocState, number> = { building: 0, ready: 1, writing: 2, approved: 3, archived: 4 }
+const PHASE_RANK: Record<ShownState, number> = { building: 0, ready: 1, writing: 2, approved: 3, done: 4, archived: 5 }
 
 function matchesPhase(state: DocState, filter: ListPhaseFilter): boolean {
   if (filter === 'any') return true
@@ -420,9 +434,10 @@ export function arrangeList(entries: SpecListEntry[], prefs: ListPreferences): L
         ['Building', ['building']],
         ['Writing', ['ready', 'writing']],
         ['Approved', ['approved']],
+        ['Done', ['done']],
         ['Archived', ['archived']],
-      ] as Array<[string, DocState[]]>) {
-        const inGroup = shown.filter((e) => states.includes(e.state)).sort((a, b) => PHASE_RANK[a.state] - PHASE_RANK[b.state] || byChanged(a, b))
+      ] as Array<[string, ShownState[]]>) {
+        const inGroup = shown.filter((e) => states.includes(e.shown)).sort((a, b) => PHASE_RANK[a.shown] - PHASE_RANK[b.shown] || byChanged(a, b))
         if (inGroup.length) groups.push({ roadmap: null, label, entries: inGroup })
       }
       return groups

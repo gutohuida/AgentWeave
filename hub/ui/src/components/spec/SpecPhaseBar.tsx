@@ -51,7 +51,7 @@ export function SpecPhaseHeader({
         path={path}
         title={document.title}
         kind={document.kind}
-        phase={document.phase}
+        phase={document.display_phase ?? document.phase}
         primary={controls.primary}
         beforePrimary={controls.beforePrimary}
         menu={controls.menu}

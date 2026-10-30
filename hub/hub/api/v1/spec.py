@@ -148,10 +148,12 @@ async def list_specs(
         document.path: document
         for document in await spec_lifecycle.list_documents(session, project_id)
     }
+    shown = await spec_lifecycle.display_phases(session, list(tracked.values()))
     specs = [
         {
             **entry,
             "phase": tracked[entry["path"]].phase if entry["path"] in tracked else None,
+            "display_phase": shown[tracked[entry["path"]].id] if entry["path"] in tracked else None,
             "document_id": tracked[entry["path"]].id if entry["path"] in tracked else None,
         }
         for entry in state.specs
@@ -633,14 +635,23 @@ class FoldRequest(RequestModel):
     criteria: list[FoldCriterionRequest] = Field(default_factory=list, max_length=256)
 
 
-def _document_view(document, steps: Optional[spec_journey.ProjectSteps] = None) -> dict:
-    """The document as the app shows it; `steps` are its project's (built-in when omitted)."""
+def _document_view(
+    document,
+    steps: Optional[spec_journey.ProjectSteps] = None,
+    display_phase: Optional[str] = None,
+) -> dict:
+    """The document as the app shows it; `steps` are its project's (built-in when omitted).
+
+    `display_phase` is what the operator reads (F1089: approved, building or done for a change);
+    computed by `spec_lifecycle.display_phases`, the phase itself when omitted.
+    """
     return {
         "id": document.id,
         "path": document.path,
         "title": document.title,
         "kind": document.kind,
         "phase": document.phase,
+        "display_phase": display_phase or document.phase,
         # What happens to work that ignores this document. Reported everywhere the phase is, because
         # they answer different questions and an operator reading one will assume the other.
         "content_digest": document.content_digest,
@@ -659,7 +670,11 @@ def _document_view(document, steps: Optional[spec_journey.ProjectSteps] = None) 
 
 async def _project_document_view(session: AsyncSession, project_id: str, document) -> dict:
     """The document's view with the journey its project's `spec/journey.json` gives it (FR-9)."""
-    return _document_view(document, await spec_journey.project_steps(session, project_id))
+    return _document_view(
+        document,
+        await spec_journey.project_steps(session, project_id),
+        await spec_lifecycle.display_phase(session, document),
+    )
 
 
 async def _fold_state(session: AsyncSession, document) -> Optional[Dict[str, Any]]:
@@ -776,8 +791,9 @@ async def list_documents(
     # The page's list marks a document with a build running and says how far it has got.
     running = await work_tally.running_progress(session, project_id)
     views = []
+    shown = await spec_lifecycle.display_phases(session, documents)
     for document in documents:
-        view = _document_view(document, steps)
+        view = _document_view(document, steps, shown[document.id])
         if document.id in overridden:
             view["approval_warnings_overridden"] = overridden[document.id]
         if document.id in amended:
@@ -2980,7 +2996,7 @@ async def set_journey(
     await spec_service.rerender_phase(session, workspace, document)
     await session.commit()
     await sse_manager.broadcast(project_id, "spec_updated", {"path": path, "phase": document.phase})
-    return _document_view(document, steps)
+    return _document_view(document, steps, await spec_lifecycle.display_phase(session, document))
 
 
 def _journey_view(steps: spec_journey.ProjectSteps) -> Dict[str, Any]:

@@ -9,10 +9,10 @@ import {
   actionsFor,
   JOURNEY,
   journeyIndex,
-  STATE_LABEL,
+  SHOWN_LABEL,
+  type ShownState,
   type CheckFinding,
   type CheckState,
-  type DocState,
   type SpecAction,
   type SpecDocumentView,
 } from './model'
@@ -121,8 +121,8 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
           <h1 className="aw-sp-title">{doc.title}</h1>
           <div className="aw-sp-meta">
             {/* The phase, not the check: a clean check makes a document ready, still being written. */}
-            <span className="aw-sp-phase" data-state={doc.state === 'ready' ? 'writing' : doc.state} key={doc.state}>
-              {STATE_LABEL[doc.state === 'ready' ? 'writing' : doc.state]}
+            <span className="aw-sp-phase" data-state={doc.state === 'ready' ? 'writing' : doc.shown} key={doc.shown}>
+              {SHOWN_LABEL[doc.state === 'ready' ? 'writing' : doc.shown]}
             </span>
             <span className="aw-sp-meta-fact">{kindLabel(doc.kind)}</span>
             {props.chrome?.badges}
@@ -178,7 +178,7 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
         </div>
       </div>
 
-      <JourneyRibbon state={doc.state} compact={compact} />
+      <JourneyRibbon state={doc.state === 'ready' ? doc.state : doc.shown} compact={compact} />
     </header>
   )
 }
@@ -345,12 +345,12 @@ function SplitButton({ icon, label, title, onClick, menu }: { icon: string; labe
 /** Writing → Approved → Building → Done, as a thread drawn up to where the document is. The red
  *  thread (brand madder) grows to the current stop when the state changes; a building document's
  *  stop pulses. */
-export function JourneyRibbon({ state, compact }: { state: DocState; compact?: boolean }) {
+export function JourneyRibbon({ state, compact }: { state: ShownState; compact?: boolean }) {
   const at = journeyIndex(state)
   const span = JOURNEY.length - 1
   const thread = useThreadDraw()
   return (
-    <ol className="aw-sp-journey" data-compact={compact ? 'true' : 'false'} aria-label={`Journey: ${STATE_LABEL[state]}`} style={{ '--at': at / span } as React.CSSProperties}>
+    <ol className="aw-sp-journey" data-compact={compact ? 'true' : 'false'} aria-label={`Journey: ${SHOWN_LABEL[state]}`} style={{ '--at': at / span } as React.CSSProperties}>
       <span className="aw-sp-journey-track" aria-hidden="true">
         <span className="aw-sp-journey-thread" ref={thread} />
       </span>
@@ -358,12 +358,12 @@ export function JourneyRibbon({ state, compact }: { state: DocState; compact?: b
         <li
           key={stop.key}
           className="aw-sp-journey-stop"
-          data-reached={i < at || (i === at && state === 'archived') ? 'done' : i === at ? 'current' : 'ahead'}
+          data-reached={i < at || (i === at && (state === 'archived' || state === 'done')) ? 'done' : i === at ? 'current' : 'ahead'}
           data-live={i === at && state === 'building' ? 'true' : undefined}
           aria-current={i === at ? 'step' : undefined}
         >
           <span className="aw-sp-journey-knot" aria-hidden="true">
-            {i < at || (i === at && state === 'archived') ? <Icon name="check" size={9} weight={700} /> : null}
+            {i < at || (i === at && (state === 'archived' || state === 'done')) ? <Icon name="check" size={9} weight={700} /> : null}
           </span>
           <span className="aw-sp-journey-label">
             {stop.label}

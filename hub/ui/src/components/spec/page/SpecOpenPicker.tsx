@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { formatAgo } from '@/lib/format'
-import { arrangeList, STATE_LABEL, type ListPreferences, type SpecListEntry } from './model'
+import { arrangeList, SHOWN_LABEL, type ListPreferences, type SpecListEntry } from './model'
 import { SpecDocList } from './SpecDocList'
 import '@/styles/spec-page.css'
 
@@ -155,8 +155,8 @@ function QuickCard({
         {open ? <span className="aw-sp-open-card-here">Open</span> : null}
       </span>
       <span className="aw-sp-open-card-meta">
-        <span className="aw-sp-list-dot" data-state={e.state} aria-hidden="true" />
-        {STATE_LABEL[e.state]} · {formatAgo(e.updatedAt, now)}
+        <span className="aw-sp-list-dot" data-state={e.shown} aria-hidden="true" />
+        {SHOWN_LABEL[e.shown]} · {formatAgo(e.updatedAt, now)}
         {progress ? (
           <span className="aw-sp-open-card-progress">
             {progress.done} of {progress.total}
