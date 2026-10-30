@@ -25,6 +25,7 @@ const SSE_EVENT_TYPES = [
   'message_read',
   'task_created',
   'task_updated',
+  'build_stopped',
   'task_integration_retried',
   'queue_entry_abandoned',
   'question_asked',
@@ -484,6 +485,12 @@ function applyContextReading(queryClient: QueryClient, pid: string | undefined, 
   return true
 }
 
+function invalidateSpecShownPhase(inv: (f?: InvalidateFilters) => void, pid: string | undefined): void {
+  inv({ queryKey: ['project', pid, 'spec'] })
+  inv({ queryKey: ['project', pid, 'specs'] })
+  inv({ queryKey: ['project', pid, 'specDocuments'] })
+}
+
 /** Apply one stream event to *queryClient*'s cache. Called once per event per tab (see
  *  `acquireInvalidator`), however many components subscribe. */
 function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
@@ -523,8 +530,15 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // Approving or rejecting a task releases its checkout (F250).
           inv({ queryKey: ['project', pid, 'worktrees'] })
           inv({ queryKey: ['project', pid, 'worktree-conflicts'] })
+          // A document reads Building or Done from its tasks (`display_phase`), so a task moving
+          // changes the phase every spec view shows; `spec_updated` is not sent for it (F1089).
+          invalidateSpecShownPhase(inv, pid)
           break
         }
+        case 'build_stopped':
+          // Stopping a build changes the shown phase with no task event and no `spec_updated`.
+          invalidateSpecShownPhase(inv, pid)
+          break
         case 'queue_entry_abandoned': {
           // The Hub stopped trying to deliver something. The queue card is where that shows, and
           // the prefix covers both that agent's entries and its status without naming either.
