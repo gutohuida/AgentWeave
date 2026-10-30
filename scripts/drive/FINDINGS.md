@@ -41051,3 +41051,33 @@ Passing hand-built work back and forth (build, review, send back, fix, re-review
 **Tier:** 0
 
 The Hub requires `reason_class` for a send-back and `hub/hub/mcp_server.py:451` declares it, but QA2's tool schema did not list it; passing it anyway worked. **Expected:** the schema an agent receives lists it.
+
+## F1102 (B) -- a builders list naming only the document's checker stalls with nobody building
+
+**Status:** open 2026-10-30. Filed from QA2's `task-c87303ac6161`; older than F1092 by the diff, not re-run on the earlier commit.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+Driven on :8010 at f9d69aa: delivery `{agent: X, checker: X}`, roster X and Other, build `{builders: [X], builder: X, checker: X}`. The task stays pending with no assignee, and the board says only "loop queue is stalled". X is withheld as a judge (`scheduler.py:1859-1861`) and the pool is then narrowed to the list (`:1836`), leaving nobody. **Expected:** the task is built, or the operator is told why not, naming the agent.
+
+## F1103 (C) -- a dialog's checker does not release the document's checker to build
+
+**Status:** open 2026-10-30.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+Roster X and Y, document checker Y, dialog builder = checker = X. After F1092's fix X builds and the review stalls while Y is free: Y stays withheld as the document's judge though the build's record replaced it. The dialog warns first. **Expected:** Y builds and X checks, because the build's record decides who checks.
+
+## F1104 (D) -- New capability's refusal names an API route, and a directory at the path gets no clean refusal
+
+**Status:** open 2026-10-30. Found by QA reviewing F1095; the directory case was not investigated.
+**Source:** found by driving
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+The dialog tells the operator to "Adopt it (POST /documents/adopt)" rather than how to adopt in the app. With a directory at the path, QA's test client failed with `PermissionError`. **Expected:** the message says what to do in the app, and a directory gets the same 409.
