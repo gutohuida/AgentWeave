@@ -40935,10 +40935,10 @@ Repro: approve a change document whose delivery is `{"mode": "flow", "agent": "D
 
 ## F1089 (B) -- a spec whose build finished reads `approved`, the same as one never built, so the operator cannot tell which specs are done
 
-**Status:** open 2026-10-29. Operator report ("When a spec finished building it goes back to approved. We don't know which spec finished building").
+**Status:** fixed 2026-10-29 (task-5776b7d94b0c: the Hub computes `display_phase`, approved/building/done, in the document reads; `hub/tests/test_a_spec_shows_building_and_done.py`). Operator report ("When a spec finished building it goes back to approved. We don't know which spec finished building").
 **Source:** operator
 **Theme:** Builds
-**Ready:** no (needs the operator's call on where "built" shows and whether it is a phase)
+**Ready:** yes
 **Tier:** 1
 
 Repro: `spdoc-a7d41f10be14`'s build `build-c68972449bdc` ended `finished` at 2026-10-29 21:49. The document reads `phase: approved, step: build`, exactly as it did before Build was pressed. The finished state lives only in `build.last_ended` (and the header's `BuildStatusStrip`, `useSpecPhaseControls.tsx:598`, which only shows once the document is open). Nothing in the UI reads `last_ended`. The spec list and search show phase alone, and no notice says a build finished. To find the specs that are done, you have to open each approved one. **Expected (to be decided):** every place a document is listed says built / building / not built, and a build finishing raises a notice that names the document and what is left before it can be folded (see F1090). **Test:** a Hub test where a build finishes, then the document listing carries the build state `finished`; plus a UI test that the list shows it.
@@ -40954,3 +40954,24 @@ Repro: `spdoc-a7d41f10be14`'s build `build-c68972449bdc` ended `finished` at 202
 Repro: after the build finished, two tasks outside the build's plan stayed bound to the document. One was `task-0e655f8ddc47`, filed by QA during review for F1088, with no assignee. The other was `task-5f4335f3826b`, Architect's replacement for it, assigned to Developer and pending. Folding refuses `fold_tasks_open` (`spec_service.py:881`) while any task is open. Neither task is in the build (`build_id: null`), so nothing starts it and the spec stays unfoldable until someone notices. Rejecting the duplicate also fails: `PATCH /tasks/task-0e655f8ddc47 {status: rejected}` answers 409 "From 'pending' the available transitions are: assigned, in_progress". **Expected:** a pending task can be withdrawn as a duplicate. The fold refusal and the finished-build notice name each open task and whether a build will ever start it. **Test:** reject a pending task -> 200, and the document's open-task list no longer names it.
 
 **Also (2026-10-29, operator: "the agents are stopping because there is no flow"):** hand-driven work does not move on by itself. `task-5f4335f3826b` was completed again at 22:51 after a send-back, and sat with no check until Architect messaged QA. When it was sent back at 22:48, Developer did not start until messaged. A sent-back task can only move to `in_progress`, so nobody but its holder can put it back in the queue. When it was approved, its dependent `task-5776b7d94b0c` stayed `pending` until moved by hand. Each step of a two-task fix needed the Architect to relay it. **Expected (to be decided):** a hand-placed task with a named checker goes to that checker when completed, and a dependent pending task with an assignee is assigned once its prerequisites are approved. Or the operator is told plainly which task waits on them, and for what.
+## F1091 (C) -- a landing's send-back that is refused leaves the task approved with its landing recorded sent back
+
+**Status:** open 2026-10-30. Found by DeveloperOpus reading the landing code (task-e4a49edf95a0); the branch has not been seen to fire and no gate is known to refuse this edge.
+**Source:** code reading
+**Theme:** Landing
+**Ready:** yes
+**Tier:** 0
+
+`_send_back` (`hub/hub/landing_queue.py:1850`) sets the landing to `SENT_BACK` before calling `apply_transition`, and its `except TransitionRefusedError` (`:1878`) only logs, then commits (`:1880`). If the approved -> revision_needed transition is refused, the task stays `approved`, its work is not on main, and nothing is left to land it. The work cannot land this way, so this is a stuck task and not bad code on main. **Expected:** a refused send-back leaves a state that someone is told about and can act on, not an approved task that never lands. **Test:** make `apply_transition` raise `TransitionRefusedError` in `_send_back`; the task must not read as approved with a sent-back landing and no signal.
+
+## F1092 (B) -- a build's default builder is not honoured in a flow: any free agent takes a task that names no builder
+
+**Area:** Flows & review. Driven 2026-10-30 on :8010 at 4dba06e (`scripts/drive/d1030_own_work_replay.py`). A flow built with `builder: Builder`, `checker: Checker`, no per-task people and an idle agent `Other` on the roster: `Other` built "Add the report" while Builder was busy. This is what the real build-7450d5263aed did (default DeveloperOpus; Developer and Architect each took a task). The Build dialog shows a default builder, so the operator reads it as a choice that will be kept.
+**Cause, read:** the flow's pool narrows only by `build.builders` (`hub/hub/scheduler.py:1836`); the default builder is stored apart from that list and the pool never reads it. A task naming a builder is held for that builder (slice 1's drive passes 24/24), and a task added mid-build is assigned to the default, so the plan's own unnamed tasks are the ones left open to anybody.
+**Default checker held:** every review in the drive went to Checker.
+**Status:** open 2026-10-30.
+
+## F1093 (C) -- Run now on a build past its window answers a bare 500 "Failed to fire job" although the stop worked
+
+**Area:** Jobs & loops. Driven 2026-10-30 on :8010 at 4dba06e: a flow build whose `window_end` has passed; `POST /jobs/{id}/run` answered `500 {"detail": "Failed to fire job"}`, while the build correctly stopped with "the build's window closed at ...; extend it to resume" and `build_stopped` was emitted. The route's message is in `hub/hub/api/v1/jobs.py`; which of its branches answered was not traced. Expected: an answer saying the build stopped and why.
+**Status:** open 2026-10-30.

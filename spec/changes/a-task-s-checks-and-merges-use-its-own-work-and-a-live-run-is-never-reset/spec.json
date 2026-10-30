@@ -175,6 +175,45 @@
     ]
   },
   "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-10-30T05:55:45.026058+00:00",
+        "id": "build-7450d5263aed",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-10-29T23:19:00.516093+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "added-task-people": {
+            "builder": null,
+            "checker": null
+          },
+          "live-run-guard": {
+            "builder": null,
+            "checker": null
+          },
+          "own-work-everywhere": {
+            "builder": null,
+            "checker": null
+          },
+          "send-back-reason": {
+            "builder": null,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
     "phase": "approved",
     "size": "large",
     "step": "build"
