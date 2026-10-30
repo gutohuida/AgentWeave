@@ -244,6 +244,95 @@ async def test_a_flow_gives_a_task_to_its_builder_outside_the_list(app, auth_hea
 
 
 # ---------------------------------------------------------------------------------------------
+# F1092: the build's default builder, stored apart from `builders`
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_flow_gives_an_unnamed_task_only_to_the_default_builder(
+    app, auth_headers, bind_runner
+):
+    """As build-7450d5263aed was built: default builder, empty `builders`, nobody on the tasks. The
+    job's own agent dev and the idle other are free and neither takes anything; opus takes one task
+    at a time, and while opus is busy the work waits."""
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}, {"key": "t2"}]))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="opus")
+    tasks = await _tasks()
+    assert (tasks["t1"].builder, tasks["t1"].assignee) == (None, None)
+
+    free = await _decide()
+
+    assert [(agent, review) for _, agent, review in _picks(free)] == [("opus", False)]
+    assert _picks(free)[0][0] in {tasks["t1"].id, tasks["t2"].id}
+
+    await _run_headers("run-opus-busy", "opus")
+
+    busy = await _decide()
+
+    assert _picks(busy) == [], busy
+
+
+@pytest.mark.asyncio
+async def test_a_default_builder_who_is_not_open_holds_the_work(app, auth_headers, bind_runner):
+    """Nobody is quietly substituted for a default that was archived since: the task says who."""
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}]))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="opus")
+    archived = await app.post(f"/api/v1/projects/{P}/agents/opus/archive", headers=auth_headers)
+    assert archived.status_code in (200, 204), archived.text
+
+    decision = await _decide()
+
+    assert _picks(decision) == []
+    assert "opus is not an open agent" in str(decision.unstaffed), decision
+
+
+@pytest.mark.asyncio
+async def test_a_task_naming_its_builder_still_goes_to_it_over_the_default(
+    app, auth_headers, bind_runner
+):
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1", "builder": "other"}]))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="opus")
+    t1 = (await _tasks())["t1"]
+    await _clear_assignee(t1.id)
+
+    assert _picks(await _decide()) == [(t1.id, "other", False)]
+
+
+@pytest.mark.asyncio
+async def test_a_filled_builders_list_still_narrows_the_pool_beside_a_default(
+    app, auth_headers, bind_runner
+):
+    """The list is the wider choice and stands as it did: both of its people may build, and the
+    default outside it gets nothing it was not named for."""
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}, {"key": "t2"}]))
+    await _build(
+        app,
+        auth_headers,
+        driver="flow",
+        level="reviewed",
+        builder="opus",
+        builders=["dev", "other"],
+    )
+
+    assert sorted(agent for _, agent, _ in _picks(await _decide())) == ["dev", "other"]
+
+
+@pytest.mark.asyncio
+async def test_a_build_with_no_default_and_no_list_leaves_any_free_agent(
+    app, auth_headers, bind_runner
+):
+    await _roster(app, auth_headers, bind_runner, "dev", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}, {"key": "t2"}]))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="")
+
+    assert len({agent for _, agent, _ in _picks(await _decide())}) == 2
+
+
+# ---------------------------------------------------------------------------------------------
 # ac-builder-not-open (flow-gives-task-to-its-builder)
 # ---------------------------------------------------------------------------------------------
 

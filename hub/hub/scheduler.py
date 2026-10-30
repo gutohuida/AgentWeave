@@ -2383,6 +2383,13 @@ async def decide_firing(
     build = await facts.build_of_loop(loop)
     if build is not None and build.builders and default_agent not in build.builders:
         default_withheld = True
+    # The build's default builder, kept apart from `builders` in its people (F1092). A filled list
+    # is the wider choice and stands; with none, the default is who every unnamed task is held for.
+    build_default = (
+        (build.people.get("builder") or None)
+        if build is not None and not build.builders and isinstance(build.people, dict)
+        else None
+    )
     # Agents that hold no task's work (F425): the dispatch refuses a read-only agent's work turn,
     # so staffing one would stage a step that cannot start. Narrows only fresh work below -- the
     # pool and the job's own default -- never the reviewer ladder, because reviewing is what a
@@ -2658,15 +2665,16 @@ async def decide_firing(
                         )
                     )
                     continue
-            elif task.build_id and task.builder:
+            elif (task.build_id and task.builder) or build_default:
                 # **A build's task goes to its own builder, and to nobody else**
                 # (`flow-gives-task-to-its-builder`). Before the default and the pool, which are
                 # for work nobody was named for: the builder need not be among the build's
                 # builders, and is not withheld for being named to check other work (F767). Reached
                 # where the build gave the task to nobody -- its builder was not an open agent then
                 # -- or its holder was cleared since. A builder who is not an open agent holds the
-                # task, saying so, rather than letting the pool substitute somebody.
-                agent = task.builder
+                # task, saying so, rather than letting the pool substitute somebody. A task naming
+                # nobody is the build's default builder's on the same terms (F1092).
+                agent = (task.builder if task.build_id else None) or build_default
                 record = next(
                     (r for r in await facts.roster(loop.project_id) if r.name == agent), None
                 )
