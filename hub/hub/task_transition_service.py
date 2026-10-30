@@ -916,7 +916,8 @@ async def run_fast_checks_before_completion(session: AsyncSession, task: Task, a
     database's write lock. Not inside `apply_transition`, which stages and runs inside other
     transactions; not in `decide_move`, which answers only who may move. A move this actor may not
     make is left for `apply_transition` to refuse, so nothing runs for it. Returns what the wait
-    found (`None` where no fast check applies), for the caller to act on once it commits."""
+    found, for the caller to act on once it commits: `ChecksSkipped` where no check ran, whose note
+    the completion's history row carries (FR-2), and `None` where nothing was asked."""
     if actor.is_operator or task.status == "completed":
         return None
     if await completion_refusal(session, task, actor) is not None:
@@ -924,8 +925,8 @@ async def run_fast_checks_before_completion(session: AsyncSession, task: Task, a
     from . import project_checks
 
     outcome = await project_checks.fast_checks_at_completion(session, task, actor.agent)
-    if outcome is None:
-        return None
+    if isinstance(outcome, project_checks.ChecksSkipped):
+        return outcome
     if outcome.failing:
         raise ChecksFailedError(task, outcome)
     # The wait may have been long: what is applied is the task as it stands now.

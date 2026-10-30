@@ -620,15 +620,14 @@ async def test_a_branch_tip_target_is_not_marked_as_evidence_named(
 
 
 @pytest.mark.asyncio
-async def test_a_commit_another_task_recorded_is_attributed_to_it(
+async def test_a_commit_another_task_recorded_is_not_this_tasks_to_refuse_on(
     app, auth_headers, builder, tmp_path
 ):
-    """2.2b / 3.3b — built for real rather than by patching the flag.
-
-    The population is what is in doubt, not the boolean. `_targets` reaches evidence through
-    `TaskRequirementLink` (`task_integration.py:244`), so a requirement served by two tasks puts one
-    task's footprint into the other's targets — and, once the other task is approved (F520: not
-    before), this task's approval is what would merge it.
+    """2.2b / 3.3b, built for real. This test used to assert that an approved sibling's conflicting
+    commit, recorded against a shared requirement, refused this task's approval and was attributed
+    to the sibling (F520's "or by tasks already approved"). That clause is retired
+    (`a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset`, FR-1): another
+    task's commit is never this task's to merge, so it is not this task's to refuse on either.
     """
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
@@ -652,21 +651,14 @@ async def test_a_commit_another_task_recorded_is_attributed_to_it(
     git(tmp_path, "add", "shared.txt")
     git(tmp_path, "commit", "-q", "-m", "the operator's own change")
     async with async_session_factory() as session:
-        # Approved with its commit still unmerged, constructed directly: only an approved
-        # recorder's evidence is this task's to merge (F520), and so this task's to refuse on.
+        # Approved with its commit still unmerged, constructed directly.
         (await session.get(Task, other)).status = "approved"
         await session.commit()
 
     mine = await linked_task(app, auth_headers, title="My task")
-    refused = await approve(app, auth_headers, mine)
-    assert refused.status_code == 409, refused.text
-    body = refused.json()["detail"]
-    entry = body["unmergeable"][0]
-    assert entry["recorded_by_task"] == other
-    assert entry["recorded_by_another_task"] is True
-    assert other in body["message"], body["message"]
-    # Named, not decided: the refusal does not tell the reader whom to approach.
-    assert "not this task's" in body["message"], body["message"]
+    approved = await approve(app, auth_headers, mine)
+    assert approved.status_code == 200, approved.text
+    assert judged not in git(tmp_path, "rev-list", "main").stdout.split()
 
 
 @pytest.mark.asyncio

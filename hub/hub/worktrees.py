@@ -853,8 +853,13 @@ def unresolved_merge_paths(worktree: Path) -> List[str]:
     return sorted({p for p in [*unmerged, *marked] if p})
 
 
-def _merge_prerequisites(worktree: Path, task_id: str, prerequisites: Tuple[str, ...]) -> None:
-    """Bring each prerequisite commit not already reachable from *worktree*'s HEAD into it.
+def _merge_prerequisites(
+    worktree: Path, task_id: str, prerequisites: Tuple[Tuple[str, str], ...]
+) -> None:
+    """Bring each `(prerequisite task, commit)` not already reachable from *worktree*'s HEAD into it.
+
+    The merge commit names the commit and the prerequisite task that produced it (`a-task-s-checks-
+    and-merges-use-its-own-work-...`, FR-4), as the catch-up's does.
 
     Raises `IsolationUnavailableError` on the first one that cannot be brought in. The two ways
     that happens are told apart deliberately (design D1, corrected in R3): a commit that
@@ -862,14 +867,14 @@ def _merge_prerequisites(worktree: Path, task_id: str, prerequisites: Tuple[str,
     from the repository asks them to restore a deleted ref. A single message covering both would
     send them looking for the wrong thing.
     """
-    for sha in prerequisites:
+    for prerequisite_id, sha in prerequisites:
         present = _run_git(
             worktree, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", check=False
         )
         if present.returncode != 0:
             raise IsolationUnavailableError(
-                f"the work {task_id} depends on cannot be brought in: commit {sha[:12]} is "
-                "missing from this repository. It was recorded as a prerequisite's accepted "
+                f"the work {task_id} depends on cannot be brought in: commit {sha[:12]} of "
+                f"{prerequisite_id} is missing from this repository. It was recorded as a prerequisite's accepted "
                 "evidence, so the branch that carried it has probably been deleted."
             )
 
@@ -893,7 +898,7 @@ def _merge_prerequisites(worktree: Path, task_id: str, prerequisites: Tuple[str,
             "merge",
             "--no-ff",
             "-m",
-            f"Bring in prerequisite work {sha[:12]}",
+            f"Bring in prerequisite work {sha[:12]} ({prerequisite_id})",
             sha,
             check=False,
         )
@@ -908,7 +913,7 @@ def _merge_prerequisites(worktree: Path, task_id: str, prerequisites: Tuple[str,
             )
             raise IsolationUnavailableError(
                 f"the work {task_id} depends on {reason}: merging prerequisite "
-                f"commit {sha[:12]} failed. {detail}"
+                f"commit {sha[:12]} of {prerequisite_id} failed. {detail}"
             )
 
 
@@ -1188,7 +1193,7 @@ def carry_turn_work_to_task(
     start_head: str,
     task_id: str,
     base: str,
-    prerequisites: Sequence[str] = (),
+    prerequisites: Sequence[Tuple[str, str]] = (),
     approved: Sequence[Tuple[str, str]] = (),
 ) -> Optional[str]:
     """Cherry-pick the commits a turn made in an agent's own *worktree* onto *task_id*'s branch.
@@ -1283,7 +1288,7 @@ def ensure_task_worktree(
     repo_root: Path,
     task_id: str,
     base: str,
-    prerequisites: Sequence[str] = (),
+    prerequisites: Sequence[Tuple[str, str]] = (),
     approved: Sequence[Tuple[str, str]] = (),
 ) -> Path:
     """Provision *task_id*'s isolated checkout at *base*, creating it if absent. Idempotent.
@@ -1546,7 +1551,7 @@ def resolve_turn_workspace(
     *,
     task_id: Optional[str] = None,
     base: Optional[str] = None,
-    prerequisites: Sequence[str] = (),
+    prerequisites: Sequence[Tuple[str, str]] = (),
     approved: Sequence[Tuple[str, str]] = (),
     catch_up_to: Optional[str] = None,
 ) -> ResolvedWorkspace:

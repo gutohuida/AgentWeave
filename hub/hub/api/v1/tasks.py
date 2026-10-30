@@ -1858,6 +1858,7 @@ async def update_task_for_actor(
     withdrawn_reviews: List[Dict[str, str]] = []
     # What an agent's completion found when it waited for the fast checks, or `None`.
     completion_checks: Any = None
+    completion_note: Optional[str] = None
     # **Before the transition, not after it** (finding F70). `_guard_reviewer_is_not_the_author`
     # refuses `-> under_review` while the task still names the agent that completed it, and
     # reassigning to a different reviewer in the same PATCH is the most natural way past it.
@@ -1957,6 +1958,11 @@ async def update_task_for_actor(
             # below), so a wait of up to two minutes never holds the database's write lock. Raises
             # `ChecksFailedError` (409, with the checks' output) when one fails.
             completion_checks = await run_fast_checks_before_completion(session, task, actor)
+            from ...project_checks import ChecksSkipped
+
+            if isinstance(completion_checks, ChecksSkipped):
+                # FR-2: a completion that records no check run says why on its history row.
+                completion_note, completion_checks = completion_checks.note, None
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
         # exception handler turns into 409/403. A refusal cannot leave a half-applied update behind:
         # the assignee written above is *staged*, not committed, and `get_session` closes the session
@@ -1975,6 +1981,7 @@ async def update_task_for_actor(
             failing_pieces=failing_pieces,
             # An assignee the operator wrote in this same PATCH is who holds the rework (F743).
             holder_named="assignee" in body.model_fields_set,
+            note=completion_note,
         )
         approval_report = list(getattr(transition, "reported_advisories", None) or [])
         # Every exit from the waiting status drops the text, whichever exit it was — released,
