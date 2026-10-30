@@ -1829,13 +1829,17 @@ async def _agents_a_loop_may_staff(
     facts = facts or FiringFacts(session)
     free = await _agents_that_are_free(session, loop.project_id, facts)
     withheld = await _agents_withheld_from_fresh_work(session, loop, facts)
-    pool = [name for name in free if name not in withheld]
-    # A build's flow hands fresh work only to its builders (`the-flow-staffs-the-builds-people`):
-    # T3 of 2026-10-27 went to the free Architect because this pool knew no list of builders.
     build = await facts.build_of_loop(loop)
-    if build is not None and build.builders:
-        pool = [name for name in pool if name in build.builders]
-    return pool
+    return [name for name in free if _pool_admits(name, withheld, build)]
+
+
+def _pool_admits(name: str, withheld: "Set[str]", build: Any) -> bool:
+    """Whether a flow's pool may hold *name* when free: not a judge withheld from fresh work, and
+    among a build's builders where it lists any (`the-flow-staffs-the-builds-people`): T3 of
+    2026-10-27 went to the free Architect because this pool knew no list of builders."""
+    if name in withheld:
+        return False
+    return build is None or not build.builders or name in build.builders
 
 
 async def _agents_withheld_from_fresh_work(
@@ -1859,6 +1863,39 @@ async def _agents_withheld_from_fresh_work(
     if not any(record.has_runner and record.name not in judges for record in roster):
         return set()
     return judges
+
+
+async def _default_builder_must_check(
+    task: Task,
+    build: Any,
+    default_builder: str,
+    withheld_judges: "Set[str]",
+    facts: "FiringFacts",
+) -> bool:
+    """Whether *task*'s review needs the build's default builder, while the pool could build it.
+
+    The build's record of who checks the task decides, so a dialog choice counts as a document's
+    does; a task the record does not list falls back to the judges its document names. The default
+    steps aside only for somebody the pool would take by its own rule, judged against the roster so
+    a busy builder is waited for. With nobody, it builds and the review's stall says why (F767's
+    reason: a flow with no builder is not a flow)."""
+    from .builds import checker_of
+
+    recorded = checker_of(build, task)
+    needed = (
+        default_builder in withheld_judges if recorded is None else (recorded[0] == default_builder)
+    )
+    if not needed:
+        return False
+    for record in await facts.roster(build.project_id):
+        if (
+            record.has_runner
+            and record.name != default_builder
+            and _pool_admits(record.name, withheld_judges, build)
+            and not await facts.is_read_only(build.project_id, record.name)
+        ):
+            return True
+    return False
 
 
 #: Design D2/D3's rung-3 prefix (task 2.3, R8) -- "reviewer", not the pre-REV "nobody is free.",
@@ -2377,12 +2414,20 @@ async def decide_firing(
     free = await _agents_a_loop_may_staff(session, loop, facts)
     # The default agent is a judge the flow names (F864): the pool withholds judges, and so must
     # the arm that offers the job's own agent first, or one agent builds what it must then review.
-    default_withheld = default_agent in await _agents_withheld_from_fresh_work(session, loop, facts)
+    withheld_judges = await _agents_withheld_from_fresh_work(session, loop, facts)
+    default_withheld = default_agent in withheld_judges
     # A build's flow gives fresh work to its builders only, its job's own agent included (slice D):
     # an operator who chose another agent for the flow did not add it to the builders.
     build = await facts.build_of_loop(loop)
     if build is not None and build.builders and default_agent not in build.builders:
         default_withheld = True
+    # The build's default builder, kept apart from `builders` in its people (F1092). A filled list
+    # is the wider choice and stands; with none, the default is who every unnamed task is held for.
+    build_default = (
+        (build.people.get("builder") or None)
+        if build is not None and not build.builders and isinstance(build.people, dict)
+        else None
+    )
     # Agents that hold no task's work (F425): the dispatch refuses a read-only agent's work turn,
     # so staffing one would stage a step that cannot start. Narrows only fresh work below -- the
     # pool and the job's own default -- never the reviewer ladder, because reviewing is what a
@@ -2589,6 +2634,17 @@ async def decide_firing(
             if holder is not None:
                 in_flight.append((task.id, holder))
                 continue
+            # The default builder this task's review needs: nobody reviews their own work, so it
+            # builds nothing here and the paths below find somebody else (F1092, F767, F864).
+            judging_default = (
+                build_default
+                if build_default
+                and not task.assignee
+                and await _default_builder_must_check(
+                    task, build, build_default, withheld_judges, facts
+                )
+                else None
+            )
             if task.assignee:
                 # Already staffed; this firing is *resuming* it, not staffing it. Overwriting the
                 # assignee with the job's default here is the defect group 5's spec review found:
@@ -2658,15 +2714,16 @@ async def decide_firing(
                         )
                     )
                     continue
-            elif task.build_id and task.builder:
+            elif (task.build_id and task.builder) or (build_default and not judging_default):
                 # **A build's task goes to its own builder, and to nobody else**
                 # (`flow-gives-task-to-its-builder`). Before the default and the pool, which are
                 # for work nobody was named for: the builder need not be among the build's
                 # builders, and is not withheld for being named to check other work (F767). Reached
                 # where the build gave the task to nobody -- its builder was not an open agent then
                 # -- or its holder was cleared since. A builder who is not an open agent holds the
-                # task, saying so, rather than letting the pool substitute somebody.
-                agent = task.builder
+                # task, saying so, rather than letting the pool substitute somebody. A task naming
+                # nobody is the build's default builder's on the same terms (F1092).
+                agent = (task.builder if task.build_id else None) or build_default
                 record = next(
                     (r for r in await facts.roster(loop.project_id) if r.name == agent), None
                 )
@@ -2711,6 +2768,7 @@ async def decide_firing(
                 and default_agent not in running
                 and default_agent not in held_agents
                 and default_agent not in taken
+                and default_agent != judging_default
             ):
                 # D2's default, still first in line for the first unstaffed task.
                 #
@@ -2726,7 +2784,12 @@ async def decide_firing(
                 default_taken = True
             else:
                 candidate = next(
-                    (name for name in free if name not in taken and name not in read_only), None
+                    (
+                        name
+                        for name in free
+                        if name not in taken and name not in read_only and name != judging_default
+                    ),
+                    None,
                 )
                 if candidate is None:
                     # Width is bounded by available agents (design D5) and this is that bound
