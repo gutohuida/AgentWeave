@@ -41000,3 +41000,54 @@ Repro: after the build finished, two tasks outside the build's plan stayed bound
 **Tier:** 1
 
 Repro: write `{"title": "KEEP ME"}` to `spec/capabilities/handmade/spec.json` with no document row, then `POST /project/documents` with that path, title `Handmade`, kind `capability`. It answers 201 and the file now holds the empty scaffold; `KEEP ME` is gone (run against a test client on 2026-10-30). The content really is lost: `create_document` (`hub/hub/spec_lifecycle.py:238`) checks only for an existing row, the Hub keeps no copy of a file it never read, and only git can bring it back, if the file was ever committed. New capability reaches this from the UI, because its path comes from the title: a title that folds to a loose capability's folder overwrites it with no warning. **Expected:** a create over a file the Hub has no record of is refused and the file is untouched, with adopting (`hub/hub/spec_adoption.py:297`) named as the way to take it in. **Mind when fixing:** today's behaviour has callers. `TestReindexRoute` and its neighbours in `hub/tests/test_spec_index_writer.py` write a file and POST over it expecting 201 (`:311` onward), and `scripts/migrate_openspec_corpus.py:335` POSTs then PUTs and treats any 409 as "already imported", so a refusal there must not read as success. A refusal needs its own code, distinct from `document_exists`. **Test:** the repro above must answer 409 and leave the file byte-identical.
+
+
+## F1097 (B) -- a reviewer's verdict cannot be recorded while the task's check is running
+
+**Status:** open 2026-10-30.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+From `completed` the only move is `under_review`, and that is refused until the check run ends. On 2026-10-30 QA had a send-back for `task-57c72c07d046` and QA2 for `task-d031e6178f2c`; neither could record it (`chk-0a8eb5183544`, `chk-2562c9d59f73`), and Architect's `revision_needed` was refused too. The board read `completed` for work known to be going back, and the check kept spending on a commit already rejected. QA2's send-back landed only at 17:01, after a 42-minute run. **Expected:** a verdict can be recorded at once, and it ends or ignores the check on that commit.
+
+## F1098 (C) -- one delegation naming two tasks lands the second on the first task's branch
+
+**Status:** open 2026-10-30.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+Architect told Developer to build `task-57c72c07d046` then `task-b714a67a5b5c` in one message. The run was bound to the first, so the Hub refused completing or claiming the second (403 "already working"), and F1094's commits went on F1095's branch. F1094's own branch is empty, so a check on it proves nothing and its review depends on the other task landing. The refusal came only after the work was done. **Expected:** the run is told at the start that it can work one task, or the second task gets its own run.
+
+## F1099 (B) -- a task added mid-build can wedge when the default builder is also the checker
+
+**Status:** open 2026-10-30. Read, not reproduced (DeveloperOpus, during F1092).
+**Source:** found by reading code
+**Theme:** Flows & review
+**Ready:** no: reproduce first
+**Tier:** 0
+
+`join_running_build` (`hub/hub/builds.py:557,568`) gives an added task the default as its own builder and assignee. With builder = checker = X, X would build it and could not review it, the shape F1092's fix closed for planned tasks. Older than F1092. **Test:** add a task to a running build with builder = checker = X and another agent free; it must reach a review by X.
+
+## F1100 (C) -- the hop budget holds a reviewer's hand-off with no way for the sender to release it
+
+**Status:** open 2026-10-30.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+Passing hand-built work back and forth (build, review, send back, fix, re-review) reached the budget of 6 at F1092's re-review: `msg-01b6329d525e` was recorded and held, and only the operator can continue it. One fix round spends the whole budget, because nothing passes hand-built work along except messages. **Expected:** handing a task to its next role does not count as a chain of conversation.
+
+## F1101 (C) -- `reason_class` is missing from the `update_task` schema an agent is given
+
+**Status:** open 2026-10-30. Reported by QA2; not checked independently.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+The Hub requires `reason_class` for a send-back and `hub/hub/mcp_server.py:451` declares it, but QA2's tool schema did not list it; passing it anyway worked. **Expected:** the schema an agent receives lists it.
