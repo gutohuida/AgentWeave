@@ -133,6 +133,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                   <SpecBuildsSection
                     builds={props.builds}
                     canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
+                    changeOnly={doc.kind !== 'change-spec'}
                     now={props.now}
                     flash={nav.flash}
                     onStartBuild={props.onStartBuild}
@@ -263,6 +264,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
                 <SpecBuildsSection
                   builds={props.builds}
                   canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
+                    changeOnly={doc.kind !== 'change-spec'}
                   now={props.now}
                   flash={nav.flash}
                   onStartBuild={props.onStartBuild}

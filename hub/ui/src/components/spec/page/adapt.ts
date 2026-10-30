@@ -107,6 +107,7 @@ export function countTasks(tasks: Task[]): Record<TaskStatus, number> {
 export function stateOf(phase: SpecDocumentRecord['phase'], building: boolean, checkedClean: boolean): DocState {
   if (phase === 'exploring') return checkedClean ? 'ready' : 'writing'
   if (phase === 'archived') return 'archived'
+  if (phase === 'current') return 'current'
   return building ? 'building' : 'approved'
 }
 
@@ -220,7 +221,7 @@ export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): 
     const phase = (record?.phase ?? entry.phase ?? (entry.path.startsWith('spec/capabilities/') ? 'current' : 'approved')) as SpecPhase
     const archived = phase === 'archived' || entry.path.startsWith(ARCHIVE_PREFIX)
     const building = !!record?.build
-    const state: DocState = archived ? 'archived' : phase === 'exploring' ? 'writing' : building ? 'building' : 'approved'
+    const state: DocState = archived ? 'archived' : phase === 'exploring' ? 'writing' : phase === 'current' ? 'current' : building ? 'building' : 'approved'
     const parentIsRoadmap = !!entry.parent && kindByPath.get(entry.parent) === 'roadmap'
     return {
       id: record?.id ?? entry.document_id ?? entry.path,

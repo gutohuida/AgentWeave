@@ -10,7 +10,7 @@ export type SpecPhase = 'exploring' | 'proposed' | 'approved' | 'archived' | 'cu
 
 /** Where a document is on its way, as the operator thinks of it. `writing` and `ready` are both
  *  being written; `ready` is a writing document whose last check found nothing blocking. */
-export type DocState = 'writing' | 'ready' | 'approved' | 'building' | 'archived'
+export type DocState = 'writing' | 'ready' | 'approved' | 'building' | 'archived' | 'current'
 
 export type EvidenceState = 'verified' | 'awaiting' | 'in_progress' | 'held' | 'not_started' | 'rejected'
 
@@ -228,7 +228,9 @@ export function actionsFor(state: DocState, kind: SpecKind = 'change-spec', fold
     case 'building':
       return { primary: 'open-build', secondary: [] }
     case 'archived':
-      // The Hub has no transition out of archived: nothing is offered.
+    case 'current':
+      // The Hub has no transition out of archived, and a capability is what the product does now:
+      // it has no journey and nothing to start. Nothing is offered.
       return { primary: null, secondary: [] }
   }
 }
@@ -242,7 +244,7 @@ export const JOURNEY: Array<{ key: string; label: string }> = [
 ]
 
 export function journeyIndex(state: ShownState): number {
-  return { writing: 0, ready: 0, approved: 1, building: 2, done: 3, archived: 3 }[state]
+  return { writing: 0, ready: 0, approved: 1, building: 2, done: 3, archived: 3, current: 0 }[state]
 }
 
 export const STATE_LABEL: Record<DocState, string> = {
@@ -251,6 +253,7 @@ export const STATE_LABEL: Record<DocState, string> = {
   approved: 'Approved',
   building: 'Building',
   archived: 'Archived',
+  current: 'Current',
 }
 
 /** What a document reads as to the operator (F1089): its state, except a built change that has
@@ -394,12 +397,12 @@ export interface ListPreferences {
 
 export const DEFAULT_LIST_PREFERENCES: ListPreferences = { query: '', kind: 'all', phase: 'any', buildingOnly: false, order: 'roadmap' }
 
-const PHASE_RANK: Record<ShownState, number> = { building: 0, ready: 1, writing: 2, approved: 3, done: 4, archived: 5 }
+const PHASE_RANK: Record<ShownState, number> = { building: 0, ready: 1, writing: 2, approved: 3, done: 4, archived: 5, current: 6 }
 
 function matchesPhase(state: DocState, filter: ListPhaseFilter): boolean {
   if (filter === 'any') return true
   if (filter === 'writing') return state === 'writing' || state === 'ready'
-  if (filter === 'approved') return state === 'approved' || state === 'building'
+  if (filter === 'approved') return state === 'approved' || state === 'building' || state === 'current'
   return state === 'archived'
 }
 
@@ -435,6 +438,7 @@ export function arrangeList(entries: SpecListEntry[], prefs: ListPreferences): L
         ['Writing', ['ready', 'writing']],
         ['Approved', ['approved']],
         ['Done', ['done']],
+        ['Current', ['current']],
         ['Archived', ['archived']],
       ] as Array<[string, ShownState[]]>) {
         const inGroup = shown.filter((e) => states.includes(e.shown)).sort((a, b) => PHASE_RANK[a.shown] - PHASE_RANK[b.shown] || byChanged(a, b))

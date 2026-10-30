@@ -30,6 +30,7 @@ import '@/styles/spec-page.css'
 export function SpecBuildsSection({
   builds,
   canBuild,
+  changeOnly = false,
   now,
   flash,
   onStartBuild,
@@ -40,6 +41,8 @@ export function SpecBuildsSection({
   builds: BuildView[]
   /** Whether a build may be started: the document is approved. */
   canBuild: boolean
+  /** Only a change document is built: any other kind is told so instead of "once approved". */
+  changeOnly?: boolean
   now: Date
   flash: string | null
   onStartBuild: () => void
@@ -74,7 +77,7 @@ export function SpecBuildsSection({
       ) : (
         <div className="aw-sp-empty aw-sp-empty-builds">
           <Icon name="hammer" size={18} />
-          <span>{canBuild ? 'Not built yet. A build chooses who hands out the work, how it is checked, and who does it.' : 'A build can start once the document is approved.'}</span>
+          <span>{canBuild ? 'Not built yet. A build chooses who hands out the work, how it is checked, and who does it.' : changeOnly ? 'Only a change document is built.' : 'A build can start once the document is approved.'}</span>
         </div>
       )}
     </Section>

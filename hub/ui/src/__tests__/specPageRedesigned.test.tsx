@@ -570,6 +570,17 @@ describe('the operator decisions stay reachable', () => {
     expect(within(menu).getByRole('menuitem', { name: /Retire/ })).toBeInTheDocument()
   })
 
+  it('reads a current capability as Current, with no change journey and no build to start (F1094)', async () => {
+    renderPage(CAP)
+    await ready()
+    expect(header().querySelector('.aw-sp-phase')).toHaveTextContent('Current')
+    expect(header().querySelector('.aw-sp-journey')).toBeNull()
+    expect(screen.queryByText(/A build can start once the document is approved/)).toBeNull()
+    expect(screen.getByText('Only a change document is built.')).toBeInTheDocument()
+    // The list agrees: the capability's row is not filed under Approved.
+    expect(screen.getAllByTitle(/A capability — Current/).length).toBeGreaterThan(0)
+  })
+
   it('starts a flow from the More menu on an approved change with none', async () => {
     hub.phase = 'approved'
     const user = userEvent.setup()
