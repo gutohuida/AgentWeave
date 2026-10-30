@@ -40932,3 +40932,13 @@ Repro: `task-94d59bc7214d` was approved at 17:02. Its integration was `skipped` 
 **Tier:** 0
 
 Repro: approve a change document whose delivery is `{"mode": "flow", "agent": "Developer", "builder": "Developer", "checker": "QA"}` and open it on the spec page. The approval bar's `ReviewerLine` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:93`) reads "Reviewed by any free agent: the document names no reviewer." Yet the Build dialog for the same document pre-selects QA as the default checker, and the build sends t1's check to QA. The delivery status only looks at the old field: `hub/hub/api/v1/spec.py:295` sets `status["reviewer"]` from `delivery.reviewer` alone. The build outcome's `reviewer` key does the same (`spec.py:3563`, `:3634`). The change brought in `delivery.checker` (FR-1 `one-checker`) without updating these readers. **Expected:** the status names the default checker as `spec_payload.default_checker(payload)` resolves it (checker, else tester, else reviewer), with the same not-an-open-agent warning. **Test:** a document with `delivery.checker: "QA"` and no `reviewer`; the delivery status read carries `reviewer` (or `checker`) `QA` with state `ok`.
+
+## F1089 (C) -- a landing's send-back that is refused leaves the task approved with its landing recorded sent back
+
+**Status:** open 2026-10-30. Found by DeveloperOpus reading the landing code (task-e4a49edf95a0); the branch has not been seen to fire and no gate is known to refuse this edge.
+**Source:** code reading
+**Theme:** Landing
+**Ready:** yes
+**Tier:** 0
+
+`_send_back` (`hub/hub/landing_queue.py:1850`) sets the landing to `SENT_BACK` before calling `apply_transition`, and its `except TransitionRefusedError` (`:1878`) only logs, then commits (`:1880`). If the approved -> revision_needed transition is refused, the task stays `approved`, its work is not on main, and nothing is left to land it. The work cannot land this way, so this is a stuck task and not bad code on main. **Expected:** a refused send-back leaves a state that someone is told about and can act on, not an approved task that never lands. **Test:** make `apply_transition` raise `TransitionRefusedError` in `_send_back`; the task must not read as approved with a sent-back landing and no signal.
