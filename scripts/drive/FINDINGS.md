@@ -40942,3 +40942,13 @@ Repro: approve a change document whose delivery is `{"mode": "flow", "agent": "D
 **Tier:** 1
 
 Repro: `spdoc-a7d41f10be14`'s build `build-c68972449bdc` ended `finished` at 2026-10-29 21:49. The document reads `phase: approved, step: build`, exactly as it did before Build was pressed. The finished state lives only in `build.last_ended` (and the header's `BuildStatusStrip`, `useSpecPhaseControls.tsx:598`, which only shows once the document is open). Nothing in the UI reads `last_ended`. The spec list and search show phase alone, and no notice says a build finished. To find the specs that are done, you have to open each approved one. **Expected (to be decided):** every place a document is listed says built / building / not built, and a build finishing raises a notice that names the document and what is left before it can be folded (see F1090). **Test:** a Hub test where a build finishes, then the document listing carries the build state `finished`; plus a UI test that the list shows it.
+
+## F1091 (C) -- a landing's send-back that is refused leaves the task approved with its landing recorded sent back
+
+**Status:** open 2026-10-30. Found by DeveloperOpus reading the landing code (task-e4a49edf95a0); the branch has not been seen to fire and no gate is known to refuse this edge.
+**Source:** code reading
+**Theme:** Landing
+**Ready:** yes
+**Tier:** 0
+
+`_send_back` (`hub/hub/landing_queue.py:1850`) sets the landing to `SENT_BACK` before calling `apply_transition`, and its `except TransitionRefusedError` (`:1878`) only logs, then commits (`:1880`). If the approved -> revision_needed transition is refused, the task stays `approved`, its work is not on main, and nothing is left to land it. The work cannot land this way, so this is a stuck task and not bad code on main. **Expected:** a refused send-back leaves a state that someone is told about and can act on, not an approved task that never lands. **Test:** make `apply_transition` raise `TransitionRefusedError` in `_send_back`; the task must not read as approved with a sent-back landing and no signal.
