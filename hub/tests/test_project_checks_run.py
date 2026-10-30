@@ -100,6 +100,24 @@ def test_a_check_past_its_timeout_has_its_process_tree_ended(tmp_path):
     assert project_checks.failed(result)
 
 
+def test_a_check_past_its_timeout_names_what_was_still_running(tmp_path):
+    """A timeout says which processes were alive when it ended them, the grandchild included."""
+    hang = {
+        "name": "hang",
+        "command": (
+            f'{PY} -c "import subprocess,sys,time; '
+            "subprocess.Popen([sys.executable,'-c','import time; time.sleep(121)']); "
+            'time.sleep(120)"'
+        ),
+        "timeout_seconds": 3,
+    }
+    result = project_checks.run_one(hang, tmp_path)
+    assert result["timed_out"]
+    named = result["output_tail"].split("[still running when it was ended]\n", 1)
+    assert len(named) == 2, result["output_tail"]
+    assert "time.sleep(120)" in named[1] and "time.sleep(121)" in named[1], named[1]
+
+
 def test_no_hub_configuration_reaches_a_check(tmp_path, monkeypatch):
     monkeypatch.setenv("AW_RUN_TOKEN", "aw_run_secret-token-value")
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///C:/hub/agentweave.db")
