@@ -40975,3 +40975,8 @@ Repro: after the build finished, two tasks outside the build's plan stayed bound
 
 **Area:** Jobs & loops. Driven 2026-10-30 on :8010 at 4dba06e: a flow build whose `window_end` has passed; `POST /jobs/{id}/run` answered `500 {"detail": "Failed to fire job"}`, while the build correctly stopped with "the build's window closed at ...; extend it to resume" and `build_stopped` was emitted. The route's message is in `hub/hub/api/v1/jobs.py`; which of its branches answered was not traced. Expected: an answer saying the build stopped and why.
 **Status:** open 2026-10-30.
+
+## F1096 (B) -- a completion with uncommitted work checks the older commit, and nothing checks the commit made after it
+
+**Area:** Worktrees & integration. Seen 2026-10-30 on task-bf5ebb75161c. DeveloperOpus reports moving the task to completed with changes uncommitted, and HEAD still at 95bc0b1 straight after, although `update_task`'s description says uncommitted changes are committed to the task branch first. Check run chk-48a8b37428a3 targeted 95bc0b1 and passed at 14:22. The tip c0b79c3, committed after the completion and holding the real fix, got no run, and the task stayed `completed` as if checked. FR-2 of spdoc-ed50fbb03efe reads "that completion's newest branch commit", which 95bc0b1 literally was. Not established: why this turn's completion did not commit the worktree (the doc may be wrong, or this path may skip it). The landing batch still checks the merged result, so this is a late catch, not a hole to main.
+**Status:** open 2026-10-30.
