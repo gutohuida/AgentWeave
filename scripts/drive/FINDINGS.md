@@ -40982,7 +40982,7 @@ Repro: after the build finished, two tasks outside the build's plan stayed bound
 **Status:** open 2026-10-30.
 
 ## F1094 (C) -- a capability's header reads `Approved` with a change's stepper, though its phase is `current`
-**Status:** Open. Found driving New capability (task-bf5ebb75161c) on 2026-10-30; true of every capability, not only a new one.
+**Status:** fixed 2026-10-30 (task-b714a67a5b5c, commit c592dbe: `current` is its own state in `adapt.ts`/`model.ts`, so the pill reads Current, the ribbon is not drawn and Builds says only a change is built; `specPageRedesigned.test.tsx`). Found driving New capability (task-bf5ebb75161c) on 2026-10-30; true of every capability, not only a new one.
 **Source:** found by driving
 **Theme:** Spec documents
 **Ready:** yes
