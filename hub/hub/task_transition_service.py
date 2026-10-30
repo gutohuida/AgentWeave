@@ -90,6 +90,12 @@ class ActorNotPermittedError(TransitionRefusedError):
     http_status = 403
 
 
+class LiveRunResetRefusedError(TransitionRefusedError):
+    """An `in_progress` task was asked back to `assigned` or `pending` while a run on it executes."""
+
+    http_status = 409
+
+
 class InvalidEntryStatusError(TransitionRefusedError):
     """A task was created in a status that is not an entry point."""
 
@@ -1003,6 +1009,25 @@ async def apply_transition(
     if verdict.holder is not None:
         # A reviewer taking completed work becomes its holder, in this same move.
         task.assignee = verdict.holder
+
+    # A live run is never reset (`a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-
+    # never-reset`, FR-6). Taking an `in_progress` task back to `assigned` or `pending` while a run
+    # on it is executing hands the work to someone else under the run's feet: the mender did that to
+    # task-799357e3e80e mid-turn on 2026-10-29. Alive means in this process's registry (D3), never a
+    # quiet worktree. Every caller is covered, the operator's too: stop the run first. A run moving
+    # its own task is not blocked by itself.
+    if from_status == "in_progress" and to_status in ("assigned", "pending"):
+        from .run_liveness import live_turn_for_task
+
+        turn = await live_turn_for_task(session, task, acting_run_id=actor.run_id)
+        if turn is not None:
+            started = (
+                f"{turn.started_at:%Y-%m-%d %H:%M} UTC" if turn.started_at else "an unknown time"
+            )
+            raise LiveRunResetRefusedError(
+                f"{task.id} is not reset: {turn.agent}'s run {turn.run_id} (started {started}) is "
+                "executing on it. Stop that run, or wait for it to end, before handing the task back."
+            )
 
     # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
     # author/reviewer guard because it answers the same kind of question — is this actor entitled to

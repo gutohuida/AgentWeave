@@ -815,6 +815,7 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
     # minutes was reported. The registry holds a run exactly while this process executes it.
     live = live_run_ids()
     here = instance_identity.get()
+    executing_tasks = {run.task_id for run in running if run.task_id and run.id in live}
     await _end_dead_run_stalls_that_recovered(db, live)
     await _end_stuck_task_stalls_that_moved(db)
     for run in running:
@@ -877,6 +878,25 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
         # attended rather than stalled (slice D): nothing is wrong, and the mender has nothing to do.
         if await _build_waits(db, loop.id, now):
             continue
+        key = stall_key("no_progress", loop.id)
+        # A run executing on one of the loop's tasks is progress, however long it has been quiet
+        # (`a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset`, FR-5): an
+        # hour-long turn moves no status and starts no run, and reporting it sent the mender to
+        # reset live work. Alive means in this process's registry, the test `dead_run` uses above.
+        if (
+            executing_tasks
+            and (
+                await db.execute(
+                    select(func.count())
+                    .select_from(Task)
+                    .where(Task.loop_id == loop.id, Task.id.in_(sorted(executing_tasks)))
+                )
+            ).scalar_one()
+        ):
+            existing = await open_stall(db, loop.project_id, key)
+            if existing is not None:
+                await end(db, existing, "resolved", "A run is executing on one of its tasks.")
+            continue
         last_run = (
             await db.execute(
                 select(func.max(Run.started_at)).where(Run.project_id == loop.project_id)
@@ -891,7 +911,6 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
         ).scalar_one()
         moments = [m for m in (_aware(last_run), _aware(last_move), _aware(loop.created_at)) if m]
         last = max(moments) if moments else None
-        key = stall_key("no_progress", loop.id)
         if last is not None and last > now - window:
             existing = await open_stall(db, loop.project_id, key)
             if existing is not None:

@@ -31,6 +31,7 @@ waiting for. So the entry's presence is the answer and its `isalive()` is not co
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Dict, List, Optional, Set
 
 from sqlalchemy import select
@@ -66,6 +67,7 @@ class LiveTurn:
 
     run_id: str
     agent: str
+    started_at: Optional[datetime] = None
 
 
 @dataclass
@@ -162,5 +164,5 @@ async def live_turn_for_task(
         .all()
     )
     for run in rows:
-        return LiveTurn(run_id=run.id, agent=run.agent or "an agent")
+        return LiveTurn(run_id=run.id, agent=run.agent or "an agent", started_at=run.started_at)
     return None
