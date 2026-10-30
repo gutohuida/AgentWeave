@@ -92,6 +92,7 @@ export function BuildDialog({
   const capInvalid = capValue !== undefined && !(Number.isFinite(capValue) && capValue > 0)
   const leadMissing = driver === 'lead' && !lead
   const agentMissing = flowAgentShown && agent === '' && builders.length === 0
+  const sameDefault = builder !== '' && builder === checker
 
   function confirm() {
     const noFlow = flowAgentShown && agent === NO_FLOW
@@ -338,7 +339,7 @@ export function BuildDialog({
 
           <div>
             <span className={label} style={{ color: 'var(--text-3)' }}>
-              Builders {builders.length ? '' : '(none chosen: any free agent)'}
+              Builders {builders.length ? '' : !builder ? '(none chosen: any free agent)' : sameDefault ? '(none chosen)' : `(none chosen: @${builder} builds)`}
             </span>
             {people('build-builders', builders, setBuilders)}
             {why('builders', 'build-reason-builders')}
@@ -357,6 +358,12 @@ export function BuildDialog({
             </span>
             {personSelect('build-checker', checker, setChecker, 'Any free agent but the builder')}
             {why(reasons.checker ? 'checker' : 'reviewer', 'build-reason-checker')}
+            {sameDefault && !builders.length ? (
+              <p className="mt-1" style={{ color: 'var(--amber)' }} data-testid="build-same-person">
+                @{builder} is both the default builder and the default checker, and cannot check its
+                own work: someone else must build, or the review stalls.
+              </p>
+            ) : null}
           </div>
 
           {taskKeys.length ? (

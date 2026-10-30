@@ -244,6 +244,223 @@ async def test_a_flow_gives_a_task_to_its_builder_outside_the_list(app, auth_hea
 
 
 # ---------------------------------------------------------------------------------------------
+# F1092: the build's default builder, stored apart from `builders`
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_flow_gives_an_unnamed_task_only_to_the_default_builder(
+    app, auth_headers, bind_runner
+):
+    """As build-7450d5263aed was built: default builder, empty `builders`, nobody on the tasks. The
+    job's own agent dev and the idle other are free and neither takes anything; opus takes one task
+    at a time, and while opus is busy the work waits."""
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}, {"key": "t2"}]))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="opus")
+    tasks = await _tasks()
+    assert (tasks["t1"].builder, tasks["t1"].assignee) == (None, None)
+
+    free = await _decide()
+
+    assert [(agent, review) for _, agent, review in _picks(free)] == [("opus", False)]
+    assert _picks(free)[0][0] in {tasks["t1"].id, tasks["t2"].id}
+
+    await _run_headers("run-opus-busy", "opus")
+
+    busy = await _decide()
+
+    assert _picks(busy) == [], busy
+
+
+@pytest.mark.asyncio
+async def test_a_default_builder_who_is_not_open_holds_the_work(app, auth_headers, bind_runner):
+    """Nobody is quietly substituted for a default that was archived since: the task says who."""
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}]))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="opus")
+    archived = await app.post(f"/api/v1/projects/{P}/agents/opus/archive", headers=auth_headers)
+    assert archived.status_code in (200, 204), archived.text
+
+    decision = await _decide()
+
+    assert _picks(decision) == []
+    assert "opus is not an open agent" in str(decision.unstaffed), decision
+
+
+@pytest.mark.asyncio
+async def test_a_task_naming_its_builder_still_goes_to_it_over_the_default(
+    app, auth_headers, bind_runner
+):
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1", "builder": "other"}]))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="opus")
+    t1 = (await _tasks())["t1"]
+    await _clear_assignee(t1.id)
+
+    assert _picks(await _decide()) == [(t1.id, "other", False)]
+
+
+@pytest.mark.asyncio
+async def test_a_filled_builders_list_still_narrows_the_pool_beside_a_default(
+    app, auth_headers, bind_runner
+):
+    """The list is the wider choice and stands as it did: both of its people may build, and the
+    default outside it gets nothing it was not named for."""
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}, {"key": "t2"}]))
+    await _build(
+        app,
+        auth_headers,
+        driver="flow",
+        level="reviewed",
+        builder="opus",
+        builders=["dev", "other"],
+    )
+
+    assert sorted(agent for _, agent, _ in _picks(await _decide())) == ["dev", "other"]
+
+
+@pytest.mark.asyncio
+async def test_a_build_with_no_default_and_no_list_leaves_any_free_agent(
+    app, auth_headers, bind_runner
+):
+    await _roster(app, auth_headers, bind_runner, "dev", "other", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}, {"key": "t2"}]))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="")
+
+    assert len({agent for _, agent, _ in _picks(await _decide())}) == 2
+
+
+@pytest.mark.parametrize(
+    ("delivery", "choices", "builder", "checker"),
+    [
+        pytest.param({"checker": "dev"}, {}, "opus", "dev", id="document-checker"),
+        pytest.param({"reviewer": "dev"}, {}, "opus", "dev", id="document-reviewer-F864"),
+        pytest.param({}, {"builder": "opus", "checker": "opus"}, "dev", "opus", id="dialog-choice"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_default_builder_who_must_check_leaves_the_build_to_another(
+    app,
+    auth_headers,
+    bind_runner,
+    bind_project_workspace,
+    tmp_path,
+    reviewable,
+    delivery,
+    choices,
+    builder,
+    checker,
+):
+    """QA2's wedge: the default built, could then never review its own work, and the task stopped.
+    Another free agent builds and the default checks, through to the review being staffed."""
+    await bind_project_workspace(tmp_path)
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], **delivery))
+    await _build(app, auth_headers, driver="flow", level="reviewed", **choices)
+    t1 = (await _tasks())["t1"]
+
+    built = await _decide()
+
+    assert [agent for _, agent, _ in _picks(built)] == [builder], built
+
+    await _fire()
+    await _work(t1.id, builder)
+    checked = await _decide()
+
+    assert _picks(checked) == [(t1.id, checker, True)], checked
+
+
+@pytest.mark.asyncio
+async def test_a_default_builder_checking_one_task_still_builds_the_others(
+    app, auth_headers, bind_runner
+):
+    """Held back per task: t2 is checked by opus, so somebody else builds t2 and opus builds t1."""
+    await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
+    await _approved(
+        app,
+        auth_headers,
+        _document([{"key": "t1"}, {"key": "t2", "checker": "opus"}], checker="qa"),
+    )
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="opus")
+    tasks = await _tasks()
+
+    picks = {task: agent for task, agent, _ in _picks(await _decide())}
+
+    assert picks[tasks["t1"].id] == "opus"
+    assert picks[tasks["t2"].id] != "opus"
+
+
+@pytest.mark.asyncio
+async def test_the_default_builds_when_the_only_other_agent_is_read_only(
+    app, auth_headers, bind_runner, reviewable
+):
+    """QA2's shape (a): holding the default back left the task pending with nobody to staff it. The
+    default builds, and the review's stall says why."""
+    await app.post(
+        f"/api/v1/projects/{P}/session/sync",
+        json={
+            "data": {
+                "agents": {
+                    "dev": {"runner": "claude"},
+                    "reader": {"runner": "claude", "read_only": True},
+                }
+            }
+        },
+        headers=auth_headers,
+    )
+    for name in ("dev", "reader"):
+        await bind_runner(name, cli="claude")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], checker="dev"))
+    await _build(app, auth_headers, driver="flow", level="reviewed")
+    t1 = (await _tasks())["t1"]
+
+    assert _picks(await _decide()) == [(t1.id, "dev", False)]
+
+    await _fire()
+    await _work(t1.id, "dev")
+    stalled = await _decide()
+
+    assert _picks(stalled) == []
+    assert "'dev' as its reviewer" in str(stalled.unstaffed), stalled
+
+
+@pytest.mark.asyncio
+async def test_the_default_builds_when_the_only_other_agent_is_withheld_as_a_judge(
+    app, auth_headers, bind_runner, bind_project_workspace, reviewable, tmp_path
+):
+    """QA2's shape (b): the document names qa to check and the dialog chose dev for both. The pool
+    still withholds qa by its own rule, so dev builds and the review's stall says why."""
+    await bind_project_workspace(tmp_path)
+    await _roster(app, auth_headers, bind_runner, "dev", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], checker="qa"))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="dev", checker="dev")
+    t1 = (await _tasks())["t1"]
+
+    assert _picks(await _decide()) == [(t1.id, "dev", False)]
+
+    await _fire()
+    await _work(t1.id, "dev")
+    stalled = await _decide()
+
+    assert _picks(stalled) == []
+    assert "'dev' as its reviewer" in str(stalled.unstaffed), stalled
+
+
+@pytest.mark.asyncio
+async def test_a_lone_agent_who_builds_and_checks_is_still_given_the_work(
+    app, auth_headers, bind_runner
+):
+    """Nobody else could build, so the default keeps it rather than the flow going silent."""
+    await _roster(app, auth_headers, bind_runner, "dev")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], checker="dev"))
+    await _build(app, auth_headers, driver="flow", level="reviewed")
+
+    assert [agent for _, agent, _ in _picks(await _decide())] == ["dev"]
+
+
+# ---------------------------------------------------------------------------------------------
 # ac-builder-not-open (flow-gives-task-to-its-builder)
 # ---------------------------------------------------------------------------------------------
 
