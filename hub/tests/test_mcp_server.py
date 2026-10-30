@@ -203,9 +203,11 @@ def test_update_task_forwards_notes_so_a_rejection_is_legible_on_the_task_itself
         "revision_needed",
         notes="Scope creep in the same commit: quantize() "
         "logic looks wrong and needs to be split out before this can be reviewed.",
+        reason_class="defect",
     )
     assert _body(calls[0]) == {
         "status": "revision_needed",
+        "reason_class": "defect",
         "notes": "Scope creep in the same commit: quantize() logic looks wrong and needs to be "
         "split out before this can be reviewed.",
     }

@@ -850,6 +850,22 @@ def own_failure(results: Optional[Sequence[Dict[str, Any]]]) -> bool:
     return any(failed(result) and not preexisting(result) for result in results or [])
 
 
+def send_back_class(results: Optional[Sequence[Dict[str, Any]]]) -> str:
+    """Why the Hub sends work back for these check *results* (FR-9): `flaky` when every failure that
+    is the task's passed its confirming re-run (it still counts as the task's: a flaky test in a
+    file the task changes, FR-4), else `broken-check`."""
+    from .task_transitions import SEND_BACK_BROKEN_CHECK, SEND_BACK_FLAKY
+
+    own = [r for r in results or [] if failed(r) and not preexisting(r)]
+    confirmed = [r.get("confirmed") for r in own]
+    if own and all(
+        isinstance(c, dict) and c.get("exit_code") == 0 and not c.get("timed_out")
+        for c in confirmed
+    ):
+        return SEND_BACK_FLAKY
+    return SEND_BACK_BROKEN_CHECK
+
+
 #: The two kinds of failure that are not the task's (`a-red-main-does-not-hold-the-night`).
 FAILS_ON_MAIN = "fails on main"
 FLAKY = "flaky"
@@ -2107,6 +2123,8 @@ async def return_failed_work(run_id: str) -> bool:
                     verdict_reason=report,
                     note=f"the project's checks failed on check run {run.id}",
                     accepted_on_main=on_main,
+                    reason_class=send_back_class(run.results),
+                    reason=f"The project's checks failed on check run {run.id}.",
                 )
             except TransitionRefusedError:
                 logger.warning("could not return %s for its failed checks", task.id, exc_info=True)

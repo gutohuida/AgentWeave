@@ -35,6 +35,7 @@ from .repo_hygiene import seed_repo_excludes
 from .spec_documents import parse_stored, read_document
 from .spec_manifest import SpecPathError
 from .subprocess_windows import no_console_kwargs
+from .task_transitions import SEND_BACK_CLASSES
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +258,11 @@ def findings_lines(task: Optional[Task]) -> List[str]:
         "Only a problem that was there before this task, in code it did not touch, is a side "
         f"finding: put it in a task with `create_task`{where}. Say in your verdict notes which "
         "side findings you filed.",
+        # FR-9 of `a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset`: a
+        # send-back without a class is refused, so the reviewer is told before it tries.
+        "Every `revision_needed` says why: pass `reason_class`, one of "
+        + ", ".join(f"`{name}`" for name in SEND_BACK_CLASSES)
+        + ", with a sentence of reason in `notes`. A send-back without one is refused.",
     ]
 
 

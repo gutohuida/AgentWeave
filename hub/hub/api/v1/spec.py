@@ -1764,7 +1764,14 @@ async def _reopen_an_approved_task(
                 ),
             }
     try:
-        await apply_transition(session, task, "revision_needed", task_transitions.operator())
+        await apply_transition(
+            session,
+            task,
+            "revision_needed",
+            task_transitions.operator(),
+            reason_class=task_transitions.SEND_BACK_EVIDENCE_ONLY,
+            reason=f"Its evidence {evidence_id} was rejected after approval.",
+        )
         await session.commit()
     except TransitionRefusedError as exc:
         await session.rollback()

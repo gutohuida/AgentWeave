@@ -80,6 +80,21 @@ export function TaskTransitionHistory({ taskId, open }: { taskId: string; open: 
                     </span>
                   </>
                 ) : null}
+                {row.to_status === 'revision_needed' ? (
+                  // Why it went back (FR-8): the class and its sentence, or a plain statement that
+                  // this send-back carries none (recorded before the Hub kept them, or the
+                  // operator's status menu, which sends a status alone).
+                  <span className="block" data-testid={`task-transition-reason-${row.id}`}>
+                    {row.reason_class ? (
+                      <>
+                        <code>{row.reason_class}</code>
+                        {row.reason ? <>: {row.reason}</> : null}
+                      </>
+                    ) : (
+                      <span style={{ color: 'var(--text-3)' }}>no reason recorded</span>
+                    )}
+                  </span>
+                ) : null}
               </span>
             </li>
           )

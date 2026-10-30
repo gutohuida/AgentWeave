@@ -347,6 +347,10 @@ export interface TaskTransition {
   job_name?: string | null
   job_kind?: 'flow' | 'loop' | null
   policy_digest: string | null
+  /** Why a move to `revision_needed` was made: one of the six send-back classes and a sentence
+   *  (FR-8). Null on every other move, and on a send-back recorded before the Hub kept them. */
+  reason_class?: string | null
+  reason?: string | null
   created_at: string | null
 }
 
