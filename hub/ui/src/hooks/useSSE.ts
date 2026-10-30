@@ -26,6 +26,8 @@ const SSE_EVENT_TYPES = [
   'task_created',
   'task_updated',
   'build_stopped',
+  // The operator's stop and resume (`_after_build_change`, spec.py); the scheduler's own stop sends `build_stopped`.
+  'build_updated',
   'task_integration_retried',
   'queue_entry_abandoned',
   'question_asked',
@@ -535,6 +537,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           invalidateSpecShownPhase(inv, pid)
           break
         }
+        case 'build_updated':
         case 'build_stopped':
           // Stopping a build changes the shown phase with no task event and no `spec_updated`.
           invalidateSpecShownPhase(inv, pid)

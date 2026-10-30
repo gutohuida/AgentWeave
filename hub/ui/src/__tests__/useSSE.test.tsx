@@ -285,6 +285,7 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
 
   it.each([
     ['task_updated', '{"project_id":"proj-1","id":"task-1","title":"t","status":"revision_needed"}'],
+    ['build_updated', '{"project_id":"proj-1","id":"build-1","state":"stopped"}'],
     ['build_stopped', '{"project_id":"proj-1","build_id":"build-1","document_id":"spdoc-1","reason":"stopped"}'],
   ])('%s refreshes the spec views that show Building or Done (F1089)', async (type, data) => {
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
