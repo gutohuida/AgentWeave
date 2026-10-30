@@ -83,7 +83,7 @@ def test_a_failing_check_records_its_exit_code_and_output(tmp_path):
 
 
 def test_a_check_past_its_timeout_has_its_process_tree_ended(tmp_path):
-    """The grandchild holds the output pipe; `communicate` returns only once it is dead too."""
+    """A check past its timeout has its whole tree ended, the grandchild holding the pipe too."""
     hang = {
         "name": "hang",
         "command": (
