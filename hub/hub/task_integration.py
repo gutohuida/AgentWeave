@@ -288,8 +288,8 @@ class Target:
     The three optional fields are for saying *whose* commit this is, and are populated on both
     paths because the accepted path carries them harmlessly. They exist because a refusal has to
     name each piece of evidence it is waiting on, with a route back to its cause: the evidence row,
-    the requirement it demonstrates, and the task that recorded it — which is not always the task
-    being approved, since a requirement may be served by more than one task.
+    the requirement it demonstrates, and the task that recorded it — the task being approved, or
+    none, since another task's evidence is never this task's work (`_targets`).
 
     `requirement_id` is the `spec_requirements.id` foreign key, not the human identifier. The
     identifier lives on `SpecRequirement`, which this module deliberately does not import: reaching
@@ -313,18 +313,22 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
     would drift, and a filter added to one and not the other produces either a refusal nothing can
     clear or a silent non-merge — which is the defect this whole capability exists to end.
 
-    Evidence is reached through `TaskRequirementLink`, so evidence recorded by *another* task against
-    a *shared* requirement is in scope here. That is not an accident of the join: if that evidence
-    were accepted, it is this task's integration that would merge its commit.
+    Evidence is reached through `TaskRequirementLink`, and then only evidence this task recorded, or
+    that no task recorded (the operator's, or an agent's outside any task), counts: **a task's work
+    is its own commits** (`a-task-s-checks-and-merges-use-its-own-work-...`, FR-1, D1). A
+    requirement is shared by design -- a drive task serves every requirement it drives -- and a
+    commit is not, so evidence another task recorded against a shared requirement is that task's
+    work and lands through that task's approval alone.
 
     The empty-`commit_sha` guard belongs to the filter and lives here, although it sat inside
     `integration_targets`' reduction loop until this function existed. Left there, a `git` footprint
     whose `commit_sha` is `""` would refuse an approval that the merge would then silently ignore.
 
-    **Another task's evidence counts only once that task is approved** (F520). Until then its own
-    approval -- its review and its checks -- is what lands it; counted here, accepting it merged it
-    through this task instead, bypassing both. Evidence recorded by this task, or by no task, counts
-    as before.
+    F520 first let another task's evidence count "once that task is approved". That clause is
+    retired (operator, 2026-10-29): it made a sibling's commit the completion check's target, so a
+    pass of the sibling's tree was reused for work that broke two tests, and it made a dependent's
+    approval wait for a commit of a task it did not depend on. An id naming no task row counts as
+    before, as no recorder at all.
     """
     recorder = aliased(Task)
     assumed = ASSUMED_ACCEPTED.get()
@@ -355,7 +359,6 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
                     RequirementEvidence.task_id.is_(None),
                     RequirementEvidence.task_id == task.id,
                     recorder.id.is_(None),
-                    recorder.status == "approved",
                 ),
             )
             .order_by(EvidenceFootprint.observed_at.asc())
@@ -569,9 +572,8 @@ async def evidence_governs(session: AsyncSession, task: Task) -> bool:
     5. **Otherwise** → whether the task carries a requirement link (D11). A documentless loop's task
        created with `requirement_ids` gets real links, and `record_evidence` resolves against the
        *project's* index rather than a document's, so that task merges its evidence **today**.
-       Stopping at step 4 would silently switch it to its branch tip — and since `_targets`
-       deliberately includes evidence another task recorded against a shared requirement, a per-task
-       branch tip could not carry that commit at all.
+       Stopping at step 4 would silently switch it to its branch tip, a commit no reviewer
+       accepted.
 
     `session.get` rather than a `select`, deliberately: `merge_situation` and `integrate_task` both
     ask this within one approval and one session, so the PK get is answered from the identity map

@@ -7,9 +7,19 @@ accepted task 2's evidence, `integrate_what_was_waiting_for_this_evidence` re-ra
 integration, and task 1's merge targets -- every accepted footprint for its requirements, whoever
 recorded it -- put task 2's two commits on master. Task 2's review verdict and its checks gate were
 both bypassed. This file is the reproduction, through the real routes and a real repository.
+
+F520's fix let a sibling's evidence count for this task "once that task is approved". That clause
+is retired (`a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset`, FR-1,
+operator 2026-10-29): a task's work is its own commits, so task 2's evidence is never task 1's,
+before or after task 2's approval. The two tests below asserted only the "before" half and stand
+as they were; the "after" half is now asserted too, where it used to be the clause's allowance.
 """
 
 import pytest
+
+from hub import task_integration
+from hub.db.engine import async_session_factory
+from hub.db.models import Task
 
 from .test_task_integration import (
     AGENT_EVIDENCE,
@@ -97,3 +107,10 @@ async def test_the_siblings_own_approval_lands_it(
     assert (await approve(app, auth_headers, second)).status_code == 200
     assert two in commits_on(tmp_path, "main")
     assert "merged" in [row["outcome"] for row in await integrations(app, auth_headers, second)]
+
+    # Approved, task 2's evidence is still task 2's work only, never task 1's (F520 retired).
+    async with async_session_factory() as session:
+        targets = await task_integration.merge_targets(
+            session, await session.get(Task, first), tmp_path
+        )
+    assert two not in {target.commit_sha for target in targets}
