@@ -83,10 +83,12 @@ export function BoardScopePicker({
         data-testid="board-scope"
         aria-haspopup="listbox"
         aria-expanded={open}
+        title={scopeLabel}
+        className="aw-board-scope-button"
         onClick={toggle}
       >
         <Icon name="filter_alt" size={13} />
-        {scopeLabel}
+        <span className="aw-board-scope-label">{scopeLabel}</span>
         <Icon name="expand_more" size={13} />
       </Button>
       {open ? (

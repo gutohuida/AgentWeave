@@ -190,9 +190,11 @@ input.aw-board-search-input { height: 28px; padding: 0 10px 0 28px; font-size: 1
 .aw-board-empty { display: flex; flex: 1; align-items: center; justify-content: center; padding: 48px 16px; }
 .aw-deps-waits[data-rejected="true"] { color: var(--red); }
 
-.aw-board-scope { position: relative; }
+.aw-board-scope { position: relative; flex: none; }
+.aw-board-scope-button { max-width: 240px; }
+.aw-board-scope-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-board-scope-list {
-  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 260px; max-height: 340px;
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 260px; max-width: min(480px, 90vw); max-height: 340px;
   overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 6px;
   background: var(--popover, var(--background)); border: 1px solid var(--border); border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
