@@ -17,6 +17,10 @@ describe('board scope button with a long spec title', () => {
     expect(label).toContain('white-space: nowrap')
   })
 
+  it('lets the scope control give way before the chips and search', () => {
+    expect(css).toMatch(/\.aw-board-scope\s*\{[^}]*flex:\s*0\s+[1-9]\d*\s+240px/)
+  })
+
   it('caps the picker list width', () => {
     expect(css).toMatch(/\.aw-board-scope-list\s*\{[^}]*max-width:/)
   })
