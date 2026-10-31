@@ -68,6 +68,7 @@
 .aw-sp-phase[data-state="ready"] { --tone: var(--ring); }
 .aw-sp-phase[data-state="approved"] { --tone: var(--green); }
 .aw-sp-phase[data-state="building"] { --tone: var(--blue); }
+.aw-sp-phase[data-state="current"] { --tone: var(--text-2); }
 .aw-sp-phase[data-state="building"]::before { animation: aw-sp-live 1.6s var(--ease-out) infinite; }
 .aw-sp-phase[data-state="archived"] { --tone: var(--text-3); }
 .aw-sp-phase[data-state="done"] { --tone: var(--green); }
@@ -184,6 +185,7 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-list-dot[data-state="ready"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ring); }
 .aw-sp-list-dot[data-state="approved"] { background: var(--green); }
 .aw-sp-list-dot[data-state="building"] { background: var(--blue); }
+.aw-sp-list-dot[data-state="current"] { background: var(--text-2); }
 .aw-sp-list-dot[data-state="archived"] { background: var(--border-hi); }
 .aw-sp-list-dot[data-state="done"] { background: var(--green); box-shadow: inset 0 0 0 1.5px var(--bg, transparent); }
 .aw-sp-list-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 10px; font-size: 12.5px; color: var(--text-3); }
