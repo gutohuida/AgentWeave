@@ -40976,7 +40976,7 @@ Repro: after the build finished, two tasks outside the build's plan stayed bound
 ## F1093 (C) -- Run now on a build past its window answers a bare 500 "Failed to fire job" although the stop worked
 
 **Area:** Jobs & loops. Driven 2026-10-30 on :8010 at 4dba06e: a flow build whose `window_end` has passed; `POST /jobs/{id}/run` answered `500 {"detail": "Failed to fire job"}`, while the build correctly stopped with "the build's window closed at ...; extend it to resume" and `build_stopped` was emitted. The route's message is in `hub/hub/api/v1/jobs.py`; which of its branches answered was not traced. Expected: an answer saying the build stopped and why.
-**Status:** open 2026-10-30.
+**Status:** open 2026-10-30. Still answers 500 on 2026-10-31 (scoped drive on :8010 at 4852498, Hub log line 133).
 
 ## F1096 (C) -- a completion with uncommitted work first spends a full check run on the older commit
 
@@ -41101,3 +41101,23 @@ The dialog tells the operator to "Adopt it (POST /documents/adopt)" rather than 
 **Tier:** 0
 
 Since round 1 of task-ecc5aa118360, `_run_one` no longer ends a process a check leaves behind, by intent. Such a process could hold files open in the scratch worktree under `.agentweave/checks/`, and on Windows that could block its removal. **Expected:** a drive with a check that leaves a process running shows whether removal succeeds, and either way the next check is not affected.
+
+## F1107 (C) -- a task's Story tab says "sent back" without the reason class or sentence; only Details has them
+
+**Status:** open 2026-10-31.
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+**Area:** Tasks. Driven on :8010 at 4852498 (`scripts/drive/d1030_own_work_replay.py`, task-8b692180f351). The drawer opens on Story, whose row reads "The project's checks moved it to sent back" with no class and no sentence: `GET /tasks/{id}/story` holds no `reason_class`. The Details tab's history does show `broken-check` and the sentence, so `send-back-says-why` is met there, but a reader of the default view has to find the second tab to learn why.
+
+## F1108 (C) -- evidence the Hub's checks held reads "Held by you"
+
+**Status:** open 2026-10-31.
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+**Area:** Tasks. Same drive and task: the operator did nothing on this task, yet the Story's FR-1 evidence says "Held by you — The project's check suite failed ...". The same screen's transition row correctly says "The project's checks moved it". Likely the same root as F1062 (`actor_kind='operator'`, `origin='checks'`), which had not been seen on screen; the cause of this line was not traced.
