@@ -68,7 +68,7 @@ export function TasksScreen({
   // Every task, unfiltered: the picker's counts and whether a remembered spec still has tasks come
   // from here, not from the board's own page (which hides an archived spec's finished work). A
   // task-id narrowing reads the same page.
-  const { data: fullPage } = useTasks()
+  const { data: fullPage, error: fullPageError } = useTasks()
   const storedScope = useBoardScopeStore((state) => (projectId ? state.scopes[projectId] : undefined))
   const setStoredScope = useBoardScopeStore((state) => state.setScope)
   const rememberedScope = React.useMemo(() => storedScope ?? loadScope(projectId), [storedScope, projectId])
@@ -271,7 +271,7 @@ export function TasksScreen({
     <>
       {/* The agent filter and Start work's agent menu are built from the roster; unread, both would
           offer nobody. */}
-      <QueryErrorNotice failures={[['the agents', agentsError]]} className="aw-board-notice" />
+      <QueryErrorNotice failures={[['the agents', agentsError], ['the spec counts', fullPageError]]} className="aw-board-notice" />
       {taskPage?.has_more ? (
         <div className="aw-board-notice" data-testid="tasks-truncated-banner">
           <Icon name="info" size={14} />
