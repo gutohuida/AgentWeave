@@ -812,3 +812,98 @@ async def test_listing_an_agents_task_checkouts_provisions_none_of_them(
     assert resp.json()["task_checkouts"][0]["provisioned"] is False
     assert not worktrees.task_root(repo).exists()
     assert _git(repo, "worktree", "list", "--porcelain").stdout.count("worktree ") == 1
+
+
+# ---------------------------------------------------------------------------------------------
+# F1082: a snapshot commits inside its own checkout, and nowhere else
+# ---------------------------------------------------------------------------------------------
+
+
+def _leftover_of_a_removed_task_worktree(repo: Path) -> Path:
+    """Approval removed the checkout and Windows kept the directory, the turn's working directory.
+    Git run in it walks up to the enclosing main checkout."""
+    path = ensure_task_worktree(repo, TASK, "main", ())
+    worktrees.remove_worktree(repo, path)
+    path.mkdir(parents=True, exist_ok=True)
+    assert Path(_git(path, "rev-parse", "--show-toplevel").stdout.strip()).samefile(repo)
+    return path
+
+
+def test_a_snapshot_of_a_removed_worktrees_directory_commits_nothing_on_main(repo):
+    leftover = _leftover_of_a_removed_task_worktree(repo)
+    (repo / "scratch.txt").write_text("the operator's untracked file\n")
+    before = _git(repo, "for-each-ref", "--format=%(refname) %(objectname)").stdout
+
+    assert worktrees.snapshot_worktree(leftover, "builder") is None
+
+    assert _git(repo, "for-each-ref", "--format=%(refname) %(objectname)").stdout == before
+    assert _git(repo, "status", "--porcelain").stdout.strip().endswith("scratch.txt")
+    assert _git(repo, "status", "--porcelain").stdout.startswith("??")
+
+
+def test_a_snapshot_never_commits_in_the_main_checkout_itself(repo):
+    (repo / "scratch.txt").write_text("the operator's untracked file\n")
+    head = _git(repo, "rev-parse", "HEAD").stdout
+
+    assert worktrees.snapshot_worktree(repo, "builder") is None
+
+    assert _git(repo, "rev-parse", "HEAD").stdout == head
+    assert _git(repo, "status", "--porcelain").stdout.startswith("??")
+
+
+def test_a_snapshot_leaves_a_nested_repository_out_and_commits_the_rest(repo):
+    path = ensure_task_worktree(repo, TASK, "main", ())
+    _init_repo(path / "scratch-clone")
+    (path / "work.txt").write_text("the turn's work\n")
+
+    sha = worktrees.snapshot_worktree(path, "builder")
+
+    assert sha is not None
+    tree = _git(path, "ls-tree", "-r", sha).stdout
+    assert "160000" not in tree
+    assert "work.txt" in tree and "scratch-clone" not in tree
+    assert (path / "scratch-clone" / ".git").is_dir()
+
+
+def test_a_snapshot_with_only_a_nested_repository_makes_no_commit(repo):
+    path = ensure_task_worktree(repo, TASK, "main", ())
+    _init_repo(path / "scratch-clone")
+    head = _git(path, "rev-parse", "HEAD").stdout
+
+    assert worktrees.snapshot_worktree(path, "builder") is None
+
+    assert _git(path, "rev-parse", "HEAD").stdout == head
+    assert _git(path, "diff", "--cached", "--name-only").stdout == ""
+
+
+def test_a_registered_submodules_new_commit_is_still_snapshotted(repo, tmp_path):
+    """Only a gitlink the snapshot itself would introduce is refused: a project's own submodule
+    moved by the turn is the turn's work, and leaving it out would strand it."""
+    library = _init_repo(tmp_path / "library")
+    _git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(library), "lib")
+    _git(repo, "commit", "-q", "-m", "add the submodule")
+    path = ensure_task_worktree(repo, TASK, "main", ())
+    _git(path, "-c", "protocol.file.allow=always", "submodule", "update", "-q", "--init")
+    inside = path / "lib"
+    _git(inside, "config", "user.email", "test@example.com")
+    _git(inside, "config", "user.name", "test")
+    (inside / "g.txt").write_text("moved\n")
+    _git(inside, "add", "-A")
+    _git(inside, "commit", "-q", "-m", "move")
+    moved = _git(inside, "rev-parse", "HEAD").stdout.strip()
+
+    sha = worktrees.snapshot_worktree(path, "builder")
+
+    assert sha is not None
+    assert moved in _git(path, "ls-tree", sha, "lib").stdout
+
+
+def test_an_ordinary_dirty_task_worktree_is_still_committed_on_its_branch(repo):
+    path = ensure_task_worktree(repo, TASK, "main", ())
+    (path / "work.txt").write_text("the turn's work\n")
+    main = _git(repo, "rev-parse", "main").stdout
+
+    sha = worktrees.snapshot_worktree(path, "builder")
+
+    assert sha == _git(repo, "rev-parse", f"agentweave/task/{TASK}").stdout.strip()
+    assert _git(repo, "rev-parse", "main").stdout == main

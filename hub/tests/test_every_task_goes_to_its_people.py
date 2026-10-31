@@ -460,6 +460,82 @@ async def test_a_lone_agent_who_builds_and_checks_is_still_given_the_work(
     assert [agent for _, agent, _ in _picks(await _decide())] == ["dev"]
 
 
+@pytest.mark.asyncio
+async def test_a_builders_list_of_only_the_judge_builds_and_the_review_says_why(
+    app, auth_headers, bind_runner, bind_project_workspace, reviewable, tmp_path
+):
+    """F1102: other could build by the roster but the list rules it out, so withholding dev left
+    nobody and the board said only that the queue had stalled. dev builds; the review names dev."""
+    await bind_project_workspace(tmp_path)
+    await _roster(app, auth_headers, bind_runner, "dev", "other")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], checker="dev"))
+    await _build(
+        app,
+        auth_headers,
+        driver="flow",
+        level="reviewed",
+        builders=["dev"],
+        builder="dev",
+        checker="dev",
+    )
+    t1 = (await _tasks())["t1"]
+
+    assert _picks(await _decide()) == [(t1.id, "dev", False)]
+
+    await _fire()
+    await _work(t1.id, "dev")
+    stalled = await _decide()
+
+    assert _picks(stalled) == []
+    assert "'dev' as its reviewer" in str(stalled.unstaffed), stalled
+
+
+@pytest.mark.asyncio
+async def test_a_builders_list_whose_other_name_is_read_only_still_builds(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """F1102's neighbour: the list's only non-judge can hold no work, so it is nobody to wait for."""
+    await bind_project_workspace(tmp_path)
+    await app.post(
+        f"/api/v1/projects/{P}/session/sync",
+        json={
+            "data": {
+                "agents": {
+                    "dev": {"runner": "claude"},
+                    "reader": {"runner": "claude", "read_only": True},
+                }
+            }
+        },
+        headers=auth_headers,
+    )
+    for name in ("dev", "reader"):
+        await bind_runner(name, cli="claude")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], checker="dev"))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builders=["dev", "reader"])
+    t1 = (await _tasks())["t1"]
+
+    assert _picks(await _decide()) == [(t1.id, "dev", False)]
+
+
+@pytest.mark.asyncio
+async def test_a_builders_list_with_somebody_else_still_withholds_the_judge(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """F767 stands where the list leaves a builder: dev keeps its review, and waits while other is
+    busy rather than taking the work."""
+    await bind_project_workspace(tmp_path)
+    await _roster(app, auth_headers, bind_runner, "dev", "other")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], checker="dev"))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builders=["dev", "other"])
+    t1 = (await _tasks())["t1"]
+
+    assert _picks(await _decide()) == [(t1.id, "other", False)]
+
+    await _run_headers("run-other-busy", "other")
+
+    assert _picks(await _decide()) == []
+
+
 # ---------------------------------------------------------------------------------------------
 # ac-builder-not-open (flow-gives-task-to-its-builder)
 # ---------------------------------------------------------------------------------------------

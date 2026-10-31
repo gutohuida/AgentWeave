@@ -40873,7 +40873,7 @@ Repro, read from the live database (read-only): landing batch `lbat-3bc888bd9903
 
 ## F1082 (A) -- an agent turn's auto-snapshot committed the main checkout's untracked files onto master
 
-**Status:** open 2026-10-29. The gitlinks were cleaned up by hand in `dab496b`.
+**Status:** Fixed 2026-10-31 on `agentweave/Architect`: `snapshot_worktree` commits only where `.git` is a file (a linked worktree), so a leftover directory or a main checkout commits nothing and logs why; a nested repository is left out of the commit, while a submodule the project already tracks can still move. Tests in `hub/tests/test_task_worktrees.py` (`-k snapshot`), four of them failing before the fix. The gitlinks were cleaned up by hand in `dab496b`. Not replayed through a real approving turn: the leftover directory was built in the test.
 **Source:** drive
 **Theme:** Worktrees & integration
 **Ready:** yes
@@ -41054,7 +41054,7 @@ The Hub requires `reason_class` for a send-back and `hub/hub/mcp_server.py:451` 
 
 ## F1102 (B) -- a builders list naming only the document's checker stalls with nobody building
 
-**Status:** open 2026-10-30. Filed from QA2's `task-c87303ac6161`; older than F1092 by the diff, not re-run on the earlier commit.
+**Status:** Fixed 2026-10-31 on `agentweave/Architect`: `_agents_withheld_from_fresh_work` now holds a judge back only for somebody the pool would actually hand the work: on the builders list and not read-only. X builds, Other gets nothing, and the review's stall names X. Tests in `test_every_task_goes_to_its_people.py` (two fail without the fix); driven with Haiku on :8010, `scripts/drive/d1031_builders_list_of_the_judge.py`.
 **Source:** found by driving
 **Theme:** Flows & review
 **Ready:** yes

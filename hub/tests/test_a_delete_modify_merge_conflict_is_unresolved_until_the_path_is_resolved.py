@@ -28,7 +28,8 @@ def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
 def delete_modify(tmp_path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
-    _git(repo, "init", "-q", "-b", "main")
+    # `.git` as a file, as in the linked worktree a snapshot is limited to (F1082).
+    _git(repo, "init", "-q", "-b", "main", "--separate-git-dir", str(tmp_path / "repo.git"))
     (repo / "f.txt").write_text("base\n", encoding="utf-8")
     (repo / "keep.txt").write_text("k\n", encoding="utf-8")
     _git(repo, "add", "-A")

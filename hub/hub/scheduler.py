@@ -1851,7 +1851,9 @@ async def _agents_withheld_from_fresh_work(
     `decide_firing`'s default-agent arm (F864: a flow whose `agent` is also its `reviewer`) -- so
     the rule has one home. Empty for a documentless loop, and empty when withholding the judges
     would leave nobody who could build: somebody besides a judge must have a runner, now or later,
-    judged against the roster and not the free list, so a busy builder is waited for.
+    judged against the roster and not the free list, so a busy builder is waited for. A build's
+    list of builders and a read-only agent rule somebody out of that (F1102): the pool would never
+    hand them the work, so holding the judge back for them only stalled the flow.
     """
     if loop.spec_document_id is None:
         return set()
@@ -1859,10 +1861,15 @@ async def _agents_withheld_from_fresh_work(
     judges = set(await facts.named_reviewers(loop.project_id, loop.spec_document_id))
     if not judges:
         return set()
-    roster = await facts.roster(loop.project_id)
-    if not any(record.has_runner and record.name not in judges for record in roster):
-        return set()
-    return judges
+    build = await facts.build_of_loop(loop)
+    for record in await facts.roster(loop.project_id):
+        if (
+            record.has_runner
+            and _pool_admits(record.name, judges, build)
+            and not await facts.is_read_only(loop.project_id, record.name)
+        ):
+            return judges
+    return set()
 
 
 async def _default_builder_must_check(

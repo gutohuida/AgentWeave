@@ -247,7 +247,9 @@ def test_files_changed_reads_a_real_commit_including_the_first_one(tmp_path):
     first-ever checkpoint needs to read."""
     repo = tmp_path / "repo"
     repo.mkdir()
-    _git(repo, "init", "-q")
+    _git(
+        repo, "init", "-q", "--separate-git-dir", str(tmp_path / "repo.git")
+    )  # F1082: .git is a file
     _git(repo, "config", "user.email", "t@t")
     _git(repo, "config", "user.name", "t")
 
@@ -270,7 +272,9 @@ def test_files_changed_reads_a_real_commit_including_the_first_one(tmp_path):
 async def test_files_changed_is_the_union_over_the_covered_turns(app, tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
-    _git(repo, "init", "-q")
+    _git(
+        repo, "init", "-q", "--separate-git-dir", str(tmp_path / "repo.git")
+    )  # F1082: .git is a file
     _git(repo, "config", "user.email", "t@t")
     _git(repo, "config", "user.name", "t")
 
@@ -810,7 +814,9 @@ async def test_a_generated_checkpoint_reports_the_files_its_turns_changed(
     """
     repo = tmp_path / "repo"
     repo.mkdir()
-    _git(repo, "init", "-q")
+    _git(
+        repo, "init", "-q", "--separate-git-dir", str(tmp_path / "repo.git")
+    )  # F1082: .git is a file
     _git(repo, "config", "user.email", "t@t")
     _git(repo, "config", "user.name", "t")
     (repo / "wired.txt").write_text("1")

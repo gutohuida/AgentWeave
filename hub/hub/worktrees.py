@@ -1656,6 +1656,17 @@ def _has_uncommitted_changes(worktree: Path) -> bool:
     return bool(result.stdout.strip())
 
 
+def _unstage_new_gitlinks(worktree: Path) -> None:
+    """Take back the gitlinks `add -A` just staged for nested repositories HEAD does not track."""
+    raw = _run_git(worktree, "diff", "--cached", "--raw", "--no-renames", "-z").stdout
+    fields = raw.split("\0")
+    for header, path in zip(fields[::2], fields[1::2], strict=False):
+        modes = header.split()[:2]
+        if modes == [":000000", "160000"]:
+            logger.warning("not snapshotting %s in %s: it is a nested repository", path, worktree)
+            _run_git(worktree, "reset", "-q", "--", path)
+
+
 def snapshot_worktree(
     worktree: Path, agent: str, *, message: Optional[str] = None
 ) -> Optional[str]:
@@ -1683,7 +1694,17 @@ def snapshot_worktree(
     permanent history on the task's branch and hiding that the merge was never done. The next turn
     is told instead (`resolve_turn_workspace`). A merge whose conflicts are all resolved is
     committed like any other dirty state, which concludes it.
+
+    **Only a linked worktree is snapshotted, and only what it holds** (F1082). A directory with no
+    `.git` of its own has git walk up to the enclosing checkout: the leftover of a removed task
+    worktree, kept by Windows as a turn's working directory, once put 36 of the main checkout's
+    untracked files on master. There `.git` is absent, and in a main checkout it is a directory; a
+    linked worktree's is a file. A nested repository would be committed as a gitlink to a commit
+    nobody else has, so it stays out; a submodule the project already tracks is the turn's to move.
     """
+    if not (worktree / ".git").is_file():
+        logger.warning("not snapshotting %s: it is not a linked worktree of its own", worktree)
+        return None
     unresolved = unresolved_merge_paths(worktree)
     if unresolved:
         logger.info(
@@ -1698,6 +1719,7 @@ def snapshot_worktree(
     if not concluding and not _has_uncommitted_changes(worktree):
         return None
     _run_git(worktree, "add", "-A")
+    _unstage_new_gitlinks(worktree)
     staged = _run_git(worktree, "diff", "--cached", "--name-only")
     if not concluding and not staged.stdout.strip():
         return None
