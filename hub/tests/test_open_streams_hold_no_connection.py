@@ -11,7 +11,6 @@ first frame has arrived, which is the state an open tab is in.
 """
 
 import asyncio
-import time
 from typing import List, Tuple
 
 import pytest
@@ -77,8 +76,9 @@ async def _hold_streams(app, path: str, query_for) -> Tuple[List[_HeldStream], i
         for _ in range(STREAMS + 1):
             stream = _HeldStream(application, path, query_for())
             held.append(stream)
-            # Pre-fix the 16th waited 30s for a connection; 5s is ample for a stream that needs none.
-            await asyncio.wait_for(stream.first_frame.wait(), 5)
+            # A leak makes the 16th wait out the 30s pool timeout; this stays under it, and only a
+            # loaded machine comes near it.
+            await asyncio.wait_for(stream.first_frame.wait(), 20)
             assert stream.status == [200]
             opened += 1
     except asyncio.TimeoutError:
@@ -95,17 +95,11 @@ async def _assert_streams_leave_the_pool_free(app, auth_headers, path: str, quer
         )
         assert engine.pool.checkedout() == 0, "an open stream is holding a pooled connection"
 
-        # Best of three: a pool leak makes every read wait out the 30s pool timeout, while one slow
-        # read under a loaded suite (-n auto) says nothing about the pool.
-        elapsed = float("inf")
-        for _ in range(3):
-            started = time.perf_counter()
-            resp = await asyncio.wait_for(
-                app.get("/api/v1/projects/proj-test/agents", headers=auth_headers), 10
-            )
-            elapsed = min(elapsed, time.perf_counter() - started)
-            assert resp.status_code == 200, resp.text
-        assert elapsed < 1.0, f"GET /agents took {elapsed:.2f}s with {opened} streams open"
+        # A leak makes this read wait out the 30s pool timeout, so the bound stays under that.
+        resp = await asyncio.wait_for(
+            app.get("/api/v1/projects/proj-test/agents", headers=auth_headers), 20
+        )
+        assert resp.status_code == 200, resp.text
     finally:
         await asyncio.gather(*(stream.close() for stream in held))
 

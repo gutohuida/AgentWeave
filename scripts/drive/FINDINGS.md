@@ -41121,3 +41121,15 @@ Since round 1 of task-ecc5aa118360, `_run_one` no longer ends a process a check 
 **Tier:** 0
 
 **Area:** Tasks. Same drive and task: the operator did nothing on this task, yet the Story's FR-1 evidence says "Held by you — The project's check suite failed ...". The same screen's transition row correctly says "The project's checks moved it". Likely the same root as F1062 (`actor_kind='operator'`, `origin='checks'`), which had not been seen on screen; the cause of this line was not traced.
+
+## F1109 (C) -- a pytest run spends its exit deleting old temp directories, and that time counts against a check's timeout
+
+**Status:** open 2026-10-31. The nested test's hang is fixed by its own `--basetemp`; a project's real check can still be delayed this way.
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+**Area:** Worktrees & integration. This is the cause of the 120s `test_pytest_xdist_sizes_auto_by_the_variable` timeouts (task-ecc5aa118360). `live_process_tree`, on 2026-10-31, named only `cmd.exe`, its `conhost.exe` and the inner `python -m pytest -n auto`, with no worker left, after `1 passed in 0.68s`. An xdist main process makes a numbered `pytest-N` directory in the shared `%TEMP%\pytest-of-<user>` and, at exit, deletes the ones past the newest three (`cleanup_numbered_dir`, an atexit hook in `_pytest/pathlib.py`). Reproduced with an isolated TEMP holding 150,000 stale files: `1 passed in 0.72s`, then 21s to exit on an unloaded machine, with a `faulthandler` dump inside `shutil.rmtree` under `_pytest/pathlib.py`. The real folder held 171,069 files that day. The hang itself was not caught with a stack dump, and 120s was not reproduced; the size, the surviving-process list and the first-run-after-a-pause pattern all fit. 583 and then 816 inner runs with nothing stale to delete never hung.
+
+What remains: the `hub-tests` check, or any project's xdist check, can pass and then time out while deleting old session directories, and it reads as a failure. Nothing here limits that folder's growth.

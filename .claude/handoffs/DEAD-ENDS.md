@@ -2601,3 +2601,7 @@ When `hub/hub/mcp_server.py` changes, its tool-server digest is new, and several
   fresh backup (migration 0149 ran fine, but unprotected). Put the backup in a script file that
   exits non-zero unless `pragma integrity_check` is `ok` and no run is `running`, and make the
   restart script stop on that exit code (`$LASTEXITCODE`), never chain it with `;`. *(2026-10-27)*
+
+## 2026-10-31: the Hub suite started by `Start-Process -WindowStyle Hidden` fails on git, not on the code
+
+Full Hub suite, detached that way, `-n 6`: 103 failed, 92 errors, nearly all `git init` returning 3221225794 (0xC0000142, a process that could not initialise), from about 86% on. The same tests split in two foreground runs at `-n 8` passed 9448 with none failing. Why 0xC0000142 fired was not established. A foreground command also dies at the tool's 10-minute limit, so run the suite in two halves (`ls tests/test_*.py | awk 'NR%2==1'`, then `==0`), about 5.5 minutes each.

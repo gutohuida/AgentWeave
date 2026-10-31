@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 import os
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -23,6 +24,8 @@ GIT_DELAY = 0.25
 #: The sampling interval: the spec's probe samples every 10 ms.
 SAMPLE = 0.010
 STALL_LIMIT = 0.100
+#: Where an idle loop's thread sits: the proactor's `_poll`, or a selector's `select`.
+_LOOP_POLL_FRAMES = frozenset({"_poll", "select"})
 
 
 @dataclass
@@ -62,13 +65,12 @@ def slow_git(loop_thread: threading.Thread) -> Iterator[GitLog]:
 
 
 class LagProbe:
-    """`async with LagProbe() as probe:` samples the loop every 10 ms; `probe.worst` is the
-    longest a sample woke late, in seconds.
+    """`async with LagProbe() as probe:` samples the loop every 10 ms; `probe.worst` is the longest
+    the loop was held, in seconds.
 
-    A control thread samples the same way. A late wake-up the control thread shares (it was late
-    over the same interval) is the whole process starved by a loaded machine, not the loop held by
-    its own work, and is not counted: a git call on the loop sleeps without the GIL, so the thread
-    keeps waking on time and the stall still counts.
+    A control thread watches where the loop's thread is. A late wake while it sat in its poll is a
+    loaded machine waking it late, and is not counted: nothing held it. Anything else, a git call
+    or work on the loop, is somewhere other than the poll, and counts however busy the machine is.
     """
 
     def __init__(self) -> None:
@@ -76,21 +78,22 @@ class LagProbe:
         self._on = True
         self._task: "asyncio.Task[None] | None" = None
         self._thread: "threading.Thread | None" = None
-        self._thread_late: List[tuple] = []
+        self._loop_thread = threading.get_ident()
+        self._loop_samples: List[tuple] = []
+
+    def _loop_is_polling(self) -> bool:
+        frame = sys._current_frames().get(self._loop_thread)
+        return frame is not None and frame.f_code.co_name in _LOOP_POLL_FRAMES
 
     def _control(self) -> None:
         while self._on:
-            started = time.perf_counter()
             time.sleep(SAMPLE)
-            ended = time.perf_counter()
-            if ended - started - SAMPLE > SAMPLE:
-                self._thread_late.append((started, ended))
+            self._loop_samples.append((time.perf_counter(), self._loop_is_polling()))
 
-    def _starved(self, started: float, ended: float) -> bool:
-        covered = 0.0
-        for begin, end in self._thread_late:
-            covered += max(0.0, min(end, ended) - max(begin, started))
-        return covered >= 0.8 * (ended - started)
+    def _waiting_to_wake(self, started: float, ended: float) -> bool:
+        """Was the loop in its poll throughout, so nothing held it and only waking it ran late?"""
+        seen = [polling for at, polling in self._loop_samples if started <= at <= ended]
+        return bool(seen) and sum(seen) >= 0.8 * len(seen)
 
     async def _sample(self) -> None:
         while self._on:
@@ -98,7 +101,7 @@ class LagProbe:
             await asyncio.sleep(SAMPLE)
             ended = time.perf_counter()
             late = ended - started - SAMPLE
-            if late > SAMPLE and self._starved(started, ended):
+            if late > SAMPLE and self._waiting_to_wake(started, ended):
                 continue
             self.worst = max(self.worst, late)
 
@@ -108,7 +111,7 @@ class LagProbe:
         self._task = asyncio.create_task(self._sample())
         await asyncio.sleep(0.03)
         self.worst = 0.0
-        self._thread_late.clear()
+        self._loop_samples.clear()
         return self
 
     async def __aexit__(self, *exc: object) -> None:
