@@ -72,6 +72,24 @@ describe('useTasks', () => {
     ])
   })
 
+  it('requests one spec, or no spec, whole, for the board scope', async () => {
+    const seen: string[] = []
+    globalThis.fetch = ((url: string) => {
+      seen.push(url)
+      return Promise.resolve({ ok: true, status: 200, json: async () => PAGE } as Response)
+    }) as typeof fetch
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const one = renderHook(() => useTasks({ specDocumentId: 'spdoc-1' }), { wrapper: wrapper(client) })
+    const none = renderHook(() => useTasks({ noSpec: true }), { wrapper: wrapper(client) })
+    await waitFor(() => expect(one.result.current.data && none.result.current.data).toBeTruthy())
+
+    expect(seen.sort()).toEqual([
+      'http://hub.test/api/v1/projects/proj-1/tasks?no_spec=true&limit=1000',
+      'http://hub.test/api/v1/projects/proj-1/tasks?spec_document_id=spdoc-1&limit=1000',
+    ])
+  })
+
   it('requests ?loop_id=<id> when asked, taking priority over excludeArchivedCompleted', async () => {
     const seen: string[] = []
     globalThis.fetch = ((url: string) => {

@@ -42,6 +42,7 @@ import { applyColorMode } from '@/lib/colorMode'
 import { linkTarget } from '@/lib/threadKnots'
 import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
+import { useBoardScopeStore } from '@/store/boardScopeStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
@@ -535,8 +536,15 @@ export default function App() {
           // A coverage row's task-count link, clicked: switch to the Tasks tab filtered to what
           // it names. The filter is set on the global store because the board it applies to is
           // not mounted yet — this navigation is what mounts it.
-          onOpenTasks={(taskIds) => {
-            useTaskFilterStore.getState().setActiveTaskIds(taskIds)
+          onOpenTasks={(taskIds, specDocumentId) => {
+            // A spec page's own link (it names the document) sets the board's spec scope, which is
+            // remembered; a coverage row's list of ids stays a separate, overriding narrowing.
+            if (specDocumentId) {
+              useBoardScopeStore.getState().setScope(destination.projectId, { kind: 'spec', id: specDocumentId })
+              useTaskFilterStore.getState().clearActiveTaskIds()
+            } else {
+              useTaskFilterStore.getState().setActiveTaskIds(taskIds)
+            }
             navigateTo(projectDestination(destination.projectId, 'tasks'))
           }}
           // A flow's tab lives in the conversation panel, which this screen does not mount. Open

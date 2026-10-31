@@ -18,7 +18,9 @@ import { Button } from '@/components/ui/button'
 import { toast } from '@/lib/toast'
 import { useRequirementTallies } from '@/hooks/useRequirementTallies'
 import { useConfigStore } from '@/store/configStore'
+import { ALL_SCOPE, loadScope, useBoardScopeStore, type BoardScope } from '@/store/boardScopeStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
+import { BoardScopePicker, type ScopeSpec } from './BoardScopePicker'
 import { BOARD_COLUMNS, BoardView, type BoardMoves, type TasksView } from './BoardView'
 import type { ColumnDropState } from './BoardColumn'
 import { DependencyListView } from './DependencyListView'
@@ -63,10 +65,32 @@ export function TasksScreen({
   const pendingOpenTaskId = useTaskFilterStore((state) => state.pendingOpenTaskId)
   const clearPendingOpenTaskId = useTaskFilterStore((state) => state.clearPendingOpenTaskId)
 
-  const { data: taskPage, isLoading, isError } = useTasks({ excludeArchivedCompleted: activeTaskIds === null })
+  // Every task, unfiltered: the picker's counts and whether a remembered spec still has tasks come
+  // from here, not from the board's own page (which hides an archived spec's finished work). A
+  // task-id narrowing reads the same page.
+  const { data: fullPage } = useTasks()
+  const storedScope = useBoardScopeStore((state) => (projectId ? state.scopes[projectId] : undefined))
+  const setStoredScope = useBoardScopeStore((state) => state.setScope)
+  const rememberedScope = React.useMemo(() => storedScope ?? loadScope(projectId), [storedScope, projectId])
+  const { data: specDocuments } = useSpecDocuments()
+  // A remembered spec that holds no task any more opens as All. A truncated page cannot say so.
+  const scope: BoardScope =
+    rememberedScope.kind === 'spec' &&
+    fullPage &&
+    !fullPage.has_more &&
+    !fullPage.tasks.some((task) => task.spec_document_id === rememberedScope.id)
+      ? ALL_SCOPE
+      : rememberedScope
+  const narrowed = activeTaskIds !== null
+  const scopeOptions =
+    narrowed || scope.kind === 'all'
+      ? { excludeArchivedCompleted: !narrowed }
+      : scope.kind === 'none'
+        ? { noSpec: true }
+        : { specDocumentId: scope.id }
+  const { data: taskPage, isLoading, isError } = useTasks(scopeOptions)
   const { data: agents = [], error: agentsError } = useAgents()
   const { data: allowed, error: transitionsError } = useAllowedTransitions()
-  const { data: specDocuments } = useSpecDocuments()
   const updateTask = useUpdateTask()
   const startWork = useStartWorkOnTask()
   const retry = useRetryIntegration()
@@ -105,6 +129,25 @@ export function TasksScreen({
     () => new Set(tasks.filter((task) => task.assignee_status === 'running').map((task) => task.id)),
     [tasks],
   )
+
+  const specTitles = React.useMemo(
+    () => new Map((specDocuments?.documents ?? []).map((document) => [document.id, document.title])),
+    [specDocuments],
+  )
+  const pickerSpecs = React.useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const task of fullPage?.tasks ?? []) {
+      if (task.spec_document_id) counts.set(task.spec_document_id, (counts.get(task.spec_document_id) ?? 0) + 1)
+    }
+    return [...counts].map(([id, count]): ScopeSpec => ({ id, title: specTitles.get(id) ?? id, count }))
+  }, [fullPage, specTitles])
+  const noSpecCount = (fullPage?.tasks ?? []).filter((task) => !task.spec_document_id).length
+  const scopeName =
+    scope.kind === 'none' ? 'No spec' : scope.kind === 'spec' ? (specTitles.get(scope.id) ?? scope.id) : 'All'
+  const chooseScope = (next: BoardScope) => {
+    if (projectId) setStoredScope(projectId, next)
+    clearActiveTaskIds()
+  }
 
   const transitions = allowed?.transitions ?? {}
   const canMoveTo = (task: Task | null | undefined, column: string) => {
@@ -238,6 +281,23 @@ export function TasksScreen({
           </span>
         </div>
       ) : null}
+      {!narrowed && scope.kind !== 'all' ? (
+        <div className="aw-board-notice" data-testid="board-scope-banner">
+          <Icon name="filter_alt" size={14} />
+          <span data-testid="board-scope-name">
+            {scopeName} · {allTasks.length} task{allTasks.length === 1 ? '' : 's'}
+          </span>
+          <Button
+            variant="ghost"
+            size="xs"
+            className="aw-board-notice-action"
+            data-testid="board-scope-clear"
+            onClick={() => chooseScope(ALL_SCOPE)}
+          >
+            Show all
+          </Button>
+        </div>
+      ) : null}
       {activeTaskIds !== null ? (
         <div className="aw-board-notice" data-testid="tasks-requirement-filter-banner">
           <Icon name="filter_alt" size={14} />
@@ -273,7 +333,7 @@ export function TasksScreen({
         />
       </div>
     )
-  } else if (allTasks.length === 0) {
+  } else if (allTasks.length === 0 && (narrowed || scope.kind === 'all')) {
     body = (
       <div className="aw-board-empty">
         <EmptyState icon="task_alt" title="No tasks yet" description="Tasks an approved specification creates, or an agent adds, appear here." />
@@ -312,6 +372,15 @@ export function TasksScreen({
           onOpenTask={setOpenTaskId}
           onRetryIntegration={onRetryIntegration}
           notices={notices}
+          scopeControl={
+            <BoardScopePicker
+              scope={scope}
+              scopeLabel={scopeName}
+              specs={pickerSpecs}
+              noSpecCount={noSpecCount}
+              onChoose={chooseScope}
+            />
+          }
           moves={moves}
           startAgents={agents.map((agent) => agent.name)}
           onStartWork={onStartWork}

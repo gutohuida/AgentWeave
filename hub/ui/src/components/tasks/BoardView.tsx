@@ -56,6 +56,7 @@ export function BoardView({
   onOpenTask,
   onRetryIntegration,
   notices,
+  scopeControl,
   moves,
   startAgents,
   onStartWork,
@@ -79,6 +80,8 @@ export function BoardView({
   /** Banners that explain the board's current scope (a filter from the spec, a truncated page),
    *  shown between the toolbar and the columns. */
   notices?: React.ReactNode
+  /** The scope picker, shown first in the toolbar; `tasks` is already in that scope. */
+  scopeControl?: React.ReactNode
   moves?: BoardMoves
   /** Agents the card's Start work menu offers. */
   startAgents?: string[]
@@ -108,6 +111,7 @@ export function BoardView({
             { value: 'dependencies', label: 'Dependencies' },
           ]}
         />
+        {scopeControl}
         <div className="aw-board-filters" role="group" aria-label="Filter by agent">
           <button
             type="button"
