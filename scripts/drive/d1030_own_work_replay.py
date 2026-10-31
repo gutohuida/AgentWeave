@@ -406,3 +406,5 @@ if __name__ == "__main__":
 # ac-live-replay held from the rows: B's check failed on B's own 3eb22ac, naming test_balance, 2m28s
 # before any review of B, and C's branch held only D's commit. The script's own report stopped at the
 # query this version fixes, so the last checks were read from the database; people failed (F1092).
+# Re-run on 4852498, 2026-10-31 (trial Hub started by hand; main() does not start one): 40/40, people included. Its FR-4 check passes on an empty list:
+# C took no merge. FR-4 was read from B's history instead: ac83a12 'Bring in prerequisite work 98288deffeff (task-bd62b2c23f48)'.

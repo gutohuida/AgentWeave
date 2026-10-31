@@ -322,3 +322,18 @@ with a local backend only (D9 in `spec/changes/the-knowledge-vault-and-its-manag
 cloud backend would then be another implementation of that interface, not a rewrite. Nothing else is
 designed. Keep in mind that the product's direction so far is local-only, with federation deferred
 far out.
+
+## R13 — Hand-created tasks their own agent can land, like Fast outside a build
+**Asked:** 2026-10-31
+**Theme:** Task ledger
+**Ready:** thinking
+
+Parked by the operator the same day. An option set only when a task is created, which no endpoint can edit, lets the agent that made a hand-created task land it itself. Hub-created tasks never get it. The reason: a small fix waits far longer for review than it takes to build (F1092: about 36 minutes fixing, about 86 waiting).
+
+Notes from the discussion, none of them decided:
+
+- Reuse Fast. `task_transition_service.py:488` already approves completed work without a review, but only with a `build_id`. Approval at Fast still runs the checks and gates. `tasks.level` exists, so this probably needs no migration; not every reader was checked. Starting or joining a build writes `task.level` (`builds.py:506`, `:548`) and would need a guard.
+- Who may set it: if any agent can, review is optional for every agent. Proposed: the operator, or an agent in a turn the operator started directly.
+- It lets an agent merge to `master`, which `CLAUDE.md` keeps for the operator, and `:8000` runs that checkout. Proposed: refuse tasks touching migrations or the UI bundle at first.
+- Do not force it onto Hub-created tasks with a manual database write: they are what the rule excludes, and work on another branch would not land through them anyway.
+- It changes who may approve work, so it would be Tier 2.

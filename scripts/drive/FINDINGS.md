@@ -40976,7 +40976,7 @@ Repro: after the build finished, two tasks outside the build's plan stayed bound
 ## F1093 (C) -- Run now on a build past its window answers a bare 500 "Failed to fire job" although the stop worked
 
 **Area:** Jobs & loops. Driven 2026-10-30 on :8010 at 4dba06e: a flow build whose `window_end` has passed; `POST /jobs/{id}/run` answered `500 {"detail": "Failed to fire job"}`, while the build correctly stopped with "the build's window closed at ...; extend it to resume" and `build_stopped` was emitted. The route's message is in `hub/hub/api/v1/jobs.py`; which of its branches answered was not traced. Expected: an answer saying the build stopped and why.
-**Status:** open 2026-10-30.
+**Status:** open 2026-10-30. Still answers 500 on 2026-10-31 (scoped drive on :8010 at 4852498, Hub log line 133).
 
 ## F1096 (C) -- a completion with uncommitted work first spends a full check run on the older commit
 
@@ -41000,3 +41000,136 @@ Repro: after the build finished, two tasks outside the build's plan stayed bound
 **Tier:** 1
 
 Repro: write `{"title": "KEEP ME"}` to `spec/capabilities/handmade/spec.json` with no document row, then `POST /project/documents` with that path, title `Handmade`, kind `capability`. It answers 201 and the file now holds the empty scaffold; `KEEP ME` is gone (run against a test client on 2026-10-30). The content really is lost: `create_document` (`hub/hub/spec_lifecycle.py:238`) checks only for an existing row, the Hub keeps no copy of a file it never read, and only git can bring it back, if the file was ever committed. New capability reaches this from the UI, because its path comes from the title: a title that folds to a loose capability's folder overwrites it with no warning. **Expected:** a create over a file the Hub has no record of is refused and the file is untouched, with adopting (`hub/hub/spec_adoption.py:297`) named as the way to take it in. **Mind when fixing:** today's behaviour has callers. `TestReindexRoute` and its neighbours in `hub/tests/test_spec_index_writer.py` write a file and POST over it expecting 201 (`:311` onward), and `scripts/migrate_openspec_corpus.py:335` POSTs then PUTs and treats any 409 as "already imported", so a refusal there must not read as success. A refusal needs its own code, distinct from `document_exists`. **Test:** the repro above must answer 409 and leave the file byte-identical.
+
+
+## F1097 (B) -- a reviewer's verdict cannot be recorded while the task's check is running
+
+**Status:** open 2026-10-30.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+From `completed` the only move is `under_review`, and that is refused until the check run ends. On 2026-10-30 QA had a send-back for `task-57c72c07d046` and QA2 for `task-d031e6178f2c`; neither could record it (`chk-0a8eb5183544`, `chk-2562c9d59f73`), and Architect's `revision_needed` was refused too. The board read `completed` for work known to be going back, and the check kept spending on a commit already rejected. QA2's send-back landed only at 17:01, after a 42-minute run. **Expected:** a verdict can be recorded at once, and it ends or ignores the check on that commit.
+
+## F1098 (C) -- one delegation naming two tasks lands the second on the first task's branch
+
+**Status:** open 2026-10-30.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+Architect told Developer to build `task-57c72c07d046` then `task-b714a67a5b5c` in one message. The run was bound to the first, so the Hub refused completing or claiming the second (403 "already working"), and F1094's commits went on F1095's branch. F1094's own branch is empty, so a check on it proves nothing and its review depends on the other task landing. The refusal came only after the work was done. **Expected:** the run is told at the start that it can work one task, or the second task gets its own run.
+
+## F1099 (B) -- a task added mid-build can wedge when the default builder is also the checker
+
+**Status:** open 2026-10-30. Read, not reproduced (DeveloperOpus, during F1092).
+**Source:** found by reading code
+**Theme:** Flows & review
+**Ready:** no: reproduce first
+**Tier:** 0
+
+`join_running_build` (`hub/hub/builds.py:557,568`) gives an added task the default as its own builder and assignee. With builder = checker = X, X would build it and could not review it, the shape F1092's fix closed for planned tasks. Older than F1092. **Test:** add a task to a running build with builder = checker = X and another agent free; it must reach a review by X.
+
+## F1100 (C) -- the hop budget holds a reviewer's hand-off with no way for the sender to release it
+
+**Status:** open 2026-10-30.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+Passing hand-built work back and forth (build, review, send back, fix, re-review) reached the budget of 6 at F1092's re-review: `msg-01b6329d525e` was recorded and held, and only the operator can continue it. One fix round spends the whole budget, because nothing passes hand-built work along except messages. **Expected:** handing a task to its next role does not count as a chain of conversation.
+
+## F1101 (C) -- `reason_class` is missing from the `update_task` schema an agent is given
+
+**Status:** open 2026-10-30. Reported by QA2; not checked independently.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+The Hub requires `reason_class` for a send-back and `hub/hub/mcp_server.py:451` declares it, but QA2's tool schema did not list it; passing it anyway worked. **Expected:** the schema an agent receives lists it.
+
+## F1102 (B) -- a builders list naming only the document's checker stalls with nobody building
+
+**Status:** open 2026-10-30. Filed from QA2's `task-c87303ac6161`; older than F1092 by the diff, not re-run on the earlier commit.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+Driven on :8010 at f9d69aa: delivery `{agent: X, checker: X}`, roster X and Other, build `{builders: [X], builder: X, checker: X}`. The task stays pending with no assignee, and the board says only "loop queue is stalled". X is withheld as a judge (`scheduler.py:1859-1861`) and the pool is then narrowed to the list (`:1836`), leaving nobody. **Expected:** the task is built, or the operator is told why not, naming the agent.
+
+## F1103 (C) -- a dialog's checker does not release the document's checker to build
+
+**Status:** open 2026-10-30.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+Roster X and Y, document checker Y, dialog builder = checker = X. After F1092's fix X builds and the review stalls while Y is free: Y stays withheld as the document's judge though the build's record replaced it. The dialog warns first. **Expected:** Y builds and X checks, because the build's record decides who checks.
+
+## F1104 (D) -- New capability's refusal names an API route, and a directory at the path gets no clean refusal
+
+**Status:** open 2026-10-30. Found by QA reviewing F1095; the directory case was not investigated.
+**Source:** found by driving
+**Theme:** Spec documents
+**Ready:** yes
+**Tier:** 0
+
+The dialog tells the operator to "Adopt it (POST /documents/adopt)" rather than how to adopt in the app. With a directory at the path, QA's test client failed with `PermissionError`. **Expected:** the message says what to do in the app, and a directory gets the same 409.
+
+## F1105 (D) -- the timeout on `live_process_tree`'s PowerShell call may not hold if a child keeps the pipe open
+
+**Status:** open 2026-10-31. Found by QA2 reviewing task-ecc5aa118360, from reading the code; a hung PowerShell was only simulated.
+**Source:** found by reading code
+**Theme:** Project checks
+**Ready:** yes
+**Tier:** 0
+
+`hub/hub/project_checks.py` `live_process_tree` runs PowerShell only after a check has timed out, and is meant to add about 20s at worst. On Windows, `subprocess.run` waits with no timeout after killing the process, so a child holding the pipe could outlast that bound. `Get-CimInstance` should start no such child, so this may never fire. **Expected:** a test with a child holding the pipe shows the check still ends within the bound.
+
+## F1106 (C) -- a process a check leaves behind might block removing the scratch worktree on Windows
+
+**Status:** open 2026-10-31. Found by QA2 reviewing task-ecc5aa118360; untested.
+**Source:** found by reading code
+**Theme:** Project checks
+**Ready:** yes
+**Tier:** 0
+
+Since round 1 of task-ecc5aa118360, `_run_one` no longer ends a process a check leaves behind, by intent. Such a process could hold files open in the scratch worktree under `.agentweave/checks/`, and on Windows that could block its removal. **Expected:** a drive with a check that leaves a process running shows whether removal succeeds, and either way the next check is not affected.
+
+## F1107 (C) -- a task's Story tab says "sent back" without the reason class or sentence; only Details has them
+
+**Status:** open 2026-10-31.
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+**Area:** Tasks. Driven on :8010 at 4852498 (`scripts/drive/d1030_own_work_replay.py`, task-8b692180f351). The drawer opens on Story, whose row reads "The project's checks moved it to sent back" with no class and no sentence: `GET /tasks/{id}/story` holds no `reason_class`. The Details tab's history does show `broken-check` and the sentence, so `send-back-says-why` is met there, but a reader of the default view has to find the second tab to learn why.
+
+## F1108 (C) -- evidence the Hub's checks held reads "Held by you"
+
+**Status:** open 2026-10-31.
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+**Area:** Tasks. Same drive and task: the operator did nothing on this task, yet the Story's FR-1 evidence says "Held by you — The project's check suite failed ...". The same screen's transition row correctly says "The project's checks moved it". Likely the same root as F1062 (`actor_kind='operator'`, `origin='checks'`), which had not been seen on screen; the cause of this line was not traced.
+
+## F1109 (C) -- a pytest run spends its exit deleting old temp directories, and that time counts against a check's timeout
+
+**Status:** open 2026-10-31. The nested test's hang is fixed by its own `--basetemp`; a project's real check can still be delayed this way.
+**Source:** drive
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+**Area:** Worktrees & integration. This is the cause of the 120s `test_pytest_xdist_sizes_auto_by_the_variable` timeouts (task-ecc5aa118360). `live_process_tree`, on 2026-10-31, named only `cmd.exe`, its `conhost.exe` and the inner `python -m pytest -n auto`, with no worker left, after `1 passed in 0.68s`. An xdist main process makes a numbered `pytest-N` directory in the shared `%TEMP%\pytest-of-<user>` and, at exit, deletes the ones past the newest three (`cleanup_numbered_dir`, an atexit hook in `_pytest/pathlib.py`). Reproduced with an isolated TEMP holding 150,000 stale files: `1 passed in 0.72s`, then 21s to exit on an unloaded machine, with a `faulthandler` dump inside `shutil.rmtree` under `_pytest/pathlib.py`. The real folder held 171,069 files that day. The hang itself was not caught with a stack dump, and 120s was not reproduced; the size, the surviving-process list and the first-run-after-a-pause pattern all fit. 583 and then 816 inner runs with nothing stale to delete never hung.
+
+What remains: the `hub-tests` check, or any project's xdist check, can pass and then time out while deleting old session directories, and it reads as a failure. Nothing here limits that folder's growth.

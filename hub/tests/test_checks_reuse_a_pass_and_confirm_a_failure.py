@@ -491,7 +491,13 @@ def test_pytest_xdist_sizes_auto_by_the_variable(tmp_path_factory, monkeypatch):
     result = project_checks.run_one(
         {
             "name": "auto",
-            "command": f"{PY} -m pytest -n auto -p no:cacheprovider test_one.py",
+            # Its own --basetemp: otherwise this run, as it exits, deletes whatever old pytest-N
+            # directories other suites left in the shared temp folder, which can take past this
+            # timeout with `1 passed` already printed (F1109).
+            "command": (
+                f"{PY} -m pytest -n auto -p no:cacheprovider "
+                f'--basetemp "{outside / "basetemp"}" test_one.py'
+            ),
             "timeout_seconds": 120,
         },
         outside,
