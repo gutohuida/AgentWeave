@@ -30,6 +30,19 @@ from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional, Tup
 # import the module (`__name__ != "__main__"`), so they always take the fastmcp path.
 _CALL_MODE = __name__ == "__main__" and sys.argv[1:2] == ["--call"]
 
+_NO_HUB_ADDRESS = (
+    "No Hub address (HUB_URL is unset); the Hub must start this tool connection. "
+    "Nothing was sent."
+)
+
+# Refuses to serve unbound: a client that launched this with no environment would otherwise serve a
+# full tool list whose every call fails, or (before F526) reached for `:8000`. A missing run token
+# is not checked here: the permission approver legitimately runs without one, and every effect that
+# needs it already refuses (`_bound_token`). Also before the fastmcp import, which took 18 s on this
+# machine under load, so that saying no costs what the stdlib costs.
+if __name__ == "__main__" and not _CALL_MODE and not os.environ.get("HUB_URL", "").strip():
+    sys.exit(f"agentweave MCP server not started: {_NO_HUB_ADDRESS}")
+
 
 class _CallRegistry:
     """The stdlib stand-in for `FastMCP` in call mode: `.tool()` registers nothing and returns the
@@ -143,10 +156,7 @@ def _hub_address() -> str:
     land on is the operator's own instance (F526), under no run credential."""
     url = os.environ.get("HUB_URL", "").strip().rstrip("/")
     if not url:
-        raise UnboundIdentityError(
-            "No Hub address (HUB_URL is unset); the Hub must start this tool connection. "
-            "Nothing was sent."
-        )
+        raise UnboundIdentityError(_NO_HUB_ADDRESS)
     return url
 
 
@@ -5787,17 +5797,7 @@ def _announce_adapter_online() -> None:
 
 
 def main() -> None:
-    """Run the canonical Hub-owned surface over stdio.
-
-    Refuses to start unbound: a client that launched this with no environment would otherwise
-    serve a full tool list whose every call fails, or (before F526) reached for `:8000`. A missing
-    run token is not checked here: the permission approver legitimately runs without one, and
-    every effect that needs it already refuses (`_bound_token`).
-    """
-    try:
-        _hub_address()
-    except UnboundIdentityError as exc:
-        sys.exit(f"agentweave MCP server not started: {exc}")
+    """Run the canonical Hub-owned surface over stdio; an unbound start never gets here (above)."""
     _announce_adapter_online()
     mcp.run(transport="stdio", show_banner=False)
 

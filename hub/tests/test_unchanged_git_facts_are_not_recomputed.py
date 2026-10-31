@@ -55,6 +55,9 @@ class _CountedPopen(subprocess.Popen):
 def count_git(monkeypatch):
     _CountedPopen.started = []
     monkeypatch.setattr(subprocess, "Popen", _CountedPopen)
+    # A request that outlasts this window resolves a name again by design, and a loaded machine
+    # makes one `GET /loops` do that. These tests count per request, not per wall-clock second.
+    monkeypatch.setattr(git_facts, "REF_SCOPE_SECONDS", 3600.0)
     git_facts.forget()
     yield _CountedPopen
     git_facts.forget()
