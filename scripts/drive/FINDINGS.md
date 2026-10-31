@@ -41133,3 +41133,23 @@ Since round 1 of task-ecc5aa118360, `_run_one` no longer ends a process a check 
 **Area:** Worktrees & integration. This is the cause of the 120s `test_pytest_xdist_sizes_auto_by_the_variable` timeouts (task-ecc5aa118360). `live_process_tree`, on 2026-10-31, named only `cmd.exe`, its `conhost.exe` and the inner `python -m pytest -n auto`, with no worker left, after `1 passed in 0.68s`. An xdist main process makes a numbered `pytest-N` directory in the shared `%TEMP%\pytest-of-<user>` and, at exit, deletes the ones past the newest three (`cleanup_numbered_dir`, an atexit hook in `_pytest/pathlib.py`). Reproduced with an isolated TEMP holding 150,000 stale files: `1 passed in 0.72s`, then 21s to exit on an unloaded machine, with a `faulthandler` dump inside `shutil.rmtree` under `_pytest/pathlib.py`. The real folder held 171,069 files that day. The hang itself was not caught with a stack dump, and 120s was not reproduced; the size, the surviving-process list and the first-run-after-a-pause pattern all fit. 583 and then 816 inner runs with nothing stale to delete never hung.
 
 What remains: the `hub-tests` check, or any project's xdist check, can pass and then time out while deleting old session directories, and it reads as a failure. Nothing here limits that folder's growth.
+
+## F1110 (C) -- a fix task the Hub files during a build is invisible from that build's spec
+
+**Status:** open 2026-10-31. Operator's request: an error caught during a build must show on the spec, with whether it was introduced or only caught, and how it was fixed.
+**Source:** asked for by the operator
+**Theme:** Flows & review
+**Ready:** no: the shape needs the operator's approval
+**Tier:** 1
+
+`task-5a9efc6d2670` was filed by `flaky_tests.file_fix_task` while `task-7dd2cd4941f7` of `spdoc-ab4ca6e25adb` was being checked. The filing is intended (`a-red-main-does-not-hold-the-night`, D5), but it sets `loop_id` only: `spec_document_id` and `build_id` are null, and the link to the task it was found on is an `event_logs` row (`FIX_TASK_EVENT`) plus a sentence in the description. So the spec page does not show it, and `a-finished-spec-gets-a-build-retrospective` will not read it, because that job reads "every task of the document". **Expected:** the spec's build record lists each failure the checks found during it: which test, flaky or also failing on main, whether the build's work changed that file, the fix task and its outcome. It adds no requirement to the spec and does not hold the spec from reading as done.
+
+## F1111 (C) -- removing the lag probe's starvation exemption probably made a stall test flaky again
+
+**Status:** open 2026-10-31. Being worked by Developer in `task-5a9efc6d2670`. The cause is likely, not proven.
+**Source:** found by driving
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+`task-e9ae9d8dfeb8` (10-28) fixed `test_approving_releases_and_merges_without_stalling_the_loop` by excusing lateness the whole machine shared. Architect removed that excuse on 10-31 (`200ca41`, merged in `51e7bc4`) because it could also hide real work holding the loop, and passed 6/6 under load. Check run `chk-cbad27013168` then failed the same test at 426 ms against 100 ms during a real check. **Expected:** the test tells a busy machine from code blocking the loop, and still fails when a real stall is forced.
