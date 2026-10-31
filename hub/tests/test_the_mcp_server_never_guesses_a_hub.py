@@ -17,11 +17,11 @@ from hub import mcp_server
 from hub.tool_server import pinned_server_path
 
 
-def _spawn_without(*dropped: str, **given: str) -> subprocess.CompletedProcess:
+def _spawn_without(*dropped: str, flags: tuple = (), **given: str) -> subprocess.CompletedProcess:
     env = {k: v for k, v in os.environ.items() if k not in dropped}
     env.update(given)
     return subprocess.run(
-        [sys.executable, str(pinned_server_path())],
+        [sys.executable, *flags, str(pinned_server_path())],
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
@@ -35,6 +35,14 @@ def test_a_server_started_without_a_hub_address_exits_naming_the_variable():
     assert done.returncode != 0
     assert "HUB_URL" in done.stderr
     assert "8000" not in done.stderr
+
+
+def test_the_refusal_does_not_wait_for_the_fastmcp_import():
+    """A spawn that reached that import took 82 s on a loaded machine, past the timeout above and
+    any worth setting. Refusing ahead of it is what keeps the test above deterministic."""
+    done = _spawn_without("HUB_URL", flags=("-X", "importtime"), AW_RUN_TOKEN="aw_run_probe")
+    assert "HUB_URL" in done.stderr
+    assert "fastmcp" not in done.stderr
 
 
 def test_a_request_without_a_hub_address_never_opens_a_connection(monkeypatch):
