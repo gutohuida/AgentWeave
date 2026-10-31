@@ -41163,3 +41163,13 @@ What remains: the `hub-tests` check, or any project's xdist check, can pass and 
 **Tier:** 1
 
 On 2026-10-31 `task-5a9efc6d2670` (a critical fix task the Hub filed) went to Developer as the flow's own agent. QA sent `task-7dd2cd4941f7` back to Developer at 17:13 while `run-5fc8e9c4ad37`, started 16:59 on the fix task, was still running at 17:48, and that task's builder is given to nobody else. QA2 was on the builders list and not named by either task. **Expected:** a fix task prefers a free agent who holds no work in the build; it does not delay the build's own tasks.
+
+## F1113 (A) -- a finished build ends its flow while the Hub's fix task in that flow is still open, stranding it
+
+**Status:** open 2026-10-31. Goes in with the F1112 quick fix.
+**Source:** found by the operator on a real build
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+`builds.finish_if_done` (`hub/hub/builds.py:751`) counts only tasks with `build_id` set, and `end_loop_of` then ends the build's loop. A fix task from `flaky_tests.file_fix_task` carries the `loop_id` and no `build_id`. On 2026-10-31 approving `task-26371095d3ce` finished `build-37051e90da23` at 19:27:03 and ended `loop-028328d41d99` with `task-5a9efc6d2670` under review. At 19:32 its reviewer sent it back to Developer, and no firing will ever brief Developer. **Expected:** a loop does not end while a task in it is open; the build may read as finished, per F1110, but the flow keeps working its queue and ends when that drains.
