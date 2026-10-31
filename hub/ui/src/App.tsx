@@ -108,6 +108,19 @@ export default function App() {
     availableProjectIds: projects ? projects.map((project) => project.id) : null,
     lastOpenedProjectId: projectId,
   })
+  // A spec view's task link, clicked (the Spec tab's page and the conversation panel's spec tab):
+  // switch to the Tasks board. A spec page's own link (it names the document) sets the board's
+  // remembered spec scope; a coverage row's list of ids stays a separate, overriding narrowing.
+  // The stores are global because the board they apply to is not mounted yet.
+  const openTasksFor = (targetProjectId: string, taskIds: string[], specDocumentId?: string) => {
+    if (specDocumentId) {
+      useBoardScopeStore.getState().setScope(targetProjectId, { kind: 'spec', id: specDocumentId })
+      useTaskFilterStore.getState().clearActiveTaskIds()
+    } else {
+      useTaskFilterStore.getState().setActiveTaskIds(taskIds)
+    }
+    navigateTo(projectDestination(targetProjectId, 'tasks'))
+  }
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     try {
       const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY))
@@ -407,6 +420,9 @@ export default function App() {
         onOpenAgentSettings={() =>
           navigateTo(agentSettingsDestination(destination.projectId, agentName))
         }
+        onOpenTasks={(taskIds, specDocumentId) =>
+          openTasksFor(destination.projectId, taskIds, specDocumentId)
+        }
       />
     ) : (
       // Not while the open roster is still loading: every agent is absent from `[]`, and the notice
@@ -536,17 +552,9 @@ export default function App() {
           // A coverage row's task-count link, clicked: switch to the Tasks tab filtered to what
           // it names. The filter is set on the global store because the board it applies to is
           // not mounted yet — this navigation is what mounts it.
-          onOpenTasks={(taskIds, specDocumentId) => {
-            // A spec page's own link (it names the document) sets the board's spec scope, which is
-            // remembered; a coverage row's list of ids stays a separate, overriding narrowing.
-            if (specDocumentId) {
-              useBoardScopeStore.getState().setScope(destination.projectId, { kind: 'spec', id: specDocumentId })
-              useTaskFilterStore.getState().clearActiveTaskIds()
-            } else {
-              useTaskFilterStore.getState().setActiveTaskIds(taskIds)
-            }
-            navigateTo(projectDestination(destination.projectId, 'tasks'))
-          }}
+          onOpenTasks={(taskIds, specDocumentId) =>
+            openTasksFor(destination.projectId, taskIds, specDocumentId)
+          }
           // A flow's tab lives in the conversation panel, which this screen does not mount. Open
           // the tab, then go to the flow's agent with NO document: the conversation view's mount
           // effect opens the attached document's tab, which would sit in front of the loop.
