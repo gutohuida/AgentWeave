@@ -71,7 +71,7 @@ export interface SpecSurfaceHost {
   /** Open another document (a roadmap, a neighbouring slice, a link). */
   onOpenDocument: (path: string) => void
   /** The Tasks tab, filtered to these tasks. */
-  onOpenTasks?: (taskIds: string[]) => void
+  onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenLoop?: (loop: LoopSummary) => void
   /** The document was deleted: leave it. */
   onDeleted?: () => void

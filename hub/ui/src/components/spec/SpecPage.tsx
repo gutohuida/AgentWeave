@@ -21,7 +21,7 @@ interface SpecPageProps {
   anchor?: string | null
   onOpenDocument: (path: string | null) => void
   /** Switches to the Tasks tab, filtered to a coverage row's linked tasks. */
-  onOpenTasks?: (taskIds: string[]) => void
+  onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   /** Opens a flow's loop tab; the Spec screen has no panel shell, so the host navigates too. */
   onOpenLoop?: (loop: LoopSummary) => void
   /** Opens the Spec tab's evidence view. */
@@ -166,7 +166,7 @@ function OpenDocument({
   column: ReactNode
   footer: ReactNode
   onOpenDocument: (path: string | null) => void
-  onOpenTasks?: (taskIds: string[]) => void
+  onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenLoop?: (loop: LoopSummary) => void
 }) {
   const list = useSpecListData()

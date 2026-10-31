@@ -59,7 +59,7 @@ export function SpecDocumentFacts({
 }: {
   path: string
   specList: SpecListResponse | undefined
-  onOpenTasks?: (taskIds: string[]) => void
+  onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenRequirement: (identifier: string) => void
 }) {
   const [detail, setDetail] = useState<HealthFactKey | null>(null)
@@ -115,7 +115,7 @@ export function SpecDocumentFacts({
             onError: (error: unknown) => toast({ title: 'Could not start the check', description: readableApiError(error, 'The Hub did not answer.'), tone: 'error' }),
           })
         }
-        onOpenTasks={() => onOpenTasks?.((documentTasks ?? []).map((task) => task.id))}
+        onOpenTasks={() => onOpenTasks?.((documentTasks ?? []).map((task) => task.id), record?.id)}
         onOpenRequirement={onOpenRequirement}
         activeDetail={detail}
         onShowDetail={(fact) => setDetail((current) => (current === fact ? null : fact))}

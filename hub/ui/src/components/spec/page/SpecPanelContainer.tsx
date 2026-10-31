@@ -15,7 +15,7 @@ import type { LoopSummary } from '@/api/loops'
 export function SpecPanelContainer(props: {
   path: string
   onOpenDocument: (path: string) => void
-  onOpenTasks?: (taskIds: string[]) => void
+  onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenLoop?: (loop: LoopSummary) => void
   onDeleted?: () => void
   /** The document this conversation is attached to, for the switcher's shortcuts. */

@@ -1,6 +1,6 @@
 """Tests for task endpoints."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import select
@@ -260,6 +260,63 @@ async def test_spec_document_id_scopes_to_exactly_that_document_hiding_nothing(a
     assert resp.status_code == 200
     ids = {t["id"] for t in resp.json()["tasks"]}
     assert ids == {"task-scale-1", "task-scale-2"}
+
+
+@pytest.mark.asyncio
+async def test_no_spec_returns_exactly_the_tasks_without_a_document_in_every_status(
+    app, auth_headers
+):
+    await _make_document("spdoc-nospec-a", "approved")
+    await _make_task("task-nospec-1", "approved", None)
+    await _make_task("task-nospec-2", "pending", None)
+    await _make_task("task-nospec-3", "pending", "spdoc-nospec-a")
+
+    resp = await app.get("/api/v1/projects/proj-test/tasks?no_spec=true", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert {t["id"] for t in body["tasks"]} == {"task-nospec-1", "task-nospec-2"}
+    assert body["total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_one_spec_and_no_spec_are_whole_past_the_board_page(app, auth_headers):
+    """1005 tasks, the newest two a spec's: the board's parameters (limit=1000) still return them."""
+    await _make_document("spdoc-page-a", "archived")
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    async with async_session_factory() as session:
+        for number in range(1003):
+            session.add(
+                Task(
+                    id=f"task-page-{number:04d}",
+                    project_id="proj-test",
+                    title="filler",
+                    status="pending",
+                    spec_document_id=None if number < 2 else "spdoc-other",
+                    created_at=base + timedelta(minutes=number),
+                )
+            )
+        for number in range(2):
+            session.add(
+                Task(
+                    id=f"task-page-a{number}",
+                    project_id="proj-test",
+                    title="newest",
+                    status="approved" if number else "pending",
+                    spec_document_id="spdoc-page-a",
+                    created_at=base + timedelta(days=1, minutes=number),
+                )
+            )
+        await session.commit()
+
+    one = await app.get(
+        "/api/v1/projects/proj-test/tasks?spec_document_id=spdoc-page-a&limit=1000",
+        headers=auth_headers,
+    )
+    assert {t["id"] for t in one.json()["tasks"]} == {"task-page-a0", "task-page-a1"}
+    none = await app.get(
+        "/api/v1/projects/proj-test/tasks?no_spec=true&limit=1000", headers=auth_headers
+    )
+    assert {t["id"] for t in none.json()["tasks"]} == {"task-page-0000", "task-page-0001"}
 
 
 @pytest.mark.asyncio
