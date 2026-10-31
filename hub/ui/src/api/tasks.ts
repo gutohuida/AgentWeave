@@ -620,16 +620,24 @@ export function useTasks(options?: {
   const noSpec = options?.noSpec ?? false
   return useQuery<TaskPage>({
     queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted, loopId, ...(specDocumentId ? { specDocumentId } : {}), ...(noSpec ? { noSpec } : {}) }],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams()
       if (specDocumentId) params.set('spec_document_id', specDocumentId)
       else if (noSpec) params.set('no_spec', 'true')
       else if (loopId) params.set('loop_id', loopId)
       else if (excludeArchivedCompleted) params.set('exclude_archived_completed', 'true')
       params.set('limit', String(PAGE_SIZE))
-      return getJson<TaskPage>(
-        `/api/v1/projects/${projectId}/tasks?${params.toString()}`,
-      )
+      const url = `/api/v1/projects/${projectId}/tasks?${params.toString()}`
+      const first = await getJson<TaskPage>(url)
+      // A board scope shows every task in it: past one page, read the rest rather than a prefix.
+      if (!(specDocumentId || noSpec) || !first.has_more) return first
+      const tasks = [...first.tasks]
+      let page = first
+      while (page.has_more && page.tasks.length > 0) {
+        page = await getJson<TaskPage>(`${url}&offset=${tasks.length}`)
+        tasks.push(...page.tasks)
+      }
+      return { tasks, total: Math.max(first.total, tasks.length), has_more: false }
     },
     enabled: isConfigured && !!projectId,
   })

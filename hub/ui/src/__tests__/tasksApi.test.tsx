@@ -90,6 +90,33 @@ describe('useTasks', () => {
     ])
   })
 
+  it('reads every page of a scope, however many tasks it holds', async () => {
+    const seen: string[] = []
+    const row = (n: number) => ({ ...(PAGE.tasks[0] as object), id: `task-${n}` })
+    globalThis.fetch = ((url: string) => {
+      seen.push(url)
+      const offset = Number(new URL(url).searchParams.get('offset') ?? 0)
+      const tasks = offset === 0 ? [row(1), row(2)] : [row(3)]
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ tasks, total: 3, has_more: offset === 0 }),
+      } as Response)
+    }) as typeof fetch
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const { result } = renderHook(() => useTasks({ noSpec: true }), { wrapper: wrapper(client) })
+    await waitFor(() => expect(result.current.data).toBeDefined())
+
+    expect(result.current.data!.tasks.map((t) => t.id)).toEqual(['task-1', 'task-2', 'task-3'])
+    expect(result.current.data!.total).toBe(3)
+    expect(result.current.data!.has_more).toBe(false)
+    expect(seen).toEqual([
+      'http://hub.test/api/v1/projects/proj-1/tasks?no_spec=true&limit=1000',
+      'http://hub.test/api/v1/projects/proj-1/tasks?no_spec=true&limit=1000&offset=2',
+    ])
+  })
+
   it('requests ?loop_id=<id> when asked, taking priority over excludeArchivedCompleted', async () => {
     const seen: string[] = []
     globalThis.fetch = ((url: string) => {

@@ -61,7 +61,10 @@ export function BoardScopePicker({
     })),
   ]
   const typed = filter.trim().toLowerCase()
-  const offered = typed ? options.filter((option) => option.label.toLowerCase().includes(typed)) : options
+  // A typed title looks for a spec: All and No spec are not specs and do not answer to it.
+  const offered = typed
+    ? options.filter((option) => option.scope.kind === 'spec' && option.label.toLowerCase().includes(typed))
+    : options
 
   return (
     <div

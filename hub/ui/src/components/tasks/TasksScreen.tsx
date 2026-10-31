@@ -7,6 +7,7 @@ import {
   useRetryIntegration,
   useStartWorkOnTask,
   useTask,
+  useTaskBoards,
   useTasks,
   useUpdateTask,
   type Task,
@@ -65,20 +66,18 @@ export function TasksScreen({
   const pendingOpenTaskId = useTaskFilterStore((state) => state.pendingOpenTaskId)
   const clearPendingOpenTaskId = useTaskFilterStore((state) => state.clearPendingOpenTaskId)
 
-  // Every task, unfiltered: the picker's counts and whether a remembered spec still has tasks come
-  // from here, not from the board's own page (which hides an archived spec's finished work). A
-  // task-id narrowing reads the same page.
-  const { data: fullPage, error: fullPageError } = useTasks()
+  // The picker's specs and counts, and whether a remembered spec still has tasks, come from the
+  // Hub's per-document totals: not capped at a page, and not hiding an archived spec's finished work.
+  const { data: boardsData, error: boardsError } = useTaskBoards()
   const storedScope = useBoardScopeStore((state) => (projectId ? state.scopes[projectId] : undefined))
   const setStoredScope = useBoardScopeStore((state) => state.setScope)
   const rememberedScope = React.useMemo(() => storedScope ?? loadScope(projectId), [storedScope, projectId])
   const { data: specDocuments } = useSpecDocuments()
-  // A remembered spec that holds no task any more opens as All. A truncated page cannot say so.
+  // A remembered spec that holds no task any more opens as All.
   const scope: BoardScope =
     rememberedScope.kind === 'spec' &&
-    fullPage &&
-    !fullPage.has_more &&
-    !fullPage.tasks.some((task) => task.spec_document_id === rememberedScope.id)
+    boardsData &&
+    !boardsData.boards.some((board) => board.spec_document_id === rememberedScope.id)
       ? ALL_SCOPE
       : rememberedScope
   const narrowed = activeTaskIds !== null
@@ -135,15 +134,21 @@ export function TasksScreen({
     [specDocuments],
   )
   const pickerSpecs = React.useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const task of fullPage?.tasks ?? []) {
-      if (task.spec_document_id) counts.set(task.spec_document_id, (counts.get(task.spec_document_id) ?? 0) + 1)
-    }
-    return [...counts].map(([id, count]): ScopeSpec => ({ id, title: specTitles.get(id) ?? id, count }))
-  }, [fullPage, specTitles])
-  const noSpecCount = (fullPage?.tasks ?? []).filter((task) => !task.spec_document_id).length
+    return (boardsData?.boards ?? [])
+      .filter((board) => board.spec_document_id)
+      .map(
+        (board): ScopeSpec => ({
+          id: board.spec_document_id!,
+          title: board.title ?? specTitles.get(board.spec_document_id!) ?? board.spec_document_id!,
+          count: board.total,
+        }),
+      )
+  }, [boardsData, specTitles])
+  const noSpecCount = (boardsData?.boards ?? []).find((board) => !board.spec_document_id)?.total ?? 0
   const scopeName =
-    scope.kind === 'none' ? 'No spec' : scope.kind === 'spec' ? (specTitles.get(scope.id) ?? scope.id) : 'All'
+    scope.kind === 'none' ? 'No spec' : scope.kind === 'spec'
+      ? (specTitles.get(scope.id) ?? pickerSpecs.find((spec) => spec.id === scope.id)?.title ?? scope.id)
+      : 'All'
   const chooseScope = (next: BoardScope) => {
     if (projectId) setStoredScope(projectId, next)
     clearActiveTaskIds()
@@ -271,7 +276,7 @@ export function TasksScreen({
     <>
       {/* The agent filter and Start work's agent menu are built from the roster; unread, both would
           offer nobody. */}
-      <QueryErrorNotice failures={[['the agents', agentsError], ['the spec counts', fullPageError]]} className="aw-board-notice" />
+      <QueryErrorNotice failures={[['the agents', agentsError], ['the spec counts', boardsError]]} className="aw-board-notice" />
       {taskPage?.has_more ? (
         <div className="aw-board-notice" data-testid="tasks-truncated-banner">
           <Icon name="info" size={14} />
@@ -285,7 +290,7 @@ export function TasksScreen({
         <div className="aw-board-notice" data-testid="board-scope-banner">
           <Icon name="filter_alt" size={14} />
           <span data-testid="board-scope-name">
-            {scopeName} · {allTasks.length} task{allTasks.length === 1 ? '' : 's'}
+            {scopeName} · {taskPage?.total ?? allTasks.length} task{(taskPage?.total ?? allTasks.length) === 1 ? '' : 's'}
           </span>
           <Button
             variant="ghost"

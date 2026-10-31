@@ -17,6 +17,7 @@ import { useTaskFilterStore } from '@/store/taskFilterStore'
 let tasks: Task[] = []
 let archived = new Set<string>()
 let agents: { name: string; color_index: number }[] = []
+let cap: number | null = null
 
 vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: agents }) }))
 vi.mock('@/api/spec', () => ({
@@ -50,7 +51,33 @@ vi.mock('@/api/tasks', async (importOriginal) => {
             return !(t.spec_document_id && archived.has(t.spec_document_id) && done.includes(t.status))
           return true
         })
+      // An unscoped page stops at `cap`, oldest first, as the route's page does past 1000 tasks;
+      // a scoped query loads every page of its scope (`useTasks`).
+      const scoped = Boolean(options?.specDocumentId || options?.noSpec)
+      if (cap !== null && !scoped) {
+        return {
+          data: { tasks: rows.slice(0, cap), total: rows.length, has_more: rows.length > cap },
+          isLoading: false,
+          isError: false,
+        }
+      }
       return { data: { tasks: rows, total: rows.length, has_more: false }, isLoading: false, isError: false }
+    },
+    useTaskBoards: () => {
+      const totals = new Map<string | null, number>()
+      for (const t of tasks) totals.set(t.spec_document_id ?? null, (totals.get(t.spec_document_id ?? null) ?? 0) + 1)
+      const titles: Record<string, string> = { 'spec-a': 'Alpha plan', 'spec-b': 'Beta plan', 'spec-c': 'Gamma plan', 'spec-new': 'Newest plan' }
+      return {
+        data: {
+          boards: [...totals].map(([id, total]) => ({
+            spec_document_id: id,
+            title: id ? (titles[id] ?? id) : null,
+            total,
+            outstanding: total,
+          })),
+        },
+        error: null,
+      }
     },
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: {} } }),
     useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
@@ -103,7 +130,8 @@ beforeEach(() => {
   counter = 0
   localStorage.clear()
   agents = []
-  a = [task('A one', 'spec-a'), task('A two', 'spec-a', { status: 'approved' })]
+  cap = null
+  a =[task('A one', 'spec-a'), task('A two', 'spec-a', { status: 'approved' })]
   b = [task('B one', 'spec-b'), task('B two', 'spec-b')]
   free = [task('Free one', null), task('Free two', null)]
   tasks = [...a, ...b, ...free]
@@ -129,6 +157,36 @@ describe('the board scope', () => {
     expect(screen.getByTestId('board-scope-option-spec-a')).toBeInTheDocument()
     expect(screen.queryByTestId('board-scope-option-spec-b')).not.toBeInTheDocument()
     expect(screen.queryByTestId('board-scope-option-all')).not.toBeInTheDocument()
+  })
+
+  it('does not answer a typed title with All or No spec', () => {
+    renderBoard()
+    fireEvent.click(screen.getByTestId('board-scope'))
+    fireEvent.change(screen.getByTestId('board-scope-filter'), { target: { value: 'a' } })
+    expect(screen.queryByTestId('board-scope-option-all')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('board-scope-option-none')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByTestId('board-scope-filter'), { target: { value: 'spec' } })
+    expect(screen.queryByTestId('board-scope-option-none')).not.toBeInTheDocument()
+  })
+
+  it('offers and shows a spec whose tasks are past the task page (ac-past-the-page)', () => {
+    const newest = [task('New one', 'spec-new'), task('New two', 'spec-new')]
+    tasks = [...a, ...b, ...free, ...newest]
+    cap = 6 // the page holds the oldest six; the two newest are past it
+    renderBoard()
+    fireEvent.click(screen.getByTestId('board-scope'))
+    expect(screen.getByTestId('board-scope-option-spec-new')).toHaveTextContent('2')
+    expect(screen.getByTestId('board-scope-option-none')).toHaveTextContent('2')
+    fireEvent.click(screen.getByTestId('board-scope-option-spec-new'))
+    expect(shown()).toEqual(ids(newest))
+    expect(screen.getByTestId('board-scope-name')).toHaveTextContent('Newest plan · 2 tasks')
+  })
+
+  it('opens as All for a stale spec even when the task page is truncated (ac-stale-scope)', () => {
+    cap = 2
+    localStorage.setItem('aw.boardScope.proj-1', JSON.stringify({ kind: 'spec', id: 'spec-gone' }))
+    renderBoard()
+    expect(screen.queryByTestId('board-scope-name')).not.toBeInTheDocument()
   })
 
   it("shows an archived spec's finished and pending tasks when chosen, and hides its finished ones under All (ac-one-spec, ac-all)", () => {
