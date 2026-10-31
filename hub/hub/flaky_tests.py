@@ -244,7 +244,7 @@ async def record_flake(run_id: str, result: Dict[str, Any]) -> None:
 # --- fix tasks the Hub files itself (`a-red-main-does-not-hold-the-night`, D5) ---------------------
 
 
-def _key(test: str) -> str:
+def normalised_test(test: str) -> str:
     return test.strip().replace("\\", "/")
 
 
@@ -295,7 +295,7 @@ async def fix_tasks_by_test(
         if open_only and statuses.get(data["task_id"]) in (None, *_CLOSED_STATUSES):
             continue
         for test in data.get("tests") or []:
-            found[_key(str(test))] = data["task_id"]
+            found[normalised_test(str(test))] = data["task_id"]
     return found
 
 
@@ -400,7 +400,7 @@ async def file_fix_task(run_id: str) -> Optional[str]:
             if not found:
                 return None
             covered = await fix_tasks_by_test(session, task.project_id, open_only=True)
-            new = [entry for entry in found if _key(entry["test"]) not in covered]
+            new = [entry for entry in found if normalised_test(entry["test"]) not in covered]
             if not new:
                 return None
             loop_id = task.loop_id if await flow_advance.is_live(session, task.loop_id) else None

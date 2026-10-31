@@ -32,6 +32,22 @@ describe('phase 5 agent identity colors across project surfaces', () => {
     expect(screen.queryByTestId('task-waiting-on-task-1')).not.toBeInTheDocument()
   })
 
+  it('says when approved work is still landing and when a cap holds a task, only then', () => {
+    const now = new Date('2026-08-04T09:31:00Z')
+    const { rerender } = render(
+      <TaskCardCompact
+        task={{ ...task, status: 'approved', waiting_to_land: true, queue_held_reason: 'the cap is spent' }}
+        now={now}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('task-waiting-to-land-task-1')).toHaveTextContent('waiting to land')
+    expect(screen.getByTestId('task-queue-held-task-1')).toHaveTextContent('held: the cap is spent')
+    rerender(<TaskCardCompact task={task} now={now} onOpen={() => {}} />)
+    expect(screen.queryByTestId('task-waiting-to-land-task-1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('task-queue-held-task-1')).not.toBeInTheDocument()
+  })
+
   it('shows the activity actor name with the same project-assigned color', () => {
     render(<EventRow event={{ type: 'task_created', data: { agent: 'claude' }, timestamp: '2026-08-04T09:00:00Z', localId: 1 }} actorName="claude" actorColorIndex={2} />)
     expect(screen.getByText('claude')).toBeInTheDocument()

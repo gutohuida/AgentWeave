@@ -686,7 +686,10 @@ async def _fold_state(session: AsyncSession, document) -> Optional[Dict[str, Any
     if document.kind != "change-spec" or document.phase not in ("approved", "archived"):
         return None
     capabilities = await spec_lifecycle.merged_into(session, document)
+    # Work approved and not on main yet is still open here, as the document's shown phase says.
     open_tasks = await spec_lifecycle.open_task_ids(session, document)
+    unlanded = await spec_lifecycle.unlanded_task_ids(session, [document.id])
+    open_tasks += unlanded.get(document.id, [])
     if capabilities:
         state = "folded"
     elif open_tasks:

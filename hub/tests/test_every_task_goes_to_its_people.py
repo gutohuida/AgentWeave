@@ -274,6 +274,17 @@ async def test_a_flow_gives_an_unnamed_task_only_to_the_default_builder(
 
 
 @pytest.mark.asyncio
+async def test_a_document_checker_the_build_keeps_is_still_withheld(app, auth_headers, bind_runner):
+    """The other side of F1103: with no choice in the dialog qa still checks, so opus builds."""
+    await _roster(app, auth_headers, bind_runner, "opus", "qa")
+    await _approved(app, auth_headers, _document([{"key": "t1"}], agent="opus", checker="qa"))
+    await _build(app, auth_headers, driver="flow", level="reviewed", builder="opus")
+    t1 = (await _tasks())["t1"]
+
+    assert _picks(await _decide()) == [(t1.id, "opus", False)]
+
+
+@pytest.mark.asyncio
 async def test_a_default_builder_who_is_not_open_holds_the_work(app, auth_headers, bind_runner):
     """Nobody is quietly substituted for a default that was archived since: the task says who."""
     await _roster(app, auth_headers, bind_runner, "dev", "opus", "other", "qa")
@@ -427,25 +438,23 @@ async def test_the_default_builds_when_the_only_other_agent_is_read_only(
 
 
 @pytest.mark.asyncio
-async def test_the_default_builds_when_the_only_other_agent_is_withheld_as_a_judge(
+async def test_a_dialog_checker_frees_the_document_checker_to_build(
     app, auth_headers, bind_runner, bind_project_workspace, reviewable, tmp_path
 ):
-    """QA2's shape (b): the document names qa to check and the dialog chose dev for both. The pool
-    still withholds qa by its own rule, so dev builds and the review's stall says why."""
+    """F1103: the document names qa to check and the dialog chose dev for both. The build's record
+    decides who checks, so dev steps aside for its own review, qa builds, and dev then checks."""
     await bind_project_workspace(tmp_path)
     await _roster(app, auth_headers, bind_runner, "dev", "qa")
     await _approved(app, auth_headers, _document([{"key": "t1"}], checker="qa"))
     await _build(app, auth_headers, driver="flow", level="reviewed", builder="dev", checker="dev")
     t1 = (await _tasks())["t1"]
 
-    assert _picks(await _decide()) == [(t1.id, "dev", False)]
+    assert _picks(await _decide()) == [(t1.id, "qa", False)]
 
     await _fire()
-    await _work(t1.id, "dev")
-    stalled = await _decide()
+    await _work(t1.id, "qa")
 
-    assert _picks(stalled) == []
-    assert "'dev' as its reviewer" in str(stalled.unstaffed), stalled
+    assert _picks(await _decide()) == [(t1.id, "dev", True)]
 
 
 @pytest.mark.asyncio

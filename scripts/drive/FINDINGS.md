@@ -41064,7 +41064,7 @@ Driven on :8010 at f9d69aa: delivery `{agent: X, checker: X}`, roster X and Othe
 
 ## F1103 (C) -- a dialog's checker does not release the document's checker to build
 
-**Status:** open 2026-10-30.
+**Status:** fixed 2026-10-31. A build that records who checks its open tasks replaces the document's named judges when the flow withholds judges from fresh work (`builds.recorded_checkers`).
 **Source:** found by driving
 **Theme:** Flows & review
 **Ready:** yes
@@ -41136,7 +41136,7 @@ What remains: the `hub-tests` check, or any project's xdist check, can pass and 
 
 ## F1110 (C) -- a fix task the Hub files during a build is invisible from that build's spec
 
-**Status:** open 2026-10-31. Operator's request: an error caught during a build must show on the spec, with whether it was introduced or only caught, and how it was fixed.
+**Status:** fixed 2026-10-31. The operator approved the shape: "Caught during this build" in the build record (`hub/hub/build_caught.py`), computed per read; it adds no requirement and does not hold the spec from done.
 **Source:** asked for by the operator
 **Theme:** Flows & review
 **Ready:** no: the shape needs the operator's approval
@@ -41193,3 +41193,23 @@ Agents are told that who holds a task is the operator's, but no component under 
 **Tier:** 0
 
 The probe now excludes the heap built before its window, which was the suite's. A running Hub has its own long-lived heap and nothing freezes it after startup, so its collections may hold the loop the same way. **Expected:** measure the pause on a Hub with real data; if it passes 100 ms, `gc.freeze()` after startup is the first thing to try.
+
+## F1116 (C) -- a check that timed out on Linux named its processes with their command lines cut at 80 columns
+
+**Status:** fixed 2026-10-31, awaiting CI's Linux run. `ps -ww`.
+**Source:** found by driving
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+`live_process_tree` ran `ps -eo pid=,ppid=,args=` into a pipe, where `ps` promises no width. CI's runner cut every line at 80 columns (`.../python -c import sub`), so `test_a_check_past_its_timeout_names_what_was_still_running` failed on master from 0c0c42a on, and an operator reading a timed-out check would not have learned what was still running. **Expected:** the whole command line, up to the Hub's own 300-character limit.
+
+## F1117 (C) -- the spec header says the document's checker reviews a build whose dialog chose another
+
+**Status:** open 2026-10-31. Seen in a real build's page (`d1031b`); there before F1103.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+`delivery-reviewer` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:101`) reads `delivery_status.reviewer`, which is `spec_payload.default_checker(payload)` (`hub/hub/api/v1/spec.py:297`). With document checker C and dialog checker B, the page read "Reviewed by @C." while B reviewed the build's task. **Expected:** where a build records who checks, the sentence names that.

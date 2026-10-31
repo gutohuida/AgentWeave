@@ -502,6 +502,44 @@ async def _attach_proceeded_without_answer(
 _WAITS_FOR_ITS_HOLDER = ("assigned", "revision_needed")
 
 
+async def _attach_queue_state(
+    session: AsyncSession, responses: List[TaskResponse], project_id: str
+) -> None:
+    """What the board says of work the queue is holding: an approved task still landing, and an
+    open task of a finished build's flow whose cap or window keeps it from being handed out."""
+    from ... import builds, landing_queue
+    from ...db.models import Build, TaskLanding
+
+    approved = {r.id for r in responses if r.status == "approved"}
+    if approved:
+        landing = await session.execute(
+            select(TaskLanding.task_id).where(
+                TaskLanding.project_id == project_id,
+                TaskLanding.task_id.in_(approved),
+                TaskLanding.state.in_(landing_queue.OPEN),
+            )
+        )
+        waiting = set(landing.scalars())
+        for response in responses:
+            response.waiting_to_land = response.id in waiting
+    closed = ("approved", "rejected")
+    loops = {r.loop_id for r in responses if r.loop_id and r.status not in closed}
+    if not loops:
+        return
+    finished = await session.execute(
+        select(Build).where(Build.loop_id.in_(loops), Build.state == builds.FINISHED)
+    )
+    held: Dict[str, str] = {}
+    for build in finished.scalars():
+        verdict = await builds.may_hand_out(session, build)
+        reason = verdict.stop_reason or verdict.wait_reason
+        if build.loop_id and reason:
+            held[build.loop_id] = reason
+    for response in responses:
+        if response.loop_id in held and response.status not in closed:
+            response.queue_held_reason = held[response.loop_id]
+
+
 async def _attach_assignee_liveness(
     session: AsyncSession, responses: List[TaskResponse], *, project_id: str
 ) -> List[TaskResponse]:
@@ -530,6 +568,7 @@ async def _attach_assignee_liveness(
     on `assignee_status === "running"`, which since the watchdog was deleted no managed agent could
     ever report.
     """
+    await _attach_queue_state(session, responses, project_id)
     assignees = {response.assignee for response in responses if response.assignee}
     if not assignees:
         return responses

@@ -116,6 +116,12 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
             {b.ended === 'stopped' ? 'Stopped' : 'Finished'}
           </span>
         )}
+        {!b.running && b.openFixTasks.length ? (
+          <span className="aw-sp-build-fixes" data-testid="build-open-fixes" title={b.fixHeldReason ?? undefined}>
+            {b.openFixTasks.length} fix task{b.openFixTasks.length === 1 ? '' : 's'} open
+            {b.fixHeldReason ? ` · held: ${b.fixHeldReason}` : ''}
+          </span>
+        ) : null}
         <span className="aw-sp-build-driver" title={DRIVER_MEANING[b.driver]}>
           <Icon name={DRIVER_ICON[b.driver]} size={13} />
           {DRIVER_LABEL[b.driver]}
@@ -174,6 +180,25 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
           running={b.running}
         />
       </div>
+
+      {b.caught.length ? (
+        <div className="aw-sp-caught" data-testid="build-caught">
+          <div className="aw-sp-meter-title">Caught during this build</div>
+          <ul>
+            {b.caught.map((c) => (
+              <li key={`${c.check}-${c.test ?? ''}`} data-origin={c.origin}>
+                <code>{c.test ?? c.check}</code>
+                <span>{c.origin === 'introduced' ? 'Introduced by this build' : 'Only caught'} · {c.kind}{c.changed_by_build ? ' · this build changed the file' : ''}</span>
+                <span>
+                  {c.fix_task
+                    ? `Fix task ${c.fix_task.id}: ${TASK_STATUS_LABEL[c.fix_task.status as TaskStatus] ?? c.fix_task.status}`
+                    : `On ${c.found_on}: ${TASK_STATUS_LABEL[c.found_on_status as TaskStatus] ?? c.found_on_status}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="aw-sp-build-foot">
         <button data-slot="link-button" type="button" className="aw-sp-textbutton" onClick={onOpenRuns}>

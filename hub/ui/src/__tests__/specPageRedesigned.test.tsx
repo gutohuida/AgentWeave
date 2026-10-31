@@ -414,7 +414,14 @@ describe('build-progress-on-the-document (FR-7)', () => {
     hub.phase = 'approved'
     hub.builds = [
       build({ id: 'build-2', state: 'running', driver: 'lead', level: 'fast', builders: ['Builder', 'QA2'], reviewers: [], lead: 'Architect', stopped_at: null, created_at: '2026-10-17T11:24:00Z', spent_usd: 7.3 }),
-      build({}),
+      build({
+        caught: [
+          { check: 'hub-tests', test: 'tests/test_a.py::test_lag', kind: 'flaky', origin: 'caught', changed_by_build: false, found_on: 't1', found_on_status: 'approved', fix_task: { id: 'task-fix', title: 'Fix a flaky test', status: 'revision_needed', open: true } },
+          { check: 'hub-tests', test: 'tests/test_b.py::test_own', kind: 'fails on this work', origin: 'introduced', changed_by_build: false, found_on: 't2', found_on_status: 'approved', fix_task: null },
+        ],
+        open_fix_tasks: ['task-fix'],
+        fix_held_reason: 'the build has spent $5.00 of its $5.00 cap; raise the cap to resume',
+      }),
     ]
     hub.tasks = [task('plan', 't1', 'approved'), task('build', 't2', 'under_review'), task('ship', 't3', 'pending')]
     renderPage()
@@ -445,6 +452,13 @@ describe('build-progress-on-the-document (FR-7)', () => {
     expect(within(finished).getByText('Held by a failed check')).toBeInTheDocument()
     expect(within(finished).getByText(/2 unpriced/)).toBeInTheDocument()
     expect(within(finished).getByTestId('build-checks').textContent).toContain('10 check runs · 6 passed · 4 failed')
+    // It still reads finished, says what is open and why, and lists what its checks found (F1110).
+    expect(within(finished).getByTestId('build-open-fixes').textContent).toContain('1 fix task open · held: the build has spent')
+    const caught = within(finished).getByTestId('build-caught')
+    expect(within(caught).getByText('tests/test_a.py::test_lag')).toBeInTheDocument()
+    expect(caught.textContent).toContain('Only caught · flaky')
+    expect(caught.textContent).toContain('Fix task task-fix: ')
+    expect(caught.textContent).toContain('Introduced by this build · fails on this work')
   })
 })
 

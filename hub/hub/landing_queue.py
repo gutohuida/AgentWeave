@@ -1338,9 +1338,9 @@ async def _hub_override_reason(
             "main_sha": run.main_sha if run is not None else None,
             "failures": found,
             "fix_tasks": {
-                entry["test"]: by_test[flaky_tests._key(entry["test"])]
+                entry["test"]: by_test[flaky_tests.normalised_test(entry["test"])]
                 for entry in found
-                if flaky_tests._key(entry["test"]) in by_test
+                if flaky_tests.normalised_test(entry["test"]) in by_test
             },
         }
     )

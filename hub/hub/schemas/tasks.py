@@ -372,6 +372,10 @@ class TaskResponse(BaseModel):
     # The holder this task waits for while they run another turn, and since when (F1112).
     waiting_on: Optional[str] = None
     waiting_since: Optional[datetime] = None
+    # Approved, and its work is still in the landing queue on its way to main.
+    waiting_to_land: bool = False
+    # Why nobody is handed this task: the cap or window of the finished build whose flow holds it.
+    queue_held_reason: Optional[str] = None
     acceptance_criteria: Optional[Any] = None
     deliverables: Optional[Any] = None
     notes: Optional[Any] = None

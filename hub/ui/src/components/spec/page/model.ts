@@ -5,6 +5,8 @@
  *  helpers here are pure (filtering, ordering, which actions a state offers) so the same rules hold
  *  in the Spec tab and the conversation's side panel. */
 
+import type { BuildCaught } from '@/api/spec'
+
 export type SpecKind = 'change-spec' | 'roadmap' | 'capability' | 'baseline' | 'system-map'
 export type SpecPhase = 'exploring' | 'proposed' | 'approved' | 'archived' | 'current'
 
@@ -177,6 +179,12 @@ export interface BuildView {
   startedAt: string
   finishedAt: string | null
   landsOn: string
+  /** What the build's checks found, and how each was fixed. */
+  caught: BuildCaught[]
+  /** Fix tasks still open; they do not stop the build reading finished. */
+  openFixTasks: string[]
+  /** What keeps those fix tasks from being handed out, if anything does. */
+  fixHeldReason: string | null
   budget: number | null
   tasks: Record<TaskStatus, number>
   time: BuildTime

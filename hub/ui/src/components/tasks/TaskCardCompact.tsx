@@ -145,6 +145,24 @@ export function TaskCardCompact({
               builds @{task.builder} · by default
             </span>
           ) : null}
+          {task.waiting_to_land ? (
+            <span
+              className="aw-task-card-age"
+              data-testid={`task-waiting-to-land-${task.id}`}
+              title="Approved. Its work is in the landing queue and is not on main yet."
+            >
+              waiting to land
+            </span>
+          ) : null}
+          {task.queue_held_reason ? (
+            <span
+              className="aw-task-card-age"
+              data-testid={`task-queue-held-${task.id}`}
+              title={`Nobody is handed this task: ${task.queue_held_reason}`}
+            >
+              held: {task.queue_held_reason}
+            </span>
+          ) : null}
           {task.waiting_on && task.waiting_since ? (
             <span
               className="aw-task-card-age"

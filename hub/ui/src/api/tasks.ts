@@ -110,6 +110,10 @@ export interface Task {
    *  response so the board can say "not merged" without a per-card fetch. Absent from an older Hub,
    *  and null for a task never approved. */
   latest_integration?: LatestIntegration | null
+  /** Approved, and its work is still in the landing queue on its way to main. */
+  waiting_to_land?: boolean
+  /** Why nobody is handed this task: the cap or window of the finished build whose flow holds it. */
+  queue_held_reason?: string | null
 }
 
 /** A trimmed echo of the newest `TaskIntegration` row (`hub/hub/schemas/tasks.py`). */

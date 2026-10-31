@@ -1871,15 +1871,26 @@ async def _agents_withheld_from_fresh_work(
     would leave nobody who could build: somebody besides a judge must have a runner, now or later,
     judged against the roster and not the free list, so a busy builder is waited for. A build's
     list of builders and a read-only agent rule somebody out of that (F1102): the pool would never
-    hand them the work, so holding the judge back for them only stalled the flow.
+    hand them the work, so holding the judge back for them only stalled the flow. Where a build
+    records who checks its open tasks, that record replaces the document's names (F1103): a judge
+    the dialog replaced judges nothing here and is free to build.
     """
     if loop.spec_document_id is None:
         return set()
+    from .builds import recorded_checkers
+
     facts = facts or FiringFacts(session)
-    judges = set(await facts.named_reviewers(loop.project_id, loop.spec_document_id))
+    build = await facts.build_of_loop(loop)
+    recorded = recorded_checkers(
+        build, [t for t in await facts.loop_candidates(loop) if t.build_id]
+    )
+    judges = (
+        recorded
+        if recorded is not None
+        else set(await facts.named_reviewers(loop.project_id, loop.spec_document_id))
+    )
     if not judges:
         return set()
-    build = await facts.build_of_loop(loop)
     for record in await facts.roster(loop.project_id):
         if (
             record.has_runner

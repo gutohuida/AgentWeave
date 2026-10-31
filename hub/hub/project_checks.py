@@ -416,8 +416,9 @@ def live_process_tree(pid: int) -> str:
                 for r in rows
             ]
         else:
+            # Piped, `ps` may cut a line at 80 columns: `-ww` asks for all of it.
             listed = subprocess.run(
-                ["ps", "-eo", "pid=,ppid=,args="],
+                ["ps", "-ww", "-eo", "pid=,ppid=,args="],
                 capture_output=True,
                 timeout=_PROCESS_LIST_TIMEOUT_SECONDS,
             )

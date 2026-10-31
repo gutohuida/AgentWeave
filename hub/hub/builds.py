@@ -165,10 +165,20 @@ def _iso(value: Optional[datetime]) -> Optional[str]:
 
 async def view(session: AsyncSession, build: Build) -> Dict[str, Any]:
     """The build as the document read and the app show it."""
+    from .build_caught import caught_during
+
     spent, unpriced = await spend(session, build)
     people = await people_of(session, build)
+    caught = await caught_during(session, build)
+    verdict = await may_hand_out(session, build) if build.state == FINISHED else None
     return {
         "id": build.id,
+        # What its checks found, and what is left open because of it (F1110).
+        "caught": caught,
+        "open_fix_tasks": sorted(
+            {c["fix_task"]["id"] for c in caught if c["fix_task"] and c["fix_task"]["open"]}
+        ),
+        "fix_held_reason": (verdict.stop_reason or verdict.wait_reason) if verdict else None,
         "chosen_by": CHOSEN_BY_OPERATOR,
         "state": build.state,
         "driver": build.driver,
@@ -231,6 +241,21 @@ def checker_of(build: Optional[Build], task: Task) -> Optional[Tuple[Optional[st
     if own:
         return own, "task"
     return _person(build.people.get("checker")), "default"
+
+
+def recorded_checkers(build: Optional[Build], tasks: Iterable[Task]) -> Optional[Set[str]]:
+    """Everybody *build* names to check *tasks*, or None where it does not say for one of them or
+    there are none, so the document's declaration still stands there (`checker_of`)."""
+    named: Set[str] = set()
+    said = False
+    for task in tasks:
+        checker = checker_of(build, task)
+        if checker is None:
+            return None
+        said = True
+        if checker[0]:
+            named.add(checker[0])
+    return named if said else None
 
 
 async def checkers_by_task(session: AsyncSession, tasks: Iterable[Task]) -> Dict[str, str]:

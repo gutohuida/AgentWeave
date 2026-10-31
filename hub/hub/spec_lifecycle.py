@@ -532,12 +532,43 @@ async def open_task_ids(session: AsyncSession, document: SpecDocument) -> List[s
     return list(rows.scalars())
 
 
+async def unlanded_task_ids(session: AsyncSession, document_ids: List[str]) -> Dict[str, List[str]]:
+    """Each document's approved tasks whose work is not on main yet: the latest landing still waits
+    for the queue, or ended without landing work there is to land. A task with no work to land (no
+    commit, no branch, a build that lands nowhere) holds nothing, nor does one that never had a
+    landing."""
+    from . import landing_queue
+    from . import task_integration as ti
+    from .builds import LANDS_NOWHERE
+    from .db.models import Task, TaskLanding
+
+    nothing_to_land = (ti.NOTHING_TO_MERGE, ti.NO_TASK_BRANCH, ti.NOT_A_REPOSITORY, LANDS_NOWHERE)
+    latest: Dict[str, Any] = {}
+    if document_ids:
+        for row in await session.execute(
+            select(Task.spec_document_id, Task.id, TaskLanding.state, TaskLanding.reason)
+            .join(TaskLanding, TaskLanding.task_id == Task.id)
+            .where(Task.spec_document_id.in_(document_ids), Task.status == "approved")
+            .order_by(TaskLanding.order_key, TaskLanding.id)
+        ):
+            latest[row[1]] = row
+    found: Dict[str, List[str]] = {}
+    for document_id, task_id, state, reason in latest.values():
+        if state in landing_queue.OPEN or (
+            state == landing_queue.NOT_LANDED and (reason or "") not in nothing_to_land
+        ):
+            found.setdefault(document_id, []).append(task_id)
+    return found
+
+
 async def display_phases(session: AsyncSession, documents: List[SpecDocument]) -> Dict[str, str]:
     """The phase each document is *shown* in, by id (F1089). Not a lifecycle phase: nothing is stored.
 
-    An approved change document that has been built reads `building` while a build runs or any task
-    bound to it is open (`open_task_ids`' meaning, side-finding tasks included), and `done` when
-    neither holds; one never built stays `approved`. Every other document shows its phase.
+    An approved change document that has been built reads `building` while a build runs, any task
+    bound to it is open (`open_task_ids`' meaning, side-finding tasks included) or an approved one
+    has not landed (`unlanded_task_ids`), and `done` when none holds; one never built stays
+    `approved`. Every other document shows its phase. A fix task the Hub files is bound to no
+    document, so it never holds a spec from done (F1110).
     """
     from .db.models import Build, Task
 
@@ -555,7 +586,7 @@ async def display_phases(session: AsyncSession, documents: List[SpecDocument]) -
         .where(Task.spec_document_id.in_(approved), Task.status.notin_(_TASK_DONE))
         .distinct()
     )
-    has_open = set(open_rows.scalars())
+    has_open = set(open_rows.scalars()) | set(await unlanded_task_ids(session, approved))
     for document_id, running in built.items():
         shown[document_id] = "building" if running or document_id in has_open else "done"
     return shown

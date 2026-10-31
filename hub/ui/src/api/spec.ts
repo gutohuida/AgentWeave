@@ -158,9 +158,27 @@ export type BuildDriver = 'flow' | 'lead' | 'hand'
 export type BuildLevel = 'fast' | 'reviewed' | 'gated'
 export type BuildLanding = 'main' | 'nowhere'
 
+/** A failure one of a build's check runs found, and what became of it (F1110). */
+export interface BuildCaught {
+  check: string
+  /** Null where the check failed without naming a test. */
+  test: string | null
+  kind: string
+  /** `introduced`: the build's work caused it. `caught`: the checks only found it. */
+  origin: 'introduced' | 'caught'
+  changed_by_build: boolean
+  found_on: string
+  found_on_status: string
+  fix_task: { id: string; title: string; status: string; open: boolean } | null
+}
+
 /** One build of a document, as `GET /project/spec` lists them (`builds`, newest first). */
 export interface SpecBuild {
   id: string
+  /** Absent from an older Hub. */
+  caught?: BuildCaught[]
+  open_fix_tasks?: string[]
+  fix_held_reason?: string | null
   state: 'running' | 'stopped' | 'finished'
   driver: BuildDriver
   level: BuildLevel

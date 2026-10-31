@@ -149,6 +149,9 @@ function finishedBuild(): BuildView {
     startedAt: '2026-10-16T14:02:00Z',
     finishedAt: '2026-10-16T21:28:00Z',
     landsOn: 'a branch',
+    caught: [],
+    openFixTasks: [],
+    fixHeldReason: null,
     budget: null,
     tasks: counts({ approved: 5 }),
     time: { building: 2 * 3600 + 14 * 60, reviewing: 40 * 60, checks: 52 * 60, held: 2 * 3600 + 40 * 60, review: 38 * 60, waiting: 62 * 60 },
@@ -172,6 +175,9 @@ function runningBuild(choice?: StartBuildChoice, number = 2): BuildView {
     startedAt: '2026-10-17T11:24:00Z',
     finishedAt: null,
     landsOn: choice ? (choice.landsOn === 'main' ? 'main' : choice.branch) : 'main',
+    caught: [],
+    openFixTasks: [],
+    fixHeldReason: null,
     budget: choice ? choice.budget : 25,
     tasks: counts({}),
     time: choice
@@ -298,6 +304,12 @@ const DEFAULT_CHOICE: StartBuildChoice = {
   budget: 25,
   window: 'now',
   landsOn: 'main',
+  caught: [
+    { check: 'hub-tests', test: 'tests/test_a.py::test_lag', kind: 'flaky', origin: 'caught', changed_by_build: false, found_on: 'task-a', found_on_status: 'approved', fix_task: { id: 'task-fix', title: 'Fix a flaky test', status: 'revision_needed', open: true } },
+    { check: 'hub-tests', test: 'tests/test_b.py::test_own', kind: 'fails on this work', origin: 'introduced', changed_by_build: false, found_on: 'task-b', found_on_status: 'approved', fix_task: null },
+  ],
+  openFixTasks: ['task-fix'],
+  fixHeldReason: 'the build has spent $5.00 of its $5.00 cap; raise the cap to resume',
   branch: 'build/cairn-handoff',
 }
 
