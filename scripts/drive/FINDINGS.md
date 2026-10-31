@@ -41156,7 +41156,7 @@ What remains: the `hub-tests` check, or any project's xdist check, can pass and 
 
 ## F1112 (B) -- the Hub's fix task takes the build's builder and holds up that builder's own send-back
 
-**Status:** open 2026-10-31. The operator is also weighing several turns per agent, which would address the wider cause.
+**Status:** open 2026-10-31. Operator: Architect does this as a quick fix, no spec, only after the board spec (`spdoc-ab4ca6e25adb`) lands. The same fix covers: a send-back outranks a fix task; a softer "preferred builder" for tasks not yet started; the board names who a task is waiting on and for how long. Several turns per agent is parked.
 **Source:** found by driving
 **Theme:** Flows & review
 **Ready:** yes
