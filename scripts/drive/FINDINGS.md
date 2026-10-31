@@ -41081,3 +41081,23 @@ Roster X and Y, document checker Y, dialog builder = checker = X. After F1092's 
 **Tier:** 0
 
 The dialog tells the operator to "Adopt it (POST /documents/adopt)" rather than how to adopt in the app. With a directory at the path, QA's test client failed with `PermissionError`. **Expected:** the message says what to do in the app, and a directory gets the same 409.
+
+## F1105 (D) -- the timeout on `live_process_tree`'s PowerShell call may not hold if a child keeps the pipe open
+
+**Status:** open 2026-10-31. Found by QA2 reviewing task-ecc5aa118360, from reading the code; a hung PowerShell was only simulated.
+**Source:** found by reading code
+**Theme:** Project checks
+**Ready:** yes
+**Tier:** 0
+
+`hub/hub/project_checks.py` `live_process_tree` runs PowerShell only after a check has timed out, and is meant to add about 20s at worst. On Windows, `subprocess.run` waits with no timeout after killing the process, so a child holding the pipe could outlast that bound. `Get-CimInstance` should start no such child, so this may never fire. **Expected:** a test with a child holding the pipe shows the check still ends within the bound.
+
+## F1106 (C) -- a process a check leaves behind might block removing the scratch worktree on Windows
+
+**Status:** open 2026-10-31. Found by QA2 reviewing task-ecc5aa118360; untested.
+**Source:** found by reading code
+**Theme:** Project checks
+**Ready:** yes
+**Tier:** 0
+
+Since round 1 of task-ecc5aa118360, `_run_one` no longer ends a process a check leaves behind, by intent. Such a process could hold files open in the scratch worktree under `.agentweave/checks/`, and on Windows that could block its removal. **Expected:** a drive with a check that leaves a process running shows whether removal succeeds, and either way the next check is not affected.
