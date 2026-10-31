@@ -40,6 +40,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -60,6 +61,8 @@ logger = logging.getLogger(__name__)
 CHECKS_DIR = Path(".agentweave") / "checks"
 MAX_CONCURRENT_RUNS = 2
 OUTPUT_TAIL_CHARS = 4000
+# How long a check's output may stay open after its process exited before the run stops reading.
+OUTPUT_DRAIN_SECONDS = 5
 DEFAULT_TIMEOUT_SECONDS = 900
 GIT_TIMEOUT_SECONDS = 60
 #: Materialising and removing the scratch worktree writes the whole tree, which on a large repository
@@ -380,6 +383,69 @@ def _decode_output(raw: bytes) -> str:
         return raw.decode("utf-8", "replace")
 
 
+_PROCESS_LIST_TIMEOUT_SECONDS = 20
+_PROCESS_LINE_CHARS = 300
+#: Every process with its parent and creation time, one JSON object each. A Windows parent id may
+#: name a dead process whose id was reused, so a child must also be created after its parent.
+_WINDOWS_PROCESS_LIST = (
+    "Get-CimInstance Win32_Process | ForEach-Object { [pscustomobject]@{ pid = $_.ProcessId; "
+    "ppid = $_.ParentProcessId; created = $_.CreationDate.ToFileTimeUtc(); "
+    "command = $_.CommandLine } } | ConvertTo-Json -Compress"
+)
+
+
+def live_process_tree(pid: int) -> str:
+    """*pid* and every process descended from it, one `pid  command line` per line, or '' when
+    they cannot be listed. Only for a check that timed out, so it may take a few seconds."""
+    from .pty_runner import IS_WINDOWS
+
+    try:
+        if IS_WINDOWS:
+            listed = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", _WINDOWS_PROCESS_LIST],
+                capture_output=True,
+                timeout=_PROCESS_LIST_TIMEOUT_SECONDS,
+                **no_console_kwargs(),
+            )
+            # Windows PowerShell 5.1 leaves a control character in a command line unescaped.
+            rows = json.loads(_decode_output(listed.stdout) or "[]", strict=False)
+            if isinstance(rows, dict):
+                rows = [rows]
+            processes = [
+                (int(r["pid"]), int(r["ppid"]), int(r["created"] or 0), r["command"] or "")
+                for r in rows
+            ]
+        else:
+            listed = subprocess.run(
+                ["ps", "-eo", "pid=,ppid=,args="],
+                capture_output=True,
+                timeout=_PROCESS_LIST_TIMEOUT_SECONDS,
+            )
+            processes = []
+            for line in _decode_output(listed.stdout).splitlines():
+                parts = line.split(None, 2)
+                if len(parts) >= 2:
+                    processes.append((int(parts[0]), int(parts[1]), 0, "".join(parts[2:])))
+    except (OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired):
+        return ""
+    by_pid = {p[0]: p for p in processes}
+    if pid not in by_pid:
+        return ""
+    tree = [by_pid[pid]]
+    for parent in tree:
+        tree.extend(
+            p for p in processes if p[1] == parent[0] and p[2] >= parent[2] and p not in tree
+        )
+    return "\n".join(f"{p[0]}  {p[3][:_PROCESS_LINE_CHARS]}" for p in tree)
+
+
+def _read_all(stream: Any, chunks: List[bytes]) -> None:
+    """Append everything *stream* yields to *chunks* until it closes."""
+    with stream:
+        for chunk in iter(lambda: stream.read1(65536), b""):
+            chunks.append(chunk)
+
+
 def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> Dict[str, Any]:
     from .pty_runner import IS_WINDOWS, terminate_process_tree
 
@@ -415,23 +481,36 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
             # `supersede` sets `_superseded` before it reads `_processes`: a move that landed
             # between the check above and this registration found no process, so end it here.
             terminate_process_tree(proc.pid)
+    # The check ends when its process does, not when its output closes: a process it left behind
+    # (or one that inherited the pipe) can hold the output open long after it exited, and waiting
+    # for that end timed out a check that had already printed `1 passed` (2026-10-30).
+    chunks: List[bytes] = []
+    reader = threading.Thread(target=_read_all, args=(proc.stdout, chunks), daemon=True)
+    reader.start()
     timed_out = False
+    still_running = ""
     try:
-        output, _ = proc.communicate(timeout=check["timeout_seconds"])
+        proc.wait(timeout=check["timeout_seconds"])
     except subprocess.TimeoutExpired:
         timed_out = True
+        # Name what was still running before ending it: a timeout that printed `1 passed` and
+        # then never exited (2026-10-30) could not be reproduced, so its next one says itself.
+        still_running = live_process_tree(proc.pid)
         terminate_process_tree(proc.pid)
         try:
-            output, _ = proc.communicate(timeout=30)
+            proc.wait(timeout=30)
         except subprocess.TimeoutExpired:
             proc.kill()
-            output = b""
     finally:
         if owner is not None and _processes.get(owner) is proc:
             _processes.pop(owner, None)
-    text = scrub(_decode_output(output or b""), removed)
+    reader.join(timeout=OUTPUT_DRAIN_SECONDS)
+    output = b"".join(list(chunks))
+    text = scrub(_decode_output(output), removed)
     if timed_out:
         text += f"\n[the check ran past its {check['timeout_seconds']}s timeout and was ended]"
+        if still_running:
+            text += "\n[still running when it was ended]\n" + scrub(still_running, removed)
     result = {
         "name": check["name"],
         "exit_code": None if timed_out else proc.returncode,
