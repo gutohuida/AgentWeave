@@ -80,6 +80,9 @@ interface ConversationViewProps {
   onOpenDocument: (path: string | null) => void
   onBackToProject: () => void
   onOpenAgentSettings: () => void
+  /** A spec tab's 'Show these on the board' / coverage task link: the host scopes the Tasks board
+   *  and navigates there. */
+  onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
 }
 
 /**
@@ -102,6 +105,7 @@ export function ConversationView({
   onOpenDocument,
   onBackToProject,
   onOpenAgentSettings,
+  onOpenTasks,
 }: ConversationViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const measuredWidth = useWorkspaceWidth(containerRef)
@@ -419,6 +423,7 @@ export function ConversationView({
            * `ComposerSpecControl`'s `onStopExploring`, wired below, still calls `onOpenDocument(null)`. */
           onClose={() => closeTab(projectId, tab.id)}
           onOpenLoop={(loop) => openTab(projectId, loopTabId(loop.id))}
+          onOpenTasks={onOpenTasks}
         />
       )
     },
@@ -432,6 +437,7 @@ export function ConversationView({
       workspacePaths,
       workspacePathsLoading,
       openTab,
+      onOpenTasks,
       insertIntoComposer,
       panelActiveTabId,
       visibleLoops,
