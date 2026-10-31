@@ -41153,3 +41153,13 @@ What remains: the `hub-tests` check, or any project's xdist check, can pass and 
 **Tier:** 0
 
 `task-e9ae9d8dfeb8` (10-28) fixed `test_approving_releases_and_merges_without_stalling_the_loop` by excusing lateness the whole machine shared. Architect removed that excuse on 10-31 (`200ca41`, merged in `51e7bc4`) because it could also hide real work holding the loop, and passed 6/6 under load. Check run `chk-cbad27013168` then failed the same test at 426 ms against 100 ms during a real check. **Expected:** the test tells a busy machine from code blocking the loop, and still fails when a real stall is forced.
+
+## F1112 (B) -- the Hub's fix task takes the build's builder and holds up that builder's own send-back
+
+**Status:** open 2026-10-31. The operator is also weighing several turns per agent, which would address the wider cause.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+On 2026-10-31 `task-5a9efc6d2670` (a critical fix task the Hub filed) went to Developer as the flow's own agent. QA sent `task-7dd2cd4941f7` back to Developer at 17:13 while `run-5fc8e9c4ad37`, started 16:59 on the fix task, was still running at 17:48, and that task's builder is given to nobody else. QA2 was on the builders list and not named by either task. **Expected:** a fix task prefers a free agent who holds no work in the build; it does not delay the build's own tasks.
