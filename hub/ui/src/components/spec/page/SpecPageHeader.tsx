@@ -178,7 +178,7 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
         </div>
       </div>
 
-      <JourneyRibbon state={doc.state === 'ready' ? doc.state : doc.shown} compact={compact} />
+      {doc.state === 'current' ? null : <JourneyRibbon state={doc.state === 'ready' ? doc.state : doc.shown} compact={compact} />}
     </header>
   )
 }

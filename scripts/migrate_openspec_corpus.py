@@ -335,7 +335,10 @@ class Hub:
             "/documents",
             {"path": capability.path, "title": capability.title, "kind": "capability"},
         )
-        if status not in (201, 409):
+        # Only a tracked document is "already imported". A 409 for a file the Hub has no row for
+        # (`untracked_file_exists`) is a refusal, and writing over it is exactly what it prevents.
+        already_imported = status == 409 and _refusal_code(body) == "document_exists"
+        if status != 201 and not already_imported:
             return False, f"create failed ({status}): {body}"
 
         status, body = self._call(
@@ -344,6 +347,11 @@ class Hub:
         if status != 200:
             return False, f"write failed ({status}): {body}"
         return True, f"{len(body.get('identifiers') or {})} identifiers"
+
+
+def _refusal_code(body) -> Optional[str]:
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return detail.get("code") if isinstance(detail, dict) else None
 
 
 def main() -> int:

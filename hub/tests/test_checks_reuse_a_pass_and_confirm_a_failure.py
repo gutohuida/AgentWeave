@@ -498,3 +498,37 @@ def test_pytest_xdist_sizes_auto_by_the_variable(tmp_path_factory, monkeypatch):
     )
     assert result["exit_code"] == 0, result["output_tail"]
     assert "created: 2/2 workers" in result["output_tail"], result["output_tail"]
+
+
+def test_a_check_ends_when_its_process_does_not_when_its_output_closes(tmp_path_factory):
+    """A process that outlives the check and holds its output open does not make it time out.
+
+    The xdist check above timed out on 2026-10-30 with `1 passed` already printed: the run
+    waited for the end of its output, which something still holding the pipe kept open.
+    """
+    outside = tmp_path_factory.mktemp("lingering")
+    pid_file = outside / "holder.pid"
+    script = outside / "leave_a_holder.py"
+    script.write_text(
+        "import subprocess, sys\n"
+        "holder = subprocess.Popen(\n"
+        "    [sys.executable, '-c', 'import time; time.sleep(60)'], stdout=sys.stdout\n"
+        ")\n"
+        f"open({str(pid_file)!r}, 'w').write(str(holder.pid))\n"
+        "print('1 passed')\n",
+        encoding="utf-8",
+    )
+    try:
+        result = project_checks.run_one(
+            {"name": "lingering", "command": f'{PY} "{script}"', "timeout_seconds": 20},
+            outside,
+        )
+    finally:
+        if pid_file.exists():
+            from hub.pty_runner import terminate_process_tree
+
+            terminate_process_tree(int(pid_file.read_text()))
+    assert not result["timed_out"], result["output_tail"]
+    assert result["exit_code"] == 0, result["output_tail"]
+    assert "1 passed" in result["output_tail"]
+    assert result["duration_seconds"] < 20
