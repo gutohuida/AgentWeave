@@ -5,10 +5,17 @@ A flow build of one task on a spec titled "Note file". Written first: on master 
 
   1  the task carries a readable id (ACRONYM-N) on the task route
   2  a real Haiku turn on the task messages agent C about it, and the message names it by that id
-  3  in a browser the board is searched for the readable id in lower case, then for the hex id, and
-     the card shows the readable id; the drawer shows both
+  3  in a browser, with a second task on the board, the board is searched for the readable id in
+     lower case and then for the hex id (each finds this task and hides the other), a query that
+     matches nothing empties the board, the card shows the readable id, and the task's own drawer
+     shows both ids
   4  every task tool is called with the lower-case readable id (get_task, task_history, update_task,
-     hand_out_task, create_task depends_on) and each acts on the same task
+     hand_out_task, send_message task_id, create_task depends_on) and each acts on the same task.
+     NOT driven: mend_task_branch and mend_reset_task. They answer only the Hub's mender agent
+     (hub/hub/api/v1/mender.py get_mender_actor, 403 for anyone else, before the task is looked
+     up), and a drive cannot make an agent the mender. Their id resolution is covered by the Hub
+     tests the spec's Hub task adds beside hub/tests/test_the_mender_hands_finished_work_to_review.py
+     and test_a_live_run_is_never_reset.py, which call both routes with the readable id.
   5  the spec is renamed and the task still reads the same readable id
 
 The board search box is the one the spec's UI task adds: a search field labelled "Search tasks".
@@ -53,16 +60,12 @@ def payload():
     }
 
 
-def row(task):
-    return d.ro("select id from tasks where id=?", (task,))
-
-
 def readable_of(task_json):
     value = (task_json or {}).get("readable_id")
     return value if isinstance(value, str) and READABLE.fullmatch(value) else None
 
 
-def board_check(pid, readable, hexid):
+def board_check(pid, readable, hexid, other):
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 900})
@@ -84,23 +87,41 @@ def board_check(pid, readable, hexid):
         text = card.inner_text()
         d.check("the board card names the task by its readable id",
                 bool(readable) and readable in text, text[:200])
+        card_of = lambda tid: page.get_by_test_id(f"task-open-{tid}")  # noqa: E731
+        box = page.get_by_role("searchbox", name="Search tasks")
         for label, query in (("readable id, lower case", (readable or "no-readable-id").lower()),
                              ("stored id", hexid)):
             try:
-                box = page.get_by_role("searchbox", name="Search tasks")
                 box.fill(query, timeout=5000)
-                page.get_by_test_id(f"task-open-{hexid}").wait_for(timeout=5000)
-                found = page.get_by_test_id(f"task-open-{hexid}").count() == 1
-                detail = ""
+                card_of(hexid).wait_for(timeout=5000)
+                page.wait_for_timeout(500)
+                found = card_of(hexid).count() == 1 and card_of(other).count() == 0
+                detail = f"this task {card_of(hexid).count()}, the other {card_of(other).count()}"
             except Exception as exc:  # noqa: BLE001 -- reported as the check's detail
                 found, detail = False, str(exc)[:200]
-            d.check(f"the board search finds the task by its {label}", found, detail)
-        page.get_by_test_id(f"task-open-{hexid}").click(timeout=10000)
-        details = page.get_by_role("button", name="Details")
-        if details.count():
-            details.first.click()
-        body = page.locator("body").inner_text()
-        d.check("the drawer shows both ids", bool(readable) and readable in body and hexid in body)
+            d.check(f"the board search finds only the task by its {label}", found, detail)
+        try:
+            box.fill("zzz-matches-nothing", timeout=5000)
+            page.wait_for_timeout(500)
+            gone = card_of(hexid).count() == 0 and card_of(other).count() == 0
+            detail = f"this task {card_of(hexid).count()}, the other {card_of(other).count()}"
+        except Exception as exc:  # noqa: BLE001 -- reported as the check's detail
+            gone, detail = False, str(exc)[:200]
+        d.check("the board search hides every card for a query that matches nothing", gone, detail)
+        try:
+            box.fill("", timeout=5000)
+            card_of(hexid).click(timeout=10000)
+            details = page.get_by_role("button", name="Details")
+            if details.count():
+                details.first.click()
+            drawer = page.get_by_test_id(f"task-drawer-{hexid}")
+            drawer.wait_for(timeout=10000)
+            text = drawer.inner_text()
+            shown = bool(readable) and readable in text and hexid in text
+            detail = text[:200]
+        except Exception as exc:  # noqa: BLE001 -- reported as the check's detail
+            shown, detail = False, str(exc)[:200]
+        d.check("the task's drawer shows both ids", shown, detail)
         page.screenshot(path=str(d.TMP / "board.png"))
         d.check("no page errors", not errors, str(errors[:3]))
         browser.close()
@@ -159,23 +180,40 @@ def main():
         d.check("2 a real turn messages C about its task by the readable id", bool(named),
                 f"{len(sent)} message(s) from B to C: {[s[0][:120] for s in sent]}")
 
-        # 3. the board, in a browser
-        board_check(pid, readable, task)
+        # 3. the board, in a browser, with a second task the searches must hide
+        code, chore = d.as_agent(pid, B, "POST", "/tasks", {"title": "Unrelated chore"})
+        d.check("3 setup: a second task on the board", code in (200, 201) and "id" in (chore or {}),
+                f"{code} {str(chore)[:200]}", fatal=True)
+        board_check(pid, readable, task, chore["id"])
 
         # 4. every task tool takes the lower-case readable id
         ref = (readable or "no-readable-id").lower()
         code, out = d.api("GET", f"{base}/tasks/{ref}")
         d.check("4 operator route: GET by readable id acts on the task",
                 code == 200 and out.get("id") == task, f"{code} {str(out)[:200]}")
+        _, stored_history = d.as_agent(pid, B, "GET", f"/tasks/{task}/transitions")
         for label, method, path, body in (
             ("get_task", "GET", f"/tasks/{ref}", None),
             ("task_history", "GET", f"/tasks/{ref}/transitions", None),
+            ("send_message", "POST", "/messages",
+             {"recipient": C, "subject": "readable ref", "content": "by id", "task_id": ref}),
             ("update_task", "PATCH", f"/tasks/{ref}", {"notes": "drive: noted by readable id"}),
             ("hand_out_task", "POST", f"/tasks/{ref}/hand-out", {"agent": C, "review": False}),
         ):
             code, out = d.as_agent(pid, B, method, path, body)
             d.check(f"4 tool {label} accepts the readable id", code in (200, 201, 202, 403) and code != 404,
                     f"{code} {str(out)[:200]}")
+            if label == "task_history":
+                rows = (out or {}).get("transitions") if isinstance(out, dict) else None
+                same = rows == (stored_history or {}).get("transitions")
+                named = all(r.get("task_id", task) == task for r in rows or [])
+                d.check("4 tool task_history answers this task's own rows",
+                        bool(rows) and same and named, f"{len(rows or [])} row(s), same as stored: {same}")
+            if label == "send_message":
+                kept = d.ro("select task_id from messages where project_id=? and subject=?",
+                            (pid, "readable ref"))
+                d.check("4 tool send_message stores this task's id", [k[0] for k in kept] == [task],
+                        f"stored task_id {[k[0] for k in kept]} for {task}")
             if label in ("get_task", "update_task"):
                 d.check(f"4 tool {label} acts on the same task", isinstance(out, dict) and out.get("id") == task,
                         f"{code} {str(out)[:200]}")
