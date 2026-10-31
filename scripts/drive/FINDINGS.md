@@ -41173,3 +41173,13 @@ On 2026-10-31 `task-5a9efc6d2670` (a critical fix task the Hub filed) went to De
 **Tier:** 0
 
 `builds.finish_if_done` (`hub/hub/builds.py:751`) counts only tasks with `build_id` set, and `end_loop_of` then ends the build's loop. A fix task from `flaky_tests.file_fix_task` carries the `loop_id` and no `build_id`. On 2026-10-31 approving `task-26371095d3ce` finished `build-37051e90da23` at 19:27:03 and ended `loop-028328d41d99` with `task-5a9efc6d2670` under review. At 19:32 its reviewer sent it back to Developer, and no firing will ever brief Developer. **Expected:** a loop does not end while a task in it is open; the build may read as finished, per F1110, but the flow keeps working its queue and ends when that drains.
+
+## F1114 (B) -- the operator cannot reassign a task in the app
+
+**Status:** open 2026-10-31. Operator: Architect fixes this with the F1112 and F1113 quick fix.
+**Source:** asked for by the operator, after a real stranded task
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 1
+
+Agents are told that who holds a task is the operator's, but no component under `hub/ui/src/components` offers a reassign (grep, 2026-10-31). The API client can only pass `assignee` along with a status move (`hub/ui/src/api/tasks.ts:733`). `task-5a9efc6d2670` was stranded by F1113 and the operator had no way to move it. **Expected:** the task's page lets the operator pick any open agent and the agent's next turn starts or the page says why not; a read-only agent is refused with its reason as the route does today; a live run on the task is refused by the existing rule.
