@@ -198,6 +198,25 @@ describe('the board scope', () => {
     expect(shown()).toEqual(ids([a[0]!, ...b, ...free]))
   })
 
+  it("keeps the scope picker when All is empty but an archived spec holds finished tasks (FR-1)", () => {
+    tasks = [task('A done', 'spec-a', { status: 'approved' })]
+    renderBoard()
+    expect(screen.queryByText('No tasks yet')).not.toBeInTheDocument()
+    expect(shown()).toEqual([])
+    fireEvent.click(screen.getByTestId('board-scope'))
+    expect(screen.getByTestId('board-scope-option-spec-a')).toHaveTextContent('1')
+    fireEvent.click(screen.getByTestId('board-scope-option-spec-a'))
+    expect(shown()).toEqual(ids(tasks))
+    fireEvent.click(screen.getByTestId('board-scope-clear'))
+    expect(screen.getByTestId('board-scope')).toBeInTheDocument()
+  })
+
+  it('shows "No tasks yet" only when the project holds no task at all', () => {
+    tasks = []
+    renderBoard()
+    expect(screen.getByText('No tasks yet')).toBeInTheDocument()
+  })
+
   it('shows exactly the tasks with no spec (ac-no-spec)', () => {
     renderBoard()
     choose('none')

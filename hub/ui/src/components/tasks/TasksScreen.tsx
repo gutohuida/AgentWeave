@@ -338,7 +338,12 @@ export function TasksScreen({
         />
       </div>
     )
-  } else if (allTasks.length === 0 && (narrowed || scope.kind === 'all')) {
+  } else if (
+    allTasks.length === 0 &&
+    (narrowed || (scope.kind === 'all' && !(boardsData && boardsData.boards.length > 0)))
+  ) {
+    // All can be empty while the project still holds an archived spec's finished tasks; the board
+    // (and its scope picker) must stay then, so the operator can reach them.
     body = (
       <div className="aw-board-empty">
         <EmptyState icon="task_alt" title="No tasks yet" description="Tasks an approved specification creates, or an agent adds, appear here." />
