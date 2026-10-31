@@ -86,7 +86,7 @@ def approved_document(base, title, keys):
                        "content_version": read.get("content_version")})
     d.check(f"setup: {title} is approved", code == 200, f"{code} {str(out)[:600]}", fatal=True)
     _, page = d.api("GET", f"{base}/tasks?limit=1000")
-    tasks = [t for t in page["tasks"] if t["title"].startswith(title)]
+    tasks = [t for t in page["tasks"] if t["title"].startswith(title[:60])]
     d.check(f"setup: {title} holds {len(keys)} tasks", len(tasks) == len(keys), f"{len(tasks)}", fatal=True)
     return path, tasks[0]["spec_document_id"], [t["id"] for t in tasks]
 
@@ -237,6 +237,26 @@ def link_steps(page, facts, pid, shot):
     names(page, "6e after the reload the board still names Alpha", ALPHA, 3)
 
 
+def layout_steps(page, base, shot):
+    """A long spec title must not squeeze the agent chips or push the search box off the window."""
+    title = ("Longtitle spec with a very long title " + "that keeps going and going " * 4).strip()
+    _, spec_id, _ = approved_document(base, title, ("l1",))
+    page.set_viewport_size({"width": 1600, "height": 1000})
+    page.reload(wait_until="domcontentloaded")
+    choose(page, spec_id)
+    names(page, "8a the long-titled spec is chosen", "Longtitle spec", 1)
+    for width in (1280, 900):
+        page.set_viewport_size({"width": width, "height": 1000})
+        page.wait_for_timeout(300)
+        box = page.evaluate(
+            "() => ({chips: document.querySelector('.aw-board-filters').getBoundingClientRect().width,"
+            " search: document.querySelector('.aw-board-search').getBoundingClientRect().right})")
+        d.check(f"8b at {width} wide the agent chips keep room", box["chips"] > 0, f"{box}")
+        d.check(f"8c at {width} wide the search box stays inside the window",
+                box["search"] <= width, f"{box}")
+        shot(f"layout_{width}")
+
+
 def drive():
     root = d.TMP / "proj"
     root.mkdir(parents=True)
@@ -270,6 +290,7 @@ def drive():
         shot("board_all")
         picker_steps(page, facts, shot)
         link_steps(page, facts, pid, shot)
+        layout_steps(page, base, shot)
         browser.close()
     d.check("7 no page error while driving", not errors, f"{errors[:3]}")
 

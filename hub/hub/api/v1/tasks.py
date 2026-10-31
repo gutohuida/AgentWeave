@@ -990,6 +990,7 @@ async def list_tasks(
     agent: Optional[str] = Query(None),
     task_status: Optional[str] = Query(None, alias="status"),
     spec_document_id: Optional[str] = Query(None),
+    no_spec: bool = Query(False),
     exclude_archived_completed: bool = Query(False),
     loop_id: Optional[str] = Query(None),
     offset: int = Query(0, ge=0),
@@ -1005,6 +1006,9 @@ async def list_tasks(
         q = q.where(Task.status == task_status)
     if spec_document_id:
         q = q.where(Task.spec_document_id == spec_document_id)
+    elif no_spec:
+        # Exactly the hand-made tasks; a board scoped to "No spec" must not page them away.
+        q = q.where(Task.spec_document_id.is_(None))
     elif loop_id:
         q = q.where(Task.loop_id == loop_id)
     elif exclude_archived_completed:

@@ -603,22 +603,41 @@ export type TaskPage = { tasks: Task[]; total: number; has_more: boolean }
  *  says so on the screen rather than silently rendering a prefix. */
 const PAGE_SIZE = 1000
 
-/** `loopId` and `excludeArchivedCompleted` both scope the same query on the Hub (an `elif` chain,
- *  `hub/hub/api/v1/tasks.py`), so passing both is not meaningful — callers pick one. */
-export function useTasks(options?: { excludeArchivedCompleted?: boolean; loopId?: string }) {
+/** `specDocumentId`, `noSpec`, `loopId` and `excludeArchivedCompleted` each scope the same query on
+ *  the Hub (a precedence chain, `hub/hub/api/v1/tasks.py`), so callers pick one. `specDocumentId`
+ *  and `noSpec` are the board's scopes: exactly one document's tasks, or exactly the tasks of none,
+ *  in every status. */
+export function useTasks(options?: {
+  excludeArchivedCompleted?: boolean
+  loopId?: string
+  specDocumentId?: string
+  noSpec?: boolean
+}) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const excludeArchivedCompleted = options?.excludeArchivedCompleted ?? false
   const loopId = options?.loopId
+  const specDocumentId = options?.specDocumentId
+  const noSpec = options?.noSpec ?? false
   return useQuery<TaskPage>({
-    queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted, loopId }],
-    queryFn: () => {
+    queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted, loopId, ...(specDocumentId ? { specDocumentId } : {}), ...(noSpec ? { noSpec } : {}) }],
+    queryFn: async () => {
       const params = new URLSearchParams()
-      if (loopId) params.set('loop_id', loopId)
+      if (specDocumentId) params.set('spec_document_id', specDocumentId)
+      else if (noSpec) params.set('no_spec', 'true')
+      else if (loopId) params.set('loop_id', loopId)
       else if (excludeArchivedCompleted) params.set('exclude_archived_completed', 'true')
       params.set('limit', String(PAGE_SIZE))
-      return getJson<TaskPage>(
-        `/api/v1/projects/${projectId}/tasks?${params.toString()}`,
-      )
+      const url = `/api/v1/projects/${projectId}/tasks?${params.toString()}`
+      const first = await getJson<TaskPage>(url)
+      // A board scope shows every task in it: past one page, read the rest rather than a prefix.
+      if (!(specDocumentId || noSpec) || !first.has_more) return first
+      const tasks = [...first.tasks]
+      let page = first
+      while (page.has_more && page.tasks.length > 0) {
+        page = await getJson<TaskPage>(`${url}&offset=${tasks.length}`)
+        tasks.push(...page.tasks)
+      }
+      return { tasks, total: Math.max(first.total, tasks.length), has_more: false }
     },
     enabled: isConfigured && !!projectId,
   })
