@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -81,6 +81,7 @@ from ...task_transitions import (
     ACTOR_OPERATOR,
     SEND_BACK_CLASSES,
     STATUS_BLOCKED,
+    TERMINAL_STATUSES,
     WITH_REVIEWER_STATUSES,
     Actor,
     allowed_map_for,
@@ -498,6 +499,9 @@ async def _attach_proceeded_without_answer(
     return responses
 
 
+_WAITS_FOR_ITS_HOLDER = ("assigned", "revision_needed")
+
+
 async def _attach_assignee_liveness(
     session: AsyncSession, responses: List[TaskResponse], *, project_id: str
 ) -> List[TaskResponse]:
@@ -531,13 +535,16 @@ async def _attach_assignee_liveness(
         return responses
 
     running = await session.execute(
-        select(Run.agent).where(
+        select(Run.agent, Run.task_id).where(
             Run.project_id == project_id,
             Run.agent.in_(assignees),
             Run.status == "running",
         )
     )
-    agents_with_active_run = {name for (name,) in running}
+    tasks_being_run: Dict[str, Set[Optional[str]]] = {}
+    for name, run_task in running:
+        tasks_being_run.setdefault(name, set()).add(run_task)
+    agents_with_active_run = set(tasks_being_run)
     activity = await latest_activity_by_agent(session, project_id, assignees)
 
     for response in responses:
@@ -546,6 +553,14 @@ async def _attach_assignee_liveness(
         if response.assignee in agents_with_active_run:
             response.assignee_status = "running"
             response.assignee_status_msg = None
+            # Work that could go ahead and is waiting for its holder's other turn (F1112): the
+            # board says on whom and since when, from when the task last moved.
+            if (
+                response.status in _WAITS_FOR_ITS_HOLDER
+                and response.id not in tasks_being_run[response.assignee]
+            ):
+                response.waiting_on = response.assignee
+                response.waiting_since = response.updated
         seen = activity.get(response.assignee)
         if seen is not None:
             response.assignee_last_seen = seen
@@ -2245,6 +2260,96 @@ async def update_task(
         actor=operator(),
         session=session,
     )
+
+
+class ReassignRequest(RequestModel):
+    agent: str = Field(min_length=1, max_length=64)
+
+
+#: A task these hold is not worked yet, or nobody is working it: it returns to `assigned` first.
+_REASSIGN_RETURNS_TO_ASSIGNED = ("pending", "in_progress", "blocked")
+
+
+@router.post("/{task_id}/reassign", response_model=TaskResponse)
+async def reassign_task(
+    task_id: str,
+    body: ReassignRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Give an open task to any open agent and start its turn, or say why not (F1114).
+
+    Finished work goes to its new holder as a review, through the same hand-off the mender uses,
+    which refuses its author. A task in a live flow is left for the flow's firing, asked for now;
+    anywhere else nothing else would brief the holder, so the turn is queued here. A live run is
+    refused for every status: giving away a task under a working run is what `apply_transition`
+    refuses for a reset (FR-6), and an assignee write alone would pass that guard."""
+    from ... import assigned_task_start, flow_advance, stalls
+    from ...dependency_gate import evaluate as evaluate_dependencies
+    from ...run_liveness import live_turn_for_task
+    from .mender import hand_to_review
+
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+    if task.status in TERMINAL_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{task.id} is {task.status}, so it has no next turn to give to anybody.",
+        )
+    agent = body.agent
+    turn = await live_turn_for_task(session, task, acting_run_id=None)
+    if turn is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"{task.id} is not reassigned: {turn.agent}'s run {turn.run_id} is executing on "
+                "it. Stop that run, or wait for it to end."
+            ),
+        )
+    refusal = await assignee_refusal(session, project_id, agent)
+    if refusal is not None:
+        raise HTTPException(status_code=422, detail=refusal)
+    holder = await session.scalar(
+        select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
+    )
+    if stalls.is_mender(holder):
+        raise HTTPException(status_code=422, detail=f"{agent} mends stalls and holds no task.")
+    if task.status not in ("completed", "under_review") and await is_read_only_agent(
+        project_id, agent, session
+    ):
+        raise HTTPException(status_code=422, detail=read_only_work_sentence(agent, task.id))
+
+    if task.status in ("completed", "under_review"):
+        if task.status == "under_review":
+            task.assignee = agent
+        await hand_to_review(session, task, agent, origin="operator")
+        next_turn = f"{agent}'s review turn is queued."
+    else:
+        if task.builder:
+            task.builder = agent
+        task.assignee = agent
+        task.updated = datetime.now(timezone.utc)
+        if task.status in _REASSIGN_RETURNS_TO_ASSIGNED:
+            await apply_transition(session, task, "assigned", operator())
+            assigned_task_start.forget_after_commit(session, task.id)
+        live_flow = await flow_advance.is_live(session, task.loop_id)
+        blocked = task.status == "assigned" and (await evaluate_dependencies(session, task)).refuses
+        await session.commit()
+        if live_flow:
+            flow_advance.request(task.loop_id)
+            next_turn = f"The flow's next firing briefs {agent}, as soon as {agent} is free."
+        elif blocked:
+            next_turn = (
+                f"{agent} holds it, and no turn was started: its prerequisites are not finished."
+            )
+        else:
+            next_turn = await assigned_task_start.start_for_new_holder(task.id)
+
+    rendered = await _commit_and_render(session, task, project_id=project_id, approval_report=[])
+    rendered.next_turn = next_turn
+    return rendered
 
 
 class LandRequest(RequestModel):

@@ -296,8 +296,8 @@ class TaskReset(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-async def _hand_to_review(
-    session: AsyncSession, actor: AgentActor, task: Task, reviewer: str
+async def hand_to_review(
+    session: AsyncSession, task: Task, reviewer: str, *, origin: str = "mender"
 ) -> dict:
     """Queue a review turn of *task* for *reviewer*, the way the flow and the operator do.
 
@@ -337,15 +337,15 @@ async def _hand_to_review(
     target = await review_target(session, task)
     if not target.resolved:
         raise HTTPException(status_code=409, detail=target.refusal)
-    conversation = new_conversation(project_id=actor.project_id, agent=reviewer, origin="mender")
+    conversation = new_conversation(project_id=task.project_id, agent=reviewer, origin=origin)
     name_conversation(conversation, f"Review {task.id}: {task.title}"[:120])
     session.add(conversation)
     await inherit_runtime_overrides(session, conversation)
     await session.flush()
     entry = new_entry(
-        project_id=actor.project_id,
+        project_id=task.project_id,
         agent=reviewer,
-        origin_type="mender",
+        origin_type=origin,
         content=(
             f"Review task {task.id} ('{task.title}'): its work is finished and waiting for a "
             f"review. Judge it against its acceptance criteria and end with `approved` or "
@@ -357,7 +357,7 @@ async def _hand_to_review(
     )
     session.add(entry)
     await session.commit()
-    await schedule_accepted(actor.project_id, reviewer)
+    await schedule_accepted(task.project_id, reviewer)
     return {
         "task_id": task.id,
         "status": task.status,
@@ -375,7 +375,7 @@ async def mender_reset_task(
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Hand a stuck task back: to the queue (`pending`), to an agent (`assigned`), or finished work
-    to a reviewer (`under_review`, with `assignee` the reviewer -- `_hand_to_review`).
+    to a reviewer (`under_review`, with `assignee` the reviewer -- `hand_to_review`).
 
     Only the edges the transition map gives any run; a task the operator must move answers 409.
     """
@@ -401,7 +401,7 @@ async def mender_reset_task(
             raise HTTPException(
                 status_code=400, detail="Name the reviewer as `assignee` to hand work to review."
             )
-        return await _hand_to_review(session, actor, task, body.assignee)
+        return await hand_to_review(session, task, body.assignee)
     try:
         if task.status == "in_progress" and body.status == "pending":
             await apply_transition(session, task, "assigned", run_actor(actor.run_id, actor.agent))

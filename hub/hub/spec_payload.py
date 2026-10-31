@@ -29,7 +29,7 @@ import json
 import posixpath
 import re
 from datetime import datetime
-from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
+from typing import Annotated, Any, Dict, List, Literal, Optional, Set, Tuple
 
 from pydantic import (
     BaseModel,
@@ -179,6 +179,10 @@ class Task(_Part):
         default=None,
         max_length=32,
         description="Agent name that should build this task (F1046). Applied when a build starts, not at approval: an open agent of that name becomes the task's assignee unless the operator chose another in the Build dialog. Optional, and kept rather than refused when it names no agent, for the reason `reviewer` is: the start's response names it as unresolved and the task waits for the driver to hand it out.",
+    )
+    builder_is_preference: bool = Field(
+        default=False,
+        description="True when `builder` is a preference: if that agent is busy when the task could start, the flow may give it to another free builder. Leave false for hazardous work (migrations, live data, security), which then waits for its named builder.",
     )
     checker: Optional[str] = Field(
         default=None,
@@ -814,6 +818,8 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
         # A task naming no builder (slice D) stores as it did before the field existed.
         if task.get("builder") is None:
             task.pop("builder", None)
+        if not task.get("builder_is_preference"):
+            task.pop("builder_is_preference", None)
         if task.get("checker") is None:
             task.pop("checker", None)
     # An uncited requirement stores as before, with no facts key.
@@ -873,6 +879,15 @@ def task_checker(
             return own, "task"
         return default_checker(payload)
     return None, None
+
+
+def preferred_builders(payload: Optional[Dict[str, Any]]) -> Set[str]:
+    """The keys of the declared tasks whose `builder` is a preference, not a requirement (F1112)."""
+    return {
+        str(entry.get("key"))
+        for entry in (payload or {}).get("tasks") or []
+        if isinstance(entry, dict) and entry.get("key") and entry.get("builder_is_preference")
+    }
 
 
 def declared_people(payload: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Optional[str]]]:

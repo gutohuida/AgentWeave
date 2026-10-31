@@ -41146,7 +41146,7 @@ What remains: the `hub-tests` check, or any project's xdist check, can pass and 
 
 ## F1111 (C) -- removing the lag probe's starvation exemption probably made a stall test flaky again
 
-**Status:** open 2026-10-31. Being worked by Developer in `task-5a9efc6d2670`. The cause is likely, not proven.
+**Status:** fixed 2026-10-31 on `agentweave/Architect`, cause established. The probe now says why it counted a stall; a reproduced failure read 104 of 123 ms collecting garbage, a full collection walking the suite's heap on the loop under load. The probe collects and freezes the heap built before its window, and collection of what the window allocates still counts (tests both ways). Before: 2 failures in 19 runs under load; after: 0 in 12, plus 0 in 5 with the probe tests. A small sample. The first reproduced failure (134 ms, 0 ms of the loop thread's CPU) was before GC was measured, so GC on a worker thread is likely there, not shown. Takes over the probe from `task-5a9efc6d2670`'s branch at 6aaab79.
 **Source:** found by driving
 **Theme:** Checks
 **Ready:** yes
@@ -41156,7 +41156,7 @@ What remains: the `hub-tests` check, or any project's xdist check, can pass and 
 
 ## F1112 (B) -- the Hub's fix task takes the build's builder and holds up that builder's own send-back
 
-**Status:** open 2026-10-31. Operator: Architect does this as a quick fix, no spec, only after the board spec (`spdoc-ab4ca6e25adb`) lands. The same fix covers: a send-back outranks a fix task; a softer "preferred builder" for tasks not yet started; the board names who a task is waiting on and for how long. Several turns per agent is parked.
+**Status:** fixed 2026-10-31 on `agentweave/Architect`, no spec. A fix task goes to a free agent the build does not need, else as before; a send-back is staffed first; a task's `builder_is_preference` lets unstarted work go to a free builder, and is off by default so everything else, hazardous work included, stays strict; the card says `waits on @X` and for how long. Real flow: the fix-task routing. Firing tests only: the send-back order and the preference.
 **Source:** found by driving
 **Theme:** Flows & review
 **Ready:** yes
@@ -41166,7 +41166,7 @@ On 2026-10-31 `task-5a9efc6d2670` (a critical fix task the Hub filed) went to De
 
 ## F1113 (A) -- a finished build ends its flow while the Hub's fix task in that flow is still open, stranding it
 
-**Status:** open 2026-10-31. Goes in with the F1112 quick fix.
+**Status:** fixed 2026-10-31 on `agentweave/Architect`. Build finished, flow stayed open, a real Haiku turn did the fix task, and the flow ended when its queue and landings drained (`d1031_a_flow_keeps_and_spreads_its_work.py`, 26/26). The build still reads finished with a fix task open; a window or cap then waits with only a log line.
 **Source:** found by the operator on a real build
 **Theme:** Flows & review
 **Ready:** yes
@@ -41176,10 +41176,20 @@ On 2026-10-31 `task-5a9efc6d2670` (a critical fix task the Hub filed) went to De
 
 ## F1114 (B) -- the operator cannot reassign a task in the app
 
-**Status:** open 2026-10-31. Operator: Architect fixes this with the F1112 and F1113 quick fix.
+**Status:** fixed 2026-10-31 on `agentweave/Architect`: `POST /tasks/{id}/reassign` and the Assignee field's menu. Browser and real Haiku: a pending task. Route tests only: sent-back work in an ended flow, which is the stranded case itself.
 **Source:** asked for by the operator, after a real stranded task
 **Theme:** Tasks
 **Ready:** yes
 **Tier:** 1
 
 Agents are told that who holds a task is the operator's, but no component under `hub/ui/src/components` offers a reassign (grep, 2026-10-31). The API client can only pass `assignee` along with a status move (`hub/ui/src/api/tasks.ts:733`). `task-5a9efc6d2670` was stranded by F1113 and the operator had no way to move it. **Expected:** the task's page lets the operator pick any open agent and the agent's next turn starts or the page says why not; a read-only agent is refused with its reason as the route does today; a live run on the task is refused by the existing rule.
+
+## F1115 (C) -- a full garbage collection can hold a Hub's event loop past 100 ms
+
+**Status:** open 2026-10-31. Found measuring F1111; only measured in the test process, not on a running Hub.
+**Source:** found by driving
+**Theme:** Performance
+**Ready:** no: measure a live Hub first
+**Tier:** 0
+
+The probe now excludes the heap built before its window, which was the suite's. A running Hub has its own long-lived heap and nothing freezes it after startup, so its collections may hold the loop the same way. **Expected:** measure the pause on a Hub with real data; if it passes 100 ms, `gc.freeze()` after startup is the first thing to try.

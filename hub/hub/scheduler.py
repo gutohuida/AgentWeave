@@ -1833,6 +1833,24 @@ async def _agents_a_loop_may_staff(
     return [name for name in free if _pool_admits(name, withheld, build)]
 
 
+def _builder_is_a_preference(task: Task, build: Any) -> bool:
+    """Whether *task*'s document let somebody else start it when its builder is busy: recorded per
+    task by `builds.cover_tasks`. Absent means the builder is required, as it always was."""
+    people = build.people if build is not None and isinstance(build.people, dict) else {}
+    entry = (people.get("tasks") or {}).get(task.spec_task_key or "") or {}
+    return bool(entry.get("preferred"))
+
+
+def _free_of_the_build(
+    free: "list[str]", taken: "Set[str]", read_only: "Set[str]", build_workers: "Set[str]"
+) -> Optional[str]:
+    """A free agent nobody spoke for who holds and is named for none of the build's open tasks."""
+    return next(
+        (n for n in free if n not in taken and n not in read_only and n not in build_workers),
+        None,
+    )
+
+
 def _pool_admits(name: str, withheld: "Set[str]", build: Any) -> bool:
     """Whether a flow's pool may hold *name* when free: not a judge withheld from fresh work, and
     among a build's builders where it lists any (`the-flow-staffs-the-builds-people`): T3 of
@@ -2409,7 +2427,8 @@ async def decide_firing(
     # so the board reads them as attended -- held where somebody holds them -- and never as a
     # stall the mender is woken for.
     lead_build = await facts.build_of_loop(loop)
-    if lead_build is not None and lead_build.driver == "lead":
+    # A finished build has no lead left to brief, so what its queue still holds is the flow's (F1113).
+    if lead_build is not None and lead_build.driver == "lead" and lead_build.state != "finished":
         return FiringDecision(
             kind=DECISION_IN_FLIGHT,
             _cannot_staff=tuple(
@@ -2468,7 +2487,21 @@ async def decide_firing(
     archived_agents = await facts.archived_agents(loop.project_id)
     default_taken = False
 
-    for task in await facts.loop_candidates(loop):
+    # **A send-back goes first** (F1112): its author is its builder, and work of the build's own
+    # that came back must not wait behind a fix task the Hub filed. Stable, so nothing else moves.
+    candidates = sorted(
+        await facts.loop_candidates(loop),
+        key=lambda t: 0 if t.build_id and t.status == "revision_needed" else 1,
+    )
+    # Who the build still needs, whom a fix task should not take (F1112).
+    build_workers = {
+        name
+        for t in candidates
+        if t.build_id and t.status not in TERMINAL_FOR_BINDING
+        for name in (t.assignee, t.builder)
+        if name
+    }
+    for task in candidates:
         # Set by the `WITH_REVIEWER` branch only; declared here so the arms below can read it
         # unconditionally rather than each guarding on which branch ran.
         wedged_review = False
@@ -2675,6 +2708,21 @@ async def decide_firing(
                 # briefing would be one more copy (F370, F368). One with nothing queued for this
                 # task falls through and is briefed once, and that briefing names the task, so the
                 # next firing finds it here.
+                # A preferred builder (F1112): work nobody has started goes to a free agent rather
+                # than waiting for a busy one, where the document said the name is a preference.
+                if (
+                    (agent in running or agent in held_agents)
+                    and task.status in ("pending", "assigned")
+                    and not attendance.attended(task.id)
+                    and agent == task.builder
+                    and _builder_is_a_preference(task, build)
+                ):
+                    stand_in = next(
+                        (n for n in free if n not in taken and n not in read_only and n != agent),
+                        None,
+                    )
+                    if stand_in is not None:
+                        agent = stand_in
                 if agent in running or attendance.attends(task.id, agent):
                     # That agent's turn is still going, so this firing cannot start it -- the old
                     # whole-firing busy guard, scoped to the one selection it is actually about.
@@ -2721,6 +2769,15 @@ async def decide_firing(
                         )
                     )
                     continue
+            elif (
+                build is not None
+                and not task.build_id
+                and _free_of_the_build(free, taken, read_only, build_workers)
+            ):
+                # A task in the build's flow that is not the build's: a fix task the Hub filed. It
+                # goes to a free agent the build does not need, and to the paths below only where
+                # there is none: it must not delay the build's own tasks (F1112).
+                agent = _free_of_the_build(free, taken, read_only, build_workers)
             elif (task.build_id and task.builder) or (build_default and not judging_default):
                 # **A build's task goes to its own builder, and to nobody else**
                 # (`flow-gives-task-to-its-builder`). Before the default and the pool, which are
@@ -5174,8 +5231,25 @@ class JobScheduler:
         if build is None:
             return False
         if build.state == builds.FINISHED:
-            # Every task closed: the loop ends as a drained queue's does, once (a backstop for a
-            # finish recorded before its loop could be ended).
+            if await builds.loop_has_open_work(session, build):
+                # The build is done and its queue is not: the flow works what is left as any flow
+                # does (F1113). The cap and window still bound it, by waiting: stopping would mark
+                # a finished build as stopped, and nothing about it is left to resume.
+                verdict = await builds.may_hand_out(session, build, builds.now())
+                if verdict.allowed:
+                    return False
+                await session.commit()
+                logger.info(
+                    f"Finished build {build.id}'s queue waits: "
+                    f"{verdict.stop_reason or verdict.wait_reason}"
+                )
+                return True
+            # A stop condition that holds ends it on the firing's ordinary path, which records why,
+            # so a press of Run is answered rather than read as a failure.
+            if await _loop_stop_reason(session, job):
+                return False
+            # Every task closed: the loop ends as a drained queue's does, once (the end of a finish
+            # whose queue still held work, or one recorded before its loop could be ended).
             await builds.end_loop_of(session, build)
             await session.commit()
             await self.remove_job(job.id)

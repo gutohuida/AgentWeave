@@ -63,6 +63,11 @@ def start_after_commit(session: AsyncSession, task_id: str, by_run: Optional[str
     session.sync_session.info.setdefault(_PENDING_KEY, {})[task_id] = by_run
 
 
+def forget_after_commit(session: AsyncSession, task_id: str) -> None:
+    """Drop the nudge a move staged, where the caller starts the task itself: two would queue two."""
+    session.sync_session.info.get(_PENDING_KEY, {}).pop(task_id, None)
+
+
 def request(task_id: str, by_run: Optional[str] = None) -> None:
     """Ask the rule for *task_id* now, in the background. Never raises."""
     try:
@@ -146,18 +151,28 @@ def _briefing(task: Any) -> str:
     return "\n".join(lines).strip()
 
 
-async def _queue(task_id: str, by_run: Optional[str]) -> Optional[Tuple[str, str, Dict[str, Any]]]:
-    """Queue the entry if the rule says so: `(project_id, agent, payload)`, else `None`."""
+async def _queue(
+    task_id: str, by_run: Optional[str], *, new_holder: bool = False
+) -> Optional[Tuple[str, str, Dict[str, Any]]]:
+    """Queue the entry if the rule says so: `(project_id, agent, payload)`, else `None`.
+
+    *new_holder* is the operator giving the task to somebody (F1114), who has decided it starts:
+    the rule's "once per entry into `assigned`" does not hold them back, and sent-back work and a
+    flow that has ended have nothing else that would brief the holder."""
     from .conversations import inherit_runtime_overrides, name_conversation, new_conversation
     from .db.engine import async_session_factory
     from .db.models import Run, Task
     from .inbound_queue import new_entry
+    from .scheduler import _briefing_revision_lines
 
     async with async_session_factory() as session:
         task = await session.get(Task, task_id)
-        if not await _waiting(session, task):
+        if new_holder and (task is None or task.status not in ("assigned", "revision_needed")):
             return None
-        if await _already_started(session, task, await _entered_assigned_at(session, task)):
+        if not new_holder and (
+            not await _waiting(session, task)
+            or await _already_started(session, task, await _entered_assigned_at(session, task))
+        ):
             return None
         origin_agent: Optional[str] = None
         hop_depth = 0
@@ -179,7 +194,9 @@ async def _queue(task_id: str, by_run: Optional[str]) -> Optional[Tuple[str, str
             agent=task.assignee,
             origin_type="agent" if origin_agent else "operator",
             origin_agent=origin_agent,
-            content=_briefing(task),
+            content="\n".join(
+                [_briefing(task), "", *await _briefing_revision_lines(session, task)]
+            ).strip(),
             hop_depth=hop_depth,
             conversation_id=conversation.id,
             task_id=task.id,
@@ -219,6 +236,23 @@ async def start(task_id: str, *, by_run: Optional[str] = None) -> bool:
     except Exception:  # noqa: BLE001 -- the stall sweep asks again
         logger.warning("could not start assigned task %s", task_id, exc_info=True)
         return False
+
+
+async def start_for_new_holder(task_id: str) -> str:
+    """Queue the turn of a task the operator just gave somebody, and say what happens next."""
+    from . import turn_scheduler
+    from .sse import sse_manager
+
+    async with _lock():
+        queued = await _queue(task_id, None, new_holder=True)
+    if queued is None:
+        return "No turn was started: the task is no longer waiting for one."
+    project_id, agent, payload = queued
+    await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+    result = await turn_scheduler.schedule_accepted(project_id, agent)
+    if result.waiting_reason:
+        return f"{agent}'s turn is queued and has not started: {result.waiting_reason}."
+    return f"{agent}'s turn is starting."
 
 
 async def sweep() -> int:

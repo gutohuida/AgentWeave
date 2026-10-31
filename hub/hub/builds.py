@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -483,6 +483,7 @@ async def cover_tasks(
     chosen_checkers: Optional[Dict[str, str]] = None,
     default_builder: Optional[str] = None,
     default_checker: Optional[str] = None,
+    preferred: Optional[Set[str]] = None,
 ) -> List[Dict[str, str]]:
     """Mark *tasks* as the build's, at its level, and apply each one's builder (FR-2, FR-3).
 
@@ -511,6 +512,10 @@ async def cover_tasks(
         )
         if key:
             people[key] = {"builder": builder, "checker": checker}
+            # The document's word that this builder is a preference (F1112); the operator's own
+            # choice in the dialog is not, so it stays required.
+            if preferred and key in preferred and key not in chosen:
+                people[key]["preferred"] = True
         task.builder = builder
         if builder is None:
             continue
@@ -769,13 +774,41 @@ async def finish_if_done(session: AsyncSession, task: Task) -> None:
     if open_count == 0:
         build.state = FINISHED
         build.stopped_at = datetime.now(timezone.utc)
-        await end_loop_of(session, build)
+        # The flow outlives the build while its queue holds work the build does not count: a fix
+        # task the Hub filed, or a landing that may send a task back (F1113). A later firing ends it.
+        if not await loop_has_open_work(session, build, closing=task.id):
+            await end_loop_of(session, build)
         # The document shows it finished (`build-end-shown`).
         await record_in_document(session, build.document_id)
         # The page that shows this build reads it again and stops polling its figures.
         document = await session.get(SpecDocument, build.document_id)
         if document is not None:
             defer_broadcast(session, build.project_id, "spec_updated", {"path": document.path})
+
+
+async def loop_has_open_work(
+    session: AsyncSession, build: Build, closing: Optional[str] = None
+) -> bool:
+    """Whether *build*'s loop still has a task open, less the one *closing*, or a landing open:
+    the same "drained" a loop's own stop condition asks (F1080)."""
+    from . import landing_queue
+    from .scheduler import _approved_tasks_landing
+
+    if not build.loop_id:
+        return False
+    loop = await session.get(Loop, build.loop_id)
+    if loop is None:
+        return False
+    query = (
+        select(func.count())
+        .select_from(Task)
+        .where(Task.loop_id == loop.id, Task.status.not_in(tuple(TERMINAL_STATUSES)))
+    )
+    if closing is not None:
+        query = query.where(Task.id != closing)
+    if (await session.execute(query)).scalar_one():
+        return True
+    return bool(await _approved_tasks_landing(session, loop, landing_queue.OPEN))
 
 
 async def end_loop_of(session: AsyncSession, build: Build) -> Optional[AIJob]:
@@ -992,7 +1025,7 @@ async def hand_out(
             )
         # The dispatch's own read-only refusals, the checks wait and the commit to review, asked
         # now so the lead is answered instead of a turn that never starts (as the mender's
-        # hand-off does, `mender._hand_to_review`).
+        # hand-off does, `mender.hand_to_review`).
         from . import project_checks
         from .task_integration import review_target
 

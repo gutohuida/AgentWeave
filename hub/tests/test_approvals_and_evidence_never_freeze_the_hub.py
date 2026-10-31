@@ -47,7 +47,7 @@ _REAL_ENSURE_REVIEW_CHECKOUT = worktrees.ensure_review_checkout
 def _assert_off_the_loop(log, probe) -> None:
     assert log.calls, "nothing ran git, so this measured nothing"
     assert not log.on_loop, [call.argv[:4] for call in log.on_loop]
-    assert probe.worst < STALL_LIMIT, f"the loop stalled {probe.worst * 1000:.0f} ms"
+    assert probe.worst < STALL_LIMIT, f"the loop stalled {probe.worst * 1000:.0f} ms: {probe.why}"
 
 
 async def _completed_task_with_accepted_work(app, auth_headers, builder, tmp_path):  # noqa: F811

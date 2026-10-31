@@ -18,6 +18,20 @@ describe('phase 5 agent identity colors across project surfaces', () => {
     expect(assignee).toHaveStyle({ color: 'var(--agent-3)' })
   })
 
+  it('says who a task waits on and for how long, only when it waits (F1112)', () => {
+    const now = new Date('2026-08-04T09:31:00Z')
+    const { rerender } = render(
+      <TaskCardCompact
+        task={{ ...task, status: 'revision_needed', waiting_on: 'claude', waiting_since: '2026-08-04T09:00:00Z' }}
+        now={now}
+        onOpen={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('task-waiting-on-task-1')).toHaveTextContent('waits on @claude · 31m')
+    rerender(<TaskCardCompact task={task} now={now} onOpen={() => {}} />)
+    expect(screen.queryByTestId('task-waiting-on-task-1')).not.toBeInTheDocument()
+  })
+
   it('shows the activity actor name with the same project-assigned color', () => {
     render(<EventRow event={{ type: 'task_created', data: { agent: 'claude' }, timestamp: '2026-08-04T09:00:00Z', localId: 1 }} actorName="claude" actorColorIndex={2} />)
     expect(screen.getByText('claude')).toBeInTheDocument()

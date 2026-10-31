@@ -19,6 +19,7 @@ import {
   useTaskIntegrationPreview,
   useTaskStory,
   useTasks,
+  useReassignTask,
   useUpdateTask,
 } from '@/api/tasks'
 import { useAgents } from '@/api/agents'
@@ -307,6 +308,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   // while that answer is unread.
   const { data: taskMoves, error: taskMovesError } = useTaskMoves(task?.id ?? null)
   const updateTask = useUpdateTask()
+  const reassignTask = useReassignTask()
+  // What the last reassign started, or why it started nothing (F1114).
+  const [nextTurn, setNextTurn] = useState<string | null>(null)
   const landTask = useLandTask()
   const deleteTask = useDeleteTask()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -336,6 +340,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   useEffect(() => {
     setView('story')
     setRefusal(null)
+    setNextTurn(null)
     setBlockingReason(null)
     // The drawer instance outlives the task it shows; an advisory belongs to the task approved.
     setApprovalReport([])
@@ -723,6 +728,42 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               </span>
             ) : (
               <span style={{ color: 'var(--text-3)' }}>Unassigned</span>
+            )}
+            {/* F1114. Who holds a task is the operator's, and this is where they say so. The Hub
+                refuses what cannot be done (a live run, a read-only agent) in its own words. */}
+            {task.status !== 'approved' && task.status !== 'rejected' && (
+              <RowMenu
+                label={`Reassign ${task.title}`}
+                testId={`task-reassign-menu-${task.id}`}
+                persistent
+                items={(agents ?? [])
+                  .filter((agent) => agent.name !== task.assignee)
+                  .map((agent) => ({
+                    id: agent.name,
+                    label: `Give to @${agent.name}`,
+                    onSelect: () => {
+                      setRefusal(null)
+                      setNextTurn(null)
+                      reassignTask.mutate(
+                        { id: task.id, agent: agent.name },
+                        {
+                          onSuccess: (updated) => setNextTurn(updated.next_turn ?? null),
+                          onError: (error: unknown) =>
+                            setRefusal(readableApiError(error, 'The Hub refused this reassignment.')),
+                        },
+                      )
+                    },
+                  }))}
+              />
+            )}
+            {nextTurn && (
+              <p
+                data-testid={`task-next-turn-${task.id}`}
+                className="text-[11px] mt-1"
+                style={{ color: 'var(--text-3)' }}
+              >
+                {nextTurn}
+              </p>
             )}
           </Field>
 

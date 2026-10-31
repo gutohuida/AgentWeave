@@ -25,6 +25,8 @@ let transitionsMap: Record<string, string[]> = {}
 // F125's rename mutation, stubbed so the drawer's own edit/save/cancel mechanics are what these
 // tests exercise, not a real network call (`tasksApi.test.tsx` covers the hook's request shape).
 let renameMutate = vi.fn()
+// F1114's reassign, overridden per test.
+let reassignMutate = vi.fn()
 // F532's delete, overridden per test like `renameMutate`.
 let deleteMutate = vi.fn()
 // F823's merge note, shown in the drawer as well as on the card. Mutable like the maps above.
@@ -37,6 +39,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: transitionsMap } }),
     useTaskMoves: () => ({ data: undefined }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
+    useReassignTask: () => ({ mutate: reassignMutate, isPending: false }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),
     // F9's note. Stubbed here for the same reason the three hooks above are: this file is about the
     // drawer's mechanics, and one of its tests renders outside a QueryClientProvider deliberately.
@@ -201,6 +204,35 @@ describe('opening and closing the drawer', () => {
     // input the selection opens, are both still there.
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByTestId('task-block-reason-task-1')).toBeInTheDocument()
+  })
+})
+
+describe('reassigning a task (F1114)', () => {
+  it('gives the task to the chosen agent and says what that started', async () => {
+    reassignMutate = vi.fn((_vars, opts) => opts.onSuccess({ next_turn: "worker's turn is starting." }))
+    renderDrawer(makeTask({ assignee: 'someone' }), vi.fn())
+
+    await userEvent.click(screen.getByTestId('task-reassign-menu-task-1'))
+    await userEvent.click(screen.getByTestId('task-reassign-menu-task-1-worker'))
+
+    expect(reassignMutate.mock.calls[0][0]).toEqual({ id: 'task-1', agent: 'worker' })
+    expect(screen.getByTestId('task-next-turn-task-1')).toHaveTextContent("worker's turn is starting.")
+  })
+
+  it("shows the Hub's refusal in its words", async () => {
+    reassignMutate = vi.fn((_vars, opts) => opts.onError(new Error('run-1 is executing on it')))
+    renderDrawer(makeTask({ assignee: 'someone' }), vi.fn())
+
+    await userEvent.click(screen.getByTestId('task-reassign-menu-task-1'))
+    await userEvent.click(screen.getByTestId('task-reassign-menu-task-1-worker'))
+
+    expect(screen.queryByTestId('task-next-turn-task-1')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toHaveTextContent('The Hub refused this reassignment.')
+  })
+
+  it('offers nothing on a closed task', () => {
+    renderDrawer(makeTask({ status: 'approved' }), vi.fn())
+    expect(screen.queryByTestId('task-reassign-menu-task-1')).not.toBeInTheDocument()
   })
 })
 
