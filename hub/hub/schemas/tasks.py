@@ -367,6 +367,11 @@ class TaskResponse(BaseModel):
     # document that reports rather than refuses; never persisted, because it describes this moment,
     # not a record (`2026-08-13-a-gate-that-only-evidence-opens`, task 5.5).
     approval_report: List[Any] = Field(default_factory=list)
+    # What a reassign started, or why it started nothing (F1114). Only that route's answer has it.
+    next_turn: Optional[str] = None
+    # The holder this task waits for while they run another turn, and since when (F1112).
+    waiting_on: Optional[str] = None
+    waiting_since: Optional[datetime] = None
     acceptance_criteria: Optional[Any] = None
     deliverables: Optional[Any] = None
     notes: Optional[Any] = None

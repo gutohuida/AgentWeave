@@ -145,6 +145,15 @@ export function TaskCardCompact({
               builds @{task.builder} · by default
             </span>
           ) : null}
+          {task.waiting_on && task.waiting_since ? (
+            <span
+              className="aw-task-card-age"
+              data-testid={`task-waiting-on-${task.id}`}
+              title={`Waiting since ${formatDateTime(task.waiting_since, now)} for @${task.waiting_on} to finish another turn`}
+            >
+              waits on @{task.waiting_on} · {formatAgo(task.waiting_since, now)}
+            </span>
+          ) : null}
           {task.priority === 'high' || task.priority === 'critical' ? (
             <span className="aw-task-card-priority" title={`${task.priority} priority`}>
               <Icon name="flag" size={11} />

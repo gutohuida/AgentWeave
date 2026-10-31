@@ -3568,6 +3568,7 @@ async def _build(
         chosen_checkers=settings.task_checkers,
         default_builder=settings.builder,
         default_checker=settings.checker,
+        preferred=spec_payload_module.preferred_builders(payload),
     )
     if settings.driver == builds.DRIVER_HAND or document.kind != "change-spec":
         flow = (

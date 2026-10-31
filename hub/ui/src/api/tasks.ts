@@ -32,6 +32,9 @@ export interface Task {
   assignee_status?: string | null
   assignee_status_msg?: string | null
   assignee_last_seen?: string | null
+  /** The holder this task waits for while they run another turn, and since when (F1112). */
+  waiting_on?: string | null
+  waiting_since?: string | null
   requirements?: string[]
   acceptance_criteria?: string[]
   deliverables?: string[]
@@ -752,6 +755,25 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
       // The menu's moves belong to the holder, which this move may have changed.
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks', id, 'moves'] })
+    },
+  })
+}
+
+/**
+ * Give an open task to any open agent (F1114). The answer's `next_turn` says what that started, or
+ * why it started nothing; a refusal is the Hub's own sentence.
+ */
+export function useReassignTask() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id, agent }: { id: string; agent: string }) =>
+      postJson<Task & { next_turn?: string | null }>(
+        `/api/v1/projects/${projectId}/tasks/${id}/reassign`,
+        { agent },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
     },
   })
 }

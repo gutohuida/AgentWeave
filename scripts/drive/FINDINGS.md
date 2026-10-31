@@ -41133,3 +41133,63 @@ Since round 1 of task-ecc5aa118360, `_run_one` no longer ends a process a check 
 **Area:** Worktrees & integration. This is the cause of the 120s `test_pytest_xdist_sizes_auto_by_the_variable` timeouts (task-ecc5aa118360). `live_process_tree`, on 2026-10-31, named only `cmd.exe`, its `conhost.exe` and the inner `python -m pytest -n auto`, with no worker left, after `1 passed in 0.68s`. An xdist main process makes a numbered `pytest-N` directory in the shared `%TEMP%\pytest-of-<user>` and, at exit, deletes the ones past the newest three (`cleanup_numbered_dir`, an atexit hook in `_pytest/pathlib.py`). Reproduced with an isolated TEMP holding 150,000 stale files: `1 passed in 0.72s`, then 21s to exit on an unloaded machine, with a `faulthandler` dump inside `shutil.rmtree` under `_pytest/pathlib.py`. The real folder held 171,069 files that day. The hang itself was not caught with a stack dump, and 120s was not reproduced; the size, the surviving-process list and the first-run-after-a-pause pattern all fit. 583 and then 816 inner runs with nothing stale to delete never hung.
 
 What remains: the `hub-tests` check, or any project's xdist check, can pass and then time out while deleting old session directories, and it reads as a failure. Nothing here limits that folder's growth.
+
+## F1110 (C) -- a fix task the Hub files during a build is invisible from that build's spec
+
+**Status:** open 2026-10-31. Operator's request: an error caught during a build must show on the spec, with whether it was introduced or only caught, and how it was fixed.
+**Source:** asked for by the operator
+**Theme:** Flows & review
+**Ready:** no: the shape needs the operator's approval
+**Tier:** 1
+
+`task-5a9efc6d2670` was filed by `flaky_tests.file_fix_task` while `task-7dd2cd4941f7` of `spdoc-ab4ca6e25adb` was being checked. The filing is intended (`a-red-main-does-not-hold-the-night`, D5), but it sets `loop_id` only: `spec_document_id` and `build_id` are null, and the link to the task it was found on is an `event_logs` row (`FIX_TASK_EVENT`) plus a sentence in the description. So the spec page does not show it, and `a-finished-spec-gets-a-build-retrospective` will not read it, because that job reads "every task of the document". **Expected:** the spec's build record lists each failure the checks found during it: which test, flaky or also failing on main, whether the build's work changed that file, the fix task and its outcome. It adds no requirement to the spec and does not hold the spec from reading as done.
+
+## F1111 (C) -- removing the lag probe's starvation exemption probably made a stall test flaky again
+
+**Status:** fixed 2026-10-31 on `agentweave/Architect`, cause established. The probe now says why it counted a stall; a reproduced failure read 104 of 123 ms collecting garbage, a full collection walking the suite's heap on the loop under load. The probe collects and freezes the heap built before its window, and collection of what the window allocates still counts (tests both ways). Before: 2 failures in 19 runs under load; after: 0 in 12, plus 0 in 5 with the probe tests. A small sample. The first reproduced failure (134 ms, 0 ms of the loop thread's CPU) was before GC was measured, so GC on a worker thread is likely there, not shown. Takes over the probe from `task-5a9efc6d2670`'s branch at 6aaab79.
+**Source:** found by driving
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+`task-e9ae9d8dfeb8` (10-28) fixed `test_approving_releases_and_merges_without_stalling_the_loop` by excusing lateness the whole machine shared. Architect removed that excuse on 10-31 (`200ca41`, merged in `51e7bc4`) because it could also hide real work holding the loop, and passed 6/6 under load. Check run `chk-cbad27013168` then failed the same test at 426 ms against 100 ms during a real check. **Expected:** the test tells a busy machine from code blocking the loop, and still fails when a real stall is forced.
+
+## F1112 (B) -- the Hub's fix task takes the build's builder and holds up that builder's own send-back
+
+**Status:** fixed 2026-10-31 on `agentweave/Architect`, no spec. A fix task goes to a free agent the build does not need, else as before; a send-back is staffed first; a task's `builder_is_preference` lets unstarted work go to a free builder, and is off by default so everything else, hazardous work included, stays strict; the card says `waits on @X` and for how long. Real flow: the fix-task routing. Firing tests only: the send-back order and the preference.
+**Source:** found by driving
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 1
+
+On 2026-10-31 `task-5a9efc6d2670` (a critical fix task the Hub filed) went to Developer as the flow's own agent. QA sent `task-7dd2cd4941f7` back to Developer at 17:13 while `run-5fc8e9c4ad37`, started 16:59 on the fix task, was still running at 17:48, and that task's builder is given to nobody else. QA2 was on the builders list and not named by either task. **Expected:** a fix task prefers a free agent who holds no work in the build; it does not delay the build's own tasks.
+
+## F1113 (A) -- a finished build ends its flow while the Hub's fix task in that flow is still open, stranding it
+
+**Status:** fixed 2026-10-31 on `agentweave/Architect`. Build finished, flow stayed open, a real Haiku turn did the fix task, and the flow ended when its queue and landings drained (`d1031_a_flow_keeps_and_spreads_its_work.py`, 26/26). The build still reads finished with a fix task open; a window or cap then waits with only a log line.
+**Source:** found by the operator on a real build
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+`builds.finish_if_done` (`hub/hub/builds.py:751`) counts only tasks with `build_id` set, and `end_loop_of` then ends the build's loop. A fix task from `flaky_tests.file_fix_task` carries the `loop_id` and no `build_id`. On 2026-10-31 approving `task-26371095d3ce` finished `build-37051e90da23` at 19:27:03 and ended `loop-028328d41d99` with `task-5a9efc6d2670` under review. At 19:32 its reviewer sent it back to Developer, and no firing will ever brief Developer. **Expected:** a loop does not end while a task in it is open; the build may read as finished, per F1110, but the flow keeps working its queue and ends when that drains.
+
+## F1114 (B) -- the operator cannot reassign a task in the app
+
+**Status:** fixed 2026-10-31 on `agentweave/Architect`: `POST /tasks/{id}/reassign` and the Assignee field's menu. Browser and real Haiku: a pending task. Route tests only: sent-back work in an ended flow, which is the stranded case itself.
+**Source:** asked for by the operator, after a real stranded task
+**Theme:** Tasks
+**Ready:** yes
+**Tier:** 1
+
+Agents are told that who holds a task is the operator's, but no component under `hub/ui/src/components` offers a reassign (grep, 2026-10-31). The API client can only pass `assignee` along with a status move (`hub/ui/src/api/tasks.ts:733`). `task-5a9efc6d2670` was stranded by F1113 and the operator had no way to move it. **Expected:** the task's page lets the operator pick any open agent and the agent's next turn starts or the page says why not; a read-only agent is refused with its reason as the route does today; a live run on the task is refused by the existing rule.
+
+## F1115 (C) -- a full garbage collection can hold a Hub's event loop past 100 ms
+
+**Status:** open 2026-10-31. Found measuring F1111; only measured in the test process, not on a running Hub.
+**Source:** found by driving
+**Theme:** Performance
+**Ready:** no: measure a live Hub first
+**Tier:** 0
+
+The probe now excludes the heap built before its window, which was the suite's. A running Hub has its own long-lived heap and nothing freezes it after startup, so its collections may hold the loop the same way. **Expected:** measure the pause on a Hub with real data; if it passes 100 ms, `gc.freeze()` after startup is the first thing to try.

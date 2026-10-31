@@ -414,12 +414,15 @@ async def test_a_build_that_lands_nowhere_merges_nothing(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("driver", ["flow", "lead"])
 async def test_a_finished_build_ends_its_loop(app, auth_headers, author_headers, driver):
-    """Every task of a Fast build approved, then two firings: the build reads finished and its loop
-    has ended (completed, its job disabled), for a flow and for a lead. Before the review fix the
-    build's firing returned before the loop's own stop check, and the loop ticked forever."""
+    """Every task of a Fast build approved and landed, then two firings: the build reads finished
+    and its loop has ended (completed, its job disabled), for a flow and for a lead. Before the
+    review fix the build's firing returned before the loop's own stop check, and the loop ticked
+    forever."""
     from unittest.mock import AsyncMock, MagicMock, patch
 
-    from hub.db.models import Build
+    from sqlalchemy import update
+
+    from hub.db.models import Build, TaskLanding
     from hub.scheduler import JobScheduler
     from hub.task_transitions import operator
 
@@ -441,6 +444,9 @@ async def test_a_finished_build_ends_its_loop(app, auth_headers, author_headers,
             for status in ("in_progress", "completed", "approved"):
                 await apply_transition(db, row, status, operator())
             await db.commit()
+    async with async_session_factory() as db:
+        await db.execute(update(TaskLanding).values(state="landed"))
+        await db.commit()
 
     (loop,) = await _rows(Loop)
     for _ in range(2):
