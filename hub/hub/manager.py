@@ -45,8 +45,15 @@ SPEC_VAULT_CHECK = "spec-vault-check"
 CHAPTERS = "chapters"
 MENDER = "mender"
 BUILD_RETROSPECTIVE = "build-retrospective"
-#: The jobs with a button beside their triggers: `mode` chooses automatic firing or the button only.
-HAS_BUTTON = (CHAPTERS, BUILD_RETROSPECTIVE)
+
+
+@dataclass(frozen=True)
+class FiringChoice:
+    """A job with a button beside its triggers, in the words the Manager page offers the choice."""
+
+    button: str
+    where: str
+    automatic: str
 
 
 @dataclass(frozen=True)
@@ -58,6 +65,8 @@ class JobSpec:
     # False: with no runner chosen the job borrows one (the titler uses the conversation's own
     # agent's). True: with none it does nothing. The Manager page words its empty choice from this.
     needs_runner: bool = True
+    # Set: the job has a button, and `mode` chooses automatic firing or the button only.
+    firing_choice: Optional[FiringChoice] = None
 
 
 JOBS = (
@@ -112,6 +121,11 @@ JOBS = (
             "only when you ask. Needs a runner. Off: the Thread shows its structural surface."
         ),
         trigger="document_approved",
+        firing_choice=FiringChoice(
+            button="Weave the thread",
+            where="the Thread page",
+            automatic="after a document is approved or archived and after its last task is approved",
+        ),
     ),
     JobSpec(
         key=BUILD_RETROSPECTIVE,
@@ -125,6 +139,11 @@ JOBS = (
             "build unless you ask."
         ),
         trigger="last_task_approved",
+        firing_choice=FiringChoice(
+            button="Review this build",
+            where="a spec document's page",
+            automatic="after a document's last task is approved",
+        ),
     ),
     # The one entry that is an agent, not a one-shot spawn (`stalls.py`): its runner and model
     # become the `mender` agent's, and a stall briefs it through the ordinary queue.
@@ -145,6 +164,7 @@ JOBS = (
 )
 
 _BY_KEY = {spec.key: spec for spec in JOBS}
+HAS_BUTTON = tuple(spec.key for spec in JOBS if spec.firing_choice is not None)
 
 
 def job_spec(key: str) -> Optional[JobSpec]:
@@ -167,6 +187,7 @@ def _listed(spec: JobSpec, row: Optional[ManagerJob]) -> Dict[str, Any]:
         "model": row.model if row is not None else None,
         "automatic": bool(row.automatic) if row is not None else True,
         "mode": "automatic" if row is None or row.automatic else "button",
+        "firing_choice": asdict(spec.firing_choice) if spec.firing_choice is not None else None,
     }
 
 

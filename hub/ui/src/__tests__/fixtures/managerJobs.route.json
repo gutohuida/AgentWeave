@@ -1,0 +1,110 @@
+{
+  "jobs": [
+    {
+      "key": "conversation-titles",
+      "title": "Conversation titles",
+      "description": "Names a conversation after its first exchange, replacing the truncated first message. Off: conversations keep the truncated title.",
+      "trigger": "turn_completed",
+      "needs_runner": false,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": null
+    },
+    {
+      "key": "vault-distillation",
+      "title": "Vault distillation",
+      "description": "Reads each new vault source and writes the facts it states, each citing the lines it rests on. Needs a runner. Off: sources stay in the vault without facts.",
+      "trigger": "source_uploaded",
+      "needs_runner": true,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": null
+    },
+    {
+      "key": "vault-reports",
+      "title": "Vault reports",
+      "description": "Looks into each report a working agent files on a vault entry: corrects the fact from its source, answers why it stands, or refers it to you. Needs a runner. Off: reports stay pending.",
+      "trigger": "report_filed",
+      "needs_runner": true,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": null
+    },
+    {
+      "key": "spec-vault-check",
+      "title": "Spec vault check",
+      "description": "Reads a spec document's requirements against the vault's facts when the operator checks it, and warns on the spec page of a requirement that contradicts one. Needs a runner. Off: only the facts a requirement cites are checked.",
+      "trigger": "document_proposed",
+      "needs_runner": true,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": null
+    },
+    {
+      "key": "chapters",
+      "title": "Thread chapters",
+      "description": "Writes the Thread's chapters: titled, dated groups of the project's history, reaching back through its git history. Fires after a document is approved or archived and after a document's last task is approved (automatic), and when you press Weave the thread. It adds chapters on its own and rewrites existing ones only when you ask. Needs a runner. Off: the Thread shows its structural surface.",
+      "trigger": "document_approved",
+      "needs_runner": true,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": {
+        "button": "Weave the thread",
+        "where": "the Thread page",
+        "automatic": "after a document is approved or archived and after its last task is approved"
+      },
+      "usage_total": {
+        "firings": 0
+      }
+    },
+    {
+      "key": "build-retrospective",
+      "title": "Build retrospective",
+      "description": "Reviews a spec document's whole build: where the time went, what was sent back and why, what the spec missed, staffing, cost, friction, what worked and what to improve, every claim citing the records it rests on. Fires when a document's last task is approved (automatic), and when you press Review this build on its page. Its lessons are added to the vault as a tracked source. Needs a runner. Off: nothing reviews a build unless you ask.",
+      "trigger": "last_task_approved",
+      "needs_runner": true,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": {
+        "button": "Review this build",
+        "where": "a spec document's page",
+        "automatic": "after a document's last task is approved"
+      },
+      "usage_total": {
+        "firings": 0
+      }
+    },
+    {
+      "key": "mender",
+      "title": "Mender",
+      "description": "When the project's work stalls -- a merge skipped or failed, a loop with nothing it can start, a refused turn, a dead run, or no progress for 30 minutes -- the mender reads the cause and unblocks the agents on its own: it resolves conflicts and lands the work without review. Before anything hardcore, such as touching changes it did not make, it leaves you a note under Needs you and does not do it; your answer wakes it later. Runs on the runner's CLI default model unless you choose one. Needs a runner. Off: stalls are only recorded.",
+      "trigger": "stall_recorded",
+      "needs_runner": true,
+      "enabled": false,
+      "runner_id": null,
+      "model": null,
+      "automatic": true,
+      "mode": "automatic",
+      "firing_choice": null,
+      "default_model": null
+    }
+  ]
+}

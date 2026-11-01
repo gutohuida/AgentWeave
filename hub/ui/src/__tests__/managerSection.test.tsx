@@ -7,6 +7,7 @@ import { ManagerSection } from '@/components/settings/sections/ManagerSection'
 import { chooseMenuOption, menuSelect, openMenuSelect } from './support/menuSelect'
 import { useConfigStore } from '@/store/configStore'
 import { toast } from '@/lib/toast'
+import managerJobsRoute from './fixtures/managerJobs.route.json'
 
 vi.mock('@/lib/toast', () => ({ toast: vi.fn() }))
 
@@ -322,6 +323,7 @@ describe('Project settings → Manager', () => {
     const chapters = {
       key: 'chapters', title: 'Thread chapters', description: 'Writes the Thread’s chapters.', trigger: 'document_approved',
       needs_runner: true, enabled: true, runner_id: 'runner-haiku', model: null, mode: 'button',
+      firing_choice: { button: 'Weave the thread', where: 'the Thread page', automatic: 'after a document is approved' },
       usage_total: { firings: 2, input_tokens: 1300, output_tokens: 500, cost_usd_micros: 95_000 },
     }
     const firing = (id: string, usage: Record<string, number>) => ({
@@ -349,6 +351,33 @@ describe('Project settings → Manager', () => {
 
     await chooseMenuOption(user, 'Thread chapters firing', /^Automatic/)
     await waitFor(() => expect(patches).toContainEqual({ url: expect.stringContaining('/manager/jobs/chapters'), body: { mode: 'automatic' } }))
+  })
+
+  // The fixture is what `GET /manager/jobs` answers for a new project;
+  // `hub/tests/test_manager_jobs.py` fails when the route stops answering it.
+  it('offers the firing choice on exactly the jobs the listing says have a button', async () => {
+    const user = userEvent.setup()
+    manager = (url) => {
+      if (url.includes('/manager/jobs')) return { status: 200, body: managerJobsRoute }
+      if (url.includes('/manager/activity')) return { status: 200, body: { firings: [] } }
+      return undefined
+    }
+    render(<ManagerSection />, { wrapper })
+    await waitFor(() => expect(menuSelect('Build retrospective firing')).toHaveTextContent('Automatic'))
+    expect(menuSelect('Thread chapters firing')).toHaveTextContent('Automatic')
+    for (const { key, title, firing_choice } of managerJobsRoute.jobs) {
+      if (key !== 'build-retrospective' && key !== 'chapters') {
+        expect(firing_choice).toBeNull()
+        expect(screen.queryByRole('button', { name: `${title} firing` })).toBeNull()
+      }
+    }
+    expect(within(screen.getByTestId('manager-job-build-retrospective')).getByText(/Button only: just when you press Review this build on a spec document's page/)).toBeInTheDocument()
+
+    await openMenuSelect(user, 'Build retrospective firing')
+    expect(screen.getByRole('menuitemradio', { name: /Only when you press Review this build/ })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await chooseMenuOption(user, 'Build retrospective firing', /^Button only/)
+    await waitFor(() => expect(patches).toContainEqual({ url: 'http://hub/api/v1/projects/proj-a/manager/jobs/build-retrospective', body: { mode: 'button' } }))
   })
 
   it('counts cache tokens in a firing and in the total, and breaks them down in a tooltip', async () => {

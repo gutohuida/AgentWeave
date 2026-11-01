@@ -19,9 +19,13 @@ export interface ManagerJob {
   /** The mender only: the model its turns run on while `model` is null -- the catalog's default for
    *  its runner's CLI -- or null with no runner. Absent on a Hub that predates it. */
   default_model?: { id: string; label: string } | null
-  /** The chapters job only: fire on its triggers, or only when 'Weave the thread' is pressed. */
+  /** Fire on the job's triggers, or only on its button. The route lists it for every job; only a job
+   *  with a `firing_choice` can change it. */
   mode?: 'automatic' | 'button'
-  /** The chapters job only: what all its firings in this project recorded, summed. */
+  /** A job with a button: the choice between it and automatic firing, in words. Null on the others;
+   *  absent on a Hub that predates it, which shows no choice until it restarts. */
+  firing_choice?: { button: string; where: string; automatic: string } | null
+  /** A job with a button: what all its firings in this project recorded, summed. */
   usage_total?: JobUsageTotal
 }
 
