@@ -555,9 +555,7 @@ async def test_a_readable_id_from_another_project_is_not_found(app, auth_headers
 
 
 @pytest.mark.asyncio
-async def test_the_other_doors_store_the_stored_id(
-    app, auth_headers, author_headers, add_agent
-):
+async def test_the_other_doors_store_the_stored_id(app, auth_headers, author_headers, add_agent):
     """What is not in a path: a prerequisite, a message's task, evidence's task, a trace filter."""
     await _set_project_acronym("proj-test", "BPS")
     first = await _create(app, auth_headers)

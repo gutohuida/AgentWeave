@@ -35,7 +35,28 @@ ACRONYM_RE = re.compile(r"^[A-Z][A-Z0-9]{1,4}$")
 #: `FR-3` is how a requirement is named everywhere a task's work is discussed. Nothing stops the
 #: operator choosing it; the Hub just does not hand it out.
 _NOT_DERIVED = frozenset({"FR"})
-_STOP_WORDS = frozenset(["a", "an", "and", "at", "by", "for", "from", "in", "into", "is", "it", "its", "of", "on", "or", "the", "to", "with"])
+_STOP_WORDS = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "at",
+        "by",
+        "for",
+        "from",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "with",
+    ]
+)
 _WORD_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 SPEC_FALLBACK = "SPEC"
 PROJECT_FALLBACK = "PROJ"

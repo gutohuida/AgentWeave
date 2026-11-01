@@ -47,7 +47,28 @@ depends_on = None
 
 _ACRONYM_RE = re.compile(r"^[A-Z][A-Z0-9]{1,4}$")
 _NEVER = frozenset({"TASK", "SK", "FR"})
-_STOP_WORDS = frozenset(["a", "an", "and", "at", "by", "for", "from", "in", "into", "is", "it", "its", "of", "on", "or", "the", "to", "with"])
+_STOP_WORDS = frozenset(
+    [
+        "a",
+        "an",
+        "and",
+        "at",
+        "by",
+        "for",
+        "from",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "with",
+    ]
+)
 _WORD_RE = re.compile(r"[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+")
 _INDEX = "uq_tasks_project_readable_id"
 
