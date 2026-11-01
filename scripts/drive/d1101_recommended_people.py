@@ -31,9 +31,12 @@ Steps (each records its checks and the drive goes on, so one run on master shows
   E  Overview, in Chromium. The warning names the spec, the task, the filer and 30 days (E1);
      stopping from it stops the build (E2) and its flow starts nothing further (E3).
 
-On master it fails at A1-A6 (no tool reads the record; the author submits no tasks, so the drive
-seeds a document with picks and no reasons), B2 (no reasons shown), D1-D5 (the follow-up joins
-nothing: no reopening, no assignee, the spec reads done, no flow starts it) and E1/E2.
+The author is walked through the journey as the operator would (answering 'continue' to each
+step; the models question is answered only once asked; approval gaps go back to the author).
+On master it fails at A1/A2/A4 (no tool reads the record; picks carry no reasons), B2 (no
+reasons shown), D1-D5 (the follow-up joins nothing: no reopening, no assignee, the spec reads
+done, no flow starts it) and E1/E2. Whether the master author writes a buildable document varies
+from run to run; if not, the drive seeds one (picks, no reasons) and A7-A9 fail as well.
 The author may rename the document, so its path is re-read by id after every author turn.
 
 Selectors the build is to provide (the Overview and Build dialog test ids, named here so the
@@ -124,10 +127,12 @@ def reply(run_id):
 
 
 def chosen(options):
-    """The labels of the options that point at the project's own record."""
-    return [o["label"] for o in options if isinstance(o, dict) and o.get("label")
-            and re.search(r"record|project|history|tally", f"{o['label']} {o.get('description', '')}",
-                          re.I)]
+    """The labels of the options that point at the project's own record (the label names it:
+    a web-search option whose description mentions the project is not one)."""
+    labels = [o["label"] for o in options if isinstance(o, dict) and o.get("label")]
+    return ([x for x in labels if re.search(r"record|history|tally", x, re.I)]
+            or [x for x in labels if re.search(r"project", x, re.I)
+                and not re.search(r"web|search", x, re.I)])
 
 
 def buildable(doc):
@@ -262,30 +267,57 @@ def drive(state):
         path = current(base, doc_id)[0] or path
         return run_id
 
-    first = author_turn(REQUEST)
-    said = reply(first)
-    (d.TMP / "author-turn1.txt").write_text(said, encoding="utf-8")
-    asks = re.search(r"web|search", said, re.I) and re.search(r"record|project'?s", said, re.I) \
-        and ("?" in said or answered)
-    d.check("A1 the author asks which sources to judge the models by", bool(asks), said[:400])
-    # The models are named to the author: Opus and Sonnet from the roster.
-    d.check("A1b the author was told the roster's models", "opus" in said.lower() or
-            "opus" in json.dumps(d.ro("select content from agent_outputs where run_id=?", (first,))).lower(),
-            said[:200])
+    def step_of():
+        return (d.ro("select step from spec_documents where id=?", (doc_id,)) or [(None,)])[0][0]
 
-    if not answered:
-        author_turn(ANSWER)
-    for nudge in range(3):
+    # Walk the journey as the operator would: answer 'continue' until the author reaches the
+    # tasks step (where it is to ask how to judge the models, FR-13) and then the build step.
+    # The answer to the models question is given only in reply to the ask; an author that has not
+    # asked by the time it stood at the tasks step fails A1 by name, and is then told.
+    said_all, asked, a1_done, message = [], False, False, REQUEST
+    first = None
+    for _ in range(12):
+        step_before = step_of()
+        # Every turn is a fresh conversation, so the request rides along on each one.
+        run_id = author_turn(message if message == REQUEST
+                             else f"{REQUEST}\n\nThe operator now says: {message}")
+        first = first or run_id
+        said = reply(run_id)
+        said_all.append(said)
+        (d.TMP / f"author-turn{len(said_all)}.txt").write_text(said, encoding="utf-8")
+        text = "\n".join(said_all)
+        now_asks = bool(re.search(r"web|search", said, re.I)
+                        and re.search(r"record|project'?s", said, re.I)
+                        and ("?" in said or answered))
+        asked = asked or now_asks
+        answered_by_route = bool(answered)
+        if not a1_done and (asked or step_before in ("tasks", "build")):
+            a1_done = True
+            d.check("A1 the author asks which sources to judge the models by", asked, text[-600:])
+            d.check("A1b the author was told the roster's models", "opus" in text.lower() or
+                    "opus" in json.dumps(d.ro("select content from agent_outputs where run_id in "
+                                              "(%s)" % ",".join("?" * len(runs)), tuple(runs))).lower(),
+                    text[:200])
+            message = ("Continue." if answered_by_route else f"{ANSWER} Then continue.")
+            continue
         doc = payload_of(root, path)
-        if len(tasks_of(root, path)) >= 2 and buildable(doc):
-            break
-        if len(tasks_of(root, path)) < 2:
-            author_turn("Continue to the tasks step and submit the document with both "
-                        "tasks, each with builder, checker and a reason for each.")
+        tasks_now = tasks_of(root, path)
+        if step_of() == "build" and len(tasks_now) >= 2:
+            if buildable(doc):
+                break
+            message = ("The document cannot be built yet: declare its requirements (each with an "
+                       "acceptance criterion) and give every task `requirements` naming the keys "
+                       "it implements. Resubmit it, keeping every builder, checker and reason.")
+        elif step_of() in ("tasks", "build") and len(tasks_now) < 2:
+            message = ("Submit the document with both tasks, each with builder, checker and a "
+                       "reason for each.")
         else:
-            author_turn("The document cannot be built yet: declare its requirements (each with an "
-                        "acceptance criterion) and give every task `requirements` naming the keys "
-                        "it implements. Resubmit it, keeping every builder, checker and reason.")
+            message = ("Continue: read the document as it stands, record what the request already "
+                       "settles, and take it to the next step.")
+    if not a1_done:
+        d.check("A1 the author asks which sources to judge the models by", False,
+                "\n".join(said_all)[-600:])
+        d.check("A1b the author was told the roster's models", False, "no ask reached")
     quoted = urllib.parse.quote(path)
     _, read = d.api("GET", f"{base}/project/spec?path={quoted}")
     written = payload_of(root, path)
@@ -319,7 +351,7 @@ def drive(state):
                             default=str)[:500])
     fallback = []
     if not own:
-        # The author did not get to a document with tasks (always so on master): seed one, with
+        # The author did not get to a buildable document (on master it varies): seed one, with
         # picks and no reasons, so Build, the follow-up and Overview are driven and fail, if they
         # do, for their own reasons rather than all at once here.
         code, out = d.api("PUT", f"{base}/project/documents/{path}/content",
@@ -337,9 +369,20 @@ def drive(state):
     # The "Opus" of the roster is rebound to Haiku: every build turn is Haiku.
     d.api("PATCH", f"{base}/agents/{STRONG}", {"runner_id": haiku["id"]})
     d.api("PATCH", f"{base}/agents/{CHEAP}", {"runner_id": haiku["id"]})
-    approve = f"{base}/project/documents/phase?path={quoted}&to=approved"
-    version = read.get("content_version")
-    code, out = d.api("POST", approve, {"reason": "drive", "content_version": version})
+    # Approval gaps go back to the author, as the operator would hand them, for a bounded number
+    # of turns before A8 decides (a seeded stand-in has no author to hand them to).
+    for attempt in range(3):
+        quoted = urllib.parse.quote(path)
+        _, read = d.api("GET", f"{base}/project/spec?path={quoted}")
+        approve = f"{base}/project/documents/phase?path={quoted}&to=approved"
+        version = read.get("content_version")
+        code, out = d.api("POST", approve, {"reason": "drive", "content_version": version})
+        if code == 200 or fallback or attempt == 2:
+            break
+        author_turn("Approving the document was refused: "
+                    f"{json.dumps(out, default=str)[:1500]}\nFix what it names (record the "
+                    "journey's steps if the document already holds them) so it approves without "
+                    "approve_anyway.")
     d.check("A8 the document approves on its own, without approve_anyway", code == 200,
             f"{code} {str(out)[:400]}")
     if code != 200:
@@ -490,8 +533,9 @@ def drive(state):
         except Exception:  # noqa: BLE001 -- no warning on the page
             text = ""
         page.screenshot(path=str(d.TMP / "overview.png"), full_page=True)
+        title = str(payload_of(root, path).get("title") or "")
         d.check("E1 the warning names the spec, the task, the filer and 30 days",
-                bool(text) and DOC_TITLE.split()[0].lower() in (text + path).lower()
+                bool(text) and bool(title) and title.lower() in text.lower()
                 and "Add FOLLOWUP.md" in text and CHECKER in text and "30 days" in text, text[:400])
         if text:
             page.get_by_test_id("reopening-warning-stop").first.click()
@@ -531,14 +575,11 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Observed 2026-11-01 on master (no implementation; run 18:06:50, artefacts drive1101-recommended-
-# people/180650): 25 passed, 16 failed -- A1-A9, B2, D1, D2, D3, D5, E1, E2. A real Haiku author
-# (no ask_user, no record tool, no tasks submitted) leaves a document that is not buildable, so
-# a seeded one stands in and A7-A9 fail by design; the run therefore cannot pass on master or
-# with a seeded fallback. With that stand-in: B1, B3 pass and B2 fails (no reasons shown); B4 shows
-# a task filed with requirement_ids joins the running build; C1 the build finishes; D0b the
-# follow-up is linked to the spec (spec_document_id set) yet joins nothing: the build stays
-# finished (D1, D2), the task has no assignee (D3), no flow starts it (D5), no Overview warning
-# (E1) and stopping is refused (E2). D4 passed in that run (a pending task made the spec read
-# `building`); the check was then tightened to also require the running build, so it fails too
-# on master -- reasoned from the recorded state, not re-run. E3 passes vacuously (no job).
+# Observed 2026-11-01 on master (no implementation; run 19:00:40, artefacts drive1101-recommended-
+# people/190040): 35 passed, 11 failed -- A1, A2, A4, B2, D1-D5, E1, E2. The author was walked to the
+# build step, wrote a buildable document of its own (A3, A5-A9 hold, no seeding) but never asked
+# which sources to judge by (A1), never read a record (A2) and gave no reasons (A4, B2). The finished
+# build ignores the linked follow-up: no reopening, no assignee, the spec shows done, no flow starts it,
+# no Overview warning, nothing to stop. B4 shows a task filed against the spec while its build runs
+# does join it. What a master author writes varies run to run (an earlier run wrote nothing, or
+# stopped at intake), so a run whose document is not buildable is seeded and fails A7-A9 as well.
