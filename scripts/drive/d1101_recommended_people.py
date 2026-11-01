@@ -26,8 +26,10 @@ Steps (each records its checks and the drive goes on, so one run on master shows
   E  Overview, in Chromium. The warning names the spec, the task, the filer and 30 days (E1);
      stopping from it stops the build (E2) and its flow starts nothing further (E3).
 
-On master it fails at A2 (no tool reads the record), A4 (picks carry no reasons), D1 (the
-follow-up joins nothing: no reopening) and everything after it that needs the reopened build.
+On master it fails at A1-A6 (no tool reads the record; the author submits no tasks, so the drive
+seeds a document with picks and no reasons), B2 (no reasons shown), D1-D5 (the follow-up joins
+nothing: no reopening, no assignee, the spec reads done, no flow starts it) and E1/E2.
+The author may rename the document, so its path is re-read by id after every author turn.
 
 Selectors the build is to provide (the Overview and Build dialog test ids, named here so the
 follow-ups task and this drive agree): `build-task-reason-<task key>` beside each Build row,
@@ -55,7 +57,13 @@ REQUEST = (
     "Write a LARGE (not fix-size) change spec for this project: two tasks. One is hazardous: a "
     "database migration adding a `notes` table (treat it as a migration with a rollback). The "
     "other is routine: change the wording of one sentence in README.md. Keep the real work tiny "
-    "(each task only creates or edits one text file, as a scratch drive). The roster is "
+    "(each task only creates or edits one text file, as a scratch drive). Details, so you need not "
+    "interview me: the `notes` table has columns id (integer primary key), body (text, not null) "
+    "and created_at (timestamp); the migration is a single SQL file SCHEMA.md-style stand-in "
+    "named SCHEMA.md. The README sentence 'This project keeps notes.' becomes 'This project keeps "
+    "short notes for the team.' The motivation is that the team has nowhere to keep notes. None of "
+    "this is built yet. Only the model choice is open, and I will answer that when you ask. "
+    "The roster is "
     f"{AUTHOR} (you), {STRONG}, {CHEAP} and {CHECKER}. Follow the writing steps, go as far as "
     "submitting the document with a builder, checker and reason on every task."
 )
@@ -90,6 +98,15 @@ def payload_of(root, path):
         return json.loads((root / path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+
+
+def current(base, doc_id):
+    """The document's path and displayed phase now, by id: the author may have renamed it."""
+    _, listed = d.api("GET", f"{base}/project/documents")
+    for view in (listed or {}).get("documents") or []:
+        if view.get("id") == doc_id:
+            return view.get("path"), view.get("display_phase")
+    return None, None
 
 
 def tasks_of(root, path):
@@ -162,9 +179,17 @@ def drive(state):
     # ---- A: authoring -------------------------------------------------------------------
     code, doc = d.api("POST", f"{base}/project/documents", {"kind": "change-spec"})
     d.check("setup: an exploring document", code == 201, f"{code} {doc}", fatal=True)
+    doc_id = doc["id"]
     path = doc["path"]
-    quoted = urllib.parse.quote(path)
-    first = turn(base, REQUEST, path)
+
+    def author_turn(message):
+        """One author turn; the path is re-read by id after it, as the author may have renamed."""
+        nonlocal path
+        run_id = turn(base, message, path)
+        path = current(base, doc_id)[0] or path
+        return run_id
+
+    first = author_turn(REQUEST)
     said = reply(first)
     (d.TMP / "author-turn1.txt").write_text(said, encoding="utf-8")
     asks = re.search(r"web|search", said, re.I) and re.search(r"record|project'?s", said, re.I) \
@@ -175,13 +200,14 @@ def drive(state):
             "opus" in json.dumps(d.ro("select content from agent_outputs where run_id=?", (first,))).lower(),
             said[:200])
 
-    second = turn(base, ANSWER, path)
+    second = author_turn(ANSWER)
     runs = [first, second]
     for nudge in range(3):
         if len(tasks_of(root, path)) >= 2:
             break
-        runs.append(turn(base, "Continue to the tasks step and submit the document with both "
-                               "tasks, each with builder, checker and a reason for each.", path))
+        runs.append(author_turn("Continue to the tasks step and submit the document with both "
+                                "tasks, each with builder, checker and a reason for each."))
+    quoted = urllib.parse.quote(path)
     _, read = d.api("GET", f"{base}/project/spec?path={quoted}")
     written = payload_of(root, path)
     (d.TMP / "document.json").write_text(json.dumps(written, indent=1, default=str), encoding="utf-8")
@@ -315,8 +341,9 @@ def drive(state):
     d.check("D3 the follow-up goes to the build's default builder",
             isinstance(task, dict) and task.get("assignee") == mine.get("builder")
             and bool(mine.get("builder")), f"{str(task)[:300]} builder={mine.get('builder')}")
-    d.check("D4 the spec stops reading as done: its latest build is running again",
-            mine.get("state") == "running", str(mine.get("state")))
+    shown_phase = current(base, doc_id)[1]
+    d.check("D4 the spec stops reading as done: it shows building", shown_phase == "building",
+            f"display_phase={shown_phase}")
     new_job = (d.ro("select l.job_id from loops l join tasks t on t.loop_id=l.id where t.id=?",
                     (follow,)) or [(None,)])[0][0]
     started = False
@@ -384,10 +411,10 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Observed 2026-11-01 on master (no implementation; two runs, 16:14 and 16:20 trial-Hub clock): 20
-# passed, 14 failed. Authoring: the real Haiku author never asked how to judge the models, no tool
-# read a record, and no document with tasks, picks or reasons was submitted (A1-A6; the drive then
+# Observed 2026-11-01 on master (no implementation; 16:47 run, artefacts drive1101-recommended-
+# people/164714): 20 passed, 14 failed -- A1-A6, B2, D1-D5, E1, E2. Authoring: the real Haiku author
+# never asked how to judge the models, no tool read a record, and submitted no tasks (the drive
 # seeds a document with picks and no reasons so the rest runs). Build opens with the picks selected
-# (B1, B3 pass on master) but shows no reasons (B2). The build finishes, and the follow-up joins
-# nothing: it stays pending with no assignee, the build stays finished (D1-D3, D5), no warning is on
-# Overview (E1) and there is no build to stop (E2).
+# (B1, B3 pass) but shows no reasons (B2). The build finishes; the follow-up joins nothing: it stays
+# pending with no assignee, the build stays finished, the spec's display_phase reads `done` (D1-D5),
+# no warning is on Overview (E1) and the stop gets a 409 on a finished build (E2).
