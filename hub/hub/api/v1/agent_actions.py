@@ -1926,6 +1926,17 @@ async def record_evidence(
     return body_out
 
 
+@router.get("/model-record")
+async def read_model_record(
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """This project's work per model, for an author judging which model suits a task."""
+    from ...model_record import model_record
+
+    return await model_record(session, actor.project_id)
+
+
 @router.get("/spec/evidence")
 async def list_evidence_for_agent(
     identifier: Optional[str] = Query(None),

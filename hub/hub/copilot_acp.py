@@ -236,6 +236,7 @@ HUB_MCP_TOOLS = frozenset(
         "mend_withdraw_input",
         "read_chapters",
         "read_checkpoint",
+        "read_model_record",
         "read_spec_document",
         "recall",
         "record_reconcile",
