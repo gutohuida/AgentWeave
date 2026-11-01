@@ -19,7 +19,7 @@ The board search box is the one the spec's UI task adds: a search field labelled
 
 Starts the trial Hub on :8010 from this checkout unless one is already there.
 
-    py -3.11 scripts/drive/d1031c_readable_task_ids.py
+    py -3.11 scripts/drive/d1031c_readable_ids.py
 """
 
 import re
@@ -230,14 +230,20 @@ def main():
         code, out = d.api("PATCH", f"{base}/manager/jobs/mender",
                           {"runner_id": haiku["id"], "enabled": True})
         d.check("4 setup: the mender job is on", code == 200, f"{code} {str(out)[:200]}")
+        # the task's state after a real turn varies (completed, or already approved and landed), so
+        # the mender checks assert what the id must do: reach THIS task, whether the Hub then does the
+        # move (200, task_id) or refuses it for the task's state (409 naming the task)
+        def reached(out_, code_):
+            return (code_ == 200 and (out_ or {}).get("task_id") == task) or (
+                code_ == 409 and task in str((out_ or {}).get("detail", "")))
+
         code, out = d.as_agent(pid, "mender", "POST", f"/mender/tasks/{ref}/branch", {})
         d.check("4 tool mend_task_branch resolves the readable id to this task",
-                code == 409 and task in str((out or {}).get("detail", "")),
-                f"{code} {str(out)[:200]} (wanted 409 naming {task}: the task is not approved)")
+                reached(out, code), f"{code} {str(out)[:200]} (wanted 200 with task_id or 409 naming {task})")
         code, out = d.as_agent(pid, "mender", "POST", f"/mender/tasks/{ref}/reset",
-                               {"status": "assigned", "assignee": B})
-        d.check("4 tool mend_reset_task acts on this task",
-                code == 200 and (out or {}).get("task_id") == task, f"{code} {str(out)[:200]}")
+                               {"status": "under_review", "assignee": C})
+        d.check("4 tool mend_reset_task resolves the readable id to this task",
+                reached(out, code), f"{code} {str(out)[:200]} (wanted 200 with task_id or 409 naming {task})")
 
         # 5. retitle the spec: an approved document's path is frozen, so it is reopened and its
         # title changed, which is what renaming a built spec comes to
