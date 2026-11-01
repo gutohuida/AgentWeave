@@ -1733,9 +1733,15 @@ async def _trigger_agent_directly(
                 "context": rendered["context"],
             }
     context_file = Path(effective_work_dir) / ".agentweave" / "context" / f"{agent}.md"
-    try:
+
+    def _write_context() -> None:
         context_file.parent.mkdir(parents=True, exist_ok=True)
         context_file.write_text(rendered_context["context"], encoding="utf-8")
+
+    # This file, the calls directory and the tool server below are written off the loop like a turn
+    # start's git: under load one `mkdir` here held every request for 130 to 410 ms.
+    try:
+        await blocking.run(_write_context)
     except OSError as exc:
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
@@ -1745,7 +1751,9 @@ async def _trigger_agent_directly(
     # made beside the context, and refused the same way when it cannot be. Emptied only where
     # this turn alone stands (F663): a shared directory may hold another agent's file in flight.
     try:
-        prepare_calls_dir(effective_work_dir, empty=isolated_workspace is not None)
+        await blocking.run(
+            prepare_calls_dir, effective_work_dir, empty=isolated_workspace is not None
+        )
     except (OSError, ValueError) as exc:
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
@@ -1851,8 +1859,8 @@ async def _trigger_agent_directly(
     # and a run given no tool server needs it most. One that cannot be made refuses the run rather
     # than telling it a command that does not exist.
     try:
-        server_path = tool_server.pinned_server_path()
-        launcher_dir = tool_server.PIN.launcher_dir()
+        server_path = await blocking.run(tool_server.pinned_server_path)
+        launcher_dir = await blocking.run(tool_server.PIN.launcher_dir)
     except (OSError, ValueError) as exc:
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,

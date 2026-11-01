@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Iterator, List
 
@@ -132,6 +133,53 @@ def slow_git(loop_thread: threading.Thread) -> Iterator[GitLog]:
         subprocess.run = real
 
 
+#: What the interpreter reports of a file or directory being touched (`sys.addaudithook`). A stat
+#: reports nothing, so this is a floor; the lag probe still measures the rest.
+_DISK_EVENTS = frozenset(
+    {
+        "open",
+        "os.chmod",
+        "os.link",
+        "os.listdir",
+        "os.mkdir",
+        "os.remove",
+        "os.rename",
+        "os.rmdir",
+        "os.scandir",
+        "os.symlink",
+        "os.truncate",
+        "os.utime",
+        "shutil.copyfile",
+        "shutil.rmtree",
+    }
+)
+_disk_watch: "tuple[int, List[str]] | None" = None
+_disk_hook_added = False
+
+
+def _on_audit(event: str, args: tuple) -> None:
+    watch = _disk_watch
+    if watch is not None and event in _DISK_EVENTS and threading.get_ident() == watch[0]:
+        watch[1].append(f"{event} {args[0] if args else ''}")
+
+
+@contextlib.contextmanager
+def disk_on_loop() -> Iterator[List[str]]:
+    """The file calls the calling thread makes, as they happen: how long one takes depends on the
+    machine, whether it was made on the loop does not. An audit hook cannot be removed, so one stays
+    installed and does nothing outside this block."""
+    global _disk_watch, _disk_hook_added
+    if not _disk_hook_added:
+        sys.addaudithook(_on_audit)
+        _disk_hook_added = True
+    calls: List[str] = []
+    _disk_watch = (threading.get_ident(), calls)
+    try:
+        yield calls
+    finally:
+        _disk_watch = None
+
+
 class LagProbe:
     """`async with LagProbe() as probe:` samples the loop every 10 ms; `probe.worst` is the longest
     the loop was held, in seconds.
@@ -155,6 +203,8 @@ class LagProbe:
         self._waiting = _thread_waiting_reader(threading.get_native_id())
         #: (time, in the poll, waiting on the OS or None if unknown)
         self._loop_samples: List[tuple] = []
+        #: (time, where the loop's thread was) outside its poll, for the failure to say.
+        self._loop_places: List[tuple] = []
         #: (start, end) of each garbage collection, which holds the GIL on whichever thread runs it.
         self._collections: List[tuple] = []
         self._collecting = 0.0
@@ -182,6 +232,16 @@ class LagProbe:
             frame = frame.f_back
         return False
 
+    def _loop_place(self) -> str:
+        """The innermost frames of the loop's thread, innermost last."""
+        frame = sys._current_frames().get(self._loop_thread)
+        places = []
+        while frame is not None and len(places) < 6:
+            code = frame.f_code
+            places.append(f"{os.path.basename(code.co_filename)}:{frame.f_lineno} {code.co_name}")
+            frame = frame.f_back
+        return " < ".join(places)
+
     def _control(self) -> None:
         _raise_priority()
         while self._on:
@@ -190,7 +250,10 @@ class LagProbe:
             waiting = None if polling or self._waiting is None else self._waiting()
             if waiting and self._starting_a_thread():
                 waiting = False
-            self._loop_samples.append((time.perf_counter(), polling, waiting))
+            now = time.perf_counter()
+            self._loop_samples.append((now, polling, waiting))
+            if not polling:
+                self._loop_places.append((now, self._loop_place()))
 
     def _covered(self, started: float, ended: float) -> bool:
         """Did the control thread sample through most of the window? It cannot while something holds
@@ -255,8 +318,13 @@ class LagProbe:
             f"{sum(1 for s in seen if s[1])} in the poll, "
             f"{sum(1 for s in seen if s[2])} waiting on the OS, "
             f"{sum(1 for s in seen if s[2] is False)} runnable; "
-            f"sampling from {frame.f_code.co_name if frame else 'nowhere'}"
+            f"sampling from {frame.f_code.co_name if frame else 'nowhere'}; "
+            f"seen at {self._places_in(started, ended)}"
         )
+
+    def _places_in(self, started: float, ended: float) -> str:
+        seen = Counter(place for at, place in self._loop_places if started <= at <= ended)
+        return " | ".join(f"{count}x {place}" for place, count in seen.most_common(3)) or "nothing"
 
     async def __aenter__(self) -> "LagProbe":
         # The loop's thread runs at the control thread's priority: a loop thread that a busy machine
@@ -275,6 +343,7 @@ class LagProbe:
         self.worst = 0.0
         self.why = "nothing was counted"
         self._loop_samples.clear()
+        self._loop_places.clear()
         return self
 
     async def __aexit__(self, *exc: object) -> None:

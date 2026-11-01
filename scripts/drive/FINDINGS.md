@@ -41213,3 +41213,13 @@ The probe now excludes the heap built before its window, which was the suite's. 
 **Tier:** 0
 
 `delivery-reviewer` (`hub/ui/src/components/spec/SpecPhaseParts.tsx:101`) reads `delivery_status.reviewer`, which is `spec_payload.default_checker(payload)` (`hub/hub/api/v1/spec.py:297`). With document checker C and dialog checker B, the page read "Reviewed by @C." while B reviewed the build's task. **Expected:** where a build records who checks, the sentence names that.
+
+## F1118 (B) -- a turn start wrote its files on the event loop, and under load one `mkdir` froze the Hub for up to 412 ms
+
+**Status:** fixed 2026-11-01 on `task-c4740690e1bf`. The context file, the calls directory and the tool server's pin now go through `blocking.run`. The test also fails on any file call the audit hook sees on the loop, whatever the machine's speed; it failed that way before the fix. Repeated 500 times shuffled through the full suite at `-n 20`: 0 stalls, against 1 in 150 before on the same setup and 9 in 500 with a thread-state observer adding load. Moving the pin off the loop made its writer concurrent, which its per-process temp name did not allow: on a fresh pin 4 concurrent turn starts were refused in 183 of 300 rounds (409 "Could not materialize the tool server"). `_write_verified` now holds a process-wide lock, and `write_copilot_home_after_commit`'s pin call in `agents.py` left the loop so it never waits on that lock there. Not driven on a running Hub. A stat reports no audit event, so stats on the loop are caught only by the lag probe. `test_approving_releases_and_merges_without_stalling_the_loop` failed the same way at 426 and 436 ms (`chk-cbad27013168`, `chk-fb8c38b9bd7e`) and may have the same kind of cause; not looked at.
+**Source:** found by driving
+**Theme:** Performance
+**Ready:** yes
+**Tier:** 0
+
+The check run `chk-af888521126e` reported `test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop` as flaky at 598 ms. It was a real hold: the probe's new "seen at" stack put the loop's thread in `Path.mkdir` at `agent_trigger.py:1737` for the whole window, 132 to 412 ms. A separate process reading thread states showed the loop's thread waiting in the kernel. In other failures the loop's thread sat in the same kernel waits while the control thread waited for the GIL, 139 to 324 ms; no stack was seen for those, and they have not recurred since the fix. **Expected:** nothing a turn start writes to disk holds the loop.

@@ -2120,7 +2120,9 @@ async def write_copilot_home_after_commit(
         # Every spawnable runner is MCP-injectable; `launchability`'s now-deleted
         # `resolve_access_path` reduced to exactly this for any live `Runner.cli` (F474).
         if (agent_row.config or {}).get("hub_client") != "cli":
-            mcp_command = [sys.executable, str(tool_server.pinned_server_path())]
+            # Off the loop: the pin's write lock may be held by a turn start's worker thread (F1118).
+            server_path = await asyncio.to_thread(tool_server.pinned_server_path)
+            mcp_command = [sys.executable, str(server_path)]
         await asyncio.to_thread(
             ensure_copilot_home,
             project_id,

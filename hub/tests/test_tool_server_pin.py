@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import shutil
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -136,6 +138,33 @@ def test_a_refused_replace_that_left_other_bytes_still_raises(tmp_path, monkeypa
     monkeypatch.setattr(os, "replace", refuse)
     with pytest.raises(PermissionError):
         pin.path()
+
+
+def _start_turns_together(pin: ToolServerPin, turns: int) -> list[Path]:
+    barrier = threading.Barrier(turns)
+
+    def start_a_turn() -> Path:
+        barrier.wait()
+        pin.path()
+        return pin.launcher_dir()
+
+    with ThreadPoolExecutor(max_workers=turns) as pool:
+        return [f.result() for f in [pool.submit(start_a_turn) for _ in range(turns)]]
+
+
+def test_concurrent_turn_starts_on_a_fresh_pin_all_get_the_launchers(tmp_path):
+    """F1118: turn starts pin from worker threads, so one process has many writers. The first
+    turns after a Hub start write the launchers together; none may be refused."""
+    for round_number in range(40):
+        pin = ToolServerPin(_source(tmp_path, b"A"), root=tmp_path / f"root{round_number}")
+        directories = _start_turns_together(pin, 4)
+
+        assert len(set(directories)) == 1
+        directory = directories[0]
+        assert (directory / "aw-tool.cmd").read_bytes().endswith(b"--call %*\r\n")
+        assert (directory / "aw-tool").read_bytes().startswith(b"#!/bin/sh\n")
+        assert pin.path().read_bytes() == b"A"
+        assert not list(directory.glob("*.tmp"))
 
 
 # --- `a-run-reaches-the-hub-without-mcp` D5: the `aw-tool` launchers beside the pin ---------------
