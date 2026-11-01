@@ -28,7 +28,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Run, Task
 
 from ._background_runs import await_background_runs
-from ._loop_lag import STALL_LIMIT, LagProbe, slow_git
+from ._loop_lag import STALL_LIMIT, LagProbe, disk_on_loop, slow_git
 
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 _REAL_ENSURE_TASK_WORKTREE = worktrees.ensure_task_worktree
@@ -135,10 +135,12 @@ async def test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop(task
     repo, spawned, start = task_turn
     with slow_git(threading.current_thread()) as git:
         async with LagProbe() as probe:
-            await start()
+            with disk_on_loop() as disk:
+                await start()
+    assert not disk, disk
     assert git.calls, "the turn start ran no git at all, so this measured nothing"
     assert not git.on_loop, [call.argv[:3] for call in git.on_loop]
-    assert probe.worst < STALL_LIMIT, f"the loop stalled {probe.worst * 1000:.0f} ms"
+    assert probe.worst < STALL_LIMIT, f"the loop stalled {probe.worst * 1000:.0f} ms: {probe.why}"
     # FR-8: the same checkout, on the same branch, as when this ran on the loop.
     checkout = worktrees.task_worktree_path(repo, TASK)
     assert spawned == [str(checkout)]

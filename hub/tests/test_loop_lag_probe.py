@@ -23,6 +23,7 @@ async def test_a_counted_stall_says_why_it_was_counted():
     async with LagProbe() as probe:
         time.sleep(GIT_DELAY)
     assert " ms late" in probe.why and "samples" in probe.why
+    assert "seen at" in probe.why and "test_a_counted_stall" in probe.why
 
 
 def _cycles(count: int) -> list:
