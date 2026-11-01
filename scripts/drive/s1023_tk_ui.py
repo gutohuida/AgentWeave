@@ -158,11 +158,11 @@ with Judge("s1023-tasks", hub=e2e.hub(), key=e2e.key()) as j:
         page.wait_for_timeout(800)
         print("filter beta ->", [NAMES.get(c.get_attribute("data-task-id"), "Z") for c in page.locator("article.aw-task-card").all()])
         page.get_by_role("button", name="Everyone").click()
-        page.get_by_label("Find a task").fill("sub()")
+        page.get_by_label("Search tasks").fill("sub()")
         page.wait_for_timeout(800)
         print("search 'sub()' ->", [NAMES.get(c.get_attribute("data-task-id"), "Z") for c in page.locator("article.aw-task-card").all()])
         print("url:", page.url.split("?")[-1])
         page.reload(wait_until="domcontentloaded")
         page.wait_for_timeout(3500)
-        print("after reload search box:", page.get_by_label("Find a task").input_value(),
+        print("after reload search box:", page.get_by_label("Search tasks").input_value(),
               "| cards:", page.locator("article.aw-task-card").count())

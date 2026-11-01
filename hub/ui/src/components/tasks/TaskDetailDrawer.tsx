@@ -1162,7 +1162,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                 )
                 .map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>
-                    {candidate.title} ({candidate.id})
+                    {candidate.title} ({candidate.readable_id ?? candidate.id})
                   </option>
                 ))}
             </select>

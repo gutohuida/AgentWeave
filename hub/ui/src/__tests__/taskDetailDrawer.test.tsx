@@ -77,7 +77,7 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useTaskTransitions: () => ({ data: { transitions: [] }, isLoading: false, isError: false }),
     // The "Depends on" section (F571), stubbed for the same reason: three more real hooks that
     // need a provider. Its behaviour belongs to `taskDependsOn.test.tsx`.
-    useTasks: () => ({ data: { tasks: [], total: 0, has_more: false } }),
+    useTasks: () => ({ data: { tasks: pickerTasks, total: pickerTasks.length, has_more: false } }),
     useAddTaskDependency: () => ({ mutate: vi.fn(), isPending: false }),
     useRemoveTaskDependency: () => ({ mutate: vi.fn(), isPending: false }),
   }
@@ -106,6 +106,8 @@ vi.mock('@/api/spec', () => ({
     },
   }),
 }))
+
+let pickerTasks: Task[] = []
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -136,6 +138,7 @@ afterEach(() => {
   transitionsMap = {}
   renameMutate = vi.fn()
   integrationRows = []
+  pickerTasks = []
 })
 
 describe('the drawer names the task by both ids', () => {
@@ -603,5 +606,14 @@ describe("the build's people (hand-only-places-on-the-board)", () => {
     renderDrawer(makeTask({ build_id: 'build-1', level: 'fast', builder: 'Developer' }), vi.fn())
     expect(screen.getByTestId('task-build-task-1')).toHaveTextContent('Fast · builder @Developer')
     expect(screen.getByTestId('task-build-task-1')).not.toHaveTextContent('checker')
+  })
+})
+
+describe('the prerequisite picker names candidates by readable id', () => {
+  it('shows BPS-4 in the option text and keeps the stored id as its value', () => {
+    pickerTasks = [makeTask({ id: 'task-aaaaaaaaaaaa', readable_id: 'BPS-4', title: 'Other work' })]
+    renderDrawer(makeTask({ id: 'task-5a9efc6d2670', readable_id: 'BPS-3' }), vi.fn())
+    const option = screen.getByRole('option', { name: 'Other work (BPS-4)' }) as HTMLOptionElement
+    expect(option.value).toBe('task-aaaaaaaaaaaa')
   })
 })
