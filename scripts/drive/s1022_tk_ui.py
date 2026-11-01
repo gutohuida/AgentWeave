@@ -70,7 +70,7 @@ with Judge("s1022-tasks", hub=e2e.hub(), key=e2e.key()) as j:
         page.wait_for_timeout(800)
         print("filter beta ->", [NAMES.get(c.get_attribute("data-task-id")) for c in page.locator("article.aw-task-card").all()])
         page.get_by_role("button", name="Everyone").click()
-        page.get_by_label("Find a task").fill("H")
+        page.get_by_label("Search tasks").fill("H")
         page.wait_for_timeout(800)
         print("search 'H' ->", [NAMES.get(c.get_attribute("data-task-id")) for c in page.locator("article.aw-task-card").all()])
     elif WHAT == "deps":
@@ -86,7 +86,7 @@ with Judge("s1022-tasks", hub=e2e.hub(), key=e2e.key()) as j:
         j.shot(page, "deps", full_page=True)
         # Do the agent filter and the search the toolbar still shows apply to this view?
         page.locator(".aw-board-filters").get_by_role("button", name="beta").click()
-        page.get_by_label("Find a task").fill("Add")
+        page.get_by_label("Search tasks").fill("Add")
         page.wait_for_timeout(800)
         print("rows with filter beta + search 'Add':", page.locator("li.aw-deps-row").count(),
               [NAMES.get((r.get_attribute("data-testid") or "")[10:]) for r in page.locator("li.aw-deps-row").all()])

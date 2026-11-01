@@ -169,7 +169,8 @@ export interface BuildCaught {
   changed_by_build: boolean
   found_on: string
   found_on_status: string
-  fix_task: { id: string; title: string; status: string; open: boolean } | null
+  found_on_readable_id?: string | null
+  fix_task: { id: string; readable_id?: string | null; title: string; status: string; open: boolean } | null
 }
 
 /** One build of a document, as `GET /project/spec` lists them (`builds`, newest first). */
@@ -827,6 +828,8 @@ export interface SpecDocumentRecord {
   id: string
   path: string
   title: string
+  /** What this document's tasks are named by (`BPS` in `BPS-3`). */
+  acronym?: string
   kind: string
   /** The authority on where the document stands. The `aw-spec-status` metadata
    *  inside the file is a copy for whoever reads it, never the source. */

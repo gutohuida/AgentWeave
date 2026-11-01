@@ -2,7 +2,7 @@
 "Depends on" picker refusing a cycle (Chromium against the served bundle, scratch Hub :8161).
 
   deps            banner, groups, rows (with dependency state); the API's view of the same tasks;
-                  then whether the agent chip and "Find a task" filter the list (F914)
+                  then whether the agent chip and "Search tasks" filter the list (F914)
   cycle A C       open A's drawer, pick C (which already waits on A), Add: what reaches the screen
   drawer T        a task drawer's Details text and Depends on block
 
@@ -50,7 +50,7 @@ with Judge("s1023-dp", hub=sc.hub(), key=sc.CFG["key"]) as j:
         print("in API, not on screen:", sorted(set(api_rows) - seen))
         j.shot(page, "deps", full_page=True)
         page.locator(".aw-board-filters").get_by_role("button", name="beta").click()
-        page.get_by_label("Find a task").fill("notes")
+        page.get_by_label("Search tasks").fill("notes")
         page.wait_for_timeout(1000)
         print("F914: rows with chip beta + search 'notes':", page.locator("li.aw-deps-row").count())
         hm = page.locator("section.aw-deps-group[aria-label='Made by hand'] .aw-deps-group-meta[title]")

@@ -96,7 +96,7 @@ export function BoardView({
   const colorOf = React.useMemo(() => new Map(agents.map((a) => [a.name, a.color_index])), [agents])
   const q = query.trim().toLowerCase()
   const visible = tasks.filter(
-    (t) => (!agentFilter || t.assignee === agentFilter) && (!q || t.title.toLowerCase().includes(q) || t.id.includes(q)),
+    (t) => (!agentFilter || t.assignee === agentFilter) && (!q || t.title.toLowerCase().includes(q) || t.id.includes(q) || (t.readable_id ?? '').toLowerCase().includes(q)),
   )
 
   return (
@@ -146,8 +146,9 @@ export function BoardView({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find a task"
-            aria-label="Find a task"
+            type="search"
+            placeholder="Search tasks"
+            aria-label="Search tasks"
             className="aw-board-search-input"
           />
         </label>
