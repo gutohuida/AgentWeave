@@ -310,9 +310,7 @@ BASE_LOOPS = [
         "queue": {"rejected": 1, "under_review": 1},
         "spec_document_id": None,
         "stall_reason": "task task-once-four-a has no branch to review. Its work was never committed "
-        "to a task branch, so there is no commit for a reviewer to be given. Until "
-        "the work that finished this task is recorded as evidence naming a commit, "
-        "no reviewer can be given anything to look at.",
+        "to a task branch, so there is no commit for a reviewer to be given.",
         "stop_at": None,
         "stop_reason": None,
         "stop_when_queue_empties": False,

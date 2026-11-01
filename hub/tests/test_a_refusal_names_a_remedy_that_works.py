@@ -28,6 +28,7 @@ from hub.db.models import (
     SpecDocument,
     SpecRequirement,
     Task,
+    TaskRequirementLink,
     fit_error_summary,
 )
 from hub.scheduler import _wedged_review_reason, own_review_remedy
@@ -342,6 +343,27 @@ async def test_a_changed_reason_is_recorded_again_for_only_the_task_that_changed
         job, loop = await _flow(db, suffix="changedonly")
         a = await _operator_completed(db, loop, suffix="changedonly-a", agent=AGENT1)
         b = await _operator_completed(db, loop, suffix="changedonly-b", agent=AGENT1)
+        # Linked: only a task serving a requirement is refused for want of evidence.
+        db.add(
+            SpecRequirement(
+                id="req-f365-changedonly",
+                project_id="proj-test",
+                document_id="doc-f365-changedonly",
+                identifier="FR-1",
+                key="fr-1",
+                digest="d" * 64,
+            )
+        )
+        for task in (a, b):
+            db.add(
+                TaskRequirementLink(
+                    id=f"link-{task.id}",
+                    project_id="proj-test",
+                    task_id=task.id,
+                    requirement_id="req-f365-changedonly",
+                )
+            )
+        await db.commit()
 
     first = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
     assert first.status_code != 500, first.text

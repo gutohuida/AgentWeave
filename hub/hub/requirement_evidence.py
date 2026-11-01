@@ -1821,6 +1821,9 @@ class ReviewTarget:
     #: knows can ask why, and one that does not cannot.
     earlier_commits: List[EarlierCommit] = None  # type: ignore[assignment]
     refusal: Optional[str] = None
+    #: Whether a refusal is the want of evidence, which only its author can supply, rather than of
+    #: a branch: the two have different remedies, and a firing names the one that applies.
+    evidence_would_resolve: bool = False
 
     def __post_init__(self) -> None:
         if self.earlier_commits is None:
@@ -1871,7 +1874,7 @@ async def commit_for_task_review(session: AsyncSession, task_id: str) -> ReviewT
                 "with record_evidence from the task's own checkout, so the evidence names the "
                 "task's commit, and the review can then be requested again."
             )
-        return ReviewTarget(refusal=reason)
+        return ReviewTarget(refusal=reason, evidence_would_resolve=True)
 
     newest_evidence, newest_footprint = naming_a_commit[-1]
     newest_sha = newest_footprint.commit_sha.strip()

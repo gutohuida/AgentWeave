@@ -21,6 +21,7 @@ from hub.db.models import (
     SpecDocument,
     SpecRequirement,
     Task,
+    TaskRequirementLink,
 )
 from hub.inbound_queue import new_entry
 from hub.review_turn import ReviewTurnRefused, prepare_review_turn
@@ -277,6 +278,25 @@ async def test_flow_task_unchanged(
     _branch_work(repo, task_id)
 
     async with async_session_factory() as db:
+        db.add(
+            SpecRequirement(
+                id="req-f510-flow",
+                project_id="proj-test",
+                document_id="doc-f510-flow",
+                identifier="FR-1",
+                key="fr-1",
+                digest="d" * 64,
+            )
+        )
+        db.add(
+            TaskRequirementLink(
+                id="link-f510-flow",
+                project_id="proj-test",
+                task_id=task_id,
+                requirement_id="req-f510-flow",
+            )
+        )
+        await db.commit()
         assert await task_integration.evidence_governs(db, await db.get(Task, task_id))
     response = await _request_review(app, auth_headers, bind_runner, task_id)
 
