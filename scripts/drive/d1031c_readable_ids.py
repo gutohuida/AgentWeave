@@ -231,11 +231,19 @@ def main():
         code, out = d.as_agent(pid, B, "POST", "/spec/evidence",
                                {"identifier": "FR-1", "document": DOC, "task_id": ref,
                                 "summary": "drive: evidence recorded by readable id"})
-        rows = d.ro("select task_id from requirement_evidence where summary=?",
-                    ("drive: evidence recorded by readable id",))
+        # the task may already hold accepted evidence for FR-1 after its real turn, so the Hub may
+        # answer 409 naming the existing row; either way the row this call names must carry the
+        # stored id (a Hub that does not resolve the id misses the duplicate and stores the reference)
+        if code in (200, 201):
+            ev_id = (out or {}).get("id")
+        else:
+            found = re.search(r"\bev-[0-9a-f]+", str((out or {}).get("detail", "")))
+            ev_id = found.group(0) if code == 409 and found else None
+        rows = d.ro("select task_id from requirement_evidence where id=? and project_id=?",
+                    (ev_id, pid)) if ev_id else []
         d.check("4 tool record_evidence stores this task's id",
-                code in (200, 201) and [r[0] for r in rows] == [task],
-                f"{code} {str(out)[:200]}; stored task_id {[r[0] for r in rows]} wanted [{task}]")
+                code in (200, 201, 409) and [r[0] for r in rows] == [task],
+                f"{code} {str(out)[:200]}; row {ev_id} stored task_id {[r[0] for r in rows]} wanted [{task}]")
 
         # the mender's two tools: turn the Manager's mender job on (which makes the mender agent),
         # then call both as it, by readable id
