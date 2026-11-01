@@ -132,11 +132,11 @@ export function ManagerSettings({
                   />
                 }
               />
-              {job.key === 'chapters' && job.mode ? (
+              {job.firing_choice && job.mode ? (
                 <SettingsRow
                   label="Fires"
                   inactive={!job.enabled}
-                  description="Automatic: after a document is approved or archived and after its last task is approved, and on the button. Button only: just when you press Weave the thread on the Thread page."
+                  description={`Automatic: ${job.firing_choice.automatic}, and on the button. Button only: just when you press ${job.firing_choice.button} on ${job.firing_choice.where}.`}
                   control={
                     <MenuSelect
                       label={`${job.title} firing`}
@@ -144,7 +144,7 @@ export function ManagerSettings({
                       onChange={(v) => onChange(job.key, { mode: v }, `${job.title} fires ${v === 'automatic' ? 'automatically' : 'only on the button'}`)}
                       options={[
                         { value: 'automatic' as const, label: 'Automatic', detail: 'On major events and on the button' },
-                        { value: 'button' as const, label: 'Button only', detail: 'Only when you press Weave the thread' },
+                        { value: 'button' as const, label: 'Button only', detail: `Only when you press ${job.firing_choice.button}` },
                       ]}
                     />
                   }

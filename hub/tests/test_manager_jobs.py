@@ -5,7 +5,10 @@ the three manager routes, the settings route's compatibility mapping, and the fi
 titler writes. The spawn is faked throughout, as in `test_title_generation.py`.
 """
 
+import json
+import os
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -35,6 +38,30 @@ async def _job(app, auth_headers) -> dict:
     listed = await app.get(f"{BASE}/manager/jobs", headers=auth_headers)
     assert listed.status_code == 200, listed.text
     return next(job for job in listed.json()["jobs"] if job["key"] == JOB)
+
+
+ROUTE_FIXTURE = Path(__file__).parents[1] / "ui/src/__tests__/fixtures/managerJobs.route.json"
+
+
+@pytest.mark.asyncio
+async def test_the_ui_fixture_is_what_the_jobs_route_answers(app, auth_headers):
+    """`managerSection.test.tsx` is fed this file, so it cannot drift from the route. To refresh it,
+    run this test with AW_WRITE_ROUTE_FIXTURES=1."""
+    answered = (await app.get(f"{BASE}/manager/jobs", headers=auth_headers)).json()
+    if os.environ.get("AW_WRITE_ROUTE_FIXTURES"):
+        ROUTE_FIXTURE.write_text(json.dumps(answered, indent=2) + "\n", encoding="utf-8")
+    assert json.loads(ROUTE_FIXTURE.read_text(encoding="utf-8")) == answered
+
+
+@pytest.mark.asyncio
+async def test_the_listing_offers_the_firing_choice_on_exactly_the_jobs_with_a_button(
+    app, auth_headers
+):
+    listed = (await app.get(f"{BASE}/manager/jobs", headers=auth_headers)).json()["jobs"]
+    offered = {job["key"] for job in listed if job["firing_choice"]}
+    assert offered == {"chapters", "build-retrospective"} == set(manager.HAS_BUTTON)
+    retrospective = next(job for job in listed if job["key"] == "build-retrospective")
+    assert retrospective["firing_choice"]["button"] == "Review this build"
 
 
 # ---------------------------------------------------------------------------
