@@ -32,6 +32,7 @@ function outlineOf(doc: SpecDocumentView, findings: CheckFinding[], builds: Buil
     { anchor: anchors.section('requirements'), label: 'Requirements', detail: String(doc.requirements.length) },
     { anchor: anchors.section('tasks'), label: 'Tasks', detail: String(doc.tasks.length) },
     { anchor: anchors.section('builds'), label: 'Builds', detail: builds.length ? String(builds.length) : undefined },
+    ...(doc.kind === 'change-spec' ? [{ anchor: anchors.section('retrospective'), label: 'Retrospective' }] : []),
     ...(doc.openQuestions.length ? [{ anchor: anchors.section('questions'), label: 'Open questions' }] : []),
   ]
   return [
