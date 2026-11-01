@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy import update
 
+from hub import landing_queue
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, Build, Loop, Task, TaskLanding
 from hub.scheduler import JobScheduler
@@ -50,6 +51,9 @@ async def _fire(job_id: str) -> None:
 
 
 async def _all_landed() -> None:
+    # An approval's landing runs in the background: one still merging would write its own outcome
+    # over this update.
+    await landing_queue.drain(P)
     async with async_session_factory() as db:
         await db.execute(update(TaskLanding).values(state="landed"))
         await db.commit()
