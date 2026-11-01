@@ -319,6 +319,7 @@ async def _tasks_for(db, project_id: str, agent: str) -> Dict[str, Any]:
         "items": [
             {
                 "id": task.id,
+                "readable_id": task.readable_id,
                 "title": task.title,
                 "status": task.status,
                 "priority": task.priority,
@@ -348,6 +349,7 @@ async def _tasks_for_loop(db: AsyncSession, loop_id: str) -> Dict[str, Any]:
         "items": [
             {
                 "id": task.id,
+                "readable_id": task.readable_id,
                 "title": task.title,
                 "status": task.status,
                 "priority": task.priority,

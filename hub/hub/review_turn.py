@@ -382,9 +382,17 @@ async def verdict_evidence_sentence(
             "notes are the reason recorded on each piece you approve or hold."
         )
     if foreign:
+        foreign_ids = {row.task_id for row in foreign if row.task_id}
+        readable = dict(
+            (
+                await session.execute(
+                    select(Task.id, Task.readable_id).where(Task.id.in_(foreign_ids))
+                )
+            ).all()
+        )
         recorded = "; ".join(
             (
-                f"{named(r)}, recorded by task `{r.task_id}`"
+                f"{named(r)}, recorded by task `{readable.get(r.task_id) or r.task_id}`"
                 if r.task_id
                 else f"{named(r)}, recorded " "outside any task"
             )
@@ -445,7 +453,7 @@ async def _dependencies_sentence(session: AsyncSession, task: Task) -> Optional[
         where = (
             f"merged as `{merged[:12]}`" if merged else f"`{prerequisite.status}`, not merged yet"
         )
-        pieces.append(f"task `{prerequisite.id}` ({prerequisite.title}: {where})")
+        pieces.append(f"task `{prerequisite.display_id}` ({prerequisite.title}: {where})")
     return (
         f"**This task builds on** {'; '.join(pieces)}. Merged work is on the main branch and "
         "not in this task's diff: judge the change together with it, including tests it wrote "

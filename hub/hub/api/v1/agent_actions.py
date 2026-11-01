@@ -1828,7 +1828,7 @@ async def _resolve_requirement(
         # F513: identifiers are minted per document, so a bare `FR-1` is ambiguous in any project
         # with two documents. A task materialised from one document has already named it. Only
         # consulted when ambiguous, so an identifier that resolves today still resolves the same.
-        task = await session.get(Task, task_id)
+        task = await session.get(Task, await readable_ids.resolve(session, project_id, task_id))
         if task is not None and task.project_id == project_id and task.spec_document_id:
             row, why = await spec_index.resolve(
                 session, project_id, identifier, document_id=task.spec_document_id

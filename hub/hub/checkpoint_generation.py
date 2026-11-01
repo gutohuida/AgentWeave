@@ -276,6 +276,12 @@ def render_body(body: CheckpointBody, *, notes_incorporated: bool) -> str:
     return "\n".join(parts)
 
 
+def _task_name(item: Dict) -> str:
+    """What a checkpoint calls a task, and so what the probe expects its reader to answer. A
+    checkpoint written before `readable_id` holds the stored id alone."""
+    return str(item.get("readable_id") or item.get("id"))
+
+
 def render_checkpoint(checkpoint: Checkpoint) -> str:
     """The whole artifact, exactly as a successor receives it — computed half then written half.
 
@@ -311,7 +317,7 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
     items = tasks_payload.get("items") or []
     if items:
         lines.extend(
-            f"- {item.get('id')} — {item.get('title')} ({item.get('status')})" for item in items
+            f"- {_task_name(item)} — {item.get('title')} ({item.get('status')})" for item in items
         )
     else:
         lines.append("_No tasks assigned._")
@@ -400,7 +406,7 @@ def grade_probe(answers: ProbeAnswers, envelope: CheckpointEnvelope) -> Tuple[st
     information it made up.
     """
     expected_files = _normalise(envelope.files_changed)
-    expected_tasks = {str(item.get("id")) for item in (envelope.tasks or {}).get("items", [])}
+    expected_tasks = {_task_name(item) for item in (envelope.tasks or {}).get("items", [])}
     expected_questions = {str(q.get("id")) for q in envelope.open_questions}
 
     findings: List[Dict] = []

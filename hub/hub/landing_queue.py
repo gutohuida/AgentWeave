@@ -1009,11 +1009,24 @@ async def _run_one_batch(
         await _requeue([landing.id for landing in chosen])
         await _end_batch(batch_id, "failed", error=chain.error)
         return False
+    async with async_session_factory() as session:
+        named = dict(
+            (
+                await session.execute(
+                    select(Task.id, Task.readable_id).where(Task.id.in_(list(by_task)))
+                )
+            ).all()
+        )
     for task_id, paths, earlier in chain.conflicts:
         await _send_back(
             by_task[task_id].id,
             batch_id,
-            _conflict_report(task_id, paths, earlier, batch_id),
+            _conflict_report(
+                named.get(task_id) or task_id,
+                paths,
+                [named.get(other) or other for other in earlier],
+                batch_id,
+            ),
             SEND_BACK_MERGE_NEEDED,
             f"Its work conflicts with the main branch in landing batch {batch_id}: merge it again.",
         )

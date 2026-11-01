@@ -3324,12 +3324,12 @@ def _refused_review_reason(task: Task, reviewer: str, refusal: str, refused_here
     def _sentence(title: str, words: str) -> str:
         if refused_here:
             return (
-                f"{reviewer} is named on {task.id} ({title!r}) as its reviewer, and delivering "
+                f"{reviewer} is named on {task.display_id} ({title!r}) as its reviewer, and delivering "
                 f"the review to them was refused: {words} Fix what it names, review it yourself, "
                 f"or send it back with revision_needed."
             )
         return (
-            f"{reviewer} is named on {task.id} ({title!r}) as its reviewer, and the review is "
+            f"{reviewer} is named on {task.display_id} ({title!r}) as its reviewer, and the review is "
             f"queued behind refused input: {words} Fix what it names or withdraw that "
             f"input, review it yourself, or send it back with revision_needed."
         )
@@ -3349,7 +3349,7 @@ def _refused_staffing_reason(task: Task, agent: str, refusal: str, refused_here:
             else f"was queued behind input for {agent} whose delivery was refused"
         )
         return (
-            f"{agent}'s review of {task.id} ({title!r}) {middle}: {words} Fix what it names, "
+            f"{agent}'s review of {task.display_id} ({title!r}) {middle}: {words} Fix what it names, "
             f"withdraw that input so the flow can staff the review again, or land it yourself."
         )
 
@@ -3375,7 +3375,7 @@ def _abandoned_work_reason(task: Task, agent: str, words: str) -> str:
 
     def _sentence(title: str, words: str) -> str:
         return (
-            f"{agent} could not start: {words} The Hub stopped retrying, and {task.id} ({title!r}) "
+            f"{agent} could not start: {words} The Hub stopped retrying, and {task.display_id} ({title!r}) "
             f"is still assigned to {agent}. Fix {agent}'s runner and message {agent}, or reassign "
             f"the task."
         )
@@ -3393,7 +3393,7 @@ def _refused_work_reason(task: Task, agent: str, refusal: str, refused_here: boo
             else "and its briefing waits behind refused input"
         )
         return (
-            f"{agent} holds {task.id} ({title!r}), {middle}: {words} No firing will retry it. "
+            f"{agent} holds {task.display_id} ({title!r}), {middle}: {words} No firing will retry it. "
             f"Fix it, then withdraw that input so the next firing briefs {agent} again, or reject "
             f"the task."
         )
@@ -3409,7 +3409,7 @@ def _approval_held_reason(task: Task, reviewer: str, hold: "ApprovalHold") -> st
 
     def _sentence(title: str) -> str:
         return (
-            f"Approval of {task.id} ({title!r}) waits on you: {hold.remedy}. {reviewer} is named "
+            f"Approval of {task.display_id} ({title!r}) waits on you: {hold.remedy}. {reviewer} is named "
             f"as its reviewer and cannot approve it until then."
         )
 
@@ -3441,7 +3441,7 @@ def _wedged_review_reason(task: Task, reviewer: str) -> str:
 
     def _sentence(title: str) -> str:
         return (
-            f"{reviewer} is named on {task.id} ({title!r}) as its reviewer and is not reviewing "
+            f"{reviewer} is named on {task.display_id} ({title!r}) as its reviewer and is not reviewing "
             f"it: no turn of theirs is running on that task and none queued for them will start "
             f"on its own. Nothing will move it on its own. "
             f"Ask {reviewer} again, review it yourself, or send it back with revision_needed."

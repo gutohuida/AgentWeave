@@ -654,7 +654,8 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
         if task is not None:
             lines += [
                 "",
-                f"## The task {task.id}",
+                f"## The task {task.display_id}",
+                f"Stored id: {task.id}",
                 f"Title: {task.title}",
                 f"Status: {task.status}; assignee: {task.assignee or 'nobody'}",
                 f"Branch: {worktrees.task_branch_name(task.id)}",
@@ -667,7 +668,7 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
             for dep in deps:
                 other = await db.get(Task, dep.depends_on_task_id)
                 if other is not None:
-                    lines.append(f"Depends on {other.id} ({other.title!r}): {other.status}")
+                    lines.append(f"Depends on {other.display_id} ({other.title!r}): {other.status}")
             integrations = (
                 (
                     await db.execute(

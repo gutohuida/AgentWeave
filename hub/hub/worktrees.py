@@ -1093,19 +1093,25 @@ def unmerged_prerequisites(
     return found
 
 
-def prerequisite_merge_note(task_id: str, pending: Sequence[UnmergedPrerequisite]) -> str:
+def prerequisite_merge_note(
+    task_id: str,
+    pending: Sequence[UnmergedPrerequisite],
+    names: Optional[Mapping[str, str]] = None,
+) -> str:
     """The sentence a turn's prompt carries for *pending* (F695): what to merge, and that it is
     this turn's work before anything else, since approval waits for it."""
     pieces = []
     for entry in pending:
         piece = (
-            f"`git merge --no-ff {entry.commit_sha}` (the approved work of {entry.prerequisite_id}"
+            f"`git merge --no-ff {entry.commit_sha}` "
+            f"(the approved work of {_named(entry.prerequisite_id, names)}"
         )
         if entry.paths:
             piece += ", conflicting in " + ", ".join(entry.paths[:10])
         pieces.append(piece + ")")
     return (
-        f"[AgentWeave] Approved work that {task_id} depends on is not on this task's branch yet, "
+        f"[AgentWeave] Approved work that {_named(task_id, names)} depends on is not on this "
+        "task's branch yet, "
         "because merging it conflicts with work already here; it was left for you, and this "
         "checkout is clean. Before anything else this turn, run "
         + "; then ".join(pieces)
@@ -1114,7 +1120,11 @@ def prerequisite_merge_note(task_id: str, pending: Sequence[UnmergedPrerequisite
     )
 
 
-def unfinished_merge_note(entry: UnmergedPrerequisite, unresolved: Sequence[str]) -> str:
+def unfinished_merge_note(
+    entry: UnmergedPrerequisite,
+    unresolved: Sequence[str],
+    names: Optional[Mapping[str, str]] = None,
+) -> str:
     """The sentence for a merge of *entry* the author started and did not finish (F695)."""
     state = (
         "still conflicted in " + ", ".join(list(unresolved)[:10])
@@ -1122,7 +1132,7 @@ def unfinished_merge_note(entry: UnmergedPrerequisite, unresolved: Sequence[str]
         else "its conflicts look resolved, but it was never committed"
     )
     return (
-        f"[AgentWeave] The merge of the approved work of {entry.prerequisite_id} "
+        f"[AgentWeave] The merge of the approved work of {_named(entry.prerequisite_id, names)} "
         f"(`git merge --no-ff {entry.commit_sha}`) was started in this checkout and is unfinished: "
         f"{state}. It was not auto-committed. Before anything else this turn, resolve those paths, "
         "`git add` them and `git commit` to conclude the merge (or `git merge --abort` and run the "
@@ -1627,10 +1637,10 @@ def resolve_turn_workspace(
     merging = _merge_head(path)
     started = next((entry for entry in pending if entry.commit_sha == merging), None)
     if started is not None:
-        notes.append(unfinished_merge_note(started, unresolved_merge_paths(path)))
+        notes.append(unfinished_merge_note(started, unresolved_merge_paths(path), names))
         pending = [entry for entry in pending if entry is not started]
     if pending:
-        notes.append(prerequisite_merge_note(task_id, pending))
+        notes.append(prerequisite_merge_note(task_id, pending, names))
     return ResolvedWorkspace(path, tuple(notes))
 
 

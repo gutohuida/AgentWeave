@@ -7,18 +7,28 @@ import re
 import sqlite3
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import select, update
 
-from hub import readable_ids, worktrees
+from hub import checkpoint_generation, landing_queue, readable_ids, review_turn, stalls, worktrees
 from hub.agent_auth import hash_run_token
 from hub.api.v1 import agents as agents_module
 from hub.config import settings
 from hub.db.engine import async_session_factory
-from hub.db.models import AcronymCounter, Base, Project, Run, SpecDocument, Task
+from hub.db.models import (
+    AcronymCounter,
+    Base,
+    Checkpoint,
+    Project,
+    Run,
+    SpecDocument,
+    Stall,
+    Task,
+)
 from hub.main import app as application
 from hub.runner_events import redact_text_secrets
 from hub.scheduler import _briefing_completion_lines
@@ -227,30 +237,92 @@ async def test_a_create_that_fails_uses_up_no_number(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_ac_stable_rename_reassign_and_link_change_nothing(app, auth_headers, add_agent):
+async def test_ac_stable_rename_reassign_link_and_archive_change_nothing(
+    app, auth_headers, author_headers, add_agent
+):
+    """Each through the route that does it, against a task of the spec and a loose one."""
     await _set_project_acronym()
-    document = await _new_document(app, auth_headers, "Build Plan Spec")
-    task = await _create(app, auth_headers)
-    assert task["readable_id"] == "AW-1"
-    async with async_session_factory() as session:
-        await session.execute(
-            update(Task).where(Task.id == task["id"]).values(spec_document_id=document.id)
-        )
-        await session.commit()
-    read = await app.get(f"{TASKS}/{task['id']}", headers=auth_headers)
-    assert read.json()["readable_id"] == "AW-1"
-
-    # The spec holds a task now, so a retitle leaves its acronym too.
-    async with async_session_factory() as session:
-        row = await session.get(SpecDocument, document.id)
-        row.title = "Something Else Entirely"
-        await readable_ids.follow_title(session, row)
-        await session.commit()
-        assert row.acronym == "BPS"
-    renamed = await app.patch(
-        f"{TASKS}/{task['id']}", json={"title": "Renamed"}, headers=auth_headers
+    await add_agent("someone")
+    await _new_document(app, auth_headers, "Build Plan Spec", path=PATH)
+    saved = await app.post(
+        AGENT_DOCS,
+        json={"path": PATH, "document": _document(title="Build Plan Spec")},
+        headers=author_headers,
     )
-    assert renamed.json()["readable_id"] == "AW-1"
+    assert saved.status_code == 200, saved.text
+
+    of_spec = await _create(app, auth_headers, requirement_ids=["FR-1"])
+    loose = await _create(app, auth_headers)
+    assert (of_spec["readable_id"], loose["readable_id"]) == ("BPS-1", "AW-1")
+
+    async def still_read():
+        for task, expected in ((of_spec, "BPS-1"), (loose, "AW-1")):
+            read = await app.get(f"{TASKS}/{task['id']}", headers=auth_headers)
+            assert read.json()["readable_id"] == expected
+
+    # The spec's title changes through its author's save, and its acronym stays with it.
+    retitled = await app.post(
+        AGENT_DOCS,
+        json={"path": PATH, "document": _document(title="Something Else Entirely")},
+        headers=author_headers,
+    )
+    assert retitled.status_code == 200, retitled.text
+    async with async_session_factory() as session:
+        row = (
+            await session.execute(
+                select(SpecDocument).where(SpecDocument.project_id == P, SpecDocument.path == PATH)
+            )
+        ).scalar_one()
+    assert (row.title, row.acronym) == ("Something Else Entirely", "BPS")
+    await still_read()
+
+    reassigned = await app.post(
+        f"{TASKS}/{of_spec['id']}/reassign", json={"agent": "someone"}, headers=auth_headers
+    )
+    assert reassigned.status_code == 200, reassigned.text
+    assert reassigned.json()["assignee"] == "someone"
+    await still_read()
+
+    linked = await app.patch(
+        f"{TASKS}/{loose['id']}", json={"requirement_ids": ["FR-2"]}, headers=auth_headers
+    )
+    assert linked.status_code == 200, linked.text
+    assert linked.json()["requirement_ids"] == ["FR-2"]
+    await still_read()
+
+    renamed = await app.patch(
+        f"{TASKS}/{loose['id']}", json={"title": "Renamed"}, headers=auth_headers
+    )
+    assert renamed.status_code == 200, renamed.text
+    await still_read()
+
+    read = await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)
+    for phase, body in (
+        (
+            "approved",
+            {
+                "reason": "",
+                "approve_anyway": True,
+                "content_version": read.json()["content_version"],
+            },
+        ),
+        ("archived", {"reason": "done", "no_capability_change": True}),
+    ):
+        moved = await app.post(
+            f"{BASE}/documents/phase",
+            params={"path": PATH, "to": phase},
+            json=body,
+            headers=auth_headers,
+        )
+        assert moved.status_code == 200, moved.text
+        if phase == "approved":
+            # Archiving waits on a change's tasks being decided; how they got there is not the point.
+            async with async_session_factory() as session:
+                await session.execute(
+                    update(Task).where(Task.project_id == P).values(status="approved")
+                )
+                await session.commit()
+    await still_read()
 
 
 # --- acronyms ----------------------------------------------------------------------------------
@@ -396,7 +468,7 @@ _ROUTE_BODIES = {
     ("POST", "/tasks/{task_id}/landing/land"): None,
     ("POST", "/tasks/{task_id}/checks/run"): None,
     ("POST", "/tasks/{task_id}/integrations/retry"): None,
-    ("POST", "/tasks/{task_id}/reassign"): {"assignee": "nobody-here"},
+    ("POST", "/tasks/{task_id}/reassign"): {"agent": "nobody-here"},
     ("POST", "/tasks/{task_id}/land"): None,
     ("GET", "/tasks/{task_id}/story"): None,
     ("GET", "/tasks/{task_id}/moves"): None,
@@ -617,6 +689,40 @@ async def test_evidence_recorded_by_readable_id_holds_the_stored_id(
     assert row.task_id == task.id
 
 
+@pytest.mark.asyncio
+async def test_a_bare_identifier_finds_its_document_through_a_readable_task_id(
+    app, auth_headers, author_headers
+):
+    """Two documents hold `FR-1`, so what tells them apart is the task the evidence names (F513),
+    and the readable id has to say that as well as the stored one does."""
+    await _approved(app, auth_headers, author_headers, _document(title="Build Plan Spec"))
+    other = "spec/changes/quiet-rivers/spec.json"
+    await _new_document(app, auth_headers, "Quiet Rivers", path=other)
+    saved = await app.post(
+        AGENT_DOCS,
+        json={"path": other, "document": _document(title="Quiet Rivers")},
+        headers=author_headers,
+    )
+    assert saved.status_code == 200, saved.text
+    async with async_session_factory() as session:
+        task = (await session.execute(select(Task).where(Task.spec_task_key == "t1"))).scalar_one()
+
+    answers = {}
+    for reference in (task.id, task.readable_id.lower()):
+        answers[reference] = await app.post(
+            "/api/v1/agent-actions/spec/evidence",
+            json={"identifier": "FR-1", "task_id": reference, "summary": "bare"},
+            headers=author_headers,
+        )
+        assert answers[reference].status_code == 201, answers[reference].text
+    refused = await app.post(
+        "/api/v1/agent-actions/spec/evidence",
+        json={"identifier": "FR-1", "summary": "no task to tell them apart"},
+        headers=author_headers,
+    )
+    assert refused.status_code == 422, refused.text
+
+
 # --- old ids, shapes ---------------------------------------------------------------------------
 
 
@@ -687,6 +793,102 @@ async def test_ac_shown_a_turn_names_its_task_by_the_readable_id(app, auth_heade
         )
     rendered = str(context)
     assert "`BPS-3`" in rendered and task.id in rendered
+
+
+async def _prerequisite_and_dependent(app, auth_headers):
+    await _set_project_acronym("proj-test", "BPS")
+    first = await _create(app, auth_headers, title="The prerequisite")
+    second = await _create(app, auth_headers, title="The dependent", depends_on=["bps-1"])
+    return first, second
+
+
+@pytest.mark.asyncio
+async def test_ac_shown_a_review_turn_names_a_prerequisite_by_the_readable_id(app, auth_headers):
+    first, second = await _prerequisite_and_dependent(app, auth_headers)
+    async with async_session_factory() as session:
+        task = await session.get(Task, second["id"])
+        sentence = await review_turn._dependencies_sentence(session, task)
+    assert "`BPS-1`" in sentence and first["id"] not in sentence
+
+
+@pytest.mark.asyncio
+async def test_ac_shown_the_menders_brief_names_tasks_by_the_readable_id(app, auth_headers):
+    first, second = await _prerequisite_and_dependent(app, auth_headers)
+    async with async_session_factory() as session:
+        stall = Stall(
+            id="stall-1",
+            project_id=P,
+            task_id=second["id"],
+            key=f"integration_skipped:{second['id']}",
+            cause="integration_skipped",
+            reason="stuck",
+        )
+        session.add(stall)
+        await session.flush()
+        brief = await stalls.brief(session, stall)
+    assert "## The task BPS-2" in brief and f"Stored id: {second['id']}" in brief
+    assert "Depends on BPS-1 (" in brief and first["id"] not in brief
+
+
+@pytest.mark.parametrize(
+    "item, expected",
+    [
+        ({"id": "task-abc", "readable_id": "BPS-3", "title": "t", "status": "pending"}, "BPS-3"),
+        # A checkpoint stored before the migration.
+        ({"id": "task-abc", "title": "t", "status": "pending"}, "task-abc"),
+    ],
+)
+def test_ac_shown_a_checkpoint_and_its_probe_agree_on_a_tasks_name(item, expected):
+    """A resumed turn reads the checkpoint's list; its probe's reader answers from the same text, so
+    a probe still expecting the stored id would fail every checkpoint with a readable id."""
+    checkpoint = Checkpoint(
+        id="ckpt-1",
+        conversation_id="conv-1",
+        agent="dev",
+        trigger="task_completion",
+        status="ready",
+        tasks={"items": [item]},
+        open_questions=[],
+        files_changed=[],
+    )
+    rendered = checkpoint_generation.render_checkpoint(checkpoint)
+    assert f"- {expected} — t (pending)" in rendered
+    outcome, findings = checkpoint_generation.grade_probe(
+        checkpoint_generation.ProbeAnswers(task_ids=[expected]),
+        SimpleNamespace(files_changed=[], tasks={"items": [item]}, open_questions=[]),
+    )
+    assert (outcome, findings) == ("passed", [])
+
+
+@pytest.mark.asyncio
+async def test_ac_shown_a_review_names_who_recorded_foreign_evidence_by_the_readable_id(
+    app, auth_headers
+):
+    first, second = await _prerequisite_and_dependent(app, auth_headers)
+    foreign = SimpleNamespace(
+        task_id=first["id"], requirement_id="r", commit_sha="abc", evidence_id="ev-1"
+    )
+    with (
+        patch("hub.task_integration.awaiting_targets", AsyncMock(return_value=[foreign])),
+        patch("hub.task_integration.evidence_governs", AsyncMock(return_value=True)),
+    ):
+        async with async_session_factory() as session:
+            task = await session.get(Task, second["id"])
+            sentence = await review_turn.verdict_evidence_sentence(session, task, may_decide=False)
+    assert "recorded by task `BPS-1`" in sentence and first["id"] not in sentence
+
+
+def test_ac_shown_a_conflict_report_names_tasks_as_it_is_handed_them():
+    report = landing_queue._conflict_report("BPS-2", ["a.py"], ["BPS-1"], "batch-1")
+    assert report.startswith("Task BPS-2's work") and "the work of BPS-1" in report
+
+
+def test_ac_shown_a_merge_note_names_the_prerequisite_by_the_readable_id():
+    entry = worktrees.UnmergedPrerequisite("task-000000000001", "abc123", ())
+    names = {"task-000000000001": "BPS-1 (task-000000000001)", "task-2": "BPS-2 (task-2)"}
+    assert "work of BPS-1 (" in worktrees.prerequisite_merge_note("task-2", [entry], names)
+    assert "work that BPS-2 (" in worktrees.prerequisite_merge_note("task-2", [entry], names)
+    assert "work of BPS-1 (" in worktrees.unfinished_merge_note(entry, [], names)
 
 
 @pytest.mark.asyncio
