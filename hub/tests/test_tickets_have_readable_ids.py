@@ -1009,7 +1009,7 @@ async def test_ac_shown_a_firings_held_reasons_name_the_readable_id(
     await add_agent("norunner")
     await add_agent("reader", config={"read_only": True})
     await bind_runner("reader")
-    await add_agent("gone", archived_at=datetime.now(timezone.utc))
+    await add_agent("gone", lifecycle="archived")
     await people._approved(
         app,
         auth_headers,
