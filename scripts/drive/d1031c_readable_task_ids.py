@@ -11,11 +11,8 @@ A flow build of one task on a spec titled "Note file". Written first: on master 
      shows both ids
   4  every task tool is called with the lower-case readable id (get_task, task_history, update_task,
      hand_out_task, send_message task_id, create_task depends_on) and each acts on the same task.
-     NOT driven: mend_task_branch and mend_reset_task. They answer only the Hub's mender agent
-     (hub/hub/api/v1/mender.py get_mender_actor, 403 for anyone else, before the task is looked
-     up), and a drive cannot make an agent the mender. Their id resolution is covered by the Hub
-     tests the spec's Hub task adds beside hub/tests/test_the_mender_hands_finished_work_to_review.py
-     and test_a_live_run_is_never_reset.py, which call both routes with the readable id.
+     and mend_task_branch / mend_reset_task, as the Hub's mender agent, which the drive makes by
+     turning the Manager's mender job on (PATCH /manager/jobs/mender, stalls.ensure_mender)
   5  the spec is renamed and the task still reads the same readable id
 
 The board search box is the one the spec's UI task adds: a search field labelled "Search tasks".
@@ -203,6 +200,10 @@ def main():
             code, out = d.as_agent(pid, B, method, path, body)
             d.check(f"4 tool {label} accepts the readable id", code in (200, 201, 202, 403) and code != 404,
                     f"{code} {str(out)[:200]}")
+            if label == "hand_out_task":
+                d.check("4 tool hand_out_task resolved the same task",
+                        code == 403 and task in str((out or {}).get("detail", "")),
+                        f"{code} {str(out)[:200]}")
             if label == "task_history":
                 rows = (out or {}).get("transitions") if isinstance(out, dict) else None
                 same = rows == (stored_history or {}).get("transitions")
@@ -219,9 +220,24 @@ def main():
                         f"{code} {str(out)[:200]}")
         code, out = d.as_agent(pid, B, "POST", "/tasks",
                                {"title": "Depends by readable id", "depends_on": [ref]})
-        deps = (out or {}).get("depends_on") if isinstance(out, dict) else None
+        deps = (out or {}).get("prerequisites") if isinstance(out, dict) else None
         d.check("4 tool create_task takes the readable id as a prerequisite",
-                code in (200, 201) and bool(deps), f"{code} {str(out)[:200]}")
+                code in (200, 201) and [p.get("id") for p in deps or []] == [task],
+                f"{code} prerequisites {deps}, wanted [{task}]")
+
+        # the mender's two tools: turn the Manager's mender job on (which makes the mender agent),
+        # then call both as it, by readable id
+        code, out = d.api("PATCH", f"{base}/manager/jobs/mender",
+                          {"runner_id": haiku["id"], "enabled": True})
+        d.check("4 setup: the mender job is on", code == 200, f"{code} {str(out)[:200]}")
+        code, out = d.as_agent(pid, "mender", "POST", f"/mender/tasks/{ref}/branch", {})
+        d.check("4 tool mend_task_branch resolves the readable id to this task",
+                code == 409 and task in str((out or {}).get("detail", "")),
+                f"{code} {str(out)[:200]} (wanted 409 naming {task}: the task is not approved)")
+        code, out = d.as_agent(pid, "mender", "POST", f"/mender/tasks/{ref}/reset",
+                               {"status": "assigned", "assignee": B})
+        d.check("4 tool mend_reset_task acts on this task",
+                code == 200 and (out or {}).get("task_id") == task, f"{code} {str(out)[:200]}")
 
         # 5. retitle the spec: an approved document's path is frozen, so it is reopened and its
         # title changed, which is what renaming a built spec comes to
