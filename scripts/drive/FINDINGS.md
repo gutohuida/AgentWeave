@@ -41252,3 +41252,11 @@ On 2026-11-01 `list_tasks` with limit 1000 answered `total: 22` on `proj-d85a82b
 `scripts/drive/d1029_build_plan_in_spec.py:56` fixes `PORT = 8010`, and `start_hub` (:143) reuses any Hub answering there; the database can be moved with `AW_DRIVE_DB`, the port cannot. A drive that started the Hub stops it when it ends (`stop_hub`, :171). `d1101_recommended_people.py` imports these helpers. With two builds running, the second drive tests the first task's checkout, and the first drive's end kills the Hub under the second. Read, not run: no two builds have ever overlapped on this project (0 pairs of 9 builds on :8000). **Expected:** a drive's Hub is started from its own checkout on its own port and database, and a drive never reuses a Hub it cannot show came from its checkout.
 
 **Status:** open 2026-11-01. Found assessing whether a second build can run beside a first.
+
+## F1122 (B) -- the full Hub suite runs for tasks that change nothing it covers, and it is most of the wait for review
+
+**Tier:** 0
+
+On `proj-d85a82bf4216` since 2026-10-29, `hub-tests` ran 82 times for 29.2 hours: a median of 11.8 minutes with no other check run overlapping (39 runs) and 19.2 with one (43 runs). Its project check has `paths: []`, so it runs on every task. THRI-1, whose declared work is one script under `scripts/drive/`, spent 95 minutes in `hub-tests` over 8 check runs. **Expected:** a task whose changes cannot affect the Hub suite does not wait for it before review, and the suite still runs before work reaches main. Before narrowing `paths`, find which tests under `hub/tests/` read `scripts/` (`test_database_backups.py` does), because a path rule that skips them would let a break through.
+
+**Status:** open 2026-11-01. Measured from `task_check_runs` read-only; no change tried.
