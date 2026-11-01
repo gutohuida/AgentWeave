@@ -73,8 +73,14 @@ REQUEST = (
     "this is built yet. Only the model choice is open, and I will answer that when you ask. "
     "The roster is "
     f"{AUTHOR} (you), {STRONG}, {CHEAP} and {CHECKER}. Follow the writing steps, go as far as "
-    "submitting the document with a builder, checker and reason on every task."
+    "submitting the document with a builder, checker and reason on every task. Set the "
+    f"document's delivery to a flow run by {STRONG} that stops when its queue empties, and give "
+    "every acceptance criterion a `checked_by` (agent or human): the Hub refuses a criterion "
+    "without one."
 )
+FLOW_DELIVERY = {"mode": "flow", "agent": STRONG, "builder": STRONG, "checker": CHECKER,
+                 "builders": [STRONG, CHEAP], "stop_when_queue_empties": True,
+                 "cron": "0 0 1 1 *", "reasons": {"mode": "The drive.", "agent": "The drive."}}
 ANSWER = (
     "Judge the models by reviewing this project's record only (not the web, not just what you "
     "know). Read it with your tool, state the sample sizes, then continue and submit the tasks."
@@ -133,6 +139,28 @@ def chosen(options):
     return ([x for x in labels if re.search(r"record|history|tally", x, re.I)]
             or [x for x in labels if re.search(r"project", x, re.I)
                 and not re.search(r"web|search", x, re.I)])
+
+
+def sources_question(options):
+    """A question that offers the sources to judge the models by: the web and the project's record."""
+    labels = " ".join(o.get("label", "") for o in options if isinstance(o, dict))
+    return bool(re.search(r"web|search", labels, re.I)
+                and re.search(r"record|history|tally|project", labels, re.I))
+
+
+def journey_label(options):
+    """The option that carries the author on, for a question about the journey (not the models)."""
+    labels = [o["label"] for o in options if isinstance(o, dict) and o.get("label")]
+    ok = [x for x in labels if not re.search(r"stop|fresh|cancel", x, re.I)]
+    return next((x for x in ok if re.search(r"continue|yes|proceed|here", x, re.I)),
+                (ok or labels or ["Continue."])[0])
+
+
+def asks_for_sources(said):
+    """The author's text asks, in a question sentence, which sources to judge the models by."""
+    return bool(re.search(r"[^.?!\n]*(web|search)[^.?!\n]*(record|project'?s)[^.?!\n]*\?"
+                          r"|[^.?!\n]*(record|project'?s)[^.?!\n]*(web|search)[^.?!\n]*\?",
+                          said, re.I))
 
 
 def buildable(doc):
@@ -198,9 +226,7 @@ def seeded():
             for k in ("schema", "copy")],
         "tasks": [task("schema", "Add the notes table (migration)", "schema", "SCHEMA.md", STRONG),
                   task("copy", "Reword a sentence", "copy", "COPY.md", CHEAP)],
-        "delivery": {"mode": "flow", "agent": STRONG, "builder": STRONG, "checker": CHECKER,
-                     "builders": [STRONG, CHEAP], "stop_when_queue_empties": True,
-                     "cron": "0 0 1 1 *", "reasons": {"mode": "The drive.", "agent": "The drive."}},
+        "delivery": dict(FLOW_DELIVERY),
     }
 
 
@@ -245,6 +271,7 @@ def drive(state):
 
     runs = []
     answered = []
+    sources_answered = []
 
     def author_turn(message):
         """One author turn, answering any ask_user it parks on (through the question's route, as
@@ -257,15 +284,30 @@ def drive(state):
             if not pending:
                 break
             for qid, _text, options, _multi in pending:
-                labels = chosen(options)
+                # The models answer goes only to a question that offers the sources; any other
+                # question (the journey's 'how to proceed') gets its Continue option.
+                if sources_question(options):
+                    labels = chosen(options)
+                    answer = ", ".join(labels) or ANSWER
+                    sources_answered.append(qid)
+                else:
+                    labels = [journey_label(options)]
+                    answer = labels[0]
                 code, out = d.api("PATCH", f"{base}/questions/{qid}",
-                                  {"answer": ", ".join(labels) or ANSWER, "labels": labels})
+                                  {"answer": answer, "labels": labels})
                 d.check("setup: an author question is answered", code == 200, f"{code} {str(out)[:200]}")
                 answered.append(qid)
             d.poll(lambda: finished(run_id), TURN, 3)
             d.wait_idle(pid, 4 * 60)
         path = current(base, doc_id)[0] or path
         return run_id
+
+    def check_a1b(text, run_ids):
+        marks = ",".join("?" * len(run_ids))
+        said = json.dumps(d.ro(f"select content from agent_outputs where run_id in ({marks})",
+                               tuple(run_ids))).lower()
+        d.check("A1b the author was told the roster's models",
+                "opus" in text.lower() or "opus" in said, text[:200])
 
     def step_of():
         return (d.ro("select step from spec_documents where id=?", (doc_id,)) or [(None,)])[0][0]
@@ -274,7 +316,7 @@ def drive(state):
     # tasks step (where it is to ask how to judge the models, FR-13) and then the build step.
     # The answer to the models question is given only in reply to the ask; an author that has not
     # asked by the time it stood at the tasks step fails A1 by name, and is then told.
-    said_all, asked, a1_done, message = [], False, False, REQUEST
+    said_all, asked, a1_done, told, message = [], False, False, False, REQUEST
     first = None
     for _ in range(12):
         step_before = step_of()
@@ -286,23 +328,27 @@ def drive(state):
         said_all.append(said)
         (d.TMP / f"author-turn{len(said_all)}.txt").write_text(said, encoding="utf-8")
         text = "\n".join(said_all)
-        now_asks = bool(re.search(r"web|search", said, re.I)
-                        and re.search(r"record|project'?s", said, re.I)
-                        and ("?" in said or answered))
-        asked = asked or now_asks
-        answered_by_route = bool(answered)
+        # Asked only by an ask_user question that offered the sources, or a question sentence.
+        asked = asked or bool(sources_answered) or asks_for_sources(
+            "\n".join(c for (c,) in d.ro(
+                "select content from agent_outputs where run_id=? and kind='text'", (run_id,))))
+        answered_by_route = bool(sources_answered)
         if not a1_done and (asked or step_before in ("tasks", "build")):
             a1_done = True
             d.check("A1 the author asks which sources to judge the models by", asked, text[-600:])
-            d.check("A1b the author was told the roster's models", "opus" in text.lower() or
-                    "opus" in json.dumps(d.ro("select content from agent_outputs where run_id in "
-                                              "(%s)" % ",".join("?" * len(runs)), tuple(runs))).lower(),
-                    text[:200])
+            check_a1b(text, runs)
+            told = answered_by_route
             message = ("Continue." if answered_by_route else f"{ANSWER} Then continue.")
             continue
         doc = payload_of(root, path)
         tasks_now = tasks_of(root, path)
         if step_of() == "build" and len(tasks_now) >= 2:
+            if buildable(doc) and not told:
+                # A buildable document reached without the ask: tell the author, and let it act
+                # on the answer (A2), rather than leaving A2 to fail unprompted.
+                told = True
+                message = f"{ANSWER} Then record what you find in the document and resubmit it."
+                continue
             if buildable(doc):
                 break
             message = ("The document cannot be built yet: declare its requirements (each with an "
@@ -315,9 +361,9 @@ def drive(state):
             message = ("Continue: read the document as it stands, record what the request already "
                        "settles, and take it to the next step.")
     if not a1_done:
-        d.check("A1 the author asks which sources to judge the models by", False,
+        d.check("A1 the author asks which sources to judge the models by", asked,
                 "\n".join(said_all)[-600:])
-        d.check("A1b the author was told the roster's models", False, "no ask reached")
+        check_a1b("\n".join(said_all), runs)
     quoted = urllib.parse.quote(path)
     _, read = d.api("GET", f"{base}/project/spec?path={quoted}")
     written = payload_of(root, path)
@@ -369,6 +415,20 @@ def drive(state):
     # The "Opus" of the roster is rebound to Haiku: every build turn is Haiku.
     d.api("PATCH", f"{base}/agents/{STRONG}", {"runner_id": haiku["id"]})
     d.api("PATCH", f"{base}/agents/{CHEAP}", {"runner_id": haiku["id"]})
+    # Step C and the follow-up need a flow. The author may have written delivery none (or another
+    # shape); the drive sets the flow itself, as a named setup step, before approval, so a missing
+    # flow is never mistaken for a refused firing later.
+    full = payload_of(root, path)
+    delivery = full.get("delivery") or {}
+    d.check("setup S1: the document recommends a flow run by an open agent",
+            delivery.get("mode") == "flow" and delivery.get("agent") in (STRONG, CHEAP, CHECKER, AUTHOR),
+            json.dumps(delivery, default=str)[:300])
+    if delivery.get("mode") != "flow" or delivery.get("agent") not in (STRONG, CHEAP, CHECKER, AUTHOR):
+        full.pop("hub", None)
+        full["delivery"] = dict(FLOW_DELIVERY)
+        code, out = d.api("PUT", f"{base}/project/documents/{path}/content", {"document": full})
+        d.check("setup S2: the drive sets the flow delivery itself", code == 200,
+                f"{code} {str(out)[:400]}", fatal=True)
     # Approval gaps go back to the author, as the operator would hand them, for a bounded number
     # of turns before A8 decides (a seeded stand-in has no author to hand them to).
     for attempt in range(3):
@@ -385,6 +445,9 @@ def drive(state):
                     "approve_anyway.")
     d.check("A8 the document approves on its own, without approve_anyway", code == 200,
             f"{code} {str(out)[:400]}")
+    if code != 200 and "criterion_without_check" in str(out):
+        print("NOTE: approval was refused for a criterion without checked_by: the author left it "
+              "out after the retries. That is the author's omission, not the product's.")
     if code != 200:
         fallback.append("forced")
         code, out = d.api("POST", approve, {"reason": "drive", "approve_anyway": True,
@@ -432,6 +495,8 @@ def drive(state):
     _, read = d.api("GET", f"{base}/project/spec?path={quoted}")
     build = next((b for b in (read.get("builds") or []) if b.get("state") == "running"), None)
     state["build_id"] = (build or {}).get("id")
+    d.check("setup S3: Build was confirmed as a flow", body.get("driver") == "flow",
+            json.dumps(body, default=str)[:300], fatal=True)
     d.check("B3 building as-is records exactly those picks",
             bool(build) and bool(tasks) and all((build.get("tasks") or {}).get(t["key"]) ==
                                 {"builder": t.get("builder"), "checker": t.get("checker")}
@@ -455,6 +520,7 @@ def drive(state):
     # ---- C: the build runs and finishes -------------------------------------------------
     ((job,),) = d.ro("select l.job_id from loops l join builds b on b.loop_id=l.id where b.id=?",
                      (state["build_id"],)) or [(None,)]
+    d.check("setup S4: the build has a flow to fire", bool(job), f"job={job}", fatal=True)
     start = time.time()
     while time.time() - start < BUILD_LIMIT:
         code, out = fire_job(base, job)
@@ -518,7 +584,6 @@ def drive(state):
             break
     d.check("D5 a flow starts the follow-up within two firings, no other call", started,
             f"job={new_job}")
-    d.wait_idle(pid, 4 * 60)
 
     # ---- E: the Overview warning --------------------------------------------------------
     with sync_playwright() as pw:
