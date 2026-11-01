@@ -191,8 +191,8 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
                 <span>{c.origin === 'introduced' ? 'Introduced by this build' : 'Only caught'} · {c.kind}{c.changed_by_build ? ' · this build changed the file' : ''}</span>
                 <span>
                   {c.fix_task
-                    ? `Fix task ${c.fix_task.id}: ${TASK_STATUS_LABEL[c.fix_task.status as TaskStatus] ?? c.fix_task.status}`
-                    : `On ${c.found_on}: ${TASK_STATUS_LABEL[c.found_on_status as TaskStatus] ?? c.found_on_status}`}
+                    ? `Fix task ${c.fix_task.readable_id ?? c.fix_task.id}: ${TASK_STATUS_LABEL[c.fix_task.status as TaskStatus] ?? c.fix_task.status}`
+                    : `On ${c.found_on_readable_id ?? c.found_on}: ${TASK_STATUS_LABEL[c.found_on_status as TaskStatus] ?? c.found_on_status}`}
                 </span>
               </li>
             ))}

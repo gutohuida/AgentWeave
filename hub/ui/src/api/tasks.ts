@@ -22,6 +22,8 @@ export type ApprovalReportEntry =
 
 export interface Task {
   id: string
+  /** `BPS-3`: what a person calls this task; `id` stays what everything references. */
+  readable_id?: string | null
   project_id: string
   title: string
   description?: string
@@ -134,6 +136,7 @@ export interface LatestIntegration {
  *  (`task-dependencies` task 8.7), rather than a bare title with nowhere to point. */
 export interface TaskDependencyRef {
   id: string
+  readable_id?: string | null
   title: string
   status: string
   spec_document_id?: string | null

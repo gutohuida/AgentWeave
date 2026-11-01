@@ -7,6 +7,7 @@ import {
   useSpec,
   useSpecCoverage,
   useSpecDocuments,
+  useSetDocumentAcronym,
   useSpecDrift,
   type SpecApprovalOutcome,
   type SpecDiagnostic,
@@ -43,6 +44,61 @@ function approvalHistory(outcome: SpecApprovalOutcome | undefined): string[] {
   if (outcome.dependencies_not_honoured.length) lines.push(`${outcome.dependencies_not_honoured.length} declared dependencies could not be honoured.`)
   lines.push(...(outcome.flow?.messages ?? []))
   return lines
+}
+
+/** A spec's acronym, and the way to change it until its first task exists; the Hub's refusal is
+ *  shown in its own words (FR-11). */
+export function AcronymEditor({ path, acronym }: { path: string; acronym: string }) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<string | null>(null)
+  const setAcronym = useSetDocumentAcronym()
+  const save = () => {
+    if (draft === null) return
+    setRefusal(null)
+    setAcronym.mutate(
+      { path, acronym: draft },
+      {
+        onSuccess: () => setDraft(null),
+        onError: (error: unknown) => setRefusal(readableApiError(error, 'The Hub did not accept that acronym.')),
+      },
+    )
+  }
+  return (
+    <div className="flex items-center gap-2 text-xs" data-testid="spec-acronym" style={{ color: 'var(--text-3)' }}>
+      <span>Task ids</span>
+      {draft === null ? (
+        <>
+          <code data-testid="spec-acronym-value">{acronym}-N</code>
+          <Button variant="ghost" size="xs" data-testid="spec-acronym-edit" onClick={() => { setRefusal(null); setDraft(acronym) }}>
+            Change
+          </Button>
+        </>
+      ) : (
+        <>
+          <input
+            data-testid="spec-acronym-input"
+            aria-label="Acronym"
+            value={draft}
+            maxLength={32}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') save() }}
+            style={{ width: '6rem', background: 'var(--surface-2)', color: 'var(--text)' }}
+          />
+          <Button variant="ghost" size="xs" data-testid="spec-acronym-save" disabled={setAcronym.isPending} onClick={save}>
+            Save
+          </Button>
+          <Button variant="ghost" size="xs" onClick={() => { setDraft(null); setRefusal(null) }}>
+            Cancel
+          </Button>
+        </>
+      )}
+      {refusal ? (
+        <span role="alert" data-testid="spec-acronym-refusal" style={{ color: 'var(--amber)' }}>
+          {refusal}
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 /**
@@ -83,6 +139,7 @@ export function SpecDocumentFacts({
 
   return (
     <div data-testid="spec-document-facts">
+      {record?.acronym ? <AcronymEditor path={path} acronym={record.acronym} /> : null}
       {unread ? (
         <p className="aw-spec-message" data-tone="warn" data-testid="spec-facts-unread">
           <span className="aw-spec-message-text">Some of this document's facts could not be read, so the line below may be missing some.</span>

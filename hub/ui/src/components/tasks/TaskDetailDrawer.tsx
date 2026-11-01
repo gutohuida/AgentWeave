@@ -527,7 +527,13 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             </p>
           )}
           <p className="text-[11px] mt-1 font-mono" style={{ color: 'var(--text-3)' }}>
-            {task.id}
+            {task.readable_id ? (
+              <>
+                <span data-testid={`task-drawer-readable-id-${task.id}`}>{task.readable_id}</span>
+                {' · '}
+              </>
+            ) : null}
+            <span data-testid={`task-drawer-stored-id-${task.id}`}>{task.id}</span>
           </p>
         </div>
         <button
@@ -1109,7 +1115,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   data-testid={`task-dependency-${task.id}-${prerequisite.id}`}
                 >
                   <span className="flex-1 min-w-0 truncate">{prerequisite.title}</span>
-                  <code className="text-[11px]" style={{ color: 'var(--text-3)' }}>{prerequisite.id}</code>
+                  <code className="text-[11px]" style={{ color: 'var(--text-3)' }}>{prerequisite.readable_id ?? prerequisite.id}</code>
                   <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
                     {prerequisite.status.replace(/_/g, ' ')}
                   </span>

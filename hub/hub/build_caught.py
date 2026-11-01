@@ -68,6 +68,7 @@ async def caught_during(session: AsyncSession, build: Build) -> List[Dict[str, A
                 rows[(entry["check"], entry["test"])] = {
                     **entry,
                     "found_on": run.task_id,
+                    "found_on_readable_id": tasks[run.task_id].display_id,
                     "found_on_status": tasks[run.task_id].status,
                 }
     if not rows:
@@ -79,6 +80,7 @@ async def caught_during(session: AsyncSession, build: Build) -> List[Dict[str, A
         row["fix_task"] = (
             {
                 "id": fix.id,
+                "readable_id": fix.display_id,
                 "title": fix.title,
                 "status": fix.status,
                 "open": fix.status not in _CLOSED,

@@ -94,7 +94,12 @@ export function TaskCardCompact({
           }
         }}
       >
-        <span className="aw-task-card-title">{task.title}</span>
+        <span className="aw-task-card-title">
+          {task.readable_id ? (
+            <code className="aw-task-card-id" data-testid={`task-readable-id-${task.id}`}>{task.readable_id}</code>
+          ) : null}{task.readable_id ? ' ' : ''}
+          {task.title}
+        </span>
         <span className="aw-task-card-meta">
           {tally && tally.total > 0 ? (
             <span

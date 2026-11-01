@@ -44,11 +44,11 @@ export function DependencyListView({
   const titleOf = new Map(documents.map((d) => [d.id, d.title]))
   // A prerequisite another document declared is named with that document, so a row never points
   // at a title the operator cannot find on this screen (the DAG board's off-board reference).
-  const named = (refs: Array<{ title: string; spec_document_id?: string | null }>, home: string | null) =>
+  const named = (refs: Array<{ title: string; readable_id?: string | null; spec_document_id?: string | null }>, home: string | null) =>
     names(
       refs.map((r) =>
         r.spec_document_id && r.spec_document_id !== home && titleOf.has(r.spec_document_id)
-          ? { title: `${r.title} (in ${titleOf.get(r.spec_document_id)})` }
+          ? { ...r, title: `${r.title} (in ${titleOf.get(r.spec_document_id)})` }
           : r,
       ),
     )
@@ -103,7 +103,7 @@ export function DependencyListView({
                     <button type="button" data-slot="deps-row" className="aw-deps-row-main" onClick={() => onOpenTask(task.id)}>
                       <span className="aw-deps-row-line">
                         <span className="aw-deps-status">{STATUS_LABEL[task.status] ?? task.status}</span>
-                        <span className="aw-deps-title">{task.title}</span>
+                        <span className="aw-deps-title">{task.readable_id ? `${task.readable_id} ` : ''}{task.title}</span>
                         {task.assignee ? <span className="aw-deps-assignee">@{task.assignee}</span> : null}
                       </span>
                       <span className="aw-deps-relations">
@@ -134,9 +134,10 @@ export function DependencyListView({
   )
 }
 
-function names(refs: Array<{ title: string }>): string {
-  if (refs.length <= 2) return refs.map((r) => r.title).join(' and ')
-  return `${refs[0]!.title} and ${refs.length - 1} more`
+function names(refs: Array<{ title: string; readable_id?: string | null }>): string {
+  const label = (r: { title: string; readable_id?: string | null }) => (r.readable_id ? `${r.readable_id} ${r.title}` : r.title)
+  if (refs.length <= 2) return refs.map(label).join(' and ')
+  return `${label(refs[0]!)} and ${refs.length - 1} more`
 }
 
 /** Prerequisites first; ties keep the list's order. Cycles cannot happen (the Hub refuses them),

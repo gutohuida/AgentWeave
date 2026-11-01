@@ -138,6 +138,14 @@ afterEach(() => {
   integrationRows = []
 })
 
+describe('the drawer names the task by both ids', () => {
+  it('shows the readable id and the stored id', () => {
+    renderDrawer(makeTask({ id: 'task-5a9efc6d2670', readable_id: 'BPS-3' }), vi.fn())
+    expect(screen.getByTestId('task-drawer-readable-id-task-5a9efc6d2670')).toHaveTextContent('BPS-3')
+    expect(screen.getByTestId('task-drawer-stored-id-task-5a9efc6d2670')).toHaveTextContent('task-5a9efc6d2670')
+  })
+})
+
 describe('opening and closing the drawer', () => {
   it('renders nothing for no task', () => {
     renderDrawer(null, vi.fn())
