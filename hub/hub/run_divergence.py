@@ -205,9 +205,9 @@ def _response_prompt(task: Task, diverging_run: Run, escalating: bool) -> str:
     moves = ", ".join(reachable) if reachable else "none — this task is not yours to move"
     lead = (
         f"Run {diverging_run.id} ({diverging_run.agent}) ended without recording any progress on "
-        f"task {task.id}, so this work has been escalated to you."
+        f"task {task.display_id}, so this work has been escalated to you."
         if escalating
-        else f"Your previous run ended without recording any progress on task {task.id}."
+        else f"Your previous run ended without recording any progress on task {task.display_id}."
     )
     return (
         f"{lead}\n\n"
@@ -456,7 +456,7 @@ async def _answer_failed_review(
             OUTCOME_SURFACED,
             None,
             None,
-            f"{run.agent} is this task's declared reviewer and its review of {task.id} ended "
+            f"{run.agent} is this task's declared reviewer and its review of {task.display_id} ended "
             f"without recording a verdict. Nobody has been substituted: naming a different "
             f"reviewer, reviewing it yourself, or asking this one again is the way forward.",
         )
@@ -534,7 +534,7 @@ async def _answer_failed_review(
 def _held_review_reason(run: Run, task: Task, hold: "ApprovalHold") -> str:
     """D4: a review that ended without a verdict where no reviewer can approve until the operator acts."""
     return (
-        f"{run.agent}'s review of {task.id} ended without a verdict, and no reviewer can approve "
+        f"{run.agent}'s review of {task.display_id} ended without a verdict, and no reviewer can approve "
         f"it until you act: {hold.detail} Nobody else has been asked to review it."
     )
 
@@ -550,7 +550,7 @@ def _failed_review_prompt(task: Task, diverging_run: Run) -> str:
     reachable = sorted(allowed_targets(task.status, ACTOR_RUN))
     moves = ", ".join(reachable) if reachable else "none — this task is not yours to move"
     return (
-        f"Run {diverging_run.id} ({diverging_run.agent}) was given task {task.id} to review and "
+        f"Run {diverging_run.id} ({diverging_run.agent}) was given task {task.display_id} to review and "
         f"ended without recording a verdict, so the review comes to you.\n\n"
         f"Task: {task.title}\n"
         f"Current status: {task.status}\n"
@@ -706,7 +706,7 @@ def _released_review_prompt(task: Task, held_run: Run) -> str:
     reachable = sorted(allowed_targets(task.status, ACTOR_RUN))
     moves = ", ".join(reachable) if reachable else "none — this task is not yours to move"
     return (
-        f"Your review of task {task.id} (run {held_run.id}) ended without a verdict because "
+        f"Your review of task {task.display_id} (run {held_run.id}) ended without a verdict because "
         f"approval was waiting on the operator. The operator has now decided the evidence it "
         f"waited on, so your verdict can be recorded.\n\n"
         f"Task: {task.title}\n"

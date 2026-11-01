@@ -10,7 +10,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Annotated, Any, Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
@@ -18,7 +18,7 @@ from pydantic import AliasChoices, BaseModel, Field, ValidationInfo, field_valid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import mcp_announce, run_liveness, run_waits, spec_reading
+from ... import mcp_announce, readable_ids, run_liveness, run_waits, spec_reading
 from ...agent_auth import AgentActor, get_agent_actor
 from ...checkpoint_access import (
     AccessDeniedError,
@@ -79,6 +79,18 @@ from .vault import PathsAdd as VaultPathsAdd
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent-actions", tags=["agent-actions"])
+
+
+async def _agent_task_id(
+    task_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+) -> str:
+    """The stored id a path's task names, in the project the run's credential belongs to."""
+    return await readable_ids.resolve(session, actor.project_id, task_id)
+
+
+AgentTaskId = Annotated[str, Depends(_agent_task_id)]
 
 
 class AgentMessageCreate(RequestModel):
@@ -344,7 +356,7 @@ async def list_shared_tasks(
 
 @router.get("/tasks/{task_id}", response_model=TaskResponse)
 async def get_shared_task(
-    task_id: str,
+    task_id: AgentTaskId,
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -357,7 +369,7 @@ async def get_shared_task(
 
 @router.patch("/tasks/{task_id}", response_model=TaskResponse)
 async def update_shared_task(
-    task_id: str,
+    task_id: AgentTaskId,
     body: TaskUpdate,
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
@@ -381,7 +393,7 @@ class HandOutRequest(RequestModel):
 
 @router.post("/tasks/{task_id}/hand-out")
 async def hand_out_shared_task(
-    task_id: str,
+    task_id: AgentTaskId,
     body: HandOutRequest,
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
@@ -419,7 +431,7 @@ async def hand_out_shared_task(
 
 @router.get("/tasks/{task_id}/integrations")
 async def read_shared_task_integrations(
-    task_id: str,
+    task_id: AgentTaskId,
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -437,7 +449,7 @@ async def read_shared_task_integrations(
 
 @router.get("/tasks/{task_id}/transitions")
 async def read_shared_task_transitions(
-    task_id: str,
+    task_id: AgentTaskId,
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -456,7 +468,7 @@ async def read_shared_task_transitions(
 
 @router.post("/tasks/{task_id}/integrations/retry")
 async def retry_shared_task_integration(
-    task_id: str,
+    task_id: AgentTaskId,
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1816,7 +1828,7 @@ async def _resolve_requirement(
         # F513: identifiers are minted per document, so a bare `FR-1` is ambiguous in any project
         # with two documents. A task materialised from one document has already named it. Only
         # consulted when ambiguous, so an identifier that resolves today still resolves the same.
-        task = await session.get(Task, task_id)
+        task = await session.get(Task, await readable_ids.resolve(session, project_id, task_id))
         if task is not None and task.project_id == project_id and task.spec_document_id:
             row, why = await spec_index.resolve(
                 session, project_id, identifier, document_id=task.spec_document_id

@@ -50,7 +50,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import flaky_tests, traces
+from . import flaky_tests, readable_ids, traces
 from .db.engine import async_session_factory
 from .db.models import Project, Run, Task, TaskCheckRun, TaskTransition
 from .subprocess_windows import no_console_kwargs
@@ -1891,7 +1891,16 @@ async def _snapshot_task_checkout(root: Path, task: Task, agent: Optional[str]) 
     if not checkout.is_dir():
         return
     try:
-        await blocking.run(worktrees.snapshot_worktree, checkout, agent or task.assignee or "agent")
+        who = agent or task.assignee or "agent"
+        await blocking.run(
+            worktrees.snapshot_worktree,
+            checkout,
+            who,
+            message=(
+                f"Auto-snapshot: {who}'s turn on "
+                f"{readable_ids.commit_name(task.id, task.readable_id)}"
+            ),
+        )
     except Exception:  # noqa: BLE001 -- a snapshot failure does not stop the completion
         logger.warning(
             "could not snapshot the checkout of %s at completion", task.id, exc_info=True

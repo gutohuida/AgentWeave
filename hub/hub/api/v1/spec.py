@@ -34,6 +34,7 @@ from ... import (
     deletion,
     loop_history,
     project_workspace,
+    readable_ids,
     requirement_coverage,
     requirement_evidence,
     requirement_links,
@@ -649,6 +650,8 @@ def _document_view(
         "id": document.id,
         "path": document.path,
         "title": document.title,
+        # What this document's tasks are named by (`readable_ids`).
+        "acronym": document.acronym,
         "kind": document.kind,
         "phase": document.phase,
         "display_phase": display_phase or document.phase,
@@ -3721,6 +3724,47 @@ async def _finish_build(session: AsyncSession, project_id: str, started: _Starte
         from ...turn_scheduler import schedule_accepted
 
         await schedule_accepted(project_id, started.lead)
+
+
+class AcronymEdit(RequestModel):
+    acronym: str = Field(max_length=32)
+
+
+@router.post("/documents/acronym")
+async def set_acronym(
+    body: AcronymEdit,
+    path: str = Query(...),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator choosing what a spec's tasks are named by, until its first task exists (FR-11).
+
+    422 for a value no acronym can be, 409 for one taken or a spec already named by it; each says
+    why. On the project credential, so no agent run reaches it.
+    """
+    project_id, _ = project
+    document = await spec_lifecycle.get_document(session, project_id, path)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"no document at {path}")
+    previous = document.acronym
+    try:
+        acronym = await readable_ids.edit_acronym(session, document, body.acronym)
+    except readable_ids.AcronymRefusedError as refusal:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT if refusal.conflict else 422,
+            detail=str(refusal),
+        ) from refusal
+    if acronym != previous:
+        await spec_lifecycle.record_event(
+            session,
+            document,
+            kind="acronym_changed",
+            actor=spec_lifecycle.Actor(kind="operator", name="operator"),
+            detail={"from": previous, "to": acronym},
+        )
+    await session.commit()
+    return {"path": document.path, "acronym": acronym}
 
 
 @router.post("/documents/phase")

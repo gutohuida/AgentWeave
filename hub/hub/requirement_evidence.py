@@ -38,7 +38,15 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import blocking, git_facts, run_liveness, spec_index, traces, worktrees
+from . import (
+    blocking,
+    git_facts,
+    readable_ids,
+    run_liveness,
+    spec_index,
+    traces,
+    worktrees,
+)
 from .db.models import (
     Agent,
     EvidenceFootprint,
@@ -210,6 +218,9 @@ async def record(
     command = (command or "").strip()[:COMMAND_MAX] or None
     output = output_tail(output)
 
+    if task_id:
+        # The row holds the stored id, which is what reviews and merges look evidence up by.
+        task_id = await readable_ids.resolve(session, requirement.project_id, task_id)
     if task_id is None:
         # The run already knows its task, so an agent that did not repeat it is not ambiguous --
         # only quiet. Without this the row lands with `task_id` NULL and `commit_for_task_review`,

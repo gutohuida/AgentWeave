@@ -27,7 +27,7 @@ from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from . import blocking, flow_advance, traces
+from . import blocking, flow_advance, readable_ids, traces
 from .db.models import RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
     SEND_BACK_CLASSES,
@@ -1464,7 +1464,10 @@ async def _release_task_workspace(session: AsyncSession, task: Task) -> None:
         workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
         # Off the loop, one at a time with every other worktree change (`blocking`, D1/D5).
         result = await blocking.run_serialized(
-            worktrees.release_task_worktree, workspace.root, task.id
+            worktrees.release_task_worktree,
+            workspace.root,
+            task.id,
+            name=readable_ids.commit_name(task.id, task.readable_id),
         )
     except Exception as exc:  # noqa: BLE001 - any release failure is recorded, never a rollback
         logger.warning("Could not release task %s's checkout", task.id, exc_info=True)

@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 
 from hub.db.engine import async_session_factory
 from hub.db.models import (
+    AcronymCounter,
     Agent,
     AgentHeartbeat,
     AgentJobDeletion,
@@ -115,6 +116,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "checkpoints",
     "agents",
     "agent_outputs",
+    "acronym_counters",
     "worker_invocations",
     "tasks",
     "spec_documents",
@@ -163,6 +165,7 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
     session.add(Runner(id=f"runner-{tag}", project_id=project_id, name="Runner", cli="claude"))
     session.add(Agent(id=f"agent-{tag}", project_id=project_id, name=f"agent-{tag}"))
     session.add(Task(id=f"task-{tag}", project_id=project_id, title="Task"))
+    session.add(AcronymCounter(project_id=project_id, acronym="TAG", high_water=1))
     session.add(
         Build(
             id=f"build-{tag}",

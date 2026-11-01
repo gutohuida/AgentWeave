@@ -77,6 +77,9 @@ class ReviewContext:
     def work_moved(self) -> bool:
         return bool(self.earlier_commits)
 
+    #: `BPS-3`, what the prompt names the task by.
+    task_readable_id: Optional[str] = None
+
 
 @dataclass
 class ReviewerResolution:
@@ -379,9 +382,17 @@ async def verdict_evidence_sentence(
             "notes are the reason recorded on each piece you approve or hold."
         )
     if foreign:
+        foreign_ids = {row.task_id for row in foreign if row.task_id}
+        readable = dict(
+            (
+                await session.execute(
+                    select(Task.id, Task.readable_id).where(Task.id.in_(foreign_ids))
+                )
+            ).all()
+        )
         recorded = "; ".join(
             (
-                f"{named(r)}, recorded by task `{r.task_id}`"
+                f"{named(r)}, recorded by task `{readable.get(r.task_id) or r.task_id}`"
                 if r.task_id
                 else f"{named(r)}, recorded " "outside any task"
             )
@@ -442,7 +453,7 @@ async def _dependencies_sentence(session: AsyncSession, task: Task) -> Optional[
         where = (
             f"merged as `{merged[:12]}`" if merged else f"`{prerequisite.status}`, not merged yet"
         )
-        pieces.append(f"task `{prerequisite.id}` ({prerequisite.title}: {where})")
+        pieces.append(f"task `{prerequisite.display_id}` ({prerequisite.title}: {where})")
     return (
         f"**This task builds on** {'; '.join(pieces)}. Merged work is on the main branch and "
         "not in this task's diff: judge the change together with it, including tests it wrote "
@@ -485,7 +496,7 @@ async def _other_requirements_sentence(session: AsyncSession, task: Task) -> Opt
             continue
         sibling = siblings.get(key)
         who = (
-            f"`{sibling.id}` ({sibling.title})"
+            f"`{sibling.display_id}` ({sibling.title})"
             if sibling is not None
             else f"`{key}` ({entry.get('title') or 'no title'})"
         )
@@ -741,6 +752,7 @@ async def prepare_review_turn(
 
     return ReviewContext(
         task_id=task_id,
+        task_readable_id=task.readable_id,
         task_title=task.title,
         reviewer=reviewer,
         commit_sha=target.commit_sha,

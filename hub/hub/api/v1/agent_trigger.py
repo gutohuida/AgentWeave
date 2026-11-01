@@ -46,6 +46,7 @@ from ... import (
     mcp_announce,
     project_checks,
     project_workspace,
+    readable_ids,
     requirement_evidence,
     review_turn,
     run_liveness,
@@ -324,7 +325,7 @@ async def _carry_mid_turn_claim(
         root = Path(repo_root)
         if holder is not None and holder != agent:
             problem: Optional[str] = (
-                f"{holder}'s turn holds {task.id}'s checkout, so this turn's work stayed in "
+                f"{holder}'s turn holds {task.display_id}'s checkout, so this turn's work stayed in "
                 f"{worktree}"
             )
         else:
@@ -1567,6 +1568,7 @@ async def _trigger_agent_directly(
                     base=turn_workspace.base,
                     prerequisites=turn_workspace.prerequisites,
                     approved=turn_workspace.approved,
+                    names=turn_workspace.names,
                     catch_up_to=catch_up_to,
                 )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
@@ -1697,6 +1699,7 @@ async def _trigger_agent_directly(
         # against. Rendered as its own block for exactly that reason.
         task_spec_document=task_document,
         task_id=binding.task.id if binding.task is not None else None,
+        task_readable_id=binding.task.readable_id if binding.task is not None else None,
         # The other half of design D4: the boundary above enforces *where*, this states *what*.
         # A reviewer that is not told it is reviewing will helpfully fix the bug itself and report
         # the work as verified.
@@ -2251,6 +2254,11 @@ async def trigger_agent(
     from sqlalchemy import select
 
     project_id, _ = project
+    # Past here both are stored ids: they bind runs and find conversations.
+    if body.task_id:
+        body.task_id = await readable_ids.resolve(session, project_id, body.task_id)
+    if body.review_task_id:
+        body.review_task_id = await readable_ids.resolve(session, project_id, body.review_task_id)
     try:
         worktrees.validate_agent_name(body.agent)
     except ValueError as exc:
@@ -3660,7 +3668,12 @@ async def _execute_run(
             try:
                 # `blocking.run` carries the run's trace into the thread, as `to_thread` did, so
                 # the snapshot's git is in the run's trace (trace-hub-wide D2).
-                snapshot_sha = await blocking.run(worktrees.snapshot_worktree, worktree, agent)
+                snapshot_sha = await blocking.run(
+                    worktrees.snapshot_worktree,
+                    worktree,
+                    agent,
+                    message=await readable_ids.snapshot_message(worktree, agent),
+                )
             except worktrees.GitCommandError:
                 logger.warning(
                     "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True
@@ -4744,7 +4757,12 @@ async def _execute_rpc_run(
             try:
                 # `blocking.run` carries the run's trace into the thread, as `to_thread` did, so
                 # the snapshot's git is in the run's trace (trace-hub-wide D2).
-                snapshot_sha = await blocking.run(worktrees.snapshot_worktree, worktree, agent)
+                snapshot_sha = await blocking.run(
+                    worktrees.snapshot_worktree,
+                    worktree,
+                    agent,
+                    message=await readable_ids.snapshot_message(worktree, agent),
+                )
             except worktrees.GitCommandError:
                 logger.warning(
                     "Could not snapshot %r's worktree after run %s", agent, run_id, exc_info=True

@@ -29,6 +29,7 @@ from typing import Dict, FrozenSet, Iterable, List, Mapping, NamedTuple, Optiona
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import readable_ids
 from .db.models import (
     Conversation,
     InboundQueueEntry,
@@ -138,7 +139,7 @@ async def resolve_task_for_project(session: AsyncSession, task_id: str, project_
     see learns immediately, in the tool result it is already reading, rather than through a run
     that quietly starts unbound.
     """
-    task = await session.get(Task, task_id)
+    task = await session.get(Task, await readable_ids.resolve(session, project_id, task_id))
     if task is None or task.project_id != project_id:
         raise TaskBindingError(
             f"Task {task_id!r} does not exist in this project. A delegation may only name a task "

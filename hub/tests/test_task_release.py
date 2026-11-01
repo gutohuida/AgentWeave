@@ -308,9 +308,9 @@ async def test_release_does_not_move_the_frozen_target(
     seen = {}
     real_release = worktrees.release_task_worktree
 
-    def spy(repo_root, task_id):
+    def spy(repo_root, task_id, **kwargs):
         seen["released"] = True
-        return real_release(repo_root, task_id)
+        return real_release(repo_root, task_id, **kwargs)
 
     monkeypatch.setattr(worktrees, "release_task_worktree", spy)
 
@@ -423,7 +423,7 @@ async def test_a_release_that_raises_is_recorded_and_the_transition_stands(
     checkout = worktrees.ensure_task_worktree(tmp_path, task, "main")
     work_in(checkout, "feature.py", "print('hi')\n", "the task's work")
 
-    def boom(repo_root, task_id):
+    def boom(repo_root, task_id, **_kwargs):
         raise worktrees.GitCommandError(
             ["worktree", "remove", "--force", str(repo_root)], 128, "permission denied"
         )

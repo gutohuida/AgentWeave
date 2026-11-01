@@ -372,6 +372,23 @@ export interface AlreadyBuiltResult {
 /** Close every open task of an approved change as already built, against commits on the main
  *  branch (`every-task-can-always-be-moved-on` FR-5/FR-6). Each task moves to under review with
  *  evidence awaiting a decision, and is approved once that evidence is accepted. */
+/** What a spec's tasks are named by, editable until its first task exists; a refusal says why. */
+export function useSetDocumentAcronym() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ path, acronym }: { path: string; acronym: string }) =>
+      postJson<{ path: string; acronym: string }>(
+        `/api/v1/projects/${projectId}/project/documents/acronym?path=${encodeURIComponent(path)}`,
+        { acronym },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+    },
+  })
+}
+
 export function useCloseAlreadyBuilt() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()

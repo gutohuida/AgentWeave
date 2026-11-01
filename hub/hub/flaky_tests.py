@@ -404,7 +404,7 @@ async def file_fix_task(run_id: str) -> Optional[str]:
             if not new:
                 return None
             loop_id = task.loop_id if await flow_advance.is_live(session, task.loop_id) else None
-            title, description = fix_task_text_for(new, run=run, found_by=task.id)
+            title, description = fix_task_text_for(new, run=run, found_by=task.display_id)
             project_id, found_by, main_sha = task.project_id, task.id, run.main_sha
             started = _aware(run.started_at) or datetime.now(timezone.utc)
 
