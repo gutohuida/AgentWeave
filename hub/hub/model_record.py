@@ -7,13 +7,17 @@ judges.
 
 Attribution is by the model that **ran** a task's build turns (`TurnUsage.model` of the runs the
 runtime bound to the task, `Run.task_id`), never by the task's assignee: an agent can be rebound
-to another model between tasks, and crediting the agent would credit the wrong model. Review turns
-are bound by `Run.review_task_id`, not `task_id`, so they are not build turns.
+to another model between tasks, and crediting the agent would credit the wrong model. A review
+turn also carries `Run.task_id`; what marks it is the queue entry delivered to that run, which names
+`review_task_id` (`inbound_queue.entry_kind`). Review turns are the checker's, not the builder's,
+so they are left out.
 
-A task whose build turns ran under more than one model counts under the model of its latest turn
-that names one (the model that finished it), and lists the others in `models_seen`. A turn with no
-usage row, or with a row carrying no price, is **unpriced**: counted as a turn and reported, never
-added to the cost as zero.
+A task whose build turns ran under more than one model counts, with its send-backs, under the model
+of its latest build turn that names one (the model that finished it), and lists the others in
+`models_seen`. Each turn's count and cost go under the model that ran *that turn*. A finished turn
+with no usage row, or with a row carrying no price, is **unpriced**: counted and reported, never
+added to the cost as zero. A turn still running has no usage row yet and is reported as
+`running_turns`, neither priced nor unpriced.
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Run, Task, TaskTransition, TurnUsage
+from .db.models import InboundQueueEntry, Run, Task, TaskTransition, TurnUsage
 from .task_transitions import SEND_BACK_CLASSES
 
 UNKNOWN_MODEL = "unknown"
@@ -37,6 +41,7 @@ def _row() -> Dict[str, Any]:
         "turns": 0,
         "priced_turns": 0,
         "unpriced_turns": 0,
+        "running_turns": 0,
         "cost_usd_micros": 0,
         "tasks": [],
     }
@@ -81,9 +86,23 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
         .all()
     )
 
+    review_runs = set(
+        (
+            await session.execute(
+                select(InboundQueueEntry.delivered_in_run_id).where(
+                    InboundQueueEntry.project_id == project_id,
+                    InboundQueueEntry.review_task_id.is_not(None),
+                    InboundQueueEntry.delivered_in_run_id.is_not(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     by_task: Dict[str, List[Run]] = {}
     for run in runs:
-        if run.task_id in tasks:
+        if run.task_id in tasks and run.id not in review_runs:
             by_task.setdefault(run.task_id, []).append(run)
 
     models: Dict[str, Dict[str, Any]] = {}
@@ -97,14 +116,20 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
         row["tasks_built"] += 1
         row["tasks_approved"] += 1 if task.status == "approved" else 0
         for run in task_runs:
-            row["turns"] += 1
             measured = usage.get(run.id)
+            if measured is None and run.status == "running":
+                row["running_turns"] += 1
+                continue
+            turn_row = models.setdefault(
+                (measured.model if measured and measured.model else UNKNOWN_MODEL), _row()
+            )
+            turn_row["turns"] += 1
             micros: Optional[int] = measured.api_equivalent_usd_micros if measured else None
             if micros is None:
-                row["unpriced_turns"] += 1
+                turn_row["unpriced_turns"] += 1
             else:
-                row["priced_turns"] += 1
-                row["cost_usd_micros"] += micros
+                turn_row["priced_turns"] += 1
+                turn_row["cost_usd_micros"] += micros
         row["tasks"].append(
             {
                 "task_id": task_id,
@@ -128,10 +153,12 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
             "tasks_built": sum(r["tasks_built"] for r in models.values()),
             "turns": sum(r["turns"] for r in models.values()),
             "unpriced_turns": sum(r["unpriced_turns"] for r in models.values()),
+            "running_turns": sum(r["running_turns"] for r in models.values()),
         },
         "note": (
             "Cost is the API-equivalent figure each priced turn recorded, in millionths of a "
             "dollar; an unpriced turn is counted in unpriced_turns and added to no cost. A task "
-            "counts under the model of its latest build turn that names one."
+            "counts under the model of its latest build turn that names one; review turns are excluded, and "
+            "each turn's cost is under the model that ran it."
         ),
     }

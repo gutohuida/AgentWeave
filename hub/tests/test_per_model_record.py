@@ -10,7 +10,7 @@ import pytest
 
 from hub import mcp_server
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, Task, TaskTransition, TurnUsage
+from hub.db.models import InboundQueueEntry, Run, Task, TaskTransition, TurnUsage
 
 from .test_spec_archive import run_headers  # noqa: F401
 
@@ -129,6 +129,56 @@ async def test_each_task_counts_under_the_model_that_ran_it(app, run_headers):  
     assert sample["tasks_built"] == sum(r["tasks_built"] for r in record.values()) == 4
     assert sample["turns"] == 5
     assert sample["unpriced_turns"] == 2
+
+
+@pytest.mark.asyncio
+async def test_a_review_turn_is_not_a_build_turn(app, run_headers):  # noqa: F811
+    """Real review runs carry Run.task_id; only the delivered queue entry marks them."""
+    await _seed(_task("t-x"))
+    await _seed(
+        *_run("r-build1", "t-x", 1, SONNET, 1000, agent="dev"),
+        *_run("r-build2", "t-x", 2, SONNET, 2000, agent="dev"),
+        # the checker's turn, later and under another model, shaped as the runtime binds it
+        *_run("r-review", "t-x", 60, OPUS, 9000, agent="qa"),
+        *_run("r-live", "t-x", 61, None, None, agent="dev", usage=False),
+    )
+    await _seed(
+        InboundQueueEntry(
+            id="q-review",
+            project_id=P,
+            agent="qa",
+            origin_type="operator",
+            content="review it",
+            hop_depth=0,
+            state="delivered",
+            task_id="t-x",
+            review_task_id="t-x",
+            delivered_in_run_id="r-review",
+        ),
+        _send_back("m-x", "t-x", "defect"),
+    )
+    live = await _live_run("r-live")
+
+    response = await app.get(ROUTE, headers=run_headers)
+    record = {row["model"]: row for row in response.json()["models"]}
+
+    assert set(record) == {SONNET}, "the reviewer's model must not appear as a builder"
+    assert record[SONNET]["tasks_built"] == 1
+    assert record[SONNET]["turns"] == 2
+    assert record[SONNET]["cost_usd_micros"] == 3000
+    assert record[SONNET]["send_backs"]["defect"] == 1
+    assert record[SONNET]["running_turns"] == 1
+    assert record[SONNET]["unpriced_turns"] == 0
+    assert live
+
+
+async def _live_run(run_id):
+    from sqlalchemy import update
+
+    async with async_session_factory() as session:
+        await session.execute(update(Run).where(Run.id == run_id).values(status="running"))
+        await session.commit()
+    return True
 
 
 @pytest.mark.asyncio
