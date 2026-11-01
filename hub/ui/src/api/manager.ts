@@ -116,10 +116,108 @@ export interface BuildRetrospective {
   cost_usd_micros: number | null
   parts: number
   vault_source: string | null
-  report: Record<string, unknown> | null
+  report: RetrospectiveReport | null
 }
 
-/** A document's retrospectives, newest first. */
+export interface RetrospectiveFinding {
+  text: string
+  cites: string[]
+}
+
+export interface RetrospectiveSendBack {
+  transition_id: string
+  task_id: string
+  readable_id: string | null
+  at: string
+  by: string
+  run_id: string | null
+  reason_class: string | null
+  reason: string | null
+  /** `defect`, `process` or `spec`. */
+  cause: string
+  cause_from: 'model' | 'reviewer'
+  explanation: string
+  cites: string[]
+}
+
+interface RetrospectiveEvent {
+  id: string
+  kind: string
+  detail: Record<string, unknown> | null
+}
+
+interface RetrospectiveCost {
+  runs: number
+  cost_usd_micros: number
+}
+
+/** The stored report (`build_retrospective.py`). `nothing` names each empty section with what it
+ *  says instead. */
+export interface RetrospectiveReport {
+  parts: number
+  dropped: number
+  where_time_went: {
+    findings: RetrospectiveFinding[]
+    per_task: Array<{
+      task_id: string
+      readable_id: string | null
+      title: string
+      status: string
+      building_seconds: number
+      waiting_for_review_seconds: number
+      in_check_gate_seconds: number
+      waiting_to_start_seconds: number
+    }>
+  }
+  send_backs: RetrospectiveSendBack[]
+  spec_missed: {
+    findings: RetrospectiveFinding[]
+    amendments: RetrospectiveEvent[]
+    tasks_added_mid_build: Array<{ task_id: string; readable_id: string | null; title: string }>
+    unsatisfiable_criteria: RetrospectiveEvent[]
+    requirements_without_accepted_evidence: string[]
+    reconcile_gaps: Array<{ class?: string; requirement?: string; where?: string; summary?: string }>
+  }
+  staffing: {
+    findings: RetrospectiveFinding[]
+    builds: Array<{ id: string; driver: string; level: string }>
+    per_agent: Array<RetrospectiveCost & { agent: string }>
+  }
+  cost: {
+    findings: RetrospectiveFinding[]
+    per_agent: Array<RetrospectiveCost & { agent: string }>
+    per_task: Array<RetrospectiveCost & { task_id: string }>
+    totals: RetrospectiveCost
+  }
+  friction: {
+    findings: RetrospectiveFinding[]
+    stalls: Array<{ id: string; cause: string | null; reason: string | null; outcome: string | null }>
+    flaky_send_backs: RetrospectiveSendBack[]
+    operator_waits: Array<{ question_id: string; task_id: string | null; waited_seconds: number }>
+  }
+  what_worked: RetrospectiveFinding[]
+  /** `label` is `code_and_checks`, `specs`, `staffing_and_running` or `tooling`. */
+  improvements: Array<RetrospectiveFinding & { label: string }>
+  lessons: RetrospectiveFinding[]
+  transcripts_read: Array<{ run_id: string; task_id: string | null; agent: string; flags: string[] }>
+  nothing: Partial<
+    Record<
+      | 'where_time_went'
+      | 'send_backs'
+      | 'spec_missed'
+      | 'staffing'
+      | 'cost'
+      | 'friction'
+      | 'what_worked'
+      | 'improvements'
+      | 'lessons'
+      | 'transcripts_read',
+      string
+    >
+  >
+}
+
+/** A document's retrospectives, newest first. Polled: a firing is recorded when it ends, not broadcast. */
 export function useBuildRetrospectives(path: string) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<BuildRetrospective[]>({
@@ -131,6 +229,8 @@ export function useBuildRetrospectives(path: string) {
         )
       ).retrospectives,
     enabled: isConfigured && !!projectId && !!path,
+    retry: (count, error) => !isNoManager(error) && count < 2,
+    refetchInterval: (query) => (isNoManager(query.state.error) ? false : 10_000),
   })
 }
 
