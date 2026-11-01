@@ -31,8 +31,8 @@ Steps (each records its checks and the drive goes on, so one run on master shows
   E  Overview, in Chromium. The warning names the spec, the task, the filer and 30 days (E1);
      stopping from it stops the build (E2) and its flow starts nothing further (E3).
 
-The author is walked through the journey as the operator would (answering 'continue' to each
-step; the models question is answered only once asked; approval gaps go back to the author).
+The author is walked through the journey as the operator would, in one conversation (answering
+'continue' to each step; the models question is answered only once asked; approval gaps go back to the author).
 On master it fails at A1/A2/A4 (no tool reads the record; picks carry no reasons), B2 (no
 reasons shown), D1-D5 (the follow-up joins nothing: no reopening, no assignee, the spec reads
 done, no flow starts it) and E1/E2. Whether the master author writes a buildable document varies
@@ -75,8 +75,10 @@ REQUEST = (
     f"{AUTHOR} (you), {STRONG}, {CHEAP} and {CHECKER}. Follow the writing steps, go as far as "
     "submitting the document with a builder, checker and reason on every task. Set the "
     f"document's delivery to a flow run by {STRONG} that stops when its queue empties, and give "
-    "every acceptance criterion a `checked_by` (agent or human): the Hub refuses a criterion "
-    "without one."
+    "every acceptance criterion both a `how_to_check` and a `checked_by` (agent or human): the "
+    "Hub refuses a criterion without either. Order the tasks so the Hub accepts them: the first "
+    "task depends on nothing and every other task has it in `depends_on` (the first is the "
+    "acceptance drive the rest wait on)."
 )
 FLOW_DELIVERY = {"mode": "flow", "agent": STRONG, "builder": STRONG, "checker": CHECKER,
                  "builders": [STRONG, CHEAP], "stop_when_queue_empties": True,
@@ -86,6 +88,7 @@ ANSWER = (
     "know). Read it with your tool, state the sample sizes, then continue and submit the tasks."
 )
 TURN = 8 * 60
+TURNS = 12
 BUILD_LIMIT = 30 * 60
 
 
@@ -111,14 +114,17 @@ def open_questions(run_ids):
     return out
 
 
-def turn(base, message, path):
-    """Triggers the author and waits until its run ends, or until it parks on an ask_user."""
-    code, run = d.api("POST", f"{base}/agent/trigger",
-                      {"agent": AUTHOR, "message": message, "spec_document": path})
+def turn(base, message, path, conversation=None):
+    """Triggers the author, in its conversation once it has one, and waits until its run ends or
+    parks on an ask_user. Returns (run id, conversation id)."""
+    body = {"agent": AUTHOR, "message": message, "spec_document": path}
+    if conversation:
+        body["conversation_id"] = conversation
+    code, run = d.api("POST", f"{base}/agent/trigger", body)
     d.check("setup: the author turn starts", code in (200, 201, 202), f"{code} {run}", fatal=True)
     run_id = run["run_id"]
     d.poll(lambda: finished(run_id) or open_questions([run_id]), TURN, 3)
-    return run_id
+    return run_id, run.get("conversation_id") or conversation
 
 
 def reply(run_id):
@@ -146,6 +152,11 @@ def sources_question(options):
     labels = " ".join(o.get("label", "") for o in options if isinstance(o, dict))
     return bool(re.search(r"web|search", labels, re.I)
                 and re.search(r"record|history|tally|project", labels, re.I))
+
+
+def models_question(text):
+    """A question about which models, agents or builders to use (answered with the sources)."""
+    return bool(re.search(r"model|judge|assign|builder|checker|roster|pick", text or "", re.I))
 
 
 def journey_label(options):
@@ -212,7 +223,8 @@ def seeded():
         return {"key": key, "title": title, "requirements": [key], "files": [file],
                 "description": f"Create {file} holding the single line `{text}`, then move this "
                                "task to completed. Change nothing else.",
-                "builder": builder, "checker": CHECKER}
+                "builder": builder, "checker": CHECKER,
+                "depends_on": [] if key == "schema" else ["schema"]}
     return {
         "schema_version": 1, "kind": "change-spec", "title": DOC_TITLE,
         "summary": "A notes table and a wording change.", "problem": "There are no notes.",
@@ -273,23 +285,30 @@ def drive(state):
     answered = []
     sources_answered = []
 
+    conversation = None
+
     def author_turn(message):
-        """One author turn, answering any ask_user it parks on (through the question's route, as
-        the operator would); the path is re-read by id after, as the author may have renamed."""
-        nonlocal path
-        run_id = turn(base, message, path)
+        """One author turn, in the one conversation, answering any ask_user it parks on (through
+        the question's route, as the operator would); the path is re-read by id after, as the
+        author may have renamed."""
+        nonlocal path, conversation
+        run_id, conversation = turn(base, message, path, conversation)
         runs.append(run_id)
         for _ in range(4):
             pending = open_questions(runs)
             if not pending:
                 break
-            for qid, _text, options, _multi in pending:
-                # The models answer goes only to a question that offers the sources; any other
-                # question (the journey's 'how to proceed') gets its Continue option.
+            for qid, qtext, options, _multi in pending:
+                # A question that offers the sources gets the project's record; any other
+                # question about the models or the roster is answered in words; the journey's
+                # 'how to proceed' gets its Continue option.
                 if sources_question(options):
                     labels = chosen(options)
                     answer = ", ".join(labels) or ANSWER
                     sources_answered.append(qid)
+                elif models_question(qtext):
+                    labels = chosen(options)
+                    answer = ANSWER
                 else:
                     labels = [journey_label(options)]
                     answer = labels[0]
@@ -312,26 +331,23 @@ def drive(state):
     def step_of():
         return (d.ro("select step from spec_documents where id=?", (doc_id,)) or [(None,)])[0][0]
 
-    # Walk the journey as the operator would: answer 'continue' until the author reaches the
-    # tasks step (where it is to ask how to judge the models, FR-13) and then the build step.
-    # The answer to the models question is given only in reply to the ask; an author that has not
-    # asked by the time it stood at the tasks step fails A1 by name, and is then told.
+    # Walk the journey as the operator would, in one conversation: the request goes once, then
+    # 'continue' to each step. The author is to ask how to judge the models at the tasks step
+    # (FR-13); the answer is given only in reply to the ask. An author that has not asked by the
+    # time it stands at the tasks step fails A1 by name, and is then told. The walk is bounded.
     said_all, asked, a1_done, told, message = [], False, False, False, REQUEST
-    first = None
-    for _ in range(12):
+    reached = False
+    for _ in range(TURNS):
         step_before = step_of()
-        # Every turn is a fresh conversation, so the request rides along on each one.
-        run_id = author_turn(message if message == REQUEST
-                             else f"{REQUEST}\n\nThe operator now says: {message}")
-        first = first or run_id
+        run_id = author_turn(message)
         said = reply(run_id)
         said_all.append(said)
         (d.TMP / f"author-turn{len(said_all)}.txt").write_text(said, encoding="utf-8")
         text = "\n".join(said_all)
+        turn_text = "\n".join(c for (c,) in d.ro(
+            "select content from agent_outputs where run_id=? and kind='text'", (run_id,)))
         # Asked only by an ask_user question that offered the sources, or a question sentence.
-        asked = asked or bool(sources_answered) or asks_for_sources(
-            "\n".join(c for (c,) in d.ro(
-                "select content from agent_outputs where run_id=? and kind='text'", (run_id,))))
+        asked = asked or bool(sources_answered) or asks_for_sources(turn_text)
         answered_by_route = bool(sources_answered)
         if not a1_done and (asked or step_before in ("tasks", "build")):
             a1_done = True
@@ -350,6 +366,7 @@ def drive(state):
                 message = f"{ANSWER} Then record what you find in the document and resubmit it."
                 continue
             if buildable(doc):
+                reached = True
                 break
             message = ("The document cannot be built yet: declare its requirements (each with an "
                        "acceptance criterion) and give every task `requirements` naming the keys "
@@ -357,9 +374,13 @@ def drive(state):
         elif step_of() in ("tasks", "build") and len(tasks_now) < 2:
             message = ("Submit the document with both tasks, each with builder, checker and a "
                        "reason for each.")
+        elif not told and asks_for_sources(turn_text):
+            told = True
+            message = f"{ANSWER} Then continue."
         else:
-            message = ("Continue: read the document as it stands, record what the request already "
-                       "settles, and take it to the next step.")
+            message = "Continue: take the document to the next step."
+    d.check(f"A0 the author reached the build step with a buildable document within {TURNS} turns",
+            reached, f"step={step_of()} turns={len(said_all)}")
     if not a1_done:
         d.check("A1 the author asks which sources to judge the models by", asked,
                 "\n".join(said_all)[-600:])
@@ -445,9 +466,8 @@ def drive(state):
                     "approve_anyway.")
     d.check("A8 the document approves on its own, without approve_anyway", code == 200,
             f"{code} {str(out)[:400]}")
-    if code != 200 and "criterion_without_check" in str(out):
-        print("NOTE: approval was refused for a criterion without checked_by: the author left it "
-              "out after the retries. That is the author's omission, not the product's.")
+    if code != 200:
+        print(f"NOTE: approval was refused after the retries; the Hub's gaps: {str(out)[:600]}")
     if code != 200:
         fallback.append("forced")
         code, out = d.api("POST", approve, {"reason": "drive", "approve_anyway": True,
@@ -466,7 +486,13 @@ def drive(state):
                 and "/project/documents/build" in r.url else None)
         page.goto(f"{d.HUB}/?project={pid}&tab=spec&document={quoted.replace('/', '%2F')}",
                   wait_until="domcontentloaded")
-        page.get_by_role("button", name="Build…").first.click(timeout=30000)
+        try:
+            page.get_by_role("button", name="Build…").first.click(timeout=30000)
+        except Exception:  # noqa: BLE001 -- keep what the page showed, then fail as before
+            page.screenshot(path=str(d.TMP / "no-build-button.png"))
+            (d.TMP / "no-build-button.txt").write_text(
+                f"{page.url}\n{page.inner_text('body')[:3000]}", encoding="utf-8")
+            raise
         page.get_by_test_id("build-dialog").wait_for(timeout=10000)
         page.screenshot(path=str(d.TMP / "build_dialog.png"), full_page=True)
         shown = {}
@@ -640,11 +666,13 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Observed 2026-11-01 on master (no implementation; run 19:00:40, artefacts drive1101-recommended-
-# people/190040): 35 passed, 11 failed -- A1, A2, A4, B2, D1-D5, E1, E2. The author was walked to the
-# build step, wrote a buildable document of its own (A3, A5-A9 hold, no seeding) but never asked
-# which sources to judge by (A1), never read a record (A2) and gave no reasons (A4, B2). The finished
-# build ignores the linked follow-up: no reopening, no assignee, the spec shows done, no flow starts it,
-# no Overview warning, nothing to stop. B4 shows a task filed against the spec while its build runs
-# does join it. What a master author writes varies run to run (an earlier run wrote nothing, or
-# stopped at intake), so a run whose document is not buildable is seeded and fails A7-A9 as well.
+# Observed 2026-11-01 on master (no implementation; run 21:18:12, artefacts drive1101-recommended-
+# people/211812): 39 passed, 11 failed -- A1, A2, A4, B2, D1-D5, E1, E2. The author, kept in one
+# conversation, reached the build step in 9 turns (A0) with a buildable document of its own, which
+# approved without approve_anyway (A7-A9 hold, no seeding); it never asked which sources to judge by
+# (A1), never read a record (A2) and gave no reasons (A4, B2). The finished build ignores the linked
+# follow-up: no reopening, no assignee, the spec shows done, no flow starts it, no Overview warning,
+# nothing to stop. B4 shows a task filed against the spec while its build runs does join it. What a
+# master author writes varies run to run, so a run whose document is not buildable is seeded and
+# fails A7-A9 as well, and a walk that runs out of turns fails A0 by name. One earlier run could not
+# find the Build button within 30 s (a slow page load; the drive now keeps a screenshot then).
