@@ -41223,3 +41223,15 @@ The probe now excludes the heap built before its window, which was the suite's. 
 **Tier:** 0
 
 The check run `chk-af888521126e` reported `test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop` as flaky at 598 ms. It was a real hold: the probe's new "seen at" stack put the loop's thread in `Path.mkdir` at `agent_trigger.py:1737` for the whole window, 132 to 412 ms. A separate process reading thread states showed the loop's thread waiting in the kernel. In other failures the loop's thread sat in the same kernel waits while the control thread waited for the GIL, 139 to 324 ms; no stack was seen for those, and they have not recurred since the fix. **Expected:** nothing a turn start writes to disk holds the loop.
+
+## F1119 (B) -- an author is told `ready_to_approve: true` on a document the operator's Approve then stops on
+
+**Status:** open
+**Source:** found by using the spec flow
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+On 2026-11-01, `spec/changes/every-task-comes-with-a-recommended-builder-and-checker` was saved with `blocking: []`, `warnings: []` and `ready_to_approve: true`, and the author told the operator it was ready. Approve then stopped on `criterion_without_check` ×15. `spec_completeness.approval_gaps` (`hub/hub/spec_completeness.py:360`) is kept out of the save result on purpose, and `agent_actions.py:2854` computes `ready_to_approve` from `blocking` alone. The only thing that asks an author for `how_to_check` and `checked_by` is the acceptance step's `spec_journey.missing`, and that is reached only when the document advances; this one sat at `intake`, as its sibling "Tickets have readable ids" did. `submit_spec_document`'s description does not name the two fields either, though the tool's text says `blocking` is what would refuse approval "exactly as the operator's Check shows it".
+
+The cost is an operator round trip on every document an author does not walk through its steps. A gap stays a warning, not a refusal, so the fix is to return the approval gaps in the save result's `warnings` and name the two fields in the tool's description. A test that fails first: save a document with a criterion lacking both fields, and assert the response's `warnings` names `criterion_without_check`.
