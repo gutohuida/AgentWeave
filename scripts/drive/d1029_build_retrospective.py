@@ -298,7 +298,18 @@ def spec_page_shows(base, pid, sent_back):
         page.wait_for_timeout(2500)
         text = page.locator("body").inner_text()
         page.screenshot(path=str(PROFILE / "spec_page.png"), full_page=True)
+        # FR-3 on the real button: the first press fires, the second answers with the Hub's sentence.
+        button = page.get_by_role("button", name="Review this build")
+        button.click()
+        page.get_by_test_id("retro-running").wait_for(timeout=15000)
+        button.click()
+        page.get_by_test_id("retro-refusal").wait_for(timeout=15000)
+        refusal = page.get_by_test_id("retro-refusal").inner_text()
+        running = page.get_by_test_id("retro-running").is_visible()
+        page.screenshot(path=str(PROFILE / "spec_page_pressed.png"), full_page=True)
         browser.close()
+    check("Review this build fires, and a second press answers that one is in progress",
+          running and "in progress" in refusal, refusal)
     check("the spec page shows the retrospective, naming the sent-back task",
           "retrospective" in text.lower() and (sent_back in text or (readable or sent_back) in text),
           f"looked for {sent_back}/{readable}; screenshot {PROFILE / 'spec_page.png'}")
@@ -447,3 +458,5 @@ if __name__ == "__main__":
 # With the job (FSGBR-2), 2026-11-01 (drive8020/20261101-203658): 30 passed, 1 failed, the spec page,
 # which is FSGBR-4's. That run also found Haiku's send-back dropped for citing the document's own
 # requirement beside its transition, fixed in `grounded_cites`.
+# With the spec page (FSGBR-4), 2026-11-01 (drive8020/20261101-222305): 32 passed, 0 failed, the real
+# Review this build button pressed twice among them.

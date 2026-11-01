@@ -1,0 +1,337 @@
+[
+  {
+    "id": "evt-4c820a1d489d",
+    "at": "2026-11-01T20:39:50.035196+00:00",
+    "trigger": "last_task_approved",
+    "model": "claude-haiku-5-5",
+    "outcome": "written",
+    "detail": "Reviewed 2 tasks; 4 claims dropped.",
+    "duration_ms": 34672,
+    "usage": {
+      "input_tokens": 2,
+      "output_tokens": 7135,
+      "cache_read_tokens": 649,
+      "cache_write_tokens": 9568,
+      "cost_usd_micros": 5488
+    },
+    "cost_usd_micros": 5488,
+    "parts": 1,
+    "vault_source": "src-25275c054b4a",
+    "report": {
+      "document": {
+        "id": "spdoc-5edb5c67777f",
+        "path": "spec/changes/hello-file/spec.json",
+        "title": "Hello file"
+      },
+      "parts": 1,
+      "dropped": 4,
+      "where_time_went": {
+        "findings": [
+          {
+            "text": "HF-2 spent about 91 seconds between creation and start, because it was assigned only after HF-1 had cleared its build and review. Its own build took about 36 seconds.",
+            "cites": [
+              "task-61c6308fed73",
+              "ttr-d6754d33b6f3",
+              "ttr-638e601edeb1"
+            ]
+          },
+          {
+            "text": "HF-1's build time covers two Builder runs because of the send-back. The first run completed the file without the requested second line, and the rework run added it.",
+            "cites": [
+              "task-b887d20a47ac",
+              "run-5e866ebcdf98",
+              "run-a6ec66736983"
+            ]
+          },
+          {
+            "text": "No time was spent in the check gate. Every completion recorded that no check ran because the project configures no fast check.",
+            "cites": [
+              "ttr-dcec72d9d28a",
+              "ttr-3016601bd7da",
+              "ttr-1270373dfb9d"
+            ]
+          }
+        ],
+        "per_task": [
+          {
+            "task_id": "task-b887d20a47ac",
+            "readable_id": "HF-1",
+            "title": "Add hello.txt",
+            "status": "approved",
+            "building_seconds": 64.107,
+            "waiting_for_review_seconds": 21.112,
+            "in_check_gate_seconds": 0,
+            "waiting_to_start_seconds": 2.124
+          },
+          {
+            "task_id": "task-61c6308fed73",
+            "readable_id": "HF-2",
+            "title": "Add bye.txt",
+            "status": "approved",
+            "building_seconds": 32.172,
+            "waiting_for_review_seconds": 7.314,
+            "in_check_gate_seconds": 0,
+            "waiting_to_start_seconds": 90.769
+          }
+        ],
+        "totals": {
+          "building_seconds": 96.279,
+          "waiting_for_review_seconds": 28.426,
+          "in_check_gate_seconds": 0,
+          "waiting_to_start_seconds": 92.893
+        }
+      },
+      "send_backs": [
+        {
+          "transition_id": "ttr-2dd8e1645b5d",
+          "task_id": "task-b887d20a47ac",
+          "readable_id": "HF-1",
+          "at": "2026-11-01T20:37:46.786276+00:00",
+          "by": "operator",
+          "run_id": null,
+          "reason_class": "defect",
+          "reason": "hello.txt needs a second line reading `world`. Add it and change nothing else.",
+          "cause": "defect",
+          "cause_from": "reviewer",
+          "explanation": "hello.txt needs a second line reading `world`. Add it and change nothing else.",
+          "cites": [
+            "ttr-2dd8e1645b5d"
+          ]
+        }
+      ],
+      "spec_missed": {
+        "findings": [],
+        "amendments": [],
+        "tasks_added_mid_build": [],
+        "unsatisfiable_criteria": [],
+        "requirements_without_accepted_evidence": [],
+        "reconcile_gaps": []
+      },
+      "staffing": {
+        "findings": [
+          {
+            "text": "The build names a Builder and a Checker, but the per-task builder and checker fields are all null, and no check run was recorded. The build ran with no checker involvement.",
+            "cites": [
+              "build-93cea24d81ce"
+            ]
+          },
+          {
+            "text": "The two tasks ran one after the other on a single Builder. HF-2 was not assigned until HF-1 had left the build and review loop.",
+            "cites": [
+              "task-61c6308fed73",
+              "task-b887d20a47ac"
+            ]
+          }
+        ],
+        "builds": [
+          {
+            "id": "build-93cea24d81ce",
+            "driver": "flow",
+            "level": "reviewed",
+            "people": {
+              "builder": "Builder",
+              "checker": "Checker",
+              "tasks": {
+                "t1": {
+                  "builder": null,
+                  "checker": null
+                },
+                "t2": {
+                  "builder": null,
+                  "checker": null
+                }
+              }
+            }
+          }
+        ],
+        "per_agent": [
+          {
+            "agent": "Builder",
+            "runs": 3,
+            "cost_usd_micros": 28679,
+            "input_tokens": 913566,
+            "output_tokens": 6172,
+            "total_tokens": 919738
+          }
+        ]
+      },
+      "cost": {
+        "findings": [
+          {
+            "text": "The rework run after the send-back cost about as much as the original run on the same task. Both runs are recorded separately, so the extra cost of the send-back is visible per run.",
+            "cites": [
+              "run-5e866ebcdf98",
+              "run-a6ec66736983",
+              "task-b887d20a47ac"
+            ]
+          }
+        ],
+        "per_agent": [
+          {
+            "agent": "Builder",
+            "runs": 3,
+            "cost_usd_micros": 28679,
+            "input_tokens": 913566,
+            "output_tokens": 6172,
+            "total_tokens": 919738
+          }
+        ],
+        "per_task": [
+          {
+            "task_id": "task-b887d20a47ac",
+            "runs": 2,
+            "cost_usd_micros": 20055,
+            "input_tokens": 657106,
+            "output_tokens": 4563,
+            "total_tokens": 661669
+          },
+          {
+            "task_id": "task-61c6308fed73",
+            "runs": 1,
+            "cost_usd_micros": 8624,
+            "input_tokens": 256460,
+            "output_tokens": 1609,
+            "total_tokens": 258069
+          }
+        ],
+        "totals": {
+          "runs": 3,
+          "cost_usd_micros": 28679,
+          "input_tokens": 913566,
+          "output_tokens": 6172,
+          "total_tokens": 919738
+        }
+      },
+      "friction": {
+        "findings": [
+          {
+            "text": "The Builder's tool list did not include submit_checkpoint_notes. The run used update_task notes instead and also wrote a file under .agentweave/calls as a workaround.",
+            "cites": [
+              "run-5e866ebcdf98"
+            ]
+          },
+          {
+            "text": "Both accepted decisions carry the reason `the drive's operator`, which says nothing about why the evidence was accepted.",
+            "cites": [
+              "evr-39e553d15330",
+              "evr-2a2add101e2e"
+            ]
+          },
+          {
+            "text": "HF-1's task notes still say the evidence is `awaiting decision`, but the evidence was first held and later accepted, so the notes are out of date.",
+            "cites": [
+              "task-b887d20a47ac",
+              "ev-39d5235db649",
+              "evr-880dbfc55a13"
+            ]
+          },
+          {
+            "text": "Completions logged that no check ran, so the completion step gives no automated verification in this project.",
+            "cites": [
+              "ttr-dcec72d9d28a",
+              "ttr-3016601bd7da",
+              "ttr-1270373dfb9d"
+            ]
+          }
+        ],
+        "stalls": [],
+        "flaky_send_backs": [],
+        "operator_waits": []
+      },
+      "what_worked": [
+        {
+          "text": "The send-back loop moved from revision_needed to in_progress almost immediately, and the rework run finished in about 42 seconds.",
+          "cites": [
+            "ttr-e444e8ed1a1c",
+            "run-a6ec66736983"
+          ]
+        },
+        {
+          "text": "The Builder stayed in scope. HF-1 changed only hello.txt, and the first run did not pick up HF-2 because the loop briefing said not to.",
+          "cites": [
+            "ev-39d5235db649",
+            "run-5e866ebcdf98"
+          ]
+        },
+        {
+          "text": "HF-2 was built in one run with no send-back, and its evidence was accepted on the first review.",
+          "cites": [
+            "task-61c6308fed73",
+            "ev-15feb12cd692",
+            "run-d25f08654a3c"
+          ]
+        }
+      ],
+      "improvements": [
+        {
+          "label": "code_and_checks",
+          "text": "Configure a fast check for this project so that task completions run an automated verification and no longer log that no check ran.",
+          "cites": [
+            "ttr-dcec72d9d28a",
+            "ttr-3016601bd7da",
+            "ttr-1270373dfb9d"
+          ]
+        },
+        {
+          "label": "staffing_and_running",
+          "text": "Name the Builder and Checker per task when a build is staffed at the reviewed level, and run the checker so the build has a check run.",
+          "cites": [
+            "build-93cea24d81ce",
+            "task-b887d20a47ac"
+          ]
+        },
+        {
+          "label": "tooling",
+          "text": "Make submit_checkpoint_notes available to Builder runs, or document update_task notes as the fallback, so that Builders do not write workaround files under .agentweave/calls.",
+          "cites": [
+            "run-5e866ebcdf98"
+          ]
+        },
+        {
+          "label": "tooling",
+          "text": "Record a meaningful reason on accepted evidence decisions instead of the placeholder `the drive's operator`, and refresh task notes when evidence changes state.",
+          "cites": [
+            "evr-39e553d15330",
+            "evr-2a2add101e2e",
+            "task-b887d20a47ac"
+          ]
+        }
+      ],
+      "lessons": [
+        {
+          "text": "When the project has no fast check configured, completions run no automated verification. Builders should run and record their own verification in the evidence.",
+          "cites": [
+            "ttr-dcec72d9d28a",
+            "ev-cf91ce1ffc71"
+          ]
+        },
+        {
+          "text": "Builders here work one task at a time, so a second task waits until the first has cleared review. Plan timing with that queue in mind.",
+          "cites": [
+            "task-61c6308fed73",
+            "ttr-d6754d33b6f3"
+          ]
+        },
+        {
+          "text": "The checkpoint-notes tool may be absent from a Builder's tool list. If it is, record checkpoint notes in update_task notes and say so in the final message.",
+          "cites": [
+            "run-5e866ebcdf98"
+          ]
+        }
+      ],
+      "transcripts_read": [
+        {
+          "run_id": "run-5e866ebcdf98",
+          "task_id": "task-b887d20a47ac",
+          "agent": "Builder",
+          "flags": [
+            "send_back"
+          ]
+        }
+      ],
+      "nothing": {
+        "spec_missed": "Nothing shows the spec missed anything."
+      }
+    }
+  }
+]
