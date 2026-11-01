@@ -41260,3 +41260,11 @@ On 2026-11-01 `list_tasks` with limit 1000 answered `total: 22` on `proj-d85a82b
 On `proj-d85a82bf4216` since 2026-10-29, `hub-tests` ran 82 times for 29.2 hours: a median of 11.8 minutes with no other check run overlapping (39 runs) and 19.2 with one (43 runs). Its project check has `paths: []`, so it runs on every task. THRI-1, whose declared work is one script under `scripts/drive/`, spent 95 minutes in `hub-tests` over 8 check runs. **Expected:** a task whose changes cannot affect the Hub suite does not wait for it before review, and the suite still runs before work reaches main. Before narrowing `paths`, find which tests under `hub/tests/` read `scripts/` (`test_database_backups.py` does), because a path rule that skips them would let a break through.
 
 **Status:** open 2026-11-01. Measured from `task_check_runs` read-only; no change tried.
+
+## F1123 (C) -- approving a spec that belongs to no roadmap lists every roadmap's unclaimed slices
+
+**Tier:** 0
+
+On 2026-11-01 the operator approved `a-finished-spec-gets-a-build-retrospective`, a standalone spec, and was shown `roadmap_slice_unclaimed` ×5, one per approved roadmap with an unclaimed slice (`hub/hub/spec_service.py:1296`). It does not gate (`NOTE_CODES`, :1319), but it reads like a problem with the spec just approved. Its advice is for an author naming a slice, and it reached the operator at approval. **Expected:** the note goes to the author while writing, not to the operator approving, or is limited to a document whose subject could be one of those slices.
+
+**Status:** open 2026-11-01. Seen once, reported by the operator; not driven.
