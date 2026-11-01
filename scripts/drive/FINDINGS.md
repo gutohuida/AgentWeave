@@ -41235,3 +41235,20 @@ The check run `chk-af888521126e` reported `test_a_turn_start_that_creates_its_ch
 On 2026-11-01, `spec/changes/every-task-comes-with-a-recommended-builder-and-checker` was saved with `blocking: []`, `warnings: []` and `ready_to_approve: true`, and the author told the operator it was ready. Approve then stopped on `criterion_without_check` ×15. `spec_completeness.approval_gaps` (`hub/hub/spec_completeness.py:360`) is kept out of the save result on purpose, and `agent_actions.py:2854` computes `ready_to_approve` from `blocking` alone. The only thing that asks an author for `how_to_check` and `checked_by` is the acceptance step's `spec_journey.missing`, and that is reached only when the document advances; this one sat at `intake`, as its sibling "Tickets have readable ids" did. `submit_spec_document`'s description does not name the two fields either, though the tool's text says `blocking` is what would refuse approval "exactly as the operator's Check shows it".
 
 The cost is an operator round trip on every document an author does not walk through its steps. A gap stays a warning, not a refusal, so the fix is to return the approval gaps in the save result's `warnings` and name the two fields in the tool's description. A test that fails first: save a document with a criterion lacking both fields, and assert the response's `warnings` names `criterion_without_check`.
+
+
+## F1120 (B) -- an agent's list_tasks returns only the tasks with no spec, while calling itself the whole ledger
+
+**Tier:** 0
+
+On 2026-11-01 `list_tasks` with limit 1000 answered `total: 22` on `proj-d85a82bf4216`, whose `tasks` table on :8000 holds 136 rows: 22 with `spec_document_id` NULL and 114 with one. The 22 returned were exactly the NULL rows, so the running build's ETCRB tasks were not listed and `has_more` was false. `list_shared_tasks` (`hub/hub/api/v1/agent_actions.py:302`) passes `spec_document_id=None` to `list_tasks`, which appears to read None as "no spec" rather than "no filter"; the filter itself was not read. **Expected:** the tool returns every task in the project, spec-bound ones included. A test that fails first: a project with one bound and one unbound task lists both through the agent route.
+
+**Status:** open 2026-11-01. Measured by comparing the tool's answer with a read-only query.
+
+## F1121 (B) -- two drives share :8010, so running two builds together can test the wrong checkout or kill the other's Hub
+
+**Tier:** 0
+
+`scripts/drive/d1029_build_plan_in_spec.py:56` fixes `PORT = 8010`, and `start_hub` (:143) reuses any Hub answering there; the database can be moved with `AW_DRIVE_DB`, the port cannot. A drive that started the Hub stops it when it ends (`stop_hub`, :171). `d1101_recommended_people.py` imports these helpers. With two builds running, the second drive tests the first task's checkout, and the first drive's end kills the Hub under the second. Read, not run: no two builds have ever overlapped on this project (0 pairs of 9 builds on :8000). **Expected:** a drive's Hub is started from its own checkout on its own port and database, and a drive never reuses a Hub it cannot show came from its checkout.
+
+**Status:** open 2026-11-01. Found assessing whether a second build can run beside a first.
