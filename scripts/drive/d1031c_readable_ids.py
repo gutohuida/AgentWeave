@@ -10,7 +10,8 @@ A flow build of one task on a spec titled "Note file". Written first: on master 
      matches nothing empties the board, the card shows the readable id, and the task's own drawer
      shows both ids
   4  every task tool is called with the lower-case readable id (get_task, task_history, update_task,
-     hand_out_task, send_message task_id, create_task depends_on) and each acts on the same task.
+     hand_out_task, send_message task_id, create_task depends_on, record_evidence task_id, whose
+     stored row must carry the stored id) and each acts on the same task.
      and mend_task_branch / mend_reset_task, as the Hub's mender agent, which the drive makes by
      turning the Manager's mender job on (PATCH /manager/jobs/mender, stalls.ensure_mender)
   5  the spec is renamed and the task still reads the same readable id
@@ -224,6 +225,17 @@ def main():
         d.check("4 tool create_task takes the readable id as a prerequisite",
                 code in (200, 201) and [p.get("id") for p in deps or []] == [task],
                 f"{code} prerequisites {deps}, wanted [{task}]")
+
+        # record_evidence takes a task id too, and evidence is what lets work merge: the row it
+        # writes must carry the stored id, not the readable one it was given
+        code, out = d.as_agent(pid, B, "POST", "/spec/evidence",
+                               {"identifier": "FR-1", "document": DOC, "task_id": ref,
+                                "summary": "drive: evidence recorded by readable id"})
+        rows = d.ro("select task_id from requirement_evidence where summary=?",
+                    ("drive: evidence recorded by readable id",))
+        d.check("4 tool record_evidence stores this task's id",
+                code in (200, 201) and [r[0] for r in rows] == [task],
+                f"{code} {str(out)[:200]}; stored task_id {[r[0] for r in rows]} wanted [{task}]")
 
         # the mender's two tools: turn the Manager's mender job on (which makes the mender agent),
         # then call both as it, by readable id
