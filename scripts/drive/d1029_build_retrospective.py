@@ -271,7 +271,7 @@ def firings(base):
 def retrospectives(base):
     """The document's retrospectives, newest first, as its spec page reads them. CONTRACT."""
     quoted = urllib.parse.quote(DOC)
-    code, out = api("GET", f"{base}/project/documents/retrospectives?path={quoted}")
+    code, out = api("GET", f"{base}/manager/jobs/build-retrospective/retrospectives?path={quoted}")
     return code, (out.get("retrospectives", []) if code == 200 and isinstance(out, dict) else out)
 
 
@@ -443,7 +443,7 @@ if __name__ == "__main__":
     main()
 
 # Observed on 6cee437 (before the job exists), 2026-11-01, on :8020 (artefacts
-# drive8020/20261101-195501): 20 passed, 2 failed. All setup and the real flow held: Builder worked t1,
-# the operator sent it back, Builder worked it again, both tasks landed. The two failures are the
-# missing job: PATCH /manager/jobs/build-retrospective answers 404, and no manager_job_fired event
-# appeared within 300s of the last approval. The checks after that one have not run yet.
+# drive8020/20261101-195501): 20 passed, 2 failed, both the missing job.
+# With the job (FSGBR-2), 2026-11-01 (drive8020/20261101-203658): 30 passed, 1 failed, the spec page,
+# which is FSGBR-4's. That run also found Haiku's send-back dropped for citing the document's own
+# requirement beside its transition, fixed in `grounded_cites`.
