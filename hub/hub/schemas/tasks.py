@@ -6,6 +6,7 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
+from ..readable_id_shape import is_readable_shaped
 from ..route_words import task_route_word
 from .common import RequestModel
 
@@ -26,6 +27,10 @@ def check_task_id(value: str) -> str:
     """
     if not _TASK_ID_RE.match(value):
         raise ValueError("id must be a safe task identifier")
+    if is_readable_shaped(value):
+        # It could shadow a real readable id (`tickets-have-readable-ids`, FR-8). Leave id out and
+        # the Hub mints both.
+        raise ValueError(f"id '{value}' has the shape of a readable task id, which the Hub mints")
     refusal = task_route_word(value)
     if refusal is not None:
         raise ValueError(refusal)
@@ -293,6 +298,7 @@ class TaskDependencyRef(BaseModel):
     (task 8.7) rather than a bare title with nowhere to point."""
 
     id: str = Field(max_length=64)
+    readable_id: Optional[str] = Field(default=None, max_length=32)
     title: str = Field(max_length=256)
     status: str = Field(max_length=32)
     spec_document_id: Optional[str] = Field(default=None, max_length=128)
@@ -331,6 +337,8 @@ class TaskIntegrationSummary(BaseModel):
 
 class TaskResponse(BaseModel):
     id: str = Field(max_length=128)
+    # `BPS-3` (`readable_ids`), what a person calls this task; `id` stays what everything references.
+    readable_id: Optional[str] = Field(default=None, max_length=32)
     project_id: str = Field(max_length=128)
     title: str = Field(max_length=256)
     description: str = Field(max_length=10000)

@@ -15,6 +15,7 @@ from typing import Any, Optional
 from sqlalchemy import Table, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import readable_ids
 from .db.models import RUNNER_CLIS, Base, Charter, DeletedProject, Project, Run, Runner
 from .project_workspace import (
     PROJECT_MARKER_PATH,
@@ -413,6 +414,9 @@ class ProjectLifecycleService:
         return projects[0] if len(projects) == 1 else None
 
     async def _seed_new_project(self, project: Project) -> None:
+        project.acronym = await readable_ids.derive(
+            self.session, project.id, project.name or "", readable_ids.PROJECT_FALLBACK
+        )
         for cli in RUNNER_CLIS:
             self.session.add(
                 Runner(

@@ -180,7 +180,7 @@ async def test_the_lead_is_briefed_and_hands_out_the_work(app, auth_headers, bin
 
     briefs = await _briefs()
     assert len(briefs) == 1, "one brief when the build starts"
-    assert all(task.id in briefs[0].content for task in (await _tasks()).values())
+    assert all(task.readable_id in briefs[0].content for task in (await _tasks()).values())
     assert "reviewed" in briefs[0].content and "dev" in briefs[0].content
     await _tick()
     assert len(await _briefs()) == 1, "no second brief over an unread one"

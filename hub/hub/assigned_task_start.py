@@ -142,7 +142,7 @@ def _briefing(task: Any) -> str:
     from .scheduler import _briefing_completion_lines
 
     lines = [
-        f"Work task {task.id} ('{task.title}'): it is assigned to you.",
+        f"Work task {task.display_id} ('{task.title}'): it is assigned to you.",
         "",
     ]
     if (task.description or "").strip():
@@ -185,7 +185,7 @@ async def _queue(
             agent=task.assignee,
             origin="peer" if origin_agent else "operator",
         )
-        name_conversation(conversation, f"Task {task.id}: {task.title}"[:120])
+        name_conversation(conversation, f"Task {task.display_id}: {task.title}"[:120])
         session.add(conversation)
         await inherit_runtime_overrides(session, conversation)
         await session.flush()

@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
+from typing import Annotated, Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -15,6 +15,7 @@ from ... import (
     dependency_gate,
     loop_history,
     project_workspace,
+    readable_ids,
     spec_identity,
     spec_lifecycle,
     spec_reading,
@@ -91,6 +92,29 @@ from ...task_transitions import (
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+async def _operator_task_id(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> str:
+    """The stored id a path's task names (`readable_ids.resolve`): the one door to the routes below,
+    so nothing past it sees a readable id. `test_tickets_have_readable_ids` fails a route without.
+    """
+    return await readable_ids.resolve(session, project[0], task_id)
+
+
+async def _operator_prerequisite_id(
+    depends_on: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> str:
+    return await readable_ids.resolve(session, project[0], depends_on)
+
+
+OperatorTaskId = Annotated[str, Depends(_operator_task_id)]
+OperatorPrerequisiteId = Annotated[str, Depends(_operator_prerequisite_id)]
 
 
 def _task_response(
@@ -295,6 +319,7 @@ async def _attach_dependencies(
     known = {
         response.id: {
             "id": response.id,
+            "readable_id": response.readable_id,
             "title": response.title,
             "status": response.status,
             "spec_document_id": response.spec_document_id,
@@ -303,13 +328,14 @@ async def _attach_dependencies(
     }
     if other_ids:
         other_rows = await session.execute(
-            select(Task.id, Task.title, Task.status, Task.spec_document_id).where(
+            select(Task.id, Task.readable_id, Task.title, Task.status, Task.spec_document_id).where(
                 Task.id.in_(other_ids)
             )
         )
-        for other_id, title, other_status, other_document_id in other_rows:
+        for other_id, other_readable, title, other_status, other_document_id in other_rows:
             known[other_id] = {
                 "id": other_id,
+                "readable_id": other_readable,
                 "title": title,
                 "status": other_status,
                 "spec_document_id": other_document_id,
@@ -809,6 +835,11 @@ async def _check_prerequisites(session: AsyncSession, project_id: str, body: Tas
     wanted = list(dict.fromkeys(body.depends_on or []))
     if not wanted:
         return
+    # Named however the caller knows them; the edges and every read after hold the stored id.
+    wanted = list(
+        dict.fromkeys([await readable_ids.resolve(session, project_id, w) for w in wanted])
+    )
+    body.depends_on = wanted
     if body.id and body.id in wanted:
         raise HTTPException(
             status_code=422, detail=f"A task cannot depend on itself ('{body.id}')."
@@ -916,6 +947,7 @@ async def create_task_for_actor(
     task_id = body.id or f"task-{short_id()}"
     task = Task(
         id=task_id,
+        readable_id=await readable_ids.mint(session, project_id, spec_document_id),
         project_id=project_id,
         title=body.title,
         description=body.description,
@@ -1233,7 +1265,7 @@ async def task_boards(
 
 @router.get("/{task_id}/integrations")
 async def task_integrations(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1252,7 +1284,7 @@ async def task_integrations(
 
 @router.get("/{task_id}/integration-preview")
 async def task_integration_preview(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1473,7 +1505,7 @@ async def _integration_view(session: AsyncSession, task_id: str) -> dict:
 
 @router.get("/{task_id}/checks")
 async def task_checks(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1517,7 +1549,7 @@ class LandHeldRequest(RequestModel):
 
 @router.post("/{task_id}/landing/land")
 async def land_held_landing(
-    task_id: str,
+    task_id: OperatorTaskId,
     body: LandHeldRequest,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
@@ -1554,7 +1586,7 @@ async def land_held_landing(
 
 @router.post("/{task_id}/checks/run", status_code=202)
 async def run_task_checks(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1571,7 +1603,7 @@ async def run_task_checks(
 
 @router.post("/{task_id}/integrations/retry")
 async def retry_task_integration(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1614,7 +1646,7 @@ async def retry_task_integration(
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -1677,7 +1709,7 @@ async def delete_task(
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -2286,7 +2318,7 @@ async def _commit_and_render(
 
 @router.patch("/{task_id}", response_model=TaskResponse)
 async def update_task(
-    task_id: str,
+    task_id: OperatorTaskId,
     body: TaskUpdate,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
@@ -2311,7 +2343,7 @@ _REASSIGN_RETURNS_TO_ASSIGNED = ("pending", "in_progress", "blocked")
 
 @router.post("/{task_id}/reassign", response_model=TaskResponse)
 async def reassign_task(
-    task_id: str,
+    task_id: OperatorTaskId,
     body: ReassignRequest,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
@@ -2399,7 +2431,7 @@ class LandRequest(RequestModel):
 
 @router.post("/{task_id}/land", response_model=TaskResponse)
 async def land_task(
-    task_id: str,
+    task_id: OperatorTaskId,
     body: Optional[LandRequest] = None,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
@@ -2548,7 +2580,7 @@ def _transition_view(
 
 @router.get("/{task_id}/story")
 async def task_story(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -2570,7 +2602,7 @@ async def task_story(
 
 @router.get("/{task_id}/moves")
 async def task_moves(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -2640,7 +2672,7 @@ async def _reviewers_for(session: AsyncSession, task: Task, actor: Actor) -> Lis
 
 @router.get("/{task_id}/transitions")
 async def task_transitions(
-    task_id: str,
+    task_id: OperatorTaskId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -2740,7 +2772,7 @@ class DependencyRequest(RequestModel):
 
 @router.post("/{task_id}/dependencies", status_code=status.HTTP_201_CREATED)
 async def add_task_dependency(
-    task_id: str,
+    task_id: OperatorTaskId,
     body: DependencyRequest,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
@@ -2759,6 +2791,7 @@ async def add_task_dependency(
     "invalid" tries the same thing again.
     """
     project_id, _ = project
+    body.depends_on = await readable_ids.resolve(session, project_id, body.depends_on)
     outcome = await task_dependency_writer.add_dependency(
         session, project_id, task_id, body.depends_on
     )
@@ -2807,8 +2840,8 @@ async def add_task_dependency(
 
 @router.delete("/{task_id}/dependencies/{depends_on}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_task_dependency(
-    task_id: str,
-    depends_on: str,
+    task_id: OperatorTaskId,
+    depends_on: OperatorPrerequisiteId,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):

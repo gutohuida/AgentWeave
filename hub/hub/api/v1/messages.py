@@ -92,7 +92,8 @@ async def create_message_for_actor(
         # Validated here, at the moment of the call, rather than at spawn. A task the sender cannot
         # see is a mistake worth learning about in the tool result they are already reading — not
         # through a run that quietly starts unbound and is never checked at its boundary.
-        await resolve_task_for_project(session, body.task_id, project_id)
+        # What is stored is the stored id, however the sender named the task.
+        body.task_id = (await resolve_task_for_project(session, body.task_id, project_id)).id
     msg = Message(
         id=f"msg-{short_id()}",
         project_id=project_id,

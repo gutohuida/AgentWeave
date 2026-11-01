@@ -385,7 +385,7 @@ async def turn_lines(session: AsyncSession, task_id: Optional[str]) -> List[str]
         f"- Build `{build.id}` ({state}), as the operator chose it when they pressed Build: "
         f"driver **{build.driver}**, level **{build.level}**. The document's `delivery` is the "
         "author's recommendation; where the two differ, this is the decision.",
-        f"- `{task.id}`'s builder: **{builder or 'none named'}**; its checker: "
+        f"- `{task.display_id}`'s builder: **{builder or 'none named'}**; its checker: "
         f"**{checker or 'none named'}**.",
         "",
     ]
@@ -913,7 +913,7 @@ async def compose_brief(session: AsyncSession, build: Build, title: str) -> str:
         named = checker_of(build, task)
         checker = named[0] if named is not None else None
         lines.append(
-            f"- {task.id} [{task.status}] {task.title} (held by {holder}; builder "
+            f"- {task.display_id} [{task.status}] {task.title} (held by {holder}; builder "
             f"{task.builder or 'none named'}, checker {checker or 'none named'})"
         )
     if not open_tasks:
@@ -1111,7 +1111,7 @@ async def hand_out(
     session.add(conversation)
     await inherit_runtime_overrides(session, conversation)
     await session.flush()
-    content = f"The lead ({caller}) hands you task {task.id}, {task.title!r}, to " + (
+    content = f"The lead ({caller}) hands you task {task.display_id}, {task.title!r}, to " + (
         "review: judge the finished work and move it on." if review else "build."
     )
     entry = new_entry(

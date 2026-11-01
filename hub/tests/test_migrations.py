@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0157"
+HEAD_REVISION = "0158"
 
 
 # ---------------------------------------------------------------------------
@@ -4912,13 +4912,15 @@ def test_migration_0121_lets_a_capability_be_archived_and_downgrades_it_to_curre
 
 
 def _database_at_0121(tmp_path, name: str) -> tuple:
-    """Every table from the models, minus what 0122 adds, stamped at 0121."""
+    """Every table from the models, minus what 0122 and later add to this table, stamped at 0121."""
     db_file = tmp_path / name
     db_url = f"sqlite+aiosqlite:///{db_file}"
     _run(_create_all_at(db_url))
     with sqlite3.connect(db_file) as conn:
         conn.execute("ALTER TABLE spec_documents DROP COLUMN step")
         conn.execute("ALTER TABLE spec_documents DROP COLUMN size")
+        conn.execute("ALTER TABLE spec_documents DROP COLUMN acronym")
+        conn.execute("ALTER TABLE spec_documents DROP COLUMN acronym_chosen")
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0121')")
         conn.commit()

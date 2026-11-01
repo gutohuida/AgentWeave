@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import readable_ids
 from .db.models import SPEC_KINDS, SpecDocument, SpecDocumentEvent
 from .utils import short_id
 
@@ -249,6 +250,7 @@ async def create_document(
         phase=phase,
         # A new change starts its journey at intake, size unknown (`spec_journey`, FR-1).
         step=INTAKE_STEP if kind == "change-spec" and phase == EXPLORING else None,
+        acronym=await readable_ids.derive(session, project_id, title, readable_ids.SPEC_FALLBACK),
     )
     session.add(document)
     await session.flush()
@@ -285,7 +287,10 @@ async def record_content(
     accepter identity, and `SpecDocumentEvent.actor` staying "who wrote the file" — the accepter, for
     an accepted proposal, consistent with every other content-write event — needs no schema change.
     """
+    retitled = document.title != title
     document.title = title
+    if retitled:
+        await readable_ids.follow_title(session, document)
     document.content_digest = digest(content)
     document.requirement_digests = dict(digests)
     detail: Dict[str, Any] = {"requirements": sorted(digests)}

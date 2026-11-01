@@ -3969,7 +3969,7 @@ def _briefing_completion_lines(task: Task, *, is_flow: bool) -> list[str]:
     """
 
     def move(status: str) -> str:
-        return f'`update_task("{task.id}", status="{status}")`'
+        return f'`update_task("{task.display_id}", status="{status}")`'
 
     sentence = "**Finishing means moving the task.**"
     if task.status == "in_progress":

@@ -731,7 +731,7 @@ def _record(
             cause=cause,
             subject=task.id,
             text=(
-                f"{task.id} ({task.title!r}) was approved, but its merge into "
+                f"{task.display_id} ({task.title!r}) was approved, but its merge into "
                 f"{result.target_branch or 'the main branch'} {result.outcome}: "
                 f"{(result.reason or '').strip()[:1500]}"
             ),

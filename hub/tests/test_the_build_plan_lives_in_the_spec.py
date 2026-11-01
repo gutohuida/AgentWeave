@@ -412,7 +412,7 @@ async def test_agent_reads_the_build_apart_from_delivery_and_its_turn_names_it(
     context = rendered["context"]
     assert "### The build this task belongs to" in context
     assert f"Build `{build_id}`" in context and "driver **hand**" in context
-    assert f"`{t1.id}`'s builder: **Architect**; its checker: **QA**" in context
+    assert f"`{t1.readable_id}`'s builder: **Architect**; its checker: **QA**" in context
 
 
 # ---------------------------------------------------------------------------------------------

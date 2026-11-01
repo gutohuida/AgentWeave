@@ -77,6 +77,9 @@ class ReviewContext:
     def work_moved(self) -> bool:
         return bool(self.earlier_commits)
 
+    #: `BPS-3`, what the prompt names the task by.
+    task_readable_id: Optional[str] = None
+
 
 @dataclass
 class ReviewerResolution:
@@ -741,6 +744,7 @@ async def prepare_review_turn(
 
     return ReviewContext(
         task_id=task_id,
+        task_readable_id=task.readable_id,
         task_title=task.title,
         reviewer=reviewer,
         commit_sha=target.commit_sha,

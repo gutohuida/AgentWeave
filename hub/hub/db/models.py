@@ -103,6 +103,8 @@ class Project(Base):
     # Deliberately not a ForeignKey: `runners.project_id` already points here, and closing the
     # loop would make the two tables unsortable for DDL. Validated where it is set instead.
     conversation_title_runner_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # What a task with no spec is named by (`readable_ids`). Null only on a row nothing has named yet.
+    acronym: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
 
     # --- Integration ---
     # The branch approval merges into. Null means "not chosen", which is not an error: nothing
@@ -739,10 +741,28 @@ class InboundQueueEntry(Base):
     )
 
 
+class AcronymCounter(Base):
+    """An acronym held in a project, and the last number minted under it (`readable_ids`).
+
+    Kept when the task or the document goes, because a number is never used again. Not a foreign key
+    for the reason on `Task.spec_document_id`; project deletion clears it as project-scoped.
+    """
+
+    __tablename__ = "acronym_counters"
+
+    project_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    acronym: Mapped[str] = mapped_column(String(5), primary_key=True)
+    high_water: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # `BPS-3` (`readable_ids`): minted once at creation and never changed. Nullable only because a
+    # column cannot be added NOT NULL without rebuilding this table (migration 0158). Unique per
+    # project, not globally: two projects can each have a BPS-3.
+    readable_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
@@ -847,6 +867,7 @@ class Task(Base):
     # would make 0056 irreversible. The values are declared in `run_task_binding.py` and validated
     # on the way in.
     __table_args__ = (
+        Index("uq_tasks_project_readable_id", "project_id", "readable_id", unique=True),
         Index("ix_tasks_project_status", "project_id", "status"),
         Index("ix_tasks_project_assignee", "project_id", "assignee"),
         # One task per declared key per document. This is the constraint, not a convention: it is
@@ -863,6 +884,11 @@ class Task(Base):
             unique=True,
         ),
     )
+
+    @property
+    def display_id(self) -> str:
+        """What a prompt or message calls this task: the readable id, on a row that has one."""
+        return self.readable_id or self.id
 
 
 class TaskTransition(Base):
@@ -2470,6 +2496,13 @@ class SpecDocument(Base):
     # so a project-defined journey needs no table recreate.
     step: Mapped[Optional[str]] = mapped_column(String(48), nullable=True)
     size: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # What this document's tasks are named by (`readable_ids`), derived from the title and editable
+    # until its first task exists. `acronym_chosen` is the operator having edited it: a title change
+    # re-derives an acronym the Hub picked and leaves theirs alone.
+    acronym: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+    acronym_chosen: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
