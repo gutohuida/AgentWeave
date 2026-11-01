@@ -654,7 +654,8 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
         if task is not None:
             lines += [
                 "",
-                f"## The task {task.id}",
+                f"## The task {task.display_id}",
+                f"Stored id: {task.id}",
                 f"Title: {task.title}",
                 f"Status: {task.status}; assignee: {task.assignee or 'nobody'}",
                 f"Branch: {worktrees.task_branch_name(task.id)}",
@@ -667,7 +668,7 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
             for dep in deps:
                 other = await db.get(Task, dep.depends_on_task_id)
                 if other is not None:
-                    lines.append(f"Depends on {other.id} ({other.title!r}): {other.status}")
+                    lines.append(f"Depends on {other.display_id} ({other.title!r}): {other.status}")
             integrations = (
                 (
                     await db.execute(
@@ -710,8 +711,15 @@ async def brief(db: AsyncSession, stall: Stall) -> str:
     )
     if refused:
         lines += ["", "## Input waiting in agents' queues"]
+        named_ids = {entry.task_id for entry in refused if entry.task_id}
+        readable = dict(
+            (
+                await db.execute(select(Task.id, Task.readable_id).where(Task.id.in_(named_ids)))
+            ).all()
+        )
         for entry in refused:
-            lines.append(f"{entry.id} for {entry.agent} (task {entry.task_id or '-'})")
+            named = readable.get(entry.task_id) or entry.task_id or "-"
+            lines.append(f"{entry.id} for {entry.agent} (task {named})")
     if root is not None:
         main = (project.main_branch if project else None) or "the main branch"
         lines += [
@@ -846,7 +854,7 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
             cause="stuck_task",
             subject=task.id,
             text=(
-                f"{task.id} ({task.title!r}) has been in progress since {updated:%H:%M} UTC with "
+                f"{task.display_id} ({task.title!r}) has been in progress since {updated:%H:%M} UTC with "
                 f"no run working it."
             ),
             task_id=task.id,

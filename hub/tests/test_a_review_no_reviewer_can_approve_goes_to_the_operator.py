@@ -283,12 +283,13 @@ async def test_the_flow_says_the_approval_waits_on_the_operator(
         task = await db.get(Task, task_id)
         task.title = "T" * 300
         task.loop_id = loop.id
+        readable = task.readable_id
         await db.commit()
         decision = await decide_firing(db, await db.get(Loop, loop.id), default_agent=GAMMA)
 
     assert decision.kind == DECISION_STALLED, decision
     reason = decision.stall_reason
-    assert reason.startswith(f"Approval of {task_id}")
+    assert readable and reason.startswith(f"Approval of {readable}")
     assert "accept or reject the evidence" in reason
     assert "Ask beta again" not in reason
     assert len(reason) <= 500

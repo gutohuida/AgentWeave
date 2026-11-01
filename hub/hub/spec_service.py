@@ -17,6 +17,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import (
+    readable_ids,
     requirement_coverage,
     requirement_links,
     spec_completeness,
@@ -1006,6 +1007,7 @@ async def rename_document(
     # placeholder in place meant every surface that lists documents showed a name contradicting the
     # document's own location until some later save happened to correct it.
     document.title = subject.strip() or document.title
+    await readable_ids.follow_title(session, document)
     await _repoint_pending_input(session, document.project_id, previous_path, new_path)
     spec_documents.move_document(workspace, previous_path, new_path)
     # F742: the file's own title follows the row's. The index is built from the row and the

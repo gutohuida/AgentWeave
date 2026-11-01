@@ -2170,6 +2170,7 @@ async def _render_hub_agent_context(
     spec_document: Optional[str] = None,
     task_spec_document: Optional[str] = None,
     task_id: Optional[str] = None,
+    task_readable_id: Optional[str] = None,
     review: Optional[ReviewContext] = None,
     access_path: str = "mcp",
     runner: Optional[str] = None,
@@ -2298,7 +2299,8 @@ async def _render_hub_agent_context(
                 "own.**"
             )
             lines.append(
-                f"- Under review: task `{review.task_id}` — {review.task_title}, at commit "
+                f"- Under review: task `{review.task_readable_id or review.task_id}` — "
+                f"{review.task_title}, at commit "
                 f"`{review.commit_sha}`"
                 + (f" from branch `{review.branch}`." if review.branch else ".")
             )
@@ -2483,8 +2485,13 @@ async def _render_hub_agent_context(
 
         lines.append("### The specification this task implements")
         if task_id:
+            bound = (
+                f"`{task_readable_id}` (stored id `{task_id}`)"
+                if task_readable_id
+                else (f"`{task_id}`")
+            )
             lines.append(
-                f"- This turn is bound to `{task_id}`, which implements `{task_spec_document}`."
+                f"- This turn is bound to {bound}, which implements `{task_spec_document}`."
             )
         else:
             lines.append(f"- The task you are working on implements `{task_spec_document}`.")

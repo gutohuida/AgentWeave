@@ -17,7 +17,7 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import trace_export, trace_retention, traces
+from ... import readable_ids, trace_export, trace_retention, traces
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Run, TraceSettings
@@ -62,6 +62,7 @@ async def list_project_traces(
         if run_id:
             query = query.where(Run.id == run_id)
         if task_id:
+            task_id = await readable_ids.resolve(session, project_id, task_id)
             query = query.where(Run.task_id == task_id)
         if conversation_id:
             query = query.where(Run.conversation_id == conversation_id)

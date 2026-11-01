@@ -112,7 +112,10 @@ async def test_take_queues_once_in_a_new_conversation_with_the_outcomes(
     (entry,) = await _queued("architect")
     assert await _queued("planner") == []
     assert entry.origin_type == "operator" and entry.spec_document == offer["roadmap"]
-    assert f"`{task_id}`" in entry.content and ": rejected" in entry.content
+    async with async_session_factory() as session:
+        readable_id = (await session.get(Task, task_id)).readable_id
+    assert readable_id and task_id not in entry.content
+    assert f"`{readable_id}`" in entry.content and ": rejected" in entry.content
     assert "no merge into the main branch is recorded" in entry.content
     assert "s2" in entry.content and "Slice two" in entry.content
     async with async_session_factory() as session:

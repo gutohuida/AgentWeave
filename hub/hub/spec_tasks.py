@@ -40,6 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from . import (
     builds,
     loop_history,
+    readable_ids,
     requirement_links,
     spec_identity,
     spec_reading,
@@ -409,6 +410,7 @@ async def materialise(
         criteria = _criteria_for_entry(names, criteria_index, position)
         task = Task(
             id=f"task-{short_id()}",
+            readable_id=await readable_ids.mint(session, document.project_id, document.id),
             project_id=document.project_id,
             title=_title_for(entry),
             description=description,

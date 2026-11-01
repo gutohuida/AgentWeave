@@ -42,7 +42,7 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from . import traces
 from .repo_hygiene import seed_repo_excludes
@@ -853,8 +853,17 @@ def unresolved_merge_paths(worktree: Path) -> List[str]:
     return sorted({p for p in [*unmerged, *marked] if p})
 
 
+def _named(task_id: str, names: Optional[Mapping[str, str]]) -> str:
+    """How a commit message names a task: `names` holds what the Hub layer knows of it, because this
+    module reads no database. A task it does not name is named by its stored id."""
+    return (names or {}).get(task_id, task_id)
+
+
 def _merge_prerequisites(
-    worktree: Path, task_id: str, prerequisites: Tuple[Tuple[str, str], ...]
+    worktree: Path,
+    task_id: str,
+    prerequisites: Tuple[Tuple[str, str], ...],
+    names: Optional[Mapping[str, str]] = None,
 ) -> None:
     """Bring each `(prerequisite task, commit)` not already reachable from *worktree*'s HEAD into it.
 
@@ -898,7 +907,7 @@ def _merge_prerequisites(
             "merge",
             "--no-ff",
             "-m",
-            f"Bring in prerequisite work {sha[:12]} ({prerequisite_id})",
+            f"Bring in prerequisite work {sha[:12]} ({_named(prerequisite_id, names)})",
             sha,
             check=False,
         )
@@ -918,7 +927,10 @@ def _merge_prerequisites(
 
 
 def _catch_up_prerequisites(
-    worktree: Path, task_id: str, approved: Sequence[Tuple[str, str]]
+    worktree: Path,
+    task_id: str,
+    approved: Sequence[Tuple[str, str]],
+    names: Optional[Mapping[str, str]] = None,
 ) -> None:
     """Bring into an **existing** task branch the approved prerequisites' commits it lacks (F158).
 
@@ -967,7 +979,10 @@ def _catch_up_prerequisites(
         snapshot_worktree(
             worktree,
             task_id,
-            message=f"Auto-snapshot: {task_id}, before bringing in approved prerequisite work",
+            message=(
+                f"Auto-snapshot: {_named(task_id, names)}, "
+                "before bringing in approved prerequisite work"
+            ),
         )
 
     for prerequisite_id, sha in missing:
@@ -982,7 +997,7 @@ def _catch_up_prerequisites(
                 "merge",
                 "--no-ff",
                 "-m",
-                f"Bring in approved prerequisite work {sha[:12]} ({prerequisite_id})",
+                f"Bring in approved prerequisite work {sha[:12]} ({_named(prerequisite_id, names)})",
                 sha,
                 check=False,
             )
@@ -1078,19 +1093,25 @@ def unmerged_prerequisites(
     return found
 
 
-def prerequisite_merge_note(task_id: str, pending: Sequence[UnmergedPrerequisite]) -> str:
+def prerequisite_merge_note(
+    task_id: str,
+    pending: Sequence[UnmergedPrerequisite],
+    names: Optional[Mapping[str, str]] = None,
+) -> str:
     """The sentence a turn's prompt carries for *pending* (F695): what to merge, and that it is
     this turn's work before anything else, since approval waits for it."""
     pieces = []
     for entry in pending:
         piece = (
-            f"`git merge --no-ff {entry.commit_sha}` (the approved work of {entry.prerequisite_id}"
+            f"`git merge --no-ff {entry.commit_sha}` "
+            f"(the approved work of {_named(entry.prerequisite_id, names)}"
         )
         if entry.paths:
             piece += ", conflicting in " + ", ".join(entry.paths[:10])
         pieces.append(piece + ")")
     return (
-        f"[AgentWeave] Approved work that {task_id} depends on is not on this task's branch yet, "
+        f"[AgentWeave] Approved work that {_named(task_id, names)} depends on is not on this "
+        "task's branch yet, "
         "because merging it conflicts with work already here; it was left for you, and this "
         "checkout is clean. Before anything else this turn, run "
         + "; then ".join(pieces)
@@ -1099,7 +1120,11 @@ def prerequisite_merge_note(task_id: str, pending: Sequence[UnmergedPrerequisite
     )
 
 
-def unfinished_merge_note(entry: UnmergedPrerequisite, unresolved: Sequence[str]) -> str:
+def unfinished_merge_note(
+    entry: UnmergedPrerequisite,
+    unresolved: Sequence[str],
+    names: Optional[Mapping[str, str]] = None,
+) -> str:
     """The sentence for a merge of *entry* the author started and did not finish (F695)."""
     state = (
         "still conflicted in " + ", ".join(list(unresolved)[:10])
@@ -1107,7 +1132,7 @@ def unfinished_merge_note(entry: UnmergedPrerequisite, unresolved: Sequence[str]
         else "its conflicts look resolved, but it was never committed"
     )
     return (
-        f"[AgentWeave] The merge of the approved work of {entry.prerequisite_id} "
+        f"[AgentWeave] The merge of the approved work of {_named(entry.prerequisite_id, names)} "
         f"(`git merge --no-ff {entry.commit_sha}`) was started in this checkout and is unfinished: "
         f"{state}. It was not auto-committed. Before anything else this turn, resolve those paths, "
         "`git add` them and `git commit` to conclude the merge (or `git merge --abort` and run the "
@@ -1290,6 +1315,7 @@ def ensure_task_worktree(
     base: str,
     prerequisites: Sequence[Tuple[str, str]] = (),
     approved: Sequence[Tuple[str, str]] = (),
+    names: Optional[Mapping[str, str]] = None,
 ) -> Path:
     """Provision *task_id*'s isolated checkout at *base*, creating it if absent. Idempotent.
 
@@ -1358,7 +1384,7 @@ def ensure_task_worktree(
                 "before this task runs again. Do not remove the directory: it is the registered "
                 "checkout for this task and carries its work."
             )
-        _catch_up_prerequisites(path, task_id, approved)
+        _catch_up_prerequisites(path, task_id, approved, names)
         return path
 
     _run_git(repo_root, "worktree", "prune", check=False)
@@ -1380,12 +1406,12 @@ def ensure_task_worktree(
         # approved since the branch was cut are brought in (F158).
         _run_git(repo_root, "worktree", "add", str(path), branch)
         _symlink_shared_dependencies(repo_root, path)
-        _catch_up_prerequisites(path, task_id, approved)
+        _catch_up_prerequisites(path, task_id, approved, names)
         return path
 
     _run_git(repo_root, "worktree", "add", "-b", branch, str(path), base)
     try:
-        _merge_prerequisites(path, task_id, tuple(prerequisites))
+        _merge_prerequisites(path, task_id, tuple(prerequisites), names)
     except IsolationUnavailableError:
         _unwind_task_worktree(repo_root, path, branch)
         raise
@@ -1554,6 +1580,7 @@ def resolve_turn_workspace(
     prerequisites: Sequence[Tuple[str, str]] = (),
     approved: Sequence[Tuple[str, str]] = (),
     catch_up_to: Optional[str] = None,
+    names: Optional[Mapping[str, str]] = None,
 ) -> ResolvedWorkspace:
     """Return the directory a spawned process should use as its cwd, for *this turn* (design D3),
     with the notes its prompt carries about that checkout (`ResolvedWorkspace`, F695).
@@ -1600,7 +1627,7 @@ def resolve_turn_workspace(
     # rather than only at registration. The task path is the same funnel and needs the same
     # seeding, before there is anything to ignore.
     seed_repo_excludes(repo_root)
-    path = ensure_task_worktree(repo_root, task_id, base, prerequisites, approved)
+    path = ensure_task_worktree(repo_root, task_id, base, prerequisites, approved, names=names)
     # F695: an approved prerequisite whose merge conflicted was left for the author, who is told --
     # and told differently when it started that merge and left it unfinished.
     if not approved:
@@ -1610,10 +1637,10 @@ def resolve_turn_workspace(
     merging = _merge_head(path)
     started = next((entry for entry in pending if entry.commit_sha == merging), None)
     if started is not None:
-        notes.append(unfinished_merge_note(started, unresolved_merge_paths(path)))
+        notes.append(unfinished_merge_note(started, unresolved_merge_paths(path), names))
         pending = [entry for entry in pending if entry is not started]
     if pending:
-        notes.append(prerequisite_merge_note(task_id, pending))
+        notes.append(prerequisite_merge_note(task_id, pending, names))
     return ResolvedWorkspace(path, tuple(notes))
 
 
@@ -1888,7 +1915,9 @@ def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
     )
 
 
-def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
+def release_task_worktree(
+    repo_root: Path, task_id: str, *, name: Optional[str] = None
+) -> ReleaseResult:
     """Release *task_id*'s checkout (design D5): remove the directory, keep the branch.
 
     The per-task counterpart of `release_worktree`, and it keeps the same guarantees for the same
@@ -1924,7 +1953,7 @@ def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
 
     had_uncommitted = _has_uncommitted_changes(path)
     snapshot_commit = (
-        snapshot_worktree(path, task_id, message=f"Auto-snapshot: {task_id}")
+        snapshot_worktree(path, task_id, message=f"Auto-snapshot: {name or task_id}")
         if had_uncommitted
         else None
     )

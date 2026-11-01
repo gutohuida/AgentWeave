@@ -438,7 +438,7 @@ def next_slice_message(
     link = f'{{"document": "{roadmap_path}", "slice": "{following.get("key")}"}}'
     task_lines: List[str] = []
     for t in tasks:
-        task_lines.append(f"- `{t.id}` {t.title}: {t.status}")
+        task_lines.append(f"- `{t.display_id}` {t.title}: {t.status}")
         task_lines.extend(f"  - {line}" for line in (outcomes or {}).get(t.id, []))
     lines = [
         f"Slice `{approved.get('key')}` ({approved.get('title') or ''}) of the roadmap "

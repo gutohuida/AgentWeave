@@ -12,14 +12,14 @@ route for them is the guarantee its brief describes.
 from __future__ import annotations
 
 import asyncio
-from typing import Literal, Optional, Tuple
+from typing import Annotated, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import stalls
+from ... import readable_ids, stalls
 from ...agent_auth import AgentActor, get_agent_actor
 from ...auth import get_project
 from ...db.engine import get_session
@@ -88,6 +88,18 @@ async def get_mender_actor(
     return actor
 
 
+async def _mender_task_id(
+    task_id: str,
+    actor: AgentActor = Depends(get_mender_actor),
+    session: AsyncSession = Depends(get_session),
+) -> str:
+    """The stored id a path's task names, in the mender's project."""
+    return await readable_ids.resolve(session, actor.project_id, task_id)
+
+
+MenderTaskId = Annotated[str, Depends(_mender_task_id)]
+
+
 async def _task(session: AsyncSession, actor: AgentActor, task_id: str) -> Task:
     task = await session.get(Task, task_id)
     if task is None or task.project_id != actor.project_id:
@@ -132,7 +144,7 @@ class Landing(BaseModel):
 
 @mender_router.post("/tasks/{task_id}/branch")
 async def mender_land_task(
-    task_id: str,
+    task_id: MenderTaskId,
     body: Landing,
     actor: AgentActor = Depends(get_mender_actor),
     session: AsyncSession = Depends(get_session),
@@ -338,7 +350,7 @@ async def hand_to_review(
     if not target.resolved:
         raise HTTPException(status_code=409, detail=target.refusal)
     conversation = new_conversation(project_id=task.project_id, agent=reviewer, origin=origin)
-    name_conversation(conversation, f"Review {task.id}: {task.title}"[:120])
+    name_conversation(conversation, f"Review {task.display_id}: {task.title}"[:120])
     session.add(conversation)
     await inherit_runtime_overrides(session, conversation)
     await session.flush()
@@ -347,7 +359,7 @@ async def hand_to_review(
         agent=reviewer,
         origin_type=origin,
         content=(
-            f"Review task {task.id} ('{task.title}'): its work is finished and waiting for a "
+            f"Review task {task.display_id} ('{task.title}'): its work is finished and waiting for a "
             f"review. Judge it against its acceptance criteria and end with `approved` or "
             f"`revision_needed`."
         ),
@@ -369,7 +381,7 @@ async def hand_to_review(
 
 @mender_router.post("/tasks/{task_id}/reset")
 async def mender_reset_task(
-    task_id: str,
+    task_id: MenderTaskId,
     body: TaskReset,
     actor: AgentActor = Depends(get_mender_actor),
     session: AsyncSession = Depends(get_session),

@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, NamedTuple, Optional, Tuple
+from typing import List, Mapping, NamedTuple, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import blocking, dependency_gate, task_integration, worktrees
+from . import blocking, dependency_gate, readable_ids, task_integration, worktrees
 from .db.models import Project, Task, TaskDependency
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,8 @@ class TurnWorkspace(NamedTuple):
     #: `(prerequisite task id, commit)` for prerequisites at `approved` only: what an *existing*
     #: branch takes in (F158). Unlike `prerequisites`, no unapproved prerequisite's evidence.
     approved: Tuple[Tuple[str, str], ...] = ()
+    #: How a commit message names each task above, both ids (`readable_ids.commit_name`).
+    names: Mapping[str, str] = {}
 
 
 #: The answer for every turn that is not getting a task workspace.
@@ -156,11 +158,18 @@ async def resolve_turn_workspace_inputs(
         return UNBOUND
 
     prerequisites, approved = await _prerequisite_commits(session, task, repo_root)
+    named_ids = {task.id, *(pair[0] for pair in (*prerequisites, *approved))}
     return TurnWorkspace(
         task_id=task.id,
         base=await integration_base(session, project_id, repo_root),
         prerequisites=prerequisites,
         approved=approved,
+        names={
+            row.id: readable_ids.commit_name(row.id, row.readable_id)
+            for row in await session.execute(
+                select(Task.id, Task.readable_id).where(Task.id.in_(named_ids))
+            )
+        },
     )
 
 

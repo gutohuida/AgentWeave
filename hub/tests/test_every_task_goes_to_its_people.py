@@ -753,7 +753,7 @@ async def test_the_lead_is_told_each_tasks_people_and_a_hand_out_is_recorded(
         InboundQueueEntry.agent == "architect",
         InboundQueueEntry.task_id.is_(None),
     )
-    assert f"{t1.id} [pending]" in brief.content
+    assert f"{t1.readable_id} [pending]" in brief.content
     assert "builder dev, checker qa" in brief.content
 
     lead = await _run_headers("run-architect-lead", "architect")

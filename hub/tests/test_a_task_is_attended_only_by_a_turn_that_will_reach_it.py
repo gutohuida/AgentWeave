@@ -395,6 +395,7 @@ async def test_a_running_pair_beats_a_queued_one_but_is_not_a_has_turn(app):
 
 class _T:
     id = "task-1"
+    display_id = "BPS-1"
     title = "x" * 200
 
 
