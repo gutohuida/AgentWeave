@@ -325,7 +325,7 @@ async def _carry_mid_turn_claim(
         root = Path(repo_root)
         if holder is not None and holder != agent:
             problem: Optional[str] = (
-                f"{holder}'s turn holds {task.id}'s checkout, so this turn's work stayed in "
+                f"{holder}'s turn holds {task.display_id}'s checkout, so this turn's work stayed in "
                 f"{worktree}"
             )
         else:

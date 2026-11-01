@@ -303,7 +303,7 @@ def not_open_reason(task: Task, role: str, name: str) -> str:
     somebody else, so a broken plan shows instead of being quietly substituted."""
     what = "its work" if role == "builder" else "its check"
     return (
-        f"{task.id}'s {role} {name} is not an open agent of this project, so {what} is held and "
+        f"{task.display_id}'s {role} {name} is not an open agent of this project, so {what} is held and "
         f"given to nobody else. Add or unarchive {name}, or stop the build and start it again "
         f"naming an agent who is."
     )

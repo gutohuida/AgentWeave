@@ -1248,6 +1248,8 @@ class Holding:
     status: str
     loop_id: Optional[str]
     reachable: bool
+    #: What a sentence calls the task: its readable id, or the stored id on a row without one.
+    display_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -1665,7 +1667,7 @@ async def _read_roster_availability(
     attendance = await facts.attendance(project_id)
     holdings = (
         await session.execute(
-            select(Task.id, Task.assignee, Task.loop_id, Task.status).where(
+            select(Task.id, Task.assignee, Task.loop_id, Task.status, Task.readable_id).where(
                 Task.project_id == project_id,
                 Task.assignee.isnot(None),
                 Task.status.in_(tuple(sorted(LIVE_STATUSES))),
@@ -1673,13 +1675,14 @@ async def _read_roster_availability(
         )
     ).all()
     holdings_by_agent: "Dict[str, list[Holding]]" = {}
-    for task_id, assignee, loop_id, status in holdings:
+    for task_id, assignee, loop_id, status, readable_id in holdings:
         holdings_by_agent.setdefault(assignee, []).append(
             Holding(
                 task_id=task_id,
                 status=status,
                 loop_id=loop_id,
                 reachable=loop_id in live or attendance.has_turn(task_id, assignee),
+                display_id=readable_id,
             )
         )
     # **A review turn waiting for an agent books it on that task** (D4 of
@@ -1694,7 +1697,7 @@ async def _read_roster_availability(
     if review_pairs:
         reviewed = (
             await session.execute(
-                select(Task.id, Task.assignee, Task.loop_id, Task.status).where(
+                select(Task.id, Task.assignee, Task.loop_id, Task.status, Task.readable_id).where(
                     Task.project_id == project_id,
                     Task.id.in_(sorted({task_id for task_id, _ in review_pairs})),
                     Task.status.in_(
@@ -1710,7 +1713,13 @@ async def _read_roster_availability(
             if row is None or row[1] == agent:
                 continue
             holdings_by_agent.setdefault(agent, []).append(
-                Holding(task_id=task_id, status=row[3], loop_id=row[2], reachable=True)
+                Holding(
+                    task_id=task_id,
+                    status=row[3],
+                    loop_id=row[2],
+                    reachable=True,
+                    display_id=row[4],
+                )
             )
     # **The Hub's own mender is not on the roster** (loop-df5f74816122, 2026-10-25): it is the
     # repair agent a stall briefs, never a flow's builder or reviewer. Read as an ordinary agent,
@@ -1971,7 +1980,9 @@ def _rung_3_booked_clause(name: str, reachable: "Sequence[Holding]", *, limit: i
     """`"{name} is booked for {id} (status), ... and N more"` (task 2.3, R8) -- *limit* tasks named
     by id, in the order `_roster_availability` already holds them (by task id), the rest counted."""
     shown = reachable[:limit]
-    named = ", ".join(f"{holding.task_id} ({holding.status})" for holding in shown)
+    named = ", ".join(
+        f"{holding.display_id or holding.task_id} ({holding.status})" for holding in shown
+    )
     remaining = len(reachable) - len(shown)
     if remaining > 0:
         named = f"{named} and {remaining} more"
@@ -2709,7 +2720,7 @@ async def decide_firing(
                     unstaffed.append(
                         (
                             task.id,
-                            f"{task.id} is held by {agent}, who is archived; unarchive {agent} "
+                            f"{task.display_id} is held by {agent}, who is archived; unarchive {agent} "
                             f"or reassign the task",
                         )
                     )
@@ -2808,7 +2819,7 @@ async def decide_firing(
                     reason = (
                         not_open_reason(task, "builder", agent)
                         if record is None
-                        else f"{task.id}'s builder {agent} has no runner bound, so its work is "
+                        else f"{task.display_id}'s builder {agent} has no runner bound, so its work is "
                         f"held and given to nobody else. Bind a runner to {agent}."
                     )
                     unstaffed.append((task.id, reason))
@@ -2822,7 +2833,7 @@ async def decide_firing(
                     unstaffed.append(
                         (
                             task.id,
-                            f"{task.id}'s builder {agent} is read-only and holds no task's work, "
+                            f"{task.display_id}'s builder {agent} is read-only and holds no task's work, "
                             f"so its work is held and given to nobody else.",
                         )
                     )

@@ -1,4 +1,4 @@
-# ruff: noqa: F811 -- `author_headers` is a fixture imported to be requested by name
+﻿# ruff: noqa: F811 -- `author_headers` is a fixture imported to be requested by name
 """`tickets-have-readable-ids`: a task's `BPS-3` beside its stored `task-<hex>`."""
 
 import asyncio
@@ -6,6 +6,7 @@ import importlib.util
 import re
 import sqlite3
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -14,7 +15,16 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import select, update
 
-from hub import checkpoint_generation, landing_queue, readable_ids, review_turn, stalls, worktrees
+from hub import (
+    checkpoint_generation,
+    flaky_tests,
+    landing_queue,
+    readable_ids,
+    review_turn,
+    slice_drafting,
+    stalls,
+    worktrees,
+)
 from hub.agent_auth import hash_run_token
 from hub.api.v1 import agents as agents_module
 from hub.config import settings
@@ -23,6 +33,7 @@ from hub.db.models import (
     AcronymCounter,
     Base,
     Checkpoint,
+    InboundQueueEntry,
     Project,
     Run,
     SpecDocument,
@@ -31,8 +42,14 @@ from hub.db.models import (
 )
 from hub.main import app as application
 from hub.runner_events import redact_text_secrets
-from hub.scheduler import _briefing_completion_lines
+from hub.scheduler import (
+    Holding,
+    _briefing_completion_lines,
+    _roster_availability,
+    _rung_3_booked_clause,
+)
 
+from . import test_every_task_goes_to_its_people as people
 from ._routing import iter_api_routes
 from .test_a_build_has_a_driver_a_level_and_its_people import (
     AGENT_DOCS,
@@ -876,6 +893,161 @@ async def test_ac_shown_a_review_names_who_recorded_foreign_evidence_by_the_read
             task = await session.get(Task, second["id"])
             sentence = await review_turn.verdict_evidence_sentence(session, task, may_decide=False)
     assert "recorded by task `BPS-1`" in sentence and first["id"] not in sentence
+
+
+@pytest.mark.asyncio
+async def test_ac_shown_a_review_names_a_siblings_requirements_by_the_readable_id(
+    app, auth_headers
+):
+    document = await _new_document(app, auth_headers, "Siblings")
+    payload = {
+        "tasks": [
+            {"key": "a", "requirements": ["r-a"]},
+            {"key": "b", "requirements": ["r-b"]},
+            {"key": "c", "title": "Not yet a task", "requirements": ["r-c"]},
+        ]
+    }
+    async with async_session_factory() as session:
+        for key, stored, readable in (("a", "task-a", "SIB-1"), ("b", "task-b", "SIB-2")):
+            session.add(
+                Task(
+                    id=stored,
+                    project_id=P,
+                    title=f"Build {key}",
+                    spec_document_id=document.id,
+                    spec_task_key=key,
+                    readable_id=readable,
+                )
+            )
+        await session.commit()
+        task = await session.get(Task, "task-a")
+        with patch.object(review_turn, "_document_payload", AsyncMock(return_value=payload)):
+            sentence = await review_turn._other_requirements_sentence(session, task)
+    assert "`r-b`: `SIB-2` (Build b)" in sentence and "task-b" not in sentence
+    assert "`r-c`: `c` (Not yet a task)" in sentence
+
+
+def test_ac_shown_the_drafting_turn_lists_tasks_by_the_readable_id():
+    task = Task(id="task-abc", title="Build it", status="approved", readable_id="BPS-3")
+    message = slice_drafting.next_slice_message(
+        {"roadmap": "spec/roadmap/spec.json"}, approved_path="spec/a/spec.json", tasks=[task]
+    )
+    assert "- `BPS-3` Build it: approved" in message and "task-abc" not in message
+
+
+@pytest.mark.asyncio
+async def test_ac_shown_the_menders_brief_names_queued_input_by_the_readable_id(app, auth_headers):
+    first, _ = await _prerequisite_and_dependent(app, auth_headers)
+    async with async_session_factory() as session:
+        stall = Stall(id="stall-q", project_id=P, key="k", cause="stuck_task", reason="stuck")
+        session.add(stall)
+        for entry_id, task_id, sequence in (("iq-1", first["id"], 1), ("iq-2", None, 2)):
+            session.add(
+                InboundQueueEntry(
+                    id=entry_id,
+                    project_id=P,
+                    agent="dev",
+                    origin_type="agent",
+                    origin_agent="peer",
+                    conversation_id="conv-q",
+                    sequence=sequence,
+                    content="work",
+                    hop_depth=0,
+                    state="queued",
+                    task_id=task_id,
+                )
+            )
+        await session.flush()
+        brief = await stalls.brief(session, stall)
+    assert "iq-1 for dev (task BPS-1)" in brief and first["id"] not in brief
+    assert "iq-2 for dev (task -)" in brief
+
+
+@pytest.mark.asyncio
+async def test_ac_shown_a_stuck_task_stall_names_the_readable_id(app, auth_headers):
+    first = await _create(app, auth_headers, title="Stuck")
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as session:
+        await session.execute(
+            update(Task)
+            .where(Task.id == first["id"])
+            .values(status="in_progress", updated=now - timedelta(days=1))
+        )
+        await session.commit()
+    assert await stalls.sweep(now=now) == 1
+    async with async_session_factory() as session:
+        (stall,) = (
+            (await session.execute(select(Stall).where(Stall.cause == "stuck_task")))
+            .scalars()
+            .all()
+        )
+    assert stall.reason.startswith(f"{first['readable_id']} ('Stuck')")
+    assert first["id"] not in stall.reason
+
+
+@pytest.mark.asyncio
+async def test_ac_shown_a_booked_agent_is_named_with_its_tasks_readable_id(
+    app, auth_headers, add_agent
+):
+    await add_agent("dev")
+    first = await _create(app, auth_headers, title="Held", assignee="dev")
+    async with async_session_factory() as session:
+        roster = await _roster_availability(session, P)
+    (record,) = [r for r in roster if r.name == "dev"]
+    clause = _rung_3_booked_clause("dev", record.holdings, limit=3)
+    assert first["readable_id"] in clause and first["id"] not in clause
+    # A holding read from a row with no readable id still names its task.
+    bare = Holding(task_id="task-old", status="assigned", loop_id=None, reachable=True)
+    assert _rung_3_booked_clause("dev", [bare], limit=3) == "dev is booked for task-old (assigned)"
+
+
+@pytest.mark.asyncio
+async def test_ac_shown_a_firings_held_reasons_name_the_readable_id(
+    app, auth_headers, add_agent, bind_runner
+):
+    await people._roster(app, auth_headers, bind_runner, "dev", "qa")
+    await add_agent("norunner")
+    await add_agent("reader", config={"read_only": True})
+    await bind_runner("reader")
+    await add_agent("gone", archived_at=datetime.now(timezone.utc))
+    await people._approved(
+        app,
+        auth_headers,
+        people._document(
+            [
+                {"key": "t1", "builder": "norunner"},
+                {"key": "t2", "builder": "reader"},
+                {"key": "t3", "builder": "ghost"},
+                {"key": "t4"},
+            ]
+        ),
+    )
+    await people._build(app, auth_headers, driver="flow", level="reviewed", builders=["dev"])
+    tasks = await people._tasks()
+    async with async_session_factory() as session:
+        await session.execute(update(Task).where(Task.id == tasks["t4"].id).values(assignee="gone"))
+        await session.commit()
+    # Build hands a named builder the task; a builder only stands in the way once nobody holds it.
+    await people._clear_assignee(tasks["t1"].id)
+    await people._clear_assignee(tasks["t2"].id)
+
+    unstaffed = dict((await people._decide()).unstaffed)
+
+    for key, words in (
+        ("t1", "'s builder norunner has no runner bound"),
+        ("t2", "'s builder reader is read-only"),
+        ("t3", "'s builder ghost is not an open agent"),
+        ("t4", " is held by gone, who is archived"),
+    ):
+        assert tasks[key].readable_id
+        assert unstaffed[tasks[key].id].startswith(f"{tasks[key].readable_id}{words}"), unstaffed
+
+
+def test_ac_shown_a_fix_task_says_whose_work_found_it_by_the_readable_id():
+    run = SimpleNamespace(id="run-1", main_sha="abc", results=[])
+    entry = {"check": "tests", "test": "test_x", "kind": "flaky"}
+    _, description = flaky_tests.fix_task_text_for([entry], run=run, found_by="BPS-3")
+    assert "on task BPS-3's work" in description
 
 
 def test_ac_shown_a_conflict_report_names_tasks_as_it_is_handed_them():

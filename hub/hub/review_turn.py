@@ -496,7 +496,7 @@ async def _other_requirements_sentence(session: AsyncSession, task: Task) -> Opt
             continue
         sibling = siblings.get(key)
         who = (
-            f"`{sibling.id}` ({sibling.title})"
+            f"`{sibling.display_id}` ({sibling.title})"
             if sibling is not None
             else f"`{key}` ({entry.get('title') or 'no title'})"
         )
