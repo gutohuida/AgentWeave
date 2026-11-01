@@ -10,16 +10,21 @@ Drives the trial Hub on :8010 (reusing one that answers, else starting one from 
 Steps (each records its checks and the drive goes on, so one run on master shows every failure):
 
   A  Authoring. A real Haiku author is asked for a large spec with one hazardous (migration) and
-     one routine (copy change) task. It must ask how to judge the models (A1); the drive answers
-     'review the project record' and the author must read the per-model record (A2: a tool call
-     naming the record, or its figures in the document's evidence, FR-13/FR-14). The submitted
+     one routine (copy change) task. It must ask how to judge the models (A1, by ask_user or in
+     text); the drive answers through the question's route ('review the project record') and the
+     author must read the per-model record (A2: a tool call naming the record, with its figures
+     in the document's evidence, FR-13/FR-14). The author's document must be buildable (A7:
+     requirements declared, every task linked to one) and approve without approve_anyway (A8);
+     only then does A9 hold. A document that is not buildable is replaced by a seeded one so the
+     rest is seen, but that run cannot pass. The submitted
      document gives every task a builder and checker (A3), a reason for each pick (A4), a checker
      that is not the builder (A5), and the two tasks different builders (A6).
   B  Build dialog, in Chromium. It opens with each task's picks selected (B1), their reasons
      visible beside the row (B2), and building as-is records exactly those picks (B3).
   C  The build runs as a flow at Reviewed until it finishes (C1); the drive then ages its end 30
      days back, as the fixture, so the warning has an age to name.
-  D  Follow-up. The Checker files a task against the spec through the agent plane. It joins the
+  D  Follow-up. The Checker files a task against the spec's requirements through the agent plane
+     (B4 first shows that such a filing joins a running build). It joins the
      finished build, which reopens under the same id, level and landing (D1), shows the reopening
      (D2), takes the build's people (D3), and the spec stops reading as done (D4). Firing the
      build's flow at most twice then starts the task with no other call (D5).
@@ -75,20 +80,71 @@ TURN = 8 * 60
 BUILD_LIMIT = 30 * 60
 
 
+def finished(run_id):
+    return d.ro("select status from runs where id=?", (run_id,))[0][0] not in (
+        "running", "queued", "starting")
+
+
+def open_questions(run_ids):
+    """The ask_user questions these runs left unanswered: (id, text, options, multi_select)."""
+    if not run_ids:
+        return []
+    marks = ",".join("?" * len(run_ids))
+    out = []
+    for qid, text, options, multi in d.ro(
+            "select id, question, options, multi_select from questions where created_by_run_id "
+            f"in ({marks}) and answered=0 and declined=0 order by created_at", tuple(run_ids)):
+        try:
+            options = json.loads(options) if isinstance(options, str) else options
+        except ValueError:
+            options = []
+        out.append((qid, text, options or [], bool(multi)))
+    return out
+
+
 def turn(base, message, path):
+    """Triggers the author and waits until its run ends, or until it parks on an ask_user."""
     code, run = d.api("POST", f"{base}/agent/trigger",
                       {"agent": AUTHOR, "message": message, "spec_document": path})
-    d.check("setup: the author turn starts", code in (200, 202), f"{code} {run}", fatal=True)
+    d.check("setup: the author turn starts", code in (200, 201, 202), f"{code} {run}", fatal=True)
     run_id = run["run_id"]
-    d.poll(lambda: d.ro("select status from runs where id=?", (run_id,))[0][0]
-           not in ("running", "queued", "starting"), TURN, 3)
+    d.poll(lambda: finished(run_id) or open_questions([run_id]), TURN, 3)
     return run_id
 
 
 def reply(run_id):
-    return "\n".join(c for (c,) in d.ro(
+    """What the run said: its text, and every ask_user question with its options."""
+    said = [c for (c,) in d.ro(
         "select content from agent_outputs where run_id=? and kind='text' order by sequence",
-        (run_id,)))
+        (run_id,))]
+    for text, options in d.ro("select question, options from questions where created_by_run_id=? "
+                              "order by created_at", (run_id,)):
+        said.append(f"{text} {options}")
+    return "\n".join(said)
+
+
+def chosen(options):
+    """The labels of the options that point at the project's own record."""
+    return [o["label"] for o in options if isinstance(o, dict) and o.get("label")
+            and re.search(r"record|project|history|tally", f"{o['label']} {o.get('description', '')}",
+                          re.I)]
+
+
+def buildable(doc):
+    """Requirements declared, and every task linked to one of them: without that a task has no
+    evidence to wait for, and the build stalls on a 409 at its first completed task."""
+    keys = {r.get("key") for r in doc.get("requirements") or [] if isinstance(r, dict)}
+    ts = [t for t in doc.get("tasks") or [] if isinstance(t, dict)]
+    return bool(keys) and len(ts) >= 2 and all(
+        [r for r in t.get("requirements") or [] if isinstance(r, str)]
+        and set(t["requirements"]) <= keys for t in ts)
+
+
+def fire_job(base, job_id):
+    """Fires a build's flow once and returns the answer: a refused firing is the caller's failure."""
+    code, out = d.api("POST", f"{base}/jobs/{job_id}/run")
+    print(f"  fired {job_id}: {code} {str(out)[:200]}", flush=True)
+    return code, out
 
 
 def payload_of(root, path):
@@ -182,10 +238,27 @@ def drive(state):
     doc_id = doc["id"]
     path = doc["path"]
 
+    runs = []
+    answered = []
+
     def author_turn(message):
-        """One author turn; the path is re-read by id after it, as the author may have renamed."""
+        """One author turn, answering any ask_user it parks on (through the question's route, as
+        the operator would); the path is re-read by id after, as the author may have renamed."""
         nonlocal path
         run_id = turn(base, message, path)
+        runs.append(run_id)
+        for _ in range(4):
+            pending = open_questions(runs)
+            if not pending:
+                break
+            for qid, _text, options, _multi in pending:
+                labels = chosen(options)
+                code, out = d.api("PATCH", f"{base}/questions/{qid}",
+                                  {"answer": ", ".join(labels) or ANSWER, "labels": labels})
+                d.check("setup: an author question is answered", code == 200, f"{code} {str(out)[:200]}")
+                answered.append(qid)
+            d.poll(lambda: finished(run_id), TURN, 3)
+            d.wait_idle(pid, 4 * 60)
         path = current(base, doc_id)[0] or path
         return run_id
 
@@ -193,20 +266,26 @@ def drive(state):
     said = reply(first)
     (d.TMP / "author-turn1.txt").write_text(said, encoding="utf-8")
     asks = re.search(r"web|search", said, re.I) and re.search(r"record|project'?s", said, re.I) \
-        and "?" in said
+        and ("?" in said or answered)
     d.check("A1 the author asks which sources to judge the models by", bool(asks), said[:400])
     # The models are named to the author: Opus and Sonnet from the roster.
     d.check("A1b the author was told the roster's models", "opus" in said.lower() or
             "opus" in json.dumps(d.ro("select content from agent_outputs where run_id=?", (first,))).lower(),
             said[:200])
 
-    second = author_turn(ANSWER)
-    runs = [first, second]
+    if not answered:
+        author_turn(ANSWER)
     for nudge in range(3):
-        if len(tasks_of(root, path)) >= 2:
+        doc = payload_of(root, path)
+        if len(tasks_of(root, path)) >= 2 and buildable(doc):
             break
-        runs.append(author_turn("Continue to the tasks step and submit the document with both "
-                                "tasks, each with builder, checker and a reason for each."))
+        if len(tasks_of(root, path)) < 2:
+            author_turn("Continue to the tasks step and submit the document with both "
+                        "tasks, each with builder, checker and a reason for each.")
+        else:
+            author_turn("The document cannot be built yet: declare its requirements (each with an "
+                        "acceptance criterion) and give every task `requirements` naming the keys "
+                        "it implements. Resubmit it, keeping every builder, checker and reason.")
     quoted = urllib.parse.quote(path)
     _, read = d.api("GET", f"{base}/project/spec?path={quoted}")
     written = payload_of(root, path)
@@ -233,12 +312,21 @@ def drive(state):
     d.check("A6 the two tasks hold different builders",
             len({t.get("builder") for t in tasks}) >= 2,
             json.dumps([t.get("builder") for t in tasks]))
-    if len(tasks) < 2:
+    own = len(tasks) >= 2 and buildable(written)
+    d.check("A7 the author's document is buildable: requirements declared, every task linked to one",
+            own, json.dumps({"requirements": written.get("requirements"),
+                             "task_requirements": [t.get("requirements") for t in tasks]},
+                            default=str)[:500])
+    fallback = []
+    if not own:
         # The author did not get to a document with tasks (always so on master): seed one, with
         # picks and no reasons, so Build, the follow-up and Overview are driven and fail, if they
         # do, for their own reasons rather than all at once here.
         code, out = d.api("PUT", f"{base}/project/documents/{path}/content",
                           {"document": seeded()})
+        fallback.append("seeded")
+        print("NOTE: the author's document is not buildable; a seeded one stands in so the rest "
+              "of the drive is seen. This run cannot pass (A9).")
         d.check("setup: the author's document did not stand; a seeded one is saved instead",
                 code == 200, f"{code} {str(out)[:400]}", fatal=True)
         _, read = d.api("GET", f"{base}/project/spec?path={quoted}")
@@ -249,10 +337,18 @@ def drive(state):
     # The "Opus" of the roster is rebound to Haiku: every build turn is Haiku.
     d.api("PATCH", f"{base}/agents/{STRONG}", {"runner_id": haiku["id"]})
     d.api("PATCH", f"{base}/agents/{CHEAP}", {"runner_id": haiku["id"]})
-    code, out = d.api("POST", f"{base}/project/documents/phase?path={quoted}&to=approved",
-                      {"reason": "drive", "approve_anyway": True,
-                       "content_version": read.get("content_version")})
+    approve = f"{base}/project/documents/phase?path={quoted}&to=approved"
+    version = read.get("content_version")
+    code, out = d.api("POST", approve, {"reason": "drive", "content_version": version})
+    d.check("A8 the document approves on its own, without approve_anyway", code == 200,
+            f"{code} {str(out)[:400]}")
+    if code != 200:
+        fallback.append("forced")
+        code, out = d.api("POST", approve, {"reason": "drive", "approve_anyway": True,
+                                            "content_version": version})
     d.check("setup: the document is approved", code == 200, f"{code} {str(out)[:400]}", fatal=True)
+    d.check("A9 the build is on the author's own document (not seeded, not forced)",
+            not fallback, ",".join(fallback))
 
     # ---- B: the Build dialog ------------------------------------------------------------
     with sync_playwright() as pw:
@@ -300,12 +396,30 @@ def drive(state):
     if not build:
         raise d.Stop("no running build")
 
+    # A control: a task filed against the spec while its build runs joins that build, so the
+    # follow-up's filing in D is known good and only the finished build is in question.
+    reqs = [i for (i,) in d.ro("select identifier from spec_requirements where document_id=? "
+                               "and state='active' order by identifier", (doc_id,))]
+    code, control = d.as_agent(pid, CHECKER, "POST", "/tasks", {
+        "title": "Add CONTROL.md", "spec_document": path, "requirement_ids": reqs[:1],
+        "description": "Create CONTROL.md holding the single line `control`, then move this "
+                       "task to completed. Change nothing else."})
+    joined = code in (200, 201) and d.ro("select build_id from tasks where id=?",
+                                         (control["id"],))[0][0] == state["build_id"]
+    d.check("B4 a task filed against the spec while its build runs joins the build", joined,
+            f"{code} {str(control)[:300]}")
+
     # ---- C: the build runs and finishes -------------------------------------------------
     ((job,),) = d.ro("select l.job_id from loops l join builds b on b.loop_id=l.id where b.id=?",
                      (state["build_id"],)) or [(None,)]
     start = time.time()
     while time.time() - start < BUILD_LIMIT:
-        d.fire(base, job)
+        code, out = fire_job(base, job)
+        # "Every task ... is already being worked" is a 409 that says nothing is wrong; any other
+        # refusal (for one, a completed task with no recorded evidence) stops the drive, named.
+        busy = code == 409 and "already being worked" in str(out)
+        d.check("C0 the build's flow accepts each firing", code in (200, 201, 202) or busy,
+                f"{code} {str(out)[:300]}", fatal=True)
         d.wait_idle(pid, 4 * 60)
         if d.ro("select state from builds where id=?", (state["build_id"],))[0][0] != "running":
             break
@@ -323,12 +437,15 @@ def drive(state):
 
     # ---- D: the follow-up ---------------------------------------------------------------
     code, filed = d.as_agent(pid, CHECKER, "POST", "/tasks", {
-        "title": "Add FOLLOWUP.md", "spec_document": path,
+        "title": "Add FOLLOWUP.md", "spec_document": path, "requirement_ids": reqs[:1],
         "description": "Create FOLLOWUP.md holding the single line `follow-up`, then move this "
                        "task to completed. Change nothing else."})
     d.check("D0 the checker files a follow-up against the spec", code in (200, 201),
             f"{code} {str(filed)[:300]}", fatal=True)
     follow = filed["id"]
+    linked = d.ro("select spec_document_id from tasks where id=?", (follow,))[0][0]
+    d.check("D0b the follow-up is linked to the spec, as the control was",
+            linked == doc_id, f"spec_document_id={linked}", fatal=True)
     after = build_of(pid, path)
     d.check("D1 the same build reads running at the same level and landing",
             bool(after) and after[0][0] == state["build_id"] and after[0][1] == "running"
@@ -342,14 +459,17 @@ def drive(state):
             isinstance(task, dict) and task.get("assignee") == mine.get("builder")
             and bool(mine.get("builder")), f"{str(task)[:300]} builder={mine.get('builder')}")
     shown_phase = current(base, doc_id)[1]
-    d.check("D4 the spec stops reading as done: it shows building", shown_phase == "building",
-            f"display_phase={shown_phase}")
+    # A pending task against the spec already reads `building` on master, so the build must also
+    # be the running one for this to tell the two apart.
+    d.check("D4 the spec stops reading as done: it shows building under a running build",
+            shown_phase == "building" and bool(after) and after[0][1] == "running",
+            f"display_phase={shown_phase} build={after[:1]}")
     new_job = (d.ro("select l.job_id from loops l join tasks t on t.loop_id=l.id where t.id=?",
                     (follow,)) or [(None,)])[0][0]
     started = False
     for _ in range(2):
         if new_job:
-            d.fire(base, new_job)
+            fire_job(base, new_job)
             started = d.poll(lambda: d.ro("select 1 from runs where task_id=?", (follow,)), 90, 3)
         if started:
             break
@@ -382,7 +502,7 @@ def drive(state):
             str(d.ro("select state from builds where id=?", (state["build_id"],))))
     before = d.ro("select count(*) from runs where project_id=?", (pid,))[0][0]
     if new_job:
-        d.fire(base, new_job)
+        fire_job(base, new_job)
         d.wait_idle(pid, 2 * 60)
     d.check("E3 its flow starts nothing further",
             d.ro("select count(*) from runs where project_id=?", (pid,))[0][0] == before)
@@ -411,10 +531,14 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Observed 2026-11-01 on master (no implementation; 16:47 run, artefacts drive1101-recommended-
-# people/164714): 20 passed, 14 failed -- A1-A6, B2, D1-D5, E1, E2. Authoring: the real Haiku author
-# never asked how to judge the models, no tool read a record, and submitted no tasks (the drive
-# seeds a document with picks and no reasons so the rest runs). Build opens with the picks selected
-# (B1, B3 pass) but shows no reasons (B2). The build finishes; the follow-up joins nothing: it stays
-# pending with no assignee, the build stays finished, the spec's display_phase reads `done` (D1-D5),
-# no warning is on Overview (E1) and the stop gets a 409 on a finished build (E2).
+# Observed 2026-11-01 on master (no implementation; run 18:06:50, artefacts drive1101-recommended-
+# people/180650): 25 passed, 16 failed -- A1-A9, B2, D1, D2, D3, D5, E1, E2. A real Haiku author
+# (no ask_user, no record tool, no tasks submitted) leaves a document that is not buildable, so
+# a seeded one stands in and A7-A9 fail by design; the run therefore cannot pass on master or
+# with a seeded fallback. With that stand-in: B1, B3 pass and B2 fails (no reasons shown); B4 shows
+# a task filed with requirement_ids joins the running build; C1 the build finishes; D0b the
+# follow-up is linked to the spec (spec_document_id set) yet joins nothing: the build stays
+# finished (D1, D2), the task has no assignee (D3), no flow starts it (D5), no Overview warning
+# (E1) and stopping is refused (E2). D4 passed in that run (a pending task made the spec read
+# `building`); the check was then tightened to also require the running build, so it fails too
+# on master -- reasoned from the recorded state, not re-run. E3 passes vacuously (no job).
