@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Collection, Dict, List, Optional, Tuple
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -543,8 +543,8 @@ async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
     merge source depend on when you asked — D10's rejected timing-dependent alternative — so a task
     would merge its branch tip in the morning and its evidence in the afternoon.
 
-    Reached only from the last arm of `evidence_governs`, so an ordinary task, a flow task and a
-    loop that declared for itself never pay for the query.
+    Reached only from the last two arms of `evidence_governs`, so an ordinary task and a loop that
+    declared for itself never pay for the query.
     """
     return (
         await session.execute(
@@ -553,6 +553,30 @@ async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
             .limit(1)
         )
     ).first() is not None
+
+
+async def _task_has_evidence(session: AsyncSession, task: Task) -> bool:
+    """Has any evidence been recorded for *task*, in whatever state and against whatever requirement?"""
+    return (
+        await session.execute(
+            select(RequirementEvidence.id).where(RequirementEvidence.task_id == task.id).limit(1)
+        )
+    ).first() is not None
+
+
+async def _task_is_in_the_evidence_chain(session: AsyncSession, task: Task) -> bool:
+    """A requirement link or any evidence, in one statement: a firing asks this of each finished
+    task in a flow, and the board's statement budget counts it."""
+    return (
+        await session.execute(
+            select(
+                or_(
+                    exists().where(TaskRequirementLink.task_id == task.id),
+                    exists().where(RequirementEvidence.task_id == task.id),
+                )
+            )
+        )
+    ).scalar_one()
 
 
 async def evidence_governs(session: AsyncSession, task: Task) -> bool:
@@ -565,10 +589,15 @@ async def evidence_governs(session: AsyncSession, task: Task) -> bool:
     2. **The loop id does not resolve** → yes. A dangling id decides nothing.
     3. **The loop declared** → the operator said, in either direction, and the operator wins over
        both defaults below.
-    4. **The loop has a document** → yes. It is a *flow*, and `Loop` is a flow's row too (D10). A
-       document's requirements are the evidence chain, so a flat "a loop merges its branch tip"
-       default here would switch every flow onto a commit no reviewer accepted and degrade
-       `approval-refuses-unaccepted-evidence` to an advisory product-wide.
+    4. **The loop has a document** → yes, unless the task links no requirement and carries no
+       evidence. It is a *flow*, and `Loop` is a flow's row too (D10). A document's requirements are
+       the evidence chain, so a flat "a loop merges its branch tip" default here would switch every
+       flow onto a commit no reviewer accepted and degrade `approval-refuses-unaccepted-evidence` to
+       an advisory product-wide. A task outside that chain is the one exception: nothing tells its
+       builder what to record, and a document with no requirements leaves nothing to record against,
+       so it could never be reviewed or merged and held every firing behind it (d1101, 2026-11-01).
+       Its approved review is the gate, as F622 made it for a task with no loop, and evidence once
+       recorded keeps deciding (D10).
     5. **Otherwise** → whether the task carries a requirement link (D11). A documentless loop's task
        created with `requirement_ids` gets real links, and `record_evidence` resolves against the
        *project's* index rather than a document's, so that task merges its evidence **today**.
@@ -595,7 +624,7 @@ async def evidence_governs(session: AsyncSession, task: Task) -> bool:
     if loop.work_needs_evidence is not None:
         return loop.work_needs_evidence
     if loop.spec_document_id is not None:
-        return True
+        return await _task_is_in_the_evidence_chain(session, task)
     return await task_has_requirement_links(session, task)
 
 
@@ -616,11 +645,7 @@ async def review_alone_gates(session: AsyncSession, task: Task) -> bool:
         return True
     if task.loop_id is not None or await task_has_requirement_links(session, task):
         return False
-    return (
-        await session.execute(
-            select(RequirementEvidence.id).where(RequirementEvidence.task_id == task.id).limit(1)
-        )
-    ).first() is None
+    return not await _task_has_evidence(session, task)
 
 
 async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[Target]:
