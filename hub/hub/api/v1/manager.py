@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import chapters_job, manager
+from ... import build_retrospective, chapters_job, manager
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Runner
@@ -23,7 +23,7 @@ class JobUpdate(BaseModel):
     enabled: Optional[bool] = None
     runner_id: Optional[str] = Field(default=None, max_length=64)
     model: Optional[str] = Field(default=None, max_length=256)
-    # The chapters job only: fire on its triggers ("automatic") or only on the button ("button").
+    # A job with a button: fire on its triggers ("automatic") or only on the button ("button").
     mode: Optional[Literal["automatic", "button"]] = None
 
     model_config = {"extra": "forbid"}
@@ -53,11 +53,11 @@ async def update_manager_job(
         fields.pop("enabled", None)
     mode = fields.pop("mode", None)
     if mode is not None:
-        if key != manager.CHAPTERS:
+        if key not in manager.HAS_BUTTON:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="mode chooses between automatic firing and the button, and only the "
-                "chapters job has a button",
+                "chapters and build retrospective jobs have a button",
             )
         fields["automatic"] = mode == "automatic"
     runner_id = fields.get("runner_id")
@@ -122,6 +122,39 @@ async def weave_the_thread(
         chapters_job.weave_in_background, project_id, trigger=chapters_job.REQUESTED
     )
     return {"started": True}
+
+
+@router.post("/jobs/build-retrospective/run", status_code=status.HTTP_202_ACCEPTED)
+async def review_this_build(
+    path: str = Query(..., min_length=1),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """'Review this build': a retrospective of the document *path* now, on an unfinished build too
+    and whatever the job's automatic choice. Refused (409) with no runner or while one of this
+    document is in progress; the firing runs after the answer and never holds it."""
+    try:
+        await build_retrospective.request(session, project[0], path)
+    except build_retrospective.CannotReviewError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.reason) from exc
+    return {"started": True}
+
+
+@router.get("/jobs/build-retrospective/retrospectives")
+async def list_retrospectives(
+    path: str = Query(..., min_length=1),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """The document's retrospectives, newest first, the failed firings among them."""
+    document = await build_retrospective.find_document(session, project[0], path)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No document '{path}'")
+    return {
+        "retrospectives": await build_retrospective.list_for_document(
+            session, project[0], document.id
+        )
+    }
 
 
 @router.get("/activity")
