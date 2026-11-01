@@ -102,6 +102,53 @@ export function useWeaveThread() {
   })
 }
 
+/** One firing of the build retrospective, written or not, as its document lists it. `report` is
+ *  absent from a failed firing. */
+export interface BuildRetrospective {
+  id: string
+  at: string
+  trigger: string
+  model: string | null
+  outcome: ManagerFiring['outcome']
+  detail: string | null
+  duration_ms: number | null
+  usage: Record<string, number> | null
+  cost_usd_micros: number | null
+  parts: number
+  vault_source: string | null
+  report: Record<string, unknown> | null
+}
+
+/** A document's retrospectives, newest first. */
+export function useBuildRetrospectives(path: string) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<BuildRetrospective[]>({
+    queryKey: ['project', projectId, 'manager', 'retrospectives', path],
+    queryFn: async () =>
+      (
+        await getJson<{ retrospectives: BuildRetrospective[] }>(
+          `/api/v1/projects/${projectId}/manager/jobs/build-retrospective/retrospectives?path=${encodeURIComponent(path)}`,
+        )
+      ).retrospectives,
+    enabled: isConfigured && !!projectId && !!path,
+  })
+}
+
+/** "Review this build": refused with 409 and a sentence while one is in progress or with no runner. */
+export function useReviewThisBuild(path: string) {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: () =>
+      postJson<unknown>(
+        `/api/v1/projects/${projectId}/manager/jobs/build-retrospective/run?path=${encodeURIComponent(path)}`,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager'] })
+    },
+  })
+}
+
 export function useUpdateManagerJob() {
   const queryClient = useQueryClient()
   const projectId = useConfigStore((state) => state.selectedProjectId)

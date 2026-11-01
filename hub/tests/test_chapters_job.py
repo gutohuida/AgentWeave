@@ -208,7 +208,7 @@ async def test_button_only_ignores_triggers_and_the_press_fires_as_asked(
 
 
 @pytest.mark.asyncio
-async def test_mode_is_only_for_the_chapters_job(app, auth_headers):
+async def test_mode_is_only_for_the_jobs_with_a_button(app, auth_headers):
     refused = await app.patch(
         f"{BASE}/manager/jobs/conversation-titles", json={"mode": "button"}, headers=auth_headers
     )

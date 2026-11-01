@@ -44,6 +44,9 @@ REPORTS = "vault-reports"
 SPEC_VAULT_CHECK = "spec-vault-check"
 CHAPTERS = "chapters"
 MENDER = "mender"
+BUILD_RETROSPECTIVE = "build-retrospective"
+#: The jobs with a button beside their triggers: `mode` chooses automatic firing or the button only.
+HAS_BUTTON = (CHAPTERS, BUILD_RETROSPECTIVE)
 
 
 @dataclass(frozen=True)
@@ -109,6 +112,19 @@ JOBS = (
             "only when you ask. Needs a runner. Off: the Thread shows its structural surface."
         ),
         trigger="document_approved",
+    ),
+    JobSpec(
+        key=BUILD_RETROSPECTIVE,
+        title="Build retrospective",
+        description=(
+            "Reviews a spec document's whole build: where the time went, what was sent back and "
+            "why, what the spec missed, staffing, cost, friction, what worked and what to improve, "
+            "every claim citing the records it rests on. Fires when a document's last task is "
+            "approved (automatic), and when you press Review this build on its page. Its lessons "
+            "are added to the vault as a tracked source. Needs a runner. Off: nothing reviews a "
+            "build unless you ask."
+        ),
+        trigger="last_task_approved",
     ),
     # The one entry that is an agent, not a one-shot spawn (`stalls.py`): its runner and model
     # become the `mender` agent's, and a stall briefs it through the ordinary queue.
@@ -179,7 +195,7 @@ async def get_job(db: AsyncSession, project_id: str, key: str) -> Dict[str, Any]
     job = _listed(_BY_KEY[key], row)
     if key == MENDER:
         job["default_model"] = await _mender_default(db, project_id, row)
-    if key == CHAPTERS:
+    if key in HAS_BUTTON:
         job["usage_total"] = await usage_total(db, project_id, key)
     return job
 
@@ -230,8 +246,8 @@ async def list_jobs(db: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
     by_key = {row.job: row for row in rows}
     listed = [_listed(spec, by_key.get(spec.key)) for spec in JOBS]
     for job in listed:
-        if job["key"] == CHAPTERS:
-            job["usage_total"] = await usage_total(db, project_id, CHAPTERS)
+        if job["key"] in HAS_BUTTON:
+            job["usage_total"] = await usage_total(db, project_id, job["key"])
         if job["key"] == MENDER:
             job["default_model"] = await _mender_default(db, project_id, by_key.get(MENDER))
     return listed
