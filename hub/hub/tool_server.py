@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import sys
+import threading
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -26,6 +27,7 @@ _SERVER_NAME = "mcp_server.py"
 # A refused replace is retried this often, pausing a little longer each time (F750).
 _REPLACE_ATTEMPTS = 6
 _REPLACE_PAUSE = 0.02
+_WRITE_LOCK = threading.Lock()
 
 
 def pin_root() -> Path:
@@ -72,7 +74,16 @@ class ToolServerPin:
     @staticmethod
     def _write_verified(target: Path, data: bytes, mode: Optional[int] = None) -> None:
         """Leave *target* alone if it holds *data* (touching it, so pruning sees it in use);
-        otherwise write it atomically. Raises `OSError`."""
+        otherwise write it atomically. Raises `OSError`.
+
+        Turn starts call this from worker threads, so the lock gives each process one writer at a
+        time, which the temp name below relies on (F1118). Other processes are handled by the
+        retry (F750)."""
+        with _WRITE_LOCK:
+            ToolServerPin._write_verified_locked(target, data, mode)
+
+    @staticmethod
+    def _write_verified_locked(target: Path, data: bytes, mode: Optional[int]) -> None:
         try:
             if target.read_bytes() == data:
                 os.utime(target)
