@@ -9,7 +9,7 @@ import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState
 import type { SpecSurfaceProps } from '@/components/spec/page/SpecWorkspace'
 import type { CoverageEntry } from '@/api/spec'
 import { agents, tasks as taskFixtures } from './fixtures'
-import { FOOTER_CHOICES, HEADER_CHOICES, MARKER_CHOICES, PANEL_NAV_CHOICES, MockHealth, NOTICE_LEVELS, TodayBanner, noticesFor, type FooterChoice, type HeaderChoice, type MarkerChoice, type PanelNavChoice, type NoticeLevel } from './specBanner'
+import { HEADER_CHOICES, PANEL_NAV_CHOICES, MockHealth, NOTICE_LEVELS, TodayBanner, noticesFor, type HeaderChoice, type PanelNavChoice, type NoticeLevel } from './specBanner'
 import coverageJson from './fixtures/spec_coverage.json'
 import documentJson from './fixtures/spec_document.json'
 import documentsJson from './fixtures/spec_documents.json'
@@ -61,10 +61,6 @@ export interface SpecMockControls {
   notices: NoticeLevel
   /** Which header design is shown (today, or A, B or C). */
   header: HeaderChoice
-  /** Whether the list's defects report starts open (today) or folded. */
-  footer: FooterChoice
-  /** How the list marks each document's state. */
-  marker: MarkerChoice
   /** The conversation panel's navigation rows: as today, or one row. */
   panelNav: PanelNavChoice
 }
@@ -79,8 +75,6 @@ function readHashControls(): Partial<SpecMockControls> & { at?: string } {
   return {
     notices: notices && NOTICE_LEVELS.some((n) => n.value === notices) ? notices : undefined,
     header: HEADER_CHOICES.find((h) => h.value === query.get('header'))?.value,
-    footer: FOOTER_CHOICES.find((f) => f.value === query.get('footer'))?.value,
-    marker: MARKER_CHOICES.find((m) => m.value === query.get('marker'))?.value,
     panelNav: PANEL_NAV_CHOICES.find((n) => n.value === query.get('nav'))?.value,
     state: state && STATES.includes(state) ? state : undefined,
     layout: layout === 'switcher' || layout === 'column' ? layout : undefined,
@@ -88,7 +82,7 @@ function readHashControls(): Partial<SpecMockControls> & { at?: string } {
   }
 }
 
-let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', header: 'today', footer: 'today', marker: 'icon-paper', panelNav: 'today', ...stripUndefined(readHashControls()) }
+let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', header: 'today', panelNav: 'today', ...stripUndefined(readHashControls()) }
 const listeners = new Set<() => void>()
 
 function stripUndefined<T extends object>(o: T): Partial<T> {

@@ -11,7 +11,7 @@ import {
   type SpecDocumentView,
   type SpecListEntry,
 } from './model'
-import { SpecDocSwitcher, type ListMarker } from './SpecDocList'
+import { SpecDocSwitcher } from './SpecDocList'
 import { DocumentFilterBar } from './SpecDocumentBody'
 import { SpecOpenPicker } from './SpecOpenPicker'
 import '@/styles/spec-page.css'
@@ -25,8 +25,6 @@ export interface PanelListProps {
   attachedPath?: string | null
   recent?: string[]
   progress?: Record<string, { done: number; total: number }>
-  /** How the picker marks each document's state (being mocked). */
-  marker?: ListMarker
 }
 
 export interface SpecPanelNavProps {
@@ -211,7 +209,6 @@ export function SpecPanelDocSwitcher({
       attachedPath={list.attachedPath}
       recent={list.recent}
       progress={list.progress}
-      marker={list.marker}
       compact
       autoFocus
     />

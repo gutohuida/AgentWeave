@@ -3,7 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { useActiveAnchor, useDocumentNavigation, useEnterChildren } from './hooks'
 import { anchors, type BuildView, type CheckFinding, type CheckState, type DocumentFilters, type ListPreferences, type SpecAction, type SpecDocumentView, type SpecListEntry } from './model'
 import { SpecBuildsSection } from './SpecBuilds'
-import { SpecDocList, SpecDocSwitcher, type ListMarker } from './SpecDocList'
+import { SpecDocList, SpecDocSwitcher } from './SpecDocList'
 import { SpecDocumentBody, type BodyPart } from './SpecDocumentBody'
 import { SpecOutlineMenu, SpecOutlineRail } from './SpecOutline'
 import { SpecPageHeader, type HeaderChrome } from './SpecPageHeader'
@@ -57,8 +57,6 @@ export interface SpecWorkspaceProps extends SpecSurfaceProps {
   layout: 'column' | 'switcher'
   /** Pinned under the list (the evidence entry, the defects report). */
   listFooter?: React.ReactNode
-  /** How the list marks each document's state (being mocked). */
-  listMarker?: ListMarker
 }
 
 /** The body has scrolled away from its top: the compact header condenses to one line. */
@@ -127,7 +125,6 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
       now={props.now}
       variant={variant}
       footer={props.listFooter}
-      marker={props.listMarker}
     />
   )
 
