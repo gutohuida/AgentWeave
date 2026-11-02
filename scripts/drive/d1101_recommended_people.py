@@ -421,7 +421,8 @@ def drive(state):
                 break
             message = ("The document cannot be built yet: declare its requirements (each with an "
                        "acceptance criterion) and give every task `requirements` naming the keys "
-                       "it implements. Resubmit it, keeping every builder, checker and reason.")
+                       "it implements. Resubmit it, keeping every builder, checker and reason, and "
+                       "its evidence.")
         elif step_of() in ("tasks", "build") and len(tasks_now) < 2:
             message = ("Submit the document with both tasks, each with builder, checker and a "
                        "reason for each.")
@@ -764,3 +765,10 @@ if __name__ == "__main__":
 # that A2 failure is why the route's access line now counts. D1-D5, E1, E2 are ETCRB-4's. A forced run
 # (a queued first trigger, a 2-turn budget) ended 28 passed, 18 failed with no crash: it named
 # A0, went on on a seeded document and reached E3.
+#
+# A2 keeps its figures-in-evidence half: FR-13 says the author "records what it found in the
+# document's evidence" and names this drive reading it. Observed 2026-11-02 (run 05:36:02, artefacts
+# .../053602) it failed on an author that did read the record: its one attempt sent `evidence` as a
+# string, the 422 named no shape, and it moved the figures to the design. The tasks step now gives the
+# shape. Run 06:17:11 (artefacts .../061711, empty record): 52 passed, 7 failed, A2 passing on
+# {"checked": ["project record: 0 tasks built, 0 turns, ..."]}; the failures are ETCRB-4's D1-D5, E1, E2.
