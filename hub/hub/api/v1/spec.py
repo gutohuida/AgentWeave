@@ -870,16 +870,18 @@ async def _waiting_on_operator(
     for the document (the-list-says-what-waits). Only an exploring document is checked, because
     that is the one check that reads more than the listing already has."""
     waiting: List[str] = []
-    if document.phase == "exploring" and stored is not None and workspace is not None:
+    if document.phase == "exploring" and stored is not None:
+        # The stored payload alone, no file or vault read per document: this runs for every row of
+        # an unpolled-but-frequent list. A payload that does not validate is not ready.
         with contextlib.suppress(Exception):
-            from ... import spec_service
+            from ... import spec_completeness
+            from ...spec_payload import validate_payload
 
-            found = await spec_service.phase_findings(
-                session, workspace, document, spec_lifecycle.APPROVED
-            )
-            if not found.refusals:
+            payload = validate_payload(stored)
+            findings = spec_completeness.check(payload) + spec_completeness.approval_gaps(payload)
+            if not spec_completeness.split(findings)[0]:
                 waiting.append("ready_to_approve")
-    if amendments and (amendments.get("unreviewed") or amendments.get("proposed")):
+    if amendments and (amendments.get("unreviewed") or amendments.get(spec_lifecycle.PROPOSED)):
         waiting.append("amendments_to_review")
     if (
         document.kind == "change-spec"
