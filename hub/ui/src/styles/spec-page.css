@@ -180,14 +180,6 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-list-pos { width: 14px; flex: none; font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
 .aw-sp-list-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-sp-list-meta { flex: none; font-size: 11px; font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.aw-sp-list-dot { width: 7px; height: 7px; flex: none; border-radius: 999px; background: var(--text-3); }
-.aw-sp-list-dot[data-state="writing"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-3); }
-.aw-sp-list-dot[data-state="ready"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ring); }
-.aw-sp-list-dot[data-state="approved"] { background: var(--green); }
-.aw-sp-list-dot[data-state="building"] { background: var(--blue); }
-.aw-sp-list-dot[data-state="current"] { background: var(--text-2); }
-.aw-sp-list-dot[data-state="archived"] { background: var(--border-hi); }
-.aw-sp-list-dot[data-state="done"] { background: var(--green); box-shadow: inset 0 0 0 1.5px var(--bg, transparent); }
 .aw-sp-list-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 10px; font-size: 12.5px; color: var(--text-3); }
 
 /* The top switcher: the list drops down beneath the open document's title. */

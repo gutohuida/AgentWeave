@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
 
@@ -800,6 +802,15 @@ async def list_documents(
     running = await work_tally.running_progress(session, project_id)
     views = []
     shown = await spec_lifecycle.display_phases(session, documents)
+    folded_ids = set(
+        (
+            await session.execute(
+                select(SpecDocumentMerge.change_document_id).where(
+                    SpecDocumentMerge.change_document_id.in_([d.id for d in documents])
+                )
+            )
+        ).scalars()
+    )
     for document in documents:
         view = _document_view(document, steps, shown[document.id])
         if document.id in overridden:
@@ -812,8 +823,96 @@ async def list_documents(
         if document.path in on_disk:
             content = on_disk[document.path]
             view["diverged"] = spec_lifecycle.divergence(document, content) is not None
+        stored = spec_documents.parse_stored(on_disk.get(document.path))
+        view["roadmap"] = _named_roadmap(stored, on_disk)
+        view["waiting"] = await _waiting_on_operator(
+            session,
+            workspace,
+            document,
+            shown[document.id],
+            stored,
+            amended.get(document.id),
+            document.id in folded_ids,
+        )
         views.append(view)
     return {"documents": views}
+
+
+def _named_roadmap(
+    stored: Optional[Dict[str, Any]], on_disk: Dict[str, Optional[str]]
+) -> Optional[Dict[str, Any]]:
+    """The roadmap and slice a stored change document names, or None.
+
+    `order` is where the roadmap lists that slice (its build order), null when the roadmap is not
+    readable or does not hold it, so a list can order slices without the spec index.
+    """
+    named = stored.get("roadmap") if isinstance(stored, dict) else None
+    if not isinstance(named, dict) or not named.get("document") or not named.get("slice"):
+        return None
+    roadmap = spec_documents.parse_stored(on_disk.get(str(named["document"])))
+    keys = [s.get("key") for s in (roadmap or {}).get("slices") or [] if isinstance(s, dict)]
+    slice_key = str(named["slice"])
+    return {
+        "document": str(named["document"]),
+        "slice": slice_key,
+        "order": keys.index(slice_key) if slice_key in keys else None,
+    }
+
+
+_READY_VERDICTS: Dict[Tuple[Any, ...], Tuple[float, bool]] = {}
+_READY_VERDICT_SECONDS = 15.0
+
+
+async def _waiting_on_operator(
+    session: AsyncSession,
+    workspace,
+    document,
+    shown: str,
+    stored: Optional[Dict[str, Any]],
+    amendments: Optional[Dict[str, int]],
+    folded: bool,
+) -> List[str]:
+    """Which of `ready_to_approve`, `amendments_to_review`, `ready_to_build`, `ready_to_fold` hold
+    for the document (the-list-says-what-waits). Only an exploring document is checked, because
+    that is the one check that reads more than the listing already has."""
+    waiting: List[str] = []
+    if document.phase == "exploring" and stored is not None:
+        # What approval itself finds (`phase_findings`): nothing blocks it when it has neither
+        # refusals nor gaps. A document with no readable payload is not ready.
+        # The findings read several files (payload, roadmaps, journey), so a verdict is kept for
+        # the document's stored content and unreviewed amendments, and for a few seconds at most
+        # because the other files it depends on are not part of the key.
+        key = (
+            document.id,
+            hash(json.dumps(stored, sort_keys=True, default=str)),
+            tuple(sorted((amendments or {}).items())),
+        )
+        now = time.monotonic()
+        held = _READY_VERDICTS.get(key)
+        if held is not None and now - held[0] < _READY_VERDICT_SECONDS:
+            ready = held[1]
+        else:
+            ready = False
+            with contextlib.suppress(Exception):
+                found = await spec_service.phase_findings(session, workspace, document, "approved")
+                ready = not found.refusals and not found.gaps
+            if len(_READY_VERDICTS) > 4096:
+                _READY_VERDICTS.clear()
+            _READY_VERDICTS[key] = (now, ready)
+        if ready:
+            waiting.append("ready_to_approve")
+    if amendments and (amendments.get("unreviewed") or amendments.get(spec_lifecycle.PROPOSED)):
+        waiting.append("amendments_to_review")
+    if (
+        document.kind == "change-spec"
+        and shown == "approved"
+        and isinstance(stored, dict)
+        and stored.get("tasks")
+    ):
+        waiting.append("ready_to_build")
+    if document.kind == "change-spec" and shown == "done" and not folded:
+        waiting.append("ready_to_fold")
+    return waiting
 
 
 class EvidenceRecord(RequestModel):

@@ -122,6 +122,7 @@ describe('defects by step', () => {
       defects: [], by_step: { reconcile: 1, review: 1, 'after-fold': 1 },
     }]
     wrap(<SpecDefectsReport onSelect={onSelect} />)
+    await userEvent.click(screen.getByRole('button', { name: /Defects by step/ }))
 
     const row = screen.getByTestId('spec-defects-row')
     expect(row).toHaveTextContent('Service routes')
@@ -140,6 +141,7 @@ describe('recording a defect', () => {
   it('records one against the open change with the step that caught it', async () => {
     wrap(<SpecDefectsReport currentPath={CHANGE} onSelect={vi.fn()} />)
 
+    await userEvent.click(screen.getByRole('button', { name: /Defects by step/ }))
     await userEvent.click(screen.getByTestId('spec-defect-add'))
     await userEvent.type(screen.getByLabelText('What went wrong'), '500 under load')
     await userEvent.selectOptions(screen.getByLabelText('Caught at'), 'review')

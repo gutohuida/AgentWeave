@@ -22,7 +22,7 @@ import builderChat from '../fixtures/chat_builder_e3aba2.json'
 import architectChat from '../fixtures/chat_architect_9cdda4.json'
 import modelCatalog from '../fixtures/model_catalog.json'
 import type { ScreenProps } from '../routes'
-import { useSpecMock, useSpecMockControls } from '../specMock'
+import { useSpecMock } from '../specMock'
 
 const CHATS: Record<string, ChatHistoryResponse> = {
   'conv-e3aba2c5956a': builderChat as unknown as ChatHistoryResponse,
@@ -88,7 +88,6 @@ export default function Conversation(props: ScreenProps) {
 function SpecPanelMock({ picking, go, route }: { picking: boolean; go: ScreenProps['go']; route: ScreenProps['route'] }) {
   const { surface, startDialog, entries } = useSpecMock('conversation/Architect/conv-9cdda4865e0b/spec')
   const [listPrefs, setListPrefs] = useListPreferences(PROJECT_ID)
-  const { marker } = useSpecMockControls()
   // mock state: the conversation's attached document, what was opened lately, and the running builds' progress.
   const attachedPath = surface.doc.path
   const recent = entries.filter((e) => !e.building && e.path !== attachedPath).slice(0, 3).map((e) => e.path)
@@ -101,7 +100,6 @@ function SpecPanelMock({ picking, go, route }: { picking: boolean; go: ScreenPro
     attachedPath,
     recent,
     progress,
-    marker,
   }
   const openDoc = (path: string) => {
     if (route.kind === 'conversation') go({ ...route, panel: 'spec' })
@@ -121,7 +119,6 @@ function SpecPanelMock({ picking, go, route }: { picking: boolean; go: ScreenPro
             attachedPath={attachedPath}
             recent={recent}
             progress={progress}
-            marker={marker}
             autoFocus
           />
         </div>
