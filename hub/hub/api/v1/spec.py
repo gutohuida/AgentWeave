@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple
 
@@ -857,6 +859,10 @@ def _named_roadmap(
     }
 
 
+_READY_VERDICTS: Dict[Tuple[Any, ...], Tuple[float, bool]] = {}
+_READY_VERDICT_SECONDS = 15.0
+
+
 async def _waiting_on_operator(
     session: AsyncSession,
     workspace,
@@ -873,10 +879,28 @@ async def _waiting_on_operator(
     if document.phase == "exploring" and stored is not None:
         # What approval itself finds (`phase_findings`): nothing blocks it when it has neither
         # refusals nor gaps. A document with no readable payload is not ready.
-        with contextlib.suppress(Exception):
-            found = await spec_service.phase_findings(session, workspace, document, "approved")
-            if not found.refusals and not found.gaps:
-                waiting.append("ready_to_approve")
+        # The findings read several files (payload, roadmaps, journey), so a verdict is kept for
+        # the document's stored content and unreviewed amendments, and for a few seconds at most
+        # because the other files it depends on are not part of the key.
+        key = (
+            document.id,
+            hash(json.dumps(stored, sort_keys=True, default=str)),
+            tuple(sorted((amendments or {}).items())),
+        )
+        now = time.monotonic()
+        held = _READY_VERDICTS.get(key)
+        if held is not None and now - held[0] < _READY_VERDICT_SECONDS:
+            ready = held[1]
+        else:
+            ready = False
+            with contextlib.suppress(Exception):
+                found = await spec_service.phase_findings(session, workspace, document, "approved")
+                ready = not found.refusals and not found.gaps
+            if len(_READY_VERDICTS) > 4096:
+                _READY_VERDICTS.clear()
+            _READY_VERDICTS[key] = (now, ready)
+        if ready:
+            waiting.append("ready_to_approve")
     if amendments and (amendments.get("unreviewed") or amendments.get(spec_lifecycle.PROPOSED)):
         waiting.append("amendments_to_review")
     if (
