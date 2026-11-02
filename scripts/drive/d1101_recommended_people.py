@@ -32,7 +32,10 @@ Steps (each records its checks and the drive goes on, so one run on master shows
      stopping from it stops the build (E2) and its flow starts nothing further (E3).
 
 The author is walked through the journey as the operator would, in one conversation (answering
-'continue' to each step; the models question is answered only once asked; approval gaps go back to the author).
+'continue' to each step, and pressing it on when a turn leaves the step where it was; the models
+question is answered only once asked; approval gaps go back to the author). A turn is every run the
+author does until it is idle: the trigger may answer 'queued' with no run, and an answer delivered
+late starts a run nobody triggered. A walk that runs out of turns says so (A0, A0b) and goes on.
 On master it fails at A1/A2/A4 (no tool reads the record; picks carry no reasons), B2 (no
 reasons shown), D1-D5 (the follow-up joins nothing: no reopening, no assignee, the spec reads
 done, no flow starts it) and E1/E2. Whether the master author writes a buildable document varies
@@ -87,14 +90,18 @@ ANSWER = (
     "Judge the models by reviewing this project's record only (not the web, not just what you "
     "know). Read it with your tool, state the sample sizes, then continue and submit the tasks."
 )
+PRESS_ON = (
+    "Nothing more is coming on this step: everything I can tell you is in my request, repeated "
+    "below. Decide anything it leaves out yourself and say what you decided; every acceptance "
+    "criterion is `checked_by` agent. The model choice is not one of those: leave who builds and "
+    "checks undecided until the tasks step, whose instructions say how to settle it. Write only "
+    "this step's part with submit_spec_document, keeping everything already written, then call "
+    "advance_spec_step once and read what the next step says: I have chosen to continue."
+    "\n\nMy request: "
+) + REQUEST
 TURN = 8 * 60
 TURNS = 12
 BUILD_LIMIT = 30 * 60
-
-
-def finished(run_id):
-    return d.ro("select status from runs where id=?", (run_id,))[0][0] not in (
-        "running", "queued", "starting")
 
 
 def open_questions(run_ids):
@@ -114,27 +121,43 @@ def open_questions(run_ids):
     return out
 
 
-def turn(base, message, path, conversation=None):
-    """Triggers the author, in its conversation once it has one, and waits until its run ends or
-    parks on an ask_user. Returns (run id, conversation id)."""
+def trigger(base, message, path, conversation=None):
+    """Triggers the author, in its conversation once it has one. Returns the conversation id. The
+    answer holds no run when the input was queued, so the caller waits on the author, not on a run."""
     body = {"agent": AUTHOR, "message": message, "spec_document": path}
     if conversation:
         body["conversation_id"] = conversation
     code, run = d.api("POST", f"{base}/agent/trigger", body)
     d.check("setup: the author turn starts", code in (200, 201, 202), f"{code} {run}", fatal=True)
-    run_id = run["run_id"]
-    d.poll(lambda: finished(run_id) or open_questions([run_id]), TURN, 3)
-    return run_id, run.get("conversation_id") or conversation
+    if not run.get("run_id"):
+        print(f"  author turn queued: {run.get('waiting_reason') or run.get('message')}", flush=True)
+    return run.get("conversation_id") or conversation
 
 
-def reply(run_id):
-    """What the run said: its text, and every ask_user question with its options."""
-    said = [c for (c,) in d.ro(
-        "select content from agent_outputs where run_id=? and kind='text' order by sequence",
-        (run_id,))]
-    for text, options in d.ro("select question, options from questions where created_by_run_id=? "
-                              "order by created_at", (run_id,)):
-        said.append(f"{text} {options}")
+def author_runs(pid):
+    """Every run the author has had, oldest first, however it was started."""
+    return [r for (r,) in d.ro("select id from runs where project_id=? and agent=? order by rowid",
+                               (pid, AUTHOR))]
+
+
+def author_busy(pid):
+    """The author's live runs and the input waiting for one."""
+    return d.ro("select id, status from runs where project_id=? and agent=? and status in "
+                "('running', 'queued', 'starting') union all select id, state from "
+                "inbound_queue_entries where project_id=? and agent=? and state='queued'",
+                (pid, AUTHOR, pid, AUTHOR))
+
+
+def reply(run_ids):
+    """What the runs said: their text, and every ask_user question with its options."""
+    said = []
+    for run_id in run_ids:
+        said += [c for (c,) in d.ro(
+            "select content from agent_outputs where run_id=? and kind='text' order by sequence",
+            (run_id,))]
+        for text, options in d.ro("select question, options from questions where "
+                                  "created_by_run_id=? order by created_at", (run_id,)):
+            said.append(f"{text} {options}")
     return "\n".join(said)
 
 
@@ -168,10 +191,23 @@ def journey_label(options):
 
 
 def asks_for_sources(said):
-    """The author's text asks, in a question sentence, which sources to judge the models by."""
+    """The author's text asks, in a question sentence, which sources to judge the models by: naming
+    both sources in that sentence, or asking about sources and listing them around it."""
     return bool(re.search(r"[^.?!\n]*(web|search)[^.?!\n]*(record|project'?s)[^.?!\n]*\?"
                           r"|[^.?!\n]*(record|project'?s)[^.?!\n]*(web|search)[^.?!\n]*\?",
-                          said, re.I))
+                          said, re.I)
+                or (re.search(r"[^.?!\n]*(sources?|judge)[^.?!\n]*\?", said, re.I)
+                    and re.search(r"web|search", said, re.I)
+                    and re.search(r"record|project'?s", said, re.I)))
+
+
+def read_record_by_route():
+    """An author that reads through its command equivalents shows only `Called PowerShell` in its
+    outputs, so the route's own access line counts as the call. Only a Hub this drive started has
+    a log here; on a reused one the tool name is the only signal."""
+    log = d.TMP / "hub.log"
+    return log.exists() and "/agent-actions/model-record HTTP/1.1\" 200" in log.read_text(
+        encoding="utf-8", errors="replace")
 
 
 def buildable(doc):
@@ -281,45 +317,58 @@ def drive(state):
     doc_id = doc["id"]
     path = doc["path"]
 
-    runs = []
     answered = []
     sources_answered = []
 
     conversation = None
 
+    def answer_questions():
+        """Answers what the author has parked on (through the question's route, as the operator
+        would). Returns whether there was anything to answer."""
+        pending = open_questions(author_runs(pid))
+        for qid, qtext, options, _multi in pending:
+            # A question that offers the sources gets the project's record; any other
+            # question about the models or the roster is answered in words; the journey's
+            # 'how to proceed' gets its Continue option.
+            if sources_question(options):
+                labels = chosen(options)
+                answer = ", ".join(labels) or ANSWER
+                sources_answered.append(qid)
+            elif models_question(qtext):
+                labels = chosen(options)
+                answer = ANSWER
+            else:
+                labels = [journey_label(options)]
+                answer = labels[0]
+            code, out = d.api("PATCH", f"{base}/questions/{qid}",
+                              {"answer": answer, "labels": labels})
+            d.check("setup: an author question is answered", code == 200, f"{code} {str(out)[:200]}")
+            answered.append(qid)
+        return bool(pending)
+
     def author_turn(message):
-        """One author turn, in the one conversation, answering any ask_user it parks on (through
-        the question's route, as the operator would); the path is re-read by id after, as the
-        author may have renamed."""
+        """One author turn, in the one conversation: from the trigger until the author is idle,
+        answering any ask_user on the way. Returns the runs it took, none if the input never got
+        one; the path is re-read by id after, as the author may have renamed."""
         nonlocal path, conversation
-        run_id, conversation = turn(base, message, path, conversation)
-        runs.append(run_id)
-        for _ in range(4):
-            pending = open_questions(runs)
-            if not pending:
+        before = set(author_runs(pid))
+        conversation = trigger(base, message, path, conversation)
+        deadline = time.time() + TURN
+        was_idle = False
+        while time.time() < deadline:
+            time.sleep(3)
+            if answer_questions():
+                deadline = time.time() + TURN
+                was_idle = False
+                continue
+            # Twice running: a run that just ended can hand the queue to the next one.
+            idle = not author_busy(pid)
+            if idle and was_idle:
                 break
-            for qid, qtext, options, _multi in pending:
-                # A question that offers the sources gets the project's record; any other
-                # question about the models or the roster is answered in words; the journey's
-                # 'how to proceed' gets its Continue option.
-                if sources_question(options):
-                    labels = chosen(options)
-                    answer = ", ".join(labels) or ANSWER
-                    sources_answered.append(qid)
-                elif models_question(qtext):
-                    labels = chosen(options)
-                    answer = ANSWER
-                else:
-                    labels = [journey_label(options)]
-                    answer = labels[0]
-                code, out = d.api("PATCH", f"{base}/questions/{qid}",
-                                  {"answer": answer, "labels": labels})
-                d.check("setup: an author question is answered", code == 200, f"{code} {str(out)[:200]}")
-                answered.append(qid)
-            d.poll(lambda: finished(run_id), TURN, 3)
-            d.wait_idle(pid, 4 * 60)
+            was_idle = idle
+        d.check("setup: the author turn ends", was_idle, f"still busy: {author_busy(pid)}")
         path = current(base, doc_id)[0] or path
-        return run_id
+        return [r for r in author_runs(pid) if r not in before]
 
     def check_a1b(text, run_ids):
         marks = ",".join("?" * len(run_ids))
@@ -337,22 +386,24 @@ def drive(state):
     # time it stands at the tasks step fails A1 by name, and is then told. The walk is bounded.
     said_all, asked, a1_done, told, message = [], False, False, False, REQUEST
     reached = False
+    saw_tasks = False
     for _ in range(TURNS):
         step_before = step_of()
-        run_id = author_turn(message)
-        said = reply(run_id)
+        run_ids = author_turn(message)
+        saw_tasks = saw_tasks or step_of() in ("tasks", "build")
+        said = reply(run_ids)
         said_all.append(said)
         (d.TMP / f"author-turn{len(said_all)}.txt").write_text(said, encoding="utf-8")
         text = "\n".join(said_all)
-        turn_text = "\n".join(c for (c,) in d.ro(
-            "select content from agent_outputs where run_id=? and kind='text'", (run_id,)))
+        turn_text = "\n".join(c for r in run_ids for (c,) in d.ro(
+            "select content from agent_outputs where run_id=? and kind='text'", (r,)))
         # Asked only by an ask_user question that offered the sources, or a question sentence.
         asked = asked or bool(sources_answered) or asks_for_sources(turn_text)
         answered_by_route = bool(sources_answered)
         if not a1_done and (asked or step_before in ("tasks", "build")):
             a1_done = True
             d.check("A1 the author asks which sources to judge the models by", asked, text[-600:])
-            check_a1b(text, runs)
+            check_a1b(text, author_runs(pid))
             told = answered_by_route
             message = ("Continue." if answered_by_route else f"{ANSWER} Then continue.")
             continue
@@ -377,26 +428,33 @@ def drive(state):
         elif not told and asks_for_sources(turn_text):
             told = True
             message = f"{ANSWER} Then continue."
+        elif step_of() == step_before:
+            message = PRESS_ON
         else:
             message = "Continue: take the document to the next step."
+    d.check(f"A0b the author reached the tasks step within {TURNS} turns", saw_tasks,
+            f"step={step_of()} turns={len(said_all)}")
     d.check(f"A0 the author reached the build step with a buildable document within {TURNS} turns",
             reached, f"step={step_of()} turns={len(said_all)}")
     if not a1_done:
         d.check("A1 the author asks which sources to judge the models by", asked,
-                "\n".join(said_all)[-600:])
-        check_a1b("\n".join(said_all), runs)
+                ("" if saw_tasks else "never reached the tasks step, where it is asked; ")
+                + "\n".join(said_all)[-600:])
+        check_a1b("\n".join(said_all), author_runs(pid))
     quoted = urllib.parse.quote(path)
     _, read = d.api("GET", f"{base}/project/spec?path={quoted}")
     written = payload_of(root, path)
     (d.TMP / "document.json").write_text(json.dumps(written, indent=1, default=str), encoding="utf-8")
-    marks = "','".join(runs)
-    touched = d.ro(f"select content from agent_outputs where run_id in ('{marks}') "
-                   "and kind in ('tool_use','tool_call') ") or []
+    run_ids = author_runs(pid)
+    marks = ",".join("?" * len(run_ids))
+    touched = d.ro(f"select content from agent_outputs where run_id in ({marks}) "
+                   "and kind in ('tool_use','tool_call') ", tuple(run_ids)) or []
     blob = " ".join(c for (c,) in touched).lower()
     evidence = json.dumps(written.get("evidence"), default=str).lower()
     d.check("A2 the author read the per-model record (a tool call, with its figures in evidence)",
-            bool(re.search(r"model[_ -]?record|per[_ -]?model|work[_ -]?tally", blob))
-            and re.search(r"sample|n=|\b\d+ tasks?\b", evidence) is not None,
+            (bool(re.search(r"model[_ -]?record|per[_ -]?model|work[_ -]?tally", blob))
+             or read_record_by_route())
+            and re.search(r"sample|n=|\b\d+ (\w+ )?(tasks?|turns?)\b", evidence) is not None,
             f"calls={blob[:300]} evidence={evidence[:300]}")
     tasks = tasks_of(root, path)
     d.check("A3 every task names a builder and a checker",
@@ -550,9 +608,11 @@ def drive(state):
     start = time.time()
     while time.time() - start < BUILD_LIMIT:
         code, out = fire_job(base, job)
-        # "Every task ... is already being worked" is a 409 that says nothing is wrong; any other
-        # refusal (for one, a completed task with no recorded evidence) stops the drive, named.
-        busy = code == 409 and "already being worked" in str(out)
+        # "Every task ... is already being worked" and "<agent> is already running a turn" are 409s
+        # that say nothing is wrong; any other refusal (for one, a completed task with no recorded
+        # evidence) stops the drive, named.
+        busy = code == 409 and ("already being worked" in str(out)
+                                or "already running a turn" in str(out))
         d.check("C0 the build's flow accepts each firing", code in (200, 201, 202) or busy,
                 f"{code} {str(out)[:300]}", fatal=True)
         d.wait_idle(pid, 4 * 60)
@@ -676,3 +736,10 @@ if __name__ == "__main__":
 # master author writes varies run to run, so a run whose document is not buildable is seeded and
 # fails A7-A9 as well, and a walk that runs out of turns fails A0 by name. One earlier run could not
 # find the Build button within 30 s (a slow page load; the drive now keeps a screenshot then).
+#
+# Observed 2026-11-02 at ETCRB-3's implementation (run 05:06:47, artefacts .../050647): 48 passed, 8
+# failed. The author reached the build step in 8 turns on its own document (A0, A0b, A7-A9), asked
+# which sources in a question of its own (A1) and read the record through its command route, twice;
+# that A2 failure is why the route's access line now counts. D1-D5, E1, E2 are ETCRB-4's. A forced run
+# (a queued first trigger, a 2-turn budget) ended 28 passed, 18 failed with no crash: it named
+# A0, went on on a seeded document and reached E3.
