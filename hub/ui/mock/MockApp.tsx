@@ -200,7 +200,6 @@ function SpecMockBar({ showLayout }: { showLayout: boolean }) {
           ))}
         </select>
       )}
-      {showLayout ? (
         <select className="mock-bar-select" aria-label="Status mark" value={marker} onChange={(e) => setSpecMockControls({ marker: e.target.value as never })}>
           {MARKER_CHOICES.map((m) => (
             <option key={m.value} value={m.value}>
@@ -208,7 +207,6 @@ function SpecMockBar({ showLayout }: { showLayout: boolean }) {
             </option>
           ))}
         </select>
-      ) : null}
       {showLayout ? (
         <select className="mock-bar-select" aria-label="List footer" value={footer} onChange={(e) => setSpecMockControls({ footer: e.target.value as never })}>
           {FOOTER_CHOICES.map((f) => (

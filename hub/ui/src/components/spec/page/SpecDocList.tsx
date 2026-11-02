@@ -294,7 +294,7 @@ const STATE_ICONS: Record<IconSet, Record<SpecListEntry['shown'], string>> = {
 }
 
 /** One mark per state, told apart by shape as well as colour: done is a filled green badge. */
-function StateIcon({ state, set }: { state: SpecListEntry['shown']; set: IconSet }) {
+export function StateIcon({ state, set }: { state: SpecListEntry['shown']; set: IconSet }) {
   return (
     <span className="aw-sp-list-mark" data-state={state} data-set={set} aria-hidden="true">
       <Icon name={STATE_ICONS[set][state]} size={state === 'done' ? 10 : 13} weight={state === 'done' ? 700 : undefined} />
