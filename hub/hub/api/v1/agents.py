@@ -1541,6 +1541,20 @@ def _operations() -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="read_model_record",
+            args="",
+            method="GET",
+            path="/model-record",
+            fields=(),
+            required=(),
+            text=(
+                "this project's work per model: tasks built, send-backs by reason class, "
+                "API-equivalent cost and sample sizes, each task under the model that ran it. "
+                "An unpriced turn is reported as unpriced, never as zero. Read it when judging "
+                "which model suits a task."
+            ),
+        ),
+        _Operation(
             tool="read_chapters",
             args="",
             method="GET",

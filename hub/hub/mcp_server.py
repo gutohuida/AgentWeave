@@ -5739,6 +5739,21 @@ def list_evidence(
 
 
 @_tool()
+def read_model_record() -> Dict[str, Any]:
+    """Read this project's record per model: what each model built, was sent back for, and cost.
+
+    Use it when judging which model suits a task. Answers `{"models": [...], "sample": {...}}`;
+    each model carries `tasks_built`, `tasks_approved`, `send_backs` (a `total` and a count per
+    reason class), `turns`, `priced_turns`, `unpriced_turns` and `cost_usd_micros` (API-equivalent,
+    millionths of a dollar, over priced turns only), with the tasks behind them. A task counts under
+    the model that ran its build turns, not under the agent it was assigned to, since an agent can
+    be rebound to another model. An unpriced turn is reported as unpriced, never as zero cost.
+    Small samples are small: read `tasks_built` before trusting a ratio.
+    """
+    return _hub_request("GET", "/model-record")
+
+
+@_tool()
 def decide_evidence(
     evidence_id: str, decision: EvidenceDecision, reason: str = ""
 ) -> Dict[str, Any]:
