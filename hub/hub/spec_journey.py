@@ -275,6 +275,36 @@ async def project_steps(session: AsyncSession, project_id: str) -> ProjectSteps:
     return load(workspace)
 
 
+async def open_roster(session: AsyncSession, project_id: str) -> Roster:
+    """The project's open agents with the model each runs, by name."""
+    from sqlalchemy import select
+
+    from .db.models import Agent, Runner
+
+    agents = (
+        (
+            await session.execute(
+                select(Agent).where(Agent.project_id == project_id, Agent.lifecycle == "open")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    runners = {
+        row.id: row
+        for row in (await session.execute(select(Runner).where(Runner.project_id == project_id)))
+        .scalars()
+        .all()
+    }
+    return sorted(
+        (
+            row.name,
+            (runners[row.runner_id].model or "") if row.runner_id in runners else "",
+        )
+        for row in agents
+    )
+
+
 def journey(size: Optional[str], steps: Optional[ProjectSteps] = None) -> List[str]:
     """The steps a document of this size visits, in the project's order (FR-2)."""
     return [step.key for step in (steps or BUILT_IN).steps if step.in_journey(size)]
@@ -534,21 +564,29 @@ STEP_DUTIES: Dict[str, str] = {
         "- For each task list in `files` the paths it will edit, and in `depends_on` the tasks it "
         "waits on; chain any two tasks that share a path. Link each task to the requirements it "
         "serves.\n"
-        "- Name one checker: `delivery.checker` for every task, and a task's own `checker` (or "
-        "`builder`) only where it differs from the delivery's."
+        "- **Name people on every task.** Give each task its own `builder` and `checker`, chosen "
+        "from the open agents, with `builder_reason` and `checker_reason`: one sentence each. A "
+        "reason states the pick in terms of that agent's model (its cost and performance) and the "
+        "task's complexity, and nothing else. Give a hazardous task (a migration, live data, "
+        "security) an agent whose model suits it and a routine one (a copy change) a cheaper "
+        "model where the roster has one. A task's checker is never its builder; with one open "
+        "agent, leave `checker` empty and let `checker_reason` say why. A task missing a pick or "
+        "a reason draws a warning on the document, never a block. Still set `delivery.builder` "
+        "and `delivery.checker` as the defaults."
     ),
     BUILD: (
         f"{marker(BUILD)} **Build: recommend how it will be built.** You recommend; the operator "
         "decides when they press Build, which opens with your recommendation filled in. Recommend "
         "a flow when the work splits into tasks: a flow starts every task whose prerequisites are "
         "met, has finished work reviewed when there is another agent, and can stop when its queue "
-        "empties. Recommend which agent works it, who reviews, when it stops and how often it "
-        "fires (every 5 minutes unless the operator says otherwise). Each review also tests the "
-        "running product unless that is turned off (`tester: false`); say whether a particular "
-        "agent should test (`tester`). 'No flow' is a valid recommendation. Ask in your reply "
+        "empties. Recommend which agent works it, who checks, when it stops and how often it "
+        "fires (every 5 minutes unless the operator says otherwise). Each check also tests the "
+        "running product; the checker both tests and records the verdict (`delivery.checker`). "
+        "'No flow' is a valid recommendation. Ask in your reply "
         "about any choice that is the operator's to make. Record the recommendation as "
         "`delivery`, with `reasons`: one sentence for each choice, keyed `mode`, `agent`, "
-        "`reviewer`, `tester`, `stop` and `cron`. Include `delivery` in every later submission. "
+        "`stop` and `cron`. Each task's builder and checker are recommended on the task, with "
+        "their reasons, at the tasks step. Include `delivery` in every later submission. "
         "The document is then ready for the operator to approve."
     ),
 }
@@ -561,7 +599,51 @@ WRITE_WHERE = (
 )
 
 
-def duty(step: Optional[str], steps: Optional[ProjectSteps] = None) -> str:
+#: An open agent and the model its runner is bound to ("" when it has none).
+Roster = List[Tuple[str, str]]
+
+#: The sources the operator may choose to judge models by (`asks-how-to-judge`).
+SOURCES = (
+    "what you already know",
+    "a web search",
+    "a review of this project's record (the per-model record tool)",
+)
+
+
+def people_brief(size: Optional[str], roster: Optional[Roster]) -> str:
+    """What the tasks step adds once the roster and size are known: each open agent's model, and
+    for a document larger than a fix, the question of how to judge them (FR-2, FR-13)."""
+    lines: List[str] = []
+    if roster:
+        lines.append(
+            "- **Open agents and their models:** "
+            + "; ".join(f"`{name}` ({model or 'no model set'})" for name, model in roster)
+            + "."
+        )
+        if len(roster) == 1:
+            lines.append(
+                "- There is one open agent, so no task can have a checker other than its "
+                "builder: leave every `checker` empty and say why in `checker_reason`."
+            )
+    if size != "fix":
+        lines.append(
+            "- **Before naming people, state your current view** of these models (cost, "
+            "performance, where each is strong) and **ask the operator which sources to judge by**, "
+            "in any combination: " + "; ".join(SOURCES) + ". Ask in your reply and end your turn. "
+            "Use only the sources they choose, record what you found in the document's "
+            "`evidence`, and if a chosen source is unavailable say so rather than presenting a "
+            "guess as the finding."
+        )
+    return "\n".join(lines)
+
+
+def duty(
+    step: Optional[str],
+    steps: Optional[ProjectSteps] = None,
+    *,
+    size: Optional[str] = None,
+    roster: Optional[Roster] = None,
+) -> str:
     """The step's instructions, the project's appended instruction for that step and no other
     (FR-4), and the ask-to-advance protocol; "" for a step the project does not have."""
     entry = (steps or BUILT_IN).get(step)
@@ -571,6 +653,10 @@ def duty(step: Optional[str], steps: Optional[ProjectSteps] = None) -> str:
         text = f"{marker(entry.key)} **{entry.title}.**\n{entry.instructions}\n{WRITE_WHERE}"
     else:
         text = STEP_DUTIES[entry.key]
+        if entry.key == TASKS:
+            brief = people_brief(size, roster)
+            if brief:
+                text += "\n" + brief
     if entry.append:
         text += "\n- **This project adds to this step:** " + entry.append
     return text if entry.key == BUILD else text + "\n" + ASK_TO_ADVANCE
