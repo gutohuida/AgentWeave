@@ -630,9 +630,15 @@ def people_brief(size: Optional[str], roster: Optional[Roster]) -> str:
             "- **Before naming people, state your current view** of these models (cost, "
             "performance, where each is strong) and **ask the operator which sources to judge by**, "
             "in any combination: " + "; ".join(SOURCES) + ". Ask in your reply and end your turn. "
-            "Use only the sources they choose, record what you found in the document's "
-            "`evidence`, and if a chosen source is unavailable say so rather than presenting a "
-            "guess as the finding."
+            "Use only the sources they choose, and if a chosen source is unavailable say so rather "
+            "than presenting a guess as the finding.\n"
+            "- **Record what you found in the document's `evidence`, in the submission that names "
+            'the people:** it is an object, `{"checked": [...], "limits": [...]}`, of strings. '
+            "`checked` holds one line per source used, with any figures and their sample sizes "
+            "(`project record: sample of 12 tasks built, 30 turns; ...`, an empty record too); "
+            "`limits` holds what those sources cannot tell you. Stating it in your reply or the "
+            "design does not record it. A submission replaces the whole document, so keep "
+            "`evidence` in every later one."
         )
     return "\n".join(lines)
 
