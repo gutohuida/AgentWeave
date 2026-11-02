@@ -6,6 +6,7 @@ import { APP_SETTINGS_SECTIONS, PROJECT_TABS, type AppSettingsSection, type Proj
 import { MOCK_NOW, project, projects, tasks } from './fixtures'
 import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
+import { NOTICE_LEVELS } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 
 const BEFORE = import.meta.glob('./before/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
@@ -180,9 +181,16 @@ function MockBar({
 /** The spec page's controls: which of the five document states to show, and (open question 2)
  *  whether the document list is a left column or a switcher above a full-width document. */
 function SpecMockBar({ showLayout }: { showLayout: boolean }) {
-  const { state, layout } = useSpecMockControls()
+  const { state, layout, notices } = useSpecMockControls()
   return (
     <>
+      <select className="mock-bar-select" aria-label="Messages" value={notices} onChange={(e) => setSpecMockControls({ notices: e.target.value as never })}>
+        {NOTICE_LEVELS.map((n) => (
+          <option key={n.value} value={n.value}>
+            {n.label}
+          </option>
+        ))}
+      </select>
       <select className="mock-bar-select" aria-label="Document state" value={state} onChange={(e) => setSpecMockControls({ state: e.target.value as never })}>
         {SPEC_MOCK_STATES.map((s) => (
           <option key={s.value} value={s.value}>

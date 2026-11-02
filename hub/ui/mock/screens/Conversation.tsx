@@ -13,7 +13,7 @@ import { StartBuildDialog } from '@/components/spec/page/SpecBuilds'
 import { SpecSidePanel } from '@/components/spec/page/SpecWorkspace'
 import { SpecOpenPicker } from '@/components/spec/page/SpecOpenPicker'
 import { useListPreferences } from '@/components/spec/page/hooks'
-import { CONVERSATION_MIN_WIDTH, SPEC_DOC_MIN_WIDTH } from '@/components/spec/specPreferences'
+import { CONVERSATION_DEFAULT_WIDTH, CONVERSATION_MIN_WIDTH, SPEC_DOC_MIN_WIDTH } from '@/components/spec/specPreferences'
 import { toast } from '@/lib/toast'
 import { setComposerDraft } from '@/lib/composerDrafts'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
@@ -70,7 +70,8 @@ export default function Conversation(props: ScreenProps) {
     <QueryClientProvider client={queryClient}>
       {panel ? (
         <div className="flex h-full min-w-0 flex-row overflow-hidden">
-          <div className="flex h-full min-w-0 flex-1 flex-col" style={{ minWidth: CONVERSATION_MIN_WIDTH }}>
+          {/* As in the app (ConversationView): the conversation keeps its 480px column and the document takes the rest. */}
+          <div className="flex h-full flex-none flex-col" style={{ width: CONVERSATION_DEFAULT_WIDTH, minWidth: CONVERSATION_MIN_WIDTH }}>
             <ConversationMock {...props} />
           </div>
           <SpecPanelMock picking={panel === 'specs'} go={props.go} route={props.route} />
@@ -83,7 +84,7 @@ export default function Conversation(props: ScreenProps) {
 }
 
 /** The conversation's spec panel, redesigned: the same components as the Spec tab in one column.
- *  At a window narrower than 1200px it sits at its narrowest width (the app's SPEC_DOC_MIN_WIDTH). */
+ *  As in the app, it takes the width the conversation's 480px column leaves. */
 function SpecPanelMock({ picking, go, route }: { picking: boolean; go: ScreenProps['go']; route: ScreenProps['route'] }) {
   const { surface, startDialog, entries } = useSpecMock('conversation/Architect/conv-9cdda4865e0b/spec')
   const [listPrefs, setListPrefs] = useListPreferences(PROJECT_ID)
@@ -104,14 +105,8 @@ function SpecPanelMock({ picking, go, route }: { picking: boolean; go: ScreenPro
     if (route.kind === 'conversation') go({ ...route, panel: 'spec' })
     if (path !== attachedPath) toast({ title: 'Opens that document', description: 'The mock holds one full document.' })
   }
-  const [width, setWidth] = React.useState(() => (window.innerWidth >= 1200 ? 440 : SPEC_DOC_MIN_WIDTH))
-  React.useEffect(() => {
-    const onResize = () => setWidth(window.innerWidth >= 1200 ? 440 : SPEC_DOC_MIN_WIDTH)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
   return (
-    <div className="h-full flex-none" style={{ width }} data-testid="spec-panel">
+    <div className="h-full min-w-0 flex-1" style={{ minWidth: SPEC_DOC_MIN_WIDTH }} data-testid="spec-panel">
       {picking ? (
         <div className="aw-sp aw-sp-panel" data-layout="panel">
           <SpecOpenPicker

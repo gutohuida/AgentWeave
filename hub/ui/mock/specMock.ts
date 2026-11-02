@@ -5,9 +5,11 @@
  *  roadmap slices C and D, not yet built. */
 import * as React from 'react'
 import { toast } from '@/lib/toast'
-import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState, type DocState, type DocumentFilters, type EvidenceState, type SpecAction, type SpecDocumentView, type SpecListEntry, type StartBuildChoice, type TaskStatus } from '@/components/spec/page/model'
+import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState, type DocState, type DocumentFilters, type EvidenceState, type SpecAction, type SpecDocumentView, type SpecListEntry, type StartBuildChoice, type TaskStatus, shownOf } from '@/components/spec/page/model'
 import type { SpecSurfaceProps } from '@/components/spec/page/SpecWorkspace'
+import type { CoverageEntry } from '@/api/spec'
 import { agents, tasks as taskFixtures } from './fixtures'
+import { NOTICE_LEVELS, TodayBanner, type NoticeLevel } from './specBanner'
 import coverageJson from './fixtures/spec_coverage.json'
 import documentJson from './fixtures/spec_document.json'
 import documentsJson from './fixtures/spec_documents.json'
@@ -55,6 +57,8 @@ export const AGENT_NAMES = agents.map((a) => a.name)
 export interface SpecMockControls {
   state: DocState
   layout: 'column' | 'switcher'
+  /** How much the banner under the header carries (the compact-header slice). */
+  notices: NoticeLevel
 }
 
 const STATES: DocState[] = ['writing', 'ready', 'approved', 'building', 'archived']
@@ -63,14 +67,16 @@ function readHashControls(): Partial<SpecMockControls> & { at?: string } {
   const query = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
   const state = query.get('state') as DocState | null
   const layout = query.get('layout')
+  const notices = query.get('notices') as NoticeLevel | null
   return {
+    notices: notices && NOTICE_LEVELS.some((n) => n.value === notices) ? notices : undefined,
     state: state && STATES.includes(state) ? state : undefined,
     layout: layout === 'switcher' || layout === 'column' ? layout : undefined,
     at: query.get('at') ?? undefined,
   }
 }
 
-let controls: SpecMockControls = { state: 'building', layout: 'column', ...stripUndefined(readHashControls()) }
+let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', ...stripUndefined(readHashControls()) }
 const listeners = new Set<() => void>()
 
 function stripUndefined<T extends object>(o: T): Partial<T> {
@@ -217,6 +223,7 @@ function documentView(state: DocState, live: Record<string, { status: TaskStatus
     kind: PAYLOAD.kind,
     phase: state === 'writing' || state === 'ready' ? 'exploring' : state === 'archived' ? 'archived' : 'approved',
     state,
+    shown: shownOf(state),
     summary: PAYLOAD.summary,
     problem: PAYLOAD.problem,
     inScope: PAYLOAD.scope.in_scope,
@@ -278,17 +285,18 @@ function listEntries(state: DocState): SpecListEntry[] {
       kind: d.kind,
       phase: d.phase,
       state: d.path === 'spec/changes/terra-app-and-plugin-contract/spec.json' ? 'building' : docState,
+      shown: shownOf(d.path === 'spec/changes/terra-app-and-plugin-contract/spec.json' ? 'building' : docState),
       updatedAt: d.updated_at,
       roadmap: order[d.path] ? { path: ROADMAP_PATH, order: order[d.path]! } : null,
       building: (isOpen && state === 'building') || d.path === 'spec/changes/terra-app-and-plugin-contract/spec.json',
     }
   })
   const simulated: SpecListEntry[] = [
-    { id: 'm1', path: 'spec/changes/terra-observe-agents-across-projects/spec.json', title: 'Terra: observe agents across projects', kind: 'change-spec', phase: 'exploring', state: 'writing', updatedAt: '2026-10-17T09:40:00Z', roadmap: { path: ROADMAP_PATH, order: 4 }, building: false },
-    { id: 'm2', path: 'spec/changes/terra-plugin-registry/spec.json', title: 'Terra: a registry of plugins', kind: 'change-spec', phase: 'exploring', state: 'writing', updatedAt: '2026-10-15T16:05:00Z', roadmap: { path: ROADMAP_PATH, order: 5 }, building: false },
-    { id: 'm3', path: 'spec/capabilities/handoff-chain/spec.json', title: 'Handoff chain', kind: 'capability', phase: 'current', state: 'approved', updatedAt: '2026-10-12T10:00:00Z', roadmap: null, building: false },
-    { id: 'm4', path: 'spec/capabilities/agent-skills/spec.json', title: 'Agent skills', kind: 'capability', phase: 'current', state: 'approved', updatedAt: '2026-10-09T08:30:00Z', roadmap: null, building: false },
-    { id: 'm5', path: 'spec/changes/cairn-first-sketch/spec.json', title: 'Cairn: a first sketch', kind: 'change-spec', phase: 'archived', state: 'archived', updatedAt: '2026-10-11T18:20:00Z', roadmap: null, building: false },
+    { id: 'm1', path: 'spec/changes/terra-observe-agents-across-projects/spec.json', title: 'Terra: observe agents across projects', kind: 'change-spec', phase: 'exploring', state: 'writing', shown: 'writing', updatedAt: '2026-10-17T09:40:00Z', roadmap: { path: ROADMAP_PATH, order: 4 }, building: false },
+    { id: 'm2', path: 'spec/changes/terra-plugin-registry/spec.json', title: 'Terra: a registry of plugins', kind: 'change-spec', phase: 'exploring', state: 'writing', shown: 'writing', updatedAt: '2026-10-15T16:05:00Z', roadmap: { path: ROADMAP_PATH, order: 5 }, building: false },
+    { id: 'm3', path: 'spec/capabilities/handoff-chain/spec.json', title: 'Handoff chain', kind: 'capability', phase: 'current', state: 'approved', shown: 'approved', updatedAt: '2026-10-12T10:00:00Z', roadmap: null, building: false },
+    { id: 'm4', path: 'spec/capabilities/agent-skills/spec.json', title: 'Agent skills', kind: 'capability', phase: 'current', state: 'approved', shown: 'approved', updatedAt: '2026-10-09T08:30:00Z', roadmap: null, building: false },
+    { id: 'm5', path: 'spec/changes/cairn-first-sketch/spec.json', title: 'Cairn: a first sketch', kind: 'change-spec', phase: 'archived', state: 'archived', shown: 'archived', updatedAt: '2026-10-11T18:20:00Z', roadmap: null, building: false },
   ]
   return [...recorded, ...simulated]
 }
@@ -319,7 +327,7 @@ function copy(text: string) {
 
 /** Everything the page's components take, as a container would hold it. */
 export function useSpecMock(routeHash: string) {
-  const { state, layout } = useSpecMockControls()
+  const { state, layout, notices } = useSpecMockControls()
   const initialAnchor = React.useMemo(() => readHashControls().at ?? null, [])
   const [check, setCheck] = React.useState<CheckState>(state === 'ready' ? { status: 'done', findings: [], at: 'preset' } : { status: 'idle' })
   const [filters, setFilters] = React.useState<DocumentFilters>(NO_DOCUMENT_FILTERS)
@@ -418,6 +426,13 @@ export function useSpecMock(routeHash: string) {
   }
 
   const surface: SpecSurfaceProps = {
+    banner: () =>
+      React.createElement(TodayBanner, {
+        path: doc.path,
+        level: notices,
+        coverage: COVERAGE as unknown as CoverageEntry[],
+        tasks: RECORDED_TASKS.map((t) => ({ id: t.id, title: t.title, status: t.status })),
+      }),
     doc,
     builds: [...shownBuilds].reverse(),
     check,
