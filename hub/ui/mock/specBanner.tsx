@@ -66,6 +66,14 @@ export const HEADER_CHOICES: Array<{ value: HeaderChoice; label: string }> = [
   { value: 'rail', label: 'Header: C, beside the spec' },
 ]
 
+export type MarkerChoice = 'dot' | 'icon' | 'pill'
+
+export const MARKER_CHOICES: Array<{ value: MarkerChoice; label: string }> = [
+  { value: 'dot', label: 'Status mark: today (dot)' },
+  { value: 'icon', label: 'Status mark: icon' },
+  { value: 'pill', label: 'Status mark: word' },
+]
+
 export type FooterChoice = 'today' | 'tidy'
 
 export const FOOTER_CHOICES: Array<{ value: FooterChoice; label: string }> = [

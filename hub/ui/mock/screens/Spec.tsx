@@ -14,7 +14,7 @@ import { useSpecMock, useSpecMockControls } from '../specMock'
 export default function Spec() {
   const { surface, layout, entries, startDialog } = useSpecMock('tab/spec')
   const [listPrefs, setListPrefs] = useListPreferences(PROJECT_ID)
-  const { footer } = useSpecMockControls()
+  const { footer, marker } = useSpecMockControls()
   // mock state: the defects report as the operator's Hub answered it on 2026-11-02 (14 changes,
   // 72 defects), and its evidence count then.
   const client = useQueryClient()
@@ -42,6 +42,7 @@ export default function Spec() {
         onNew={() => toast({ title: 'Starts a new change', description: 'With an agent, in a conversation.' })}
         layout={layout}
         listFooter={listFooter}
+        listMarker={marker}
       />
       <StartBuildDialog {...startDialog} />
     </>

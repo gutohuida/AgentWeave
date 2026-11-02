@@ -1,0 +1,35 @@
+/* How the spec list marks a document's state (being mocked, spec `the-spec-header-redesigned`).
+   Today's dot tells approved from done by a 1.5px inner ring; these tell them apart by shape. */
+
+/* An icon per state. */
+.aw-sp-list-mark {
+  --tone: var(--text-3);
+  display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; color: var(--tone);
+}
+.aw-sp-list-mark[data-state="ready"] { --tone: var(--ring); }
+.aw-sp-list-mark[data-state="approved"] { --tone: var(--green); }
+.aw-sp-list-mark[data-state="building"] { --tone: var(--blue); animation: aw-sp-live 1.6s var(--ease-out) infinite; }
+.aw-sp-list-mark[data-state="current"] { --tone: var(--text-2); }
+.aw-sp-list-mark[data-state="done"] { border-radius: 999px; background: var(--green); color: var(--bg); }
+.aw-sp-list-mark[data-state="archived"] { --tone: var(--text-3); opacity: .7; }
+
+/* Finished documents step back: a done or archived row reads quieter than live work. */
+.aw-sp-list-row[data-marker="icon"][data-state="archived"] .aw-sp-list-name,
+.aw-sp-list-row[data-marker="pill"][data-state="archived"] .aw-sp-list-name { color: var(--text-3); }
+
+/* A word per state. */
+.aw-sp-list-pill {
+  --tone: var(--text-3);
+  flex: none; height: 18px; padding: 0 7px; border-radius: 999px; display: inline-flex; align-items: center;
+  font-size: 10.5px; font-weight: 600; letter-spacing: .01em; color: var(--tone);
+  background: color-mix(in oklab, var(--tone) 13%, transparent);
+}
+.aw-sp-list-pill[data-state="writing"] { background: transparent; box-shadow: inset 0 0 0 1px var(--border-hi); }
+.aw-sp-list-pill[data-state="ready"] { --tone: var(--ring); }
+.aw-sp-list-pill[data-state="approved"] { --tone: var(--green); background: transparent; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--green) 55%, transparent); }
+.aw-sp-list-pill[data-state="building"] { --tone: var(--blue); }
+.aw-sp-list-pill[data-state="done"] { --tone: var(--green); background: var(--green); color: var(--bg); }
+.aw-sp-list-pill[data-state="current"] { --tone: var(--text-2); }
+
+/* What a document waits on the operator for, when the list is grouped by what needs them. */
+.aw-sp-list-waiting { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--amber); }

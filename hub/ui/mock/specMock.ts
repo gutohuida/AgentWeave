@@ -9,7 +9,7 @@ import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState
 import type { SpecSurfaceProps } from '@/components/spec/page/SpecWorkspace'
 import type { CoverageEntry } from '@/api/spec'
 import { agents, tasks as taskFixtures } from './fixtures'
-import { FOOTER_CHOICES, HEADER_CHOICES, MockHealth, NOTICE_LEVELS, TodayBanner, noticesFor, type FooterChoice, type HeaderChoice, type NoticeLevel } from './specBanner'
+import { FOOTER_CHOICES, HEADER_CHOICES, MARKER_CHOICES, MockHealth, NOTICE_LEVELS, TodayBanner, noticesFor, type FooterChoice, type HeaderChoice, type MarkerChoice, type NoticeLevel } from './specBanner'
 import coverageJson from './fixtures/spec_coverage.json'
 import documentJson from './fixtures/spec_document.json'
 import documentsJson from './fixtures/spec_documents.json'
@@ -63,6 +63,8 @@ export interface SpecMockControls {
   header: HeaderChoice
   /** Whether the list's defects report starts open (today) or folded. */
   footer: FooterChoice
+  /** How the list marks each document's state. */
+  marker: MarkerChoice
 }
 
 const STATES: DocState[] = ['writing', 'ready', 'approved', 'building', 'archived']
@@ -76,13 +78,14 @@ function readHashControls(): Partial<SpecMockControls> & { at?: string } {
     notices: notices && NOTICE_LEVELS.some((n) => n.value === notices) ? notices : undefined,
     header: HEADER_CHOICES.find((h) => h.value === query.get('header'))?.value,
     footer: FOOTER_CHOICES.find((f) => f.value === query.get('footer'))?.value,
+    marker: MARKER_CHOICES.find((m) => m.value === query.get('marker'))?.value,
     state: state && STATES.includes(state) ? state : undefined,
     layout: layout === 'switcher' || layout === 'column' ? layout : undefined,
     at: query.get('at') ?? undefined,
   }
 }
 
-let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', header: 'today', footer: 'today', ...stripUndefined(readHashControls()) }
+let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', header: 'today', footer: 'today', marker: 'dot', ...stripUndefined(readHashControls()) }
 const listeners = new Set<() => void>()
 
 function stripUndefined<T extends object>(o: T): Partial<T> {
@@ -295,6 +298,8 @@ function listEntries(state: DocState): SpecListEntry[] {
       updatedAt: d.updated_at,
       roadmap: order[d.path] ? { path: ROADMAP_PATH, order: order[d.path]! } : null,
       building: (isOpen && state === 'building') || d.path === 'spec/changes/terra-app-and-plugin-contract/spec.json',
+      // mock state: what each waits on the operator for, for the "What needs you" order.
+      waiting: isOpen && state === 'building' ? '1 amendment to review' : !isOpen && docState === 'approved' && d.path !== 'spec/changes/terra-app-and-plugin-contract/spec.json' ? 'Ready to build' : null,
     }
   })
   const simulated: SpecListEntry[] = [
@@ -303,6 +308,11 @@ function listEntries(state: DocState): SpecListEntry[] {
     { id: 'm3', path: 'spec/capabilities/handoff-chain/spec.json', title: 'Handoff chain', kind: 'capability', phase: 'current', state: 'approved', shown: 'approved', updatedAt: '2026-10-12T10:00:00Z', roadmap: null, building: false },
     { id: 'm4', path: 'spec/capabilities/agent-skills/spec.json', title: 'Agent skills', kind: 'capability', phase: 'current', state: 'approved', shown: 'approved', updatedAt: '2026-10-09T08:30:00Z', roadmap: null, building: false },
     { id: 'm5', path: 'spec/changes/cairn-first-sketch/spec.json', title: 'Cairn: a first sketch', kind: 'change-spec', phase: 'archived', state: 'archived', shown: 'archived', updatedAt: '2026-10-11T18:20:00Z', roadmap: null, building: false },
+    // mock state: a built change not yet folded, a change built and folded long ago, and one
+    // checked clean and waiting for approval, so every state the list can mark is on screen.
+    { id: 'm6', path: 'spec/changes/terra-handoff-numbering/spec.json', title: 'Terra: handoffs are numbered by the tool', kind: 'change-spec', phase: 'approved', state: 'approved', shown: 'done', updatedAt: '2026-10-16T11:00:00Z', roadmap: { path: ROADMAP_PATH, order: 0 }, building: false, waiting: 'Ready to fold' },
+    { id: 'm7', path: 'spec/changes/cairn-chain-format/spec.json', title: 'Cairn: the chain format', kind: 'change-spec', phase: 'approved', state: 'approved', shown: 'done', updatedAt: '2026-10-13T15:30:00Z', roadmap: null, building: false },
+    { id: 'm8', path: 'spec/changes/terra-plugin-settings/spec.json', title: 'Terra: plugin settings page', kind: 'change-spec', phase: 'exploring', state: 'ready', shown: 'ready', updatedAt: '2026-10-17T10:55:00Z', roadmap: null, building: false, waiting: 'Ready to approve' },
   ]
   return [...recorded, ...simulated]
 }

@@ -8,9 +8,11 @@ import { formatAgo } from '@/lib/format'
 import { arrangeList, SHOWN_LABEL, type ListOrder, type ListPreferences, type SpecListEntry } from './model'
 import { NewCapabilityAction } from './NewCapability'
 import '@/styles/spec-page.css'
+import '@/styles/spec-list-marks.css'
 
 const ORDERS: Array<{ value: ListOrder; label: string; detail: string }> = [
   { value: 'roadmap', label: 'Roadmap order', detail: 'Slices under their roadmap, in build order.' },
+  { value: 'attention', label: 'What needs you', detail: 'Waiting on you, in progress, finished.' },
   { value: 'changed', label: 'Last change', detail: 'Most recently changed first.' },
   { value: 'phase', label: 'Phase', detail: 'Building, writing, approved, archived.' },
   { value: 'title', label: 'Title', detail: 'A to Z.' },
@@ -31,6 +33,7 @@ export function SpecDocList({
   hideHead = false,
   footer,
   rowAction,
+  marker = 'dot',
 }: {
   entries: SpecListEntry[]
   active: string | null
@@ -49,6 +52,8 @@ export function SpecDocList({
   footer?: React.ReactNode
   /** Beside a row (Adopt, on a document the Hub keeps no record of). */
   rowAction?: (entry: SpecListEntry) => React.ReactNode
+  /** How a row shows its state (being mocked): today's dot, an icon per state, or a word. */
+  marker?: ListMarker
 }) {
   const groups = arrangeList(entries, prefs)
   const shown = groups.reduce((n, g) => n + g.entries.length + (g.roadmap ? 1 : 0), 0)
@@ -114,12 +119,12 @@ export function SpecDocList({
         {groups.map((g, gi) => (
           <div key={g.roadmap?.path ?? g.label ?? `run-${gi}`} className="aw-sp-list-group" data-roadmap={g.roadmap ? 'true' : 'false'}>
             {g.label ? <div className="aw-sp-list-label">{g.label}</div> : null}
-            {g.roadmap ? <Row entry={g.roadmap} active={active} onOpen={onOpen} now={now} roadmap slices={g.entries.length} action={rowAction} /> : null}
+            {g.roadmap ? <Row entry={g.roadmap} active={active} onOpen={onOpen} now={now} roadmap slices={g.entries.length} action={rowAction} marker={marker} /> : null}
             {g.entries.length ? (
               <ol className="aw-sp-list-rows" data-slices={g.roadmap ? 'true' : 'false'}>
                 {g.entries.map((e, i) => (
                   <li key={e.path}>
-                    <Row entry={e} active={active} onOpen={onOpen} now={now} position={g.roadmap ? i + 1 : undefined} action={rowAction} />
+                    <Row entry={e} active={active} onOpen={onOpen} now={now} position={g.roadmap ? i + 1 : undefined} action={rowAction} marker={marker} showWaiting={prefs.order === 'attention'} />
                   </li>
                 ))}
               </ol>
@@ -151,7 +156,11 @@ function Row({
   slices,
   position,
   action,
+  marker = 'dot',
+  showWaiting = false,
 }: {
+  marker?: ListMarker
+  showWaiting?: boolean
   entry: SpecListEntry
   active: string | null
   onOpen: (path: string) => void
@@ -169,6 +178,8 @@ function Row({
       className="aw-sp-list-row"
       data-active={e.path === active ? 'true' : 'false'}
       data-roadmap={roadmap ? 'true' : undefined}
+      data-marker={marker}
+      data-state={e.shown}
       aria-current={e.path === active ? 'page' : undefined}
       onClick={() => onOpen(e.path)}
       title={`${e.title} — ${SHOWN_LABEL[e.shown]}, changed ${formatAgo(e.updatedAt, now)}`}
@@ -178,10 +189,21 @@ function Row({
       ) : position !== undefined ? (
         <span className="aw-sp-list-pos">{position}</span>
       ) : null}
-      <span className="aw-sp-list-dot" data-state={e.shown} aria-hidden="true" />
+      {marker === 'icon' ? <StateIcon state={e.shown} /> : marker === 'dot' ? <span className="aw-sp-list-dot" data-state={e.shown} aria-hidden="true" /> : null}
       <span className="aw-sp-list-name">{e.title}</span>
-      {e.building ? <span className="aw-sp-live" title="A build is running" aria-label="A build is running" /> : null}
-      {roadmap && slices !== undefined ? <span className="aw-sp-list-meta">{slices}</span> : <span className="aw-sp-list-meta">{formatAgo(e.updatedAt, now)}</span>}
+      {e.building && marker !== 'icon' ? <span className="aw-sp-live" title="A build is running" aria-label="A build is running" /> : null}
+      {marker === 'pill' && !roadmap ? (
+        <span className="aw-sp-list-pill" data-state={e.shown}>
+          {SHOWN_LABEL[e.shown]}
+        </span>
+      ) : null}
+      {showWaiting && e.waiting ? (
+        <span className="aw-sp-list-waiting">{e.waiting}</span>
+      ) : roadmap && slices !== undefined ? (
+        <span className="aw-sp-list-meta">{slices}</span>
+      ) : marker === 'pill' ? null : (
+        <span className="aw-sp-list-meta">{formatAgo(e.updatedAt, now)}</span>
+      )}
     </button>
   )
   return extra ? (
@@ -256,5 +278,26 @@ export function SpecDocSwitcher({ title, children }: { title: string; children: 
       </button>
       {open ? <div className="aw-sp-switcher-pop aw-pop" data-state="open">{children}</div> : null}
     </div>
+  )
+}
+
+export type ListMarker = 'dot' | 'icon' | 'pill'
+
+const STATE_ICON: Record<SpecListEntry['shown'], string> = {
+  writing: 'circle_dashed',
+  ready: 'circle_dot',
+  approved: 'flag',
+  building: 'hammer',
+  done: 'check',
+  current: 'menu_book',
+  archived: 'archive',
+}
+
+/** One mark per state, told apart by shape as well as colour: done is a filled green badge. */
+function StateIcon({ state }: { state: SpecListEntry['shown'] }) {
+  return (
+    <span className="aw-sp-list-mark" data-state={state} aria-hidden="true">
+      <Icon name={STATE_ICON[state]} size={state === 'done' ? 10 : 13} weight={state === 'done' ? 700 : undefined} />
+    </span>
   )
 }

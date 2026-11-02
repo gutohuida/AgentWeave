@@ -389,9 +389,13 @@ export interface SpecListEntry {
   building: boolean
   /** On disk, but the Hub keeps no record of it: it can be adopted. */
   untracked?: boolean
+  /** What the operator has to do next on it, when anything (being mocked, spec
+   *  `the-spec-header-redesigned`): "Ready to approve", "2 amendments to review", "Ready to build",
+   *  "Ready to fold". Null when it waits on nobody, or on an agent. */
+  waiting?: string | null
 }
 
-export type ListOrder = 'changed' | 'phase' | 'title' | 'roadmap'
+export type ListOrder = 'changed' | 'phase' | 'title' | 'roadmap' | 'attention'
 export type ListKindFilter = 'all' | 'change-spec' | 'roadmap' | 'capability'
 export type ListPhaseFilter = 'any' | 'writing' | 'approved' | 'archived'
 
@@ -452,6 +456,21 @@ export function arrangeList(entries: SpecListEntry[], prefs: ListPreferences): L
         const inGroup = shown.filter((e) => states.includes(e.shown)).sort((a, b) => PHASE_RANK[a.shown] - PHASE_RANK[b.shown] || byChanged(a, b))
         if (inGroup.length) groups.push({ roadmap: null, label, entries: inGroup })
       }
+      return groups
+    }
+    case 'attention': {
+      // What the operator would ask first: what waits on me, what is moving without me, what is
+      // finished, and what is reference.
+      const groups: ListGroup[] = []
+      const put = (label: string, test: (e: SpecListEntry) => boolean) => {
+        const inGroup = shown.filter(test).sort(byChanged)
+        if (inGroup.length) groups.push({ roadmap: null, label, entries: inGroup })
+      }
+      put('Waiting on you', (e) => Boolean(e.waiting))
+      put('In progress', (e) => !e.waiting && (e.shown === 'writing' || e.shown === 'ready' || e.shown === 'building'))
+      put('Approved, not started', (e) => !e.waiting && e.shown === 'approved')
+      put('Finished', (e) => !e.waiting && (e.shown === 'done' || e.shown === 'archived'))
+      put('Capabilities', (e) => !e.waiting && e.shown === 'current')
       return groups
     }
     case 'roadmap': {
