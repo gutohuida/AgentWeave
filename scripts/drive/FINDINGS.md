@@ -41223,3 +41223,13 @@ The probe now excludes the heap built before its window, which was the suite's. 
 **Tier:** 0
 
 The check run `chk-af888521126e` reported `test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop` as flaky at 598 ms. It was a real hold: the probe's new "seen at" stack put the loop's thread in `Path.mkdir` at `agent_trigger.py:1737` for the whole window, 132 to 412 ms. A separate process reading thread states showed the loop's thread waiting in the kernel. In other failures the loop's thread sat in the same kernel waits while the control thread waited for the GIL, 139 to 324 ms; no stack was seen for those, and they have not recurred since the fix. **Expected:** nothing a turn start writes to disk holds the loop.
+
+## F1119 (C) -- a worker thread preempted while holding the GIL read as the loop stalled
+
+**Status:** fixed 2026-11-02 on `task-80e9111cd00a` (AW-23). `LagProbe` raises the whole process to the HIGH priority class for its window, not just the loop and control threads, and puts it back after. Tests and six CPU burners pinned to two cores: 4 failures in 24 before, 0 in 84 after; 150 runs with 40 burners across all 20 cores never reproduced it, before the fix. Every forced-stall test in `test_loop_lag_probe.py` still passes. The cause is inferred from the failure's signature and from the fix removing it: no thread state was captured during a gap. Windows only; other platforms are unchanged. Not re-run through the full suite at `-n 20` in this turn, where the original rate was about 1 in 150. The HIGH class applies only in the test process, so a running Hub's GIL holders can still be preempted on a busy machine; not measured.
+**Source:** found by driving
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+Check run `chk-7c08b3c0621e` failed `test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop` at 155 ms: 0 of 17 samples, 0 ms of the process's CPU, 0 ms collecting garbage. No thread in the process ran. The probe read the missing samples as a call keeping the GIL, which is right for a real one (`test_a_blocking_call_keeping_the_gil_counts_as_a_stall`), but here nothing was holding it for long: only the loop and control threads were at raised priority, so a normal-priority worker could lose its core with the GIL in hand. **Expected:** a stall test fails on code that holds the loop, not on the machine's scheduling.
