@@ -627,12 +627,14 @@ def people_brief(size: Optional[str], roster: Optional[Roster]) -> str:
             )
     if size != "fix":
         lines.append(
-            "- **Before naming people, state your current view** of these models (cost, "
-            "performance, where each is strong) and **ask the operator which sources to judge by**, "
+            "- **Before naming people, or keeping any you already named, state your current view** "
+            "of these models (cost, performance, where each is strong) and **ask the operator "
+            "which sources to judge by**, "
             "in any combination: " + "; ".join(SOURCES) + ". Ask in your reply and end your turn. "
-            "Use only the sources they choose, record what you found in the document's "
-            "`evidence`, and if a chosen source is unavailable say so rather than presenting a "
-            "guess as the finding."
+            "Use only the sources they choose, record what you found, with its sample sizes, as "
+            "lines in the document's `evidence.checked` (a list of strings), and if a chosen "
+            "source is unavailable say so in `evidence.limits` rather than presenting a guess as "
+            "the finding."
         )
     return "\n".join(lines)
 

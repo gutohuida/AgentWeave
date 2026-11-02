@@ -11,6 +11,11 @@ import { useDeleteProject } from '@/api/projects'
 // Real App, real `@/api/projects` hooks and real navigation; only the network and the page
 // bodies are stubbed.
 
+vi.mock('@/api/reopeningWarnings', () => ({
+  useReopeningWarnings: () => ({ data: [], error: null }),
+  useStopReopenedBuild: () => ({ mutate: vi.fn(), isPending: false }),
+  useDismissReopeningWarning: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('@/hooks/useSSE', () => ({
   useSSEConnectionState: () => 'open',
   useSSE: () => {},

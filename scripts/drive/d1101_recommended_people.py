@@ -169,9 +169,15 @@ def journey_label(options):
 
 def asks_for_sources(said):
     """The author's text asks, in a question sentence, which sources to judge the models by."""
-    return bool(re.search(r"[^.?!\n]*(web|search)[^.?!\n]*(record|project'?s)[^.?!\n]*\?"
-                          r"|[^.?!\n]*(record|project'?s)[^.?!\n]*(web|search)[^.?!\n]*\?",
-                          said, re.I))
+    if re.search(r"[^.?!\n]*(web|search)[^.?!\n]*(record|project'?s)[^.?!\n]*\?"
+                 r"|[^.?!\n]*(record|project'?s)[^.?!\n]*(web|search)[^.?!\n]*\?", said, re.I):
+        return True
+    # A question about sources that lists them on the lines under it.
+    for question in re.finditer(r"[^.?!\n]*\bsources?\b[^.?!\n]*\?", said, re.I):
+        offered = said[question.end():question.end() + 600]
+        if re.search(r"web|search", offered, re.I) and re.search(r"record|project", offered, re.I):
+            return True
+    return False
 
 
 def buildable(doc):
@@ -390,9 +396,10 @@ def drive(state):
     written = payload_of(root, path)
     (d.TMP / "document.json").write_text(json.dumps(written, indent=1, default=str), encoding="utf-8")
     marks = "','".join(runs)
-    touched = d.ro(f"select content from agent_outputs where run_id in ('{marks}') "
+    # The tool's name is in the call's payload: a call through `aw-tool` summarises as its shell.
+    touched = d.ro(f"select content, payload from agent_outputs where run_id in ('{marks}') "
                    "and kind in ('tool_use','tool_call') ") or []
-    blob = " ".join(c for (c,) in touched).lower()
+    blob = " ".join(f"{c} {p or ''}" for (c, p) in touched).lower()
     evidence = json.dumps(written.get("evidence"), default=str).lower()
     d.check("A2 the author read the per-model record (a tool call, with its figures in evidence)",
             bool(re.search(r"model[_ -]?record|per[_ -]?model|work[_ -]?tally", blob))
@@ -552,7 +559,9 @@ def drive(state):
         code, out = fire_job(base, job)
         # "Every task ... is already being worked" is a 409 that says nothing is wrong; any other
         # refusal (for one, a completed task with no recorded evidence) stops the drive, named.
-        busy = code == 409 and "already being worked" in str(out)
+        # A builder busy on its other task says the same.
+        busy = code == 409 and ("already being worked" in str(out)
+                                or "already running a turn" in str(out))
         d.check("C0 the build's flow accepts each firing", code in (200, 201, 202) or busy,
                 f"{code} {str(out)[:300]}", fatal=True)
         d.wait_idle(pid, 4 * 60)
@@ -676,3 +685,12 @@ if __name__ == "__main__":
 # master author writes varies run to run, so a run whose document is not buildable is seeded and
 # fails A7-A9 as well, and a walk that runs out of turns fails A0 by name. One earlier run could not
 # find the Build button within 30 s (a slow page load; the drive now keeps a screenshot then).
+
+# Observed 2026-11-02 from the finished branch of ETCRB-4 (:8010, on a copy of the trial database, so
+# the branch's migration stayed off the shared profile): 47 passed, 0 failed (run 034500). Earlier runs
+# that day failed only on what they then fixed: A2 read the tool summary, which says `Called
+# PowerShell` for a call through aw-tool, while the author put its finding in `design` (the prompt now
+# names `evidence.checked`); A1 failed when an author had already named people before the tasks step,
+# so the prompt now covers keeping them, and on a question listing its sources as bullets, which the
+# matcher now reads; C0 took a builder busy on its other task for a refusal. D and E held on every run.
+# Whether a Haiku author asks at the tasks step still varies with what it did before reaching it.

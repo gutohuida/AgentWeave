@@ -1066,7 +1066,8 @@ def _operations() -> List[_Operation]:
             tool="create_task",
             args=(
                 "title, description, assignee, priority=medium, requirements, acceptance_criteria, "
-                "requirement_ids=None, spec_document=None, loop_id=None, depends_on=None"
+                "requirement_ids=None, spec_document=None, loop_id=None, depends_on=None, "
+                "builder=None, checker=None"
             ),
             method="POST",
             path="/tasks",
@@ -1081,11 +1082,16 @@ def _operations() -> List[_Operation]:
                 "acceptance_criteria",
                 "loop_id",
                 "depends_on",
+                "builder",
+                "checker",
             ),
             required=("title",),
             text=(
                 f"priority is one of {values(TaskPriority)}. depends_on is a list of task ids this "
-                "one waits on; an id the project does not have is refused, naming it."
+                "one waits on; an id the project does not have is refused, naming it. A task against "
+                "a spec joins its build and goes to the build's builder and checker unless it names "
+                "its own; `build_note` in the answer says if it reopened a finished build, or why "
+                "it joined none."
             ),
         ),
         _Operation(

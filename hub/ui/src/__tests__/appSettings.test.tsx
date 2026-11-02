@@ -10,6 +10,11 @@ import { useConfigStore } from '@/store/configStore'
  *  connection), reachable from the rail on every screen, even with no project open (slice I,
  *  `app-settings-have-a-home`). The whole app is mounted, as `App-mount.test.tsx` does. */
 
+vi.mock('@/api/reopeningWarnings', () => ({
+  useReopeningWarnings: () => ({ data: [], error: null }),
+  useStopReopenedBuild: () => ({ mutate: vi.fn(), isPending: false }),
+  useDismissReopeningWarning: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('@/hooks/useSSE', () => ({
   useSSEConnectionState: () => 'open',
   useSSE: () => {},

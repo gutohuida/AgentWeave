@@ -3370,6 +3370,10 @@ class Build(Base):
     # The people the operator chose (migration 0156): `{"builder", "checker", "tasks": {key:
     # {"builder", "checker"}}}`. Null on a build recorded before it.
     people: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Each time a follow-up reopened this build once it had finished (migration 0159), oldest first:
+    # `{"at", "finished_at", "finished_ago", "tasks": [{"id", "display_id", "title", "filer"}],
+    # "dismissed_at", "cleared_at"}`. The last is the Overview's warning until dismissed or ended.
+    reopenings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # The lead's build conversation, where its briefs are queued (driver `lead`).
     lead_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

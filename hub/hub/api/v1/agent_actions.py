@@ -128,6 +128,8 @@ class AgentTaskCreate(RequestModel):
     status: str = Field(default="pending", max_length=64)
     priority: str = Field(default="medium", max_length=64)
     assignee: Optional[str] = Field(default=None, max_length=64)
+    builder: Optional[str] = Field(default=None, max_length=64)
+    checker: Optional[str] = Field(default=None, max_length=64)
     requirements: Optional[List[Any]] = None
     # The requirements this task serves, by identifier. Checked: an identifier the project does not
     # have is refused with the identifier named. Present here as well as on the operator's schema
