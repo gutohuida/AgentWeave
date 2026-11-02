@@ -77,6 +77,13 @@ export const MARKER_CHOICES: Array<{ value: MarkerChoice; label: string }> = [
   { value: 'pill', label: 'Status mark: word' },
 ]
 
+export type PanelNavChoice = 'today' | 'row'
+
+export const PANEL_NAV_CHOICES: Array<{ value: PanelNavChoice; label: string }> = [
+  { value: 'today', label: 'Panel navigation: today (4 rows)' },
+  { value: 'row', label: 'Panel navigation: one row' },
+]
+
 export type FooterChoice = 'today' | 'tidy'
 
 export const FOOTER_CHOICES: Array<{ value: FooterChoice; label: string }> = [

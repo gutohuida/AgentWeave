@@ -82,3 +82,13 @@ button.aw-notice-summary:hover { color: var(--text); }
 .aw-sp-head[data-condensed="true"] .aw-sp-head-condensed-title { display: inline-flex; }
 .aw-sp-head-condensed-title strong { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-sp-panel-tabs[data-design="compact"] { padding: 4px 14px; }
+
+/* The panel's navigation: stacked rows today, or one row (being mocked). */
+.aw-sp-pnav-stack { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.aw-sp-pnav[data-inline="true"] { padding: 6px 14px; }
+.aw-sp-pnav-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
+.aw-sp-pnav-row > .aw-segmented { flex: none; }
+.aw-sp-pnav-row .aw-sp-pnav-sections { flex: none; }
+.aw-sp-pnav-row .aw-sp-pnav-strip { flex: 1 1 220px; }
+.aw-sp-pnav-row .aw-sp-pnav-filter { flex: none; }
+.aw-sp-pnav-row .aw-sp-pnav-filter-btn { padding-inline: 6px; }

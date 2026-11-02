@@ -9,7 +9,7 @@ import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState
 import type { SpecSurfaceProps } from '@/components/spec/page/SpecWorkspace'
 import type { CoverageEntry } from '@/api/spec'
 import { agents, tasks as taskFixtures } from './fixtures'
-import { FOOTER_CHOICES, HEADER_CHOICES, MARKER_CHOICES, MockHealth, NOTICE_LEVELS, TodayBanner, noticesFor, type FooterChoice, type HeaderChoice, type MarkerChoice, type NoticeLevel } from './specBanner'
+import { FOOTER_CHOICES, HEADER_CHOICES, MARKER_CHOICES, PANEL_NAV_CHOICES, MockHealth, NOTICE_LEVELS, TodayBanner, noticesFor, type FooterChoice, type HeaderChoice, type MarkerChoice, type PanelNavChoice, type NoticeLevel } from './specBanner'
 import coverageJson from './fixtures/spec_coverage.json'
 import documentJson from './fixtures/spec_document.json'
 import documentsJson from './fixtures/spec_documents.json'
@@ -65,6 +65,8 @@ export interface SpecMockControls {
   footer: FooterChoice
   /** How the list marks each document's state. */
   marker: MarkerChoice
+  /** The conversation panel's navigation rows: as today, or one row. */
+  panelNav: PanelNavChoice
 }
 
 const STATES: DocState[] = ['writing', 'ready', 'approved', 'building', 'archived']
@@ -79,13 +81,14 @@ function readHashControls(): Partial<SpecMockControls> & { at?: string } {
     header: HEADER_CHOICES.find((h) => h.value === query.get('header'))?.value,
     footer: FOOTER_CHOICES.find((f) => f.value === query.get('footer'))?.value,
     marker: MARKER_CHOICES.find((m) => m.value === query.get('marker'))?.value,
+    panelNav: PANEL_NAV_CHOICES.find((n) => n.value === query.get('nav'))?.value,
     state: state && STATES.includes(state) ? state : undefined,
     layout: layout === 'switcher' || layout === 'column' ? layout : undefined,
     at: query.get('at') ?? undefined,
   }
 }
 
-let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', header: 'today', footer: 'today', marker: 'dot', ...stripUndefined(readHashControls()) }
+let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', header: 'today', footer: 'today', marker: 'icon-paper', panelNav: 'today', ...stripUndefined(readHashControls()) }
 const listeners = new Set<() => void>()
 
 function stripUndefined<T extends object>(o: T): Partial<T> {
@@ -343,7 +346,7 @@ function copy(text: string) {
 
 /** Everything the page's components take, as a container would hold it. */
 export function useSpecMock(routeHash: string) {
-  const { state, layout, notices, header } = useSpecMockControls()
+  const { state, layout, notices, header, panelNav } = useSpecMockControls()
   const initialAnchor = React.useMemo(() => readHashControls().at ?? null, [])
   const [check, setCheck] = React.useState<CheckState>(state === 'ready' ? { status: 'done', findings: [], at: 'preset' } : { status: 'idle' })
   const [filters, setFilters] = React.useState<DocumentFilters>(NO_DOCUMENT_FILTERS)
@@ -448,6 +451,7 @@ export function useSpecMock(routeHash: string) {
       ? { banner: () => React.createElement(TodayBanner, { path: doc.path, level: notices, coverage, tasks: healthTasks }) }
       : {
           headerDesign: 'compact' as const,
+          panelNav,
           noticeStyle: header,
           notices: noticesFor(notices),
           health: React.createElement(MockHealth, { level: notices, coverage, tasks: healthTasks }),

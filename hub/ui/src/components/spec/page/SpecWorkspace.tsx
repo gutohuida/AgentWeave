@@ -29,6 +29,8 @@ export interface SpecSurfaceProps {
   notices?: HeaderNotice[]
   noticeStyle?: 'line' | 'badge' | 'rail'
   health?: React.ReactNode
+  /** Being mocked: the panel's tabs, sections, strip and filter on one row. */
+  panelNav?: 'today' | 'row'
   onAction: (action: SpecAction) => void
   onOpenDocument: (path: string) => void
   onCopyLink: (anchor: string | null) => void
@@ -233,6 +235,31 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
   const parts: BodyPart[] = [tab]
   const findingsIn = (t: PanelTab) =>
     findings.filter((f) => (t === 'tasks' ? f.target.kind === 'task' : t === 'document' ? f.target.kind !== 'task' : false)).length
+  const panelRow = props.panelNav === 'row'
+  const tabs = (
+    <Segmented<PanelTab>
+      label="Show"
+      size={panelRow ? 'xs' : undefined}
+      value={tab}
+      onChange={setTab}
+      options={[
+        { value: 'document', label: 'Document', count: findingsIn('document') || undefined },
+        { value: 'tasks', label: 'Tasks', count: doc.tasks.length },
+        {
+          value: 'builds',
+          label: running ? (
+            <>
+              Builds
+              <span className="aw-sp-live" aria-label="A build is running" />
+            </>
+          ) : (
+            'Builds'
+          ),
+          count: props.builds.length || undefined,
+        },
+      ]}
+    />
+  )
 
   return (
     <div className="aw-sp aw-sp-panel" data-layout="panel">
@@ -270,25 +297,8 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
         />
         {props.banner?.({ jump })}
         {props.list && !compactDesign ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} /> : null}
-        <div className="aw-sp-panel-tabs" data-design={compactDesign ? 'compact' : undefined}>
-          <Segmented<PanelTab>
-            label="Show"
-            value={tab}
-            onChange={setTab}
-            options={[
-              { value: 'document', label: 'Document', count: findingsIn('document') || undefined },
-              { value: 'tasks', label: 'Tasks', count: doc.tasks.length },
-              { value: 'builds', label: running ? (
-                  <>
-                    Builds
-                    <span className="aw-sp-live" aria-label="A build is running" />
-                  </>
-                ) : (
-                  'Builds'
-                ), count: props.builds.length || undefined },
-            ]}
-          />
-        </div>
+        {/* The tabs: a row of their own today, or first in the one navigation row. */}
+        {panelRow ? null : <div className="aw-sp-panel-tabs" data-design={compactDesign ? 'compact' : undefined}>{tabs}</div>}
         <SpecPanelNav
           doc={doc}
           tab={tab}
@@ -296,6 +306,8 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
           onFiltersChange={props.onFiltersChange}
           active={active}
           onJump={jump}
+          inline={panelRow}
+          lead={panelRow ? tabs : undefined}
         />
         <div className="aw-sp-scroll" ref={scroller}>
           <div className="aw-sp-content" key={`${doc.path}:${tab}`} ref={content}>
