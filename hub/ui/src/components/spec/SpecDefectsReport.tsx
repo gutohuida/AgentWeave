@@ -18,12 +18,17 @@ import {
 export function SpecDefectsReport({
   currentPath,
   onSelect,
+  defaultOpen = true,
+  showCount = false,
 }: {
   currentPath?: string | null
   onSelect: (path: string) => void
+  defaultOpen?: boolean
+  /** The number of defects beside the heading, so a folded report still says how many. */
+  showCount?: boolean
 }) {
   const { data, error } = useSpecDefects()
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(defaultOpen)
   const changes = data?.changes ?? []
   const onChange = !!currentPath && currentPath.startsWith('spec/changes/')
 
@@ -47,6 +52,11 @@ export function SpecDefectsReport({
       >
         <Icon name={open ? 'expand_more' : 'chevron_right'} size={13} />
         Defects by step
+        {showCount ? (
+          <span className="ml-auto" style={{ color: 'var(--text-3)', fontWeight: 400 }}>
+            {changes.reduce((n, change) => n + change.defects.length, 0)}
+          </span>
+        ) : null}
       </button>
       {open && (
         <>

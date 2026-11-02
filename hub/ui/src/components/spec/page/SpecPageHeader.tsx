@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
 import { formatAgo } from '@/lib/format'
 import { useEnter } from './hooks'
+import { SpecNoticeBadge, SpecNoticeLine, type HeaderNotice } from './SpecNotices'
 import {
   actionsFor,
   JOURNEY,
@@ -55,11 +56,24 @@ export interface SpecPageHeaderProps {
   onArchive?: () => void
   /** Left out when the document must not be deleted (the corpus depends on it). */
   onDelete?: () => void
+  /** `today`: three rows, with the banner stacked under the header by the container. `compact`
+   *  (spec `the-spec-header-redesigned`, being mocked): two rows, the journey as four knots, the
+   *  health facts beside the phase, and the notices as one line (`line`) or a count (`badge`); with
+   *  `rail` the container shows them beside the body instead. */
+  design?: 'today' | 'compact'
+  notices?: HeaderNotice[]
+  noticeStyle?: 'line' | 'badge' | 'rail'
+  /** The document's health facts, drawn beside the phase in the compact design. */
+  health?: React.ReactNode
+  /** The body is scrolled: the compact design shrinks to one line. */
+  condensed?: boolean
+  onExpand?: () => void
 }
 
 /** The document's header: where it sits (roadmap › slice, previous and next slice), its title and
  *  phase, the journey ribbon, and the actions open to it as buttons, one primary (FR-1). */
 export function SpecPageHeader(props: SpecPageHeaderProps) {
+  if (props.design === 'compact') return <CompactHeader {...props} />
   const { doc, check, compact, now } = props
   const actions = actionsFor(doc.state, doc.kind, doc.foldReady === true)
   return (
@@ -180,6 +194,170 @@ export function SpecPageHeader(props: SpecPageHeaderProps) {
 
       {doc.state === 'current' ? null : <JourneyRibbon state={doc.state === 'ready' ? doc.state : doc.shown} compact={compact} />}
     </header>
+  )
+}
+
+/** Two rows: where it sits and what can be done; then the title with where it is and how it
+ *  stands. The notices take one line under them, or a count among the actions. */
+function CompactHeader(props: SpecPageHeaderProps) {
+  const { doc, check, compact, now } = props
+  const actions = actionsFor(doc.state, doc.kind, doc.foldReady === true)
+  const notices = props.notices ?? []
+  const shownState = doc.state === 'ready' ? 'writing' : doc.shown
+  return (
+    <header
+      className="aw-sp-head"
+      data-testid="spec-document-header"
+      data-design="compact"
+      data-compact={compact ? 'true' : 'false'}
+      data-condensed={props.condensed ? 'true' : 'false'}
+    >
+      <div className="aw-sp-head-bar">
+        {props.leading}
+        <div className="aw-sp-history" role="group" aria-label="History">
+          <button data-slot="icon-button" type="button" className="aw-icon-button" disabled={!props.canBack} onClick={props.onBack} aria-label="Back" title="Back">
+            <Icon name="arrow_left" size={14} />
+          </button>
+          <button data-slot="icon-button" type="button" className="aw-icon-button" disabled={!props.canForward} onClick={props.onForward} aria-label="Forward" title="Forward">
+            <Icon name="arrow_forward" size={14} />
+          </button>
+        </div>
+        <span className="aw-sp-head-condensed-title" onClick={props.onExpand} title="Show the whole header">
+          <strong>{doc.title}</strong>
+          <span className="aw-sp-phase" data-state={shownState}>
+            {SHOWN_LABEL[shownState]}
+          </span>
+        </span>
+        <nav className="aw-sp-crumbs" aria-label="Where this document sits">
+          {doc.roadmap ? (
+            <>
+              <button data-slot="crumb" type="button" className="aw-sp-crumb" onClick={() => props.onOpenDocument(doc.roadmap!.path)} title="Open the roadmap">
+                <Icon name="list_tree" size={13} />
+                <span className="truncate">{doc.roadmap.title}</span>
+              </button>
+              <Icon name="chevron_right" size={12} className="aw-sp-crumb-sep" />
+              <span className="aw-sp-crumb-current truncate">{doc.roadmap.sliceTitle}</span>
+            </>
+          ) : (
+            <span className="aw-sp-crumb-current truncate">{kindLabel(doc.kind)}</span>
+          )}
+        </nav>
+        {doc.roadmap ? (
+          <div className="aw-sp-slicenav" role="group" aria-label="Neighbouring slices">
+            <button
+              data-slot="icon-button"
+              type="button"
+              className="aw-icon-button"
+              disabled={!doc.roadmap.previous}
+              onClick={() => doc.roadmap?.previous && props.onOpenDocument(doc.roadmap.previous.path)}
+              aria-label="Previous slice"
+              title={doc.roadmap.previous ? `Previous slice: ${doc.roadmap.previous.title}` : 'This is the first slice'}
+            >
+              <Icon name="expand_less" size={14} />
+            </button>
+            <button
+              data-slot="icon-button"
+              type="button"
+              className="aw-icon-button"
+              disabled={!doc.roadmap.next}
+              onClick={() => doc.roadmap?.next && props.onOpenDocument(doc.roadmap.next.path)}
+              aria-label="Next slice"
+              title={doc.roadmap.next ? `Next slice: ${doc.roadmap.next.title}` : 'This is the last slice'}
+            >
+              <Icon name="expand_more" size={14} />
+            </button>
+          </div>
+        ) : null}
+        <span className="aw-sp-head-spacer" />
+        <div className="aw-sp-actions">
+          {props.noticeStyle === 'badge' || props.condensed ? <SpecNoticeBadge notices={notices} /> : null}
+          {props.chrome?.draftNext}
+          {actions.secondary.includes('check') ? <CheckButton check={check} onCheck={() => props.onAction('check')} /> : null}
+          <PrimaryAction
+            action={actions.primary}
+            check={check}
+            runningBuild={props.runningBuild ?? null}
+            offersApproveAndBuild={actions.secondary.includes('approve-and-build')}
+            onAction={props.onAction}
+          />
+          <MoreMenu {...props} />
+          {props.trailing}
+        </div>
+      </div>
+
+      <div className="aw-sp-head-row2">
+        <h1 className="aw-sp-title">{doc.title}</h1>
+        <div className="aw-sp-meta">
+          <span className="aw-sp-phase" data-state={shownState} key={doc.shown}>
+            {SHOWN_LABEL[shownState]}
+          </span>
+          {doc.state === 'current' ? null : <MiniJourney state={doc.state === 'ready' ? doc.state : doc.shown} />}
+          <span className="aw-sp-meta-fact">{kindLabel(doc.kind)}</span>
+          {props.chrome?.badges}
+          <span className="aw-sp-meta-fact" title={doc.updatedAt}>
+            Changed {formatAgo(doc.updatedAt, now)}
+          </span>
+          <CheckResult check={check} onJump={props.onJumpToFindings} />
+        </div>
+        {props.health}
+      </div>
+      {props.noticeStyle === 'line' || (props.noticeStyle === 'rail' && compact) ? <SpecNoticeLine notices={notices} /> : null}
+    </header>
+  )
+}
+
+function MoreMenu(props: SpecPageHeaderProps) {
+  const { doc } = props
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <button data-slot="icon-button" type="button" className="aw-icon-button aw-sp-more" aria-label="More actions" title="More actions">
+          <Icon name="more_horiz" size={15} />
+        </button>
+      </MenuTrigger>
+      <MenuContent>
+        <MenuItem icon="link" onSelect={props.onCopyLink}>
+          Copy link to this document
+        </MenuItem>
+        <MenuItem icon="content_copy" onSelect={props.onCopyPath}>
+          Copy its path
+        </MenuItem>
+        {props.chrome?.moreItems}
+        {(doc.state === 'approved' || doc.state === 'building') && doc.phase !== 'current' ? (
+          <MenuItem icon="edit" onSelect={() => props.onAction('reopen')}>
+            Reopen for changes
+          </MenuItem>
+        ) : null}
+        {props.onArchive || props.onDelete ? <MenuSeparator /> : null}
+        {props.onArchive ? (
+          <MenuItem icon="archive" onSelect={props.onArchive}>
+            Archive
+          </MenuItem>
+        ) : null}
+        {props.onDelete ? (
+          <MenuItem icon="delete" destructive onSelect={props.onDelete}>
+            Delete…
+          </MenuItem>
+        ) : null}
+      </MenuContent>
+    </Menu>
+  )
+}
+
+/** The journey as four knots beside the phase: the ribbon's thread, without its row. */
+function MiniJourney({ state }: { state: ShownState }) {
+  const at = journeyIndex(state)
+  const finished = state === 'archived' || state === 'done'
+  const names = JOURNEY.map((s) => s.label).join(' → ')
+  return (
+    <span className="aw-sp-minijourney" role="img" aria-label={`Journey: ${names}; now ${SHOWN_LABEL[state]}`} title={names}>
+      {JOURNEY.map((stop, i) => (
+        <React.Fragment key={stop.key}>
+          {i > 0 ? <span className="aw-sp-minijourney-link" data-reached={i <= at ? 'done' : 'ahead'} /> : null}
+          <span className="aw-sp-minijourney-knot" data-reached={i < at || (i === at && finished) ? 'done' : i === at ? 'current' : 'ahead'} />
+        </React.Fragment>
+      ))}
+    </span>
   )
 }
 

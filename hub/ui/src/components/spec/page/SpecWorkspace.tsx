@@ -8,6 +8,7 @@ import { SpecDocumentBody, type BodyPart } from './SpecDocumentBody'
 import { SpecOutlineMenu, SpecOutlineRail } from './SpecOutline'
 import { SpecPageHeader, type HeaderChrome } from './SpecPageHeader'
 import { SpecPanelDocSwitcher, SpecPanelNav, type PanelListProps } from './SpecPanelNav'
+import { SpecNoticeStack, type HeaderNotice } from './SpecNotices'
 import { Segmented } from '@/components/ui/segmented'
 import '@/styles/spec-page.css'
 
@@ -22,6 +23,12 @@ export interface SpecSurfaceProps {
   now: Date
   /** The position a link named, opened on arrival. */
   initialAnchor?: string | null
+  /** Being mocked (spec `the-spec-header-redesigned`): the two-row header, with the notices and
+   *  health facts handed to it instead of stacked in the banner. */
+  headerDesign?: 'today' | 'compact'
+  notices?: HeaderNotice[]
+  noticeStyle?: 'line' | 'badge' | 'rail'
+  health?: React.ReactNode
   onAction: (action: SpecAction) => void
   onOpenDocument: (path: string) => void
   onCopyLink: (anchor: string | null) => void
@@ -50,6 +57,35 @@ export interface SpecWorkspaceProps extends SpecSurfaceProps {
   listFooter?: React.ReactNode
 }
 
+/** The body has scrolled away from its top: the compact header condenses to one line. */
+function useCondensed(scroller: React.RefObject<HTMLDivElement | null>, on: boolean) {
+  const [condensed, setCondensed] = React.useState(false)
+  React.useEffect(() => {
+    const el = scroller.current
+    if (!el || !on) return
+    const onScroll = () => setCondensed((was) => (was ? el.scrollTop > 8 : el.scrollTop > 48))
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [scroller, on])
+  const expand = () => {
+    scroller.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    setCondensed(false)
+  }
+  return { condensed: on && condensed, expand }
+}
+
+function headerDesignProps(props: SpecSurfaceProps, condensed: { condensed: boolean; expand: () => void }) {
+  if (props.headerDesign !== 'compact') return {}
+  return {
+    design: 'compact' as const,
+    notices: props.notices,
+    noticeStyle: props.noticeStyle ?? 'line',
+    health: props.health,
+    condensed: condensed.condensed,
+    onExpand: condensed.expand,
+  }
+}
+
 function useSurface(props: SpecSurfaceProps, scroller: React.RefObject<HTMLDivElement | null>) {
   const nav = useDocumentNavigation(scroller, props.initialAnchor ?? null)
   const findings: CheckFinding[] = props.check.status === 'done' ? props.check.findings : []
@@ -73,6 +109,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
   const active = useActiveAnchor(scroller, [props.doc.path])
   const content = React.useRef<HTMLDivElement>(null)
   useEnterChildren(content, props.doc.path)
+  const condensed = useCondensed(scroller, props.headerDesign === 'compact')
   const { doc } = props
 
   const list = (variant: 'column' | 'popover') => (
@@ -116,6 +153,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           onCopyPath={props.onCopyPath}
           onArchive={props.onArchive}
           onDelete={props.onDelete}
+          {...headerDesignProps(props, condensed)}
         />
         {props.banner?.({ jump: nav.jump })}
         <div className="aw-sp-scroll" ref={scroller}>
@@ -150,6 +188,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               />
             </div>
             <div className="aw-sp-rail">
+              {props.headerDesign === 'compact' && props.noticeStyle === 'rail' ? <SpecNoticeStack notices={props.notices ?? []} /> : null}
               <SpecOutlineRail doc={doc} findings={findings} builds={props.builds} active={active} onJump={nav.jump} />
             </div>
           </div>
@@ -176,6 +215,8 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
   const active = useActiveAnchor(scroller, [props.doc.path, tab])
   const content = React.useRef<HTMLDivElement>(null)
   useEnterChildren(content, `${props.doc.path}:${tab}`)
+  const compactDesign = props.headerDesign === 'compact'
+  const condensed = useCondensed(scroller, compactDesign)
   const jump = (anchor: string) => {
     setTab(tabFor(anchor))
     nav.jump(anchor)
@@ -221,10 +262,12 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
           onCopyPath={props.onCopyPath}
           onArchive={props.onArchive}
           onDelete={props.onDelete}
+          leading={compactDesign && props.list ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} inline /> : undefined}
+          {...headerDesignProps(props, condensed)}
         />
         {props.banner?.({ jump })}
-        {props.list ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} /> : null}
-        <div className="aw-sp-panel-tabs">
+        {props.list && !compactDesign ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} /> : null}
+        <div className="aw-sp-panel-tabs" data-design={compactDesign ? 'compact' : undefined}>
           <Segmented<PanelTab>
             label="Show"
             value={tab}

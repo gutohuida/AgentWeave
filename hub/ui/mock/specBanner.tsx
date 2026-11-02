@@ -4,6 +4,7 @@ import type { CoverageEntry, SpecAmendment } from '@/api/spec'
 import { Icon } from '@/components/common/Icon'
 import { SpecAmendmentsPanel } from '@/components/spec/SpecAmendmentsPanel'
 import { SpecHealthLine } from '@/components/spec/SpecHealthLine'
+import type { HeaderNotice } from '@/components/spec/page/SpecNotices'
 import { toast } from '@/lib/toast'
 import { PROJECT_ID } from './fixtures'
 import documentsJson from './fixtures/spec_documents.json'
@@ -54,6 +55,88 @@ function useSeedAmendments(path: string, level: NoticeLevel) {
     client.setQueryData(['project', PROJECT_ID, 'specDocuments'], { documents })
     client.setQueryData(['project', PROJECT_ID, 'specs', 'amendments', path], { amendments: has ? [AMENDMENT] : [] })
   }, [client, path, level])
+}
+
+export type HeaderChoice = 'today' | 'line' | 'badge' | 'rail'
+
+export const HEADER_CHOICES: Array<{ value: HeaderChoice; label: string }> = [
+  { value: 'today', label: 'Header: today' },
+  { value: 'line', label: 'Header: A, one line' },
+  { value: 'badge', label: 'Header: B, a count' },
+  { value: 'rail', label: 'Header: C, beside the spec' },
+]
+
+export type FooterChoice = 'today' | 'tidy'
+
+export const FOOTER_CHOICES: Array<{ value: FooterChoice; label: string }> = [
+  { value: 'today', label: 'List footer: today' },
+  { value: 'tidy', label: 'List footer: folded' },
+]
+
+/** The same messages as today's banner, as the compact header's notices. */
+export function noticesFor(level: NoticeLevel): HeaderNotice[] {
+  if (level === 'none') return []
+  const amendment: HeaderNotice = {
+    id: AMENDMENT.id,
+    tone: 'warn',
+    summary: (
+      <>
+        Added task <code>{AMENDMENT.target}</code> ({AMENDMENT.identifier}) · @{AMENDMENT.author} · not reviewed
+      </>
+    ),
+    body: (
+      <>
+        <p>{AMENDMENT.reason}</p>
+        <p className="aw-notice-muted">How to check: {AMENDMENT.how_to_check}</p>
+      </>
+    ),
+    action: { label: 'Mark reviewed', onClick: () => toast({ title: 'Marked reviewed', tone: 'success' }) },
+  }
+  if (level === 'one') return [amendment]
+  return [
+    {
+      id: 'delivery-stale',
+      tone: 'warn',
+      summary: 'The recommended build names DeveloperOpus3, which is not an agent on this project.',
+      body: <p>Building will not start a flow unless you choose another agent in the Build dialog.</p>,
+    },
+    amendment,
+    {
+      id: 'build-outcome',
+      tone: 'info',
+      summary: 'The flow A finished spec gets a build retrospective was started as DeveloperOpus2; it fires at its next tick.',
+    },
+    {
+      id: 'approval-notes',
+      tone: 'info',
+      summary: 'Approved. For your information: 2 notes',
+      body: (
+        <ul>
+          <li>roadmap — the approved roadmap AgentWeave performance overhaul has slices no document names: off-main-thread-io, lazy-spec-reads</li>
+          <li>tasks — two tasks edit hub/ui/src/components/spec/page/SpecPageHeader.tsx with no order between them</li>
+        </ul>
+      ),
+    },
+  ]
+}
+
+/** The health facts, as the compact header draws them beside the phase. */
+export function MockHealth({ level, coverage, tasks }: { level: NoticeLevel; coverage: CoverageEntry[]; tasks: Array<{ id: string; title: string; status: string }> }) {
+  return (
+    <SpecHealthLine
+      coverage={coverage}
+      driftCount={0}
+      vaultWarnings={level === 'many' ? 2 : 0}
+      indexIssues={0}
+      tasks={tasks}
+      history={[]}
+      now={new Date('2026-10-17T12:10:00Z')}
+      onScanDrift={() => toast({ title: 'Scans for drift' })}
+      onCheckVault={() => toast({ title: 'Checks against the vault' })}
+      onOpenTasks={() => toast({ title: 'Opens the tasks' })}
+      onOpenRequirement={() => undefined}
+    />
+  )
 }
 
 /** Today's banner, as useSpecSurface stacks it under the header: the messages, the facts line and

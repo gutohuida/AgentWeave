@@ -9,7 +9,7 @@ import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState
 import type { SpecSurfaceProps } from '@/components/spec/page/SpecWorkspace'
 import type { CoverageEntry } from '@/api/spec'
 import { agents, tasks as taskFixtures } from './fixtures'
-import { NOTICE_LEVELS, TodayBanner, type NoticeLevel } from './specBanner'
+import { FOOTER_CHOICES, HEADER_CHOICES, MockHealth, NOTICE_LEVELS, TodayBanner, noticesFor, type FooterChoice, type HeaderChoice, type NoticeLevel } from './specBanner'
 import coverageJson from './fixtures/spec_coverage.json'
 import documentJson from './fixtures/spec_document.json'
 import documentsJson from './fixtures/spec_documents.json'
@@ -59,6 +59,10 @@ export interface SpecMockControls {
   layout: 'column' | 'switcher'
   /** How much the banner under the header carries (the compact-header slice). */
   notices: NoticeLevel
+  /** Which header design is shown (today, or A, B or C). */
+  header: HeaderChoice
+  /** Whether the list's defects report starts open (today) or folded. */
+  footer: FooterChoice
 }
 
 const STATES: DocState[] = ['writing', 'ready', 'approved', 'building', 'archived']
@@ -70,13 +74,15 @@ function readHashControls(): Partial<SpecMockControls> & { at?: string } {
   const notices = query.get('notices') as NoticeLevel | null
   return {
     notices: notices && NOTICE_LEVELS.some((n) => n.value === notices) ? notices : undefined,
+    header: HEADER_CHOICES.find((h) => h.value === query.get('header'))?.value,
+    footer: FOOTER_CHOICES.find((f) => f.value === query.get('footer'))?.value,
     state: state && STATES.includes(state) ? state : undefined,
     layout: layout === 'switcher' || layout === 'column' ? layout : undefined,
     at: query.get('at') ?? undefined,
   }
 }
 
-let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', ...stripUndefined(readHashControls()) }
+let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', header: 'today', footer: 'today', ...stripUndefined(readHashControls()) }
 const listeners = new Set<() => void>()
 
 function stripUndefined<T extends object>(o: T): Partial<T> {
@@ -327,7 +333,7 @@ function copy(text: string) {
 
 /** Everything the page's components take, as a container would hold it. */
 export function useSpecMock(routeHash: string) {
-  const { state, layout, notices } = useSpecMockControls()
+  const { state, layout, notices, header } = useSpecMockControls()
   const initialAnchor = React.useMemo(() => readHashControls().at ?? null, [])
   const [check, setCheck] = React.useState<CheckState>(state === 'ready' ? { status: 'done', findings: [], at: 'preset' } : { status: 'idle' })
   const [filters, setFilters] = React.useState<DocumentFilters>(NO_DOCUMENT_FILTERS)
@@ -425,14 +431,17 @@ export function useSpecMock(routeHash: string) {
     }
   }
 
+  const coverage = COVERAGE as unknown as CoverageEntry[]
+  const healthTasks = RECORDED_TASKS.map((t) => ({ id: t.id, title: t.title, status: t.status }))
   const surface: SpecSurfaceProps = {
-    banner: () =>
-      React.createElement(TodayBanner, {
-        path: doc.path,
-        level: notices,
-        coverage: COVERAGE as unknown as CoverageEntry[],
-        tasks: RECORDED_TASKS.map((t) => ({ id: t.id, title: t.title, status: t.status })),
-      }),
+    ...(header === 'today'
+      ? { banner: () => React.createElement(TodayBanner, { path: doc.path, level: notices, coverage, tasks: healthTasks }) }
+      : {
+          headerDesign: 'compact' as const,
+          noticeStyle: header,
+          notices: noticesFor(notices),
+          health: React.createElement(MockHealth, { level: notices, coverage, tasks: healthTasks }),
+        }),
     doc,
     builds: [...shownBuilds].reverse(),
     check,

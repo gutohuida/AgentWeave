@@ -180,12 +180,32 @@ export function SpecPanelDocSwitcher({
   list,
   onOpenDocument,
   now,
+  inline,
 }: {
   doc: SpecDocumentView
   list: PanelListProps
   onOpenDocument: (path: string) => void
   now: Date
+  /** In the compact header's first row: a short "Specs" trigger rather than a row of its own. */
+  inline?: boolean
 }) {
+  const picker = (
+    <SpecOpenPicker
+      entries={list.entries}
+      prefs={list.prefs}
+      onPrefsChange={list.onPrefsChange}
+      onOpen={onOpenDocument}
+      onNew={list.onNew}
+      now={now}
+      openPath={doc.path}
+      attachedPath={list.attachedPath}
+      recent={list.recent}
+      progress={list.progress}
+      compact
+      autoFocus
+    />
+  )
+  if (inline) return <SpecDocSwitcher title="Specs">{picker}</SpecDocSwitcher>
   return (
     <div className="aw-sp-pnav aw-sp-pnav-top">
       <div className="aw-sp-pnav-docs">

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { EmptyState } from '@/components/common/EmptyState'
-import { Icon } from '@/components/common/Icon'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import { toast } from '@/lib/toast'
 import { useProjectEvidence, useSpecDocumentRename, useSpecEvents } from '@/api/spec'
@@ -10,7 +9,7 @@ import { SpecPlainDocument } from './page/SpecPlainDocument'
 import { SpecWorkspace } from './page/SpecWorkspace'
 import { useSpecListData, useSpecSurface } from './page/useSpecSurface'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
-import { SpecDefectsReport } from './SpecDefectsReport'
+import { SpecListFooter } from './SpecListFooter'
 import { buildInventory, resolveSelection } from './specNavigation'
 import '@/styles/spec-header.css'
 
@@ -75,26 +74,14 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
   }, [openPicker])
 
   const footer = (
-    <>
-      {onOpenEvidence ? (
-        <button
-          type="button"
-          data-slot="spec-row"
-          className="aw-sp-list-row"
-          data-testid="spec-list-evidence"
-          data-active={evidenceOpen ? 'true' : 'false'}
-          aria-current={evidenceOpen ? 'page' : undefined}
-          onClick={onOpenEvidence}
-        >
-          <Icon name="fact_check" size={13} className="aw-sp-list-icon" />
-          <span className="aw-sp-list-name">Evidence</span>
-          <span className="aw-sp-list-meta" title={evidenceError ? 'The evidence count could not be read' : undefined}>
-            {evidenceError ? '—' : (evidence?.evidence?.length ?? '')}
-          </span>
-        </button>
-      ) : null}
-      <SpecDefectsReport currentPath={openDocument} onSelect={(path) => onOpenDocument(path)} />
-    </>
+    <SpecListFooter
+      onOpenEvidence={onOpenEvidence}
+      evidenceOpen={evidenceOpen}
+      evidenceCount={evidence?.evidence?.length ?? null}
+      evidenceError={evidenceError}
+      currentPath={openDocument ?? null}
+      onSelect={(path) => onOpenDocument(path)}
+    />
   )
 
   const now = useMemo(() => new Date(), [])
