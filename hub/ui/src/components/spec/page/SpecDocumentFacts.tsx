@@ -123,14 +123,16 @@ export function SpecDocumentFacts({
   inHeader?: boolean
 }) {
   const [detail, setDetail] = useState<HealthFactKey | null>(null)
-  const { data: specDoc } = useSpec(path)
-  const { data: coverage } = useSpecCoverage(path)
+  const { data: specDoc, error: specError } = useSpec(path)
+  const { data: coverage, error: coverageError } = useSpecCoverage(path)
   const { data: drift, isError: driftError } = useSpecDrift(path)
   const { data: vault } = useVaultWarnings(path)
-  const { data: vaultChecked } = useVaultChecked(path)
-  const { data: documents } = useSpecDocuments()
+  const { data: vaultChecked, error: vaultCheckedError } = useVaultChecked(path)
+  const { data: documents, error: documentsError } = useSpecDocuments()
   const record = documents?.documents.find((entry) => entry.path === path)
-  const { data: documentTasks } = useDocumentTasks(record?.id ?? null)
+  const { data: documentTasks, error: tasksError } = useDocumentTasks(record?.id ?? null)
+  // In the header the same failure is one of its notices (`useSpecSurface`), so it adds no height.
+  const unread = !inHeader && [specError, coverageError, vaultCheckedError, documentsError, tasksError].some(Boolean)
   const detect = useDetectDrift()
   const checkVault = useCheckVaultWarnings()
 
@@ -143,6 +145,11 @@ export function SpecDocumentFacts({
   return (
     <div data-testid="spec-document-facts" className={inHeader ? 'aw-sp-head-facts' : undefined}>
       {record?.acronym ? <AcronymEditor path={path} acronym={record.acronym} /> : null}
+      {unread ? (
+        <p className="aw-spec-message" data-tone="warn" data-testid="spec-facts-unread">
+          <span className="aw-spec-message-text">Some of this document's facts could not be read, so the line below may be missing some.</span>
+        </p>
+      ) : null}
       <SpecHealthLine
         coverage={coverage?.requirements ?? []}
         coverageDiagnostics={coverage?.diagnostics.length ?? 0}
