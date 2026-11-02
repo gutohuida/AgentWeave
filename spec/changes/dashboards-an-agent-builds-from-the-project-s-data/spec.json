@@ -1,0 +1,88 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "Live :8000 database read with mode=ro on 2026-11-02: 61 tables, 56 carry project_id, and the projects table lists every project on the Hub",
+      "Credential-bearing: api_keys, operator_credentials, runs.capability_token_hash, trace_settings.otlp_headers",
+      "Local machine paths: projects.working_directory, runs.workspace_dir, workspace_fingerprints",
+      "Free text: agent_outputs (54,143 rows), trace attributes with tool arguments/results, messages and command lines, inbound queue, messages and checkpoint text; scanned for real-length aw_live_ and Anthropic keys, none found",
+      "trace_spans: 136,139 spans from 2026-10-21 to 2026-11-02",
+      "No charting library in hub/ui/package.json"
+    ],
+    "limits": [
+      "No query for the example questions has been written or checked yet"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Where the description of the data lives.",
+      "resolved": true
+    },
+    {
+      "question": "Whether free text is queryable: yes, with regular expressions (operator, 2026-11-02).",
+      "resolved": true
+    },
+    {
+      "question": "Refresh: on open and with a Refresh button (operator, 2026-11-02).",
+      "resolved": true
+    }
+  ],
+  "problem": "Every question the operator has about how the project is going needs a screen someone built in advance. Questions that come up while using AgentWeave — how much each spec cost, how many times QA rejected each model's work, what kinds of tasks took longest — have no screen, even though the Hub already records everything needed to answer them: runs, per-run usage and cost, every task status change with actor and time, evidence and who decided it, and about 136,000 trace spans of tool calls, model turns, git commands and requests. Today an answer means asking an agent to query the database by hand and getting a one-off table in a conversation that is lost afterwards. Fixed screens will never keep up with the questions, and the operator's direction is that other kinds of users will connect their own projects to AgentWeave and need to see what matters to them, which no fixed set of screens can anticipate.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Any agent, asked in plain words, builds a dashboard over the current project's data by writing its own queries and choosing chart kinds",
+      "Queryable data includes the project's traces and its free text, with regular-expression matching (operator, 2026-11-02: to count leaks and occurrences in conversations)",
+      "Charts use the app's colours, type and light/dark themes; the chart kinds are a fixed set the app provides",
+      "Dashboards are saved per project, listed, reopened, and run their queries when opened and on a Refresh button",
+      "A panel whose query fails shows a warning or the error on the dashboard, and the rest still draws",
+      "The Hub generates the reference of what can be queried; a vault note holds what agents learn about the data's meaning and traps"
+    ],
+    "non_goals": [
+      "Dashboards over several projects, or any query reaching another project's data (operator, 2026-11-02: current project only)",
+      "Credentials and this machine's paths are never queryable",
+      "Agent-defined stored tables or materialised datasets: queries only for now (operator, 2026-11-02), revisited once queries have been used",
+      "Agent-written visual code or charts that do not follow the app's look (operator, 2026-11-02)",
+      "Dashboards writing or changing any project data; they only read",
+      "Refreshing on a timer or while open (operator, 2026-11-02: on open and on Refresh)",
+      "Keeping dashboards working across Hub upgrades: a break is surfaced, not prevented (operator, 2026-11-02)"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "The three example questions each show correct numbers (checked against a hand-written query) on a saved dashboard, reopening it after new runs shows the new numbers, and a deliberately broken panel shows its error while the others draw.",
+      "intent": "The operator asks an agent for a dashboard answering cost per spec, QA send-backs per model and the longest kinds of task; it appears on a Dashboards screen with charts in the app's style, is still there when reopened, and a panel with a broken query shows its error.",
+      "key": "first-dashboard",
+      "title": "Ask any agent for a dashboard and get one that stays"
+    },
+    {
+      "builds_after": [
+        "first-dashboard"
+      ],
+      "done": "Asking for a change edits the saved dashboard rather than creating a new one, and a broken panel is repaired by asking.",
+      "intent": "The operator asks an agent to change an existing dashboard (add a panel, change a chart, fix a broken query) and the dashboard is edited in place.",
+      "key": "change-by-asking",
+      "title": "Change a dashboard by asking"
+    }
+  ],
+  "summary": "The operator asks any agent for a view of the project's data that the app does not have — cost per spec, how often QA sends a model's work back, which kinds of task take longest, how many leaks or mentions of something the conversations hold, what the traces show — and the agent builds a dashboard for it by writing its own queries over the current project's data, free text and traces included, and choosing from chart kinds that look like the rest of the app. Dashboards are kept, run their queries when opened and on Refresh, and a panel whose query stops working says so. This is the first step towards other kinds of users connecting their projects and seeing what matters to them.",
+  "tasks": [],
+  "title": "Dashboards an agent builds from the project's data"
+}

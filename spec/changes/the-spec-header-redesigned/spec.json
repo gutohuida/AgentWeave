@@ -1,0 +1,483 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a document with one unreviewed amendment and three other messages, open on the spec page in a 1920x1080 browser window on a real Hub",
+      "how_to_check": "The acceptance drive measures it with a real browser against a Hub on :8020.",
+      "key": "page-many-messages",
+      "requirement": "body-gets-the-page",
+      "then": "the top of the body's first line is at most 200px below the top of the spec header",
+      "when": "the page has loaded with the header expanded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same document in the conversation's side panel at 1920x1080 with the conversation at 480px, on a real Hub",
+      "how_to_check": "The acceptance drive measures it in the same browser session.",
+      "key": "panel-many-messages",
+      "requirement": "body-gets-the-panel",
+      "then": "the body's first line is at most 320px below the top of the spec header",
+      "when": "the panel has loaded on the Document tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with one blocking finding and three warnings",
+      "how_to_check": "A UI component test fed the route payloads in the order the routes return them, and the acceptance drive's click on the count.",
+      "key": "count-opens-all",
+      "requirement": "messages-behind-a-count",
+      "then": "before the click the header shows 4 in the blocking tone and the height above the body equals that of a document with no messages; after it all four messages are listed, and opening the amendment shows its reason, how to check it and Mark reviewed",
+      "when": "the operator opens it, then clicks the count"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document open in the page and, separately, in the panel",
+      "how_to_check": "The acceptance drive scrolls and measures in a real browser.",
+      "key": "condensed-line",
+      "requirement": "condenses-on-scroll",
+      "then": "while scrolled the header is one line at most 48px tall showing the title, the phase, the count, the primary action and More; back at the top, and after the click, it is expanded",
+      "when": "the operator scrolls the body down, then back to its top, then down and clicks the condensed line"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a list of every button, menu item, link, message and fact the header and banner render on master, taken from the components",
+      "how_to_check": "UI component tests, one per state, assert each control by its label or test id.",
+      "key": "every-control-reachable",
+      "requirement": "nothing-is-lost",
+      "then": "each is found, and each that needs no menu on master needs none, other than a message's own action and the journey-step and size control",
+      "when": "each is looked for in the new header, message list and body for a document in each state (writing, ready, approved, building, done, archived, capability)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with changes that have defects",
+      "how_to_check": "A UI component test, and the acceptance drive's screenshot.",
+      "key": "defects-folded",
+      "requirement": "defects-start-folded",
+      "then": "the list's footer shows Evidence and one 'Defects by step' line with the defect count, and no change row of the report is shown until it is opened",
+      "when": "the operator opens the spec page"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved roadmap with slices a and b, and two change documents naming slice b and slice a, neither with a parent in the spec index",
+      "how_to_check": "A UI test fed the list route's real payload, and the acceptance drive on a real Hub.",
+      "key": "slices-grouped",
+      "requirement": "slices-under-their-roadmap",
+      "then": "in both, the two documents are under the roadmap, slice a's above slice b's, and neither under 'Not in a roadmap'",
+      "when": "the Spec tab's list and the panel's Open a spec screen are shown in roadmap order"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one document in each state",
+      "how_to_check": "UI component tests over every state for SpecDocList and SpecOpenPicker, and the acceptance drive's screenshots of the Spec tab and the panel's Open a spec screen.",
+      "key": "marks-differ",
+      "requirement": "done-is-unmistakable",
+      "then": "every row and card marks its state with the icon set 2 gives it, done is a solid green disc with a check, no two states share an icon, and no old state dot remains",
+      "when": "the Spec tab's list, the panel's Open a spec screen (its cards and All specs), the Specs switcher and the search dialog are rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "documents ready to approve, with an unreviewed amendment, approved with open tasks and no build, done and not folded, being written with a blocking gap, building, archived, and a capability",
+      "how_to_check": "A UI test fed the list route's real payload, and the acceptance drive on a real Hub with such documents.",
+      "key": "needs-you-groups",
+      "requirement": "what-needs-you",
+      "then": "in both, the first four are under Waiting on you with the reasons ready to approve, amendments to review, ready to build and ready to fold; the gap-blocked and building ones are under In progress; the archived one under Finished; the capability under Capabilities",
+      "when": "the Spec tab's list and the panel's Open a spec screen are shown in 'What needs you' order"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project holding a change naming a roadmap slice, a clean exploring document, an exploring document with a blocking gap, an approved document with an unreviewed amendment, an approved document with open tasks and no build, and a done unfolded change",
+      "how_to_check": "A Hub test that fails before the change.",
+      "key": "route-says-what-waits",
+      "requirement": "the-list-says-what-waits",
+      "then": "each entry carries its named roadmap and slice and exactly the conditions that hold for it",
+      "when": "the spec list route is read"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built page, panel and spec pickers on a real Hub, next to the mock",
+      "how_to_check": "The operator compares the drive's screenshots with the mock.",
+      "key": "operator-approves-shipped",
+      "requirement": "matches-the-approved-mock",
+      "then": "the operator approves them as matching",
+      "when": "the operator reviews them"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "fe4ca7724aa9652dbf7c1e12590dc2a9fd8e317ae5b3d8e169154f8383b48d90",
+      "FR-10": "739feb0a7fe4d879200e604427a70f132b0ed90537b3af9d6f988dff9618c1a4",
+      "FR-11": "a18a2bb0cacd8dccda72a2195c0f1e3ce0543c57f670f221bdb7d1a99e1f3ae8",
+      "FR-12": "6addb03aa8c2e7048615633712f25fc0ead76104cff2c5b1b54ffbaef88aafea",
+      "FR-2": "86cc939e2499aec71516adc959ff3f6c2128367838d747b21e3e9b3ea7d37bd1",
+      "FR-3": "8e58949dc7a360679eb69e77aa9ae97c3d568606ff33b025d9218652392f4813",
+      "FR-4": "2fc9bdb8744afbdb6ab1c6198b973813784eebb835bdc6cabf6169d857519d33",
+      "FR-5": "0cd0af953b711a831e6bf42a3ba12a742a35e992024b72e3dfaffb14cd56a253",
+      "FR-6": "cdb9c9837ab41c56537d08dbd669bd4de016b21195dbfbebee49a7e8afbc9c09",
+      "FR-7": "569aa4fdd2fa395b83fb56914c540d6ef3f39045cf14b142f3a94b116311e9ab",
+      "FR-8": "19dd8b7f854b317798ae4d0d9e69cea9065fa04fff8eaa6980aaf689fd4a9078",
+      "FR-9": "14c98867b8837646ce0364295db8ee427b63b5e53c2b998ac393ae30f120ccbb"
+    },
+    "high_water": 12,
+    "requirements": {
+      "body-gets-the-page": "FR-1",
+      "body-gets-the-panel": "FR-2",
+      "condenses-on-scroll": "FR-4",
+      "defects-start-folded": "FR-8",
+      "done-is-unmistakable": "FR-10",
+      "matches-the-approved-mock": "FR-6",
+      "messages-behind-a-count": "FR-7",
+      "nothing-is-lost": "FR-5",
+      "slices-under-their-roadmap": "FR-9",
+      "the-list-says-what-waits": "FR-12",
+      "what-needs-you": "FR-11"
+    },
+    "retired": {
+      "messages-do-not-stack": "FR-3"
+    }
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "UI work from an existing mock plus one route change; no migration or live-data hazard, so Sonnet is enough (quota), with Opus only on the header task.",
+      "builder": "Same as the agent.",
+      "checker": "QA2 checked the retrospective build's UI and its :8020 drives and knows the pattern.",
+      "cron": "The usual five-minute tick.",
+      "mode": "Five chained tasks with a drive at each end; a flow runs them in order with no one stepping in.",
+      "stop": "Stops when the five tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decided with the operator on the mock, 2026-11-02. The mock is the shipped components fed fixtures, now on master: SpecPageHeader's compact design, SpecNotices, SpecListFooter, SpecDocList's marks (StateIcon) and the 'attention' order, SpecOpenPicker's marker, spec-notices.css and spec-list-marks.css. Building wires them to the Hub's data and removes every design not chosen.\n\nHeader (design B):\n- Row 1: back/forward; in the panel a \"Specs\" switcher; the breadcrumb and slice arrows; then the notice count and the actions (Draft next, Check, the primary action, More, and in the panel the outline menu and close).\n- Row 2: the title, the phase, the journey as four knots, kind, changed, the check result, and the health facts (requirements verified, drift, vault, tasks decided).\n- The count shows how many notices the document has, in the tone of the most urgent, and opens them as a list: one line each, with its full text and its action on demand (e.g. an amendment's reason, how to check, Mark reviewed). Measured: 154px on the page whatever the messages.\n- Every banner item becomes a notice or moves into the body: today's messages (unread errors, the deleted note, the phase controls' messages and refusals, approval gaps and notes, the blocking list), unreviewed and proposed amendments, retired requirements. Dialogs stay where they are. The journey-step and size control (exploring documents) moves into the notice list or the More menu, one click away.\n- Condensed: once the body is scrolled, one line of 41px with the title, the phase, the count and the actions; clicking it, or scrolling back to the top, expands it.\n- The side panel keeps today's four navigation rows (tabs, sections, requirement strip, Filter & sort): with the new header it measured 248 to 276px. A one-row version (134 to 162px) was mocked and declined.\n\nLists of specs, everywhere one is drawn (the Spec tab's column, the panel's Open a spec screen with its cards and All specs list, the panel's Specs switcher, the search dialog), since all of them are SpecDocList or SpecOpenPicker:\n- Marks, set 2 \"paperwork\": writing a page with a pen, ready a paper plane, approved a green stamp, building the hammer, done a solid green disc with a check, capability a library, archived a faded box (and its title faded). The cards' status line uses the same marks.\n- Defects by step starts folded, showing its count (Spec tab only; the pickers have no footer).\n- Roadmap order lists every slice under the roadmap it names, in the roadmap's slice order.\n- A fifth order, \"What needs you\": Waiting on you (each with its reason), In progress, Approved not started, Finished, Capabilities. Reasons: ready to approve (a document being written that the Hub's check finds nothing blocking), amendments to review (unreviewed or proposed), ready to build (approved, no build yet, open tasks), ready to fold (done, not folded). The pickers offer it in their order menu.\n\nDeclined on the mock: header A (one notice line, 190px), header C (cards in the right column), today's dot, a word per state, icon sets 1, 3 and 4.",
+  "evidence": {
+    "checked": [
+      "Measured with Playwright against the mock (real components fed fixtures) at 1920x1080, page and panel, with no message, one amendment (the operator's real amd-af1520e0f673) and four messages: today and designs A, B, C, and the panel's navigation as four rows and as one",
+      "SpecPageHeader.tsx, SpecWorkspace.tsx, useSpecSurface.tsx, useSpecPhaseControls.tsx, SpecDefectsReport.tsx, SpecPage.tsx, SpecOpenPicker.tsx, adapt.ts listEntries and spec-page.css on master at f565d6d",
+      "The panel's Open a spec screen in the mock with set 2 marks on its cards and All specs list",
+      "The operator's defects report (14 changes, 72 defects), computed with the Hub's own spec_defects on a read-only copy of their database",
+      "spec/index.json on master: 47 change documents name a roadmap and none has an index parent",
+      "With the mock's src changes (master 080188f): vitest 'spec' 27 files, 299 tests passed; tsc clean; eslint 0 errors"
+    ],
+    "limits": [
+      "The mock's numbers are the mock's; the shipped page must be measured again on a real Hub (the acceptance drive)",
+      "Measured only with the conversation column at its 480px default",
+      "'Ready to approve' on a list of about 160 documents has not been timed; list-data must keep the list fast",
+      "The search dialog (Ctrl/Cmd+Shift+K) is not in the mock; it renders SpecOpenPicker, so it takes the same marks"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "DeveloperOpus",
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": null,
+        "id": "build-42ad89960ea5",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-02T18:59:25.511763+00:00",
+        "state": "running",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "header": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "list-data": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "list-ui": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "ship-and-drive": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which design for the header, the list marks, the defects footer, the extra grouping and the panel navigation?",
+      "resolved": true
+    }
+  ],
+  "problem": "Operator, 2026-10-28 (vault src-2a9cc1abc8e4) and 2026-11-02: on a 1920x1080 screen, in the side panel less than half of the height is the spec itself. On the spec page it looks fine until one error or warning shows, then the body drops below half, and it shrinks further with each warning. \"I like a lot of stuff from the current design but there is too much that takes the screen.\" Also, 2026-11-02: opening a spec, the list's footer (\"Defects by step\") takes most of the spec list; the list does not group slices under their roadmap; and \"the small green as done\" does not show a spec is done. The operator asked that the list changes apply wherever specs are listed, including the side panel's first screen when searching for a spec.\n\nMeasured in the mock at 1920x1080 (real components, the operator's real amendment from \"A finished spec gets a build retrospective\"), from the top of the spec header to the first line of the body:\n- Spec page: 290px with no message, 473px with one amendment, 667px with four messages (body 80%, 62%, 43% of the height).\n- Side panel: 459px, 658px, 874px (body 57%, 38%, 17%).\n\nCauses found in the code at f565d6d:\n- SpecPageHeader.tsx has three rows (bar, title with actions, journey ribbon): 169px on the page, 198px in the panel.\n- useSpecSurface's banner stacks every message, the health line and the full amendment card (about 185px) between the header and the body.\n- SpecDefectsReport starts open (useState(true)) and lists every change with defects: 14 changes and 72 defects on the operator's project, about 500px of the list's column.\n- The list groups a slice under its roadmap only through the spec index's `parent` (adapt.ts listEntries). 47 change documents name their roadmap in their own `roadmap` field and none has an index parent, so in the operator's app no slice is grouped. The list route does not return the `roadmap` field.\n- spec-page.css draws approved and done as the same 7px green dot; done only adds a 1.5px inner ring. The same dot is drawn by SpecDocList's rows and by SpecOpenPicker's cards (This conversation, Building now, Recently opened); SpecOpenPicker is the panel's Open a spec screen, its Specs switcher and the Ctrl/Cmd+Shift+K search dialog (SpecDocumentPicker).",
+  "requirements": [
+    {
+      "key": "body-gets-the-page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today it is 290 to 667px; the chosen design measured 154px.",
+      "statement": "On the spec page in a 1920x1080 window with the header expanded, the first line of the document body starts at most 200px below the top of the spec header, whatever messages, warnings and facts are showing."
+    },
+    {
+      "key": "body-gets-the-panel",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today it is 459 to 874px; the chosen design measured 248 to 276px with the panel's four navigation rows kept.",
+      "statement": "In the conversation's side panel in a 1920x1080 window, with the conversation column at its default 480px and the header expanded, the first line of the body starts at most 320px below the top of the spec header, the tabs and section navigation included, whatever messages are showing."
+    },
+    {
+      "key": "messages-behind-a-count",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each message adding its own height is what made the body shrink with every warning. The operator chose the count (B) over a line (A) and a side column (C).",
+      "statement": "However many messages and warnings a document has, they add no height above the body: the header shows their count, in the tone of the most urgent, and the count opens all of them, each on one line with its full text and its action reachable from there."
+    },
+    {
+      "key": "condenses-on-scroll",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Once the body is scrolled away from its top, the header condenses to a single line of at most 48px, in the page and in the panel, still showing the title, the phase, the message count, the primary action and the More menu; it expands again when the body returns to its top or the line is clicked."
+    },
+    {
+      "key": "nothing-is-lost",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every action, navigation, message, fact and detail panel the header and the banner offer today stays available from the header, the message list or the body; each action reachable today without opening a menu is still reachable without opening one, except a message's own action and the journey-step and size control, which are one click away."
+    },
+    {
+      "key": "defects-start-folded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Open by default it took most of the list's column on the operator's project (14 changes, 72 defects).",
+      "statement": "The spec list's defects report starts folded to one line showing the number of defects, and opens only when the operator opens it."
+    },
+    {
+      "key": "slices-under-their-roadmap",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "In roadmap order, in every list of specs, every change document that names a roadmap slice is listed under that roadmap, in the roadmap's slice order, whether or not the spec index records a parent for it."
+    },
+    {
+      "key": "done-is-unmistakable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today approved and done are the same green dot. The operator chose set 2 (paperwork) on the mock, and asked that it apply wherever specs are listed.",
+      "statement": "Wherever a spec's state is marked in a list of specs (the Spec tab's column, the side panel's Open a spec screen including its cards, its Specs switcher, and the search dialog), each state has its own icon (writing, ready, approved, building, done, capability, archived), done is a solid green disc with a check, and no two states share an icon."
+    },
+    {
+      "key": "what-needs-you",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator opens the list to find what is waiting on them; no other order answers that.",
+      "statement": "Every list of specs offers a 'What needs you' order that groups documents as Waiting on you, In progress, Approved not started, Finished and Capabilities, and shows beside each waiting document why: ready to approve, amendments to review, ready to build, or ready to fold."
+    },
+    {
+      "key": "the-list-says-what-waits",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "For every document it lists, the Hub returns the roadmap and slice the document names, if any, and which of these hold: being written with nothing blocking approval, amendments unreviewed or proposed, approved with open tasks and no build, done and not folded."
+    },
+    {
+      "key": "matches-the-approved-mock",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The shipped header and lists match the mock the operator approved, in the page and in the panel, in each state the mock shows."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/building-a-spec-ties-together-from-plan-to-board/spec.json",
+    "slice": "compact-spec-header"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The spec document header and everything stacked between it and the body, in the page and in the side panel",
+      "The header condensing to one line while the body is scrolled",
+      "Every list of specs: the Spec tab's column, the side panel's Open a spec screen (cards and All specs), its Specs switcher, and the search dialog: footer, roadmap grouping by the document's named roadmap, state marks, and the 'What needs you' order",
+      "The Hub returning, per listed document, its named roadmap and slice and what it waits on the operator for"
+    ],
+    "non_goals": [
+      "Removing any action, message, fact or navigation the header, banner or list offer today: they move, they do not go",
+      "The panel's tabs, section chips, requirement strip and filter rows: they stay as they are (operator, 2026-11-02)",
+      "The page's right-hand Sections/Requirements column",
+      "The wider side-panel rework (item 2 of the operator's 2026-10-28 note)",
+      "The Build dialog (slice build-dialog-overhaul)",
+      "What any action, message or fact does or says",
+      "Writing a roadmap parent into the spec index",
+      "Grouping by product area: a change records its capability only once folded",
+      "Screens smaller than 1920x1080 as a target; they must still work"
+    ]
+  },
+  "summary": "The spec page gives its height back to the spec. The header becomes two rows, with every message behind one count beside the actions, and shrinks to one line once the body is scrolled. Every list of specs (the Spec tab, the side panel's Open a spec screen and switcher, and the search dialog) stops being pushed off screen by the defects report, groups slices under the roadmap they name, marks each state with its own icon so a finished spec cannot be mistaken for an approved one, and gains a \"What needs you\" order. Designed interactively with the operator on the mock (hub/ui/mock), and built from it.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "A drive script following the d1029 pattern; routine, Sonnet is enough.",
+      "checker": "QA2",
+      "checker_reason": "QA2 ran the retrospective build's :8020 drives and knows the harness.",
+      "depends_on": [],
+      "description": "Write scripts/drive/d1102_spec_page_room.py. It starts a Hub on :8020 with its own database from the task's own checkout, refuses to run if :8020 already answers, and stops the Hub when it ends. It seeds a throwaway project in testbed/ with: a roadmap with two slices and two change documents naming them, with no index parent; a document with one unreviewed amendment and three other messages; documents in every state; and changes with defects. Then, in a 1920x1080 real browser, it measures header top to first body line on the page and in the conversation panel (480px conversation), opens the count, scrolls to check the condensed line, and checks the grouping, marks and 'What needs you' order in both the Spec tab's list and the panel's Open a spec screen, and the folded defects. Saves screenshots. Run it on today's code and record it failing for the missing behaviour, not for a setup error. Not part of the project's checks.",
+      "files": [
+        "scripts/drive/d1102_spec_page_room.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "body-gets-the-page",
+        "body-gets-the-panel",
+        "condenses-on-scroll",
+        "slices-under-their-roadmap",
+        "what-needs-you"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "One read-only route field and its adapter; no migration or live-data hazard.",
+      "checker": "QA2",
+      "checker_reason": "Same checker through the build keeps the drive's context.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "The spec list route returns, per document, the roadmap and slice it names and the waiting conditions of the-list-says-what-waits, computed without slowing the list noticeably. The app's list entries take the roadmap from it (not only the index parent), ordered by the roadmap's slice order, and carry a waiting reason. Hub test first, then UI tests fed the route's real payload in its real order.",
+      "files": [
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/spec_documents.py",
+        "hub/tests",
+        "hub/ui/src/api/spec.ts",
+        "hub/ui/src/components/spec/page/adapt.ts",
+        "hub/ui/src/__tests__"
+      ],
+      "from": null,
+      "key": "list-data",
+      "requirements": [
+        "the-list-says-what-waits",
+        "slices-under-their-roadmap"
+      ],
+      "reviewer": null,
+      "title": "The list route says each spec's roadmap and what it waits on"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Wiring components that already exist in the mock; mostly removal and tests.",
+      "checker": "QA2",
+      "checker_reason": "Same checker through the build.",
+      "depends_on": [
+        "list-data"
+      ],
+      "description": "Make the mock's chosen list designs the only ones, everywhere specs are listed: set 2 icons as the only state mark in SpecDocList's rows and SpecOpenPicker's cards (the Spec tab, the panel's Open a spec screen, its Specs switcher and the search dialog), with no old state dot left; Defects by step folded with its count; the 'What needs you' order fed by list-data's waiting reasons. Remove the marker switch, the dot, the word marks and icon sets 1, 3 and 4. Component tests over every state and order, for SpecDocList and SpecOpenPicker.",
+      "files": [
+        "hub/ui/src/components/spec/page/SpecDocList.tsx",
+        "hub/ui/src/components/spec/page/SpecOpenPicker.tsx",
+        "hub/ui/src/components/spec/page/SpecPanelNav.tsx",
+        "hub/ui/src/components/spec/SpecDocumentPicker.tsx",
+        "hub/ui/src/components/spec/page/model.ts",
+        "hub/ui/src/components/spec/SpecListFooter.tsx",
+        "hub/ui/src/components/spec/SpecDefectsReport.tsx",
+        "hub/ui/src/components/spec/SpecPage.tsx",
+        "hub/ui/src/styles/spec-list-marks.css",
+        "hub/ui/src/styles/spec-page.css",
+        "hub/ui/src/components/spec/page/SpecWorkspace.tsx",
+        "hub/ui/src/__tests__"
+      ],
+      "from": null,
+      "key": "list-ui",
+      "requirements": [
+        "done-is-unmistakable",
+        "defects-start-folded",
+        "what-needs-you"
+      ],
+      "reviewer": null,
+      "title": "Every spec list: icons, folded defects, What needs you"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "The riskiest task: turning a dozen kinds of banner content, some interactive, into notices without losing any (nothing-is-lost). Worth Opus.",
+      "checker": "QA2",
+      "checker_reason": "Same checker through the build.",
+      "depends_on": [
+        "list-ui"
+      ],
+      "description": "Make the compact header (design B) the only header in the page and the panel, fed by the Hub's data: every banner message, unreviewed or proposed amendment and retired requirement becomes a notice (one line, full text and action on demand), the health facts sit in row 2, the journey becomes four knots, and the header condenses on scroll. Keep the panel's four navigation rows; remove the one-row panel navigation, designs A and C and the old three-row header. Move the journey-step and size control within one click. Component tests per document state for every control (nothing-is-lost).",
+      "files": [
+        "hub/ui/src/components/spec/page/SpecPageHeader.tsx",
+        "hub/ui/src/components/spec/page/SpecNotices.tsx",
+        "hub/ui/src/components/spec/page/SpecWorkspace.tsx",
+        "hub/ui/src/components/spec/page/SpecPanelNav.tsx",
+        "hub/ui/src/components/spec/page/useSpecSurface.tsx",
+        "hub/ui/src/components/spec/useSpecPhaseControls.tsx",
+        "hub/ui/src/components/spec/SpecAmendmentsPanel.tsx",
+        "hub/ui/src/styles/spec-notices.css",
+        "hub/ui/src/styles/spec-page.css",
+        "hub/ui/src/__tests__"
+      ],
+      "from": null,
+      "key": "header",
+      "requirements": [
+        "messages-behind-a-count",
+        "condenses-on-scroll",
+        "nothing-is-lost",
+        "body-gets-the-page",
+        "body-gets-the-panel"
+      ],
+      "reviewer": null,
+      "title": "The two-row header with notices behind a count"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Bundle refresh and running the drive; routine.",
+      "checker": "QA2",
+      "checker_reason": "QA2 compares the drive's screenshots with the mock before the operator does.",
+      "depends_on": [
+        "header"
+      ],
+      "description": "Remove the mock's design switches that no longer select anything (keep the messages level and document state), refresh the UI bundle (commit hub/ui/src and hub/hub/static/ui together; if the merge conflicts in hub/hub/static/ui, merge main and regenerate rather than resolving by hand), then run the acceptance drive on :8020 and record it passing, with its screenshots (spec page, side panel, Open a spec screen) for the operator's comparison.",
+      "files": [
+        "hub/ui/mock",
+        "hub/hub/static/ui",
+        "scripts/drive/d1102_spec_page_room.py"
+      ],
+      "from": null,
+      "key": "ship-and-drive",
+      "requirements": [
+        "body-gets-the-page",
+        "body-gets-the-panel",
+        "condenses-on-scroll",
+        "matches-the-approved-mock"
+      ],
+      "reviewer": null,
+      "title": "Bundle, mock tidy-up, drive passing"
+    }
+  ],
+  "title": "The spec header, redesigned"
+}

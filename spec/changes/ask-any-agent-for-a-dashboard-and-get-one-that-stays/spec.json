@@ -1,0 +1,334 @@
+{
+  "acceptance_criteria": [
+    {
+      "given": "a project with tasks and runs",
+      "key": "ac-run-query",
+      "requirement": "agent-runs-query",
+      "then": "it receives column names and rows matching a hand-written count over the same project",
+      "when": "an agent runs a query counting the project's tasks by status"
+    },
+    {
+      "given": "two projects on one Hub, each with tasks",
+      "key": "ac-project-only",
+      "requirement": "project-only",
+      "then": "every row returned belongs to project A",
+      "when": "an agent in project A runs a query with no project filter over tasks, a join of tasks and runs, and a query over the projects list"
+    },
+    {
+      "given": "a project",
+      "key": "ac-never-queryable",
+      "requirement": "never-queryable",
+      "then": "each query is refused with a message naming what is not queryable, and no value of them is returned",
+      "when": "an agent queries the API keys, operator credentials, run tokens, trace exporter headers, the project directory or a run's workspace"
+    },
+    {
+      "given": "a project",
+      "key": "ac-read-only",
+      "requirement": "read-only",
+      "then": "each is refused and the database is unchanged",
+      "when": "an agent runs an insert, an update, a delete, a table drop and an attach"
+    },
+    {
+      "given": "agent output containing three occurrences of a marker string",
+      "key": "ac-regex",
+      "requirement": "free-text-and-regex",
+      "then": "the count is three",
+      "when": "an agent counts agent output matching a regular expression for the marker"
+    },
+    {
+      "given": "a project with trace spans of tool calls",
+      "key": "ac-traces",
+      "requirement": "free-text-and-regex",
+      "then": "both return the project's spans",
+      "when": "an agent queries span count and total duration by tool name, and the text of tool arguments"
+    },
+    {
+      "given": "a query that runs longer than 10 seconds",
+      "key": "ac-timeout",
+      "requirement": "query-bounded",
+      "then": "it is stopped and answers an error saying it ran too long, and a request to the Hub made while it runs is answered without waiting for it",
+      "when": "an agent or a panel runs it"
+    },
+    {
+      "given": "a query returning more than 10,000 rows",
+      "key": "ac-row-cap",
+      "requirement": "query-bounded",
+      "then": "10,000 rows come back with a note that the result was cut",
+      "when": "it runs"
+    },
+    {
+      "given": "the running Hub",
+      "key": "ac-reference",
+      "requirement": "query-reference",
+      "then": "no query is refused, and no table or column from the never-queryable list appears in it",
+      "when": "an agent reads the query reference and queries every table it lists"
+    },
+    {
+      "given": "a project",
+      "key": "ac-vault-note",
+      "requirement": "data-notes-in-vault",
+      "then": "it names the vault note on data meaning, and that note exists and holds the two seeded traps",
+      "when": "an agent reads the dashboard tools' guidance"
+    },
+    {
+      "given": "an agent in a conversation",
+      "key": "ac-save",
+      "requirement": "save-dashboard",
+      "then": "the dashboard is listed with its name, the agent's name and the time, and its panels are unchanged",
+      "when": "it saves a dashboard with three panels and the Hub restarts"
+    },
+    {
+      "given": "a dashboard with one panel of each chart kind",
+      "key": "ac-chart-kinds",
+      "requirement": "chart-kinds",
+      "then": "each panel draws with the app's colours and type, and a panel naming any other kind is refused when saved",
+      "when": "it is opened in the light and in the dark theme"
+    },
+    {
+      "given": "a saved dashboard and new runs recorded after it was last opened",
+      "key": "ac-screen",
+      "requirement": "dashboards-screen",
+      "then": "the numbers include the new runs each time and the fetched-at time moves",
+      "when": "the operator opens it from the Dashboards screen, then presses Refresh after another run"
+    },
+    {
+      "given": "a saved dashboard",
+      "key": "ac-delete",
+      "requirement": "dashboards-screen",
+      "then": "it is gone from the list and from the agent's list",
+      "when": "the operator deletes it"
+    },
+    {
+      "given": "a dashboard with a panel querying a column that does not exist, a line panel with no numeric column, and a working panel",
+      "key": "ac-panel-error",
+      "requirement": "panel-errors",
+      "then": "the first shows the query's error, the second a warning saying why it cannot draw, and the third draws",
+      "when": "it is opened"
+    },
+    {
+      "given": "a project with a dashboard",
+      "key": "ac-project-delete",
+      "requirement": "project-delete-removes",
+      "then": "no dashboard row of that project remains",
+      "when": "the project is deleted"
+    },
+    {
+      "given": "the acceptance-drive project with seeded specs, tasks, runs, usage and reviews",
+      "key": "ac-examples",
+      "requirement": "dashboards-screen",
+      "then": "each panel's numbers equal the drive's hand-written reference query for the same question",
+      "when": "an agent is asked for a dashboard of cost per spec, QA send-backs per model, and the longest kinds of task, and the operator opens it"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "b0803baac55f44c18b623be53f77b4997dd2e31f939a33d74ff9a8c60fc325e1",
+      "FR-10": "c0f58de3c5c6f7d67df0438947379f8c5afbe8d38cb0df021bfd0be6b61d18d7",
+      "FR-11": "f453eafdffcb41054df830b5efdb786e7656f6ce92cac4823585260a07a82194",
+      "FR-12": "c2ad78e3a13682dc9c9bb5610cc6af4e9a20e3131b221f0411ce8227c988f2f6",
+      "FR-13": "a229b61221000e39ff54a3875cb1f996cdd220d4359a3442c0276ad1676105c9",
+      "FR-2": "1733f4bd9ee5b3f463786055856094b95bd2dddb8dc3c8d984b663d855bac5a1",
+      "FR-3": "e2f78e34150d6d5bcbc2112a66e8336bd5fcc04d64924dd941db37f7d37980f7",
+      "FR-4": "af7fa17dbfa2df761126c2b62007a860d461528a34e69f5b25df1a0b2d347684",
+      "FR-5": "2fe38cab527e030794f902e391f230fa5e563cd3b73be8a8dec699827d86bb79",
+      "FR-6": "6d692d58962c4ed32c2b190181b01e0bf800997f1c7172f484e2a44040816ccf",
+      "FR-7": "cfe7ee96fedd84763fd9720d97a252e47108c29785eca497af1e80370c644b20",
+      "FR-8": "0bb5a80d23f3141be1f287ade1f310358d3754d94d1bb4a53b867e4609812698",
+      "FR-9": "50dbf53b27754b504d5dfea3ee94c6acc17e5b11deb4206f5c9886025954cd04"
+    },
+    "high_water": 13,
+    "requirements": {
+      "agent-runs-query": "FR-1",
+      "chart-kinds": "FR-10",
+      "dashboards-screen": "FR-11",
+      "data-notes-in-vault": "FR-8",
+      "free-text-and-regex": "FR-5",
+      "never-queryable": "FR-3",
+      "panel-errors": "FR-12",
+      "project-delete-removes": "FR-13",
+      "project-only": "FR-2",
+      "query-bounded": "FR-6",
+      "query-reference": "FR-7",
+      "read-only": "FR-4",
+      "save-dashboard": "FR-9"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "The header build holds Developer, DeveloperOpus2 and QA; DeveloperOpus is free, and the query boundary is security work, so Opus.",
+      "builder": "Same as the agent.",
+      "checker": "QA2 is free and has run the :8020 dedicated-Hub drives.",
+      "cron": "The usual five-minute tick.",
+      "mode": "Chained tasks with a drive at each end; a flow runs them in order.",
+      "stop": "Stops when the tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decisions with the operator, 2026-11-02:\n- Current project only. A query never returns another project's rows, and the Hub enforces this rather than trusting each query to filter.\n- Queries only: no stored tables or materialised datasets in this slice.\n- Free text is queryable (agent output, trace tool arguments and results, model messages, command lines, message, queue and checkpoint text), and queries can match regular expressions, so a dashboard can count leaks or occurrences in conversations. Rejected: metrics and names only, which could not answer those questions.\n- Never queryable: credentials (API keys, operator credentials, run tokens, the trace exporter's headers), this machine's paths (project directory, run workspaces, workspace fingerprints), and other projects' rows. Credentials have no chart value; paths and other projects matter once other users connect projects.\n- The reference of what can be queried is generated by the Hub from the version that is running, so it always matches what a query can reach. Rejected: a hand-written schema description in the vault, which goes stale on the first migration and would cost a distillation on every upgrade. What the data means and its traps go in a vault note that agents read and add to.\n- Charts are a fixed set of kinds the app draws in its own colours, type and light and dark themes. Rejected: agent-written visual code.\n- A dashboard runs its queries when opened and when Refresh is pressed; it does not refresh on its own while open.\n- A Hub upgrade that breaks a query is surfaced on the panel, not prevented.\n\nHazard (Tier 2): storing dashboards adds a table, so the operator's :8000 Hub runs a migration on its real database at its next restart after this lands on master. The migration only creates new tables and changes no existing one; rollback is the migration's downgrade dropping them, which loses only saved dashboards.\n\nStatus 2026-11-02: paused by the operator after the requirements; the tasks are not written yet and wait on the open questions.",
+  "evidence": {
+    "checked": [
+      "Live :8000 database read with mode=ro on 2026-11-02: 61 tables, 56 carry project_id; credential-bearing api_keys, operator_credentials, runs.capability_token_hash, trace_settings.otlp_headers; paths in projects.working_directory, runs.workspace_dir, workspace_fingerprints",
+      "Free-text columns scanned for real-length aw_live_ and Anthropic keys: none found",
+      "trace_spans holds 136,139 project-scoped spans with name, operation, status, start/end times and attributes",
+      "No charting library in hub/ui/package.json; chapter_versions not removed on project delete was a past defect (task-85a6c6d51cd8), hence ac-project-delete"
+    ],
+    "limits": [
+      "The hand-written reference queries for the three examples are not written yet; the acceptance-drive task writes them",
+      "The 10-second and 10,000-row limits are proposed numbers, not measured"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "May a table panel show matched free text in full (for example the leaked value itself), or must panels over text show counts and masked excerpts only? Assumed for now: it shows what the query returns, since the screen is the operator's own machine.",
+      "resolved": false
+    },
+    {
+      "question": "Is the Dashboards screen and chart look designed first in a mock with the operator (as the spec header was), or left to the builder held only to the app's colours and type? Recommended: a mock first.",
+      "resolved": false
+    },
+    {
+      "question": "Are 10 seconds per query and 10,000 rows per result the right limits? Proposed, not measured; the traces hold about 136,000 spans.",
+      "resolved": false
+    },
+    {
+      "question": "Tasks are not written yet. Planned: acceptance drive with hand-written reference queries (fails on today's code first); query service and its boundary; dashboard store and agent tools; Dashboards screen and charts; ship. Builder DeveloperOpus, checker QA2.",
+      "resolved": false
+    }
+  ],
+  "problem": "Questions about how the project is going — how much each spec cost, how often QA sends each model's work back, which kinds of task take longest, how many times something appears in the conversations — have no screen, although the Hub records everything needed to answer them. Today an answer is a one-off query an agent runs by hand, and it is lost with the conversation. This slice proves the loop the roadmap rests on: ask, get a dashboard with correct numbers in the app's look, reopen it later, and see it current.",
+  "requirements": [
+    {
+      "key": "agent-runs-query",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent that cannot see what its query returns saves wrong numbers with confidence.",
+      "statement": "Any agent can run a read-only query over the current project's data and receive its columns and rows, so it can check a query's result before it saves a dashboard."
+    },
+    {
+      "key": "project-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One database holds every project on the Hub; the roadmap is heading towards other users' projects.",
+      "statement": "A query never returns a row belonging to another project, whatever the query text says, including queries that omit a project filter, join tables, or read the list of projects."
+    },
+    {
+      "key": "never-queryable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A query cannot read credentials (API keys, operator credentials, run tokens, the trace exporter's headers) or this machine's paths (the project directory, run workspaces, workspace fingerprints); a query naming them is refused with a message saying what is not queryable."
+    },
+    {
+      "key": "read-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A query cannot change any data: an insert, update, delete, schema change or attach is refused and the data is unchanged."
+    },
+    {
+      "key": "free-text-and-regex",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator wants to count leaks and occurrences of things in the conversations.",
+      "statement": "Free-text data is queryable — agent output, the traces' tool arguments and results, model messages and command lines, and message, queue and checkpoint text — and a query can match a regular expression against any text column."
+    },
+    {
+      "key": "query-bounded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub has a history of freezing when one piece of work holds it; a dashboard must not be the next one.",
+      "statement": "A query that runs longer than 10 seconds is stopped and answers an error saying so; a result over 10,000 rows is cut to 10,000 and says it was cut; and running queries does not hold up the Hub's other work."
+    },
+    {
+      "key": "query-reference",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A hand-written description goes stale on the first migration.",
+      "statement": "The Hub provides agents a reference of everything a query can reach — each table and column, its type and a short meaning — generated from the running version, and nothing in it is refused when queried."
+    },
+    {
+      "key": "data-notes-in-vault",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The project's vault holds a note on what the data means and its traps, which the agent tools point agents to and which agents add to, seeded with the known traps (a send-back rejects every piece of evidence from that commit; cost per spec counts its tasks' building and reviewing runs)."
+    },
+    {
+      "key": "save-dashboard",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An agent can save a dashboard to the current project with a name, a description of the question it answers, and panels, each with a title, a query and a chart kind; the dashboard records which agent made it and when, and survives a Hub restart."
+    },
+    {
+      "key": "chart-kinds",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A panel's chart kind is one of a fixed set — single number, table, bar, stacked bar and line — and every kind is drawn in the app's colours and type, readable in both light and dark themes."
+    },
+    {
+      "key": "dashboards-screen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The project has a Dashboards screen, reachable from the app's navigation, listing its dashboards with name, author and date; opening one runs all its queries and draws them, a Refresh button runs them again, and the dashboard shows when its data was last fetched. The operator can delete a dashboard there."
+    },
+    {
+      "key": "panel-errors",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A panel whose query fails shows the error on that panel, and a panel whose result cannot be drawn as its chart kind (for example a line with no numeric column) shows a warning saying why; the other panels still draw."
+    },
+    {
+      "key": "project-delete-removes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Deleting a project removes its dashboards."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/dashboards-an-agent-builds-from-the-project-s-data/spec.json",
+    "slice": "first-dashboard"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Agent tools to read the query reference, run a read-only query and see its rows, and save, list and read dashboards",
+      "A Dashboards screen per project: list, open, refresh, delete",
+      "Panels: a title, a query and a chart kind from a fixed set, drawn in the app's style",
+      "Errors and warnings shown per panel",
+      "A vault note for what the data means, seeded with the gotchas already known"
+    ],
+    "non_goals": [
+      "Changing a saved dashboard by asking (slice change-by-asking); in this slice an agent saves a new dashboard or replaces one whole",
+      "Stored tables, materialised or reusable named datasets",
+      "Queries across projects, or any write to project data",
+      "Agent-written chart code or styles outside the app's look",
+      "Refreshing on a timer or as runs finish",
+      "Keeping saved queries working across Hub upgrades",
+      "Sharing or exporting dashboards"
+    ]
+  },
+  "summary": "Any agent, asked in a conversation, writes queries over the current project's data (traces and free text included), checks their results, and saves a dashboard of panels drawn in the app's own chart kinds and colours. The project gets a Dashboards screen that lists them; opening one runs its queries, a Refresh button runs them again, and a panel whose query fails shows the error while the rest draws. The Hub publishes a reference of what can be queried, generated from the running version, and a vault note holds what agents learn about what the data means.",
+  "tasks": [],
+  "title": "Ask any agent for a dashboard and get one that stays"
+}
