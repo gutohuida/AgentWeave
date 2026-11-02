@@ -2,11 +2,14 @@
 """Every task comes with a recommended builder and checker (ETCRB-3): the prompt half and the
 warnings half. The Build dialog half is a UI test (`BuildDialog.test.tsx`)."""
 
+import json
+import re
+
 import pytest
 
 from hub import spec_journey
 from hub.spec_completeness import recommended_people_warnings
-from hub.spec_payload import SpecPayload
+from hub.spec_payload import Evidence, SpecPayload
 
 from .test_spec_undeclared_files_warning import _doc, _submit, planner  # noqa: F401 - fixture
 
@@ -53,6 +56,18 @@ def test_a_large_document_asks_for_the_three_sources_and_a_fix_does_not():
     assert "evidence" in large and "unavailable" in large
     fix = _tasks_prompt("fix")
     assert "which sources" not in fix and "web search" not in fix
+
+
+# ac-sources: an author sent `evidence` as a string, was refused with no shape to go on, and moved
+# its findings to the design, so the prompt has to give the shape the Hub accepts.
+def test_a_large_document_is_told_the_shape_evidence_takes_and_a_fix_is_not():
+    large = _tasks_prompt("large")
+    shape = re.search(r"`(\{\"checked\".*?\})`", large)
+    assert shape is not None
+    assert set(Evidence.model_fields) == set(json.loads(shape[1].replace("...", "")))
+    assert "sample size" in large
+    assert "keep `evidence` in every later" in large
+    assert "`evidence`" not in _tasks_prompt("fix")
 
 
 # ac-not-self
