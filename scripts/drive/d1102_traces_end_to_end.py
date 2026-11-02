@@ -10,7 +10,7 @@ agents bound to Haiku (`alpha`, `beta`), then, in a real browser:
      error that can be made on demand; a stopped run counts as an error, FR-6);
   3. the view first lists runs only (every row [data-testid=trace-row] is a run), filtering to alpha
      over the last hour leaves only alpha's runs, grouping by agent shows for alpha the run count,
-     total cost equal to the sum of those runs' recorded cost (read from GET /runs), total and
+     total cost equal to the sum of those runs' recorded cost (turn_usage, read from the DB), total and
      average duration, and the errors count -- and the three headline stats precede any other;
   4. opening a listed row shows that run's trace; the conversation's own "Latest trace" control and
      the task's run row each open the trace of the run the Hub says is latest / the task's run.
@@ -51,7 +51,8 @@ def turn(base, agent, message, task=None, conversation=None, stop_after=None):
     run_id = run["run_id"]
     if stop_after:
         time.sleep(stop_after)
-        d.api("POST", f"{base}/agents/{agent}/stop")
+        code, out = d.api("POST", f"{base}/agent/{agent}/stop")
+        d.check(f"{agent} run is stopped", code in (200, 202), f"{code} {str(out)[:200]}")
     end = time.time() + 600
     while time.time() < end:
         (state,) = d.ro("select status from runs where id=?", (run_id,))[0]
@@ -94,12 +95,31 @@ def drive():
 
         # 2. real runs
         a1, _ = turn(base, "alpha", "Reply with the single word ok.", task=task["id"])
+        (conv,) = d.ro("select conversation_id from runs where id=?", (a1,))[0]
+        d.check("2 the first turn has a conversation", bool(conv))
         b1, _ = turn(base, "beta", "Reply with the single word ok.")
-        a2, _ = turn(base, "alpha", "Count slowly from 1 to 200, one number per line.", stop_after=12)
-        _, runs = d.api("GET", f"{base}/runs?limit=50")
-        runs = runs["runs"] if isinstance(runs, dict) else runs
+        a2, _ = turn(base, "alpha", "Reply with the single word ok.", conversation=conv)
+        # The 'failed run': a run cannot be made to fail on demand, so one is stopped part-way;
+        # a stopped run counts as an error (FR-6). It is also the conversation's latest of three.
+        a3, a3_state = turn(base, "alpha", "Count slowly from 1 to 200, one number per line.",
+                            conversation=conv, stop_after=12)
+        d.check("2 the stopped run ended stopped", a3_state in ("stopped", "cancelled", "interrupted"),
+                a3_state)
+        cols = "id, agent, status, conversation_id, task_id"
+        runs = [dict(zip(cols.split(", "), r)) for r in d.ro(f"select {cols} from runs")]
         by_id = {r["id"]: r for r in runs}
-        d.check("2 the three runs exist", {a1, b1, a2} <= set(by_id))
+        d.check("2 the runs exist", {a1, b1, a2, a3} <= set(by_id))
+        d.check("2 the conversation holds three runs",
+                len([r for r in runs if r["conversation_id"] == conv]) == 3)
+        # Recorded cost: turn_usage.session_totals.total_cost_usd is a running session total, so a
+        # run's cost is its row's total less the agent's previous row's (ordered by observed_at).
+        prev = {}
+        for rid, agent, total in d.ro(
+                "select run_id, agent, json_extract(session_totals, '$.total_cost_usd') "
+                "from turn_usage order by observed_at"):
+            if rid in by_id and total is not None:
+                by_id[rid]["cost_usd"] = float(total) - prev.get(agent, 0.0)
+                prev[agent] = float(total)
         alpha_runs = [r for r in runs if r["agent"] == "alpha"]
 
         # 3. runs only, filter, group, stats
@@ -131,11 +151,12 @@ def drive():
         d.check("4 a listed run opens its trace", d.poll(lambda: detail.count() == 1))
         opened = detail.get_attribute("data-run-id")
         d.check("4 it is the run that was clicked", opened in {r["id"] for r in alpha_runs})
-        conv = by_id[a2]["conversation_id"]
-        page.goto(f"{d.HUB}/?project={pid}&tab=chat&conversation={conv}", wait_until="domcontentloaded")
+        page.goto(f"{d.HUB}/?project={pid}&agent=alpha&conversation={conv}", wait_until="domcontentloaded")
         page.get_by_test_id("conversation-latest-trace").click()
-        d.check("4 the conversation's control opens its latest run",
-                d.poll(lambda: page.get_by_test_id("trace-detail").get_attribute("data-run-id") == a2))
+        d.check("4 the conversation's control opens its latest (third) run",
+                d.poll(lambda: page.get_by_test_id("trace-detail").get_attribute("data-run-id") == a3))
+        # `task=` is not parsed by navigation.ts today: TVFGS-4 must add `?tab=tasks&task=<id>`
+        # (opens that task's detail) or edit this line to the way it opens a task.
         page.goto(f"{d.HUB}/?project={pid}&tab=tasks&task={task['id']}", wait_until="domcontentloaded")
         page.get_by_test_id("task-run-trace").first.click()
         d.check("4 the task's run row opens that run's trace",
