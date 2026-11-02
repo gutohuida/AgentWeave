@@ -488,6 +488,8 @@ def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[
             for key, people in spec_payload_module.declared_people(payload).items()
         },
         "reasons": dict(delivery.reasons),
+        # Why each task's own pick was recommended (`every-task-recommended`), by task key.
+        "task_reasons": spec_payload_module.declared_reasons(payload),
     }
 
 

@@ -189,6 +189,16 @@ class Task(_Part):
         max_length=32,
         description="Agent name that checks this task once it is built: the one agent who both tests it and records its verdict (`one-checker`). Optional: empty means the document's default checker (`delivery.checker`). Replaces the task's `reviewer`, which an older document may still name and which is read as its checker; naming both, differently, is refused.",
     )
+    builder_reason: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="One sentence on why `builder` is recommended, in terms of that agent's model cost and performance and this task's complexity. The operator reads it beside the task's row when they build.",
+    )
+    checker_reason: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="One sentence on why `checker` is recommended, in the same terms. With a single open agent `checker` is left empty and this says why.",
+    )
 
 
 class Algorithm(_Part):
@@ -822,6 +832,9 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
             task.pop("builder_is_preference", None)
         if task.get("checker") is None:
             task.pop("checker", None)
+        for reason in ("builder_reason", "checker_reason"):
+            if task.get(reason) is None:
+                task.pop(reason, None)
     # An uncited requirement stores as before, with no facts key.
     for requirement in data.get("requirements") or []:
         if requirement.get("facts") is None:
@@ -901,6 +914,22 @@ def declared_people(payload: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Op
         for entry in (payload or {}).get("tasks") or []
         if isinstance(entry, dict) and entry.get("key") and not entry.get("from")
     }
+
+
+def declared_reasons(payload: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, str]]:
+    """Each declared task's reasons for its own builder and checker picks, by key; a reason the
+    document does not give is left out, and a task giving none is listed with an empty dict."""
+    out: Dict[str, Dict[str, str]] = {}
+    for entry in (payload or {}).get("tasks") or []:
+        if not isinstance(entry, dict) or not entry.get("key") or entry.get("from"):
+            continue
+        reasons = {}
+        for choice in ("builder", "checker"):
+            text = entry.get(f"{choice}_reason")
+            if isinstance(text, str) and text.strip():
+                reasons[choice] = text.strip()
+        out[str(entry["key"])] = reasons
+    return out
 
 
 # ---------------------------------------------------------------------------

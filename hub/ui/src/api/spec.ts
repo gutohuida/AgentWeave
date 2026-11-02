@@ -242,6 +242,9 @@ export interface SpecRecommendedBuild {
   builder?: string | null
   checker?: string | null
   task_checkers?: Record<string, string | null>
+  /** Why each task's own builder and checker were recommended, by task key; absent from an older
+   *  Hub, and a task giving none is listed with an empty object. */
+  task_reasons?: Record<string, { builder?: string; checker?: string }>
   reasons: Partial<
     Record<
       | 'mode'

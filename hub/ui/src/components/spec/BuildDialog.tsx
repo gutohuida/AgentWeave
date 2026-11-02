@@ -75,16 +75,22 @@ export function BuildDialog({
   )
   const [windowEnd, setWindowEnd] = useState('')
   const [landing, setLanding] = useState<BuildLanding>(recommended?.landing ?? 'main')
+  // A task's own pick who is no longer an open agent is not selected; its row says so instead.
+  const openPick = (name: string | null | undefined) =>
+    name && openAgents.includes(name) ? name : ''
   const [taskBuilders, setTaskBuilders] = useState<Record<string, string>>(
     Object.fromEntries(
-      Object.entries(recommended?.task_builders ?? {}).map(([key, name]) => [key, name ?? '']),
+      Object.entries(recommended?.task_builders ?? {}).map(([key, name]) => [key, openPick(name)]),
     ),
   )
   const [taskCheckers, setTaskCheckers] = useState<Record<string, string>>(
     Object.fromEntries(
-      Object.entries(recommended?.task_checkers ?? {}).map(([key, name]) => [key, name ?? '']),
+      Object.entries(recommended?.task_checkers ?? {}).map(([key, name]) => [key, openPick(name)]),
     ),
   )
+  const closedPick = (name: string | null | undefined) =>
+    name && !openAgents.includes(name) ? name : null
+  const taskReasons = recommended?.task_reasons ?? {}
   const reasons = recommended?.reasons ?? {}
 
   const flowAgentShown = driver === 'flow' && flowRecommended
@@ -373,7 +379,8 @@ export function BuildDialog({
               </span>
               <div className="space-y-1" data-testid="build-task-people">
                 {taskKeys.map((key) => (
-                  <div key={key} className="flex items-center gap-2">
+                  <div key={key} data-testid={`build-task-row-${key}`}>
+                  <div className="flex items-center gap-2">
                     <code className="w-24 shrink-0 truncate">{key}</code>
                     {personSelect(
                       `build-task-builder-${key}`,
@@ -389,6 +396,40 @@ export function BuildDialog({
                       'Default checker',
                       { ...field, padding: '4px 8px' },
                     )}
+                  </div>
+                  {(
+                    [
+                      ['builder', closedPick(recommended?.task_builders?.[key])],
+                      ['checker', closedPick(recommended?.task_checkers?.[key])],
+                    ] as const
+                  ).map(([choice, closed]) =>
+                    closed ? (
+                      <p
+                        key={`closed-${choice}`}
+                        className="mt-1 text-xs"
+                        data-testid={`build-task-${choice}-closed-${key}`}
+                        style={{ color: 'var(--amber)' }}
+                      >
+                        Recommended {choice} @{closed} is not an open agent, so none is selected.
+                      </p>
+                    ) : null,
+                  )}
+                  {taskReasons[key]?.builder || taskReasons[key]?.checker ? (
+                    <div data-testid={`build-task-reason-${key}`}>
+                      {(['builder', 'checker'] as const).map((choice) =>
+                        taskReasons[key]?.[choice] ? (
+                          <p
+                            key={`why-${choice}`}
+                            className="mt-1 text-xs"
+                            data-testid={`build-task-${choice}-reason-${key}`}
+                            style={{ color: 'var(--text-3)' }}
+                          >
+                            {choice === 'builder' ? 'Builder' : 'Checker'}: {taskReasons[key][choice]}
+                          </p>
+                        ) : null,
+                      )}
+                    </div>
+                  ) : null}
                   </div>
                 ))}
               </div>

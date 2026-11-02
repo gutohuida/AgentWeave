@@ -2593,7 +2593,12 @@ async def advance_spec_step(
         "size": document.size,
         "journey": spec_journey.journey(document.size, steps),
         "missing": gaps,
-        "instructions": spec_journey.duty(target, steps),
+        "instructions": spec_journey.duty(
+            target,
+            steps,
+            size=document.size,
+            roster=await spec_journey.open_roster(session, actor.project_id),
+        ),
         "message": f"moved from {left} to {target}"
         + (f"; {left} left empty: {', '.join(gaps)}" if gaps else ""),
     }

@@ -35,6 +35,16 @@ def _checked(**overrides):
         "how_to_check": "a test",
         "checked_by": "agent",
     }
+    task = {
+        "key": "t1",
+        "description": "Build it",
+        "requirements": ["alpha"],
+        "builder": "Developer",
+        "builder_reason": "Sonnet is cheap enough for a small task.",
+        "checker": "QA",
+        "checker_reason": "A different agent, and Opus checks the work well.",
+    }
+    overrides.setdefault("tasks", [task])
     return _document(acceptance_criteria=[criterion], **overrides)
 
 

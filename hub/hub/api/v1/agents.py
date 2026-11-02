@@ -2596,7 +2596,18 @@ async def _render_hub_agent_context(
                     steps = await spec_journey.project_steps(db, project_id)
                     lines.append(spec_journey.journey_line(row.size, row.step, steps))
                     lines.append(
-                        spec_journey.duty(row.step, steps)
+                        spec_journey.duty(
+                            row.step,
+                            steps,
+                            size=row.size,
+                            roster=[
+                                (
+                                    peer.name,
+                                    getattr(roster_runners.get(peer.runner_id), "model", "") or "",
+                                )
+                                for peer in roster
+                            ],
+                        )
                         or spec_journey.removed(row.step, row.size, steps)
                     )
                 else:
