@@ -8,6 +8,7 @@ import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
 import { FOOTER_CHOICES, HEADER_CHOICES, MARKER_CHOICES, NOTICE_LEVELS, PANEL_NAV_CHOICES } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
+import { PLACEMENTS, setTracesPlacement, useTracesPlacement } from './tracesMock'
 
 const BEFORE = import.meta.glob('./before/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
 
@@ -25,6 +26,7 @@ function parseHash(): MockRoute {
   }
   if (kind === 'gallery') return { kind: 'gallery' }
   if (kind === 'thread') return { kind: 'thread' }
+  if (kind === 'traces') return { kind: 'traces' }
   return { kind: 'tab', tab: 'overview' }
 }
 
@@ -44,6 +46,8 @@ function toHash(route: MockRoute): string {
       return 'gallery'
     case 'thread':
       return 'thread'
+    case 'traces':
+      return 'traces'
   }
 }
 
@@ -52,6 +56,7 @@ export function MockApp() {
   const [mode, setMode] = React.useState<'dark' | 'light'>(() => (document.documentElement.dataset.mode === 'light' ? 'light' : 'dark'))
   const [collapsed, setCollapsed] = React.useState(() => window.innerWidth < 1000)
   const [before, setBefore] = React.useState(false)
+  const placement = useTracesPlacement()
 
   React.useEffect(() => {
     const onHash = () => setRoute(parseHash())
@@ -103,11 +108,11 @@ export function MockApp() {
         <TopBar
           project={{ id: project.id, name: project.name, path: project.working_directory }}
           projects={projects.map((p) => ({ id: p.id, name: p.name, path: p.working_directory }))}
-          tabs={PROJECT_TABS}
-          active={route.kind === 'tab' ? route.tab : null}
+          tabs={placement === 'tab' ? [...PROJECT_TABS, 'traces' as ProjectTab] : PROJECT_TABS}
+          active={route.kind === 'tab' ? route.tab : route.kind === 'traces' ? ((placement === 'tab' ? 'traces' : 'activity') as ProjectTab) : null}
           // Overview's count is what its "Needs you" section lists (QA1's question and the unmerged task).
           counts={{ tasks: awaitingReview, overview: 2 }}
-          onSelectTab={(tab) => go({ kind: 'tab', tab })}
+          onSelectTab={(tab) => go((tab as string) === 'traces' ? { kind: 'traces' } : { kind: 'tab', tab })}
           onSelectProject={() => undefined}
           onOpenPalette={() => undefined}
           onOpenSettings={() => go({ kind: 'settings', section: 'general' })}
@@ -171,6 +176,7 @@ function MockBar({
       {(route.kind === 'tab' && route.tab === 'spec') || (route.kind === 'conversation' && Boolean(route.panel)) ? (
         <SpecMockBar showLayout={route.kind === 'tab'} />
       ) : null}
+      {route.kind === 'traces' || (route.kind === 'tab' && route.tab === 'activity') ? <TracesMockBar /> : null}
       <button type="button" className="mock-bar-button" disabled={!hasBefore} data-on={before ? 'true' : 'false'} onClick={onBefore}>
         {before ? 'Showing today' : 'Compare with today'}
       </button>
@@ -236,5 +242,19 @@ function SpecMockBar({ showLayout }: { showLayout: boolean }) {
         </button>
       ) : null}
     </>
+  )
+}
+
+/** Where the traces view lives: the document's open question 1, settled by looking at both. */
+function TracesMockBar() {
+  const placement = useTracesPlacement()
+  return (
+    <select className="mock-bar-select" aria-label="Where traces live" value={placement} onChange={(e) => setTracesPlacement(e.target.value as never)}>
+      {PLACEMENTS.map((p) => (
+        <option key={p.value} value={p.value}>
+          {p.label}
+        </option>
+      ))}
+    </select>
   )
 }

@@ -10,6 +10,8 @@ export type MockRoute =
   | { kind: 'app-settings'; section: AppSettingsSection }
   | { kind: 'gallery' }
   | { kind: 'thread' }
+  /** The traces view; where it sits (own tab or inside Activity) is the mock bar's choice. */
+  | { kind: 'traces' }
 
 /** Project settings, one place under one name. Replaces Environment / Configuration / Settings. */
 export type SettingsSection = 'general' | 'agents-defaults' | 'manager' | 'runners' | 'charters' | 'instructions' | 'budgets' | 'worktrees' | 'diagnostics'

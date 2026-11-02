@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties } from 'react'
+import { useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { useRunTrace, useTrace } from '@/api/traces'
 import { Icon } from '@/components/common/Icon'
 import { Drawer } from '@/components/layout/Drawer'
@@ -8,7 +8,7 @@ const DRAWER_WIDTH = 920
 
 /** Reads a trace by run or by trace id; only one of the two queries is ever enabled. Mounted
  *  only while the drawer is open, so a closed affordance costs no request. */
-function TraceDrawerBody({ runId, traceId }: { runId?: string; traceId?: string }) {
+function TraceDrawerBody({ runId, traceId, emptyDescription }: { runId?: string; traceId?: string; emptyDescription?: string }) {
   const [offset, setOffset] = useState(0)
   const { data: runData, isLoading: runLoading, error: runError } = useRunTrace(
     runId ?? null,
@@ -25,7 +25,34 @@ function TraceDrawerBody({ runId, traceId }: { runId?: string; traceId?: string 
       error={runId ? runError : idError}
       offset={offset}
       onOffsetChange={setOffset}
+      emptyDescription={emptyDescription}
     />
+  )
+}
+
+/**
+ * The trace drawer, opened and closed by its caller: a list of runs owns which one is open, where
+ * `TraceButton` owns its own. Focus returns to `triggerRef` on close.
+ */
+export function TraceDrawer({
+  open,
+  onOpenChange,
+  runId,
+  traceId,
+  triggerRef,
+  emptyDescription,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  runId?: string
+  traceId?: string
+  triggerRef: RefObject<HTMLButtonElement | null>
+  emptyDescription?: string
+}) {
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} title="Trace" side="right" width={DRAWER_WIDTH} triggerRef={triggerRef}>
+      {open && <TraceDrawerBody runId={runId} traceId={traceId} emptyDescription={emptyDescription} />}
+    </Drawer>
   )
 }
 
@@ -73,16 +100,7 @@ export function TraceButton({
       {/* The drawer is portalled, but React still bubbles its events through this tree: without
           this, a click inside the trace would reach whatever row the button sits in. */}
       <span style={{ display: 'contents' }} onClick={(event) => event.stopPropagation()}>
-      <Drawer
-        open={open}
-        onOpenChange={setOpen}
-        title="Trace"
-        side="right"
-        width={DRAWER_WIDTH}
-        triggerRef={triggerRef}
-      >
-        {open && <TraceDrawerBody runId={runId} traceId={traceId} />}
-      </Drawer>
+      <TraceDrawer open={open} onOpenChange={setOpen} runId={runId} traceId={traceId} triggerRef={triggerRef} />
       </span>
     </>
   )

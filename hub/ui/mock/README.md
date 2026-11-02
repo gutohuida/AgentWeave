@@ -75,6 +75,22 @@ it renders ("it should look exactly like that"). The same screen is `#thread` in
 feed without chapters, kept for checks of a surface that pages. `py -3.11 mock/shoot.py`-style
 screenshots land in `mock/loom-shots/` (PNGs are ignored).
 
+## The traces view (mock, 2026-11-02)
+
+Spec `spec/changes/a-traces-view-with-filters-grouping-and-stats`. The components are
+`src/components/traces/TracesPage.tsx` and its pure model `tracesModel.ts` (filters, the error rule,
+totals, grouping); `src/styles/traces.css` styles them. The run drawer is the app's own
+`TraceDrawer`, now also usable controlled. The fixtures are recorded read-only from the operator's
+Hub by `py -3.11 mock/record_traces.py <db> <project>`: every run trace, the newest 200 of each kind
+of the Hub's own, and 22 whole run traces (the newest five and every error).
+
+```
+http://localhost:5199/mock.html#traces                  # its own tab in the top bar
+http://localhost:5199/mock.html#traces?place=activity   # a fourth view inside Activity
+```
+
+The mock bar switches where it lives (the document's open question 1).
+
 ## The Spec page, redesigned (mock, 2026-10-26)
 
 Spec `spec/changes/the-spec-page-redesigned`. The components are in `src/components/spec/page/`

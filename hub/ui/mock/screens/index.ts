@@ -15,6 +15,7 @@ const Settings = React.lazy(() => import('./Settings'))
 const AgentSettings = React.lazy(() => import('./AgentSettings'))
 const AppSettings = React.lazy(() => import('./AppSettings'))
 const Thread = React.lazy(() => import('./Thread'))
+const Traces = React.lazy(() => import('./Traces'))
 
 export function screenFor(route: MockRoute): ScreenComponent {
   switch (route.kind) {
@@ -22,6 +23,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
       return Gallery
     case 'thread':
       return Thread
+    case 'traces':
+      return Traces
     case 'conversation':
       return Conversation
     case 'settings':
@@ -45,6 +48,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'jobs', label: 'Jobs', route: { kind: 'tab', tab: 'jobs' } },
   { id: 'activity', label: 'Activity', route: { kind: 'tab', tab: 'activity' } },
   { id: 'thread', label: 'Thread', route: { kind: 'thread' } },
+  { id: 'traces', label: 'Traces', route: { kind: 'traces' } },
   { id: 'conversation', label: 'Conversation', route: { kind: 'conversation', agent: 'Builder', conversationId: 'conv-e3aba2c5956a' } },
   { id: 'conversation-spec', label: 'Conversation · Spec panel', route: { kind: 'conversation', agent: 'Architect', conversationId: 'conv-9cdda4865e0b', panel: 'spec' } },
   { id: 'conversation-specs', label: 'Conversation · Open a spec', route: { kind: 'conversation', agent: 'Architect', conversationId: 'conv-9cdda4865e0b', panel: 'specs' } },
