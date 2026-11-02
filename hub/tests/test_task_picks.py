@@ -122,6 +122,8 @@ async def test_missing_checker_and_missing_reason_are_named_and_never_block(
     assert CODE not in {f["code"] for f in body["blocking"]}
 
 
-def test_a_document_written_before_picks_existed_draws_no_warning():
+def test_a_document_naming_nobody_draws_a_warning_for_each_task():
     payload = SpecPayload.model_validate(_doc(("a", {}), ("b", {})))
-    assert recommended_people_warnings(payload) == []
+    warnings = recommended_people_warnings(payload)
+    assert len(warnings) == 2
+    assert "'a'" in warnings[0].message and "'b'" in warnings[1].message

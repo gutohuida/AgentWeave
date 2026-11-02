@@ -395,6 +395,9 @@ describe('BuildDialog recommended people with reasons (ac-dialog, ac-closed-agen
     const onConfirm = open(PICKS)
     expect(screen.getByTestId('build-task-builder-migrate')).toHaveValue('DeveloperOpus')
     expect(screen.getByTestId('build-task-builder-copy')).toHaveValue('Developer')
+    const reasons = screen.getByTestId('build-task-reason-migrate')
+    expect(reasons).toHaveTextContent('risky migration')
+    expect(reasons).toHaveTextContent('different agent')
     expect(screen.getByTestId('build-task-builder-reason-migrate')).toHaveTextContent('risky migration')
     expect(screen.getByTestId('build-task-checker-reason-migrate')).toHaveTextContent('different agent')
     expect(screen.getByTestId('build-task-builder-reason-copy')).toHaveTextContent('cheap enough')
@@ -420,8 +423,21 @@ describe('BuildDialog recommended people with reasons (ac-dialog, ac-closed-agen
   })
 
   it('opens an older document with no picks as it did before', () => {
-    open({ ...PICKS, task_builders: {}, task_checkers: {}, task_reasons: undefined })
-    expect(screen.queryByTestId('build-task-people')).toBeNull()
+    // What the route returns for an older document with tasks: every key present, null picks,
+    // and an empty reasons object per task.
+    open({
+      ...PICKS,
+      task_builders: { migrate: null, copy: null },
+      task_checkers: { migrate: null, copy: null },
+      task_reasons: { migrate: {}, copy: {} },
+    } as unknown as SpecRecommendedBuild)
     expect(screen.getByTestId('build-builder')).toHaveValue('Developer')
+    for (const key of ['migrate', 'copy']) {
+      expect(screen.getByTestId(`build-task-builder-${key}`)).toHaveValue('')
+      expect(screen.getByTestId(`build-task-checker-${key}`)).toHaveValue('')
+      expect(screen.queryByTestId(`build-task-builder-closed-${key}`)).toBeNull()
+      expect(screen.queryByTestId(`build-task-checker-closed-${key}`)).toBeNull()
+      expect(screen.queryByTestId(`build-task-reason-${key}`)).toBeNull()
+    }
   })
 })

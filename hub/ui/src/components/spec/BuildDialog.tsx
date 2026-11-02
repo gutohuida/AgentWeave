@@ -414,18 +414,22 @@ export function BuildDialog({
                       </p>
                     ) : null,
                   )}
-                  {(['builder', 'checker'] as const).map((choice) =>
-                    taskReasons[key]?.[choice] ? (
-                      <p
-                        key={`why-${choice}`}
-                        className="mt-1 text-xs"
-                        data-testid={`build-task-${choice}-reason-${key}`}
-                        style={{ color: 'var(--text-3)' }}
-                      >
-                        {choice === 'builder' ? 'Builder' : 'Checker'}: {taskReasons[key][choice]}
-                      </p>
-                    ) : null,
-                  )}
+                  {taskReasons[key]?.builder || taskReasons[key]?.checker ? (
+                    <div data-testid={`build-task-reason-${key}`}>
+                      {(['builder', 'checker'] as const).map((choice) =>
+                        taskReasons[key]?.[choice] ? (
+                          <p
+                            key={`why-${choice}`}
+                            className="mt-1 text-xs"
+                            data-testid={`build-task-${choice}-reason-${key}`}
+                            style={{ color: 'var(--text-3)' }}
+                          >
+                            {choice === 'builder' ? 'Builder' : 'Checker'}: {taskReasons[key][choice]}
+                          </p>
+                        ) : null,
+                      )}
+                    </div>
+                  ) : null}
                   </div>
                 ))}
               </div>

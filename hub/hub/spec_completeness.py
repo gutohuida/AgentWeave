@@ -596,12 +596,10 @@ def recommended_people_warnings(payload: SpecPayload) -> List[Finding]:
     Each declared task is meant to name a builder and a checker with a reason for each. Advisory,
     never a block (approvals are scarce): a missing pick, a pick with no reason, or a checker that
     is the builder draws a warning naming the task. A checker left empty with a reason is the
-    one-agent project's answer and is not named. A document whose tasks name no person and give no
-    reason at all is one written before picks existed, and is left alone.
+    one-agent project's answer and is not named. A document naming nobody is warned too: it never
+    blocks, and an author who ignores the request entirely is the case the warning exists for.
     """
     local = [t for t in payload.tasks if t.from_ is None]
-    if not any(t.builder or t.checker or t.builder_reason or t.checker_reason for t in local):
-        return []
     warnings: List[Finding] = []
     for task in local:
         checker = task.checker or task.reviewer
