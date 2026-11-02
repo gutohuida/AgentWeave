@@ -772,3 +772,5 @@ if __name__ == "__main__":
 # string, the 422 named no shape, and it moved the figures to the design. The tasks step now gives the
 # shape. Run 06:17:11 (artefacts .../061711, empty record): 52 passed, 7 failed, A2 passing on
 # {"checked": ["project record: 0 tasks built, 0 turns, ..."]}; the failures are ETCRB-4's D1-D5, E1, E2.
+# Observed 2026-11-02 after merging ETCRB-7 into ETCRB-4 (9e1a127, on a sqlite backup() copy of the
+# trial database): 59 passed, 0 failed (run 072039), A2 included, with D and E holding.
