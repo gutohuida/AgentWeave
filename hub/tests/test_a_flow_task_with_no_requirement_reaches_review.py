@@ -10,6 +10,8 @@ on a build that could never finish.
 `evidence_governs` is what still answered "evidence decides" for a task no evidence could reach.
 """
 
+from unittest.mock import patch
+
 import pytest
 from sqlalchemy import select
 
@@ -192,10 +194,15 @@ async def test_evidence_already_recorded_keeps_deciding(
     assert context.commit_sha == named
 
 
+@pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_the_job_route_no_longer_answers_409(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch, live_scheduler
 ):
-    """The seam the finding names: `POST /jobs/{id}/run` answered 409 on every firing."""
+    """The seam the finding names: `POST /jobs/{id}/run` answered 409 on every firing.
+
+    `which` is faked so the reviewer's runner resolves: without it the review turn waits for a
+    `claude` on PATH and the task stays `completed`, which passed only on machines that have one
+    (CI run 41463365902: "Runner CLI 'claude' was not found in PATH."). No CLI is spawned."""
     repo = await _repo(tmp_path, bind_project_workspace, monkeypatch)
     await _roster(app, auth_headers, bind_runner, WORKER, REVIEWER)
     task_id = "task-f11010000010"
@@ -206,7 +213,10 @@ async def test_the_job_route_no_longer_answers_409(
         (await db.get(AIJob, job_id)).enabled = True
         await db.commit()
 
-    fired = await app.post(f"/api/v1/projects/proj-test/jobs/{job_id}/run", headers=auth_headers)
+    with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+        fired = await app.post(
+            f"/api/v1/projects/proj-test/jobs/{job_id}/run", headers=auth_headers
+        )
 
     assert fired.status_code < 300, fired.text
     async with async_session_factory() as db:
