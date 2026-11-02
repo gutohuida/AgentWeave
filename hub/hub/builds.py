@@ -552,7 +552,7 @@ async def cover_tasks(
             # Filed against the document rather than declared by it, as a follow-up waiting since a
             # stopped build is (`stopped-stays-stopped`): the dialog has no row for it, so it keeps
             # who it names and takes the defaults, as a task joining a running build does.
-            people[task.id] = _staff_added_task(task, _person(default_builder), None)
+            people[task.id] = _staff_added_task(task, _person(default_builder), task.checker)
             if task.builder and task.builder not in agents:
                 unresolved.append({"task": task.id, "builder": task.builder})
             elif task.builder and task.assignee is None and task.status in ("pending", "assigned"):
@@ -644,6 +644,43 @@ def _filed(task: Task, filer: Optional[str]) -> Dict[str, Any]:
     }
 
 
+async def own_checker_refusal(
+    session: AsyncSession,
+    document_id: Optional[str],
+    *,
+    builder: Optional[str],
+    assignee: Optional[str],
+    checker: Optional[str],
+) -> Optional[str]:
+    """Why a task being filed would have its builder check its own work, or None.
+
+    The check would never run: the reviewer ladder excludes the author and will not substitute for
+    a named checker (`scheduler.resolve_reviewer`, rung 1b). The build's defaults count only where
+    the task will take them, on a build it joins now; the next Build's are not known yet."""
+    named_builder = _person(builder) or _person(assignee)
+    named_checker = _person(checker)
+    default_builder, default_checker = None, None
+    document = await session.get(SpecDocument, document_id) if document_id else None
+    if document is not None and document.phase != "archived":
+        rows = await builds_of(session, document.id)
+        latest = rows[0] if rows else None
+        joins = latest is not None and (
+            latest.state == RUNNING or (latest.state == FINISHED and document.phase == "approved")
+        )
+        if joins and isinstance(latest.people, dict):
+            default_builder = _person(latest.people.get("builder"))
+            default_checker = _person(latest.people.get("checker"))
+    who_builds = named_builder or default_builder
+    who_checks = named_checker or default_checker
+    if not who_builds or who_builds != who_checks:
+        return None
+    return (
+        f"This task would have {who_builds} both build it and check it, and nobody checks their own "
+        f"work: its builder is {'named' if named_builder else 'the build default'} and its checker "
+        f"is {'named' if named_checker else 'the build default'}. Name a different builder or checker."
+    )
+
+
 @dataclass
 class FollowUp:
     """What filing a task against a document did to its build, for the task route."""
@@ -666,9 +703,10 @@ async def follow_up(
     """A task filed against a document, by the state of its latest build.
 
     Running: it joins. Finished: it reopens that build, whenever it finished, at the same level,
-    landing and cap (those columns are not touched), and joins. Stopped, or a document no longer
-    approved: nothing restarts, the task stays out of any build and the filer is told why. A stop is
-    a decision; a finish is only the absence of work.
+    landing and cap (those columns are not touched), and joins. A window that has closed does not
+    come along, or the first firing would stop the build it just reopened. Stopped, or a document no
+    longer approved: nothing restarts, the task stays out of any build and the filer is told why. A
+    stop is a decision; a finish is only the absence of work.
     """
     document = await session.get(SpecDocument, task.spec_document_id)
     rows = await builds_of(session, task.spec_document_id)
@@ -697,6 +735,10 @@ async def follow_up(
         return FollowUp()
     at = now()
     ago = _ago(finished_at, at)
+    window_end = _aware(latest.window_end)
+    closed_window = window_end if window_end is not None and at >= window_end else None
+    if closed_window is not None:
+        latest.window_end = None
     await join_running_build(session, task, checker=checker)
     latest.reopenings = [
         *(latest.reopenings or []),
@@ -704,6 +746,7 @@ async def follow_up(
             "at": at.isoformat(),
             "finished_at": _iso(finished_at),
             "finished_ago": ago,
+            "closed_window": _iso(closed_window),
             "tasks": [_filed(task, filer)],
             "dismissed_at": None,
             "cleared_at": None,
@@ -714,13 +757,19 @@ async def follow_up(
         session, latest.project_id, "build_updated", {"id": latest.id, "state": RUNNING}
     )
     defer_broadcast(session, latest.project_id, "spec_updated", {"path": document.path})
-    return FollowUp(
-        note=(
-            f"Build {latest.id} of this spec had finished {ago} ago; this task reopened it. The "
-            "operator is warned on the Overview screen and can stop it there."
-        ),
-        reopened=latest,
+    note = (
+        f"Build {latest.id} of this spec had finished {ago} ago; this task reopened it. The "
+        "operator is warned on the Overview screen and can stop it there."
     )
+    if closed_window is not None:
+        note += f" Its window had closed at {_iso(closed_window)}, so it now runs with no end time."
+    verdict = await may_hand_out(session, latest, at)
+    held = verdict.stop_reason or verdict.wait_reason
+    if held:
+        # The cap is kept, so one already spent stops the build at its first firing: said now, since
+        # nothing tells the filer later.
+        note += f" Its task will not start yet: {held}."
+    return FollowUp(note=note, reopened=latest)
 
 
 async def _reopen(session: AsyncSession, build: Build) -> Optional[datetime]:

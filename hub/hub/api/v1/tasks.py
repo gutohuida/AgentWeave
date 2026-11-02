@@ -277,7 +277,8 @@ async def _attach_requirements(
         )
         checkers = await builds.checkers_by_task(session, build_tasks)
         for response in responses:
-            response.checker = checkers.get(response.id)
+            if response.build_id:
+                response.checker = checkers.get(response.id)
         marks = await builds.default_marks_by_task(session, build_tasks)
         for response in responses:
             response.builder_by_default = marks.get(response.id, {}).get("builder", False)
@@ -954,6 +955,17 @@ async def create_task_for_actor(
 
         against = await spec_lifecycle.get_document(session, project_id, body.spec_document)
         spec_document_id = against.id if against is not None else None
+    from ... import builds
+
+    refusal = await builds.own_checker_refusal(
+        session,
+        spec_document_id,
+        builder=body.builder,
+        assignee=body.assignee,
+        checker=body.checker,
+    )
+    if refusal is not None:
+        raise HTTPException(status_code=422, detail=refusal)
 
     task_id = body.id or f"task-{short_id()}"
     task = Task(
@@ -967,6 +979,7 @@ async def create_task_for_actor(
         assignee=body.assignee,
         assigner=assigner,
         builder=body.builder,
+        checker=body.checker,
         requirements=body.requirements,
         acceptance_criteria=body.acceptance_criteria,
         deliverables=body.deliverables,
@@ -981,8 +994,6 @@ async def create_task_for_actor(
         # Against a document with a build: the task joins it, reopening it if it had finished, and
         # takes its people (`a-task-s-checks-and-merges-use-its-own-work...`, FR-7;
         # `follow-up-reopens-a-finished-build`). A task put in a named queue already has its driver.
-        from ... import builds
-
         if body.loop_id is None:
             follow_up = await builds.follow_up(session, task, filer=assigner, checker=body.checker)
         else:

@@ -372,7 +372,8 @@ def create_task(
 
     A task against a spec joins its build and goes to that build's people, unless it names its own.
     If the spec's latest build had finished, this reopens it and the operator is warned; if it was
-    stopped, or the spec is archived, nothing starts. `build_note` in the answer says which.
+    stopped, or the spec is archived, nothing starts. `build_note` in the answer says which. A task
+    whose builder would also be its checker is refused.
 
     Args:
         title: Short task title.

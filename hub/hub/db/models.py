@@ -859,6 +859,10 @@ class Task(Base):
     # The agent the document (or the operator, in the Build dialog) named to build this task. Kept
     # when it names no open agent, so the operator sees what was asked for (F1046).
     builder: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The agent whoever filed this task named to check it, so a task waiting with no build still has
+    # it when the next Build takes it in. Who checks a task in a build is the build's people
+    # (`builds.checker_of`), which this seeds and does not replace.
+    checker: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="tasks")
 

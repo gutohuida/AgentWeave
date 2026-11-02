@@ -547,3 +547,156 @@ async def test_a_task_put_in_a_named_queue_does_not_reopen_the_build(
 
     assert (await _only_build()).state == "finished"
     assert filed["build_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_ac_flow_a_reopening_does_not_inherit_a_closed_window(
+    app, auth_headers, author_headers, bind_runner
+):
+    """Through real firings: the first would stop a build still carrying its closed window."""
+    await _built(app, auth_headers, author_headers, bind_runner)
+    await _finish(timedelta(days=30))
+    async with async_session_factory() as db:
+        closed = datetime.now(timezone.utc) - timedelta(days=29)
+        await db.execute(update(Build).values(window_end=closed))
+        await db.commit()
+
+    filed = await _file(app, author_headers)
+
+    assert "window had closed" in filed["build_note"]
+    build = await _only_build()
+    assert build.window_end is None
+    assert build.reopenings[-1]["closed_window"]
+    (loop,) = await _rows(Loop, Loop.archived_at.is_(None))
+    await _fire(loop.job_id)
+    await _fire(loop.job_id)
+
+    after = await _only_build()
+    assert (after.state, after.stop_reason) == ("running", None)
+    assert len(await _warnings(app, auth_headers)) == 1
+    async with async_session_factory() as db:
+        assert (await db.get(Task, filed["id"])).status != "pending"
+
+
+@pytest.mark.asyncio
+async def test_ac_flow_a_window_still_open_is_kept(app, auth_headers, author_headers, bind_runner):
+    await _built(app, auth_headers, author_headers, bind_runner)
+    await _finish()
+    async with async_session_factory() as db:
+        await db.execute(
+            update(Build).values(window_end=datetime.now(timezone.utc) + timedelta(days=2))
+        )
+        await db.commit()
+
+    filed = await _file(app, author_headers)
+
+    assert "window" not in filed["build_note"]
+    assert (await _only_build()).window_end is not None
+
+
+@pytest.mark.asyncio
+async def test_ac_reopen_the_filer_is_told_when_a_kept_cap_is_already_spent(
+    app, auth_headers, author_headers, bind_runner
+):
+    await _built(app, auth_headers, author_headers, bind_runner)
+    await _finish()
+    async with async_session_factory() as db:
+        await db.execute(update(Build).values(budget_cap_usd_micros=0))
+        await db.commit()
+
+    filed = await _file(app, author_headers)
+
+    assert "will not start yet" in filed["build_note"]
+    assert "raise the cap" in filed["build_note"]
+
+
+@pytest.mark.asyncio
+async def test_ac_stopped_a_named_checker_waits_with_the_task_and_the_next_build_keeps_it(
+    app, auth_headers, author_headers, bind_runner
+):
+    await _built(app, auth_headers, author_headers, bind_runner)
+    build = await _only_build()
+    with patch("hub.scheduler.get_scheduler", return_value=None):
+        await app.post(f"{BASE}/builds/{build.id}/stop", headers=auth_headers)
+
+    filed = await _file(app, author_headers, checker="Developer")
+    assert (filed["build_id"], filed["checker"]) == (None, "Developer")
+
+    with SCHEDULING:
+        again = await _build(app, auth_headers, driver="flow", level="reviewed", **PEOPLE)
+    assert again.status_code == 200, again.text
+    read = await app.get(f"/api/v1/projects/{P}/tasks/{filed['id']}", headers=auth_headers)
+    assert read.json()["build_id"] is not None
+    assert (read.json()["builder"], read.json()["checker"]) == ("DeveloperOpus", "Developer")
+    assert read.json()["checker_by_default"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "fields,named",
+    [
+        ({"builder": "QA"}, "QA"),
+        ({"assignee": "QA"}, "QA"),
+        ({"checker": "DeveloperOpus"}, "DeveloperOpus"),
+        ({"builder": "Developer", "checker": "Developer"}, "Developer"),
+    ],
+    ids=["builder-is-default-checker", "assignee-too", "checker-is-default-builder", "both-named"],
+)
+async def test_ac_running_a_builder_never_checks_their_own_task(
+    app, auth_headers, author_headers, bind_runner, fields, named
+):
+    await _built(app, auth_headers, author_headers, bind_runner)
+    refused = await app.post(
+        AGENT_TASKS,
+        json={"title": "Own", "spec_document": PATH, "requirement_ids": ["FR-1"], **fields},
+        headers=author_headers,
+    )
+    assert refused.status_code == 422
+    assert named in refused.text and "check" in refused.text
+
+    # Naming somebody else for the other side resolves it.
+    kept = await _file(app, author_headers, builder="QA", checker="Developer")
+    assert (kept["builder"], kept["checker"]) == ("QA", "Developer")
+
+
+@pytest.mark.asyncio
+async def test_ac_reopen_a_refused_own_checker_reopens_nothing(
+    app, auth_headers, author_headers, bind_runner
+):
+    await _built(app, auth_headers, author_headers, bind_runner)
+    await _finish()
+    refused = await app.post(
+        AGENT_TASKS,
+        json={"title": "Own", "spec_document": PATH, "requirement_ids": ["FR-1"], "builder": "QA"},
+        headers=author_headers,
+    )
+    assert refused.status_code == 422
+    assert (await _only_build()).state == "finished"
+    assert await _warnings(app, auth_headers) == []
+
+
+@pytest.mark.asyncio
+async def test_ac_stopped_a_stopped_builds_defaults_do_not_refuse_the_task(
+    app, auth_headers, author_headers, bind_runner
+):
+    """The next Build's checker is not known yet, so only names on the task itself can clash."""
+    await _built(app, auth_headers, author_headers, bind_runner)
+    build = await _only_build()
+    with patch("hub.scheduler.get_scheduler", return_value=None):
+        await app.post(f"{BASE}/builds/{build.id}/stop", headers=auth_headers)
+
+    filed = await _file(app, author_headers, builder="QA")
+    assert filed["build_id"] is None
+
+    refused = await app.post(
+        AGENT_TASKS,
+        json={
+            "title": "Own",
+            "spec_document": PATH,
+            "requirement_ids": ["FR-1"],
+            "builder": "QA",
+            "checker": "QA",
+        },
+        headers=author_headers,
+    )
+    assert refused.status_code == 422

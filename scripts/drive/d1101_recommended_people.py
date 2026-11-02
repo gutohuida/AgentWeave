@@ -556,6 +556,13 @@ def drive(state):
     d.check("setup S4: the build has a flow to fire", bool(job), f"job={job}", fatal=True)
     start = time.time()
     while time.time() - start < BUILD_LIMIT:
+        # An agent may file a follow-up of its own once the build finishes, which reopens it under
+        # a new flow; the job to fire is whichever the build holds now.
+        ((job, enabled),) = d.ro("select l.job_id, j.enabled from loops l join builds b on b.loop_id=l.id "
+                                 "join ai_jobs j on j.id=l.job_id where b.id=?", (state["build_id"],))
+        if not enabled and d.ro("select state from builds where id=?",
+                                (state["build_id"],))[0][0] != "running":
+            break
         code, out = fire_job(base, job)
         # "Every task ... is already being worked" is a 409 that says nothing is wrong; any other
         # refusal (for one, a completed task with no recorded evidence) stops the drive, named.
@@ -694,3 +701,7 @@ if __name__ == "__main__":
 # so the prompt now covers keeping them, and on a question listing its sources as bullets, which the
 # matcher now reads; C0 took a builder busy on its other task for a refusal. D and E held on every run.
 # Whether a Haiku author asks at the tasks step still varies with what it did before reaching it.
+# Observed 2026-11-02 after the send-back (closed window, kept checker, own-checker refusal): 47
+# passed, 0 failed (run 060051). Run 053211 failed A1 and A6 on what the author wrote, with D and E
+# holding; run 054536 had an agent file its own follow-up 26 s after the build finished, which
+# reopened it correctly while the drive still fired the ended flow's job (C0), so it now re-reads it.

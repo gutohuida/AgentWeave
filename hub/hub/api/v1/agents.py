@@ -1091,7 +1091,7 @@ def _operations() -> List[_Operation]:
                 "one waits on; an id the project does not have is refused, naming it. A task against "
                 "a spec joins its build and goes to the build's builder and checker unless it names "
                 "its own; `build_note` in the answer says if it reopened a finished build, or why "
-                "it joined none."
+                "it joined none. A task whose builder would also be its checker is refused."
             ),
         ),
         _Operation(
