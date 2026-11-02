@@ -189,9 +189,9 @@ function Row({
       ) : position !== undefined ? (
         <span className="aw-sp-list-pos">{position}</span>
       ) : null}
-      {marker === 'icon' ? <StateIcon state={e.shown} /> : marker === 'dot' ? <span className="aw-sp-list-dot" data-state={e.shown} aria-hidden="true" /> : null}
+      {marker.startsWith('icon') ? <StateIcon state={e.shown} set={marker as IconSet} /> : marker === 'dot' ? <span className="aw-sp-list-dot" data-state={e.shown} aria-hidden="true" /> : null}
       <span className="aw-sp-list-name">{e.title}</span>
-      {e.building && marker !== 'icon' ? <span className="aw-sp-live" title="A build is running" aria-label="A build is running" /> : null}
+      {e.building && !marker.startsWith('icon') ? <span className="aw-sp-live" title="A build is running" aria-label="A build is running" /> : null}
       {marker === 'pill' && !roadmap ? (
         <span className="aw-sp-list-pill" data-state={e.shown}>
           {SHOWN_LABEL[e.shown]}
@@ -281,23 +281,23 @@ export function SpecDocSwitcher({ title, children }: { title: string; children: 
   )
 }
 
-export type ListMarker = 'dot' | 'icon' | 'pill'
+export type IconSet = 'icon' | 'icon-paper' | 'icon-circles' | 'icon-milestones'
+export type ListMarker = 'dot' | 'pill' | IconSet
 
-const STATE_ICON: Record<SpecListEntry['shown'], string> = {
-  writing: 'circle_dashed',
-  ready: 'circle_dot',
-  approved: 'flag',
-  building: 'hammer',
-  done: 'check',
-  current: 'menu_book',
-  archived: 'archive',
+/** Being mocked: four sets of marks, one per state. Building keeps the hammer in every set, and
+ *  done is always a solid green disc, so a finished spec reads as finished whichever set wins. */
+const STATE_ICONS: Record<IconSet, Record<SpecListEntry['shown'], string>> = {
+  icon: { writing: 'circle_dashed', ready: 'circle_dot', approved: 'flag', building: 'hammer', done: 'check', current: 'menu_book', archived: 'archive' },
+  'icon-paper': { writing: 'file_pen_line', ready: 'send', approved: 'stamp', building: 'hammer', done: 'check', current: 'library_books', archived: 'archive' },
+  'icon-circles': { writing: 'circle_dashed', ready: 'circle_dot', approved: 'circle', building: 'hammer', done: 'check', current: 'book_marked', archived: 'remove_circle' },
+  'icon-milestones': { writing: 'pencil', ready: 'hourglass', approved: 'thumbs_up', building: 'hammer', done: 'trophy', current: 'library_books', archived: 'archive' },
 }
 
 /** One mark per state, told apart by shape as well as colour: done is a filled green badge. */
-function StateIcon({ state }: { state: SpecListEntry['shown'] }) {
+function StateIcon({ state, set }: { state: SpecListEntry['shown']; set: IconSet }) {
   return (
-    <span className="aw-sp-list-mark" data-state={state} aria-hidden="true">
-      <Icon name={STATE_ICON[state]} size={state === 'done' ? 10 : 13} weight={state === 'done' ? 700 : undefined} />
+    <span className="aw-sp-list-mark" data-state={state} data-set={set} aria-hidden="true">
+      <Icon name={STATE_ICONS[set][state]} size={state === 'done' ? 10 : 13} weight={state === 'done' ? 700 : undefined} />
     </span>
   )
 }

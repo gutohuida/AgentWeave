@@ -8,13 +8,14 @@
 }
 .aw-sp-list-mark[data-state="ready"] { --tone: var(--ring); }
 .aw-sp-list-mark[data-state="approved"] { --tone: var(--green); }
+.aw-sp-list-mark[data-set="icon-milestones"][data-state="ready"] { --tone: var(--amber); }
 .aw-sp-list-mark[data-state="building"] { --tone: var(--blue); animation: aw-sp-live 1.6s var(--ease-out) infinite; }
 .aw-sp-list-mark[data-state="current"] { --tone: var(--text-2); }
 .aw-sp-list-mark[data-state="done"] { border-radius: 999px; background: var(--green); color: var(--bg); }
 .aw-sp-list-mark[data-state="archived"] { --tone: var(--text-3); opacity: .7; }
 
 /* Finished documents step back: a done or archived row reads quieter than live work. */
-.aw-sp-list-row[data-marker="icon"][data-state="archived"] .aw-sp-list-name,
+.aw-sp-list-row[data-marker^="icon"][data-state="archived"] .aw-sp-list-name,
 .aw-sp-list-row[data-marker="pill"][data-state="archived"] .aw-sp-list-name { color: var(--text-3); }
 
 /* A word per state. */

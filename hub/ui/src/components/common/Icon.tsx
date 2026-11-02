@@ -122,6 +122,16 @@ import {
   ListTree,
   Timer,
   type LucideIcon,
+  Stamp,
+  PenLine,
+  Circle,
+  BookMarked,
+  ThumbsUp,
+  PackageCheck,
+  FilePenLine,
+  CircleCheckBig,
+  ClipboardCheck,
+  Trophy,
 } from 'lucide-react'
 
 /**
@@ -268,6 +278,19 @@ const ICONS: Record<string, LucideIcon> = {
   layers: Layers,
   list_tree: ListTree,
   timer: Timer,
+  stamp: Stamp,
+  pen_line: PenLine,
+  circle: Circle,
+  book_marked: BookMarked,
+  pencil: Pencil,
+  hourglass: Hourglass,
+  thumbs_up: ThumbsUp,
+  package_check: PackageCheck,
+  file_pen_line: FilePenLine,
+  circle_check_big: CircleCheckBig,
+  library_books: Library,
+  clipboard_check: ClipboardCheck,
+  trophy: Trophy,
 }
 
 
