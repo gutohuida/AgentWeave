@@ -28,6 +28,7 @@ import { useListPreferences } from './hooks'
 import { NO_DOCUMENT_FILTERS, type CheckState, type DocumentFilters, type ListPreferences, type SpecAction, type SpecListEntry } from './model'
 import { SpecDocumentFacts } from './SpecDocumentFacts'
 import type { PlainDocument } from './SpecPlainDocument'
+import { SpecRetrospective } from './SpecRetrospective'
 import type { HeaderChrome } from './SpecPageHeader'
 import type { SpecSurfaceProps } from './SpecWorkspace'
 import type { LoopSummary } from '@/api/loops'
@@ -286,6 +287,10 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
         },
       ),
     banner,
+    retrospective:
+      doc.kind === 'change-spec'
+        ? ({ flash, onCopyLink }) => <SpecRetrospective path={path} now={now} flash={flash} onCopyLink={onCopyLink} />
+        : undefined,
   }
   return { status: 'ready', surface }
 }

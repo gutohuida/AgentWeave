@@ -81,6 +81,10 @@ class TaskCreate(RequestModel):
     priority: str = Field(default="medium", max_length=64)
     assignee: Optional[str] = Field(default=None, max_length=64)
     assigner: Optional[str] = Field(default=None, max_length=64)
+    # Who builds and who checks it, where it is filed against a spec and differs from the build's
+    # defaults (`follow-up-takes-the-build-people`). Each must be an open agent.
+    builder: Optional[str] = Field(default=None, max_length=64)
+    checker: Optional[str] = Field(default=None, max_length=64)
     requirements: Optional[List[Any]] = None
     # The requirements this task serves, by identifier. Checked, unlike `requirements`: an
     # identifier the project does not have is refused with the identifier named, rather than stored
@@ -375,6 +379,9 @@ class TaskResponse(BaseModel):
     # document that reports rather than refuses; never persisted, because it describes this moment,
     # not a record (`2026-08-13-a-gate-that-only-evidence-opens`, task 5.5).
     approval_report: List[Any] = Field(default_factory=list)
+    # What filing this against a spec did to its build, or why it joined none
+    # (`stopped-stays-stopped`). Only the create route's answer has it.
+    build_note: Optional[str] = None
     # What a reassign started, or why it started nothing (F1114). Only that route's answer has it.
     next_turn: Optional[str] = None
     # The holder this task waits for while they run another turn, and since when (F1112).

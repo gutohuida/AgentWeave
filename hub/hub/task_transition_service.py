@@ -1281,6 +1281,10 @@ async def apply_transition(
                 chapters_job.LAST_TASK_APPROVED,
                 {"task": task.id, "document": task.spec_document_id},
             )
+            # And the build is finished: the manager reviews it, on its own time, if it is on.
+            from . import build_retrospective
+
+            build_retrospective.fire_after_commit(session, task)
 
     # Work that leaves `approved` before it landed (the operator sends it back) leaves the queue, in
     # this same transaction: no batch lands it.

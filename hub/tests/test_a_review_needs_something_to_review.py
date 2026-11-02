@@ -32,6 +32,7 @@ from hub.db.models import (
     SpecDocument,
     SpecRequirement,
     Task,
+    TaskRequirementLink,
 )
 from hub.scheduler import DECISION_CLAIM, decide_firing
 from hub.task_transition_service import apply_transition
@@ -94,6 +95,27 @@ async def _flow_with_completed_task(db, *, suffix):
     )
     db.add(task)
     await db.commit()
+    # Linked: a flow's task serving no requirement is reviewed at its branch tip instead
+    # (`test_a_flow_task_with_no_requirement_reaches_review`).
+    db.add(
+        SpecRequirement(
+            id=f"req-ev-{suffix}",
+            project_id="proj-test",
+            document_id=f"doc-ev-{suffix}",
+            identifier="FR-1",
+            key="fr-1",
+            digest="d" * 64,
+        )
+    )
+    db.add(
+        TaskRequirementLink(
+            id=f"link-ev-{suffix}",
+            project_id="proj-test",
+            task_id=task.id,
+            requirement_id=f"req-ev-{suffix}",
+        )
+    )
+    await db.commit()
 
     # Walked, never constructed at `completed`: `agent_that_completed` reads the history, and a
     # task with no author is declined by the ladder for a different reason entirely — the test
@@ -106,17 +128,7 @@ async def _flow_with_completed_task(db, *, suffix):
 
 
 async def _evidence_for(db, task_id, *, suffix, commit_sha):
-    """Evidence against the document the flow declares — created there, not here."""
-    db.add(
-        SpecRequirement(
-            id=f"req-ev-{suffix}",
-            project_id="proj-test",
-            document_id=f"doc-ev-{suffix}",
-            identifier="FR-1",
-            key="fr-1",
-            digest="d" * 64,
-        )
-    )
+    """Evidence against the requirement the fixture linked its task to."""
     db.add(
         RequirementEvidence(
             id=f"ev-{suffix}",

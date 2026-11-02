@@ -128,6 +128,8 @@ class AgentTaskCreate(RequestModel):
     status: str = Field(default="pending", max_length=64)
     priority: str = Field(default="medium", max_length=64)
     assignee: Optional[str] = Field(default=None, max_length=64)
+    builder: Optional[str] = Field(default=None, max_length=64)
+    checker: Optional[str] = Field(default=None, max_length=64)
     requirements: Optional[List[Any]] = None
     # The requirements this task serves, by identifier. Checked: an identifier the project does not
     # have is refused with the identifier named. Present here as well as on the operator's schema
@@ -1926,6 +1928,17 @@ async def record_evidence(
     return body_out
 
 
+@router.get("/model-record")
+async def read_model_record(
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """This project's work per model, for an author judging which model suits a task."""
+    from ...model_record import model_record
+
+    return await model_record(session, actor.project_id)
+
+
 @router.get("/spec/evidence")
 async def list_evidence_for_agent(
     identifier: Optional[str] = Query(None),
@@ -2582,7 +2595,12 @@ async def advance_spec_step(
         "size": document.size,
         "journey": spec_journey.journey(document.size, steps),
         "missing": gaps,
-        "instructions": spec_journey.duty(target, steps),
+        "instructions": spec_journey.duty(
+            target,
+            steps,
+            size=document.size,
+            roster=await spec_journey.open_roster(session, actor.project_id),
+        ),
         "message": f"moved from {left} to {target}"
         + (f"; {left} left empty: {', '.join(gaps)}" if gaps else ""),
     }

@@ -385,6 +385,7 @@ async def _completeness_report(
             *spec_completeness.undeclared_files_warnings(payload),
             *spec_completeness.test_only_task_warnings(payload),
             *spec_completeness.reviewer_undeclared_warnings(payload),
+            *spec_completeness.recommended_people_warnings(payload),
         )
     ]
 

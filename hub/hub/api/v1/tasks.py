@@ -277,7 +277,8 @@ async def _attach_requirements(
         )
         checkers = await builds.checkers_by_task(session, build_tasks)
         for response in responses:
-            response.checker = checkers.get(response.id)
+            if response.build_id:
+                response.checker = checkers.get(response.id)
         marks = await builds.default_marks_by_task(session, build_tasks)
         for response in responses:
             response.builder_by_default = marks.get(response.id, {}).get("builder", False)
@@ -900,6 +901,11 @@ async def check_task_create(
     # says so where the task is being made, rather than at a turn nobody here started.
     if body.assignee and await is_read_only_agent(project_id, body.assignee, session):
         raise HTTPException(status_code=422, detail=read_only_work_sentence(body.assignee, body.id))
+    for person in (body.builder, body.checker):
+        if person:
+            refusal = await assignee_refusal(session, project_id, person)
+            if refusal is not None:
+                raise HTTPException(status_code=422, detail=refusal)
     return named
 
 
@@ -943,6 +949,23 @@ async def create_task_for_actor(
     # leaving the agent to ask.
     document_ids = {row.document_id for row in named if row.document_id}
     spec_document_id = next(iter(document_ids)) if len(document_ids) == 1 else None
+    if not named and body.spec_document:
+        # Named by path alone, a task is against that document just the same.
+        from ... import spec_lifecycle
+
+        against = await spec_lifecycle.get_document(session, project_id, body.spec_document)
+        spec_document_id = against.id if against is not None else None
+    from ... import builds
+
+    refusal = await builds.own_checker_refusal(
+        session,
+        spec_document_id,
+        builder=body.builder,
+        assignee=body.assignee,
+        checker=body.checker,
+    )
+    if refusal is not None:
+        raise HTTPException(status_code=422, detail=refusal)
 
     task_id = body.id or f"task-{short_id()}"
     task = Task(
@@ -955,6 +978,8 @@ async def create_task_for_actor(
         priority=body.priority,
         assignee=body.assignee,
         assigner=assigner,
+        builder=body.builder,
+        checker=body.checker,
         requirements=body.requirements,
         acceptance_criteria=body.acceptance_criteria,
         deliverables=body.deliverables,
@@ -963,13 +988,23 @@ async def create_task_for_actor(
         spec_document_id=spec_document_id,
         loop_id=body.loop_id,
     )
+    follow_up = None
+    reopened_job = None
     if spec_document_id:
-        # Against a document whose build runs: the task joins the build and takes its people
-        # (`a-task-s-checks-and-merges-use-its-own-work...`, FR-7).
-        from ... import builds
-
-        await builds.join_running_build(session, task)
+        # Against a document with a build: the task joins it, reopening it if it had finished, and
+        # takes its people (`a-task-s-checks-and-merges-use-its-own-work...`, FR-7;
+        # `follow-up-reopens-a-finished-build`). A task put in a named queue already has its driver.
+        if body.loop_id is None:
+            follow_up = await builds.follow_up(session, task, filer=assigner, checker=body.checker)
+        else:
+            await builds.join_running_build(session, task, checker=body.checker)
     session.add(task)
+    if follow_up is not None and follow_up.reopened is not None:
+        # Flushed first: a new flow adopts the document's open tasks, and this is one of them.
+        from .spec import flow_for_reopened_build
+
+        await session.flush()
+        reopened_job = await flow_for_reopened_build(session, follow_up.reopened)
     if body.depends_on:
         # Written in the task's own commit, so a refusal cannot leave the task without its edges.
         # `check_task_create` already refused an unknown or own id, and a new task has no
@@ -1022,6 +1057,10 @@ async def create_task_for_actor(
     await absorb_free_text(session, task, body.requirements, actor=link_actor)
     await session.commit()
 
+    if reopened_job is not None:
+        from .jobs import _hand_job_to_scheduler
+
+        await _hand_job_to_scheduler(session, reopened_job.id, reopened_job)
     await sse_manager.broadcast(project_id, "task_created", {"id": task.id, "title": body.title})
     if task.status == "assigned" and task.loop_id is None:
         # Created `assigned` outside any flow: started for its assignee now
@@ -1051,6 +1090,8 @@ async def create_task_for_actor(
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
     responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
+    if follow_up is not None and follow_up.note:
+        responses[0].build_note = follow_up.note
     return responses[0]
 
 

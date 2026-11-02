@@ -19,9 +19,13 @@ export interface ManagerJob {
   /** The mender only: the model its turns run on while `model` is null -- the catalog's default for
    *  its runner's CLI -- or null with no runner. Absent on a Hub that predates it. */
   default_model?: { id: string; label: string } | null
-  /** The chapters job only: fire on its triggers, or only when 'Weave the thread' is pressed. */
+  /** Fire on the job's triggers, or only on its button. The route lists it for every job; only a job
+   *  with a `firing_choice` can change it. */
   mode?: 'automatic' | 'button'
-  /** The chapters job only: what all its firings in this project recorded, summed. */
+  /** A job with a button: the choice between it and automatic firing, in words. Null on the others;
+   *  absent on a Hub that predates it, which shows no choice until it restarts. */
+  firing_choice?: { button: string; where: string; automatic: string } | null
+  /** A job with a button: what all its firings in this project recorded, summed. */
   usage_total?: JobUsageTotal
 }
 
@@ -98,6 +102,153 @@ export function useWeaveThread() {
     mutationFn: () => postJson<unknown>(`/api/v1/projects/${projectId}/manager/jobs/chapters/run`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager', 'activity'] })
+    },
+  })
+}
+
+/** One firing of the build retrospective, written or not, as its document lists it. `report` is
+ *  absent from a failed firing. */
+export interface BuildRetrospective {
+  id: string
+  at: string
+  trigger: string
+  model: string | null
+  outcome: ManagerFiring['outcome']
+  detail: string | null
+  duration_ms: number | null
+  usage: Record<string, number> | null
+  cost_usd_micros: number | null
+  parts: number
+  vault_source: string | null
+  report: RetrospectiveReport | null
+}
+
+export interface RetrospectiveFinding {
+  text: string
+  cites: string[]
+}
+
+export interface RetrospectiveSendBack {
+  transition_id: string
+  task_id: string
+  readable_id: string | null
+  at: string
+  by: string
+  run_id: string | null
+  reason_class: string | null
+  reason: string | null
+  /** `defect`, `process` or `spec`. */
+  cause: string
+  cause_from: 'model' | 'reviewer'
+  explanation: string
+  cites: string[]
+}
+
+interface RetrospectiveEvent {
+  id: string
+  kind: string
+  detail: Record<string, unknown> | null
+}
+
+interface RetrospectiveCost {
+  runs: number
+  cost_usd_micros: number
+}
+
+/** The stored report (`build_retrospective.py`). `nothing` names each empty section with what it
+ *  says instead. */
+export interface RetrospectiveReport {
+  parts: number
+  dropped: number
+  where_time_went: {
+    findings: RetrospectiveFinding[]
+    per_task: Array<{
+      task_id: string
+      readable_id: string | null
+      title: string
+      status: string
+      building_seconds: number
+      waiting_for_review_seconds: number
+      in_check_gate_seconds: number
+      waiting_to_start_seconds: number
+    }>
+  }
+  send_backs: RetrospectiveSendBack[]
+  spec_missed: {
+    findings: RetrospectiveFinding[]
+    amendments: RetrospectiveEvent[]
+    tasks_added_mid_build: Array<{ task_id: string; readable_id: string | null; title: string }>
+    unsatisfiable_criteria: RetrospectiveEvent[]
+    requirements_without_accepted_evidence: string[]
+    reconcile_gaps: Array<{ class?: string; requirement?: string; where?: string; summary?: string }>
+  }
+  staffing: {
+    findings: RetrospectiveFinding[]
+    builds: Array<{ id: string; driver: string; level: string }>
+    per_agent: Array<RetrospectiveCost & { agent: string }>
+  }
+  cost: {
+    findings: RetrospectiveFinding[]
+    per_agent: Array<RetrospectiveCost & { agent: string }>
+    per_task: Array<RetrospectiveCost & { task_id: string }>
+    totals: RetrospectiveCost
+  }
+  friction: {
+    findings: RetrospectiveFinding[]
+    stalls: Array<{ id: string; cause: string | null; reason: string | null; outcome: string | null }>
+    flaky_send_backs: RetrospectiveSendBack[]
+    operator_waits: Array<{ question_id: string; task_id: string | null; waited_seconds: number }>
+  }
+  what_worked: RetrospectiveFinding[]
+  /** `label` is `code_and_checks`, `specs`, `staffing_and_running` or `tooling`. */
+  improvements: Array<RetrospectiveFinding & { label: string }>
+  lessons: RetrospectiveFinding[]
+  transcripts_read: Array<{ run_id: string; task_id: string | null; agent: string; flags: string[] }>
+  nothing: Partial<
+    Record<
+      | 'where_time_went'
+      | 'send_backs'
+      | 'spec_missed'
+      | 'staffing'
+      | 'cost'
+      | 'friction'
+      | 'what_worked'
+      | 'improvements'
+      | 'lessons'
+      | 'transcripts_read',
+      string
+    >
+  >
+}
+
+/** A document's retrospectives, newest first. Polled: a firing is recorded when it ends, not broadcast. */
+export function useBuildRetrospectives(path: string) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<BuildRetrospective[]>({
+    queryKey: ['project', projectId, 'manager', 'retrospectives', path],
+    queryFn: async () =>
+      (
+        await getJson<{ retrospectives: BuildRetrospective[] }>(
+          `/api/v1/projects/${projectId}/manager/jobs/build-retrospective/retrospectives?path=${encodeURIComponent(path)}`,
+        )
+      ).retrospectives,
+    enabled: isConfigured && !!projectId && !!path,
+    retry: (count, error) => !isNoManager(error) && count < 2,
+    refetchInterval: (query) => (isNoManager(query.state.error) ? false : 10_000),
+  })
+}
+
+/** "Review this build": refused with 409 and a sentence while one is in progress or with no runner. */
+export function useReviewThisBuild(path: string) {
+  const queryClient = useQueryClient()
+  const projectId = useConfigStore((state) => state.selectedProjectId)
+  return useMutation({
+    mutationFn: () =>
+      postJson<unknown>(
+        `/api/v1/projects/${projectId}/manager/jobs/build-retrospective/run?path=${encodeURIComponent(path)}`,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'manager'] })
     },
   })
 }

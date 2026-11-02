@@ -488,6 +488,8 @@ def _recommended_build(document, payload: Optional[Dict[str, Any]]) -> Optional[
             for key, people in spec_payload_module.declared_people(payload).items()
         },
         "reasons": dict(delivery.reasons),
+        # Why each task's own pick was recommended (`every-task-recommended`), by task key.
+        "task_reasons": spec_payload_module.declared_reasons(payload),
     }
 
 
@@ -4207,6 +4209,106 @@ async def stop_build(
         if scheduler is not None:
             await scheduler.remove_job(job.id)
     return view
+
+
+@router.get("/reopening-warnings")
+async def reopening_warnings(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The Overview's warnings, newest first: each running build a follow-up reopened, until the
+    operator dismisses the warning or the build ends (`reopening-warns`)."""
+    project_id, _ = project
+    return {"warnings": await builds.reopening_warnings(session, project_id)}
+
+
+@router.post("/builds/{build_id}/reopening-warning/dismiss")
+async def dismiss_reopening_warning(
+    build_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The operator has seen it and lets the build run. 409 when no warning stands."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    if not builds.dismiss_warning(build):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "no_warning", "message": f"build {build.id} has no warning open"},
+        )
+    return await _after_build_change(session, project_id, build, None)
+
+
+async def flow_for_reopened_build(session: AsyncSession, build) -> Optional[AIJob]:
+    """Give a reopened flow- or lead-driven *build* something to drive it, within the caller's
+    transaction, and return a new flow's job for the scheduler after its commit. A hand build gets
+    none: its task waits on the board.
+
+    A flow still working what was left in its queue goes on. One that ended is not resumed: it is
+    archived and a fresh one starts from the build's recorded settings. It stops when its queue
+    empties whatever the delivery said, since a stop time the document named may long have passed.
+    """
+    if build.driver == builds.DRIVER_HAND:
+        return None
+    project_id, build_id = build.project_id, build.id
+    document = await session.get(SpecDocument, build.document_id)
+    previous = await session.get(Loop, build.loop_id) if build.loop_id else None
+    agent, cron = None, None
+    if previous is not None:
+        if previous.ending_state is None and previous.archived_at is None:
+            return None
+        job = await session.get(AIJob, previous.job_id)
+        if job is not None:
+            agent, cron = job.agent, job.cron
+        previous.archived_at = previous.archived_at or datetime.now(timezone.utc)
+        await session.flush()
+    try:
+        payload = _read_payload(await _workspace(session, project_id), document.path)
+    except HTTPException:
+        payload = None
+    delivery = _delivery_of(payload)
+    people = await builds.people_of(session, build)
+    known = await builds.open_agents(session, project_id)
+    candidates = (
+        agent,
+        people["builder"],
+        *(build.builders or []),
+        delivery.agent if delivery is not None else None,
+    )
+    agent = next((name for name in candidates if name and name in known), None)
+    cron = cron or (delivery.cron if delivery is not None else None)
+    again = spec_payload_module.Delivery(
+        mode="flow",
+        stop_when_queue_empties=True,
+        agent=agent,
+        **({"cron": cron} if cron else {}),
+    )
+    flow, new_job = await _build_flow(
+        session,
+        project_id,
+        document,
+        {"delivery": again.model_dump()},
+        agent,
+        settings=builds.Settings(
+            driver=build.driver,
+            level=build.level,
+            builders=[],
+            reviewers=list(build.reviewers or []),
+            lead=build.lead,
+            budget_cap_usd_micros=build.budget_cap_usd_micros,
+            window_start=build.window_start,
+            window_end=build.window_end,
+            landing=build.landing,
+            task_builders={},
+        ),
+    )
+    if flow.get("job_id"):
+        (await session.get(builds.Build, build_id)).loop_id = (
+            await session.execute(select(Loop.id).where(Loop.job_id == flow["job_id"]))
+        ).scalar_one_or_none()
+    else:
+        logger.warning("build %s reopened with no flow: %s", build_id, flow.get("messages"))
+    return new_job
 
 
 class _FlowWouldBeEmptyError(Exception):

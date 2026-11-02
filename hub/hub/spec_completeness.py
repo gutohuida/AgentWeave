@@ -590,6 +590,42 @@ def reviewer_undeclared_warnings(payload: SpecPayload) -> List[Finding]:
     ]
 
 
+def recommended_people_warnings(payload: SpecPayload) -> List[Finding]:
+    """A task whose recommended people are missing, unexplained or contradictory (FR-3, FR-5).
+
+    Each declared task is meant to name a builder and a checker with a reason for each. Advisory,
+    never a block (approvals are scarce): a missing pick, a pick with no reason, or a checker that
+    is the builder draws a warning naming the task. A checker left empty with a reason is the
+    one-agent project's answer and is not named. A document naming nobody is warned too: it never
+    blocks, and an author who ignores the request entirely is the case the warning exists for.
+    """
+    local = [t for t in payload.tasks if t.from_ is None]
+    warnings: List[Finding] = []
+    for task in local:
+        checker = task.checker or task.reviewer
+        problems: List[str] = []
+        if not task.builder:
+            problems.append("no recommended builder")
+        elif not (task.builder_reason or "").strip():
+            problems.append("a builder with no reason")
+        if not checker:
+            if not (task.checker_reason or "").strip():
+                problems.append("no recommended checker (leave it empty only with a reason)")
+        elif not (task.checker_reason or "").strip():
+            problems.append("a checker with no reason")
+        if checker and task.builder and checker == task.builder:
+            problems.append(f"{checker!r} as both builder and checker, which cannot be carried out")
+        if problems:
+            warnings.append(
+                Finding(
+                    "recommended_people",
+                    "tasks",
+                    f"task {task.key!r} has " + "; ".join(problems),
+                )
+            )
+    return warnings
+
+
 #: The fewest words a slice's `done` can state an outcome in. Real agents read the field as a status
 #: and wrote "false", then "no" (F502); a list of such words is never complete, a sentence is the test.
 _OUTCOME_WORDS = 3

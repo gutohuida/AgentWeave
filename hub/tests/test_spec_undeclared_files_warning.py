@@ -98,7 +98,8 @@ async def test_the_warning_never_blocks(app, planner):
 @pytest.mark.asyncio
 async def test_the_overlap_warning_is_unchanged(app, planner):
     body = await _submit(app, planner, _doc(("a", {"files": ["x.py"]}), ("b", {"files": ["x.py"]})))
-    assert [w["code"] for w in body["warnings"]] == ["unordered_file_overlap"]
+    codes = [w["code"] for w in body["warnings"] if w["code"] != "recommended_people"]
+    assert codes == ["unordered_file_overlap"]
     assert body["ready_to_approve"] is True
 
 

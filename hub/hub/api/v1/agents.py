@@ -1066,7 +1066,8 @@ def _operations() -> List[_Operation]:
             tool="create_task",
             args=(
                 "title, description, assignee, priority=medium, requirements, acceptance_criteria, "
-                "requirement_ids=None, spec_document=None, loop_id=None, depends_on=None"
+                "requirement_ids=None, spec_document=None, loop_id=None, depends_on=None, "
+                "builder=None, checker=None"
             ),
             method="POST",
             path="/tasks",
@@ -1081,11 +1082,16 @@ def _operations() -> List[_Operation]:
                 "acceptance_criteria",
                 "loop_id",
                 "depends_on",
+                "builder",
+                "checker",
             ),
             required=("title",),
             text=(
                 f"priority is one of {values(TaskPriority)}. depends_on is a list of task ids this "
-                "one waits on; an id the project does not have is refused, naming it."
+                "one waits on; an id the project does not have is refused, naming it. A task against "
+                "a spec joins its build and goes to the build's builder and checker unless it names "
+                "its own; `build_note` in the answer says if it reopened a finished build, or why "
+                "it joined none. A task whose builder would also be its checker is refused."
             ),
         ),
         _Operation(
@@ -1538,6 +1544,20 @@ def _operations() -> List[_Operation]:
                 "4,000 characters. The manager checks it against the entry's source and corrects "
                 "it, explains why it stands, or refers it to the operator; read the entry again "
                 "later to see which. One open report per entry."
+            ),
+        ),
+        _Operation(
+            tool="read_model_record",
+            args="",
+            method="GET",
+            path="/model-record",
+            fields=(),
+            required=(),
+            text=(
+                "this project's work per model: tasks built, send-backs by reason class, "
+                "API-equivalent cost and sample sizes, each task under the model that ran it. "
+                "An unpriced turn is reported as unpriced, never as zero. Read it when judging "
+                "which model suits a task."
             ),
         ),
         _Operation(
@@ -2582,7 +2602,18 @@ async def _render_hub_agent_context(
                     steps = await spec_journey.project_steps(db, project_id)
                     lines.append(spec_journey.journey_line(row.size, row.step, steps))
                     lines.append(
-                        spec_journey.duty(row.step, steps)
+                        spec_journey.duty(
+                            row.step,
+                            steps,
+                            size=row.size,
+                            roster=[
+                                (
+                                    peer.name,
+                                    getattr(roster_runners.get(peer.runner_id), "model", "") or "",
+                                )
+                                for peer in roster
+                            ],
+                        )
                         or spec_journey.removed(row.step, row.size, steps)
                     )
                 else:

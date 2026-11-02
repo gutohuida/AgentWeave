@@ -356,3 +356,88 @@ describe('Build on the spec header', () => {
     await waitFor(() => expect(posts.some((post) => post.path.endsWith('/builds/build-1/stop'))).toBe(true))
   })
 })
+
+describe('BuildDialog recommended people with reasons (ac-dialog, ac-closed-agent)', () => {
+  /** `recommended_build` for a document whose tasks hold different picks and reasons, with the
+   *  `task_reasons` key the route adds. */
+  const PICKS: SpecRecommendedBuild = {
+    ...RECOMMENDED,
+    builder: 'Developer',
+    checker: 'QA',
+    builders: [],
+    reviewers: [],
+    task_builders: { migrate: 'DeveloperOpus', copy: 'Developer' },
+    task_checkers: { migrate: 'QA', copy: 'Gone' },
+    task_reasons: {
+      migrate: { builder: 'Opus suits a risky migration.', checker: 'QA is a different agent.' },
+      copy: { builder: 'Sonnet is cheap enough for a copy change.' },
+    },
+  }
+  const OPEN = ['Developer', 'DeveloperOpus', 'QA']
+
+  function open(recommended: SpecRecommendedBuild, onConfirm = vi.fn()) {
+    render(
+      <BuildDialog
+        title="Demo"
+        approve={false}
+        recommended={recommended}
+        openAgents={OPEN}
+        isPending={false}
+        error={null}
+        onCancel={() => {}}
+        onConfirm={onConfirm}
+      />,
+    )
+    return onConfirm
+  }
+
+  it('shows each row its pick and reasons, and builds the changed row by the operator', () => {
+    const onConfirm = open(PICKS)
+    expect(screen.getByTestId('build-task-builder-migrate')).toHaveValue('DeveloperOpus')
+    expect(screen.getByTestId('build-task-builder-copy')).toHaveValue('Developer')
+    const reasons = screen.getByTestId('build-task-reason-migrate')
+    expect(reasons).toHaveTextContent('risky migration')
+    expect(reasons).toHaveTextContent('different agent')
+    expect(screen.getByTestId('build-task-builder-reason-migrate')).toHaveTextContent('risky migration')
+    expect(screen.getByTestId('build-task-checker-reason-migrate')).toHaveTextContent('different agent')
+    expect(screen.getByTestId('build-task-builder-reason-copy')).toHaveTextContent('cheap enough')
+    expect(screen.queryByTestId('build-task-checker-reason-copy')).toBeNull()
+
+    fireEvent.change(screen.getByTestId('build-task-builder-copy'), {
+      target: { value: 'DeveloperOpus' },
+    })
+    fireEvent.click(screen.getByTestId('build-confirm'))
+
+    const sent = onConfirm.mock.calls[0][0] as BuildChoices
+    expect(sent.task_builders).toEqual({ migrate: 'DeveloperOpus', copy: 'DeveloperOpus' })
+    expect(sent.task_checkers).toEqual({ migrate: 'QA', copy: '' })
+  })
+
+  it('says a closed pick is not open on that row and selects nothing', () => {
+    open(PICKS)
+    expect(screen.getByTestId('build-task-checker-copy')).toHaveValue('')
+    expect(screen.getByTestId('build-task-checker-closed-copy')).toHaveTextContent(
+      '@Gone is not an open agent',
+    )
+    expect(screen.queryByTestId('build-task-checker-closed-migrate')).toBeNull()
+  })
+
+  it('opens an older document with no picks as it did before', () => {
+    // What the route returns for an older document with tasks: every key present, null picks,
+    // and an empty reasons object per task.
+    open({
+      ...PICKS,
+      task_builders: { migrate: null, copy: null },
+      task_checkers: { migrate: null, copy: null },
+      task_reasons: { migrate: {}, copy: {} },
+    } as unknown as SpecRecommendedBuild)
+    expect(screen.getByTestId('build-builder')).toHaveValue('Developer')
+    for (const key of ['migrate', 'copy']) {
+      expect(screen.getByTestId(`build-task-builder-${key}`)).toHaveValue('')
+      expect(screen.getByTestId(`build-task-checker-${key}`)).toHaveValue('')
+      expect(screen.queryByTestId(`build-task-builder-closed-${key}`)).toBeNull()
+      expect(screen.queryByTestId(`build-task-checker-closed-${key}`)).toBeNull()
+      expect(screen.queryByTestId(`build-task-reason-${key}`)).toBeNull()
+    }
+  })
+})

@@ -652,10 +652,11 @@ async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     assert saved.status_code == 200, saved.text
     body = saved.json()
     assert body["ready_to_approve"] is True
-    assert len(body["warnings"]) == 1
-    assert "t1" in body["warnings"][0]["message"]
-    assert "hub/hub/x.py" in body["warnings"][0]["message"]
+    overlap = [w for w in body["warnings"] if w["code"] == "unordered_file_overlap"]
+    assert len(overlap) == 1
+    assert "t1" in overlap[0]["message"]
+    assert "hub/hub/x.py" in overlap[0]["message"]
 
     tasks[1]["depends_on"] = ["t1"]
     saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
-    assert saved.json()["warnings"] == []
+    assert [w for w in saved.json()["warnings"] if w["code"] == "unordered_file_overlap"] == []

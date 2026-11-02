@@ -1,0 +1,550 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an agent on the tasks step of a change document",
+      "how_to_check": "A Hub test asserting on the assembled tasks-step and Build-step prompt text.",
+      "key": "ac-asked",
+      "requirement": "every-task-recommended",
+      "then": "it asks for a builder, a checker and a reason for each on every task, lists the open agents, and no longer asks for reasons keyed reviewer or tester",
+      "when": "its turn prompt is assembled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a roster of one Opus and one Sonnet agent, and a document with a migration task and a copy-change task",
+      "how_to_check": "A Hub test on the prompt's model names, plus the drive's real Haiku authoring turn, reading the document it submits.",
+      "key": "ac-models",
+      "requirement": "weighs-model-cost-complexity",
+      "then": "the prompt named both models, the two tasks hold different builders, and each reason names model cost or performance and the task's complexity",
+      "when": "the author writes the tasks"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a large document, then a fix-size one",
+      "how_to_check": "A Hub test on both prompts, plus the drive answering the real Haiku author 'review the project record' and reading the document's evidence.",
+      "key": "ac-sources",
+      "requirement": "asks-how-to-judge",
+      "then": "the prompt for the first requires stating its view and asking for the three sources, and the operator's choice governs what it does and what its evidence records; the prompt for the second does not ask",
+      "when": "the author reaches the tasks step of each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "tasks built under two models, one agent rebound from one model to the other between tasks, some send-backs and an unpriced turn",
+      "how_to_check": "A Hub test calling the agent tool against these rows, in hub/tests/test_per_model_record.py.",
+      "key": "ac-record",
+      "requirement": "per-model-record",
+      "then": "each task counts under the model that ran it, send-backs are split by reason class, sample sizes match the rows, and the unpriced turn is reported as unpriced",
+      "when": "an agent reads the record through its tool"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task naming the same agent as builder and checker, then a one-agent project",
+      "how_to_check": "A Hub test submitting the first document and reading `warnings`, and a test that the one-agent project's prompt says to leave the checker empty and give the reason.",
+      "key": "ac-not-self",
+      "requirement": "checker-is-not-builder",
+      "then": "the first draws a warning naming the task; the second has an empty checker with a reason",
+      "when": "the document is submitted, then authored"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose tasks hold different picks and reasons, fed as the route returns them",
+      "how_to_check": "A UI test on BuildDialog fed the route's real payload, plus the drive opening Build in a browser and reading the resulting build record.",
+      "key": "ac-dialog",
+      "requirement": "build-opens-with-picks",
+      "then": "each row shows its pick and reasons, and the changed task is built by the operator's choice while the others keep theirs",
+      "when": "the operator opens Build, changes one row and builds"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with one task with no checker and one with no reason",
+      "how_to_check": "A Hub test submitting and approving the document over the routes.",
+      "key": "ac-warns",
+      "requirement": "missing-pick-warns",
+      "then": "the response warns naming both tasks, blocking is empty, and approval succeeds",
+      "when": "it is submitted and approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pick whose agent has been closed, and an older document with no picks",
+      "how_to_check": "UI tests on BuildDialog fed each route payload.",
+      "key": "ac-closed-agent",
+      "requirement": "pick-no-longer-open",
+      "then": "the first row says the agent is not open and selects nothing; the second opens as it does on master",
+      "when": "Build opens on each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build with default builder DeveloperOpus and checker QA",
+      "how_to_check": "A Hub test filing both through the task route and reading each task's builder and resolved checker.",
+      "key": "ac-running",
+      "requirement": "follow-up-takes-the-build-people",
+      "then": "the first is built by DeveloperOpus and the second by Developer, and QA checks both",
+      "when": "an agent files one task naming nobody and one naming builder Developer"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build finished an hour ago, and another finished 30 days ago, each at level reviewed with a cap",
+      "how_to_check": "A Hub test in hub/tests/test_recommended_people.py filing through the route and reading the build and document routes, with the finish times set in the fixture.",
+      "key": "ac-reopen",
+      "requirement": "follow-up-reopens-a-finished-build",
+      "then": "each same build id reads running at the same level, landing and cap, its record shows the reopening, and its spec stops reading as done until the task lands",
+      "when": "an agent files a follow-up against each spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build that finished 30 days ago",
+      "how_to_check": "The drive opens Overview in a browser, reads the warning and clicks stop; a Hub test covers the age and the clearing when the build ends; a UI test fed the route's real payload covers the dismissal.",
+      "key": "ac-warning",
+      "requirement": "reopening-warns",
+      "then": "the warning names the spec, task, filer and 30 days, the build reads stopped and its flow starts nothing further; and a warning left alone clears when the build ends",
+      "when": "a follow-up reopens it and the operator opens the Overview screen, then stops the build from the warning"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow build whose loop ended on an empty queue, and separately a finished hand build",
+      "how_to_check": "The drive runs the flow case with a real Haiku turn on a live scheduler; a Hub test covers the hand case.",
+      "key": "ac-flow",
+      "requirement": "flow-picks-it-up",
+      "then": "the flow build's task starts within two firings with no other call; the hand build's task is assigned to its builder and no run starts",
+      "when": "a follow-up is filed against each and the scheduler fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one build stopped by the operator, one stopped by its cap, and an archived spec",
+      "how_to_check": "A Hub test filing against each case and then calling Build on the stopped spec over the routes.",
+      "key": "ac-stopped",
+      "requirement": "stopped-stays-stopped",
+      "then": "no build reopens, no flow starts, no warning shows, each task has no build, the filer's answer says why, and pressing Build on a stopped spec takes its task in",
+      "when": "a follow-up is filed against each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a finished flow build",
+      "how_to_check": "A Hub test filing concurrently over the routes, then counting builds, flows and warnings and calling create_flow.",
+      "key": "ac-simultaneous",
+      "requirement": "one-driver-still-holds",
+      "then": "one build, one active flow and one warning exist covering both tasks, and create_flow is refused naming the build",
+      "when": "two follow-ups are filed simultaneously and an agent then calls create_flow on the spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub :8010 with Haiku-bound agents",
+      "how_to_check": "Run `py -3.11 scripts/drive/d1101_recommended_people.py` on the trial Hub from master for the failing baseline, and from the finished branch for the pass.",
+      "key": "ac-drive",
+      "requirement": "acceptance-drive",
+      "then": "every step holds, and on master the drive fails because no record can be read, the picks carry no reasons and the follow-up joins nothing",
+      "when": "the drive runs the authoring, Build, follow-up and Overview warning steps"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "c4248e3e2987b7e024a07022ec529c3af8ae6a0cc7b59252ec2a45a34e73453d",
+      "FR-10": "c1ad8b69fb9e754d2946d7a1bec730115d7877bf378fdb13827c27fed5dbede8",
+      "FR-11": "752154feac63495ada8eedc9d87015e755e342a6c731529608be3c0c91c193be",
+      "FR-12": "9be063c3de628ac96e2e4dcd24068e95a06729078982beb4897d776fef808294",
+      "FR-13": "11e48ea318bc3774230b3d2289bb533b1864316aae85780bf0df7eaae4862b6d",
+      "FR-14": "8c7a92bed36a42004f57678f941adda5c739eab7481a435caf9c1ceac042066e",
+      "FR-15": "fedf19ba8b4813153cf250169166bf94cc3f1dc2d22f630ad24c1792ac34061a",
+      "FR-2": "c35d341591d7fe94f52c05910ad88631ff99c72765c52caf4c9f7900cccc5274",
+      "FR-3": "179eaa2eace05ce8d3cf1d1eb5eb4fcb0ce00b247a5a15e49e1089f7a8c2e972",
+      "FR-4": "d0bbc0bc42739adbcc24209ba6d30e02856c0f92345ea43f72caa24ed590a82e",
+      "FR-5": "89241bb53d85855e1d6302e74577b9552127dda96c4b990dd6203848af60a780",
+      "FR-6": "b40d230db499c834e87eb56ca6e02d03e6ad6a3131a291d81ac43c61a1e77a12",
+      "FR-7": "50b9f9f8138ca7d29e862ab9ae06cbdb812688d8ffaf4368f53167f584f3c1d2",
+      "FR-8": "b758aab13cbd8f9ac2a49c2c50b5e34c9238eaf5315c403b7ef090a734e749b9",
+      "FR-9": "d3ab45d47987711d18857fd888dfc67af661408d83aff4ec9ed49b205461015b"
+    },
+    "high_water": 15,
+    "requirements": {
+      "acceptance-drive": "FR-12",
+      "asks-how-to-judge": "FR-13",
+      "build-opens-with-picks": "FR-4",
+      "checker-is-not-builder": "FR-3",
+      "every-task-recommended": "FR-1",
+      "flow-picks-it-up": "FR-9",
+      "follow-up-reopens-a-finished-build": "FR-8",
+      "follow-up-takes-the-build-people": "FR-7",
+      "missing-pick-warns": "FR-5",
+      "one-driver-still-holds": "FR-11",
+      "per-model-record": "FR-14",
+      "pick-no-longer-open": "FR-6",
+      "reopening-warns": "FR-15",
+      "stopped-stays-stopped": "FR-10",
+      "weighs-model-cost-complexity": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "builders": [
+      "DeveloperOpus",
+      "Developer"
+    ],
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "The follow-up task changes the build's state rules and can spend quota unattended, which is the Opus case.",
+      "builder": "Opus for the follow-up task; Sonnet for the drive, record and recommendation tasks, which are routine, to save quota.",
+      "checker": "QA tests by running the product and builds none of this.",
+      "cron": "Every five minutes, the default.",
+      "mode": "Four tasks in order, each depending on the last; a flow runs them without hand-offs.",
+      "stop": "Stop when the four tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "**Slice boundary.** The Build dialog only gains a reason line beside each task's row; its redesign is the next slice. No new person fields: this uses the task `builder` and `checker` the build-plan slice shipped.\n\n**The author judges, and the operator chooses its sources (operator, 2026-11-01).** Before naming people, the author says what it currently believes about the roster's models and asks which of three sources to use, any combination: agree with what it already knows, search the web for current prices and models, or review how the models performed in this project. A web search or review costs a turn's quota, which is why it is the operator's call. A `fix`-size document skips the question and uses what the author knows, because the prompt would outweigh the work.\n\n**This widens a roadmap non-goal, by the operator's decision.** The roadmap excluded inputs other than model, cost and complexity, naming \"who built similar work before\". Performance is now an input, measured per model and never per agent: an agent's model can change, and ranking named agents is still out.\n\n**What the project review reads.** Per model: tasks built, how often each was sent back and for which `reason_class`, and API-equivalent cost. These are counts, not a verdict: a model given only hard tasks is sent back more, so the author states the sample size and weighs the figures itself.\n\n```\nTODAY     last task approved -> build finished -> flow ended\n          follow-up filed    -> no build, no people, nobody starts it\nPROPOSED  follow-up filed    -> build reopens -> its people -> a new flow starts it\n                             -> the Overview warns the operator, who can stop it\n```\n\n**Always reopen, and warn (operator, 2026-11-01).** A finished build reopens however long ago it finished. The operator chose this over a time limit: nothing is stranded, and managing an unwanted restart is theirs, so the warning is what makes the rule safe. It sits on the Overview screen (operator, 2026-11-01), and it fires on every reopening, because a restart nobody asked for is exactly the case it exists for.\n\n**Reopening starts a new flow, not an old one.** A finished flow is ended and is not resumed. The build gets a fresh flow from its recorded settings, as `_joined_build` already does (`api/v1/spec.py:3637`), and the work branches from current main.\n\n**A stop is a decision; a finish is not.** A build the operator stopped, or one stopped by its budget cap or window, stays stopped.",
+  "evidence": {
+    "checked": [
+      "spec_journey.py:525-553: the tasks and Build steps' wording, including the stale reviewer and tester keys",
+      "spec_payload.py:178-190,325: a task has builder and checker with no reason; reasons are build-wide",
+      "BuildDialog.tsx:78-87,376-390: per-task rows pre-fill from the spec",
+      "api/v1/agents.py:2590-2592: exploring prompts list open agents by name only",
+      "model_catalog.py: holds no prices",
+      "usage_accounting.py and db/models.py:983: turn cost by model and send-back reason class are recorded; mcp_server.py has no tool reading them by model",
+      "builds.py:96,560-598,781-811: join_running_build needs a running build, and a build finishes at its last approval, ending its flow when nothing is open",
+      "builds.py:601-627: a new build retires earlier flows, so old flows are not resumed",
+      "builds.py:771-778 and useSSE.ts:28,541: the Hub already records and broadcasts a build_stopped event, a precedent for a build warning; the UI only refreshes on it",
+      "scheduler.py:461-484: drained means landed",
+      "api/v1/spec.py:3637-3670: a running build can get a fresh flow",
+      "Build record of the board slice: task-26371095d3ce joined while its build ran"
+    ],
+    "limits": [
+      "Nothing is driven yet; the drive task establishes the baseline",
+      "Whether a Haiku author makes sensible picks is unknown until driven",
+      "Whether Build takes in a task already on a stopped document is unverified; the follow-ups task must establish it",
+      "The Overview screen's layout has not been read; the follow-ups task places the warning within it",
+      "Older turns may lack cost or send-back class, so the record is thin at first",
+      "The criteria are proposed coverage, not passing tests"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus",
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-02T07:51:55.844019+00:00",
+        "id": "build-182c9af22da4",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-01T16:06:33.783773+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "follow-ups": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "model-record": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "recommend": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "task-36b0360dabd5": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "task-670a4e6eef2e": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "task-f7824de9c8c1": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Who makes the recommendation? Answer: the author agent (operator, 2026-11-01).",
+      "resolved": true
+    },
+    {
+      "question": "How is cost and performance judged? Answer: from what the author knows, after asking the operator whether to agree with that, search the web, or review this project's work (operator, 2026-11-01).",
+      "resolved": true
+    },
+    {
+      "question": "How long after a build finishes can a follow-up reopen it? Answer: always, with a warning in the Hub so the operator can manage it (operator, 2026-11-01).",
+      "resolved": true
+    },
+    {
+      "question": "Where does the reopening warning appear? Answer: the Overview screen (operator, 2026-11-01).",
+      "resolved": true
+    }
+  ],
+  "problem": "Nothing asks an author to choose people per task. The writing steps say to name a task's own `builder` or `checker` only where it differs from the delivery's (`spec_journey.py:537`), so most tasks arrive at Build on the defaults and the operator works out the split by hand. A task can name people, and Build pre-fills them (`BuildDialog.tsx:78-87`), but nowhere holds a reason per pick: `Delivery.reasons` covers build-wide choices only (`spec_payload.py:325`). The Build step's text also still asks for reasons keyed `reviewer` and `tester` (`spec_journey.py:550-551`), names the slice before it replaced with `checker`.\n\nAn author's sense of which model suits what comes from general knowledge, which may be out of date and says nothing about how models have done on this project. The Hub records what each turn's model cost (`TurnUsage`) and why work was sent back (`reason_class`, migration 0157), but no agent tool reads them by model, and the Hub holds no price table (`model_catalog.py`).\n\nFollow-ups have a narrower gap than the roadmap assumed. A task filed against a document whose build is running already joins it and takes its default builder (`builds.py:560`, `api/v1/tasks.py:971`). But a build finishes the moment its last task is approved (`builds.py:781-811`), and `running_build` only finds running builds (`builds.py:96`). So a reviewer's follow-up filed after that joins nothing: it has no builder, no checker and no flow, and sits on the board until someone notices.",
+  "requirements": [
+    {
+      "key": "every-task-recommended",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Naming people only where they differ from the default is why the split reaches the operator undone.",
+      "statement": "An author writing a change document is asked to name a builder and a checker on every task, chosen from the open agents, each with a one-sentence reason."
+    },
+    {
+      "key": "weighs-model-cost-complexity",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The author is told each open agent's model, and each reason states the pick in terms of that model's cost and performance and the task's complexity, and nothing else. Within one document, a hazardous task and a routine task can receive different agents."
+    },
+    {
+      "key": "asks-how-to-judge",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A search or review costs quota, and the operator knows whether the author's view is current.",
+      "statement": "Before naming people on a document larger than a fix, the author states its current view of the roster's models and asks the operator which sources to use, in any combination: what it already knows, a web search, or a review of this project's record. It uses only those chosen, and records what it found in the document's evidence. If a chosen source is unavailable, it says so rather than presenting a guess as the finding."
+    },
+    {
+      "key": "per-model-record",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The review needs figures an agent cannot otherwise reach. An agent's model can change, so attributing by agent would credit the wrong model.",
+      "statement": "Any agent can read this project's record per model: tasks built, send-backs by reason class, and API-equivalent cost, each with its sample size. A task counts under the model that actually ran its build turns, and unpriced turns are reported as unpriced, not counted as zero."
+    },
+    {
+      "key": "checker-is-not-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A builder cannot check their own work at the Reviewed level, so such a pick could never be carried out.",
+      "statement": "A task's recommended checker is never its recommended builder. When a project has one open agent, the checker is left empty and the reason says why."
+    },
+    {
+      "key": "build-opens-with-picks",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "Build opens with each task's recommended builder and checker selected and its reasons visible beside that task's row. The operator can change any of them, and the choice made is what is built."
+    },
+    {
+      "key": "missing-pick-warns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approvals are scarce: warn, do not gate (operator, 2026-10-08).",
+      "statement": "A task with no recommended builder or checker, or a pick with no reason, draws a warning on the document naming the task, and never blocks approval."
+    },
+    {
+      "key": "pick-no-longer-open",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a recommended agent is no longer open at Build, the dialog says so on that task's row and does not select them. Documents with no recommendations open Build as they do today."
+    },
+    {
+      "key": "follow-up-takes-the-build-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task filed against a spec whose build is running goes to that build's default builder and is checked by its default checker, unless the task names its own."
+    },
+    {
+      "key": "follow-up-reopens-a-finished-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task filed against a spec whose latest build finished by running out of work reopens that build, however long ago it finished, at the same level, landing and budget cap, and takes its people as a running build's follow-up does. The build record shows that it reopened, and the spec stops reading as done until the task has landed."
+    },
+    {
+      "key": "reopening-warns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator chose to manage unwanted restarts themselves (2026-11-01), which works only if they learn of a restart while they can still stop it.",
+      "statement": "Every reopening shows the operator a warning on the Overview screen, naming the spec, the task, who filed it, and how long ago the build had finished, with a way to stop the build from the warning. The warning stays until the operator dismisses it or the build ends."
+    },
+    {
+      "key": "flow-picks-it-up",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a flow-driven build, a follow-up is started by a flow within two firings of being filed, including when the build's earlier flow had already stopped on an empty queue, with no operator or agent action. A hand-driven build's follow-up waits on the board under its builder for the operator to start."
+    },
+    {
+      "key": "stopped-stays-stopped",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A stop is a decision; a finish is only the absence of work. Reopening a stopped build would spend what someone chose to stop spending.",
+      "statement": "A follow-up filed against a spec whose latest build was stopped, whether by the operator, its budget cap or its window, or against an archived spec, restarts nothing and shows no reopening warning. It stays on the board with no build, the filer is told why, and on a non-archived spec the operator's next Build takes it in."
+    },
+    {
+      "key": "one-driver-still-holds",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Two follow-ups filed together reopen one build and one flow and show one warning naming both, and a second driver on the reopened build is refused as on any running build."
+    },
+    {
+      "key": "acceptance-drive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "On the trial Hub, a real Haiku agent asks how to judge the models, reads the project's record when told to, and writes a spec with one hazardous and one routine task; they receive different agents with reasons and Build opens with them filled in. After that build finishes, a reviewer files a follow-up, a flow starts it under the build's people with nobody stepping in, the warning appears on the Overview screen in a browser, and stopping from it stops the build."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/building-a-spec-ties-together-from-plan-to-board/spec.json",
+    "slice": "recommended-people"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The author asking the operator which sources to judge the models by",
+      "A per-model record of this project's work that agents can read",
+      "A recommended builder and checker for every task, with a reason for each",
+      "Build opening with those picks and showing their reasons",
+      "A warning, not a refusal, for a task with no recommendation or no reason",
+      "Correcting the writing steps' stale reviewer and tester wording",
+      "A follow-up filed against a spec joining its running or finished build and going to that build's people",
+      "A new flow starting a follow-up on a build whose earlier flow has ended",
+      "A warning on the Overview screen on every reopening, from which the operator can stop the build"
+    ],
+    "non_goals": [
+      "A time limit on reopening a finished build",
+      "Showing the reopening warning anywhere other than the Overview screen",
+      "Ranking or recommending named agents by their own past work; performance is per model",
+      "A price table or scoring rule in the Hub; the author judges",
+      "The Hub choosing the people itself",
+      "Recommendations the operator must approve as a step",
+      "An approval step before a build reopens; the operator is warned, not asked",
+      "Reopening a build the operator stopped, or one stopped by its cap or window",
+      "Redesigning the Build dialog (slice build-dialog-overhaul)",
+      "Starting agents automatically in a hand build",
+      "Changing what the levels Fast, Reviewed and Gated decide",
+      "Adding recommendations to documents already approved",
+      "Follow-ups on tasks with no spec"
+    ]
+  },
+  "summary": "While a spec is written, the author asks the operator how to judge the models (what it already knows, a web search, or a review of how they performed in this project), then gives each task a recommended builder and checker with a stated reason. Build opens with them filled in. A follow-up task filed against a spec joins its build and goes to that build's people. If the build had finished, it reopens and a new flow starts the task without anyone stepping in, and the Overview screen warns the operator, who can stop it there.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [],
+      "description": "Write a drive under scripts/drive/ against the trial Hub :8010, binding Haiku, covering the authoring, Build dialog, follow-up and Overview warning steps of the acceptance drive. Run it on master and record that it fails for the expected reasons.",
+      "files": [
+        "scripts/drive/d1101_recommended_people.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "acceptance-drive"
+      ],
+      "reviewer": null,
+      "title": "Write the recommendations and follow-up drive"
+    },
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Give agents a read of this project's work per model: tasks built, send-backs by reason class, API-equivalent cost and sample sizes, attributing each task to the model that ran it. Check the MCP rules in .claude/rules/ first.",
+      "files": [
+        "hub/hub/mcp_server.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/work_tally.py",
+        "hub/tests/test_per_model_record.py"
+      ],
+      "from": null,
+      "key": "model-record",
+      "requirements": [
+        "per-model-record"
+      ],
+      "reviewer": null,
+      "title": "Agents can read the per-model record"
+    },
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [
+        "model-record"
+      ],
+      "description": "Ask for the judging sources and for a builder, checker and reasons on every task in the writing steps, and correct the stale reviewer and tester wording; give the author each open agent's model; hold a reason per pick; warn on missing or self-checking picks; show reasons and closed agents in the Build dialog's existing rows. UI tests are fed the route's real payload; rebuild and commit the bundle.",
+      "files": [
+        "hub/hub/spec_journey.py",
+        "hub/hub/spec_payload.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/ui/src/components/spec/BuildDialog.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "recommend",
+      "requirements": [
+        "every-task-recommended",
+        "weighs-model-cost-complexity",
+        "asks-how-to-judge",
+        "checker-is-not-builder",
+        "build-opens-with-picks",
+        "missing-pick-warns",
+        "pick-no-longer-open"
+      ],
+      "reviewer": null,
+      "title": "Recommend people per task, with reasons"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "checker": "QA",
+      "depends_on": [
+        "recommend"
+      ],
+      "description": "Make a task filed against a spec take the build's people, reopen a build that finished by running out of work at any age, give it a new flow, and show a warning on the Overview screen from which the build can be stopped. Leave stopped and archived cases alone and tell the filer, have the next Build take in a waiting task, and hold one build, one flow and one warning under simultaneous filing. UI tests are fed the route's real payload; rebuild and commit the bundle. Then run the drive until it passes.",
+      "files": [
+        "hub/hub/builds.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/spec_tasks.py",
+        "hub/hub/scheduler.py",
+        "hub/ui/src/components/overview",
+        "hub/hub/static/ui",
+        "hub/tests/test_recommended_people.py"
+      ],
+      "from": null,
+      "key": "follow-ups",
+      "requirements": [
+        "follow-up-takes-the-build-people",
+        "follow-up-reopens-a-finished-build",
+        "reopening-warns",
+        "flow-picks-it-up",
+        "stopped-stays-stopped",
+        "one-driver-still-holds",
+        "acceptance-drive"
+      ],
+      "reviewer": null,
+      "title": "Follow-ups reopen a finished build, with a warning"
+    }
+  ],
+  "title": "Every task comes with a recommended builder and checker"
+}

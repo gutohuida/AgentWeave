@@ -35,6 +35,8 @@ export interface SpecSurfaceProps {
   /** Decisions the Hub's phase controls offer beyond the page's own buttons. */
   chrome?: HeaderChrome
   banner?: (context: { jump: (anchor: string) => void }) => React.ReactNode
+  /** The document's build retrospective, under its builds. */
+  retrospective?: (context: { flash: string | null; onCopyLink: (anchor: string) => void }) => React.ReactNode
 }
 
 export interface SpecWorkspaceProps extends SpecSurfaceProps {
@@ -130,17 +132,20 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 onCopyLink={props.onCopyLink}
                 onOpenDocument={props.onOpenDocument}
                 builds={
-                  <SpecBuildsSection
-                    builds={props.builds}
-                    canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
-                    changeOnly={doc.kind !== 'change-spec'}
-                    now={props.now}
-                    flash={nav.flash}
-                    onStartBuild={props.onStartBuild}
-                    onOpenRuns={props.onOpenRuns}
-                    onStop={props.onStopBuild}
-                    onCopyLink={props.onCopyLink}
-                  />
+                  <>
+                    <SpecBuildsSection
+                      builds={props.builds}
+                      canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
+                      changeOnly={doc.kind !== 'change-spec'}
+                      now={props.now}
+                      flash={nav.flash}
+                      onStartBuild={props.onStartBuild}
+                      onOpenRuns={props.onOpenRuns}
+                      onStop={props.onStopBuild}
+                      onCopyLink={props.onCopyLink}
+                    />
+                    {props.retrospective?.({ flash: nav.flash, onCopyLink: props.onCopyLink })}
+                  </>
                 }
               />
             </div>
@@ -158,7 +163,7 @@ type PanelTab = 'document' | 'tasks' | 'builds'
 
 function tabFor(anchor: string): PanelTab {
   if (anchor.startsWith('task-') || anchor === anchors.section('tasks')) return 'tasks'
-  if (anchor.startsWith('build-') || anchor === anchors.section('builds')) return 'builds'
+  if (anchor.startsWith('build-') || anchor === anchors.section('builds') || anchor === anchors.section('retrospective')) return 'builds'
   return 'document'
 }
 
@@ -261,17 +266,20 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
               onCopyLink={props.onCopyLink}
               onOpenDocument={props.onOpenDocument}
               builds={
-                <SpecBuildsSection
-                  builds={props.builds}
-                  canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
+                <>
+                  <SpecBuildsSection
+                    builds={props.builds}
+                    canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
                     changeOnly={doc.kind !== 'change-spec'}
-                  now={props.now}
-                  flash={nav.flash}
-                  onStartBuild={props.onStartBuild}
-                  onOpenRuns={props.onOpenRuns}
-                  onStop={props.onStopBuild}
-                  onCopyLink={props.onCopyLink}
-                />
+                    now={props.now}
+                    flash={nav.flash}
+                    onStartBuild={props.onStartBuild}
+                    onOpenRuns={props.onOpenRuns}
+                    onStop={props.onStopBuild}
+                    onCopyLink={props.onCopyLink}
+                  />
+                  {props.retrospective?.({ flash: nav.flash, onCopyLink: props.onCopyLink })}
+                </>
               }
             />
           </div>

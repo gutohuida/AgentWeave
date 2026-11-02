@@ -3003,14 +3003,15 @@ async def decide_firing(
 
         review_target = await task_integration.review_target(session, task)
         if not review_target.resolved:
-            unstaffed.append(
-                (
-                    task.id,
-                    f"{review_target.refusal or 'there is no commit to review'} Until the work "
-                    f"that finished this task is recorded as evidence naming a commit, no "
-                    f"reviewer can be given anything to look at.",
+            refusal = review_target.refusal or "there is no commit to review"
+            # The evidence remedy only where evidence decides: a task with no requirement has no
+            # branch to review, and recording evidence is not what it is missing.
+            if review_target.evidence_would_resolve:
+                refusal += (
+                    " Until the work that finished this task is recorded as evidence naming a "
+                    "commit, no reviewer can be given anything to look at."
                 )
-            )
+            unstaffed.append((task.id, refusal))
             continue
 
         # **Not while the task's check run is undecided** (`checks-run-before-anyone-reviews`, D6).
