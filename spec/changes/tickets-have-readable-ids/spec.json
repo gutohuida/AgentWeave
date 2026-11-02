@@ -1,0 +1,466 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a spec with acronym BPS and a project with acronym AW",
+      "how_to_check": "Hub test through the approval and create routes",
+      "key": "ac-mint",
+      "requirement": "every-task-has-one",
+      "then": "the tasks read BPS-1, BPS-2 and AW-1",
+      "when": "the spec is approved with two tasks, and a task with no spec is created"
+    },
+    {
+      "checked_by": "agent",
+      "given": "BPS-1 to BPS-3, with BPS-3 deleted, and 20 simultaneous creates",
+      "how_to_check": "Hub test with concurrent requests against a file database",
+      "key": "ac-unique",
+      "requirement": "unique-never-reused",
+      "then": "they hold BPS-4 to BPS-23 with no duplicate and no failure",
+      "when": "the creates finish"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task BPS-3, and task AW-7 with no spec",
+      "how_to_check": "Hub test",
+      "key": "ac-stable",
+      "requirement": "never-changes",
+      "then": "they still read BPS-3 and AW-7",
+      "when": "BPS-3's spec is renamed and the task is reassigned, and AW-7 is linked to a spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project already holding acronym BPS",
+      "how_to_check": "Hub test",
+      "key": "ac-acronym",
+      "requirement": "acronym-derived",
+      "then": "it receives a different acronym meeting the shape",
+      "when": "a second spec whose title would also derive BPS is created"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec titled 'Secret Keys', one titled 'Tasks', and an edit to sk",
+      "how_to_check": "Hub test, including `runner_events` redaction",
+      "key": "ac-refused",
+      "requirement": "acronym-refusals",
+      "then": "neither is given SK or TASK, the edit is refused, and text carrying a minted id in lowercase survives the redactor unchanged",
+      "when": "each acronym is derived or the edit is sent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec with no tasks, then the same spec with one",
+      "how_to_check": "UI test plus Hub test",
+      "key": "ac-edit",
+      "requirement": "acronym-editable-before-first-task",
+      "then": "the first change takes effect and the first task uses it; the second is refused with the reason",
+      "when": "the operator changes its acronym each time"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task BPS-3 and another project that also holds a BPS-3",
+      "how_to_check": "Hub test enumerating the task routes and tools, failing if one is added that does not resolve",
+      "key": "ac-accepted",
+      "requirement": "accepted-everywhere",
+      "then": "each acts on the first project's task, never the other's",
+      "when": "each task route and agent tool is called with bps-3 from the first project"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task from before the migration",
+      "how_to_check": "Hub test",
+      "key": "ac-old",
+      "requirement": "old-ids-resolve",
+      "then": "everything works as it did and the branch is still agentweave/task/task-hex",
+      "when": "it is fetched by its task-hex id, and its branch and checkout are used"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the create route",
+      "how_to_check": "Hub test",
+      "key": "ac-shape",
+      "requirement": "no-ambiguous-ids",
+      "then": "it answers 422 naming id",
+      "when": "it is called with id BPS-3"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a board holding BPS-3",
+      "how_to_check": "UI test fed the task route's payload, plus a Hub test on the turn prompt",
+      "key": "ac-shown",
+      "requirement": "shown-everywhere",
+      "then": "the card shows BPS-3, the drawer shows both ids, both searches find it, and an agent turn bound to it names BPS-3",
+      "when": "the operator reads its card and drawer and searches bps-3, then its hex id"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent's turn on BPS-3 with uncommitted work",
+      "how_to_check": "Hub test over a real git repository",
+      "key": "ac-commit",
+      "requirement": "commit-messages-name-both",
+      "then": "the commit message holds both BPS-3 and the task-hex id",
+      "when": "the Hub snapshots it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the real :8000 database, never the database itself",
+      "how_to_check": "Hub migration test on fixture data, plus one recorded run on the copy",
+      "key": "ac-migrated",
+      "requirement": "existing-tasks-migrated",
+      "then": "every task has a unique readable id in creation order per acronym, all stored ids and references are unchanged, and the downgrade leaves the copy as it was",
+      "when": "the migration upgrades it, then downgrades it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub :8010 and a Haiku-bound agent",
+      "how_to_check": "Drive script under scripts/drive/, written first",
+      "key": "ac-drive",
+      "requirement": "acceptance-drive",
+      "then": "each step holds, and the drive fails on master because the id does not exist",
+      "when": "the drive runs a real turn that messages about its task, opens the board in a browser, calls each task tool with the id and renames the spec"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "e813f73be5c8ccf978af970e61ac2c29caed622d07e29450288dc2e634a9ddc3",
+      "FR-10": "ce62b0c686370598399cabf0210ae92e404e17801844312b44cec9ec9c896efc",
+      "FR-11": "ab26e2e9448b0c3e7c78dceb8f1224fa628a76323071c7e293b10f2818556654",
+      "FR-12": "9c721fb3e8a078c5cb7e4434e5210e0051774ddc3c863e9c1f5d939797689008",
+      "FR-13": "349d9d36d91e40c6424ed4fc660a8279ba1aac6051bc595d1671fd85154e8c84",
+      "FR-2": "e06c88e554ae33712802c7bdb3298340581d4e610e74d01b6ecc9b72b62ae321",
+      "FR-3": "f1e1ebd5c077dea32854c65e621b5adbdc24bf34ed49ba76882861944ca152c2",
+      "FR-4": "86b52f16f5d35c9b08e39aaf70a8eb3b589694e6f5fd5f7f548085335f543f97",
+      "FR-5": "f8ea6a64e965bba01441b5b721d0ff26dffd0633f1476ab897ffdcb922aaa015",
+      "FR-6": "20c730cd08d5ef96fe74cece5853ec42b4727340bd3f3a8c1083496b7d735f55",
+      "FR-7": "c76020c1fda9496ff60bc426ff80def926df277e0e0c88dd2629b05070ce1676",
+      "FR-8": "27a59e0cc3e3b03e2bc0712e8da01f3ca0442e0e1efe918b9d38b943c8c6de78",
+      "FR-9": "ff6d71bea9f713e0748be67e9601fce272d24c016a46297d2480aa07d3e2f355"
+    },
+    "high_water": 13,
+    "requirements": {
+      "acceptance-drive": "FR-10",
+      "accepted-everywhere": "FR-6",
+      "acronym-derived": "FR-4",
+      "acronym-editable-before-first-task": "FR-11",
+      "acronym-refusals": "FR-5",
+      "commit-messages-name-both": "FR-12",
+      "every-task-has-one": "FR-1",
+      "existing-tasks-migrated": "FR-13",
+      "never-changes": "FR-3",
+      "no-ambiguous-ids": "FR-8",
+      "old-ids-resolve": "FR-7",
+      "shown-everywhere": "FR-9",
+      "unique-never-reused": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "builders": [
+      "DeveloperOpus",
+      "Developer"
+    ],
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "driver": "flow",
+    "landing": "main",
+    "level": "reviewed",
+    "mode": "flow",
+    "reasons": {
+      "agent": "The Hub task migrates live data and changes a contract every door relies on, which is the Opus case.",
+      "builder": "Opus for the Hub task; Developer on Sonnet for the routine drive and UI tasks to save quota, set per task.",
+      "checker": "QA, on Opus, checks all three and tests by running; it builds none. Justified because this slice touches live data.",
+      "cron": "Every five minutes, the default.",
+      "mode": "Three tasks in order, each depending on the last; a flow runs them without hand-offs.",
+      "stop": "Stop when the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decided with the operator on 2026-10-31:\n- **The readable id is added beside the stored id, not in place of it.** `Task.id` is the primary key, 12 foreign keys and 7 plain columns hold it (`db/models.py`), and branch and checkout names validate it as `task-` plus lowercase hex (`worktrees.py:84`, `:191`). Rewriting all that on live data is expensive to undo and shows the operator nothing more. A readable id is resolved to the stored id once, where a request enters; the 61 internal `session.get(Task, ...)` calls keep working on stored ids.\n- **Readable ids are unique per project; stored ids stay globally unique.** Two projects can each have BPS-3, so a readable id resolves only inside a project. Agent doors know their project from the run credential; operator routes carry it in the path.\n- **The number comes from a high-water mark, never reused**, the rule `FR-n` follows (`spec_identity.py:74-96`). Unlike `FR-n`, parallel task creation is normal in a flow, so the database enforces uniqueness and minting holds under concurrency.\n- **The Hub derives the acronym; the operator can edit it until the spec's first task exists.** After that it is fixed, because ids never change.\n- **Branches and checkouts keep the hex id; commit messages name both.** Branch code reads the id back out of the name (`worktrees.py:1651`, `:2129`, `:2237`), and two projects may share a readable id.\n- **A task with no spec keeps its project-acronym id when later linked to a spec.** The id never changes, and the card already shows the spec.\n- **Existing tasks are numbered in creation order by the migration.**\n\n**Hazard (Tier 2).** The migration runs on the operator's real data at their next restart after merging. It only adds new columns and values, and no stored id, branch or reference changes. Rollback is the migration's downgrade, which drops what it added; ids written in text after the upgrade would stop resolving, which is why the hex id stays visible in the drawer. The migration is exercised on a copy of the real database before the task is finished.",
+  "evidence": {
+    "checked": [
+      "utils.py:24, api/v1/tasks.py:916, spec_tasks.py:411: how ids are minted",
+      "db/models.py:745: single-column global primary key; 12 foreign keys and 7 plain columns hold it",
+      "worktrees.py:84,191-228,1651,2129,2237: branch and checkout names require task- plus lowercase hex, and are read back",
+      "61 session.get(Task, ...) calls across 21 hub modules: internal lookups stay on stored ids",
+      "schemas/tasks.py:18,21: the create route accepts caller ids that look readable",
+      "runner_events.py:71: the redactor's sk- alternative is case-sensitive at a word start",
+      "spec_identity.py:74-96: FR-n's high-water precedent, with no lock in spec_service.py",
+      "A survey found no regex parsing task ids out of free text; the UI has startsWith('task-') tests (EvidenceBrowser.tsx:38, SpecWorkspace.tsx:160)"
+    ],
+    "limits": [
+      "Nothing is driven yet; the drive task establishes the failing baseline",
+      "The migration's run time on real data is unmeasured until the hub task runs it on a copy",
+      "The criteria are proposed coverage, not passing tests"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus",
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-01T15:25:59.047818+00:00",
+        "id": "build-b7f12527ddd3",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-10-31T23:27:21.717704+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "hub": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "ui": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Do existing tasks get readable ids? Answer: yes, in creation order (operator, 2026-10-31).",
+      "resolved": true
+    },
+    {
+      "question": "Who picks the acronym? Answer: the Hub derives it; editable until the spec's first task exists (operator, 2026-10-31).",
+      "resolved": true
+    },
+    {
+      "question": "Do branches and checkouts use the readable id? Answer: no; they keep the hex id, and commit messages name both (operator, 2026-10-31).",
+      "resolved": true
+    },
+    {
+      "question": "Does a task with no spec keep its id when linked to one? Answer: yes (operator, 2026-10-31).",
+      "resolved": true
+    }
+  ],
+  "problem": "A task is named `task-5a9efc6d2670` everywhere: 12 random hex characters (`hub/hub/utils.py:24`, minted at `api/v1/tasks.py:916` and `spec_tasks.py:411`). Agents write that in messages and notes, the drawer shows it in full (`TaskDetailDrawer.tsx:530`), and the board card does not show it at all. Nobody can remember it, say it, or tell from it which spec a task belongs to, so following an agent's message to the board means copying and searching.",
+  "requirements": [
+    {
+      "key": "every-task-has-one",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every task created through any door receives a readable id of the form ACRONYM-N: its spec's acronym if it belongs to a spec at creation, otherwise the project's acronym."
+    },
+    {
+      "key": "unique-never-reused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A deleted task's id still appears in old messages and notes; reusing it would point them at the wrong work.",
+      "statement": "A readable id is unique within its project, including under simultaneous creation, and its number is never used again within that acronym, even after the task is deleted."
+    },
+    {
+      "key": "never-changes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task's readable id does not change when its spec is renamed or archived, when it is reassigned, or when a task with no spec is later linked to a spec."
+    },
+    {
+      "key": "acronym-derived",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An acronym of 2 to 5 uppercase letters and digits starting with a letter is derived from the title or name, and is unique within the project across specs and the project itself."
+    },
+    {
+      "key": "acronym-refusals",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "task-12 would be read as a stored id (`worktrees.py:84`), and a lowercase sk-12 is destroyed by the secret redactor (`runner_events.py:71`), which already cost every task id its name once (F118).",
+      "statement": "An acronym can never be TASK or SK, in any case, whether derived or edited."
+    },
+    {
+      "key": "acronym-editable-before-first-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can see a spec's acronym on its page and change it until the spec's first task exists; after that a change is refused, naming why. An edited acronym obeys the same shape, uniqueness and refusal rules."
+    },
+    {
+      "key": "accepted-everywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every operator route and agent tool that takes a task id, including prerequisites, accepts the readable id in any case as well as the stored id, and acts on the same task within the caller's project."
+    },
+    {
+      "key": "old-ids-resolve",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A stored task-hex id keeps resolving wherever it did, indefinitely, and branch and checkout names stay as they are."
+    },
+    {
+      "key": "no-ambiguous-ids",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The create route accepts caller ids such as BPS-3 today (`schemas/tasks.py:18`), and one could shadow a real readable id.",
+      "statement": "A caller-supplied task id shaped like a readable id is refused at creation."
+    },
+    {
+      "key": "shown-everywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The readable id is what the board card, task drawer, prerequisite lists, build record, messages and agent turn prompts show to name a task, the drawer also shows the stored id, and the board search finds a task by either."
+    },
+    {
+      "key": "commit-messages-name-both",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A commit message the Hub writes that names a task names both its readable id and its stored id."
+    },
+    {
+      "key": "existing-tasks-migrated",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "After the migration, every existing task holds a readable id numbered in creation order within its acronym, and nothing else about it has changed. A task whose spec no longer exists takes the project's acronym."
+    },
+    {
+      "key": "acceptance-drive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "On the trial Hub, a real agent turn names a task by its readable id, the operator finds it on the board by that id, every task tool accepts it, and the id is unchanged after the spec is renamed."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/building-a-spec-ties-together-from-plan-to-board/spec.json",
+    "slice": "readable-task-ids"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A readable id for every new and existing task",
+      "An acronym per spec and per project, editable for a spec until its first task exists",
+      "The readable id shown wherever a task is named to the operator or an agent",
+      "Every task route and tool accepting the readable id as well as the stored id",
+      "Commit messages naming both ids",
+      "A migration on live data, with its rollback named"
+    ],
+    "non_goals": [
+      "Changing the primary key or the columns that reference it",
+      "Renaming branches or checkouts",
+      "Rewriting ids already written in old messages, notes or commits",
+      "Retiring task-hex ids",
+      "A recommended builder and checker per task (slice recommended-people)",
+      "Redesigning the Build dialog or the spec header",
+      "Readable ids for runs, messages, documents or other records",
+      "Finding a task by readable id across projects",
+      "Editing a project's acronym or an acronym already in use"
+    ]
+  },
+  "summary": "Every task, old and new, gets a short id made of its spec's acronym and a number, such as BPS-3, or the project's acronym when it has no spec. The id is shown wherever a task is named and accepted wherever a task id is, and never changes.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [],
+      "description": "Write a drive under scripts/drive/ against the trial Hub :8010, binding Haiku: a real agent turn on a spec task messages about its task by readable id, the board is searched for that id in a browser, each task tool is called with it, and the spec is renamed and the id rechecked. Run it on master and record that it fails because the id does not exist.",
+      "files": [
+        "scripts/drive/d1031c_readable_ids.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "acceptance-drive"
+      ],
+      "reviewer": null,
+      "title": "Write the readable-ids drive, failing on master"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "checker": "QA",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add the migration and models, acronym derivation and its rules, concurrent-safe minting at both creation paths, resolution of a readable id at every task route and agent tool, refusal of readable-shaped caller ids, both ids in Hub commit messages, the readable id in agent turn prompts and messages, and the route to edit a spec's acronym. Test each route's and tool's resolution by enumerating them. Run the migration up and down on a copy of the real database and record the output. Check the migration rules in .claude/rules/ first.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/api/v1/mender.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/spec_tasks.py",
+        "hub/hub/schemas/tasks.py",
+        "hub/hub/worktrees.py",
+        "hub/tests/test_tickets_have_readable_ids.py"
+      ],
+      "from": null,
+      "key": "hub",
+      "requirements": [
+        "every-task-has-one",
+        "unique-never-reused",
+        "never-changes",
+        "acronym-derived",
+        "acronym-refusals",
+        "acronym-editable-before-first-task",
+        "accepted-everywhere",
+        "old-ids-resolve",
+        "no-ambiguous-ids",
+        "commit-messages-name-both",
+        "existing-tasks-migrated",
+        "shown-everywhere"
+      ],
+      "reviewer": null,
+      "title": "Readable ids in the Hub: mint, migrate, resolve"
+    },
+    {
+      "builder": "Developer",
+      "checker": "QA",
+      "depends_on": [
+        "hub"
+      ],
+      "description": "Show the readable id on the board card, drawer (with the stored id), prerequisite lists and build record; make board search find either id; show and edit a spec's acronym on its page with the refusal explained. Check the startsWith('task-') tests in EvidenceBrowser.tsx and SpecWorkspace.tsx against the new id. UI tests fed the route's real payload, rebuild and commit the bundle, then run the drive until it passes.",
+      "files": [
+        "hub/ui/src/components/tasks",
+        "hub/ui/src/components/spec/page",
+        "hub/ui/src/components/evidence/EvidenceBrowser.tsx",
+        "hub/ui/src/api/tasks.ts",
+        "hub/ui/src/api/spec.ts",
+        "hub/ui/src/__tests__/readableIds.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "shown-everywhere",
+        "acronym-editable-before-first-task",
+        "acceptance-drive"
+      ],
+      "reviewer": null,
+      "title": "Show readable ids and edit the acronym"
+    }
+  ],
+  "title": "Tickets have readable ids"
+}

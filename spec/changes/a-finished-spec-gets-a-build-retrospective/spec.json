@@ -2,21 +2,21 @@
   "acceptance_criteria": [
     {
       "checked_by": "agent",
-      "given": "a trial Hub (:8010) serving a throwaway project in testbed/ that is not AgentWeave's repository, the build retrospective job on with a Haiku-bound runner, and a two-task document built by a flow where the first task was sent back once",
-      "how_to_check": "scripts/drive/ acceptance drive against the trial Hub, real Haiku turns",
-      "key": "acceptance-drive",
-      "requirement": "fires-when-the-last-task-is-approved",
-      "then": "within the drive's timeout one retrospective of that document appears on its spec page, its send-backs section names the real sent-back task id, its transcripts list includes the sent-back run, and that project's vault gains one tracked source naming the document; the drive fails at any step that does not fire for real",
-      "when": "the operator approves the document's last task"
-    },
-    {
-      "checked_by": "agent",
       "given": "a project with no row for the build retrospective job",
       "how_to_check": "hub test over GET /manager/jobs and the approval path",
       "key": "job-listed-and-off-by-default",
       "requirement": "job-on-the-manager-page",
       "then": "the page lists 'Build retrospective' turned off with no runner, and no manager_job_fired event for it is recorded",
       "when": "the operator opens the Manager page and a document's last task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub on :8020 with its own database, started from the task's own checkout, serving a throwaway project in testbed/ that is not AgentWeave's repository, the build retrospective job on with a Haiku-bound runner, and a two-task document built by a flow where the first task was sent back once",
+      "how_to_check": "scripts/drive/ acceptance drive against a Hub on :8020, real Haiku turns",
+      "key": "acceptance-drive",
+      "requirement": "fires-when-the-last-task-is-approved",
+      "then": "within the drive's timeout one retrospective of that document appears on its spec page, its send-backs section names the real sent-back task id, its transcripts list includes the sent-back run, and that project's vault gains one tracked source naming the document; the drive fails at any step that does not fire for real, and refuses to run if :8020 already answers",
+      "when": "the operator approves the document's last task"
     },
     {
       "checked_by": "agent",
@@ -44,24 +44,6 @@
       "requirement": "reads-the-whole-record",
       "then": "each seeded record appears in the input under its id, and the ask_user question carries its wait time",
       "when": "the retrospective's input is assembled"
-    },
-    {
-      "checked_by": "agent",
-      "given": "a build with one run per flag (send-back, stall, failed, mender, over twice the median) and three ordinary runs",
-      "how_to_check": "hub test on the input builder",
-      "key": "only-and-all-flagged-transcripts",
-      "requirement": "transcripts-of-flagged-runs",
-      "then": "all five flagged runs' transcripts are included, no ordinary run's transcript is, and the report lists exactly the five",
-      "when": "the input is assembled"
-    },
-    {
-      "checked_by": "agent",
-      "given": "a seeded four-task build whose input is larger than the model's limit (a test limit set low) but each task's records fit, and a second build that fits",
-      "how_to_check": "hub test with a stubbed worker recording its inputs",
-      "key": "split-when-too-large",
-      "requirement": "large-builds-are-reviewed-in-parts",
-      "then": "the first makes more than one part call, no task's records appear in two parts, then one final call whose input holds the part reviews, and its report states the number of parts; the second makes exactly one call",
-      "when": "each is reviewed with a stubbed worker"
     },
     {
       "checked_by": "agent",
@@ -125,14 +107,27 @@
       "requirement": "never-blocks-the-work",
       "then": "both succeed with no added delay waiting on the job, and a manager_job_fired event with outcome failed is recorded",
       "when": "the last task is approved and the document is then archived"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with one run per flag (send-back, stall, failed, mender, over twice the median) and three ordinary runs",
+      "how_to_check": "hub test on the input builder",
+      "key": "only-and-all-flagged-transcripts",
+      "requirement": "transcripts-of-flagged-runs",
+      "then": "all five flagged runs' transcripts are included, no ordinary run's transcript is, and the report lists exactly the five",
+      "when": "the input is assembled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded four-task build whose input is larger than the model's limit (a test limit set low) but each task's records fit, and a second build that fits",
+      "how_to_check": "hub test with a stubbed worker recording its inputs",
+      "key": "split-when-too-large",
+      "requirement": "large-builds-are-reviewed-in-parts",
+      "then": "the first makes more than one part call, no task's records appear in two parts, then one final call whose input holds the part reviews, and its report states the number of parts; the second makes exactly one call",
+      "when": "each is reviewed with a stubbed worker"
     }
   ],
   "algorithms": [],
-  "already_built": {
-    "built": false,
-    "commits": [],
-    "note": ""
-  },
   "aw_identity": {
     "digests": {
       "FR-1": "853e09096e2d4bc1c4fa4585643493bd6a4bee9e64c46afe44c45797cbe861ee",
@@ -141,7 +136,7 @@
       "FR-12": "6a3c8a1174098ed010ae29d57af3b167cfc2313e0a59d716fb23198eb854f913",
       "FR-13": "597e0d637d3004e5afbae5a3ba0969e399b5e6db3277fa40dfb411c6a95f2e28",
       "FR-14": "8c6d50b775a230755700aac6330f0cd960debf78682d829c401c7b03c1168a61",
-      "FR-2": "888a1fca4470613548a3623fbb51a8167403a9ea3ed8ea8bebebfb0a893b9fe8",
+      "FR-2": "4c056ceff9acf8dcce99c3c49057dc3d9ffe0e551ed267cd80cf462e49ad3d7b",
       "FR-3": "e9881b1cd920b90d63775e4f94e45ae077401980ce56435295b96fa203010c71",
       "FR-4": "6675e0508c5850aa6fdece4cacfd0e330cd2620d84ec7888eceb7edf5d11bd2f",
       "FR-5": "f9493673f634af96721dec103928af7a0a826f8b32455c03d1eb1a04ded86bc1",
@@ -171,28 +166,73 @@
     }
   },
   "delivery": {
-    "agent": "Developer",
+    "agent": "DeveloperOpus2",
+    "builder": "DeveloperOpus2",
+    "checker": "QA2",
     "cron": "*/5 * * * *",
     "mode": "flow",
     "reasons": {
-      "agent": "Sonnet by default for build work, per the quota guidance; nothing here touches main's data or a migration hazard that needs Opus (operator agreed 2026-10-29).",
+      "agent": "Developer and DeveloperOpus are held by the build running beside this one, and DeveloperOpus2 is the free builder.",
+      "builder": "DeveloperOpus2 is free today; a free Sonnet builder is the cheaper choice if the operator creates one, since nothing here touches main's data.",
+      "checker": "QA is checking the other build, so QA2 checks this one and neither queues behind the other.",
       "cron": "The 5-minute tick is the backstop; flows already advance on transitions.",
-      "mode": "Four chained tasks on one self-contained Hub feature suit a flow, and the operator is dogfooding flows one slice at a time.",
-      "reviewer": "QA reviews; the tasks are chained, so one reviewer is not the bottleneck it was on 10-25.",
-      "stop": "Stop when the queue empties so the flow does not idle once the slice is built.",
-      "tester": "QA tests the running product within its reviews; task 4's acceptance drive is the main live check, and a separate tester would add a hand-off per task."
+      "mode": "Four chained tasks on one self-contained Hub feature suit a flow.",
+      "stop": "Stop when the queue empties so the flow does not idle once the slice is built."
     },
-    "reviewer": "QA",
+    "reviewer": null,
     "stop_at": null,
-    "stop_when_queue_empties": true,
-    "tester": "QA"
+    "stop_when_queue_empties": true
   },
-  "design": "Grounding, not decisions: the manager registry (hub/hub/manager.py JOBS) is where the job is listed; the last-open-task moment is already detected in task_transition_service.py:1237 (chapters_job.is_last_open_task + fire_after_commit), which this job can hook beside; spec-vault-check (hub/hub/vault_spec_check.py) is the precedent for a one-shot no-tools spawn whose answer names ids the Hub validates and whose result lives on its manager_job_fired event; vault.add_source (hub/hub/vault.py:1069) adds a source. Whether the report needs its own table or lives on the event is the builder's call; if it needs a migration, the migration rules in .claude/rules/ apply.",
+  "design": "Grounding, not decisions: the manager registry (hub/hub/manager.py JOBS) is where the job is listed; the last-open-task moment is already detected in task_transition_service.py:1237 (chapters_job.is_last_open_task + fire_after_commit), which this job can hook beside; spec-vault-check (hub/hub/vault_spec_check.py) is the precedent for a one-shot no-tools spawn whose answer names ids the Hub validates and whose result lives on its manager_job_fired event; vault.add_source (hub/hub/vault.py:1069) adds a source. Whether the report needs its own table or lives on the event is the builder's call; if it needs a migration, the migration rules in .claude/rules/ apply.\n\nDriving this build (operator, 2026-11-01): this spec is built beside another build whose drives use the trial Hub on :8010. All driving here, by builder and checker alike, uses a Hub on :8020 with its own database under ~/.agentweave/hub/profiles/drive8020/, started from the driving task's own checkout and stopped when the drive ends. Never use :8010, the trial database or :8000. If :8020 already answers, the drive refuses and says so rather than reusing it, because that Hub may be running another checkout's code (F1121). The helpers in d1029_build_plan_in_spec.py fix the port at 8010 and reuse whatever answers, so they cannot be used for starting this Hub as they stand.",
   "evidence": {
     "checked": [],
     "limits": []
   },
   "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-01T23:32:07.669144+00:00",
+        "id": "build-1f9c52edb1d5",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-01T19:44:38.479160+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": null,
+            "checker": null
+          },
+          "automatic-choice-on-the-manager-page": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "retrospective-job": {
+            "builder": null,
+            "checker": null
+          },
+          "review-in-parts": {
+            "builder": null,
+            "checker": null
+          },
+          "spec-page-retrospective": {
+            "builder": null,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
     "phase": "approved",
     "size": "small",
     "step": "build"
@@ -214,6 +254,10 @@
     },
     {
       "question": "A build too large for one model call: the Hub splits the input and reviews it in parts (operator, 2026-10-29).",
+      "resolved": true
+    },
+    {
+      "question": "Where is this build driven? On its own Hub on :8020, because another build drives :8010 (operator, 2026-11-01).",
       "resolved": true
     }
   ],
@@ -246,20 +290,6 @@
       "party": null,
       "rationale": null,
       "statement": "A retrospective's input holds, for every task of the document: its status transitions with who and when, its runs with agent, model, duration, outcome and cost, its notes, its evidence and every decision on it, its check-gate runs and results, the stalls and mender interventions naming it, the checkpoint summaries of its runs, and the document's amendments, reconcile gaps and the ask_user questions raised in its runs with how long each waited for an answer."
-    },
-    {
-      "key": "transcripts-of-flagged-runs",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "Transcripts are needed to explain why a flagged event happened; unflagged transcripts are mostly file reads and test runs. The operator chose no budget on flagged transcripts (2026-10-29).",
-      "statement": "A run's full transcript is included exactly when the run is flagged: it ended in a send-back, a stall names it, it failed or was stopped, it is a mender run, or its duration is more than twice the median of the build's runs. Every flagged run's transcript is included, with no budget, and the report lists the runs whose transcripts it read."
-    },
-    {
-      "key": "large-builds-are-reviewed-in-parts",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "With no transcript budget, the builds most worth reviewing (long, troubled ones) are the ones that will not fit; a retrospective that fails on exactly those is worth little (operator, 2026-10-29).",
-      "statement": "When a build's input does not fit one call to the chosen model, the Hub splits it into parts that each fit, with no task's records divided across parts, reviews each part separately, and then writes one report from the part reviews and the build-wide figures; the report says how many parts it was reviewed in. A build that fits is reviewed in one call."
     },
     {
       "key": "figures-come-from-the-records",
@@ -302,6 +332,20 @@
       "party": null,
       "rationale": null,
       "statement": "A retrospective that is off, running, failed or empty never delays or refuses approving a task or approving or archiving a document; each firing, and each part of a firing, is recorded as a manager_job_fired event with its outcome and usage, like the other jobs."
+    },
+    {
+      "key": "transcripts-of-flagged-runs",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Transcripts are needed to explain why a flagged event happened; unflagged transcripts are mostly file reads and test runs. The operator chose no budget on flagged transcripts (2026-10-29).",
+      "statement": "A run's full transcript is included exactly when the run is flagged: it ended in a send-back, a stall names it, it failed or was stopped, it is a mender run, or its duration is more than twice the median of the build's runs. Every flagged run's transcript is included, with no budget, and the report lists the runs whose transcripts it read."
+    },
+    {
+      "key": "large-builds-are-reviewed-in-parts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With no transcript budget, the builds most worth reviewing (long, troubled ones) are the ones that will not fit; a retrospective that fails on exactly those is worth little (operator, 2026-10-29).",
+      "statement": "When a build's input does not fit one call to the chosen model, the Hub splits it into parts that each fit, with no task's records divided across parts, reviews each part separately, and then writes one report from the part reviews and the build-wide figures; the report says how many parts it was reviewed in. A build that fits is reviewed in one call."
     }
   ],
   "schema_version": 1,
@@ -326,14 +370,15 @@
       "Re-running tests, drives or the check gate: it reads what was recorded and runs nothing",
       "Reading the project's code or git history beyond what the build's records hold",
       "Blocking approval or archiving of a document on the retrospective",
-      "Reading the full transcript of runs the records do not flag"
+      "Reading the full transcript of runs the records do not flag",
+      "Making drives in general safe to run side by side: this build keeps to :8020, and F1121 stays open for the shared helpers"
     ]
   },
   "summary": "A new manager job reviews a spec document's whole build, in whatever project it was built, once it finishes (or when the operator asks): where the time went, what worked, what did not, what the spec missed, and what to improve. It produces a grounded report on the spec page and writes its lessons to the project's vault as a tracked source.",
   "tasks": [
     {
       "depends_on": [],
-      "description": "Write the acceptance drive scripts/drive/d1029_build_retrospective.py per the acceptance-drive criterion: on the trial Hub (:8010) with a throwaway testbed/ project (not this repository), a Haiku-bound runner, a two-task document built by a flow with one send-back; approve the last task; assert a retrospective appears for the document, names the sent-back task id in send-backs, lists the sent-back run among transcripts read, and the project's vault gains one tracked source naming the document. Run it on today's code and record it failing (it must fail because no retrospective fires, not for a setup error). The drive is not part of the project's checks, so the suite stays green.",
+      "description": "Write the acceptance drive scripts/drive/d1029_build_retrospective.py per the acceptance-drive criterion: on a Hub on :8020 with its own database, started from this task's checkout and stopped when the drive ends (see Driving this build in the design), with a throwaway testbed/ project (not this repository), a Haiku-bound runner, a two-task document built by a flow with one send-back; approve the last task; assert a retrospective appears for the document, names the sent-back task id in send-backs, lists the sent-back run among transcripts read, and the project's vault gains one tracked source naming the document. Run it on today's code and record it failing (it must fail because no retrospective fires, not for a setup error). The drive is not part of the project's checks, so the suite stays green.",
       "files": [
         "scripts/drive/d1029_build_retrospective.py"
       ],
@@ -351,7 +396,7 @@
       "depends_on": [
         "acceptance-drive"
       ],
-      "description": "Register the Build retrospective manager job; fire it after the last open task of a document is approved (beside the chapters hook) and from an operator run route for a document (refusing a second while one runs); assemble the input from every record of the document's tasks plus the full transcripts of flagged runs; compute all time and cost figures from the records; spawn the model once, validate its answer, drop findings citing no id or an id outside the build and count them; store the report so it can be listed per document (newest first) with time, trigger, model, cost and outcome; add one dated tracked vault source with its lessons; record each firing as a manager_job_fired event and never delay approval or archive. Hub tests for each criterion of the listed requirements, with stubbed workers.",
+      "description": "Register the Build retrospective manager job; fire it after the last open task of a document is approved (beside the chapters hook) and from an operator run route for a document (refusing a second while one runs); assemble the input from every record of the document's tasks plus the full transcripts of flagged runs; compute all time and cost figures from the records; spawn the model once, validate its answer, drop findings citing no id or an id outside the build and count them; store the report so it can be listed per document (newest first) with time, trigger, model, cost and outcome; add one dated tracked vault source with its lessons; record each firing as a manager_job_fired event and never delay approval or archive. Hub tests for each criterion of the listed requirements, with stubbed workers. Any driving of this task, by builder or checker, is on :8020.",
       "files": [
         "hub/hub/build_retrospective.py",
         "hub/hub/manager.py",
@@ -380,7 +425,7 @@
       "depends_on": [
         "retrospective-job"
       ],
-      "description": "When the assembled input does not fit one call to the chosen model, split it into parts by whole task, review each part, then write the one report from the part reviews and the Hub's build-wide figures, stating the part count; grounding applies to every part and the final report; each part is recorded as a manager_job_fired event. A build that fits still makes one call. Hub tests with a stubbed worker and a low test limit.",
+      "description": "When the assembled input does not fit one call to the chosen model, split it into parts by whole task, review each part, then write the one report from the part reviews and the Hub's build-wide figures, stating the part count; grounding applies to every part and the final report; each part is recorded as a manager_job_fired event. A build that fits still makes one call. Hub tests with a stubbed worker and a low test limit. Any driving of this task, by builder or checker, is on :8020.",
       "files": [
         "hub/hub/build_retrospective.py",
         "hub/tests/test_build_retrospective_parts.py"
@@ -400,7 +445,7 @@
         "retrospective-job",
         "review-in-parts"
       ],
-      "description": "On a spec document's page, show its newest retrospective (time, trigger, model, part count, cost, every report section), earlier ones reachable, a failed firing with its reason and run-again, and a Review this build action that answers when one is already in progress. UI component tests fed the real route payload in the order the route returns it; refresh the UI bundle (commit hub/ui/src and hub/hub/static/ui together). Then run the acceptance drive against the trial Hub and record it passing.",
+      "description": "On a spec document's page, show its newest retrospective (time, trigger, model, part count, cost, every report section), earlier ones reachable, a failed firing with its reason and run-again, and a Review this build action that answers when one is already in progress. UI component tests fed the real route payload in the order the route returns it; refresh the UI bundle (commit hub/ui/src and hub/hub/static/ui together). Another build also refreshes the bundle: if the merge conflicts in hub/hub/static/ui, merge main and regenerate the bundle rather than resolving it by hand. Then run the acceptance drive against the Hub on :8020 and record it passing; the checker's own drive and browser checks also use :8020.",
       "files": [
         "hub/ui/src/components/spec/page",
         "hub/ui/src/api",
@@ -416,6 +461,25 @@
       ],
       "reviewer": null,
       "title": "Retrospective on the spec page"
+    },
+    {
+      "depends_on": [
+        "spec-page-retrospective"
+      ],
+      "description": "hub/ui/src/components/settings/ManagerSettings.tsx:135 shows the automatic/button control only when job.key === 'chapters'. The Hub now accepts mode for build-retrospective too (manager.HAS_BUTTON), so show the control for this job as well, ideally driven by a value the job listing returns rather than a second hard-coded key. Add a UI component test fed the real GET /manager/jobs payload, and refresh the UI bundle (commit hub/ui/src and hub/hub/static/ui together; if the merge conflicts in hub/hub/static/ui, merge main and regenerate rather than resolving by hand). Any driving is on :8020.",
+      "files": [
+        "hub/ui/src/components/settings/ManagerSettings.tsx",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "automatic-choice-on-the-manager-page",
+      "requirements": [
+        "fires-when-the-last-task-is-approved",
+        "operator-asks-for-one"
+      ],
+      "reviewer": null,
+      "title": "Offer the automatic or button choice for the Build retrospective job on the Manager page"
     }
   ],
   "title": "A finished spec gets a build retrospective"

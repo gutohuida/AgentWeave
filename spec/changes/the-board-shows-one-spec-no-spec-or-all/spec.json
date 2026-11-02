@@ -182,6 +182,45 @@
     ]
   },
   "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer",
+          "QA2"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-10-31T19:27:03.506293+00:00",
+        "id": "build-37051e90da23",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-10-31T14:50:30.796338+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "build": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "task-26371095d3ce": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
     "phase": "approved",
     "size": "small",
     "step": "build"
