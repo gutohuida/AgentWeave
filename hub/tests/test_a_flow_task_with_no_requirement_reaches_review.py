@@ -11,16 +11,19 @@ on a build that could never finish.
 """
 
 import pytest
+from sqlalchemy import select
 
 from hub import task_integration
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     AIJob,
+    JobRun,
     Loop,
     SpecRequirement,
     Task,
     TaskDependency,
     TaskRequirementLink,
+    TaskTransition,
 )
 from hub.scheduler import JobScheduler, decide_firing
 
@@ -208,4 +211,47 @@ async def test_the_job_route_no_longer_answers_409(
     assert fired.status_code < 300, fired.text
     async with async_session_factory() as db:
         task = await db.get(Task, task_id)
-    assert (task.status, task.assignee) == ("under_review", REVIEWER)
+    if (task.status, task.assignee) != ("under_review", REVIEWER):
+        pytest.fail(await _why_no_review(loop_id, job_id, task_id, fired))
+
+
+async def _why_no_review(loop_id, job_id, task_id, fired):
+    """Everything that says why a firing staged no review: fails only on CI's runner, where the
+    route answers 2xx and the task stays `completed` (2026-11-02, CI run 41421652793)."""
+    async with async_session_factory() as db:
+        task = await db.get(Task, task_id)
+        transitions = (
+            (
+                await db.execute(
+                    select(TaskTransition)
+                    .where(TaskTransition.task_id == task_id)
+                    .order_by(TaskTransition.sequence)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        job_runs = (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()
+    decision = await _decide(loop_id)
+    return "\n".join(
+        [
+            f"task: status={task.status!r} assignee={task.assignee!r}",
+            f"route: {fired.status_code} {fired.text}",
+            "transitions: "
+            + repr(
+                [
+                    (t.from_status, t.to_status, t.actor_kind, t.actor_agent, t.origin, t.reason)
+                    for t in transitions
+                ]
+            ),
+            "job runs: " + repr([(r.status, r.trigger, r.error_summary) for r in job_runs]),
+            f"decision now: kind={decision.kind!r} stall={decision.stall_reason!r}",
+            "  selections: "
+            + repr([(s.task.id, s.agent, s.is_review) for s in decision.selections]),
+            f"  unstaffed: {decision.unstaffed!r}",
+            f"  deferred: {decision.deferred!r}",
+            f"  cannot staff: {decision._cannot_staff!r}",
+            f"  checks waits: {decision.checks_waits!r}",
+            f"  approvals: {decision.approvals!r}",
+        ]
+    )
