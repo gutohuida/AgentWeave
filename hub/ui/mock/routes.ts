@@ -10,7 +10,7 @@ export type MockRoute =
   | { kind: 'app-settings'; section: AppSettingsSection }
   | { kind: 'gallery' }
   | { kind: 'thread' }
-  /** The traces view; where it sits (own tab or inside Activity) is the mock bar's choice. */
+  /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }
 
 /** Project settings, one place under one name. Replaces Environment / Configuration / Settings. */

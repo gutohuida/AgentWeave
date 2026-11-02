@@ -11,7 +11,6 @@ import accountingJson from '../fixtures/accounting.json'
 import { agents, conversations, tasks } from '../fixtures'
 import { NIGHT_TALLY } from '../workFixture'
 import type { ScreenProps } from '../routes'
-import { useTracesPlacement } from '../tracesMock'
 import '@/styles/activity.css'
 
 const logs = logsJson as unknown as EventLogEntry[]
@@ -21,7 +20,6 @@ const accounting = accountingJson as unknown as AccountingSnapshot
  *  sub-view control drawn its own way); Ledger and Logs are unchanged in this mock. */
 export default function Activity({ go, now }: ScreenProps) {
   const [view, setView] = React.useState<'ledger' | 'activity' | 'logs'>('activity')
-  const placement = useTracesPlacement()
   const [grouping, setGrouping] = React.useState<Grouping>('spec')
   const [since, setSince] = React.useState('')
   const days = React.useMemo(
@@ -44,7 +42,7 @@ export default function Activity({ go, now }: ScreenProps) {
             { value: 'ledger', label: 'Ledger' },
             { value: 'activity', label: 'Activity' },
             { value: 'logs', label: 'Logs' },
-            ...(placement === 'activity' ? [{ value: 'traces', label: 'Traces' }] : []),
+            { value: 'traces', label: 'Traces' },
           ]}
         />
         <span className="aw-activity-note">The last 200 events</span>

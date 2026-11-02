@@ -9,7 +9,6 @@ import runsJson from '../fixtures/traces_runs.json'
 import hubJson from '../fixtures/traces_hub.json'
 import detailsJson from '../fixtures/traces_details.json'
 import { PROJECT_ID } from '../fixtures'
-import { useTracesPlacement } from '../tracesMock'
 import type { ScreenProps } from '../routes'
 import '@/styles/activity.css'
 
@@ -63,7 +62,6 @@ const NOW = new Date(Math.max(...ROWS.filter((r) => r.kind === 'run').map((r) =>
 const PAGE = 50
 
 export default function Traces({ go }: ScreenProps) {
-  const placement = useTracesPlacement()
   const client = useQueryClient()
   const [filters, setFilters] = React.useState<TraceFilters>(DEFAULT_FILTERS)
   const [grouping, setGrouping] = React.useState<TraceGrouping>('none')
@@ -131,7 +129,6 @@ export default function Traces({ go }: ScreenProps) {
     </>
   )
 
-  if (placement === 'tab') return page
   return (
     <div className="aw-activity-page">
       <div className="aw-activity-head">

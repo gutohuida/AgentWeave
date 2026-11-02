@@ -204,6 +204,14 @@ export function totals(rows: readonly TraceRow[]): TraceTotals {
   }
 }
 
+/** What a run's task is called on screen: its reference, and its title. A task with neither no
+ *  longer exists (operator, 2026-11-02): it is named as such, never by its raw id. */
+export const GONE_TASK = 'A task that no longer exists'
+
+export function taskName(row: Pick<TraceRow, 'task_ref' | 'task_title'>): { ref: string | null; title: string } {
+  return { ref: row.task_ref, title: row.task_title ?? (row.task_ref ? 'Untitled task' : GONE_TASK) }
+}
+
 /** "claude-opus-5-5" → "Opus 5.5"; anything else as it came. */
 export function modelLabel(model: string | null): string {
   if (!model) return 'no model'
@@ -230,7 +238,12 @@ function groupKey(row: TraceRow, grouping: TraceGrouping): { key: string; label:
       return { key: row.model ?? '', label: modelLabel(row.model), detail: null, narrow: null }
     case 'task':
       return row.task_id
-        ? { key: row.task_id, label: row.task_ref ?? row.task_id, detail: row.task_title, narrow: { task: { id: row.task_id, label: row.task_ref ?? row.task_title ?? 'task' } } }
+        ? {
+            key: row.task_id,
+            label: taskName(row).ref ?? taskName(row).title,
+            detail: taskName(row).ref ? taskName(row).title : null,
+            narrow: { task: { id: row.task_id, label: taskName(row).ref ?? taskName(row).title } },
+          }
         : { key: '', label: 'No task', detail: 'Runs from a conversation, not a task', narrow: null }
     case 'conversation':
       return row.conversation_id

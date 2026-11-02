@@ -1,7 +1,7 @@
 import * as React from 'react'
 import type { TraceKind } from '@/api/traces'
 import { Icon } from '@/components/common/Icon'
-import { MenuSelect } from '@/components/ui/menu'
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuSelect, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatCount, formatDateTime, formatDuration, formatMoney, formatTokens, formatTokensExact } from '@/lib/format'
@@ -18,6 +18,7 @@ import {
   type TraceGrouping,
   type TraceRow,
   type TraceTotals,
+  taskName,
 } from './tracesModel'
 import '@/styles/traces.css'
 
@@ -30,7 +31,8 @@ import '@/styles/traces.css'
 const MICROS = 1_000_000
 const GROUP_ROWS = 10
 
-const KINDS: TraceKind[] = ['run', 'worker', 'request', 'work', 'event']
+/** The Hub's own traces: behind a quieter choice than the agents' runs (operator, 2026-11-02). */
+const HUB_KINDS: TraceKind[] = ['worker', 'request', 'work', 'event']
 const RANGES: TimeRange[] = ['hour', 'day', 'week', 'month', 'all']
 const GROUPINGS: TraceGrouping[] = ['none', 'agent', 'model', 'task', 'conversation', 'day']
 
@@ -50,7 +52,7 @@ export interface TracesPageProps {
   onGrouping: (next: TraceGrouping) => void
   /** Over everything the filters match, not the loaded page (FR-8). */
   totals: TraceTotals
-  /** How many traces of each kind the other filters leave, for the kind switch. */
+  /** How many traces of each kind the other filters leave, for the Hub internals menu. */
   kindCounts: Partial<Record<TraceKind, number>>
   /** The loaded page, newest first, when ungrouped. */
   rows: TraceRow[]
@@ -74,13 +76,6 @@ export function TracesPage(props: TracesPageProps) {
   return (
     <div className="aw-traces" data-testid="traces-page">
       <div className="aw-traces-filters" role="group" aria-label="Filters">
-        <Segmented
-          label="Kind of trace"
-          value={filters.kind}
-          onChange={(kind) => set({ kind })}
-          options={KINDS.map((k) => ({ value: k, label: KIND_LABELS[k], count: kindCounts[k] }))}
-        />
-        <span className="aw-traces-filters-gap" />
         <MenuSelect
           label="Agent"
           value={filters.agent ?? '__all'}
@@ -91,6 +86,31 @@ export function TracesPage(props: TracesPageProps) {
           ]}
         />
         <MenuSelect label="Time range" value={filters.range} onChange={(range) => set({ range })} options={RANGES.map((r) => ({ value: r, label: RANGE_LABELS[r] }))} />
+        <span className="aw-traces-filters-gap" />
+        <Menu>
+          <MenuTrigger data-slot="traces-hub" className="aw-traces-hub" data-active={isRuns ? undefined : 'true'}>
+            <Icon name="settings" size={12} />
+            {isRuns ? 'Hub internals' : `Hub internals: ${KIND_LABELS[filters.kind]}`}
+            <Icon name="expand_more" size={12} />
+          </MenuTrigger>
+          <MenuContent>
+            <MenuLabel>What the Hub did itself</MenuLabel>
+            {HUB_KINDS.map((k) => (
+              <MenuItem key={k} icon={filters.kind === k ? 'check' : undefined} onSelect={() => set({ kind: k })}>
+                {KIND_LABELS[k]}
+                {kindCounts[k] !== undefined ? <span className="aw-traces-hub-count">{formatCount(kindCounts[k]!)}</span> : null}
+              </MenuItem>
+            ))}
+            {isRuns ? null : (
+              <>
+                <MenuSeparator />
+                <MenuItem icon="arrow_left" onSelect={() => set({ kind: 'run' })}>
+                  Back to agent runs
+                </MenuItem>
+              </>
+            )}
+          </MenuContent>
+        </Menu>
       </div>
 
       {named.length || narrowed ? (
@@ -327,12 +347,12 @@ function TraceTable({
                   <td className="aw-traces-model">{modelLabel(row.model)}</td>
                   <td className="aw-traces-task">
                     {row.task_id ? (
-                      <span className="aw-traces-subject" title={row.task_title ?? undefined}>
-                        <span className="aw-traces-ref">{row.task_ref}</span>
-                        <span className="truncate">{row.task_title}</span>
+                      <span className="aw-traces-subject" title={row.task_ref ? taskName(row).title : row.task_id ?? undefined} data-gone={row.task_ref ? undefined : 'true'}>
+                        {row.task_ref ? <span className="aw-traces-ref">{row.task_ref}</span> : null}
+                        <span className="truncate">{taskName(row).title}</span>
                         <NarrowButton
                           label={`Only runs on ${row.task_ref ?? 'this task'}`}
-                          onClick={() => onFilters({ ...filters, task: { id: row.task_id!, label: row.task_ref ?? row.task_title ?? 'task' } })}
+                          onClick={() => onFilters({ ...filters, task: { id: row.task_id!, label: taskName(row).ref ?? taskName(row).title } })}
                         />
                       </span>
                     ) : row.conversation_id ? (

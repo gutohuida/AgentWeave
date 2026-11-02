@@ -85,11 +85,13 @@ Hub by `py -3.11 mock/record_traces.py <db> <project>`: every run trace, the new
 of the Hub's own, and 22 whole run traces (the newest five and every error).
 
 ```
-http://localhost:5199/mock.html#traces                  # its own tab in the top bar
-http://localhost:5199/mock.html#traces?place=activity   # a fourth view inside Activity
+http://localhost:5199/mock.html#traces     # Activity → Traces
 ```
 
-The mock bar switches where it lives (the document's open question 1).
+Decided by the operator on 2026-11-02 after driving it: the view is a fourth view inside Activity
+(an own tab was the other choice shown, and is retired); the Hub's own traces sit behind a quieter
+"Hub internals" menu rather than beside agent runs; a task with no reference or title is "A task
+that no longer exists", never its raw id.
 
 ## The Spec page, redesigned (mock, 2026-10-26)
 

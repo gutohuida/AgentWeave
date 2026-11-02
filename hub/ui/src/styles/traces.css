@@ -55,6 +55,15 @@
 .aw-traces-table em { font-style: normal; color: var(--text-3); }
 .aw-traces-subject { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .aw-traces-subject[data-conversation="true"] { color: var(--text-2); }
+.aw-traces-subject[data-gone="true"] { color: var(--text-3); font-style: italic; }
+.aw-traces-hub {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; font-size: 12px;
+  color: var(--text-3); background: none; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer;
+}
+.aw-traces-hub:hover { color: var(--text-2); background: var(--row-hover); }
+.aw-traces-hub:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-traces-hub[data-active="true"] { color: var(--text); border-color: var(--border-hi); background: var(--surface-2); }
+.aw-traces-hub-count { margin-left: 12px; float: right; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .aw-traces-conv-icon { flex: none; color: var(--text-3); }
 .aw-traces-narrow-row {
   flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; margin-left: auto;
