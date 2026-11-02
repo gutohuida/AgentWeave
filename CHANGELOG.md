@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## [2.1.0] - 2026-11-02
+
+Builds that choose their people, ship in batches and keep moving: a spec now carries its build
+plan, every task arrives with a recommended builder and checker, and the Hub stops holding work
+hostage to failures that are not its own.
+
+### Changed
+
+- **The `proposed` phase is retired.** Check reports a document's readiness without moving it, and
+  approval goes straight from `exploring` (migration `0149` moves any `proposed` document back to
+  `exploring`). The lifecycle is now `exploring → approved → archived`, plus `current`.
+- **Document rigor is retired.** Approval's evidence rule is each task's level; open contract and
+  gate tasks keep their rule as a level, and pending edit proposals are marked stale (`0153`).
+- **A spec names its people in one place.** The build plan (driver, level, builders, checker,
+  per-task picks) lives in the spec, replacing seven overlapping fields, and Build opens with it
+  (`0152`, `0156`).
+
+### Added
+
+- **Recommended builder and checker per task**, each with a one-sentence reason weighing the
+  agent's model, cost and the task's complexity. A checker is never the task's builder, a missing
+  pick warns without blocking, and a pick who is no longer open is flagged on Build.
+- **A per-model record** any agent can read: tasks built, send-backs by reason class and
+  API-equivalent cost, each with its sample size.
+- **Follow-ups reopen a finished build** at its level, landing and people, with an Overview warning
+  naming the spec, the task, who filed it and how long the build had been finished. A stopped build
+  or an archived spec stays stopped (`0159`).
+- **Readable ticket ids** such as `ETCRB-4`, shown on the board and accepted wherever a task id is
+  (`0158`).
+- **The board filters to one spec, no spec, or all.**
+- **Build retrospectives:** a finished spec's build is read as a whole and its pitfalls recorded.
+- **Approved work merges in batches,** and the Hub watches `main` so it can tell its own merges from
+  anyone else's (`0154`, `0155`).
+- **Vault sources can be edited, replaced and archived.**
+
+### Fixed
+
+- **Checks run before anyone reviews,** and an approval over check failures that are provably not
+  the task's (they fail on `main` too, or pass when rerun alone) lands with a recorded override
+  instead of holding the night (`0151`).
+- **Each piece of evidence is judged on its own:** a send-back rejects only the pieces named as
+  failing and holds the rest (`0150`); every send-back says why (`0157`).
+- **A task's checks and merges use its own work,** and a live run is never reset.
+- **Every task can always be moved on;** transitions the operator did not make one by one carry a
+  note (`0147`), and a waiting task keeps its checker (`0160`).
+- **Rebinding an agent's runner starts clean:** a conversation's session records which CLI made it,
+  so a Claude agent is never handed a Copilot session (`0148`).
+- **Same-file overlaps reach the operator:** declared paths are normalised before comparison, and
+  paths outside the repository are refused.
+- **Worktree removal never follows a junction** into the main checkout.
+- **The mender wakes only for real stalls,** and the Spec page reopens the spec you were reading.
+
+### Upgrading
+
+- Upgrading runs migrations `0147` through `0160` on first start. `0149` rewrites live rows (any
+  `proposed` document returns to `exploring`); back up the database with SQLite's backup API first.
+
 ## [2.0.0] - 2026-10-26
 
 The first release since 1.1.0, and a large one: a spec-driven development loop that runs in the
