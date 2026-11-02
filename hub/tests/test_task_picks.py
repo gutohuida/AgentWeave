@@ -1,3 +1,4 @@
+# ruff: noqa: F811  (a fixture imported by name is redefined as an argument)
 """Every task comes with a recommended builder and checker (ETCRB-3): the prompt half and the
 warnings half. The Build dialog half is a UI test (`BuildDialog.test.tsx`)."""
 
