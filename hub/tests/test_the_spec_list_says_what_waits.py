@@ -45,7 +45,15 @@ def _change(title, **overrides):
             {"key": "alpha", "statement": "It responds within 200ms", "modal": "MUST"}
         ],
         "acceptance_criteria": [
-            {"key": "c1", "requirement": "alpha", "given": "g", "when": "w", "then": "t"}
+            {
+                "key": "c1",
+                "requirement": "alpha",
+                "given": "g",
+                "when": "w",
+                "then": "t",
+                "how_to_check": "run it",
+                "checked_by": "agent",
+            }
         ],
         "tasks": [{"key": "t1", "description": "Build it", "requirements": ["alpha"]}],
         "delivery": {"mode": "none"},
@@ -61,6 +69,10 @@ async def _make(app, auth_headers, run_headers, path, document, phase=None):
     assert created.status_code == 201, created.text
     saved = await app.post(AGENT, json={"path": path, "document": document}, headers=run_headers)
     assert saved.status_code == 200, saved.text
+    reached = await app.post(
+        f"{BASE}/documents/journey?path={path}", json={"step": "build"}, headers=auth_headers
+    )
+    assert reached.status_code == 200, reached.text
     if phase:
         async with async_session_factory() as session:
             await session.execute(
@@ -85,12 +97,27 @@ async def test_the_list_route_says_each_documents_roadmap_and_what_waits(
         _change("Named", roadmap=named),
     )
     await _make(app, auth_headers, run_headers, "spec/changes/clean/spec.json", _change("Clean"))
+    # A real approval gap: a requirement no acceptance criterion covers.
     await _make(
         app,
         auth_headers,
         run_headers,
         "spec/changes/gap/spec.json",
-        _change("Gap", roadmap={"document": "spec/changes/nowhere/spec.json", "slice": "x"}),
+        _change(
+            "Gap",
+            requirements=[
+                {"key": "alpha", "statement": "It responds within 200ms", "modal": "MUST"},
+                {"key": "beta", "statement": "It logs every call", "modal": "MUST"},
+            ],
+        ),
+    )
+    # A refusal: the roadmap it names does not exist.
+    await _make(
+        app,
+        auth_headers,
+        run_headers,
+        "spec/changes/nowhere/spec.json",
+        _change("Nowhere", roadmap={"document": "spec/changes/none/spec.json", "slice": "x"}),
     )
     amended_id = await _make(
         app,
@@ -150,7 +177,8 @@ async def test_the_list_route_says_each_documents_roadmap_and_what_waits(
 
     assert by_path["spec/changes/named/spec.json"]["roadmap"] == {**named, "order": None}
     assert by_path["spec/changes/clean/spec.json"]["roadmap"] is None
-    assert "ready_to_approve" in by_path["spec/changes/clean/spec.json"]["waiting"]
+    assert by_path["spec/changes/clean/spec.json"]["waiting"] == ["ready_to_approve"]
+    assert by_path["spec/changes/nowhere/spec.json"]["waiting"] == []
     assert by_path["spec/changes/gap/spec.json"]["waiting"] == []
     assert by_path["spec/changes/amended/spec.json"]["waiting"] == [
         "amendments_to_review",

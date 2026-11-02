@@ -217,7 +217,7 @@ const WAITING_TEXT: Record<NonNullable<SpecDocumentRecord['waiting']>[number], (
   ready_to_approve: () => 'Ready to approve',
   amendments_to_review: (r) => {
     const n = (r.amendments?.unreviewed ?? 0) + (r.amendments?.proposed ?? 0)
-    return n === 1 ? '1 amendment to review' : `${n} amendments to review`
+    return `${n} amendments to review`
   },
   ready_to_build: () => 'Ready to build',
   ready_to_fold: () => 'Ready to fold',
