@@ -1,0 +1,29 @@
+{
+  "id": "fct-21a5ced0f29b",
+  "kind": "fact",
+  "claim": "record_evidence refuses builders when an FR-n is declared in several documents, because it does not default to the task's own spec document.",
+  "citations": [
+    {
+      "source": "src-463acf51f21f",
+      "quote": "Let record_evidence default to the task's own spec document when an FR-n is declared in several documents.",
+      "line_start": 19,
+      "line_end": 19
+    },
+    {
+      "source": "src-463acf51f21f",
+      "quote": "Builders would then stop hitting repeated refusals.",
+      "line_start": 19,
+      "line_end": 19
+    }
+  ],
+  "sources": [
+    "src-463acf51f21f"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-02T17:30:55.123965Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
