@@ -520,12 +520,14 @@ def condensed_checks(page, where):
     scroll_to(page, 900)
     header = page.locator("[data-testid=spec-document-header]").first
     clicked = False
-    for target in ("[data-testid*=condensed]", "[data-condensed]", "[data-testid=spec-document-header]"):
+    # Click the title, which is not a control, rather than a spot that may land on the count or a button.
+    for target in ("[data-testid=spec-document-header] :is(h1, h2, [data-testid*=title])",
+                   "[data-testid=spec-document-header]"):
         spot = page.locator(target).first
         if spot.count():
             box = spot.bounding_box()
             if box:
-                page.mouse.click(box["x"] + box["width"] * 0.6, box["y"] + box["height"] / 2)
+                page.mouse.click(box["x"] + min(box["width"] / 2, 40), box["y"] + box["height"] / 2)
                 clicked = True
                 break
     page.wait_for_timeout(700)
@@ -534,7 +536,7 @@ def condensed_checks(page, where):
           condensed and clicked and after.get("height") is not None
           and after["height"] > CONDENSED_LIMIT
           and header.count() > 0,
-          f"height {after.get('height')} after a click at 60% of the line; "
+          f"height {after.get('height')} after a click on the title; "
           f"it was {'condensed' if condensed else 'not condensed'} before it")
 
 
@@ -657,8 +659,9 @@ def list_checks(page, scope, where, _unused):
     offered = choose_order(page, "What needs you")
     groups = page.evaluate(LIST, scope) or []
     page.screenshot(path=str(TMP / f"{where}_list_needs_you.png"))
-    by_label = {g["label"]: {r["name"]: r["waiting"] for r in g["rows"]} for g in groups}
-    waiting = by_label.get("Waiting on you", {})
+    # The label renders uppercase (text-transform) and innerText returns it so: key on lower case.
+    by_label = {(g["label"] or "").lower(): {r["name"]: r["waiting"] for r in g["rows"]} for g in groups}
+    waiting = by_label.get("waiting on you", {})
     reasons = {
         "Ready one": "ready to approve", "Amended one": "amendments to review",
         "Buildable one": "ready to build", "Foldable one": "ready to fold",
@@ -668,13 +671,13 @@ def list_checks(page, scope, where, _unused):
           offered and all(reasons[n] in got[n] for n in reasons),
           f"order offered={offered}; {got} (groups {list(by_label)})")
     check(f"{where} 5b the gap-blocked and building documents are under In progress",
-          {"Gapped one", "Building one"} <= set(by_label.get("In progress", {})),
-          f"In progress {list(by_label.get('In progress', {}))}")
+          {"Gapped one", "Building one"} <= set(by_label.get("in progress", {})),
+          f"In progress {list(by_label.get('in progress', {}))}")
     check(f"{where} 5c the archived one is under Finished and the capability under Capabilities",
-          "Archived one" in by_label.get("Finished", {})
-          and "Scratch capability" in by_label.get("Capabilities", {}),
-          f"Finished {list(by_label.get('Finished', {}))}; "
-          f"Capabilities {list(by_label.get('Capabilities', {}))}")
+          "Archived one" in by_label.get("finished", {})
+          and "Scratch capability" in by_label.get("capabilities", {}),
+          f"Finished {list(by_label.get('finished', {}))}; "
+          f"Capabilities {list(by_label.get('capabilities', {}))}")
 
 
 def main():
