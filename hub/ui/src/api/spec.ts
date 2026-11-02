@@ -827,6 +827,8 @@ export function useSpecDocumentRename(
 // Documents — phase, and the operator decisions that move it
 // ---------------------------------------------------------------------------
 
+export type SpecWaiting = 'ready_to_approve' | 'amendments_to_review' | 'ready_to_build' | 'ready_to_fold'
+
 export interface SpecDocumentRecord {
   id: string
   path: string
@@ -857,6 +859,12 @@ export interface SpecDocumentRecord {
    *  (`a-tester-drives-the-built-product-and-keeps-the-spec-true`), and how many proposals wait
    *  for the operator (`proposed`, absent from an older Hub). Absent when there are none. */
   amendments?: { total: number; unreviewed: number; proposed?: number }
+  /** The roadmap and slice the document names, with the slice's place in the roadmap's build order
+   *  (`order`, null when the roadmap does not hold it). Null on a document naming none; absent from
+   *  an older Hub (`the-list-says-what-waits`). */
+  roadmap?: { document: string; slice: string; order: number | null } | null
+  /** Which of these hold for the document, for the operator (absent from an older Hub). */
+  waiting?: SpecWaiting[]
   /** Present while a build of this document is running: how many of the tasks it covers are
    *  approved (`the-spec-page-redesigned`: the list's 'building now' mark and the picker's progress). */
   build?: { id: string; done: number; total: number }

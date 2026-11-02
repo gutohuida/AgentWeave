@@ -213,6 +213,22 @@ export function roadmapOf(path: string, entries: SpecListEntry[]): SpecDocumentV
 
 const ARCHIVE_PREFIX = 'spec/changes/archive/'
 
+const WAITING_TEXT: Record<NonNullable<SpecDocumentRecord['waiting']>[number], (r: SpecDocumentRecord) => string> = {
+  ready_to_approve: () => 'Ready to approve',
+  amendments_to_review: (r) => {
+    const n = (r.amendments?.unreviewed ?? 0) + (r.amendments?.proposed ?? 0)
+    return n === 1 ? '1 amendment to review' : `${n} amendments to review`
+  },
+  ready_to_build: () => 'Ready to build',
+  ready_to_fold: () => 'Ready to fold',
+}
+
+/** The first thing the operator has to do on the document, in the words the list shows. */
+function waitingReason(record: SpecDocumentRecord | undefined): string | null {
+  const first = record?.waiting?.[0]
+  return record && first ? WAITING_TEXT[first](record) : null
+}
+
 export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): SpecListEntry[] {
   const byPath = new Map(records.map((r) => [r.path, r]))
   const kindByPath = new Map(specs.map((s) => [s.path, kindOf(byPath.get(s.path)?.kind ?? s.kind)]))
@@ -223,6 +239,8 @@ export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): 
     const building = !!record?.build
     const state: DocState = archived ? 'archived' : phase === 'exploring' ? 'writing' : phase === 'current' ? 'current' : building ? 'building' : 'approved'
     const parentIsRoadmap = !!entry.parent && kindByPath.get(entry.parent) === 'roadmap'
+    // The document's own named roadmap counts too: the index records a parent for few of them.
+    const named = record?.roadmap && kindByPath.get(record.roadmap.document) === 'roadmap' ? record.roadmap : null
     return {
       id: record?.id ?? entry.document_id ?? entry.path,
       path: entry.path,
@@ -232,7 +250,12 @@ export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): 
       state,
       shown: shownOf(state, record?.display_phase ?? entry.display_phase),
       updatedAt: record?.updated_at ?? entry.updated_at ?? '',
-      roadmap: parentIsRoadmap ? { path: entry.parent!, order: entry.order ?? 0 } : null,
+      roadmap: parentIsRoadmap
+        ? { path: entry.parent!, order: entry.order ?? 0 }
+        : named
+          ? { path: named.document, order: named.order ?? Number.MAX_SAFE_INTEGER }
+          : null,
+      waiting: waitingReason(record),
       building,
       untracked: !record && !entry.document_id,
     }
