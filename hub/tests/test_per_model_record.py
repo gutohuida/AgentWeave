@@ -172,6 +172,87 @@ async def test_a_review_turn_is_not_a_build_turn(app, run_headers):  # noqa: F81
     assert live
 
 
+@pytest.mark.asyncio
+async def test_a_verdict_run_started_by_a_plain_message_is_not_a_build_turn(
+    app, run_headers  # noqa: F811
+):
+    """A review started by a message names only task_id; what marks it is the verdict it gave."""
+    await _seed(_task("t-y"))
+    await _seed(
+        *_run("r-b1", "t-y", 1, SONNET, 1000, agent="dev"),
+        *_run("r-b2", "t-y", 2, SONNET, 2000, agent="dev"),
+        *_run("r-v", "t-y", 60, OPUS, 9000, agent="qa"),
+    )
+    await _seed(
+        InboundQueueEntry(
+            id="q-msg",
+            project_id=P,
+            agent="qa",
+            origin_type="agent",
+            origin_agent="dev",
+            content="please look at t-y",
+            hop_depth=0,
+            state="delivered",
+            task_id="t-y",
+            delivered_in_run_id="r-v",
+        ),
+        TaskTransition(
+            id="m-done",
+            project_id=P,
+            task_id="t-y",
+            from_status="in_progress",
+            to_status="completed",
+            actor_kind="run",
+            run_id="r-b2",
+            created_at=_at(3),
+        ),
+        TaskTransition(
+            id="m-ok",
+            project_id=P,
+            task_id="t-y",
+            from_status="under_review",
+            to_status="approved",
+            actor_kind="run",
+            run_id="r-v",
+            created_at=_at(61),
+        ),
+    )
+
+    response = await app.get(ROUTE, headers=run_headers)
+    record = {row["model"]: row for row in response.json()["models"]}
+
+    assert set(record) == {SONNET}
+    assert record[SONNET]["tasks_built"] == 1
+    assert record[SONNET]["turns"] == 2
+    assert record[SONNET]["cost_usd_micros"] == 3000
+
+
+@pytest.mark.asyncio
+async def test_a_task_counts_under_the_model_that_completed_it(app, run_headers):  # noqa: F811
+    await _seed(_task("t-z"))
+    await _seed(
+        *_run("r-1", "t-z", 1, OPUS, 4000, agent="dev"),
+        *_run("r-2", "t-z", 2, SONNET, 1000, agent="dev"),
+        *_run("r-3", "t-z", 3, OPUS, 500, agent="other"),  # a later non-verdict turn
+    )
+    await _seed(
+        TaskTransition(
+            id="m-z",
+            project_id=P,
+            task_id="t-z",
+            from_status="in_progress",
+            to_status="completed",
+            actor_kind="run",
+            run_id="r-2",
+            created_at=_at(2),
+        )
+    )
+    response = await app.get(ROUTE, headers=run_headers)
+    record = {row["model"]: row for row in response.json()["models"]}
+    assert record[SONNET]["tasks_built"] == 1
+    assert record[OPUS]["tasks_built"] == 0
+
+
 async def _live_run(run_id):
     from sqlalchemy import update
 

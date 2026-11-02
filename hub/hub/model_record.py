@@ -8,13 +8,14 @@ judges.
 Attribution is by the model that **ran** a task's build turns (`TurnUsage.model` of the runs the
 runtime bound to the task, `Run.task_id`), never by the task's assignee: an agent can be rebound
 to another model between tasks, and crediting the agent would credit the wrong model. A review
-turn also carries `Run.task_id`; what marks it is the queue entry delivered to that run, which names
-`review_task_id` (`inbound_queue.entry_kind`). Review turns are the checker's, not the builder's,
-so they are left out.
+turn also carries `Run.task_id`, and the queue entry that started it may name `review_task_id` or,
+when a message started it, only `task_id`. So a review turn is marked by what it did: a run that
+moved the task to `approved`, `revision_needed` or `rejected` gave a verdict, and a run delivered an
+entry naming `review_task_id` is a review. Both are the checker's, not the builder's, and are left out.
 
-A task whose build turns ran under more than one model counts, with its send-backs, under the model
-of its latest build turn that names one (the model that finished it), and lists the others in
-`models_seen`. Each turn's count and cost go under the model that ran *that turn*. A finished turn
+A task counts, with its send-backs, under the model of the run behind its latest move to
+`completed` (the run that finished the build), else under the latest remaining build turn that
+names a model; the other models its build turns ran under are listed in `models_seen`. Each turn's count and cost go under the model that ran *that turn*. A finished turn
 with no usage row, or with a row carrying no price, is **unpriced**: counted and reported, never
 added to the cost as zero. A turn still running has no usage row yet and is reported as
 `running_turns`, neither priced nor unpriced.
@@ -31,6 +32,7 @@ from .db.models import InboundQueueEntry, Run, Task, TaskTransition, TurnUsage
 from .task_transitions import SEND_BACK_CLASSES
 
 UNKNOWN_MODEL = "unknown"
+_VERDICTS = ("approved", "revision_needed", "rejected")
 
 
 def _row() -> Dict[str, Any]:
@@ -74,17 +76,30 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
         .scalars()
         .all()
     }
-    moves = list(
+    all_moves = list(
         (
             await session.execute(
                 select(TaskTransition)
                 .join(Task, Task.id == TaskTransition.task_id)
-                .where(Task.project_id == project_id, TaskTransition.to_status == "revision_needed")
+                .where(
+                    Task.project_id == project_id,
+                    TaskTransition.to_status.in_(_VERDICTS + ("completed",)),
+                )
+                .order_by(TaskTransition.sequence)
             )
         )
         .scalars()
         .all()
     )
+    moves = [m for m in all_moves if m.to_status == "revision_needed"]
+    # A run that moved a task to a verdict status gave a verdict: it is the checker's turn,
+    # whatever queue entry started it (a message names only `task_id`, not `review_task_id`).
+    verdict_runs = {m.run_id for m in all_moves if m.to_status in _VERDICTS and m.run_id}
+    # The run behind each task's latest move to `completed` is the run that finished the build.
+    finishing_run: Dict[str, str] = {}
+    for m in all_moves:
+        if m.to_status == "completed" and m.run_id:
+            finishing_run[m.task_id] = m.run_id
 
     review_runs = set(
         (
@@ -102,14 +117,18 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
 
     by_task: Dict[str, List[Run]] = {}
     for run in runs:
-        if run.task_id in tasks and run.id not in review_runs:
+        if run.task_id in tasks and run.id not in review_runs and run.id not in verdict_runs:
             by_task.setdefault(run.task_id, []).append(run)
 
     models: Dict[str, Dict[str, Any]] = {}
     model_of: Dict[str, str] = {}
     for task_id, task_runs in by_task.items():
         named = [usage[r.id].model for r in task_runs if r.id in usage and usage[r.id].model]
-        model = named[-1] if named else UNKNOWN_MODEL
+        finished = usage.get(finishing_run.get(task_id, ""))
+        if finished is not None and finished.model:
+            model = finished.model
+        else:
+            model = named[-1] if named else UNKNOWN_MODEL
         model_of[task_id] = model
         row = models.setdefault(model, _row())
         task = tasks[task_id]
@@ -158,7 +177,8 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
         "note": (
             "Cost is the API-equivalent figure each priced turn recorded, in millionths of a "
             "dollar; an unpriced turn is counted in unpriced_turns and added to no cost. A task "
-            "counts under the model of its latest build turn that names one; review turns are excluded, and "
+            "counts under the model of the run that completed it, else its latest build turn that names one; "
+            "review and verdict turns are excluded, and "
             "each turn's cost is under the model that ran it."
         ),
     }
