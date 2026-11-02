@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from ._loop_lag import GIT_DELAY, STALL_LIMIT, LagProbe
+from ._loop_lag import GIT_DELAY, STALL_LIMIT, LagProbe, _set_process_priority
 
 
 @pytest.mark.asyncio
@@ -55,6 +55,21 @@ async def test_the_probe_leaves_nothing_frozen():
     async with LagProbe():
         assert gc.get_freeze_count() > 0
     assert gc.get_freeze_count() == 0
+
+
+@pytest.mark.asyncio
+async def test_the_probe_raises_the_whole_process_and_puts_it_back():
+    before = _set_process_priority()
+    if before is None:
+        pytest.skip("a process priority class is Windows'")
+    _set_process_priority(before)
+    async with LagProbe():
+        during = _set_process_priority()
+        _set_process_priority(during)
+    after = _set_process_priority()
+    _set_process_priority(after)
+    assert during == 0x80
+    assert after == before
 
 
 @pytest.mark.asyncio

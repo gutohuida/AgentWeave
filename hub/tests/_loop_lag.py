@@ -48,6 +48,24 @@ def _raise_priority(level: int = 2) -> int:
     return 0
 
 
+def _set_process_priority(priority_class: "int | None" = None) -> "int | None":
+    """Give the whole process a priority class, and answer the one it had. Whichever thread holds
+    the GIL holds the loop too, so a worker thread that a busy machine preempts while it holds it
+    stops every thread here: 110 to 196 ms with no sample and no CPU spent (F1119). Raising only the
+    threads the probe owns left that one to the other processes. The default is HIGH; git processes
+    started meanwhile do not inherit it. None where the platform has no such thing."""
+    if sys.platform != "win32":
+        return None
+    kernel32 = ctypes.WinDLL("kernel32")
+    kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+    kernel32.GetPriorityClass.argtypes = [ctypes.c_void_p]
+    kernel32.SetPriorityClass.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+    process = kernel32.GetCurrentProcess()
+    was = kernel32.GetPriorityClass(process)
+    kernel32.SetPriorityClass(process, 0x80 if priority_class is None else priority_class)
+    return was
+
+
 def _thread_waiting_reader(native_id: int):  # noqa: ANN202
     """A callable saying whether thread `native_id` is waiting on the OS (asleep, on a lock, in a
     blocking call) rather than runnable, or None where the platform does not tell."""
@@ -330,6 +348,7 @@ class LagProbe:
         # The loop's thread runs at the control thread's priority: a loop thread that a busy machine
         # preempted while it held the GIL would leave the same gap in the samples a real hold does.
         self._priority = _raise_priority()
+        self._process_priority = _set_process_priority()
         gc.callbacks.append(self._on_collection)
         # The heap the suite built before this window is not the measured path's: a full collection
         # walking it held the loop 104 of 123 ms on a busy machine (F1111). What the path allocates
@@ -356,3 +375,5 @@ class LagProbe:
         gc.unfreeze()
         gc.callbacks.remove(self._on_collection)
         _raise_priority(self._priority)
+        if self._process_priority is not None:
+            _set_process_priority(self._process_priority)
