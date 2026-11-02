@@ -9,6 +9,7 @@ import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/quest
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
 import { useFlakyTests, useHandleFlakyTests } from '@/api/flakyTests'
 import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
+import { useReopeningWarnings } from '@/api/reopeningWarnings'
 import { offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
 import { isWaitedOn } from '@/lib/pendingQuestions'
 import { useRetryIntegration, useTasks, useUpdateTask, type Task } from '@/api/tasks'
@@ -22,6 +23,7 @@ import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { AgentPostureChips } from './AgentPostureChips'
+import { ReopeningWarnings } from './ReopeningWarnings'
 import { OverviewView, type AgentStripItem, type FinishedItem, type NeedItem, type RunningItem } from './OverviewView'
 
 /** The Hub's own agent for stalled work (`hub/hub/stalls.py`, `MENDER`). */
@@ -75,6 +77,7 @@ export function OverviewScreen({
   const takeOffer = useTakeNextSliceOffer()
   const declineOffer = useDeclineNextSliceOffer()
   const [offerAgent, setOfferAgent] = React.useState<Record<string, string>>({})
+  const { data: reopenings = [], error: reopeningsError, refetch: refetchReopenings } = useReopeningWarnings()
   const flaky = flakyReport?.flaky ?? []
   const { data: taskPage, error: tasksError, refetch: refetchTasks } = useTasks()
   const { data: conversationPage, error: conversationsError, refetch: refetchConversations } = useProjectConversations(projectId || null)
@@ -91,6 +94,7 @@ export function OverviewScreen({
     ['the budget', accountingError, refetchAccounting],
     ['the main branch notices', mainNoticesError, refetchMainNotices],
     ['the next-slice offers', offersError, refetchOffers],
+    ['the reopened builds', reopeningsError, refetchReopenings],
   ]
   // Turns the budget is holding: the queue's own reason, per agent, never inferred from the total.
   const queueStatuses = useQueueStatuses(agents.map((a) => a.name))
@@ -435,8 +439,9 @@ export function OverviewScreen({
       onOpenQuestions={() => onNavigate('questions')}
       onAddAgent={onAddAgent}
       notice={
-        failures.some(([, error]) => error) || accounting?.budget.exhausted ? (
+        reopenings.length > 0 || failures.some(([, error]) => error) || accounting?.budget.exhausted ? (
           <>
+            <ReopeningWarnings warnings={reopenings} />
             {/* A failed query would otherwise read as fact here: no questions, nobody working, $0. */}
             <QueryErrorNotice failures={failures} />
             {accounting?.budget.exhausted ? (

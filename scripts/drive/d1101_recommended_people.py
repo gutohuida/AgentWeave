@@ -448,9 +448,10 @@ def drive(state):
     (d.TMP / "document.json").write_text(json.dumps(written, indent=1, default=str), encoding="utf-8")
     run_ids = author_runs(pid)
     marks = ",".join("?" * len(run_ids))
-    touched = d.ro(f"select content from agent_outputs where run_id in ({marks}) "
+    # The tool's name is in the call's payload: a call through `aw-tool` summarises as its shell.
+    touched = d.ro(f"select content, payload from agent_outputs where run_id in ({marks}) "
                    "and kind in ('tool_use','tool_call') ", tuple(run_ids)) or []
-    blob = " ".join(c for (c,) in touched).lower()
+    blob = " ".join(f"{c} {p or ''}" for (c, p) in touched).lower()
     evidence = json.dumps(written.get("evidence"), default=str).lower()
     d.check("A2 the author read the per-model record (a tool call, with its figures in evidence)",
             (bool(re.search(r"model[_ -]?record|per[_ -]?model|work[_ -]?tally", blob))
@@ -608,6 +609,13 @@ def drive(state):
     d.check("setup S4: the build has a flow to fire", bool(job), f"job={job}", fatal=True)
     start = time.time()
     while time.time() - start < BUILD_LIMIT:
+        # An agent may file a follow-up of its own once the build finishes, which reopens it under
+        # a new flow; the job to fire is whichever the build holds now.
+        ((job, enabled),) = d.ro("select l.job_id, j.enabled from loops l join builds b on b.loop_id=l.id "
+                                 "join ai_jobs j on j.id=l.job_id where b.id=?", (state["build_id"],))
+        if not enabled and d.ro("select state from builds where id=?",
+                                (state["build_id"],))[0][0] != "running":
+            break
         code, out = fire_job(base, job)
         # "Every task ... is already being worked" and "<agent> is already running a turn" are 409s
         # that say nothing is wrong; any other refusal (for one, a completed task with no recorded
@@ -737,6 +745,19 @@ if __name__ == "__main__":
 # master author writes varies run to run, so a run whose document is not buildable is seeded and
 # fails A7-A9 as well, and a walk that runs out of turns fails A0 by name. One earlier run could not
 # find the Build button within 30 s (a slow page load; the drive now keeps a screenshot then).
+
+# Observed 2026-11-02 from the finished branch of ETCRB-4 (:8010, on a copy of the trial database, so
+# the branch's migration stayed off the shared profile): 47 passed, 0 failed (run 034500). Earlier runs
+# that day failed only on what they then fixed: A2 read the tool summary, which says `Called
+# PowerShell` for a call through aw-tool, while the author put its finding in `design` (the prompt now
+# names `evidence.checked`); A1 failed when an author had already named people before the tasks step,
+# so the prompt now covers keeping them, and on a question listing its sources as bullets, which the
+# matcher now reads; C0 took a builder busy on its other task for a refusal. D and E held on every run.
+# Whether a Haiku author asks at the tasks step still varies with what it did before reaching it.
+# Observed 2026-11-02 after the send-back (closed window, kept checker, own-checker refusal): 47
+# passed, 0 failed (run 060051). Run 053211 failed A1 and A6 on what the author wrote, with D and E
+# holding; run 054536 had an agent file its own follow-up 26 s after the build finished, which
+# reopened it correctly while the drive still fired the ended flow's job (C0), so it now re-reads it.
 #
 # Observed 2026-11-02 at ETCRB-3's implementation (run 05:06:47, artefacts .../050647): 48 passed, 8
 # failed. The author reached the build step in 8 turns on its own document (A0, A0b, A7-A9), asked
@@ -751,3 +772,5 @@ if __name__ == "__main__":
 # string, the 422 named no shape, and it moved the figures to the design. The tasks step now gives the
 # shape. Run 06:17:11 (artefacts .../061711, empty record): 52 passed, 7 failed, A2 passing on
 # {"checked": ["project record: 0 tasks built, 0 turns, ..."]}; the failures are ETCRB-4's D1-D5, E1, E2.
+# Observed 2026-11-02 after merging ETCRB-7 into ETCRB-4 (9e1a127, on a sqlite backup() copy of the
+# trial database): 59 passed, 0 failed (run 072039), A2 included, with D and E holding.

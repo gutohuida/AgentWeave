@@ -12,6 +12,11 @@ const nextSliceOffers: unknown[] = []
 const markSeenMutate = vi.fn()
 const takeOfferMutate = vi.fn()
 const declineOfferMutate = vi.fn()
+vi.mock('@/api/reopeningWarnings', () => ({
+  useReopeningWarnings: () => ({ data: [], error: null }),
+  useStopReopenedBuild: () => ({ mutate: vi.fn(), isPending: false }),
+  useDismissReopeningWarning: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('@/api/mainNotices', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/mainNotices')>()),
   useOpenMainNotices: () => ({ data: mainNotices, error: null }),

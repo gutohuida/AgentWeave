@@ -5,6 +5,11 @@ import { beforeEach, describe, expect, it, vi, beforeAll } from 'vitest'
 import { loadAllScreens } from '@/lib/lazyScreens'
 import { useConfigStore } from '@/store/configStore'
 
+vi.mock('@/api/reopeningWarnings', () => ({
+  useReopeningWarnings: () => ({ data: [], error: null }),
+  useStopReopenedBuild: () => ({ mutate: vi.fn(), isPending: false }),
+  useDismissReopeningWarning: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('@/hooks/useSSE', () => ({
   // The rail's live dot reads this; a whole-module mock has to carry it or Sidebar throws.
   useSSEConnectionState: () => 'open',

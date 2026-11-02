@@ -8,6 +8,11 @@ import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 
 // Stub useSSE so it doesn't try to connect. The module is mocked globally for
 // the test file — we just need to confirm the App's tree wiring is right.
+vi.mock('@/api/reopeningWarnings', () => ({
+  useReopeningWarnings: () => ({ data: [], error: null }),
+  useStopReopenedBuild: () => ({ mutate: vi.fn(), isPending: false }),
+  useDismissReopeningWarning: () => ({ mutate: vi.fn(), isPending: false }),
+}))
 vi.mock('@/hooks/useSSE', () => ({
   // The rail's live dot reads this; a whole-module mock has to carry it or Sidebar throws.
   useSSEConnectionState: () => 'open',

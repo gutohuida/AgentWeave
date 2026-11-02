@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import spec_rigor
@@ -197,6 +197,7 @@ async def view(session: AsyncSession, build: Build) -> Dict[str, Any]:
         "landing": build.landing,
         "loop_id": build.loop_id,
         "stop_reason": build.stop_reason,
+        "reopenings": list(build.reopenings or []),
         "created_at": _iso(build.created_at),
         "stopped_at": _iso(build.stopped_at),
     }
@@ -326,7 +327,9 @@ async def document_entry(session: AsyncSession, build: Build) -> Dict[str, Any]:
     """*build* as the spec document carries it: every choice the operator made, labelled as theirs,
     and when it started and ended. No spend: the tracked file must not change on every turn."""
     people = await people_of(session, build)
+    reopened = {"reopenings": list(build.reopenings)} if build.reopenings else {}
     return {
+        **reopened,
         "id": build.id,
         "chosen_by": CHOSEN_BY_OPERATOR,
         "state": build.state,
@@ -376,7 +379,7 @@ async def turn_lines(session: AsyncSession, task_id: Optional[str]) -> List[str]
     if task is None or build is None:
         return []
     people = await people_of(session, build)
-    own = people["tasks"].get(task.spec_task_key or "") or {}
+    own = people["tasks"].get(task.spec_task_key or task.id) or {}
     builder = own.get("builder") or people["builder"] or task.builder
     checker = own.get("checker") or people["checker"]
     state = "running" if build.state == RUNNING else f"{build.state}, no longer running"
@@ -497,6 +500,20 @@ def _person(value: Optional[str]) -> Optional[str]:
     return (value or "").strip() or None
 
 
+def _staff_added_task(
+    task: Task, default_builder: Optional[str], checker: Optional[str]
+) -> Dict[str, Any]:
+    """A task added to a build keeps the builder it names (or the agent it was assigned to), else
+    takes the build's default. Returns its entry in the build's people, which says which it was
+    (`added-task-people`); a checker left empty there is the build's default (`checker_of`)."""
+    named = _person(task.builder) or _person(task.assignee)
+    entry: Dict[str, Any] = {"builder": named, "checker": _person(checker)}
+    task.builder = named or default_builder
+    if not named:
+        entry["builder_default"] = True
+    return entry
+
+
 async def cover_tasks(
     session: AsyncSession,
     build: Build,
@@ -526,11 +543,21 @@ async def cover_tasks(
     declared_checkers = declared_checkers or {}
     chosen_checkers = chosen_checkers or {}
     unresolved: List[Dict[str, str]] = []
-    people: Dict[str, Dict[str, Optional[str]]] = {}
+    people: Dict[str, Dict[str, Any]] = {}
     for task in tasks:
         task.build_id = build.id
         task.level = build.level
         key = task.spec_task_key or ""
+        if not key:
+            # Filed against the document rather than declared by it, as a follow-up waiting since a
+            # stopped build is (`stopped-stays-stopped`): the dialog has no row for it, so it keeps
+            # who it names and takes the defaults, as a task joining a running build does.
+            people[task.id] = _staff_added_task(task, _person(default_builder), task.checker)
+            if task.builder and task.builder not in agents:
+                unresolved.append({"task": task.id, "builder": task.builder})
+            elif task.builder and task.assignee is None and task.status in ("pending", "assigned"):
+                task.assignee = task.builder
+            continue
         builder = _person(chosen[key] if key in chosen else declared.get(key))
         checker = _person(
             chosen_checkers[key] if key in chosen_checkers else declared_checkers.get(key)
@@ -581,12 +608,8 @@ async def join_running_build(
     if isinstance(build.people, dict):
         people = dict(build.people)
         tasks_map = dict(people.get("tasks") or {})
-        key = task.spec_task_key or task.id
-        entry: Dict[str, Any] = {"builder": _person(task.builder), "checker": _person(checker)}
-        if not entry["builder"]:
-            task.builder = _person(people.get("builder"))
-            entry["builder_default"] = True
-        tasks_map.setdefault(key, entry)
+        entry = _staff_added_task(task, _person(people.get("builder")), checker)
+        tasks_map.setdefault(task.spec_task_key or task.id, entry)
         people["tasks"] = tasks_map
         build.people = people
     if (
@@ -596,6 +619,236 @@ async def join_running_build(
         and task.builder in await open_agents(session, build.project_id)
     ):
         task.assignee = task.builder
+
+
+# --- a follow-up on a finished build (`follow-up-reopens-a-finished-build`) ------------------------
+
+
+def _ago(since: datetime, at: datetime) -> str:
+    """How long before *at* a build finished, in the words the warning uses."""
+    seconds = max(0, int((at - since).total_seconds()))
+    days, hours, minutes = seconds // 86400, seconds // 3600, seconds // 60
+    if days >= 2:
+        return f"{days} days"
+    if hours >= 1:
+        return f"{hours} hour{'' if hours == 1 else 's'}"
+    return f"{minutes} minute{'' if minutes == 1 else 's'}"
+
+
+def _filed(task: Task, filer: Optional[str]) -> Dict[str, Any]:
+    return {
+        "id": task.id,
+        "display_id": task.display_id,
+        "title": task.title,
+        "filer": filer or "the operator",
+    }
+
+
+async def own_checker_refusal(
+    session: AsyncSession,
+    document_id: Optional[str],
+    *,
+    builder: Optional[str],
+    assignee: Optional[str],
+    checker: Optional[str],
+) -> Optional[str]:
+    """Why a task being filed would have its builder check its own work, or None.
+
+    The check would never run: the reviewer ladder excludes the author and will not substitute for
+    a named checker (`scheduler.resolve_reviewer`, rung 1b). The build's defaults count only where
+    the task will take them, on a build it joins now; the next Build's are not known yet."""
+    named_builder = _person(builder) or _person(assignee)
+    named_checker = _person(checker)
+    default_builder, default_checker = None, None
+    document = await session.get(SpecDocument, document_id) if document_id else None
+    if document is not None and document.phase != "archived":
+        rows = await builds_of(session, document.id)
+        latest = rows[0] if rows else None
+        joins = latest is not None and (
+            latest.state == RUNNING or (latest.state == FINISHED and document.phase == "approved")
+        )
+        if joins and isinstance(latest.people, dict):
+            default_builder = _person(latest.people.get("builder"))
+            default_checker = _person(latest.people.get("checker"))
+    who_builds = named_builder or default_builder
+    who_checks = named_checker or default_checker
+    if not who_builds or who_builds != who_checks:
+        return None
+    return (
+        f"This task would have {who_builds} both build it and check it, and nobody checks their own "
+        f"work: its builder is {'named' if named_builder else 'the build default'} and its checker "
+        f"is {'named' if named_checker else 'the build default'}. Name a different builder or checker."
+    )
+
+
+@dataclass
+class FollowUp:
+    """What filing a task against a document did to its build, for the task route."""
+
+    #: Said to whoever filed it; None where the task simply joined or there is no build to speak of.
+    note: Optional[str] = None
+    #: The build this filing reopened, which the route gives a flow once the task is flushed.
+    reopened: Optional[Build] = None
+
+
+def _waits(reason: str, *, next_build: bool) -> FollowUp:
+    then = "It waits on the board with no build"
+    then += "; the operator's next Build takes it in." if next_build else "."
+    return FollowUp(note=f"Nothing was started for this task: {reason}. {then}")
+
+
+async def follow_up(
+    session: AsyncSession, task: Task, *, filer: Optional[str], checker: Optional[str] = None
+) -> FollowUp:
+    """A task filed against a document, by the state of its latest build.
+
+    Running: it joins. Finished: it reopens that build, whenever it finished, at the same level,
+    landing and cap (those columns are not touched), and joins. A window that has closed does not
+    come along, or the first firing would stop the build it just reopened. Stopped, or a document no
+    longer approved: nothing restarts, the task stays out of any build and the filer is told why. A
+    stop is a decision; a finish is only the absence of work.
+    """
+    document = await session.get(SpecDocument, task.spec_document_id)
+    rows = await builds_of(session, task.spec_document_id)
+    if document is None or task.build_id:
+        return FollowUp()
+    if document.phase == "archived":
+        return _waits("this spec is archived, so nothing builds it", next_build=False)
+    if not rows:
+        return FollowUp()
+    latest = rows[0]
+    if document.phase != "approved" and latest.state != RUNNING:
+        return _waits(
+            f"this spec is {document.phase}, so its build does not reopen", next_build=True
+        )
+    if latest.state == STOPPED:
+        return _waits(
+            f"build {latest.id} of this spec was stopped ({latest.stop_reason or 'no reason given'}), "
+            "and a stopped build stays stopped",
+            next_build=True,
+        )
+    finished_at = await _reopen(session, latest) if latest.state == FINISHED else None
+    if finished_at is None:
+        # Running, or another filing reopened it between the read and this write: this one joins.
+        await join_running_build(session, task, checker=checker)
+        _name_on_open_warning(latest, task, filer)
+        return FollowUp()
+    at = now()
+    ago = _ago(finished_at, at)
+    window_end = _aware(latest.window_end)
+    closed_window = window_end if window_end is not None and at >= window_end else None
+    if closed_window is not None:
+        latest.window_end = None
+    await join_running_build(session, task, checker=checker)
+    latest.reopenings = [
+        *(latest.reopenings or []),
+        {
+            "at": at.isoformat(),
+            "finished_at": _iso(finished_at),
+            "finished_ago": ago,
+            "closed_window": _iso(closed_window),
+            "tasks": [_filed(task, filer)],
+            "dismissed_at": None,
+            "cleared_at": None,
+        },
+    ]
+    await record_in_document(session, document.id)
+    defer_broadcast(
+        session, latest.project_id, "build_updated", {"id": latest.id, "state": RUNNING}
+    )
+    defer_broadcast(session, latest.project_id, "spec_updated", {"path": document.path})
+    note = (
+        f"Build {latest.id} of this spec had finished {ago} ago; this task reopened it. The "
+        "operator is warned on the Overview screen and can stop it there."
+    )
+    if closed_window is not None:
+        note += f" Its window had closed at {_iso(closed_window)}, so it now runs with no end time."
+    verdict = await may_hand_out(session, latest, at)
+    held = verdict.stop_reason or verdict.wait_reason
+    if held:
+        # The cap is kept, so one already spent stops the build at its first firing: said now, since
+        # nothing tells the filer later.
+        note += f" Its task will not start yet: {held}."
+    return FollowUp(note=note, reopened=latest)
+
+
+async def _reopen(session: AsyncSession, build: Build) -> Optional[datetime]:
+    """Move a finished *build* back to running in one conditional write, so that simultaneous
+    filings reopen it once. Returns when it had finished, or None if this write did not move it."""
+    finished_at = _aware(build.stopped_at or build.created_at)
+    moved = await session.execute(
+        update(Build)
+        .where(Build.id == build.id, Build.state == FINISHED)
+        .values(state=RUNNING, stopped_at=None, stop_reason=None)
+        .execution_options(synchronize_session=False)
+    )
+    await session.refresh(build)
+    return finished_at if moved.rowcount else None
+
+
+def _name_on_open_warning(build: Build, task: Task, filer: Optional[str]) -> None:
+    """A task joining a build whose reopening is still being warned about is named on that warning:
+    two follow-ups filed together show one warning naming both (`one-driver-still-holds`)."""
+    if open_warning(build) is None or task.build_id != build.id:
+        return
+    last = build.reopenings[-1]
+    build.reopenings = [
+        *build.reopenings[:-1],
+        {**last, "tasks": [*last["tasks"], _filed(task, filer)]},
+    ]
+
+
+def open_warning(build: Build) -> Optional[Dict[str, Any]]:
+    """The reopening *build* is still warning about: its last, undismissed, while it runs."""
+    rows = build.reopenings or []
+    if build.state != RUNNING or not rows:
+        return None
+    last = rows[-1]
+    return None if last.get("dismissed_at") or last.get("cleared_at") else last
+
+
+def _clear_warning(build: Build) -> None:
+    """The build ended, so its warning has: resuming it later does not bring the warning back."""
+    rows = build.reopenings or []
+    if rows and not rows[-1].get("dismissed_at") and not rows[-1].get("cleared_at"):
+        build.reopenings = [*rows[:-1], {**rows[-1], "cleared_at": now().isoformat()}]
+
+
+def dismiss_warning(build: Build) -> bool:
+    """The operator dismissed *build*'s warning; the build goes on. False if none stands."""
+    if open_warning(build) is None:
+        return False
+    rows = build.reopenings
+    build.reopenings = [*rows[:-1], {**rows[-1], "dismissed_at": now().isoformat()}]
+    return True
+
+
+async def reopening_warnings(session: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """Every reopening warning that stands in the project, newest first (`reopening-warns`)."""
+    rows = (
+        await session.execute(
+            select(Build, SpecDocument)
+            .join(SpecDocument, SpecDocument.id == Build.document_id)
+            .where(Build.project_id == project_id, Build.state == RUNNING)
+        )
+    ).all()
+    warnings = []
+    for build, document in rows:
+        warning = open_warning(build)
+        if warning is not None:
+            warnings.append(
+                {
+                    "build_id": build.id,
+                    "document_id": document.id,
+                    "path": document.path,
+                    "title": document.title or document.path,
+                    "reopened_at": warning["at"],
+                    "finished_at": warning["finished_at"],
+                    "finished_ago": warning["finished_ago"],
+                    "tasks": warning["tasks"],
+                }
+            )
+    return sorted(warnings, key=lambda row: row["reopened_at"], reverse=True)
 
 
 async def retire_previous_loops(session: AsyncSession, document_id: str, by_build: str) -> None:
@@ -728,6 +981,7 @@ async def stop(session: AsyncSession, build: Build, reason: str) -> Optional[AIJ
     build.state = STOPPED
     build.stop_reason = reason
     build.stopped_at = now()
+    _clear_warning(build)
     # The document shows it ended, with when (`build-end-shown`).
     await record_in_document(session, build.document_id)
     if not build.loop_id:
@@ -799,6 +1053,8 @@ async def finish_if_done(session: AsyncSession, task: Task) -> None:
     if open_count == 0:
         build.state = FINISHED
         build.stopped_at = datetime.now(timezone.utc)
+        _clear_warning(build)
+        defer_broadcast(session, build.project_id, "build_updated", {"id": build.id})
         # The flow outlives the build while its queue holds work the build does not count: a fix
         # task the Hub filed, or a landing that may send a task back (F1113). A later firing ends it.
         if not await loop_has_open_work(session, build, closing=task.id):

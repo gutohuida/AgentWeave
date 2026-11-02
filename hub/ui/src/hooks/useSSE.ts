@@ -541,6 +541,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'build_stopped':
           // Stopping a build changes the shown phase with no task event and no `spec_updated`.
           invalidateSpecShownPhase(inv, pid)
+          inv({ queryKey: ['project', pid, 'reopeningWarnings'] })
           break
         case 'queue_entry_abandoned': {
           // The Hub stopped trying to deliver something. The queue card is where that shows, and

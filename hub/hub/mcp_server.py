@@ -365,8 +365,15 @@ def create_task(
     acceptance_criteria: Optional[List[str]] = None,
     loop_id: Optional[str] = None,
     depends_on: Optional[List[str]] = None,
+    builder: Optional[str] = None,
+    checker: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a task attributed to the bound agent.
+
+    A task against a spec joins its build and goes to that build's people, unless it names its own.
+    If the spec's latest build had finished, this reopens it and the operator is warned; if it was
+    stopped, or the spec is archived, nothing starts. `build_note` in the answer says which. A task
+    whose builder would also be its checker is refused.
 
     Args:
         title: Short task title.
@@ -385,6 +392,8 @@ def create_task(
             has fired, may do this — send_message to the loop's agent otherwise.
         depends_on: Ids of the tasks this one waits on, like ["task-1a2b3c4d"]. Each must be a
             task in this project; an unknown id is refused, naming it, and no task is created.
+        builder: The open agent who builds it, where it differs from its build's default.
+        checker: The open agent who checks it, where it differs from its build's default.
     """
     return _hub_request(
         "POST",
@@ -393,6 +402,8 @@ def create_task(
             "title": title,
             "description": description,
             "assignee": assignee,
+            "builder": builder,
+            "checker": checker,
             "priority": priority,
             "requirements": requirements or [],
             "requirement_ids": requirement_ids or [],
