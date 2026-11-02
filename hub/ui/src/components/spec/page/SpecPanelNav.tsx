@@ -35,10 +35,6 @@ export interface SpecPanelNavProps {
   /** The anchor in view, from the panel's scroller. */
   active: string | null
   onJump: (anchor: string) => void
-  /** Being mocked (spec `the-spec-header-redesigned`): the tabs, sections, strip and filter on one
-   *  row, with `lead` (the tabs) first. The panel is wide at 1920px, so they fit side by side. */
-  inline?: boolean
-  lead?: React.ReactNode
 }
 
 const SECTIONS: Array<{ id: string; label: string }> = [
@@ -57,7 +53,7 @@ const SECTIONS: Array<{ id: string; label: string }> = [
 export function SpecPanelNav(props: SpecPanelNavProps) {
   const { doc, tab, filters } = props
   const [trayOpen, setTrayOpen] = React.useState(false)
-  if (tab === 'builds') return props.inline ? <div className="aw-sp-pnav" data-inline="true"><div className="aw-sp-pnav-row">{props.lead}</div></div> : null
+  if (tab === 'builds') return null
   const agents = Array.from(new Set(doc.tasks.map((t) => t.agent).filter((a): a is string => Boolean(a)))).sort()
   const active = countFilters(filters)
 
@@ -86,9 +82,8 @@ export function SpecPanelNav(props: SpecPanelNavProps) {
   }
 
   return (
-    <div className="aw-sp-pnav" data-inline={props.inline ? 'true' : undefined}>
-      <div className={props.inline ? 'aw-sp-pnav-row' : 'aw-sp-pnav-stack'}>
-      {props.inline ? props.lead : null}
+    <div className="aw-sp-pnav">
+      <div className="aw-sp-pnav-stack">
       {tab === 'document' ? (
         <div className="aw-sp-pnav-sections" role="navigation" aria-label="Sections">
           {SECTIONS.filter((s) => s.id !== 'questions' || doc.openQuestions.length).map((s) => (
@@ -143,7 +138,7 @@ export function SpecPanelNav(props: SpecPanelNavProps) {
           onClick={() => setTrayOpen((o) => !o)}
         >
           <Icon name="filter_list" size={13} />
-          {props.inline ? null : 'Filter & sort'}
+          Filter & sort
           {active ? <span className="aw-sp-pnav-count">{active}</span> : null}
         </button>
         {chips.map((c) => (
@@ -182,58 +177,35 @@ export function SpecPanelNav(props: SpecPanelNavProps) {
   )
 }
 
-/** The panel's document switcher: the open document's title, dropping down the spec picker. */
+/** The panel's document switcher, in the header's first row: "Specs", dropping down the spec
+ *  picker. */
 export function SpecPanelDocSwitcher({
   doc,
   list,
   onOpenDocument,
   now,
-  inline,
 }: {
   doc: SpecDocumentView
   list: PanelListProps
   onOpenDocument: (path: string) => void
   now: Date
-  /** In the compact header's first row: a short "Specs" trigger rather than a row of its own. */
-  inline?: boolean
 }) {
-  const picker = (
-    <SpecOpenPicker
-      entries={list.entries}
-      prefs={list.prefs}
-      onPrefsChange={list.onPrefsChange}
-      onOpen={onOpenDocument}
-      onNew={list.onNew}
-      now={now}
-      openPath={doc.path}
-      attachedPath={list.attachedPath}
-      recent={list.recent}
-      progress={list.progress}
-      compact
-      autoFocus
-    />
-  )
-  if (inline) return <SpecDocSwitcher title="Specs">{picker}</SpecDocSwitcher>
   return (
-    <div className="aw-sp-pnav aw-sp-pnav-top">
-      <div className="aw-sp-pnav-docs">
-        <SpecDocSwitcher title={doc.title}>
-          <SpecOpenPicker
-            entries={list.entries}
-            prefs={list.prefs}
-            onPrefsChange={list.onPrefsChange}
-            onOpen={onOpenDocument}
-            onNew={list.onNew}
-            now={now}
-            openPath={doc.path}
-            attachedPath={list.attachedPath}
-            recent={list.recent}
-            progress={list.progress}
-            compact
-            autoFocus
-          />
-        </SpecDocSwitcher>
-      </div>
-    </div>
+    <SpecDocSwitcher title="Specs">
+      <SpecOpenPicker
+        entries={list.entries}
+        prefs={list.prefs}
+        onPrefsChange={list.onPrefsChange}
+        onOpen={onOpenDocument}
+        onNew={list.onNew}
+        now={now}
+        openPath={doc.path}
+        attachedPath={list.attachedPath}
+        recent={list.recent}
+        progress={list.progress}
+        compact
+        autoFocus
+      />
+    </SpecDocSwitcher>
   )
 }

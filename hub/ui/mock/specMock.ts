@@ -9,7 +9,7 @@ import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState
 import type { SpecSurfaceProps } from '@/components/spec/page/SpecWorkspace'
 import type { CoverageEntry } from '@/api/spec'
 import { agents, tasks as taskFixtures } from './fixtures'
-import { HEADER_CHOICES, PANEL_NAV_CHOICES, MockHealth, NOTICE_LEVELS, TodayBanner, noticesFor, type HeaderChoice, type PanelNavChoice, type NoticeLevel } from './specBanner'
+import { HEADER_CHOICES, PANEL_NAV_CHOICES, MockHealth, NOTICE_LEVELS, noticesFor, type HeaderChoice, type PanelNavChoice, type NoticeLevel } from './specBanner'
 import coverageJson from './fixtures/spec_coverage.json'
 import documentJson from './fixtures/spec_document.json'
 import documentsJson from './fixtures/spec_documents.json'
@@ -340,7 +340,7 @@ function copy(text: string) {
 
 /** Everything the page's components take, as a container would hold it. */
 export function useSpecMock(routeHash: string) {
-  const { state, layout, notices, header, panelNav } = useSpecMockControls()
+  const { state, layout, notices } = useSpecMockControls()
   const initialAnchor = React.useMemo(() => readHashControls().at ?? null, [])
   const [check, setCheck] = React.useState<CheckState>(state === 'ready' ? { status: 'done', findings: [], at: 'preset' } : { status: 'idle' })
   const [filters, setFilters] = React.useState<DocumentFilters>(NO_DOCUMENT_FILTERS)
@@ -441,15 +441,8 @@ export function useSpecMock(routeHash: string) {
   const coverage = COVERAGE as unknown as CoverageEntry[]
   const healthTasks = RECORDED_TASKS.map((t) => ({ id: t.id, title: t.title, status: t.status }))
   const surface: SpecSurfaceProps = {
-    ...(header === 'today'
-      ? { banner: () => React.createElement(TodayBanner, { path: doc.path, level: notices, coverage, tasks: healthTasks }) }
-      : {
-          headerDesign: 'compact' as const,
-          panelNav,
-          noticeStyle: header,
-          notices: noticesFor(notices),
-          health: React.createElement(MockHealth, { level: notices, coverage, tasks: healthTasks }),
-        }),
+    notices: noticesFor(notices),
+    health: () => React.createElement(MockHealth, { level: notices, coverage, tasks: healthTasks }),
     doc,
     builds: [...shownBuilds].reverse(),
     check,

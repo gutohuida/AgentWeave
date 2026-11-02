@@ -8,7 +8,7 @@ import { SpecDocumentBody, type BodyPart } from './SpecDocumentBody'
 import { SpecOutlineMenu, SpecOutlineRail } from './SpecOutline'
 import { SpecPageHeader, type HeaderChrome } from './SpecPageHeader'
 import { SpecPanelDocSwitcher, SpecPanelNav, type PanelListProps } from './SpecPanelNav'
-import { SpecNoticeStack, type HeaderNotice } from './SpecNotices'
+import type { HeaderNotice } from './SpecNotices'
 import { Segmented } from '@/components/ui/segmented'
 import '@/styles/spec-page.css'
 
@@ -23,14 +23,9 @@ export interface SpecSurfaceProps {
   now: Date
   /** The position a link named, opened on arrival. */
   initialAnchor?: string | null
-  /** Being mocked (spec `the-spec-header-redesigned`): the two-row header, with the notices and
-   *  health facts handed to it instead of stacked in the banner. */
-  headerDesign?: 'today' | 'compact'
+  /** Everything the document has to tell the operator, behind the header's count (spec
+   *  `the-spec-header-redesigned`, FR-7). Check's findings are added to them here. */
   notices?: HeaderNotice[]
-  noticeStyle?: 'line' | 'badge' | 'rail'
-  health?: React.ReactNode
-  /** Being mocked: the panel's tabs, sections, strip and filter on one row. */
-  panelNav?: 'today' | 'row'
   onAction: (action: SpecAction) => void
   onOpenDocument: (path: string) => void
   onCopyLink: (anchor: string | null) => void
@@ -40,10 +35,14 @@ export interface SpecSurfaceProps {
   onStartBuild: () => void
   onOpenRuns: (build: BuildView) => void
   onStopBuild: (build: BuildView) => void
-  /** Under the header, above the document: what the operator has to decide (amendments, proposals), what the actions said (refusals, gaps) and the dialogs. */
   /** Decisions the Hub's phase controls offer beyond the page's own buttons. */
   chrome?: HeaderChrome
-  banner?: (context: { jump: (anchor: string) => void }) => React.ReactNode
+  /** The document's health facts, in the header's second row; each opens its detail. */
+  health?: (context: { jump: (anchor: string) => void }) => React.ReactNode
+  /** Above the builds: the newest build's strip and Close the open tasks as already built. */
+  buildActions?: React.ReactNode
+  /** The dialogs the phase controls open (Build, Archive, Delete, Fold, Retire, Start a flow). */
+  dialogs?: React.ReactNode
   /** The document's build retrospective, under its builds. */
   retrospective?: (context: { flash: string | null; onCopyLink: (anchor: string) => void }) => React.ReactNode
 }
@@ -59,33 +58,40 @@ export interface SpecWorkspaceProps extends SpecSurfaceProps {
   listFooter?: React.ReactNode
 }
 
-/** The body has scrolled away from its top: the compact header condenses to one line. */
-function useCondensed(scroller: React.RefObject<HTMLDivElement | null>, on: boolean) {
+/** The body has scrolled away from its top: the header condenses to one line (FR-4). It expands
+ *  when the body is back at its top, or when the operator clicks the line, which does not scroll:
+ *  the reader keeps their place, and the header stays expanded until the body scrolls again. */
+function useCondensed(scroller: React.RefObject<HTMLDivElement | null>) {
   const [condensed, setCondensed] = React.useState(false)
   React.useEffect(() => {
     const el = scroller.current
-    if (!el || !on) return
-    const onScroll = () => setCondensed((was) => (was ? el.scrollTop > 8 : el.scrollTop > 48))
+    if (!el) return
+    let last = el.scrollTop
+    const onScroll = () => {
+      const top = el.scrollTop
+      const moved = top - last
+      last = top
+      // Hysteresis: a header that shrinks moves the body, which must not flip it straight back.
+      setCondensed((was) => (top <= 8 ? false : was ? true : moved > 0 && top > 48))
+    }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
-  }, [scroller, on])
-  const expand = () => {
-    scroller.current?.scrollTo({ top: 0, behavior: 'smooth' })
-    setCondensed(false)
-  }
-  return { condensed: on && condensed, expand }
+  }, [scroller])
+  return { condensed, expand: () => setCondensed(false) }
 }
 
-function headerDesignProps(props: SpecSurfaceProps, condensed: { condensed: boolean; expand: () => void }) {
-  if (props.headerDesign !== 'compact') return {}
-  return {
-    design: 'compact' as const,
-    notices: props.notices,
-    noticeStyle: props.noticeStyle ?? 'line',
-    health: props.health,
-    condensed: condensed.condensed,
-    onExpand: condensed.expand,
-  }
+/** Check's findings, as notices: one line each, its action shows it in the document. */
+function findingNotices(findings: CheckFinding[], jump: (anchor: string) => void): HeaderNotice[] {
+  return findings.map((f) => ({
+    id: `finding-${f.id}`,
+    tone: f.severity === 'blocking' ? ('error' as const) : ('warn' as const),
+    summary: `${f.target.id} — ${f.message}`,
+    action: { label: 'Show', onClick: () => jump(findingAnchorOf(f)) },
+  }))
+}
+
+function findingAnchorOf(f: CheckFinding): string {
+  return f.target.kind === 'requirement' ? anchors.requirement(f.target.id) : f.target.kind === 'task' ? anchors.task(f.target.id) : anchors.section(f.target.id)
 }
 
 function useSurface(props: SpecSurfaceProps, scroller: React.RefObject<HTMLDivElement | null>) {
@@ -93,13 +99,7 @@ function useSurface(props: SpecSurfaceProps, scroller: React.RefObject<HTMLDivEl
   const findings: CheckFinding[] = props.check.status === 'done' ? props.check.findings : []
   const running = props.builds.find((b) => b.running) ?? null
   const firstFinding = findings[0]
-  const findingAnchor = firstFinding
-    ? firstFinding.target.kind === 'requirement'
-      ? anchors.requirement(firstFinding.target.id)
-      : firstFinding.target.kind === 'task'
-        ? anchors.task(firstFinding.target.id)
-        : anchors.section(firstFinding.target.id)
-    : null
+  const findingAnchor = firstFinding ? findingAnchorOf(firstFinding) : null
   const onAction = (action: SpecAction) => (action === 'open-build' && running ? nav.jump(anchors.build(running.id)) : props.onAction(action))
   return { nav, findings, running, findingAnchor, onAction }
 }
@@ -111,7 +111,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
   const active = useActiveAnchor(scroller, [props.doc.path])
   const content = React.useRef<HTMLDivElement>(null)
   useEnterChildren(content, props.doc.path)
-  const condensed = useCondensed(scroller, props.headerDesign === 'compact')
+  const condensed = useCondensed(scroller)
   const { doc } = props
 
   const list = (variant: 'column' | 'popover') => (
@@ -155,9 +155,12 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
           onCopyPath={props.onCopyPath}
           onArchive={props.onArchive}
           onDelete={props.onDelete}
-          {...headerDesignProps(props, condensed)}
+          notices={[...(props.notices ?? []), ...findingNotices(findings, nav.jump)]}
+          health={props.health?.({ jump: nav.jump })}
+          condensed={condensed.condensed}
+          onExpand={condensed.expand}
         />
-        {props.banner?.({ jump: nav.jump })}
+        {props.dialogs}
         <div className="aw-sp-scroll" ref={scroller}>
           <div className="aw-sp-columns">
             <div className="aw-sp-content" key={doc.path} ref={content}>
@@ -173,6 +176,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 onOpenDocument={props.onOpenDocument}
                 builds={
                   <>
+                    {props.buildActions ? <div className="aw-sp-build-actions">{props.buildActions}</div> : null}
                     <SpecBuildsSection
                       builds={props.builds}
                       canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}
@@ -190,7 +194,6 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
               />
             </div>
             <div className="aw-sp-rail">
-              {props.headerDesign === 'compact' && props.noticeStyle === 'rail' ? <SpecNoticeStack notices={props.notices ?? []} /> : null}
               <SpecOutlineRail doc={doc} findings={findings} builds={props.builds} active={active} onJump={nav.jump} />
             </div>
           </div>
@@ -217,8 +220,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
   const active = useActiveAnchor(scroller, [props.doc.path, tab])
   const content = React.useRef<HTMLDivElement>(null)
   useEnterChildren(content, `${props.doc.path}:${tab}`)
-  const compactDesign = props.headerDesign === 'compact'
-  const condensed = useCondensed(scroller, compactDesign)
+  const condensed = useCondensed(scroller)
   const jump = (anchor: string) => {
     setTab(tabFor(anchor))
     nav.jump(anchor)
@@ -232,11 +234,9 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
   const parts: BodyPart[] = [tab]
   const findingsIn = (t: PanelTab) =>
     findings.filter((f) => (t === 'tasks' ? f.target.kind === 'task' : t === 'document' ? f.target.kind !== 'task' : false)).length
-  const panelRow = props.panelNav === 'row'
   const tabs = (
     <Segmented<PanelTab>
       label="Show"
-      size={panelRow ? 'xs' : undefined}
       value={tab}
       onChange={setTab}
       options={[
@@ -289,23 +289,17 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
           onCopyPath={props.onCopyPath}
           onArchive={props.onArchive}
           onDelete={props.onDelete}
-          leading={compactDesign && props.list ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} inline /> : undefined}
-          {...headerDesignProps(props, condensed)}
+          leading={props.list ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} /> : undefined}
+          notices={[...(props.notices ?? []), ...findingNotices(findings, jump)]}
+          health={props.health?.({ jump })}
+          condensed={condensed.condensed}
+          onExpand={condensed.expand}
         />
-        {props.banner?.({ jump })}
-        {props.list && !compactDesign ? <SpecPanelDocSwitcher doc={doc} list={props.list} onOpenDocument={props.onOpenDocument} now={props.now} /> : null}
-        {/* The tabs: a row of their own today, or first in the one navigation row. */}
-        {panelRow ? null : <div className="aw-sp-panel-tabs" data-design={compactDesign ? 'compact' : undefined}>{tabs}</div>}
-        <SpecPanelNav
-          doc={doc}
-          tab={tab}
-          filters={props.filters}
-          onFiltersChange={props.onFiltersChange}
-          active={active}
-          onJump={jump}
-          inline={panelRow}
-          lead={panelRow ? tabs : undefined}
-        />
+        {props.dialogs}
+        {/* The panel's four navigation rows stay (operator, 2026-11-02): tabs, sections, the strip,
+            and Filter & sort. */}
+        <div className="aw-sp-panel-tabs">{tabs}</div>
+        <SpecPanelNav doc={doc} tab={tab} filters={props.filters} onFiltersChange={props.onFiltersChange} active={active} onJump={jump} />
         <div className="aw-sp-scroll" ref={scroller}>
           <div className="aw-sp-content" key={`${doc.path}:${tab}`} ref={content}>
             <SpecDocumentBody
@@ -322,6 +316,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
               onOpenDocument={props.onOpenDocument}
               builds={
                 <>
+                  {props.buildActions ? <div className="aw-sp-build-actions">{props.buildActions}</div> : null}
                   <SpecBuildsSection
                     builds={props.builds}
                     canBuild={doc.state === 'approved' && doc.kind === 'change-spec'}

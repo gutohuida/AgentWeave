@@ -112,22 +112,25 @@ export function SpecDocumentFacts({
   specList,
   onOpenTasks,
   onOpenRequirement,
+  inHeader = false,
 }: {
   path: string
   specList: SpecListResponse | undefined
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenRequirement: (identifier: string) => void
+  /** In the redesigned header's second row: the facts flow beside the phase and a detail opens
+   *  over the body. A fact that could not be read is the header's notice. */
+  inHeader?: boolean
 }) {
   const [detail, setDetail] = useState<HealthFactKey | null>(null)
-  const { data: specDoc, error: specError } = useSpec(path)
-  const { data: coverage, error: coverageError } = useSpecCoverage(path)
+  const { data: specDoc } = useSpec(path)
+  const { data: coverage } = useSpecCoverage(path)
   const { data: drift, isError: driftError } = useSpecDrift(path)
   const { data: vault } = useVaultWarnings(path)
-  const { data: vaultChecked, error: vaultCheckedError } = useVaultChecked(path)
-  const { data: documents, error: documentsError } = useSpecDocuments()
+  const { data: vaultChecked } = useVaultChecked(path)
+  const { data: documents } = useSpecDocuments()
   const record = documents?.documents.find((entry) => entry.path === path)
-  const { data: documentTasks, error: tasksError } = useDocumentTasks(record?.id ?? null)
-  const unread = [specError, coverageError, vaultCheckedError, documentsError, tasksError].some(Boolean)
+  const { data: documentTasks } = useDocumentTasks(record?.id ?? null)
   const detect = useDetectDrift()
   const checkVault = useCheckVaultWarnings()
 
@@ -138,13 +141,8 @@ export function SpecDocumentFacts({
   const indexIssues = diagnostics.length + missing.length
 
   return (
-    <div data-testid="spec-document-facts">
+    <div data-testid="spec-document-facts" className={inHeader ? 'aw-sp-head-facts' : undefined}>
       {record?.acronym ? <AcronymEditor path={path} acronym={record.acronym} /> : null}
-      {unread ? (
-        <p className="aw-spec-message" data-tone="warn" data-testid="spec-facts-unread">
-          <span className="aw-spec-message-text">Some of this document's facts could not be read, so the line below may be missing some.</span>
-        </p>
-      ) : null}
       <SpecHealthLine
         coverage={coverage?.requirements ?? []}
         coverageDiagnostics={coverage?.diagnostics.length ?? 0}
