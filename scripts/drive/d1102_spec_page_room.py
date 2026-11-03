@@ -194,7 +194,7 @@ def change(title, *, tasks=True, gaps=False, requirements=2):
         "scope": {"in_scope": [f"Thing {n}" for n in range(1, 6)], "non_goals": ["Everything else"]},
         "requirements": reqs, "acceptance_criteria": crits,
         "tasks": ([{"key": "t1", "title": "Do the work", "description": "Do it.",
-                    "requirements": ["r1"], "depends_on": [], "files": ["notes.txt"],
+                    "requirements": [r["key"] for r in reqs], "depends_on": [], "files": ["notes.txt"],
                     "from": None, "reviewer": None}] if tasks else []),
         "algorithms": [], "design": PARAGRAPH * 12,
         "evidence": {"checked": ["notes.txt exists"], "limits": []},
@@ -243,11 +243,15 @@ class Project:
                                                if to == "approved" else {}), **extra})
         setup(code == 200, f"{path} to {to}", f"{code} {str(out)[:800]}")
 
-    def approve(self, path):
+    def make_ready(self, path):
+        """Walk the journey to its last step and close exploration: nothing blocks approval."""
         quoted = urllib.parse.quote(path)
         api("POST", f"{self.base}/project/documents/journey?path={quoted}",
             {"size": "small", "step": "delivery", "reason": "drive setup"})
         api("POST", f"{self.base}/project/documents/close-exploration?path={quoted}")
+
+    def approve(self, path):
+        self.make_ready(path)
         self.phase(path, "approved")
 
 
@@ -351,6 +355,7 @@ def seed():
 
     # One document in each state the list marks.
     p.create(READY, change("Ready one"))
+    p.make_ready(READY)
     p.create(AMENDED, change("Amended one", tasks=False))
     p.approve(AMENDED)
     stamp_event(p.ids[AMENDED], p.pid, "amendment", {
