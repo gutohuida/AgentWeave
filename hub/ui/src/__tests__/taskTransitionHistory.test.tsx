@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 
@@ -42,6 +42,19 @@ const ROWS = [
     created_at: '2026-09-22T10:05:00Z',
   },
 ]
+
+
+// The trace drawer itself is covered by traces.test.tsx; here a trace link is a button that reports
+// which run it was asked to open.
+const traceOpened = vi.hoisted(() => vi.fn())
+vi.mock('@/components/traces/TraceDrawer', () => ({
+  TraceButton: ({ runId, testId }: { runId?: string; testId?: string }) => (
+    <button type="button" data-testid={testId} onClick={() => traceOpened(runId)}>
+      trace
+    </button>
+  ),
+  TraceDrawerPanel: () => null,
+}))
 
 let rows: typeof ROWS = ROWS
 
@@ -159,5 +172,15 @@ describe('a task’s transition history', () => {
     rows = []
     render(<TaskTransitionHistory taskId="task-1" open />)
     expect(screen.queryByTestId('task-transitions-task-1')).toBeNull()
+  })
+})
+
+describe('every run named in a task’s history opens its trace', () => {
+  it('opens run-9’s trace from the move it made, and offers none on the operator’s move', () => {
+    traceOpened.mockClear()
+    render(<TaskTransitionHistory taskId="task-1" open />)
+    expect(screen.queryByTestId('task-transition-trace-ttr-1')).toBeNull()
+    fireEvent.click(screen.getByTestId('task-transition-trace-ttr-2'))
+    expect(traceOpened).toHaveBeenCalledExactlyOnceWith('run-9')
   })
 })

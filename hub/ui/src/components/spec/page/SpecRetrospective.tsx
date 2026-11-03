@@ -1,3 +1,4 @@
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import * as React from 'react'
 import { isNoManager, useBuildRetrospectives, useReviewThisBuild, type BuildRetrospective, type RetrospectiveFinding, type RetrospectiveReport } from '@/api/manager'
 import { readableApiError } from '@/api/client'
@@ -314,7 +315,7 @@ function Report({ report }: { report: RetrospectiveReport }) {
       {part(
         'transcripts_read',
         'Transcripts read',
-        <Rows rows={report.transcripts_read.map((r) => ({ key: r.run_id, text: `${r.run_id} · ${r.agent}${r.task_id ? ` · ${name(r.task_id)}` : ''} · ${r.flags.join(', ')}` }))} />,
+        <Rows rows={report.transcripts_read.map((r) => ({ key: r.run_id, runId: r.run_id, text: `${r.run_id} · ${r.agent}${r.task_id ? ` · ${name(r.task_id)}` : ''} · ${r.flags.join(', ')}` }))} />,
       )}
     </div>
   )
@@ -339,14 +340,22 @@ function Findings({ rows }: { rows: RetrospectiveFinding[] }) {
   )
 }
 
-function Rows({ title, rows }: { title?: string; rows: Array<{ key: string; text: string }> }) {
+function Rows({ title, rows }: { title?: string; rows: Array<{ key: string; text: string; runId?: string }> }) {
   if (!rows.length) return null
   return (
     <div className="aw-sp-retro-rows">
       {title ? <div className="aw-sp-meter-title">{title}</div> : null}
       <ul>
         {rows.map((r) => (
-          <li key={r.key}>{r.text}</li>
+          <li key={r.key}>
+            {r.text}
+            {r.runId ? (
+              <>
+                {' · '}
+                <TraceButton runId={r.runId} label="trace" testId={`retro-transcript-trace-${r.runId}`} />
+              </>
+            ) : null}
+          </li>
         ))}
       </ul>
     </div>

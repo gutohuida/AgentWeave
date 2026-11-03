@@ -7,9 +7,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from hub import traces
+from hub import traces, work_tally
 from hub.db.engine import async_session_factory
-from hub.db.models import Conversation, Run, Task, TurnUsage
+from hub.db.models import Build, Conversation, Run, Stall, Task, TurnUsage
 
 PROJECT = "proj-test"
 NOW = datetime.now(timezone.utc)
@@ -131,3 +131,59 @@ async def test_a_runs_row_carries_its_fields(app, auth_headers):
     assert gone["cost_usd"] is None and gone["cost_state"] == "unpriced"
     live = rows["run-r-live"]
     assert live["cost_state"] == "running" and live["cost_usd"] is None
+
+
+@pytest.mark.asyncio
+async def test_build_filter_lists_exactly_the_runs_of_that_builds_tasks(app, auth_headers):
+    """FR-12: a build's run count opens the view filtered to the runs of that build's tasks."""
+    async with async_session_factory() as db:
+        db.add(Task(id="task-bf1", project_id=PROJECT, title="In build", build_id="build-bf1"))
+        db.add(Task(id="task-bf2", project_id=PROJECT, title="Other build", build_id="build-bf2"))
+        db.add(Task(id="task-bf3", project_id=PROJECT, title="No build"))
+        for bid in ("build-bf1", "build-bf2"):
+            db.add(
+                Build(
+                    id=bid,
+                    project_id=PROJECT,
+                    document_id=f"spdoc-{bid}",
+                    driver="flow",
+                    level="reviewed",
+                    lead_conversation_id="conv-lead-bf1" if bid == "build-bf1" else None,
+                )
+            )
+        db.add(
+            Stall(
+                id="stall-bf1",
+                project_id=PROJECT,
+                key="k-bf1",
+                cause="dead_run",
+                task_id="task-bf1",
+                conversation_id="conv-stall-bf1",
+            )
+        )
+        await db.commit()
+    await _run("run-bf-1", "alpha", task_id="task-bf1")
+    await _run("run-bf-2", "beta", task_id="task-bf1")
+    await _run("run-bf-3", "alpha", task_id="task-bf2")
+    await _run("run-bf-4", "alpha", task_id="task-bf3")
+    await _run("run-bf-mend", "mender", conv="conv-stall-bf1")
+    await _run("run-bf-lead", "lead", conv="conv-lead-bf1")
+
+    got = {t["run_id"] for t in await _listed(app, auth_headers, build_id="build-bf1")}
+    assert got == {"run-bf-1", "run-bf-2", "run-bf-mend", "run-bf-lead"}
+    async with async_session_factory() as db:
+        card = (await work_tally.tally(db, PROJECT, build_id="build-bf1"))["builds"]["build-bf1"]
+    assert card["runs"]["total"] == len(got)
+    got = {
+        t["run_id"] for t in await _listed(app, auth_headers, build_id="build-bf1", agent="beta")
+    }
+    assert got == {"run-bf-2"}
+    assert await _listed(app, auth_headers, build_id="build-none") == []
+
+    res = await app.get(
+        f"/api/v1/projects/{PROJECT}/traces/totals",
+        params={"build_id": "build-bf1"},
+        headers=auth_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["totals"]["count"] == 4

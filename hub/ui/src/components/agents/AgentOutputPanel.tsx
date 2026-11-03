@@ -50,6 +50,7 @@ import { activeQuestionFor, isWaitedOn } from '@/lib/pendingQuestions'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { handoffLabel, handoffReason, type HandoffState } from '@/lib/checkpointControl'
 import { ConversationBar } from '@/components/conversation/ConversationBar'
+import { TraceDrawerPanel } from '@/components/traces/TraceDrawer'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 import { hubDate } from '@/lib/hubTime'
@@ -482,6 +483,14 @@ export function AgentOutputPanel({
   const runFacts = chat.data?.runs ?? {}
   const sseConnectionState = useSSEConnectionState()
   const [diagnosticsHidden, setDiagnosticsHidden] = useDiagnosticsHidden()
+  // The conversation's most recent run: the one that started last, taken from the run rows rather
+  // than the order the entries arrive in. The per-turn trace link beside each turn stays.
+  const latestRunId =
+    Object.entries(runFacts)
+      .map(([id, facts]) => ({ id, at: hubDate(facts.started_at).getTime() }))
+      .filter((run) => !Number.isNaN(run.at))
+      .sort((a, b) => b.at - a.at)[0]?.id ?? null
+  const [latestTraceOpen, setLatestTraceOpen] = useState(false)
 
   /** When the turn running now began, from its run row (the newest one with no end), so the bar's
    *  "working · 2m 14s" reads the same after a reload as it did when the turn started. */
@@ -1239,6 +1248,11 @@ export function AgentOutputPanel({
       {checkpointsOpen && currentConversationId ? (
         <CheckpointsPanel conversationId={currentConversationId} onClose={() => setCheckpointsOpen(false)} />
       ) : null}
+      <TraceDrawerPanel
+        open={latestTraceOpen && latestRunId !== null}
+        onOpenChange={setLatestTraceOpen}
+        runId={latestRunId ?? undefined}
+      />
       <ConversationBar
         barRef={headerRef}
         agent={agent}
@@ -1267,6 +1281,7 @@ export function AgentOutputPanel({
         onToggleDiagnostics={() => setDiagnosticsHidden(!diagnosticsHidden)}
         onFoldAll={() => setFoldAllSignal((n) => n + 1)}
         onOpenCheckpoints={currentConversationId ? () => setCheckpointsOpen(true) : undefined}
+        onOpenTrace={latestRunId ? () => setLatestTraceOpen(true) : undefined}
         onOpenAgentSettings={onOpenAgentSettings}
         onTogglePanel={onTogglePanel}
         panelOpen={panelOpen}

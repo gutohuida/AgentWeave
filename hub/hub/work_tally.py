@@ -414,6 +414,7 @@ async def tally(
     # Runs: cost, time and count by role
     # ------------------------------------------------------------------------------------------
     role_of: Dict[str, str] = {}
+    build_runs: Dict[str, List[str]] = {}
     for run_id, usage in usages.items():  # a usage row whose run row is gone still counts
         if run_id not in runs:
             runs[run_id] = _Orphan(run_id, usage)
@@ -449,6 +450,8 @@ async def tally(
             values["aiu"] = usage.ai_nano_aiu
             values["premium"] = usage.premium_requests
         book.book(values, scope, run.agent, model)
+        if scope[1] is not None:
+            build_runs.setdefault(scope[1], []).append(run.id)
         if usage is not None:
             day = usage.observed_at.date().isoformat() if usage.observed_at else "unknown"
             spend = {"usd": usage.api_equivalent_usd_micros, "tokens": usage.total_tokens}
@@ -704,6 +707,8 @@ async def tally(
         "workers": workers_acc.row(),
         "project": project.row(),
         "builds": {bid: acc.row() for bid, acc in book.builds.items()},
+        #: The runs each build's row counts, so a surface can open exactly those.
+        "build_runs": build_runs,
         "groups": {
             "spec": spec_entries,
             "agent": group(book.agents, "checks and wall time"),
