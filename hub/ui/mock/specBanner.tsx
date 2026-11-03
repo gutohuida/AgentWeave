@@ -66,29 +66,11 @@ export const HEADER_CHOICES: Array<{ value: HeaderChoice; label: string }> = [
   { value: 'rail', label: 'Header: C, beside the spec' },
 ]
 
-export type MarkerChoice = 'dot' | 'icon' | 'icon-paper' | 'icon-circles' | 'icon-milestones' | 'pill'
-
-export const MARKER_CHOICES: Array<{ value: MarkerChoice; label: string }> = [
-  { value: 'dot', label: 'Status mark: today (dot)' },
-  { value: 'icon', label: 'Icons 1: shapes' },
-  { value: 'icon-paper', label: 'Icons 2: paperwork' },
-  { value: 'icon-circles', label: 'Icons 3: circles' },
-  { value: 'icon-milestones', label: 'Icons 4: milestones' },
-  { value: 'pill', label: 'Status mark: word' },
-]
-
 export type PanelNavChoice = 'today' | 'row'
 
 export const PANEL_NAV_CHOICES: Array<{ value: PanelNavChoice; label: string }> = [
   { value: 'today', label: 'Panel navigation: today (4 rows)' },
   { value: 'row', label: 'Panel navigation: one row' },
-]
-
-export type FooterChoice = 'today' | 'tidy'
-
-export const FOOTER_CHOICES: Array<{ value: FooterChoice; label: string }> = [
-  { value: 'today', label: 'List footer: today' },
-  { value: 'tidy', label: 'List footer: folded' },
 ]
 
 /** The same messages as today's banner, as the compact header's notices. */

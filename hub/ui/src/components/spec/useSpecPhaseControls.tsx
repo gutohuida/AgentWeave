@@ -22,6 +22,8 @@ import { toast } from '@/lib/toast'
 import type { SpecPrimaryAction } from './SpecDocumentHeader'
 import { GapLines, ReviewerLine } from './SpecPhaseParts'
 import { NextSliceOfferNotice } from './NextSliceOfferNotice'
+import type { HeaderNotice } from './page/SpecNotices'
+import { offerTitle, useNextSliceOffers } from '@/api/nextSlice'
 import {
   useApproveAndBuildSpecDocument,
   useBuildSpecDocument,
@@ -142,6 +144,16 @@ export interface SpecPhaseControls {
   badges: React.ReactNode
   /** What the controls produced: refusals, gaps, and the journey. */
   messages: React.ReactNode
+  /** The same messages as the redesigned header's notices, one line each (spec
+   *  `the-spec-header-redesigned`). The build's status strip and the close-as-built control are not
+   *  messages: they are `buildActions`, drawn in the body's builds section; who reviews, when nobody
+   *  needs warning about it, is a fact (`facts`). */
+  notices: HeaderNotice[]
+  /** Beside the phase in the redesigned header: who reviews the document's work. */
+  facts: React.ReactNode
+  /** Above the builds in the body: the newest build's strip (Stop, Raise cap) and Close the open
+   *  tasks as already built. */
+  buildActions: React.ReactNode
   dialogs: React.ReactNode
 }
 
@@ -205,6 +217,7 @@ export function useSpecPhaseControls(
   const inline = options.inlineFindings === true
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
+  const { data: offers, error: offersError } = useNextSliceOffers()
   if (!document) return null
 
   // On a failed fetch there is nothing to flag as stale, and nothing to offer as a replacement —
@@ -559,180 +572,291 @@ export function useSpecPhaseControls(
     ) : null
 
   // ── Messages ───────────────────────────────────────────────────────────────────────────────
+  // Each message is built once, then laid out twice: stacked as `messages` (the phase bar) and as
+  // `notices` (the redesigned header), whose body is the same block, so neither can drop a control.
+  const offer = (offers ?? []).find((entry) => entry.document === path)
+  const nextSlice = <NextSliceOfferNotice path={path} />
+
+  // A stale recommendation (design D5/D5b): the recommended agent is archived or unknown, so
+  // building as written would start no flow. The Build dialog chooses another agent, for that build
+  // only; the document is never rewritten.
+  const staleSummary =
+    deliveryStatus?.state === 'stale'
+      ? `The recommended build names ${deliveryStatus.agent || 'no agent'}, which is ${
+          deliveryStatus.reason === 'archived' ? 'archived' : 'not an agent on this project'
+        }.`
+      : null
+  const deliveryStale = staleSummary ? (
+    <div className="aw-spec-message" data-tone="warn" data-testid="delivery-stale-strip">
+      <Icon name="warning" size={13} />
+      <span className="aw-spec-message-text">
+        {staleSummary} Building will not start a flow unless you choose another agent in the Build dialog.
+      </span>
+    </div>
+  ) : null
+
+  const checkClean =
+    checkedClean && !inline ? (
+      <p className="aw-spec-message" data-testid="spec-check-clean">
+        <span className="aw-spec-message-text">Checked: nothing blocks approval, and nothing moved.</span>
+      </p>
+    ) : null
+
+  const buildOutcome =
+    buildMessages.length > 0 ? (
+      <div className="aw-spec-message" data-testid="spec-build-outcome">
+        {buildMessages.map((message, i) => (
+          <span key={i} className="aw-spec-message-text">
+            {message}
+          </span>
+        ))}
+      </div>
+    ) : null
+
+  // The build running now (or the last one stopped): driver, level, spend of cap, window, with Stop
+  // and Raise cap (`a-build-has-a-driver-a-level-and-its-people`).
+  const buildStatus = !specDocError && specDoc?.builds?.length ? <BuildStatusStrip build={specDoc.builds[0]!} /> : null
+
+  // reconcile-and-measure: what reconciling the change with its code found, while it is approved.
+  // Its full form, and the ask, are in the fold dialog.
+  const reconcileResult = document.phase === 'approved' ? foldState?.reconcile : undefined
+  const reconcile = document.phase === 'approved' ? <ReconcileSummary path={document.path} result={reconcileResult} compact /> : null
+
+  // every-task-can-always-be-moved-on FR-5: an approved change whose work already shipped closes
+  // its open tasks in one step, checked through its evidence rather than rebuilt.
+  const alreadyBuiltOffer = specDocError ? undefined : specDoc?.approval_outcome?.already_built
+  const closeAlreadyBuilt =
+    document.kind === 'change-spec' && document.phase === 'approved' ? (
+      <CloseAlreadyBuilt path={document.path} documentId={document.id} offer={alreadyBuiltOffer} />
+    ) : null
+
+  const folded =
+    foldState?.state === 'folded' ? (
+      <p className="aw-spec-message" data-testid="fold-state" data-state="folded">
+        <span className="aw-spec-message-text">Folded into {foldState.capabilities.join(', ')}.</span>
+      </p>
+    ) : null
+
+  // Who reviews (F508): always said for a flow-delivered document, so the operator approves the
+  // staffing they were told about rather than learning it from a task's assignee.
+  const reviewerStatus = deliveryStatus?.state === 'ok' || deliveryStatus?.state === 'stale' ? deliveryStatus : null
+  const reviewer = reviewerStatus ? <ReviewerLine status={reviewerStatus} /> : null
+  const reviewerStale = !!reviewerStatus?.reviewer && reviewerStatus.reviewer_state !== 'ok'
+
+  const journey = onJourney ? (
+    <div className="aw-spec-message">
+      <nav aria-label="Journey" data-testid="spec-journey" className="aw-spec-journey">
+        {(document.journey ?? []).map((step, index) => {
+          const current = step === document.step
+          return (
+            <span key={step} className="flex items-center gap-1">
+              {index > 0 && <Icon name="chevron_right" size={11} />}
+              <button
+                type="button"
+                data-slot="journey-step"
+                className="aw-spec-journey-step"
+                data-testid={`spec-journey-step-${step}`}
+                aria-current={current ? 'step' : undefined}
+                disabled={busy || current}
+                title={current ? 'The step the next turn is briefed with' : `Move to ${step}`}
+                onClick={() => moveJourney({ step })}
+              >
+                {step}
+              </button>
+            </span>
+          )
+        })}
+      </nav>
+      <span className="ml-auto" data-testid="spec-journey-size" data-value={document.size ?? ''}>
+        <Segmented
+          label="Size"
+          size="xs"
+          value={(document.size ?? '') as SpecSize}
+          onChange={(size) => {
+            if (!busy) moveJourney({ size })
+          }}
+          options={[
+            { value: 'fix', label: 'Fix' },
+            { value: 'small', label: 'Small' },
+            { value: 'large', label: 'Large' },
+          ]}
+        />
+      </span>
+    </div>
+  ) : null
+  const journeyRefused = journeyRefusal ? (
+    <p className="aw-spec-message" data-tone="error" data-testid="spec-journey-refusal" role="alert">
+      <span className="aw-spec-message-text">{journeyRefusal}</span>
+    </p>
+  ) : null
+
+  const showGaps = gaps.length > 0 && (!inline || gapsOverridable)
+  const gapsSummary = gapsOverridable
+    ? 'Not approved: the Hub found these gaps. Approve anyway records them on the document.'
+    : 'Gaps approval will list:'
+  const offersApproveAnyway = gapsOverridable && document.phase === 'exploring'
+  const approveAnywayLabel = pendingApproval.build ? 'Approve and build anyway' : 'Approve anyway'
+  const gapList = showGaps ? (
+    <div className="aw-spec-message" data-tone="warn" data-testid="approval-warnings">
+      <span className="aw-spec-message-text">{gapsSummary}</span>
+      {offersApproveAnyway && (
+        <Button variant="primary" size="xs" data-testid="spec-approve-anyway" disabled={busy} onClick={onApproveAnyway}>
+          {approveAnywayLabel}
+        </Button>
+      )}
+      <GapLines gaps={gaps} />
+    </div>
+  ) : null
+
+  const notes =
+    approvalNotes.length > 0 ? (
+      <div className="aw-spec-message" data-testid="approval-notes">
+        <span className="aw-spec-message-text">Approved. For your information:</span>
+        <GapLines gaps={approvalNotes} />
+      </div>
+    ) : null
+
+  // What the approval overrode stays beside the phase while the document is approved (FR-5, FR-7):
+  // the record of the operator's judgement, not a to-do.
+  const overriddenGaps = document.phase === 'approved' ? (document.approval_warnings_overridden ?? []) : []
+  const overridden =
+    overriddenGaps.length > 0 ? (
+      <div className="aw-spec-message" data-testid="approval-overridden">
+        <span className="aw-spec-message-text">Approved over these gaps:</span>
+        <GapLines gaps={overriddenGaps} />
+      </div>
+    ) : null
+
+  const blockingList =
+    blocking.length > 0 && !inline ? (
+      <ul className="aw-spec-message" data-tone="warn" data-testid="spec-blocking">
+        {blocking.map((finding) => (
+          <li key={`${finding.code}:${finding.where}`} className="flex items-start gap-1.5">
+            <Icon name="warning" size={13} />
+            <span>
+              {finding.where && <code>{finding.where}</code>}
+              {finding.where ? ' — ' : ''}
+              {finding.message}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ) : null
+
+  const retiredText =
+    document.kind === 'capability' && document.phase === 'archived' && retirement
+      ? `Retired${retirement.at ? ` ${formatAgoLong(retirement.at)}` : ''}: ${retirement.reason}${absorberTitle ? ` Absorbed by ${absorberTitle}.` : ''}`
+      : null
+  const retiredNote = retiredText ? (
+    <p className="aw-spec-message" data-testid="spec-retired-note">
+      <span className="aw-spec-message-text">{retiredText}</span>
+    </p>
+  ) : null
+
   const messages = (
     <>
-      <NextSliceOfferNotice path={path} />
-
-      {/* A stale recommendation (design D5/D5b): the recommended agent is archived or unknown,
-          so building as written would start no flow. The Build dialog chooses another agent, for
-          that build only; the document is never rewritten. */}
-      {deliveryStatus?.state === 'stale' && (
-        <div className="aw-spec-message" data-tone="warn" data-testid="delivery-stale-strip">
-          <Icon name="warning" size={13} />
-          <span className="aw-spec-message-text">
-            The recommended build names {deliveryStatus.agent || 'no agent'}, which is{' '}
-            {deliveryStatus.reason === 'archived' ? 'archived' : 'not an agent on this project'}.
-            {' '}Building will not start a flow unless you choose another agent in the Build dialog.
-          </span>
-        </div>
-      )}
-
-      {checkedClean && !inline && (
-        <p className="aw-spec-message" data-testid="spec-check-clean">
-          <span className="aw-spec-message-text">Checked: nothing blocks approval, and nothing moved.</span>
-        </p>
-      )}
-
-      {buildMessages.length > 0 && (
-        <div className="aw-spec-message" data-testid="spec-build-outcome">
-          {buildMessages.map((message, i) => (
-            <span key={i} className="aw-spec-message-text">
-              {message}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* The build running now (or the last one stopped): driver, level, spend of cap, window,
-          with Stop and Raise cap (`a-build-has-a-driver-a-level-and-its-people`). */}
-      {!specDocError && specDoc?.builds?.length ? <BuildStatusStrip build={specDoc.builds[0]!} /> : null}
-
-      {/* reconcile-and-measure: what reconciling the change with its code found, while it is
-          approved. Its full form, and the ask, are in the fold dialog. */}
-      {document.phase === 'approved' && (
-        <ReconcileSummary path={document.path} result={foldState?.reconcile} compact />
-      )}
-      {/* every-task-can-always-be-moved-on FR-5: an approved change whose work already shipped
-          closes its open tasks in one step, checked through its evidence rather than rebuilt. */}
-      {document.kind === 'change-spec' && document.phase === 'approved' && (
-        <CloseAlreadyBuilt
-          path={document.path}
-          documentId={document.id}
-          offer={specDocError ? undefined : specDoc?.approval_outcome?.already_built}
-        />
-      )}
-      {foldState?.state === 'folded' && (
-        <p className="aw-spec-message" data-testid="fold-state" data-state="folded">
-          <span className="aw-spec-message-text">Folded into {foldState.capabilities.join(', ')}.</span>
-        </p>
-      )}
-
-      {/* Who reviews (F508): always said for a flow-delivered document, so the operator approves
-          the staffing they were told about rather than learning it from a task's assignee. */}
-      {(deliveryStatus?.state === 'ok' || deliveryStatus?.state === 'stale') && (
-        <ReviewerLine status={deliveryStatus} />
-      )}
-
-      {onJourney && (
-        <div className="aw-spec-message">
-          <nav aria-label="Journey" data-testid="spec-journey" className="aw-spec-journey">
-            {(document.journey ?? []).map((step, index) => {
-              const current = step === document.step
-              return (
-                <span key={step} className="flex items-center gap-1">
-                  {index > 0 && <Icon name="chevron_right" size={11} />}
-                  <button
-                    type="button"
-                    data-slot="journey-step"
-                    className="aw-spec-journey-step"
-                    data-testid={`spec-journey-step-${step}`}
-                    aria-current={current ? 'step' : undefined}
-                    disabled={busy || current}
-                    title={current ? 'The step the next turn is briefed with' : `Move to ${step}`}
-                    onClick={() => moveJourney({ step })}
-                  >
-                    {step}
-                  </button>
-                </span>
-              )
-            })}
-          </nav>
-          <span className="ml-auto" data-testid="spec-journey-size" data-value={document.size ?? ''}>
-            <Segmented
-              label="Size"
-              size="xs"
-              value={(document.size ?? '') as SpecSize}
-              onChange={(size) => {
-                if (!busy) moveJourney({ size })
-              }}
-              options={[
-                { value: 'fix', label: 'Fix' },
-                { value: 'small', label: 'Small' },
-                { value: 'large', label: 'Large' },
-              ]}
-            />
-          </span>
-        </div>
-      )}
-      {journeyRefusal && (
-        <p className="aw-spec-message" data-tone="error" data-testid="spec-journey-refusal" role="alert">
-          <span className="aw-spec-message-text">{journeyRefusal}</span>
-        </p>
-      )}
-
-      {gaps.length > 0 && (!inline || gapsOverridable) && (
-        <div className="aw-spec-message" data-tone="warn" data-testid="approval-warnings">
-          <span className="aw-spec-message-text">
-            {gapsOverridable
-              ? 'Not approved: the Hub found these gaps. Approve anyway records them on the document.'
-              : 'Gaps approval will list:'}
-          </span>
-          {gapsOverridable && document.phase === 'exploring' && (
-            <Button
-              variant="primary"
-              size="xs"
-              data-testid="spec-approve-anyway"
-              disabled={busy}
-              onClick={onApproveAnyway}
-            >
-              {pendingApproval.build ? 'Approve and build anyway' : 'Approve anyway'}
-            </Button>
-          )}
-          <GapLines gaps={gaps} />
-        </div>
-      )}
-
-      {approvalNotes.length > 0 && (
-        <div className="aw-spec-message" data-testid="approval-notes">
-          <span className="aw-spec-message-text">Approved. For your information:</span>
-          <GapLines gaps={approvalNotes} />
-        </div>
-      )}
-
-      {/* What the approval overrode stays beside the phase while the document is approved (FR-5,
-          FR-7): the record of the operator's judgement, not a to-do. */}
-      {document.phase === 'approved' && (document.approval_warnings_overridden?.length ?? 0) > 0 && (
-        <div className="aw-spec-message" data-testid="approval-overridden">
-          <span className="aw-spec-message-text">Approved over these gaps:</span>
-          <GapLines gaps={document.approval_warnings_overridden ?? []} />
-        </div>
-      )}
-
-      {blocking.length > 0 && !inline && (
-        <ul className="aw-spec-message" data-tone="warn" data-testid="spec-blocking">
-          {blocking.map((finding) => (
-            <li key={`${finding.code}:${finding.where}`} className="flex items-start gap-1.5">
-              <Icon name="warning" size={13} />
-              <span>
-                {finding.where && <code>{finding.where}</code>}
-                {finding.where ? ' — ' : ''}
-                {finding.message}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {document.kind === 'capability' && document.phase === 'archived' && retirement && (
-        <p className="aw-spec-message" data-testid="spec-retired-note">
-          <span className="aw-spec-message-text">
-            Retired{retirement.at ? ` ${formatAgoLong(retirement.at)}` : ''}: {retirement.reason}
-            {absorberTitle ? ` Absorbed by ${absorberTitle}.` : ''}
-          </span>
-        </p>
-      )}
+      {nextSlice}
+      {deliveryStale}
+      {checkClean}
+      {buildOutcome}
+      {buildStatus}
+      {reconcile}
+      {closeAlreadyBuilt}
+      {folded}
+      {reviewer}
+      {journey}
+      {journeyRefused}
+      {gapList}
+      {notes}
+      {overridden}
+      {blockingList}
+      {retiredNote}
     </>
   )
+
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+  const notices: HeaderNotice[] = []
+  if (offersError) notices.push({ id: 'next-slice-error', tone: 'warn', summary: 'Could not read whether the next slice is offered', body: nextSlice })
+  else if (offer) notices.push({ id: 'next-slice', tone: 'info', summary: offerTitle(offer), body: nextSlice, defaultOpen: true })
+  if (deliveryStale && staleSummary) notices.push({ id: 'delivery-stale', tone: 'warn', summary: staleSummary, body: deliveryStale })
+  if (checkClean) notices.push({ id: 'check-clean', tone: 'info', summary: 'Checked: nothing blocks approval, and nothing moved.' })
+  if (buildOutcome) {
+    notices.push({
+      id: 'build-outcome',
+      tone: 'info',
+      summary: buildMessages.length === 1 ? buildMessages[0] : `${buildMessages[0]} (and ${buildMessages.length - 1} more)`,
+      body: buildOutcome,
+    })
+  }
+  if (reconcileResult && reconcileResult.state !== 'none') {
+    notices.push({ id: 'reconcile', tone: 'info', summary: 'Reconciled with its code', body: reconcile, defaultOpen: true })
+  }
+  // An offer from intake is something to decide; the plain control waits in the builds section.
+  if (closeAlreadyBuilt && alreadyBuiltOffer) {
+    notices.push({
+      id: 'already-built',
+      tone: 'info',
+      summary: alreadyBuiltOffer.message || 'Intake recorded this work as already built',
+      body: closeAlreadyBuilt,
+      defaultOpen: true,
+    })
+  }
+  if (folded && foldState?.state === 'folded') notices.push({ id: 'folded', tone: 'info', summary: `Folded into ${foldState.capabilities.join(', ')}.` })
+  if (reviewer && reviewerStale) {
+    notices.push({ id: 'reviewer', tone: 'warn', summary: `Reviewed by @${reviewerStatus?.reviewer}: its reviews will come to you`, body: reviewer })
+  }
+  if (journey) {
+    notices.push({
+      id: 'journey',
+      tone: 'info',
+      summary: `Step ${document.step}${document.size ? ` · ${document.size}` : ''}: move the step or change the size`,
+      body: journey,
+      defaultOpen: true,
+    })
+  }
+  if (journeyRefused && journeyRefusal) notices.push({ id: 'journey-refusal', tone: 'error', summary: journeyRefusal })
+  if (gapList) {
+    notices.push({
+      id: 'approval-warnings',
+      tone: 'warn',
+      summary: gapsOverridable
+        ? `Not approved: the Hub found ${plural(gaps.length, 'gap', 'gaps')}`
+        : `${plural(gaps.length, 'gap', 'gaps')} approval will list`,
+      body: (
+        <>
+          <p>{gapsSummary}</p>
+          <GapLines gaps={gaps} />
+        </>
+      ),
+      defaultOpen: true,
+      action: offersApproveAnyway ? { label: approveAnywayLabel, onClick: onApproveAnyway, disabled: busy } : undefined,
+    })
+  }
+  if (notes) {
+    notices.push({ id: 'approval-notes', tone: 'info', summary: `Approved. For your information: ${plural(approvalNotes.length, 'note', 'notes')}`, body: notes })
+  }
+  if (overridden) {
+    notices.push({ id: 'approval-overridden', tone: 'info', summary: `Approved over ${plural(overriddenGaps.length, 'gap', 'gaps')}`, body: overridden })
+  }
+  if (blockingList) {
+    notices.push({ id: 'blocking', tone: 'error', summary: `${plural(blocking.length, 'thing blocks', 'things block')} approval`, body: blockingList, defaultOpen: true })
+  }
+  if (retiredText) notices.push({ id: 'retired-note', tone: 'info', summary: retiredText })
+
+  const facts =
+    reviewerStatus && !reviewerStale ? (
+      <span className="aw-sp-meta-fact" data-testid="delivery-reviewer">
+        {reviewerStatus.reviewer ? `Reviewed by @${reviewerStatus.reviewer}` : 'Reviewed by any free agent'}
+      </span>
+    ) : null
+
+  const buildActions =
+    buildStatus || closeAlreadyBuilt ? (
+      <>
+        {buildStatus}
+        {alreadyBuiltOffer ? null : closeAlreadyBuilt}
+      </>
+    ) : null
 
   const dialogs = (
     <>
@@ -823,6 +947,9 @@ export function useSpecPhaseControls(
     findings: { blocking, gaps, checking: check.isPending, checked: checkedOnce, clean: checkedClean },
     badges,
     messages,
+    notices,
+    facts,
+    buildActions,
     dialogs,
   }
 }

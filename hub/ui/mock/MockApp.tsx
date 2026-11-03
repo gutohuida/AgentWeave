@@ -6,7 +6,7 @@ import { APP_SETTINGS_SECTIONS, PROJECT_TABS, type AppSettingsSection, type Proj
 import { MOCK_NOW, project, projects, tasks } from './fixtures'
 import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
-import { FOOTER_CHOICES, HEADER_CHOICES, MARKER_CHOICES, NOTICE_LEVELS, PANEL_NAV_CHOICES } from './specBanner'
+import { HEADER_CHOICES, NOTICE_LEVELS, PANEL_NAV_CHOICES } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 
 const BEFORE = import.meta.glob('./before/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
@@ -181,7 +181,7 @@ function MockBar({
 /** The spec page's controls: which of the five document states to show, and (open question 2)
  *  whether the document list is a left column or a switcher above a full-width document. */
 function SpecMockBar({ showLayout }: { showLayout: boolean }) {
-  const { state, layout, notices, header, footer, marker, panelNav } = useSpecMockControls()
+  const { state, layout, notices, header, panelNav } = useSpecMockControls()
   return (
     <>
       <select className="mock-bar-select" aria-label="Header" value={header} onChange={(e) => setSpecMockControls({ header: e.target.value as never })}>
@@ -200,22 +200,6 @@ function SpecMockBar({ showLayout }: { showLayout: boolean }) {
           ))}
         </select>
       )}
-        <select className="mock-bar-select" aria-label="Status mark" value={marker} onChange={(e) => setSpecMockControls({ marker: e.target.value as never })}>
-          {MARKER_CHOICES.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      {showLayout ? (
-        <select className="mock-bar-select" aria-label="List footer" value={footer} onChange={(e) => setSpecMockControls({ footer: e.target.value as never })}>
-          {FOOTER_CHOICES.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
-      ) : null}
       <select className="mock-bar-select" aria-label="Messages" value={notices} onChange={(e) => setSpecMockControls({ notices: e.target.value as never })}>
         {NOTICE_LEVELS.map((n) => (
           <option key={n.value} value={n.value}>
