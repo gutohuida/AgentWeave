@@ -53,7 +53,7 @@ export function LoopFiringGroup({
   const openTab = usePanelTabsStore((state) => state.openTab)
   // Which run each firing started comes from the loop's firing history, read only while the group
   // is open; a firing the history does not name (older than its last ten, or with no run) has none.
-  const { data: loop } = useLoop(expanded ? loopId : null)
+  const { data: loop, error: historyError } = useLoop(expanded ? loopId : null)
   const runByConversation = new Map(
     (loop?.history ?? []).flatMap((f) => (f.conversation_id && f.run_id ? [[f.conversation_id, f.run_id] as const] : [])),
   )
@@ -119,6 +119,11 @@ export function LoopFiringGroup({
 
       {expanded && (
         <div className="aw-rail-conversations" data-testid={`${testId}-firings`}>
+          {historyError ? (
+            <div className="px-2 text-xs opacity-70" data-testid={`${testId}-trace-error`}>
+              Trace links unavailable: the loop's firing history could not be read.
+            </div>
+          ) : null}
           {conversations.map((conversation) => (
             <div key={conversation.id} className="flex items-center">
             <div className="min-w-0 flex-1">
