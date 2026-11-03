@@ -1,4 +1,4 @@
-import { StartBuildDialog } from '@/components/spec/page/SpecBuilds'
+import { BuildPlanDialog } from '@/components/spec/build/BuildPlanDialog'
 import { SpecWorkspace } from '@/components/spec/page/SpecWorkspace'
 import { useListPreferences } from '@/components/spec/page/hooks'
 import { toast } from '@/lib/toast'
@@ -12,7 +12,7 @@ import { useSpecMock } from '../specMock'
 /** The Spec tab, redesigned (spec `the-spec-page-redesigned`). The mock bar switches the document's
  *  state and the list's layout; everything else responds as the page will. */
 export default function Spec() {
-  const { surface, layout, entries, startDialog } = useSpecMock('tab/spec')
+  const { surface, layout, entries, planDialog } = useSpecMock('tab/spec')
   const [listPrefs, setListPrefs] = useListPreferences(PROJECT_ID)
   // mock state: the defects report as the operator's Hub answered it on 2026-11-02 (14 changes,
   // 72 defects), and its evidence count then.
@@ -40,7 +40,7 @@ export default function Spec() {
         layout={layout}
         listFooter={listFooter}
       />
-      <StartBuildDialog {...startDialog} />
+      <BuildPlanDialog {...planDialog} />
     </>
   )
 }

@@ -7,7 +7,8 @@ import * as React from 'react'
 import { toast } from '@/lib/toast'
 import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState, type DocState, type DocumentFilters, type EvidenceState, type SpecAction, type SpecDocumentView, type SpecListEntry, type StartBuildChoice, type TaskStatus, shownOf } from '@/components/spec/page/model'
 import type { SpecSurfaceProps } from '@/components/spec/page/SpecWorkspace'
-import type { CoverageEntry } from '@/api/spec'
+import type { BuildChoices, CoverageEntry, SpecRecommendedBuild } from '@/api/spec'
+import type { BuildPlanAgent, BuildPlanTask } from '@/components/spec/build/BuildPlanDialog'
 import { agents, tasks as taskFixtures } from './fixtures'
 import { MockHealth } from './MockHealth'
 import { NOTICE_LEVELS, noticesFor, type NoticeLevel } from './specBanner'
@@ -52,6 +53,85 @@ const ROADMAP_PATH = 'spec/changes/terra-agent-control-center-roadmap/spec.json'
 const NEXT_SLICE = 'spec/changes/cairn-interactive-setup-and-skill-selection/spec.json'
 
 export const AGENT_NAMES = agents.map((a) => a.name)
+
+// ── The Build dialog's plan (slice `build-dialog-overhaul`) ──────────────
+
+/** mock state: the replica's agents carry no model, so the dialog's second line is supplied here. */
+const MODEL_OF: Record<string, string> = { Architect: 'Opus 5.5', Builder: 'Sonnet 5.5', QA1: 'Opus 5.5', QA2: 'Haiku 5.5' }
+export const PLAN_AGENTS: BuildPlanAgent[] = AGENT_NAMES.map((name) => ({ name, detail: MODEL_OF[name] }))
+export const PLAN_TASKS: BuildPlanTask[] = PAYLOAD.tasks.map((t) => ({ key: t.key, title: t.title }))
+
+/** mock state: the recommendation an author gives under `every-task-comes-with-a-recommended-
+ *  builder-and-checker`, over the recorded document's five tasks. One names an agent that is not
+ *  open here (Codex), and one gives no reason, so both of those rows are on screen. */
+export const PLAN_RECOMMENDED: SpecRecommendedBuild = {
+  mode: 'flow',
+  agent: 'Builder',
+  reviewer: null,
+  tester: null,
+  cron: '*/5 * * * *',
+  stop_when_queue_empties: true,
+  stop_at: null,
+  driver: 'flow',
+  level: 'reviewed',
+  builders: ['Builder', 'QA2'],
+  builder: 'Builder',
+  checker: 'QA1',
+  landing: 'main',
+  task_builders: {
+    'chain-format': 'QA2',
+    'create-command': 'Builder',
+    'resume-command': 'Builder',
+    'skill-installer': 'Codex',
+    'install-and-drive-green': 'Architect',
+  },
+  task_checkers: {
+    'chain-format': 'QA1',
+    'create-command': 'QA1',
+    'resume-command': 'QA1',
+    'skill-installer': 'QA2',
+    'install-and-drive-green': 'QA1',
+  },
+  task_reasons: {
+    'chain-format': {
+      builder: 'Writing the acceptance drive is scripted and well specified; Haiku does it cheaply.',
+      checker: 'The drive decides every later task, so an Opus checker runs it rather than reading it.',
+    },
+    'create-command': {
+      builder: 'A single command with its refusal cases spelled out suits Sonnet.',
+      checker: 'Opus checks the refusal paths, which a cheaper model tends to wave through.',
+    },
+    'resume-command': { builder: 'Same shape as create; Sonnet again.' },
+    'skill-installer': {
+      builder: 'Codex has the npm packaging experience from the last build.',
+      checker: 'Instructions are checked by running them, which Haiku handles.',
+    },
+    'install-and-drive-green': {},
+  },
+  reasons: {
+    mode: 'Five chained tasks; a flow hands each out as the one before it lands.',
+    driver: 'The order is fixed by the chain, so nobody needs to lead it.',
+    level: 'Reviewed: every task touches the published command.',
+    builders: 'Sonnet builds by default to spare the weekly quota.',
+    checker: 'One Opus checker across the build keeps the verdicts consistent.',
+    landing: 'Each task lands on main as it passes.',
+    stop: 'Stops once the fifth task lands.',
+  },
+}
+
+/** The mock's simulated build from what the dialog sends. */
+function startChoiceOf(choices: BuildChoices): StartBuildChoice {
+  return {
+    ...DEFAULT_CHOICE,
+    driver: choices.driver ?? 'flow',
+    level: choices.level ?? 'reviewed',
+    builders: choices.builders?.length ? choices.builders : [choices.builder || 'Builder'],
+    reviewers: choices.checker ? [choices.checker] : [],
+    lead: choices.lead ?? null,
+    budget: choices.budget_cap_usd ?? null,
+    landsOn: 'main',
+  }
+}
 
 // ── Mock controls (the mock bar writes them; the hash can preset them) ───
 
@@ -489,7 +569,19 @@ export function useSpecMock(routeHash: string) {
     },
   }
 
-  return { surface, layout, entries: listEntries(state), startDialog }
+  const planDialog = {
+    open: dialog.open,
+    onOpenChange: (open: boolean) => setDialog((d) => ({ ...d, open })),
+    title: PAYLOAD.title,
+    approve: dialog.approving,
+    recommended: PLAN_RECOMMENDED,
+    tasks: PLAN_TASKS,
+    agents: PLAN_AGENTS,
+    now: new Date('2026-10-17T11:20:00Z'),
+    onConfirm: (choices: BuildChoices) => startDialog.onStart(startChoiceOf(choices)),
+  }
+
+  return { surface, layout, entries: listEntries(state), startDialog, planDialog }
 }
 
 function buildsFor(state: DocState): BuildView[] {

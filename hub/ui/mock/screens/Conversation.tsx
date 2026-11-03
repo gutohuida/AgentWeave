@@ -9,7 +9,7 @@ import { Icon } from '@/components/common/Icon'
 import { ConversationBar } from '@/components/conversation/ConversationBar'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
 import { NewConversationIntro, type ConversationStarter } from '@/components/conversation/NewConversationIntro'
-import { StartBuildDialog } from '@/components/spec/page/SpecBuilds'
+import { BuildPlanDialog } from '@/components/spec/build/BuildPlanDialog'
 import { SpecSidePanel } from '@/components/spec/page/SpecWorkspace'
 import { SpecOpenPicker } from '@/components/spec/page/SpecOpenPicker'
 import { useListPreferences } from '@/components/spec/page/hooks'
@@ -86,7 +86,7 @@ export default function Conversation(props: ScreenProps) {
 /** The conversation's spec panel, redesigned: the same components as the Spec tab in one column.
  *  As in the app, it takes the width the conversation's 480px column leaves. */
 function SpecPanelMock({ picking, go, route }: { picking: boolean; go: ScreenProps['go']; route: ScreenProps['route'] }) {
-  const { surface, startDialog, entries } = useSpecMock('conversation/Architect/conv-9cdda4865e0b/spec')
+  const { surface, planDialog, entries } = useSpecMock('conversation/Architect/conv-9cdda4865e0b/spec')
   const [listPrefs, setListPrefs] = useListPreferences(PROJECT_ID)
   // mock state: the conversation's attached document, what was opened lately, and the running builds' progress.
   const attachedPath = surface.doc.path
@@ -125,7 +125,7 @@ function SpecPanelMock({ picking, go, route }: { picking: boolean; go: ScreenPro
       ) : (
         <SpecSidePanel {...surface} onOpenDocument={openDoc} list={list} />
       )}
-      <StartBuildDialog {...startDialog} />
+      <BuildPlanDialog {...planDialog} />
     </div>
   )
 }
