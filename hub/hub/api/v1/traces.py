@@ -17,10 +17,10 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import readable_ids, trace_export, trace_retention, traces
+from ... import readable_ids, trace_export, trace_retention, traces, work_tally
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
-from ...db.models import Run, Task, TraceSettings
+from ...db.models import Run, TraceSettings
 from ...schemas.common import RequestModel
 
 router = APIRouter(prefix="/traces", tags=["traces"])
@@ -75,11 +75,12 @@ async def list_project_traces(
         if conversation_id:
             query = query.where(Run.conversation_id == conversation_id)
         if build_id:
-            query = query.where(
-                Run.task_id.in_(
-                    select(Task.id).where(Task.build_id == build_id, Task.project_id == project_id)
-                )
-            )
+            # The runs the build's card counts: task-bound, stall-scoped and the lead's.
+            try:
+                whole = await work_tally.tally(session, project_id, build_id=build_id)
+            except LookupError:
+                whole = {"build_runs": {}}
+            query = query.where(Run.id.in_(whole["build_runs"].get(build_id, [])))
         if agent:
             query = query.where(Run.agent == agent)
         run_ids = list((await session.execute(query)).scalars().all())
