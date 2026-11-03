@@ -159,7 +159,7 @@ export function TracesPage() {
   const [anchor, setAnchor] = React.useState(() => new Date())
   const [before, setBefore] = React.useState<string | undefined>(undefined)
   const [opened, setOpened] = React.useState<TraceSummary | null>(null)
-  const { data: agents = [] } = useAgents()
+  const { data: agents = [], error: agentsError } = useAgents()
 
   const change = (patch: Partial<TracesFilter>) => {
     setFilter((current) => ({ ...current, ...patch }))
@@ -254,6 +254,12 @@ export function TracesPage() {
           ))}
         </select>
       </div>
+
+      {agentsError ? (
+        <p role="alert" className="aw-traces-error">
+          {readableApiError(agentsError, 'The agents could not be listed, so the agent filter has no choices.')}
+        </p>
+      ) : null}
 
       {internal ? (
         <p className="aw-traces-internal-note" data-testid="traces-internal-note">
