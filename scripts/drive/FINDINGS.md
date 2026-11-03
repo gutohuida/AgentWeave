@@ -41288,3 +41288,13 @@ On `proj-d85a82bf4216` since 2026-10-29, `hub-tests` ran 82 times for 29.2 hours
 On 2026-11-01 the operator approved `a-finished-spec-gets-a-build-retrospective`, a standalone spec, and was shown `roadmap_slice_unclaimed` ×5, one per approved roadmap with an unclaimed slice (`hub/hub/spec_service.py:1296`). It does not gate (`NOTE_CODES`, :1319), but it reads like a problem with the spec just approved. Its advice is for an author naming a slice, and it reached the operator at approval. **Expected:** the note goes to the author while writing, not to the operator approving, or is limited to a document whose subject could be one of those slices.
 
 **Status:** open 2026-11-01. Seen once, reported by the operator; not driven.
+
+## F1126 (B) -- work that reaches master inside a dependent task's merge is never recorded as landed
+
+**Status:** open 2026-11-03.
+**Source:** found by reading the ledger and git, reported by the operator ("the spec header is done, why is it still building?")
+**Theme:** Flows & review
+**Ready:** yes
+**Tier:** 0
+
+The spec header redesign (`spdoc-407caf5abcdb`, loop `loop-d7043722a6fc`) read Building on 2026-11-03 although all its code was on master. SHR-2, 3, 4 and 6 (`task-e780849e6c34`, `task-2e162d826142`, `task-68034ef3e9fe`, `task-c24ef7bbfec5`) are `approved` with `waiting_to_land: true` and `latest_integration: null`, because their own merges were held earlier when UI lint failed on master. But each task's branch tip is an ancestor of `origin/master`: the dependent's checkout took it in with the Hub's "Bring in prerequisite work" commit (`hub/hub/worktrees.py:910`; master commits `58adf19`, `99feb37`, `06382da`, and `2898970` for SHR-6), and that dependent's landing carried it to master. The Hub records a landing only through the task's own merge, so the prerequisites stay "waiting to land" forever. Two consequences: the spec shows Building (F1089's rule), and the open held merges kept the loop from ending, which made DeveloperOpus fire every 5 minutes (fixed separately in `6ed8604` by skipping firings, but the stale state itself remains). The workaround is a merge retry, which answers "already in master; there was nothing to merge" and records it. **Expected:** when a merge lands on master, every approved task whose recorded work commit is now an ancestor of master is recorded as landed, with the commit that carried it. **Test:** approve A, hold A's merge, have dependent B bring A in and land; A must then read landed, not `waiting_to_land`.
