@@ -2,25 +2,39 @@ import * as React from 'react'
 import { format } from 'date-fns'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
-import { useTraces, type TraceSummary } from '@/api/traces'
+import {
+  useTraceTotals,
+  useTraces,
+  type TraceGroup,
+  type TraceGrouping,
+  type TraceSummary,
+  type TraceTotals,
+} from '@/api/traces'
 import { Badge } from '@/components/common/Badge'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import { TraceDrawerPanel } from '@/components/traces/TraceDrawer'
 import { formatDuration } from '@/components/traces/traceModel'
 import {
   EMPTY_FILTER,
+  GROUPINGS,
   INTERNAL_KINDS,
   RANGES,
   costOf,
   durationMs,
+  errorBreakdown,
   filtersToQuery,
+  groupNarrow,
   narrowedBy,
   subjectOf,
+  totalCostOf,
+  type CostCell,
   type InternalKind,
   type TracesFilter,
 } from '@/components/traces/tracesModel'
 import { Button } from '@/components/ui/button'
 import type { TracesRequest } from '@/store/tracesRequestStore'
+import { Segmented } from '@/components/ui/segmented'
+import { formatCount, formatTokens, formatTokensExact } from '@/lib/format'
 import { hubDate } from '@/lib/hubTime'
 import '@/styles/traces.css'
 
@@ -29,13 +43,20 @@ function money(usd: number): string {
   return usd < 0.01 ? `$${usd.toFixed(4)}` : `$${usd.toFixed(2)}`
 }
 
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${formatCount(n)} ${n === 1 ? one : many}`
+}
+
 function Cost({ trace }: { trace: TraceSummary }) {
-  const cost = costOf(trace)
-  if (cost.kind === 'cost') return <span data-testid="trace-cost">{money(cost.usd)}</span>
+  return <CostText cost={costOf(trace)} />
+}
+
+function CostText({ cost, testId = 'trace-cost' }: { cost: CostCell; testId?: string }) {
+  if (cost.kind === 'cost') return <span data-testid={testId}>{money(cost.usd)}</span>
   if (cost.kind === 'unpriced') {
     return (
       <span
-        data-testid="trace-cost"
+        data-testid={testId}
         className="aw-traces-unpriced"
         title="This run finished and the Hub could not measure its cost"
       >
@@ -44,7 +65,7 @@ function Cost({ trace }: { trace: TraceSummary }) {
     )
   }
   return (
-    <span data-testid="trace-cost" className="aw-traces-none">
+    <span data-testid={testId} className="aw-traces-none">
       —
     </span>
   )
@@ -149,6 +170,134 @@ function TraceRowView({
   )
 }
 
+/** Cost, duration and errors first (FR-6), over everything the filter matches (FR-8); tokens,
+ *  calls and waiting on one quieter line after them (FR-7). */
+function Headline({ totals, isRuns }: { totals: TraceTotals; isRuns: boolean }) {
+  const cost = totalCostOf(totals)
+  const why = errorBreakdown(totals)
+  return (
+    <section className="aw-traces-stats" aria-label="Totals" data-testid="traces-totals">
+      <div className="aw-traces-tile" data-testid="traces-stat-cost">
+        <span className="aw-traces-tile-label">Cost</span>
+        <strong>{isRuns ? <CostText cost={cost} testId="traces-total-cost" /> : '—'}</strong>
+        <small data-testid="traces-unpriced-note">
+          {!isRuns
+            ? 'The Hub’s own work is not billed'
+            : totals.unpriced
+              ? `${plural(totals.unpriced, 'unpriced run')} left out`
+              : totals.priced
+                ? 'Every finished run priced'
+                : 'No finished run yet'}
+        </small>
+      </div>
+      <div className="aw-traces-tile" data-testid="traces-stat-duration">
+        <span className="aw-traces-tile-label">Duration</span>
+        <strong data-testid="traces-total-duration">{formatDuration(totals.duration_seconds * 1000)}</strong>
+        <small data-testid="traces-average-duration">
+          {totals.duration_avg_seconds === null
+            ? 'Nothing has finished'
+            : `${formatDuration(totals.duration_avg_seconds * 1000)} on average`}
+          {totals.running ? ` · ${totals.running} still running` : ''}
+        </small>
+      </div>
+      <div className="aw-traces-tile" data-testid="traces-stat-errors" data-bad={totals.errors ? 'true' : undefined}>
+        <span className="aw-traces-tile-label">Errors</span>
+        <strong data-testid="traces-total-errors">{formatCount(totals.errors)}</strong>
+        <small>{why || `None of ${plural(totals.count, isRuns ? 'run' : 'trace')}`}</small>
+      </div>
+      {isRuns ? (
+        <div className="aw-traces-secondary" data-testid="traces-secondary">
+          <span
+            data-testid="traces-tokens"
+            title={
+              totals.tokens
+                ? `${formatTokensExact(totals.tokens.input)} in · ${formatTokensExact(totals.tokens.output)} out · ${formatTokensExact(totals.tokens.cache_read)} read from cache · ${formatTokensExact(totals.tokens.cache_write)} written to cache`
+                : undefined
+            }
+          >
+            {totals.tokens ? formatTokens(totals.tokens.input + totals.tokens.output) : 'No tokens recorded'}
+          </span>
+          <span data-testid="traces-model-calls">{plural(totals.model_calls, 'model call')}</span>
+          <span data-testid="traces-tool-calls">{plural(totals.tool_calls, 'tool call')}</span>
+          <span data-testid="traces-waiting">
+            {totals.wait_seconds ? `${formatDuration(totals.wait_seconds * 1000)} waiting on you` : 'No waiting on you'}
+          </span>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+/** One row per group: its count, then the same three statistics, with a bar for its cost share. */
+function Groups({
+  grouping,
+  groups,
+  overall,
+  isRuns,
+  onNarrow,
+}: {
+  grouping: TraceGrouping
+  groups: TraceGroup[]
+  overall: TraceTotals
+  isRuns: boolean
+  onNarrow: (patch: Partial<TracesFilter>) => void
+}) {
+  const label = GROUPINGS.find((g) => g.value === grouping)?.label ?? ''
+  return (
+    <div className="aw-traces-groups" data-testid="traces-groups" data-grouping={grouping}>
+      <div className="aw-traces-group aw-traces-group-head" aria-hidden="true">
+        <span>{label}</span>
+        <span>{isRuns ? 'Runs' : 'Traces'}</span>
+        <span>Cost</span>
+        <span>Took</span>
+        <span>Errors</span>
+        <span />
+      </div>
+      {groups.map((group) => {
+        const t = group.totals
+        const cost = totalCostOf(t)
+        const share =
+          isRuns && overall.cost_usd_micros && t.cost_usd_micros !== null ? t.cost_usd_micros / overall.cost_usd_micros : null
+        const narrow = groupNarrow(grouping, group)
+        return (
+          <div className="aw-traces-group" data-testid="traces-group" data-key={group.key} key={group.key}>
+            <span className={group.missing ? 'aw-traces-group-name aw-traces-missing' : 'aw-traces-group-name'}>
+              <span className="aw-traces-subject-text">{group.label}</span>
+              {group.detail ? <small>{group.detail}</small> : null}
+            </span>
+            <span className="aw-traces-group-num" data-testid="traces-group-count">
+              {formatCount(t.count)}
+            </span>
+            <span className="aw-traces-group-num">
+              {isRuns ? <CostText cost={cost} testId="traces-group-cost" /> : <span data-testid="traces-group-cost">—</span>}
+              {isRuns && t.unpriced && cost.kind === 'cost' ? (
+                <small data-testid="traces-group-unpriced">+{t.unpriced} unpriced</small>
+              ) : null}
+              {share !== null ? (
+                <span className="aw-traces-share" style={{ ['--share' as string]: `${Math.max(2, share * 100)}%` }} />
+              ) : null}
+            </span>
+            <span className="aw-traces-group-num" data-testid="traces-group-duration">
+              {formatDuration(t.duration_seconds * 1000)}
+              <small>{t.duration_avg_seconds === null ? '' : `${formatDuration(t.duration_avg_seconds * 1000)} avg`}</small>
+            </span>
+            <span className="aw-traces-group-num" data-testid="traces-group-errors" data-bad={t.errors ? 'true' : undefined}>
+              {t.errors ? plural(t.errors, 'error') : '—'}
+            </span>
+            <span>
+              {narrow ? (
+                <button type="button" className="aw-link" onClick={() => onNarrow(narrow)}>
+                  Only this
+                </button>
+              ) : null}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 /**
  * Activity → Traces: agents' runs by default, the Hub's own traces behind a quiet "Hub internals"
  * choice; filters by agent, conversation, task, run and time range. A row opens its trace in the
@@ -167,6 +316,7 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
   // Set when the operator lets go of the runs a count asked for (its `since` is not a filter field).
   const [released, setReleased] = React.useState(false)
   const [opened, setOpened] = React.useState<TraceSummary | null>(null)
+  const [grouping, setGrouping] = React.useState<TraceGrouping | 'none'>('none')
   const { data: agents = [], error: agentsError } = useAgents()
 
   const change = (patch: Partial<TracesFilter>) => {
@@ -181,6 +331,9 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
     return q
   }, [filter, anchor, before, request, released])
   const { data, isLoading, error } = useTraces(query)
+  // The statistics are the Hub's, over every trace the filter matches, not this page (FR-8).
+  const totalsQuery = useTraceTotals(query, grouping === 'none' ? null : grouping)
+  const overall = totalsQuery.data?.totals
   const traces = data?.traces ?? []
   const internal = INTERNAL_KINDS.find((k) => k.value === filter.kind)
 
@@ -295,6 +448,34 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
         </p>
       ) : null}
 
+      {totalsQuery.error ? (
+        <p role="alert" className="aw-traces-error">
+          {readableApiError(totalsQuery.error, 'The statistics could not be computed.')}
+        </p>
+      ) : overall ? (
+        <Headline totals={overall} isRuns={!internal} />
+      ) : null}
+
+      <div className="aw-traces-groupbar">
+        <span className="aw-traces-groupbar-label">Group by</span>
+        <Segmented label="Group by" size="xs" value={grouping} onChange={setGrouping} options={GROUPINGS} />
+        {overall ? (
+          <span className="aw-traces-groupbar-count" data-testid="traces-total-count" data-value={overall.count}>
+            {plural(overall.count, internal ? 'trace' : 'run')}
+          </span>
+        ) : null}
+      </div>
+
+      {grouping !== 'none' && overall && totalsQuery.data?.groups ? (
+        <Groups
+          grouping={grouping}
+          groups={totalsQuery.data.groups}
+          overall={overall}
+          isRuns={!internal}
+          onNarrow={change}
+        />
+      ) : null}
+
       {isLoading ? (
         <LoadingThread label="Loading traces" />
       ) : error ? (
@@ -306,9 +487,9 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
       ) : (
         <>
           <p className="aw-traces-count" data-testid="traces-count" data-value={traces.length}>
-            {traces.length} {internal ? 'trace' : 'run'}
-            {traces.length === 1 ? '' : 's'}
-            {data?.next_before ? ' on this page' : ''}
+            {data?.next_before || before
+              ? `${plural(traces.length, internal ? 'trace' : 'run')} on this page${overall ? ` of ${formatCount(overall.count)}` : ''}`
+              : plural(traces.length, internal ? 'trace' : 'run')}
           </p>
           <ul className="aw-traces-list">
             {traces.map((trace) => (
