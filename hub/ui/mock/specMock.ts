@@ -58,7 +58,7 @@ export const AGENT_NAMES = agents.map((a) => a.name)
 
 /** mock state: the replica's agents carry no model, so the dialog's second line is supplied here. */
 const MODEL_OF: Record<string, string> = { Architect: 'Opus 5.5', Builder: 'Sonnet 5.5', QA1: 'Opus 5.5', QA2: 'Haiku 5.5' }
-export const PLAN_AGENTS: BuildPlanAgent[] = AGENT_NAMES.map((name) => ({ name, detail: MODEL_OF[name] }))
+export const PLAN_AGENTS: BuildPlanAgent[] = agents.map((a) => ({ name: a.name, detail: MODEL_OF[a.name], colorIndex: a.color_index }))
 export const PLAN_TASKS: BuildPlanTask[] = PAYLOAD.tasks.map((t) => ({ key: t.key, title: t.title }))
 
 /** mock state: the recommendation an author gives under `every-task-comes-with-a-recommended-

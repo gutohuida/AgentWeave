@@ -18,8 +18,8 @@
 .aw-bp-label { font-size: 12.5px; font-weight: 500; color: var(--text-2); }
 .aw-bp-note { font-size: 12px; line-height: 1.45; color: var(--text-3); }
 .aw-bp-fact { font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
-.aw-bp-why { font-size: 11.5px; line-height: 1.45; color: var(--text-3); font-style: italic; }
-.aw-bp-none { font-style: normal; opacity: .8; }
+.aw-bp-why { font-size: 11.5px; line-height: 1.45; color: var(--text-3); }
+.aw-bp-none { opacity: .75; }
 .aw-bp-warn { font-size: 11.5px; line-height: 1.45; color: var(--amber); }
 
 .aw-bp-defaults { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
@@ -59,3 +59,5 @@
   .aw-bp-row { grid-template-columns: minmax(0, 1fr); }
   .aw-bp-row-head { display: none; }
 }
+
+.aw-bp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }
