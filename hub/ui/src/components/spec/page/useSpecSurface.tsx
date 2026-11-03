@@ -15,18 +15,21 @@ import {
   type SpecListResponse,
 } from '@/api/spec'
 import { useDocumentTasks } from '@/api/tasks'
+import { useVaultChecked } from '@/api/vault'
 import { serializeDestination, projectDestination } from '@/lib/navigation'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
-import { SpecAmendmentsPanel } from '../SpecAmendmentsPanel'
-import { SpecDeletedNote } from '../SpecDeletedNote'
+import { useSpecDeletionStore } from '@/store/specDeletionStore'
+import { keptDetail } from '@/lib/eventSummary'
+import { useAmendmentNotices } from '../amendmentNotices'
 import { SpecPlaceUnder } from '../SpecPlaceUnder'
-import { SpecRetiredRequirements } from '../SpecRetiredRequirements'
+import { useRetiredRequirementsNotice } from '../retiredRequirementsNotice'
 import { useSpecPhaseControls } from '../useSpecPhaseControls'
 import { buildViews, documentView, findingsOf, listEntries, parsePayload, textOfPage } from './adapt'
 import { useListPreferences } from './hooks'
 import { NO_DOCUMENT_FILTERS, type CheckState, type DocumentFilters, type ListPreferences, type SpecAction, type SpecListEntry } from './model'
 import { SpecDocumentFacts } from './SpecDocumentFacts'
+import type { HeaderNotice } from './SpecNotices'
 import type { PlainDocument } from './SpecPlainDocument'
 import { SpecRetrospective } from './SpecRetrospective'
 import type { HeaderChrome } from './SpecPageHeader'
@@ -64,6 +67,17 @@ export function useBuildProgress(): Record<string, { done: number; total: number
     () => error ? {} : Object.fromEntries((records?.documents ?? []).filter((d) => d.build).map((d) => [d.path, { done: d.build!.done, total: d.build!.total }])),
     [records, error],
   )
+}
+
+/** Whether some of the document's facts (`SpecDocumentFacts`) could not be read, so the line may be missing some. */
+function useFactsUnread(path: string): boolean {
+  const { error: specError } = useSpec(path)
+  const { error: coverageError } = useSpecCoverage(path)
+  const { error: vaultCheckedError } = useVaultChecked(path)
+  const { data: documents, error: documentsError } = useSpecDocuments()
+  const record = documents?.documents.find((entry) => entry.path === path)
+  const { error: tasksError } = useDocumentTasks(record?.id ?? null)
+  return [specError, coverageError, vaultCheckedError, documentsError, tasksError].some(Boolean)
 }
 
 // ── One document ────────────────────────────────────────────────────────
@@ -116,6 +130,11 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
   const now = useNow()
   const [filters, setFilters] = React.useState<DocumentFilters>(NO_DOCUMENT_FILTERS)
   const controls = useSpecPhaseControls(path, host.onOpenLoop, host.onDeleted, { inlineFindings: true })
+  const amendmentNotices = useAmendmentNotices(path)
+  const retiredNotice = useRetiredRequirementsNotice(path, host.onOpenTasks)
+  const factsUnread = useFactsUnread(path)
+  const deleted = useSpecDeletionStore((s) => s.notice)
+  const clearDeleted = useSpecDeletionStore((s) => s.clear)
 
   // `at` changes whenever a check answers, so the result pill plays its entrance again.
   const checking = controls?.findings.checking ?? false
@@ -201,21 +220,57 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     }
   }
 
+  // Everything the banner used to stack between the header and the body, as the header's notices
+  // (spec `the-spec-header-redesigned`, FR-5, FR-7). The facts are in the header's second row, the
+  // build's strip in the builds section, and the dialogs stay where they were.
   const unread = [list.error, recordsError, coverageError, tasksError].find(Boolean)
-  const banner = ({ jump }: { jump: (anchor: string) => void }) => (
-    <div className="aw-sp-banner" data-testid="spec-banner">
-      {unread ? (
-        <p className="aw-spec-message" data-tone="warn" data-testid="spec-unread">
-          <span className="aw-spec-message-text">Part of this page could not be read: {readableApiError(unread, 'the Hub did not answer.')}</span>
-        </p>
-      ) : null}
-      <SpecDeletedNote />
-      {controls ? controls.messages : null}
-      <SpecDocumentFacts path={path} specList={list.specList} onOpenTasks={host.onOpenTasks} onOpenRequirement={jump} />
-      <SpecAmendmentsPanel path={path} />
-      <SpecRetiredRequirements path={path} onOpenTasks={host.onOpenTasks} />
-      {controls ? controls.dialogs : null}
-    </div>
+  const notices: HeaderNotice[] = []
+  if (unread) {
+    notices.push({
+      id: 'unread',
+      tone: 'error',
+      testId: 'spec-unread',
+      summary: `Part of this page could not be read: ${readableApiError(unread, 'the Hub did not answer.')}`,
+    })
+  }
+  if (factsUnread) {
+    notices.push({
+      id: 'facts-unread',
+      tone: 'warn',
+      testId: 'spec-facts-unread',
+      summary: "Some of this document's facts could not be read, so the facts beside the phase may be missing some.",
+    })
+  }
+  if (deleted) {
+    // F829, F838: what "Delete document" removed, and any branch kept from a deleted task.
+    notices.push({
+      id: 'deleted',
+      tone: 'info',
+      testId: 'spec-deleted-note',
+      summary:
+        deleted.tasks === 0
+          ? `Deleted “${deleted.title}”. It had no tasks.`
+          : `Deleted “${deleted.title}” and its ${deleted.tasks} ${deleted.tasks === 1 ? 'task' : 'tasks'}.`,
+      body: (deleted.kept ?? []).length ? (
+        <ul>
+          {(deleted.kept ?? []).map((kept) => (
+            <li key={kept.task_id} data-testid="spec-deleted-kept">
+              {kept.error
+                ? `Could not clean up the checkout of ${kept.task_id}: ${kept.error}`
+                : `Kept ${kept.branch ?? 'its branch'}${keptDetail(kept)} from a deleted task.`}
+            </li>
+          ))}
+        </ul>
+      ) : undefined,
+      defaultOpen: true,
+      action: { label: 'Dismiss', onClick: clearDeleted },
+    })
+  }
+  notices.push(...(controls?.notices ?? []), ...amendmentNotices)
+  if (retiredNotice) notices.push(retiredNotice)
+
+  const health = ({ jump }: { jump: (anchor: string) => void }) => (
+    <SpecDocumentFacts path={path} specList={list.specList} onOpenTasks={host.onOpenTasks} onOpenRequirement={jump} inHeader />
   )
 
   const node = list.specList?.specs.find((e) => e.path === path)
@@ -238,6 +293,7 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     badges: (
       <>
         {controls?.badges}
+        {controls?.facts}
         {doc.state === 'archived' ? (
           <span className="aw-sp-meta-fact" data-testid="spec-archived-marker">
             Archived
@@ -286,7 +342,10 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
           onError: (error: unknown) => toast({ title: 'Could not stop the build', description: readableApiError(error, 'The Hub refused.'), tone: 'error' }),
         },
       ),
-    banner,
+    notices,
+    health,
+    buildActions: controls?.buildActions,
+    dialogs: controls?.dialogs,
     retrospective:
       doc.kind === 'change-spec'
         ? ({ flash, onCopyLink }) => <SpecRetrospective path={path} now={now} flash={flash} onCopyLink={onCopyLink} />

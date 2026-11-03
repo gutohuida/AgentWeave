@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { formatAgo } from '@/lib/format'
 import { arrangeList, SHOWN_LABEL, type ListPreferences, type SpecListEntry } from './model'
-import { SpecDocList, StateIcon, type IconSet, type ListMarker } from './SpecDocList'
+import { SpecDocList, StateIcon } from './SpecDocList'
 import '@/styles/spec-page.css'
 
 export interface SpecOpenPickerProps {
@@ -25,8 +25,6 @@ export interface SpecOpenPickerProps {
   autoFocus?: boolean
   /** Beside a document in the list (Adopt, on one the Hub keeps no record of). */
   rowAction?: (entry: SpecListEntry) => React.ReactNode
-  /** How rows and cards mark each document's state (being mocked, spec `the-spec-header-redesigned`). */
-  marker?: ListMarker
 }
 
 /**
@@ -85,20 +83,20 @@ export function SpecOpenPicker(props: SpecOpenPickerProps) {
         <div className="aw-sp-open-quick">
           {attached ? (
             <QuickGroup label="This conversation">
-              <QuickCard entry={attached} now={now} marker={props.marker} onOpen={props.onOpen} open={props.openPath === attached.path} icon="link" progress={props.progress?.[attached.path]} />
+              <QuickCard entry={attached} now={now} onOpen={props.onOpen} open={props.openPath === attached.path} icon="link" progress={props.progress?.[attached.path]} />
             </QuickGroup>
           ) : null}
           {building.length ? (
             <QuickGroup label="Building now">
               {building.map((e) => (
-                <QuickCard key={e.path} entry={e} now={now} marker={props.marker} onOpen={props.onOpen} open={props.openPath === e.path} progress={props.progress?.[e.path]} />
+                <QuickCard key={e.path} entry={e} now={now} onOpen={props.onOpen} open={props.openPath === e.path} progress={props.progress?.[e.path]} />
               ))}
             </QuickGroup>
           ) : null}
           {recent.length ? (
             <QuickGroup label="Recently opened">
               {recent.map((e) => (
-                <QuickCard key={e.path} entry={e} now={now} marker={props.marker} onOpen={props.onOpen} open={props.openPath === e.path} icon="schedule" />
+                <QuickCard key={e.path} entry={e} now={now} onOpen={props.onOpen} open={props.openPath === e.path} icon="schedule" />
               ))}
             </QuickGroup>
           ) : null}
@@ -119,7 +117,7 @@ export function SpecOpenPicker(props: SpecOpenPickerProps) {
           hideSearch
           hideHead
           rowAction={props.rowAction}
-          marker={props.marker}
+         
         />
       </div>
     </div>
@@ -138,7 +136,6 @@ function QuickGroup({ label, children }: { label: string; children: React.ReactN
 function QuickCard({
   entry: e,
   now,
-  marker,
   onOpen,
   open,
   icon,
@@ -146,7 +143,6 @@ function QuickCard({
 }: {
   entry: SpecListEntry
   now: Date
-  marker?: ListMarker
   onOpen: (path: string) => void
   open: boolean
   icon?: string
@@ -160,7 +156,7 @@ function QuickCard({
         {open ? <span className="aw-sp-open-card-here">Open</span> : null}
       </span>
       <span className="aw-sp-open-card-meta">
-        {marker && marker.startsWith('icon') ? <StateIcon state={e.shown} set={marker as IconSet} /> : <span className="aw-sp-list-dot" data-state={e.shown} aria-hidden="true" />}
+        <StateIcon state={e.shown} />
         {SHOWN_LABEL[e.shown]} · {formatAgo(e.updatedAt, now)}
         {progress ? (
           <span className="aw-sp-open-card-progress">
