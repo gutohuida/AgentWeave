@@ -24,7 +24,7 @@ faithfully — `firing_active` is the live fact `history` alone could not state.
 """
 
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import select
@@ -163,38 +163,6 @@ async def get_loop(
     listing."""
     project_id, _ = project
     return await _get_loop_detail(session, project_id, loop_id)
-
-
-@router.get("/{loop_id}/firing-runs", response_model=Dict[str, str])
-async def get_loop_firing_runs(
-    loop_id: str,
-    conversation_id: List[str] = Query(default_factory=list, max_length=500),
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-) -> Dict[str, str]:
-    """Conversation id -> the run this loop's latest firing in it started, for the conversations
-    asked about. The rail shows every open firing of a loop, not just the ten the loop's own record
-    lists, so it asks about exactly the ones it renders. A conversation whose firings started no
-    run is left out."""
-    project_id, _ = project
-    loop = await session.get(Loop, loop_id)
-    if loop is None or loop.project_id != project_id:
-        raise HTTPException(status_code=404, detail="Loop not found")
-    if not conversation_id:
-        return {}
-    result = await session.execute(
-        select(JobRun)
-        .where(JobRun.job_id == loop.job_id, JobRun.conversation_id.in_(conversation_id))
-        .order_by(JobRun.fired_at.asc())
-    )
-    firings = result.scalars().all()
-    run_ids = await run_ids_for_firings(session, firings)
-    # Oldest to newest, so a conversation several firings reused ends on its latest run.
-    return {
-        f.conversation_id: run_ids[f.id]
-        for f in firings
-        if f.conversation_id is not None and run_ids.get(f.id)
-    }
 
 
 @router.post("/{loop_id}/archive", response_model=LoopDetail)

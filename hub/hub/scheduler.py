@@ -3152,6 +3152,15 @@ async def decide_firing(
             kind=DECISION_IN_FLIGHT, unstaffed=tuple(unstaffed), deferred=tuple(deferred)
         )
     if stall_reason is None:
+        # **A held landing is a stall, not an empty queue** (operator, 2026-11-03). It keeps the
+        # queue from draining (`_loop_stop_reason`), and it is not in flight (above), so without
+        # this it fell to `DECISION_PROCEED_EMPTY` -- the never-filled case -- and the flow fired
+        # its agent every tick with nothing to do: 100 empty DeveloperOpus turns in a day while
+        # four approved tasks' landings waited on the operator.
+        held = await facts.approved_tasks_landing(loop, (landing_queue.HELD,))
+        if held:
+            stall_reason = _held_landing_stall_reason(held)
+    if stall_reason is None:
         return FiringDecision(
             kind=DECISION_PROCEED_EMPTY, unstaffed=tuple(unstaffed), deferred=tuple(deferred)
         )
@@ -3479,6 +3488,21 @@ def _landing_stall_reason(count: int) -> str:
     return (
         f"loop queue is stalled: {subject} waiting for you to land {them}. A loop does not review "
         f"its own agent's work, so approving is what puts it in the product."
+    )
+
+
+def _held_landing_stall_reason(count: int) -> str:
+    """What a loop says when its only open work is approved tasks whose landing is held.
+
+    A held landing waits on the operator (land the batch with a reason, or fix main), so no agent
+    turn can move it; the firing skips until it lands or comes back as work.
+    """
+    subject = (
+        "1 approved task's landing is" if count == 1 else f"{count} approved tasks' landings are"
+    )
+    return (
+        f"loop queue is stalled: {subject} held for you. Land the batch with a reason, or fix "
+        f"main and retry it."
     )
 
 

@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AgentConversation } from '@/api/agentChat'
 import { Icon } from '@/components/common/Icon'
-import { useLoopFiringRuns } from '@/api/loops'
-import { TraceButton } from '@/components/traces/TraceDrawer'
 import { loopTabId, usePanelTabsStore } from '@/store/panelTabsStore'
 import { ConversationRow } from './ConversationRow'
 
@@ -51,12 +49,6 @@ export function LoopFiringGroup({
   const holdsActive = conversations.some((c) => c.id === activeConversation)
   const [expanded, setExpanded] = useState(holdsActive)
   const openTab = usePanelTabsStore((state) => state.openTab)
-  // Which run each firing started is asked for exactly the firings this group shows, and only while
-  // it is open: the loop's own history holds its last ten firings across every agent, not these.
-  const { data: runByConversation, error: historyError } = useLoopFiringRuns(
-    expanded ? loopId : null,
-    conversations.map((c) => c.id),
-  )
 
   // Opening a firing from anywhere else — the recency view, a URL, a notification — must reveal it
   // here too, not leave the rail pointing at a collapsed row.
@@ -119,15 +111,9 @@ export function LoopFiringGroup({
 
       {expanded && (
         <div className="aw-rail-conversations" data-testid={`${testId}-firings`}>
-          {historyError ? (
-            <div className="px-2 text-xs opacity-70" data-testid={`${testId}-trace-error`}>
-              Trace links unavailable: the firings' runs could not be read.
-            </div>
-          ) : null}
           {conversations.map((conversation) => (
-            <div key={conversation.id} className="flex items-center">
-            <div className="min-w-0 flex-1">
             <ConversationRow
+              key={conversation.id}
               projectId={projectId}
               conversation={conversation}
               active={activeConversation === conversation.id}
@@ -135,18 +121,11 @@ export function LoopFiringGroup({
               agentColor={agentColor}
               agentName={agentName}
               testId={rowTestId(conversation)}
-              /* The group row already names the loop, once, for every firing under it. */
+              /* The group row already names the loop, once, for every firing under it. A firing's
+                 trace is opened from the conversation's own 'Trace of the latest run' control, not
+                 from a per-row button here (operator, 2026-11-03). */
               showLoopMarker={false}
             />
-            </div>
-            {runByConversation?.[conversation.id] ? (
-              <TraceButton
-                runId={runByConversation?.[conversation.id]}
-                label="trace"
-                testId={`${rowTestId(conversation)}-trace`}
-              />
-            ) : null}
-            </div>
           ))}
         </div>
       )}

@@ -18,9 +18,15 @@ from sqlalchemy import select
 from hub import stalls
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, InboundQueueEntry, JobRun, Loop, Stall, Task, TaskLanding
-from hub.landing_queue import CHECKING, LANDED, QUEUED, SENT_BACK
+from hub.landing_queue import CHECKING, HELD, LANDED, QUEUED, SENT_BACK
 from hub.loop_ending import QUEUE_DRAINED_REASON
-from hub.scheduler import DECISION_CLAIM, DECISION_IN_FLIGHT, JobScheduler, decide_firing
+from hub.scheduler import (
+    DECISION_CLAIM,
+    DECISION_IN_FLIGHT,
+    DECISION_STALLED,
+    JobScheduler,
+    decide_firing,
+)
 
 from .test_a_stalled_project_wakes_the_mender import mender_on
 from .test_agent_trigger import _init_repo
@@ -165,6 +171,37 @@ async def test_ac_landing_wait_quiet_records_in_progress_and_wakes_no_mender(
         decision = await decide_firing(db, loop, default_agent=AUTHOR)
     assert decision.kind == DECISION_IN_FLIGHT
     assert decision.stall_reason is None
+
+
+@pytest.mark.usefixtures("no_agent_cli_spawn")
+async def test_a_held_landing_skips_the_firing_rather_than_starting_an_empty_turn(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """Operator, 2026-11-03: a flow whose only open work was held landings fired its agent every
+    five minutes with nothing to do (the never-filled case), and never ended either."""
+    job_id, loop_id = await _approved_flow(
+        app, auth_headers, bind_runner, bind_project_workspace, tmp_path, landing_state=HELD
+    )
+    async with async_session_factory() as db:
+        loop = await db.get(Loop, loop_id)
+        decision = await decide_firing(db, loop, default_agent=AUTHOR)
+    assert decision.kind == DECISION_STALLED
+    assert "held for you" in (decision.stall_reason or "")
+
+    await _fire(JobScheduler(), job_id)
+
+    async with async_session_factory() as db:
+        turns = (
+            (await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.agent == AUTHOR)))
+            .scalars()
+            .all()
+        )
+        runs = (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()
+    assert turns == [], "a held landing started an agent turn"
+    assert [r.status for r in runs] == ["skipped"]
+    stop_reason, ending_state, enabled = await _ended(job_id, loop_id)
+    assert (stop_reason, ending_state, enabled) == (None, None, True)
+    await stalls.drain()
 
 
 # ---------------------------------------------------------------------------
