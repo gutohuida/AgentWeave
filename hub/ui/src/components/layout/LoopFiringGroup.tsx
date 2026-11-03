@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AgentConversation } from '@/api/agentChat'
 import { Icon } from '@/components/common/Icon'
-import { useLoop } from '@/api/loops'
+import { useLoopFiringRuns } from '@/api/loops'
 import { TraceButton } from '@/components/traces/TraceDrawer'
 import { loopTabId, usePanelTabsStore } from '@/store/panelTabsStore'
 import { ConversationRow } from './ConversationRow'
@@ -51,11 +51,11 @@ export function LoopFiringGroup({
   const holdsActive = conversations.some((c) => c.id === activeConversation)
   const [expanded, setExpanded] = useState(holdsActive)
   const openTab = usePanelTabsStore((state) => state.openTab)
-  // Which run each firing started comes from the loop's firing history, read only while the group
-  // is open; a firing the history does not name (older than its last ten, or with no run) has none.
-  const { data: loop, error: historyError } = useLoop(expanded ? loopId : null)
-  const runByConversation = new Map(
-    (loop?.history ?? []).flatMap((f) => (f.conversation_id && f.run_id ? [[f.conversation_id, f.run_id] as const] : [])),
+  // Which run each firing started is asked for exactly the firings this group shows, and only while
+  // it is open: the loop's own history holds its last ten firings across every agent, not these.
+  const { data: runByConversation, error: historyError } = useLoopFiringRuns(
+    expanded ? loopId : null,
+    conversations.map((c) => c.id),
   )
 
   // Opening a firing from anywhere else — the recency view, a URL, a notification — must reveal it
@@ -121,7 +121,7 @@ export function LoopFiringGroup({
         <div className="aw-rail-conversations" data-testid={`${testId}-firings`}>
           {historyError ? (
             <div className="px-2 text-xs opacity-70" data-testid={`${testId}-trace-error`}>
-              Trace links unavailable: the loop's firing history could not be read.
+              Trace links unavailable: the firings' runs could not be read.
             </div>
           ) : null}
           {conversations.map((conversation) => (
@@ -139,9 +139,9 @@ export function LoopFiringGroup({
               showLoopMarker={false}
             />
             </div>
-            {runByConversation.has(conversation.id) ? (
+            {runByConversation?.[conversation.id] ? (
               <TraceButton
-                runId={runByConversation.get(conversation.id)}
+                runId={runByConversation?.[conversation.id]}
                 label="trace"
                 testId={`${rowTestId(conversation)}-trace`}
               />

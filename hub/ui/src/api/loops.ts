@@ -57,6 +57,23 @@ export function useLoop(loopId: string | null) {
   })
 }
 
+/** The run each of these conversations' firings started, for the conversations a rail group shows
+ *  (`GET .../loops/{id}/firing-runs`). Not read from `useLoop`'s history, which holds only the
+ *  loop's last ten firings across every agent. A conversation with no run is absent. */
+export function useLoopFiringRuns(loopId: string | null, conversationIds: string[]) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<Record<string, string>>({
+    queryKey: ['project', projectId, 'loops', loopId, 'firing-runs', conversationIds],
+    queryFn: () => {
+      const query = conversationIds.map((id) => `conversation_id=${encodeURIComponent(id)}`).join('&')
+      return getJson<Record<string, string>>(
+        `/api/v1/projects/${projectId}/loops/${loopId}/firing-runs?${query}`,
+      )
+    },
+    enabled: isConfigured && !!projectId && !!loopId && conversationIds.length > 0,
+  })
+}
+
 /** Every loop action re-reads the loops and the jobs on *settle*, not on success: a Stop that lost
  *  a race with another tab or a firing is refused with 409, and the tab must then show what the
  *  Hub recorded rather than keep offering a control that no longer applies. */

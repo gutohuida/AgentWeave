@@ -10,17 +10,14 @@ import type { AgentConversation } from '@/api/agentChat'
 import { RunHistory } from '@/components/jobs/JobDetails'
 import { LoopFiringGroup } from '@/components/layout/LoopFiringGroup'
 
+// Asked about exactly the conversations the group renders. The loop's own detail (last ten firings,
+// all agents) is deliberately not mocked: the group must not depend on it.
+const askedFor: string[][] = []
 vi.mock('@/api/loops', () => ({
-  useLoop: (id: string | null) => ({
-    data: id
-      ? {
-          history: [
-            { id: 'jr-2', job_id: 'j', fired_at: '2026-08-19T02:00:00Z', status: 'skipped', trigger: 'scheduled', conversation_id: 'c2', run_id: null },
-            { id: 'jr-1', job_id: 'j', fired_at: '2026-08-19T01:00:00Z', status: 'completed', trigger: 'scheduled', conversation_id: 'c1', run_id: 'run-abc' },
-          ],
-        }
-      : undefined,
-  }),
+  useLoopFiringRuns: (id: string | null, conversationIds: string[]) => {
+    if (id) askedFor.push(conversationIds)
+    return { data: id ? { c1: 'run-abc' } : undefined }
+  },
 }))
 vi.mock('@/components/traces/TraceDrawer', () => ({
   TraceButton: ({ runId, testId }: { runId?: string; testId?: string }) =>
@@ -67,6 +64,7 @@ describe('loop firing group', () => {
       </QueryClientProvider>,
     )
     fireEvent.click(screen.getByTestId('grp-expander'))
+    expect(askedFor[askedFor.length - 1]).toEqual(['c1', 'c2'])
     expect(screen.getByTestId('row-c1-trace')).toHaveAttribute('data-run-id', 'run-abc')
     expect(screen.queryByTestId('row-c2-trace')).toBeNull()
   })
