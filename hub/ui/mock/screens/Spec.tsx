@@ -1,4 +1,4 @@
-import { BuildPlanDialog } from '@/components/spec/build/BuildPlanDialog'
+import { BuildPlanDialog } from '@/components/spec/BuildPlanDialog'
 import { SpecWorkspace } from '@/components/spec/page/SpecWorkspace'
 import { useListPreferences } from '@/components/spec/page/hooks'
 import { toast } from '@/lib/toast'
