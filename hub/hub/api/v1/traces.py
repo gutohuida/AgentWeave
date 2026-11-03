@@ -8,7 +8,7 @@ read as a trace id.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -38,6 +38,30 @@ def _bounds(since: Optional[str], until: Optional[str]):
     return start, end
 
 
+async def _run_ids(
+    session: AsyncSession,
+    project_id: str,
+    run_id: Optional[str],
+    task_id: Optional[str],
+    conversation_id: Optional[str],
+    agent: Optional[str],
+) -> Optional[List[str]]:
+    """The runs the run-side filters leave, or None when none is in force."""
+    if not (run_id or task_id or conversation_id or agent):
+        return None
+    query = select(Run.id).where(Run.project_id == project_id)
+    if run_id:
+        query = query.where(Run.id == run_id)
+    if task_id:
+        task_id = await readable_ids.resolve(session, project_id, task_id)
+        query = query.where(Run.task_id == task_id)
+    if conversation_id:
+        query = query.where(Run.conversation_id == conversation_id)
+    if agent:
+        query = query.where(Run.agent == agent)
+    return list((await session.execute(query)).scalars().all())
+
+
 @router.get("")
 async def list_project_traces(
     limit: int = Query(50, ge=1, le=200),
@@ -63,19 +87,7 @@ async def list_project_traces(
     one kind of trace; `since`/`until` the traces that started in that range."""
     project_id, _ = project
     start, end = _bounds(since, until)
-    run_ids = None
-    if run_id or task_id or conversation_id or agent:
-        query = select(Run.id).where(Run.project_id == project_id)
-        if run_id:
-            query = query.where(Run.id == run_id)
-        if task_id:
-            task_id = await readable_ids.resolve(session, project_id, task_id)
-            query = query.where(Run.task_id == task_id)
-        if conversation_id:
-            query = query.where(Run.conversation_id == conversation_id)
-        if agent:
-            query = query.where(Run.agent == agent)
-        run_ids = list((await session.execute(query)).scalars().all())
+    run_ids = await _run_ids(session, project_id, run_id, task_id, conversation_id, agent)
     try:
         return await traces.list_traces(
             session,
@@ -89,6 +101,45 @@ async def list_project_traces(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"`before` is not a cursor: {exc}") from exc
+
+
+@router.get("/totals")
+async def project_trace_totals(
+    run_id: Optional[str] = Query(None),
+    task_id: Optional[str] = Query(None),
+    conversation_id: Optional[str] = Query(None),
+    agent: Optional[str] = Query(None, max_length=64),
+    since: Optional[str] = Query(None),
+    until: Optional[str] = Query(None),
+    operation: Optional[str] = Query(None, max_length=32),
+    group_by: Optional[str] = Query(
+        None, description="agent, model, task, conversation, kind or day"
+    ),
+    utc_offset: int = Query(
+        0, ge=-14 * 60, le=14 * 60, description="The operator's UTC offset in minutes, for `day`"
+    ),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Statistics over every trace the list's filters match (not one page), and per group with
+    `group_by`: cost (unpriced runs left out and counted), duration, errors, then tokens, model
+    and tool calls and waiting time. Takes the list route's filters, so both read the same set."""
+    project_id, _ = project
+    start, end = _bounds(since, until)
+    run_ids = await _run_ids(session, project_id, run_id, task_id, conversation_id, agent)
+    try:
+        return await traces.trace_totals(
+            session,
+            project_id,
+            run_ids=run_ids,
+            operation=operation,
+            since=start,
+            until=end,
+            group_by=group_by or None,
+            utc_offset_minutes=utc_offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/export")
