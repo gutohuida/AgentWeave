@@ -9,7 +9,8 @@ import { NO_DOCUMENT_FILTERS, type BuildView, type CheckFinding, type CheckState
 import type { SpecSurfaceProps } from '@/components/spec/page/SpecWorkspace'
 import type { CoverageEntry } from '@/api/spec'
 import { agents, tasks as taskFixtures } from './fixtures'
-import { HEADER_CHOICES, PANEL_NAV_CHOICES, MockHealth, NOTICE_LEVELS, noticesFor, type HeaderChoice, type PanelNavChoice, type NoticeLevel } from './specBanner'
+import { MockHealth } from './MockHealth'
+import { NOTICE_LEVELS, noticesFor, type NoticeLevel } from './specBanner'
 import coverageJson from './fixtures/spec_coverage.json'
 import documentJson from './fixtures/spec_document.json'
 import documentsJson from './fixtures/spec_documents.json'
@@ -59,10 +60,6 @@ export interface SpecMockControls {
   layout: 'column' | 'switcher'
   /** How much the banner under the header carries (the compact-header slice). */
   notices: NoticeLevel
-  /** Which header design is shown (today, or A, B or C). */
-  header: HeaderChoice
-  /** The conversation panel's navigation rows: as today, or one row. */
-  panelNav: PanelNavChoice
 }
 
 const STATES: DocState[] = ['writing', 'ready', 'approved', 'building', 'archived']
@@ -74,15 +71,13 @@ function readHashControls(): Partial<SpecMockControls> & { at?: string } {
   const notices = query.get('notices') as NoticeLevel | null
   return {
     notices: notices && NOTICE_LEVELS.some((n) => n.value === notices) ? notices : undefined,
-    header: HEADER_CHOICES.find((h) => h.value === query.get('header'))?.value,
-    panelNav: PANEL_NAV_CHOICES.find((n) => n.value === query.get('nav'))?.value,
     state: state && STATES.includes(state) ? state : undefined,
     layout: layout === 'switcher' || layout === 'column' ? layout : undefined,
     at: query.get('at') ?? undefined,
   }
 }
 
-let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', header: 'today', panelNav: 'today', ...stripUndefined(readHashControls()) }
+let controls: SpecMockControls = { state: 'building', layout: 'column', notices: 'none', ...stripUndefined(readHashControls()) }
 const listeners = new Set<() => void>()
 
 function stripUndefined<T extends object>(o: T): Partial<T> {
