@@ -116,6 +116,47 @@ def _thread_waiting_reader(native_id: int):  # noqa: ANN202
     return None
 
 
+def _find_gil() -> "tuple[int, int] | None":
+    """Where this interpreter keeps who holds its GIL, for the observer to read from outside: the
+    address of the GIL's `last_holder` (`locked` follows it) and the offset of the thread id in a
+    thread state. Found by looking rather than assumed: CPython keeps `interval`, `last_holder` and
+    `locked` in that order in `_PyRuntime.ceval.gil`, so a switch interval nothing else holds marks
+    the place, and this thread, holding the GIL, must be what it names. None on any other layout;
+    the observer then judges without it. Call with the GIL held, as any Python code is."""
+    if sys.platform != "win32" or sys.implementation.name != "cpython":
+        return None
+    import struct
+
+    try:
+        api = ctypes.pythonapi
+        runtime = ctypes.addressof(ctypes.c_char.in_dll(api, "_PyRuntime"))
+        api.PyThreadState_Get.restype = ctypes.c_void_p
+        me = api.PyThreadState_Get()
+    except (AttributeError, ValueError, OSError):
+        return None
+    was = sys.getswitchinterval()
+    sys.setswitchinterval(0.004321)
+    try:
+        marker = round(sys.getswitchinterval() * 1e6)
+        found = []
+        head = ctypes.string_at(runtime, 1024)
+        for at in range(0, len(head) - 24, 4):
+            if struct.unpack_from("<I", head, at)[0] != marker:
+                continue
+            holder_at = (at + 4 + 7) & ~7
+            holder, locked = struct.unpack_from("<Qi", head, holder_at)
+            if holder == me and locked == 1:
+                found.append(runtime + holder_at)
+    finally:
+        sys.setswitchinterval(was)
+    state = ctypes.string_at(me, 256)
+    native = threading.get_native_id()
+    offsets = [at for at in range(0, 256, 4) if struct.unpack_from("<I", state, at)[0] == native]
+    if len(found) != 1 or not offsets:
+        return None
+    return found[0], offsets[0]
+
+
 _OBSERVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_thread_observer.py")
 #: Thread states meaning "could run, but the machine has not given it a core": Ready, Standby,
 #: Transition (its kernel stack is paged out), DeferredReady. Running is 2, Waiting 5.
@@ -131,13 +172,14 @@ class _ThreadObserver:
     """What every thread of this process was doing, sampled from another process
     (`_thread_observer.py`). Inside the process a sample needs the GIL, so when the probe's own
     samples go missing they cannot say whether a thread here kept the GIL or the machine stopped
-    the whole process (F1119, AW-25). This one can. Windows only; elsewhere it has no samples and
-    judges nothing."""
+    the whole process (F1119, AW-25). This one can, and it reads who holds the GIL (AW-27).
+    Windows only; elsewhere it has no samples and judges nothing."""
 
     def __init__(self) -> None:
         self._process: "subprocess.Popen[bytes] | None" = None
         self._out = ""
-        #: (time, hard faults, {thread id: (state, wait reason, cpu in 100 ns)})
+        #: (time, hard faults, GIL, {thread id: (state, wait reason, cpu in 100 ns)}), the GIL as
+        #: the id of the thread holding it, 0 when nobody did, -1 when it was not read.
         self.samples: List[tuple] = []
 
     async def start(self) -> None:
@@ -145,8 +187,10 @@ class _ThreadObserver:
             return
         handle, self._out = tempfile.mkstemp(prefix="aw-thread-observer-", suffix=".txt")
         os.close(handle)
+        gil = _find_gil()
         self._process = subprocess.Popen(
-            [sys.executable, "-I", _OBSERVER, str(os.getpid()), self._out],
+            [sys.executable, "-I", _OBSERVER, str(os.getpid()), self._out]
+            + ([str(part) for part in gil] if gil else []),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
         )
@@ -171,44 +215,54 @@ class _ThreadObserver:
         except OSError:
             return
         for line in lines:
-            at, faults, threads = line.split(" ", 2)
+            at, faults, gil, threads = line.split(" ", 3)
             seen = {}
             for thread in threads.split(","):
                 tid, state, reason, cpu = thread.split(":")
                 seen[int(tid)] = (int(state), int(reason), int(cpu))
-            self.samples.append((float(at), int(faults), seen))
+            self.samples.append((float(at), int(faults), int(gil), seen))
 
     @staticmethod
-    def _stopped(threads: dict) -> bool:
-        """Was the machine keeping this process from running? No thread of it ran, and one could
-        have but had no core, or waited on memory, a page-in or a suspension. A thread blocked in
-        a call that keeps the GIL waits for something else, so that reads as not stopped."""
+    def _machines(state: int, reason: int) -> bool:
+        """Is a thread in this state held up by the machine rather than by the code?"""
+        return state in _NOT_SCHEDULED or (state == 5 and reason in _MACHINE_WAITS)
+
+    @classmethod
+    def _stopped(cls, gil: int, threads: dict) -> bool:
+        """Was nothing in this process holding it up? Only a thread holding the GIL can keep the
+        others from running Python, so with the GIL read: nobody held it, or its holder was held
+        up by the machine (no core, memory, a page-in, a suspension). A holder that ran, or waited
+        on anything else -- a call that keeps the GIL -- is the code's. With the GIL unread: no
+        thread ran, and one was held up by the machine."""
+        if gil == 0:
+            return True  # every thread here could have taken it: none was let run (AW-27)
+        if gil > 0 and gil in threads:
+            return cls._machines(*threads[gil][:2])
         if any(state == 2 for state, _, _ in threads.values()):
             return False
-        return any(
-            state in _NOT_SCHEDULED or (state == 5 and reason in _MACHINE_WAITS)
-            for state, reason, _ in threads.values()
-        )
+        return any(cls._machines(state, reason) for state, reason, _ in threads.values())
 
     def stopped_share(self, started: float, ended: float) -> "float | None":
-        """The share of a window the machine kept the process stopped, or None if it was not
+        """The share of a window nothing in the process held it up, or None if it was not
         observed through enough of it to say."""
-        seen = [threads for at, _, threads in self.samples if started <= at <= ended]
+        seen = [(gil, threads) for at, _, gil, threads in self.samples if started <= at <= ended]
         if len(seen) < _MIN_OBSERVED:
             return None
-        return sum(map(self._stopped, seen)) / len(seen)
+        return sum(self._stopped(*sample) for sample in seen) / len(seen)
 
     def describe(self, started: float, ended: float) -> str:
         seen = [s for s in self.samples if started <= s[0] <= ended]
         if not seen:
             return "no observer samples"
         history = [s for s in self.samples if s[0] < started][-1:] + seen
+        holders = Counter({0: "free", -1: "unread"}.get(s[2], f"held by t{s[2]}") for s in seen)
         parts = [
-            f"{len(seen)} observer samples, {sum(self._stopped(s[2]) for s in seen)} stopped, "
-            f"{seen[-1][1] - history[0][1]} hard faults"
+            f"{len(seen)} observer samples, {sum(self._stopped(*s[2:]) for s in seen)} stopped, "
+            f"{seen[-1][1] - history[0][1]} hard faults, GIL "
+            + " ".join(f"{k}x{v}" for k, v in holders.most_common(3))
         ]
-        for tid in sorted({tid for s in seen for tid in s[2]}):
-            mine = [s[2][tid] for s in history if tid in s[2]]
+        for tid in sorted({tid for s in seen for tid in s[3]}):
+            mine = [s[3][tid] for s in history if tid in s[3]]
             states = Counter(f"{state}/{reason}" for state, reason, _ in mine)
             cpu = (mine[-1][2] - mine[0][2]) / 10_000  # a thread can begin or end in the window
             common = " ".join(f"{k}x{v}" for k, v in states.most_common(3))
@@ -434,9 +488,10 @@ class LagProbe:
 
     def _judge_unsampled(self) -> None:
         """A window without samples was held by a call keeping the GIL, on whichever thread, or
-        the machine stopped the whole process: no core for it, memory, a page-in, a suspension.
-        Only the observer, sampling from outside, saw which. The time the machine kept the process
-        stopped is not the code's; the rest counts in full, and all of it counts unobserved."""
+        the machine did not let the process run: no core for it, memory, a page-in, a suspension,
+        or every thread left waiting with the GIL free (AW-27: 371 ms, no thread ran or could).
+        Only the observer, sampling from outside, saw which. The time nothing here held the process
+        up is not the code's; the rest counts in full, and all of it counts unobserved."""
         for started, ended, late, why in self._unsampled:
             stopped = self._observer.stopped_share(started, ended)
             if stopped is None:
@@ -444,8 +499,8 @@ class LagProbe:
             else:
                 late *= 1 - stopped
                 verdict = (
-                    f"read as the GIL held except the {stopped:.0%} of it the machine kept the "
-                    "process stopped: the rest counts"
+                    f"read as the GIL held except the {stopped:.0%} of it nothing here held the "
+                    "process up: the rest counts"
                 )
             self._count(
                 late,
