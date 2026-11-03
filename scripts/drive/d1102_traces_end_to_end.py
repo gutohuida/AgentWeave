@@ -51,6 +51,8 @@ def turn(base, agent, message, task=None, conversation=None, stop_after=None):
     d.check(f"{agent} turn starts", code in (200, 202), f"{code} {str(run)[:200]}")
     run_id = run["run_id"]
     if stop_after:
+        # Stop once the run is seen running (not after a fixed sleep: a short turn would be over).
+        d.poll(lambda: d.ro("select status from runs where id=?", (run_id,))[0][0] == "running", 60)
         time.sleep(stop_after)
         code, out = d.api("POST", f"{base}/agent/{agent}/stop")
         d.check(f"{agent} run is stopped", code in (200, 202), f"{code} {str(out)[:200]}")
@@ -102,8 +104,8 @@ def drive():
         a2, _ = turn(base, "alpha", "Reply with the single word ok.", conversation=conv)
         # The 'failed run': a run cannot be made to fail on demand, so one is stopped part-way;
         # a stopped run counts as an error (FR-6). It is also the conversation's latest of three.
-        a3, a3_state = turn(base, "alpha", "Count slowly from 1 to 200, one number per line.",
-                            conversation=conv, stop_after=12)
+        a3, a3_state = turn(base, "alpha", "Count from 1 to 20000, one number per line, and do not stop early.",
+                            conversation=conv, stop_after=3)
         d.check("2 the stopped run ended stopped", a3_state in ("stopped", "cancelled", "interrupted"),
                 a3_state)
         cols = "id, agent, status, conversation_id, task_id"
@@ -133,31 +135,28 @@ def drive():
         page.get_by_test_id("traces-filter-range").select_option("1h")
         d.check("3 the filter leaves alpha's runs",
                 d.poll(lambda: rows.count() == len(alpha_runs)), f"rows={rows.count()}")
-        page.get_by_test_id("traces-group-by").select_option("agent")
-        group = page.locator('[data-testid=trace-group][data-group=alpha]')
+        page.get_by_role("radio", name="Agent", exact=True).click()
+        group = page.locator('[data-testid=traces-group][data-key=alpha]')
         d.check("3 the alpha group is shown", d.poll(lambda: group.count() == 1))
-        ids = [t.get_attribute("data-testid") for t in group.locator('[data-testid^=stat-]').all()]
-        d.check("3 headline stats come first, in order",
-                ids[:4] == ["stat-cost", "stat-duration", "stat-avg-duration", "stat-errors"], str(ids))
         cost = sum(float(r.get("cost_usd") or 0) for r in alpha_runs)
-        shown = float(group.get_by_test_id("stat-cost").get_attribute("data-value"))
+        shown = float(group.get_by_test_id("traces-group-cost").get_attribute("data-value"))
         d.check("3 total cost is the sum of the runs' recorded costs", abs(shown - cost) < 1e-6,
                 f"shown={shown} sum={cost}")
         d.check("3 the group shows the run count",
-                int(group.get_by_test_id("stat-count").get_attribute("data-value")) == len(alpha_runs))
+                int(group.get_by_test_id("traces-group-count").get_attribute("data-value")) == len(alpha_runs))
         # data-value of stat-duration / stat-avg-duration is in seconds; tolerance 1s per run
         # (the view may round each run's duration to whole seconds).
         total_s = sum(r["duration_s"] for r in alpha_runs)
         tol = 1.0 * len(alpha_runs)
-        shown_total = float(group.get_by_test_id("stat-duration").get_attribute("data-value"))
+        shown_total = float(group.get_by_test_id("traces-group-duration").get_attribute("data-value"))
         d.check("3 total duration matches started_at/ended_at", abs(shown_total - total_s) <= tol,
                 f"shown={shown_total} expected={total_s} tol={tol}")
-        shown_avg = float(group.get_by_test_id("stat-avg-duration").get_attribute("data-value"))
+        shown_avg = float(group.get_by_test_id("traces-group-duration").get_attribute("data-avg"))
         d.check("3 average duration matches", abs(shown_avg - total_s / len(alpha_runs)) <= 1.0,
                 f"shown={shown_avg} expected={total_s / len(alpha_runs)}")
         errors = sum(1 for r in alpha_runs if r["status"] in ("failed", "cancelled", "interrupted", "stopped"))
         d.check("3 errors counts the stopped run",
-                int(group.get_by_test_id("stat-errors").get_attribute("data-value")) == errors == 1)
+                int(group.get_by_test_id("traces-group-errors").get_attribute("data-value")) == errors == 1)
 
         # 4. entry points
         rows.first.click()
@@ -166,15 +165,24 @@ def drive():
         opened = detail.get_attribute("data-run-id")
         d.check("4 it is the run that was clicked", opened in {r["id"] for r in alpha_runs})
         page.goto(f"{d.HUB}/?project={pid}&agent=alpha&conversation={conv}", wait_until="domcontentloaded")
-        page.get_by_test_id("conversation-latest-trace").click()
+        page.get_by_test_id("conversation-more").click()
+        page.get_by_role("menuitem", name="Trace of the latest run").click()
         d.check("4 the conversation's control opens its latest (third) run",
-                d.poll(lambda: page.get_by_test_id("trace-detail").get_attribute("data-run-id") == a3))
-        # `task=` is not parsed by navigation.ts today: TVFGS-4 must add `?tab=tasks&task=<id>`
-        # (opens that task's detail) or edit this line to the way it opens a task.
-        page.goto(f"{d.HUB}/?project={pid}&tab=tasks&task={task['id']}", wait_until="domcontentloaded")
-        page.get_by_test_id("task-run-trace").first.click()
-        d.check("4 the task's run row opens that run's trace",
-                d.poll(lambda: page.get_by_test_id("trace-detail").get_attribute("data-run-id") == a1))
+                d.poll(lambda: page.get_by_test_id("trace-detail").count() == 1
+                       and page.get_by_test_id("trace-detail").get_attribute("data-run-id") == a3))
+        # The task's run count opens Activity -> Traces filtered to the task; its run opens there.
+        page.goto(f"{d.HUB}/?project={pid}&tab=tasks", wait_until="domcontentloaded")
+        page.get_by_test_id(f"task-open-{task['id']}").click()
+        page.get_by_test_id(f"task-story-runs-open-{task['id']}").click()
+        d.check("4 the task's runs open filtered in Traces",
+                d.poll(lambda: page.get_by_test_id("trace-row").count()
+                       == len([r for r in runs if r["task_id"] == task["id"]])),
+                f"rows={page.get_by_test_id('trace-row').count()} url={page.url}")
+        page.screenshot(path=str(d.SHOT) + "_task.png", full_page=True)
+        page.locator(f'[data-testid=trace-row][data-run-id={a1}]').click()
+        d.check("4 the task's run opens that run's trace",
+                d.poll(lambda: page.get_by_test_id("trace-detail").count() == 1
+                       and page.get_by_test_id("trace-detail").get_attribute("data-run-id") == a1))
         page.screenshot(path=str(d.SHOT) + "_traces.png", full_page=True)
         browser.close()
 

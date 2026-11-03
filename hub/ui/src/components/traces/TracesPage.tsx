@@ -52,7 +52,7 @@ function Cost({ trace }: { trace: TraceSummary }) {
 }
 
 function CostText({ cost, testId = 'trace-cost' }: { cost: CostCell; testId?: string }) {
-  if (cost.kind === 'cost') return <span data-testid={testId}>{money(cost.usd)}</span>
+  if (cost.kind === 'cost') return <span data-testid={testId} data-value={cost.usd}>{money(cost.usd)}</span>
   if (cost.kind === 'unpriced') {
     return (
       <span
@@ -265,7 +265,7 @@ function Groups({
               <span className="aw-traces-subject-text">{group.label}</span>
               {group.detail ? <small>{group.detail}</small> : null}
             </span>
-            <span className="aw-traces-group-num" data-testid="traces-group-count">
+            <span className="aw-traces-group-num" data-testid="traces-group-count" data-value={t.count}>
               {formatCount(t.count)}
             </span>
             <span className="aw-traces-group-num">
@@ -277,11 +277,16 @@ function Groups({
                 <span className="aw-traces-share" style={{ ['--share' as string]: `${Math.max(2, share * 100)}%` }} />
               ) : null}
             </span>
-            <span className="aw-traces-group-num" data-testid="traces-group-duration">
+            <span
+              className="aw-traces-group-num"
+              data-testid="traces-group-duration"
+              data-value={t.duration_seconds}
+              data-avg={t.duration_avg_seconds ?? ''}
+            >
               {formatDuration(t.duration_seconds * 1000)}
               <small>{t.duration_avg_seconds === null ? '' : `${formatDuration(t.duration_avg_seconds * 1000)} avg`}</small>
             </span>
-            <span className="aw-traces-group-num" data-testid="traces-group-errors" data-bad={t.errors ? 'true' : undefined}>
+            <span className="aw-traces-group-num" data-testid="traces-group-errors" data-value={t.errors} data-bad={t.errors ? 'true' : undefined}>
               {t.errors ? plural(t.errors, 'error') : '—'}
             </span>
             <span>
