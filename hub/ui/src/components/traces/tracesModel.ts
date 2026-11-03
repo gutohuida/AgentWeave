@@ -1,4 +1,4 @@
-import type { TraceFilters, TraceOperation, TraceSummary } from '@/api/traces'
+import type { TraceFilters, TraceGroup, TraceGrouping, TraceOperation, TraceSummary, TraceTotals } from '@/api/traces'
 import { hubDate } from '@/lib/hubTime'
 
 /** What the view narrows by. `kind` is the Hub-internals choice; null is agents' runs. */
@@ -113,4 +113,46 @@ export function costOf(trace: TraceSummary): CostCell {
   if (trace.cost_state === 'measured' && trace.cost_usd != null) return { kind: 'cost', usd: trace.cost_usd }
   if (trace.cost_state === 'unpriced') return { kind: 'unpriced' }
   return { kind: 'none' }
+}
+
+/** The grouping switch, in the order it is offered. `none` lists the runs ungrouped. */
+export const GROUPINGS: ReadonlyArray<{ value: TraceGrouping | 'none'; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'model', label: 'Model' },
+  { value: 'task', label: 'Task' },
+  { value: 'conversation', label: 'Conversation' },
+  { value: 'kind', label: 'Kind' },
+  { value: 'day', label: 'Day' },
+]
+
+/** The filter that narrows the view to one group, where the list can filter by what it groups. */
+export function groupNarrow(grouping: TraceGrouping, group: TraceGroup): Partial<TracesFilter> | null {
+  if (!group.key || group.missing) return null
+  if (grouping === 'agent') return { agent: group.key }
+  if (grouping === 'task') return { task: group.key }
+  if (grouping === 'conversation') return { conversation: group.key }
+  if (grouping === 'day') return { day: group.key, range: 'all' }
+  return null
+}
+
+/** A total's cost as it reads: a figure over the measured runs, "unpriced" when every finished
+ *  run in it went unmeasured, or nothing (still running, or the Hub's own work). Never $0.00 for
+ *  a cost that was not measured. */
+export function totalCostOf(totals: TraceTotals): CostCell {
+  if (totals.cost_usd_micros !== null) return { kind: 'cost', usd: totals.cost_usd_micros / 1_000_000 }
+  if (totals.unpriced) return { kind: 'unpriced' }
+  return { kind: 'none' }
+}
+
+/** Why the errors count, in the operator's words: "1 failed · 2 stopped · 1 ended in error". */
+export function errorBreakdown(totals: TraceTotals): string {
+  const k = totals.error_kinds
+  return [
+    k.failed ? `${k.failed} failed` : null,
+    k.stopped ? `${k.stopped} stopped` : null,
+    k.trace_error ? `${k.trace_error} ended in error` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
