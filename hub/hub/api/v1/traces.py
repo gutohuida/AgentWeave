@@ -96,9 +96,7 @@ async def list_project_traces(
     one kind of trace; `since`/`until` the traces that started in that range."""
     project_id, _ = project
     start, end = _bounds(since, until)
-    run_ids = await _run_ids(
-        session, project_id, run_id, task_id, conversation_id, agent, build_id
-    )
+    run_ids = await _run_ids(session, project_id, run_id, task_id, conversation_id, agent, build_id)
     try:
         return await traces.list_traces(
             session,
@@ -138,9 +136,7 @@ async def project_trace_totals(
     and tool calls and waiting time. Takes the list route's filters, so both read the same set."""
     project_id, _ = project
     start, end = _bounds(since, until)
-    run_ids = await _run_ids(
-        session, project_id, run_id, task_id, conversation_id, agent, build_id
-    )
+    run_ids = await _run_ids(session, project_id, run_id, task_id, conversation_id, agent, build_id)
     try:
         return await traces.trace_totals(
             session,

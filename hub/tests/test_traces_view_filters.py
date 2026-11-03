@@ -179,3 +179,11 @@ async def test_build_filter_lists_exactly_the_runs_of_that_builds_tasks(app, aut
     }
     assert got == {"run-bf-2"}
     assert await _listed(app, auth_headers, build_id="build-none") == []
+
+    res = await app.get(
+        f"/api/v1/projects/{PROJECT}/traces/totals",
+        params={"build_id": "build-bf1"},
+        headers=auth_headers,
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["totals"]["count"] == 4
