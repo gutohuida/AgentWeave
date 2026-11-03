@@ -103,7 +103,7 @@ export default function App() {
   const [agentCreateProjectId, setAgentCreateProjectId] = useState<string | null>(null)
   const [overviewQuestionsOpen, setOverviewQuestionsOpen] = useState(false)
   // The ledger leads (slice project-ledger): what the project did, before the live stream of it.
-  const [activitySubview, setActivitySubview] = useState<'ledger' | 'activity' | 'logs'>('ledger')
+  const [activitySubview, setActivitySubview] = useState<'ledger' | 'activity' | 'logs' | 'traces'>('ledger')
   const { destination, navigate: navigateTo } = useWorkspaceNavigation({
     availableProjectIds: projects ? projects.map((project) => project.id) : null,
     lastOpenedProjectId: projectId,
@@ -331,8 +331,8 @@ export default function App() {
       navigateTo(projectDestination(currentProjectId, 'overview'))
       return
     }
-    if (value === 'logs') {
-      setActivitySubview('logs')
+    if (value === 'logs' || value === 'traces') {
+      setActivitySubview(value)
       navigateTo(projectDestination(currentProjectId, 'activity'))
       return
     }

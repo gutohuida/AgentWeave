@@ -73,7 +73,7 @@ export function ProjectSettingsScreen({
         <>
           <GeneralSection onNavigate={onNavigate ?? ((value) => onSelectSection(value as EnvironmentSection))} />
           <SpecStepsSection />
-          <TracesSection />
+          <TracesSection onOpenTraces={() => onNavigate?.('traces')} />
         </>
       )
       break

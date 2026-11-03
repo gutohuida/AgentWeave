@@ -1,0 +1,41 @@
+/* Activity → Traces (a-traces-view-with-filters-grouping-and-stats). */
+
+.aw-traces { width: min(100%, 1100px); margin-inline: auto; padding: 4px clamp(20px, 3vw, 32px) 96px; }
+.aw-traces-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+.aw-traces-filters .control-field { padding: 5px 8px; font-size: 12px; min-width: 0; }
+.aw-traces-filters input.control-field { width: 120px; }
+.aw-traces-spacer { flex: 1; }
+.aw-traces-internals { color: var(--text-3); border-style: dashed; }
+.aw-traces-internal-note { font-size: 12px; color: var(--amber); margin-bottom: 10px; }
+.aw-traces-count { font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
+.aw-traces-empty, .aw-traces-error { font-size: 12.5px; color: var(--text-3); }
+.aw-traces-error { color: var(--red); }
+
+.aw-traces-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.aw-traces-row {
+  display: grid;
+  grid-template-columns: 112px 110px 130px minmax(0, 1fr) 70px 64px 64px;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 38px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  cursor: pointer;
+}
+.aw-traces-row:hover, .aw-traces-row:focus-visible { background: var(--bg-hover, rgba(127, 127, 127, .08)); }
+.aw-traces-row[data-error='true'] { box-shadow: inset 2px 0 0 var(--red); }
+.aw-traces-when { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aw-traces-agent, .aw-traces-model, .aw-traces-subject-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-traces-model { color: var(--text-3); }
+.aw-traces-subject { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.aw-traces-missing { color: var(--text-3); font-style: italic; }
+.aw-traces-narrow {
+  flex: none; font-size: 10.5px; color: var(--text-3); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0 5px; background: transparent; cursor: pointer;
+}
+.aw-traces-narrow:hover { color: var(--text); }
+.aw-traces-duration, .aw-traces-row > [data-testid='trace-cost'] { font-variant-numeric: tabular-nums; text-align: right; }
+.aw-traces-unpriced { color: var(--amber); }
+.aw-traces-none { color: var(--text-3); }
+.aw-traces-paging { display: flex; gap: 8px; margin-top: 10px; }
