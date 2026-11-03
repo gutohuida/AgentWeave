@@ -114,3 +114,21 @@ http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/spec?st
 
 The mock bar switches the state and, on the tab, the list between a left column and a top switcher
 (the document's open question 2). The panel sits at its narrowest width (360px) below a 1200px window.
+
+## The Build dialog (mock, approved 2026-11-03)
+
+Roadmap `building-a-spec-ties-together-from-plan-to-board`, slice `build-dialog-overhaul`. The component
+is `src/components/spec/BuildPlanDialog.tsx`, styled by `src/styles/build-plan.css`. It takes the
+Hub's `SpecRecommendedBuild` and the document's tasks and answers `BuildChoices`, so applying it
+replaces `BuildDialog` in `useSpecPhaseControls` without redrawing. The recommendation over the
+recorded document's five tasks is simulated (`// mock state`, `PLAN_RECOMMENDED` in `specMock.ts`):
+one task names an agent that is not open (Codex), and two give no reason.
+```
+http://localhost:5199/mock.html#tab/spec?state=approved     # then Build in the header
+```
+Decided by the operator on 2026-11-03 after looking at it in dark and light: two sections, "How it
+runs" and "Who builds and checks", with a row per task showing its builder, its checker and each
+reason; the separate Builders list and Flow agent control are gone (the builders are those the table
+names, and the default builder works the flow); the window end is a short list of ends, not a date
+input; the Fast level hides the checker column. Agents carry their colour and their model; reasons
+are plain muted text, not italic. The dialog is 760px, the widest in the app, for the table.
