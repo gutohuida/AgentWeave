@@ -7,6 +7,7 @@ import { useTasks } from '@/api/tasks'
 import { Icon } from '@/components/common/Icon'
 import { QueryErrorNotice } from '@/components/common/QueryErrorNotice'
 import { LogsView } from '@/components/logs/LogsView'
+import { TracesPage } from '@/components/traces/TracesPage'
 import { Button } from '@/components/ui/button'
 import { Segmented } from '@/components/ui/segmented'
 import { buildDigest } from '@/lib/activityDigest'
@@ -17,7 +18,7 @@ import { ProjectLedger } from './ProjectLedger'
 import '@/styles/activity.css'
 import { LoadingThread } from '@/components/common/LoadingThread'
 
-export type ActivityView = 'ledger' | 'activity' | 'logs'
+export type ActivityView = 'ledger' | 'activity' | 'logs' | 'traces'
 
 /** How many log entries the digest reads per page; "Show earlier" asks for the page before. */
 const DIGEST_PAGE = 200
@@ -53,6 +54,7 @@ export function ActivityScreen({
             { value: 'ledger', label: 'Ledger' },
             { value: 'activity', label: 'Activity' },
             { value: 'logs', label: 'Logs' },
+            { value: 'traces', label: 'Traces' },
           ]}
         />
       </div>
@@ -61,8 +63,10 @@ export function ActivityScreen({
           <ProjectLedger onOpenTask={onOpenTask} />
         ) : view === 'activity' ? (
           <LiveDigest onOpenConversation={onOpenConversation} />
-        ) : (
+        ) : view === 'logs' ? (
           <LogsView />
+        ) : (
+          <TracesPage />
         )}
       </div>
     </div>
