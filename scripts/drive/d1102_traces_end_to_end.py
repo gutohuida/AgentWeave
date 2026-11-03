@@ -51,6 +51,8 @@ def turn(base, agent, message, task=None, conversation=None, stop_after=None):
     d.check(f"{agent} turn starts", code in (200, 202), f"{code} {str(run)[:200]}")
     run_id = run["run_id"]
     if stop_after:
+        # Stop once the run is seen running (not after a fixed sleep: a short turn would be over).
+        d.poll(lambda: d.ro("select status from runs where id=?", (run_id,))[0][0] == "running", 60)
         time.sleep(stop_after)
         code, out = d.api("POST", f"{base}/agent/{agent}/stop")
         d.check(f"{agent} run is stopped", code in (200, 202), f"{code} {str(out)[:200]}")
@@ -102,8 +104,8 @@ def drive():
         a2, _ = turn(base, "alpha", "Reply with the single word ok.", conversation=conv)
         # The 'failed run': a run cannot be made to fail on demand, so one is stopped part-way;
         # a stopped run counts as an error (FR-6). It is also the conversation's latest of three.
-        a3, a3_state = turn(base, "alpha", "Count slowly from 1 to 200, one number per line.",
-                            conversation=conv, stop_after=12)
+        a3, a3_state = turn(base, "alpha", "Count from 1 to 20000, one number per line, and do not stop early.",
+                            conversation=conv, stop_after=3)
         d.check("2 the stopped run ended stopped", a3_state in ("stopped", "cancelled", "interrupted"),
                 a3_state)
         cols = "id, agent, status, conversation_id, task_id"
