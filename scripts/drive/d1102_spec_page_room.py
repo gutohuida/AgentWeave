@@ -521,7 +521,10 @@ def condensed_checks(page, where):
     header = page.locator("[data-testid=spec-document-header]").first
     clicked = False
     # Click the title, which is not a control, rather than a spot that may land on the count or a button.
-    for target in ("[data-testid=spec-document-header] :is(h1, h2, [data-testid*=title])",
+    # The condensed line comes first: the header's own left edge is the panel's Specs switcher.
+    for target in ("[data-testid=spec-header-condensed] strong",
+                   "[data-testid=spec-header-condensed]",
+                   "[data-testid=spec-document-header] :is(h1, h2, [data-testid*=title])",
                    "[data-testid=spec-document-header]"):
         spot = page.locator(target).first
         if spot.count():

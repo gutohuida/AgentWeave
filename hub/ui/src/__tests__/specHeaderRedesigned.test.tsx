@@ -314,6 +314,20 @@ describe('condenses-on-scroll (FR-4)', () => {
       await user.click(within(header()).getByTestId('spec-header-condensed'))
       expect(header()).toHaveAttribute('data-condensed', 'false')
       expect(header().querySelector('.aw-sp-head-row2')).toBeTruthy()
+
+      // What a browser does next, measured by QA in the panel at the body's maximum scroll: the
+      // expanded header shrinks the scroller (813 → 745px) and scroll anchoring moves its offset by
+      // +68. That move is the header's own and must leave it expanded.
+      const el = scroller()
+      Object.defineProperty(el, 'clientHeight', { value: 745, configurable: true })
+      Object.defineProperty(el, 'scrollTop', { value: 768, configurable: true, writable: true })
+      el.dispatchEvent(new Event('scroll'))
+      await new Promise((r) => setTimeout(r, 20))
+      expect(header()).toHaveAttribute('data-condensed', 'false')
+
+      // The reader scrolling down again, with the scroller's height unchanged, condenses it.
+      scroller().scrollTo({ top: 800 })
+      await waitFor(() => expect(header()).toHaveAttribute('data-condensed', 'true'))
     })
   }
 })

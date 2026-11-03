@@ -67,15 +67,28 @@ function useCondensed(scroller: React.RefObject<HTMLDivElement | null>) {
     const el = scroller.current
     if (!el) return
     let last = el.scrollTop
+    // The scroller's height as last laid out. A browser dispatches scroll events before it delivers
+    // resize observations, so a scroll the resize itself caused still sees the old height here.
+    let height = el.clientHeight
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => (height = el.clientHeight))
+    observer?.observe(el)
     const onScroll = () => {
       const top = el.scrollTop
       const moved = top - last
       last = top
-      // Hysteresis: a header that shrinks moves the body, which must not flip it straight back.
+      // A header that changes height resizes the scroller, and the browser re-anchors or clamps its
+      // offset: that move is the header's own, not the reader's, and must not flip it back. Expanding
+      // at the body's maximum scroll otherwise reads as scrolling down and condenses straight away.
+      const resized = el.clientHeight !== height
+      height = el.clientHeight
+      if (resized && top > 8) return
       setCondensed((was) => (top <= 8 ? false : was ? true : moved > 0 && top > 48))
     }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      observer?.disconnect()
+    }
   }, [scroller])
   return { condensed, expand: () => setCondensed(false) }
 }
