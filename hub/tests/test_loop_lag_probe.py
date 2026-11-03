@@ -215,10 +215,72 @@ def test_the_observer_describes_threads_that_begin_or_end_in_the_window():
 
     observer = _ThreadObserver()
     observer.samples = [
-        (1.0, 0, {1: (5, 6, 0), 2: (5, 6, 0)}),
-        (1.1, 0, {1: (2, 6, 10_000), 2: (5, 6, 0), 3: (5, 6, 0)}),  # 3 began
-        (1.2, 0, {1: (1, 32, 20_000), 3: (5, 6, 50_000)}),  # 2 ended
+        (1.0, 0, 1, {1: (5, 6, 0), 2: (5, 6, 0)}),
+        (1.1, 0, 1, {1: (2, 6, 10_000), 2: (5, 6, 0), 3: (5, 6, 0)}),  # 3 began
+        (1.2, 0, 0, {1: (1, 32, 20_000), 3: (5, 6, 50_000)}),  # 2 ended
     ]
     described = observer.describe(1.05, 1.25)
     assert "t1 2 ms" in described and "t2 0 ms" in described and "t3 5 ms" in described
+    assert "GIL held by t1x1 freex1" in described, described
     assert observer.stopped_share(1.05, 1.25) is None  # two samples are too few to judge
+
+
+@pytest.mark.parametrize(
+    "gil, threads, stopped",
+    [
+        # AW-27's check run: 371 ms, every thread waiting, none ran; the GIL free.
+        (0, {1: (5, 6, 0), 2: (5, 15, 0), 3: (5, 0, 0)}, True),
+        # The same threads with the GIL held by one blocked in a call that keeps it.
+        (3, {1: (5, 6, 0), 2: (5, 15, 0), 3: (5, 0, 0)}, False),
+        (3, {1: (5, 6, 0), 3: (5, 4, 0)}, False),  # a PyDLL Sleep keeping it
+        (3, {1: (5, 6, 0), 3: (2, 0, 0)}, False),  # its holder working
+        (3, {1: (2, 0, 0), 3: (1, 0, 0)}, True),  # its holder preempted (F1119)
+        (3, {1: (5, 6, 0), 3: (5, 5, 0)}, True),  # its holder suspended
+        # Unread: judged by the threads alone, as before the GIL was read.
+        (-1, {1: (5, 6, 0), 2: (5, 6, 0)}, False),
+        (-1, {1: (5, 6, 0), 2: (1, 0, 0)}, True),
+        (-1, {1: (2, 0, 0), 2: (1, 0, 0)}, False),
+    ],
+)
+def test_a_gap_is_the_codes_only_while_something_here_holds_the_gil(gil, threads, stopped):
+    from ._loop_lag import _ThreadObserver
+
+    observer = _ThreadObserver()
+    observer.samples = [(1.0 + i / 100, 0, gil, threads) for i in range(5)]
+    assert observer.stopped_share(1.0, 2.0) == (1.0 if stopped else 0.0)
+
+
+@pytest.mark.asyncio
+async def test_the_observer_reads_which_thread_holds_the_gil():
+    """AW-27: the gap is judged by who held the GIL, read from outside, so the reading has to be
+    right: a worker blocked in a call keeping it is named through its whole call."""
+    import ctypes
+    import sys
+    import threading
+
+    if sys.platform != "win32":
+        pytest.skip("the observer is Windows'")
+    from ._loop_lag import _find_gil
+
+    assert _find_gil() is not None, "this interpreter's GIL was not found: gaps are judged blind"
+    sleep = ctypes.PyDLL("kernel32").Sleep
+    called = {}
+
+    def _keep_the_gil() -> None:
+        called["tid"] = threading.get_native_id()
+        called["from"] = time.perf_counter()
+        sleep(int(GIT_DELAY * 1000))
+        called["to"] = time.perf_counter()
+
+    worker = threading.Thread(target=_keep_the_gil)
+    async with LagProbe() as probe:
+        worker.start()
+        await asyncio.to_thread(worker.join)
+    held = [
+        gil
+        for at, _, gil, _ in probe._observer.samples
+        if called["from"] + 0.02 <= at <= called["to"] - 0.02
+    ]
+    assert len(held) >= 10, probe._observer.samples
+    assert set(held) == {called["tid"]}, held
+    assert probe.worst >= STALL_LIMIT, probe.why

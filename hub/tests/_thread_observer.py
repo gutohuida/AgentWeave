@@ -1,10 +1,13 @@
 """Records, from outside, what each thread of one process is doing: run as
-`python -I _thread_observer.py <pid> <out file>`, it samples every few milliseconds until its stdin
-closes, and prints `ready` once it has its first sample. The lag probe starts it for its window, because inside the process a sample needs the GIL,
-so a gap in the probe's own samples cannot say whether a thread held the GIL or the machine stopped
-the process (F1119, AW-25). Windows only: elsewhere it exits at once.
+`python -I _thread_observer.py <pid> <out file> [<GIL address> <thread id offset>]`, it samples
+every few milliseconds until its stdin closes, and prints `ready` once it has its first sample. The
+lag probe starts it for its window, because inside the process a sample needs the GIL, so a gap in
+the probe's own samples cannot say whether a thread held the GIL or the machine stopped the process
+(F1119, AW-25). Given where the process keeps its GIL, it also reads who holds it (AW-27). Windows
+only: elsewhere it exits at once.
 
-Each line is `<perf_counter> <hard faults> <tid>:<state>:<wait reason>:<cpu 100ns>,...`.
+Each line is `<perf_counter> <hard faults> <GIL> <tid>:<state>:<wait reason>:<cpu 100ns>,...`, where
+`<GIL>` is the id of the thread holding it, 0 when nobody does, or -1 when it could not be read.
 `time.perf_counter` is the machine's performance counter on Windows, so the probe can line these
 up with its own windows.
 """
@@ -20,6 +23,42 @@ import time
 INTERVAL = 0.004
 
 
+def _gil_reader(kernel32, pid: int, where: "list[str]"):  # noqa: ANN001, ANN202
+    """A callable answering which thread of process `pid` holds its GIL: its id, 0 when nobody
+    does, -1 when it cannot be read. `where` is the address of the GIL's `last_holder`, which
+    `locked` follows, and the offset of a thread state's thread id, both as the probe found them."""
+    if len(where) != 2:
+        return lambda: -1
+    gil, tid_offset = int(where[0]), int(where[1])
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.ReadProcessMemory.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.c_void_p,
+    ]
+    process = kernel32.OpenProcess(0x0010, False, pid)  # PROCESS_VM_READ
+    if not process:
+        return lambda: -1
+    state = ctypes.create_string_buffer(16)
+    tid = ctypes.c_uint32()
+
+    def holder() -> int:
+        if not kernel32.ReadProcessMemory(process, gil, state, 16, None):
+            return -1
+        last_holder, locked = struct.unpack_from("<Qi", state.raw)
+        if not locked:
+            return 0
+        if not kernel32.ReadProcessMemory(
+            process, last_holder + tid_offset, ctypes.byref(tid), 4, None
+        ):
+            return -1
+        return tid.value
+
+    return holder
+
+
 def main() -> int:
     if sys.platform != "win32":
         return 0
@@ -32,6 +71,7 @@ def main() -> int:
     kernel32.SetPriorityClass.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
     kernel32.SetPriorityClass(kernel32.GetCurrentProcess(), 0x80)  # HIGH
     kernel32.SetThreadPriority(kernel32.GetCurrentThread(), 2)  # HIGHEST
+    gil_holder = _gil_reader(kernel32, pid, sys.argv[3:5])
     done = threading.Event()
     threading.Thread(target=lambda: (sys.stdin.read(), done.set()), daemon=True).start()
     size = 1 << 21
@@ -57,7 +97,7 @@ def main() -> int:
                     tid = struct.unpack_from("<Q", buf, thread + 0x30)[0]
                     state, reason = struct.unpack_from("<II", buf, thread + 0x44)
                     threads.append(f"{tid}:{state}:{reason}:{kernel + user}")
-                lines.append(f"{now:.6f} {faults} {','.join(threads)}")
+                lines.append(f"{now:.6f} {faults} {gil_holder()} {','.join(threads)}")
                 if len(lines) == 1:
                     print("ready", flush=True)
                 break
