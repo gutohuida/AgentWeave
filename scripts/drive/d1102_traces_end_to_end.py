@@ -17,7 +17,8 @@ agents bound to Haiku (`alpha`, `beta`), then, in a real browser:
 
 Contract the build must honour (test ids): `traces-view`, `traces-filter-agent`, `traces-filter-range`,
 `traces-group-by` (select), `trace-row` (data-run-id), `trace-group` (data-group), within a group
-`stat-cost`, `stat-duration`, `stat-avg-duration`, `stat-errors` in that DOM order and before any
+`stat-cost`, `stat-duration`, `stat-avg-duration`, `stat-errors` in that DOM order, plus `stat-count` (data-value; durations are
+seconds in data-value) and before any
 other `[data-testid^=stat-]`; `trace-detail` (data-run-id); `conversation-latest-trace`;
 `task-run-trace`.
 
@@ -111,15 +112,16 @@ def drive():
         d.check("2 the runs exist", {a1, b1, a2, a3} <= set(by_id))
         d.check("2 the conversation holds three runs",
                 len([r for r in runs if r["conversation_id"] == conv]) == 3)
-        # Recorded cost: turn_usage.session_totals.total_cost_usd is a running session total, so a
-        # run's cost is its row's total less the agent's previous row's (ordered by observed_at).
-        prev = {}
-        for rid, agent, total in d.ro(
-                "select run_id, agent, json_extract(session_totals, '$.total_cost_usd') "
-                "from turn_usage order by observed_at"):
-            if rid in by_id and total is not None:
-                by_id[rid]["cost_usd"] = float(total) - prev.get(agent, 0.0)
-                prev[agent] = float(total)
+        # Recorded cost: turn_usage.api_equivalent_usd_micros is this run's settled cost.
+        for r in runs:
+            r["cost_usd"] = 0.0
+        for rid, micros in d.ro("select run_id, api_equivalent_usd_micros from turn_usage"):
+            if rid in by_id and micros is not None:
+                by_id[rid]["cost_usd"] += micros / 1e6
+        # Duration in seconds: ended_at - started_at (runs still open count as 0).
+        for rid, secs in d.ro(
+                "select id, (julianday(ended_at) - julianday(started_at)) * 86400.0 from runs"):
+            by_id[rid]["duration_s"] = float(secs or 0.0)
         alpha_runs = [r for r in runs if r["agent"] == "alpha"]
 
         # 3. runs only, filter, group, stats
@@ -141,6 +143,18 @@ def drive():
         shown = float(group.get_by_test_id("stat-cost").get_attribute("data-value"))
         d.check("3 total cost is the sum of the runs' recorded costs", abs(shown - cost) < 1e-6,
                 f"shown={shown} sum={cost}")
+        d.check("3 the group shows the run count",
+                int(group.get_by_test_id("stat-count").get_attribute("data-value")) == len(alpha_runs))
+        # data-value of stat-duration / stat-avg-duration is in seconds; tolerance 1s per run
+        # (the view may round each run's duration to whole seconds).
+        total_s = sum(r["duration_s"] for r in alpha_runs)
+        tol = 1.0 * len(alpha_runs)
+        shown_total = float(group.get_by_test_id("stat-duration").get_attribute("data-value"))
+        d.check("3 total duration matches started_at/ended_at", abs(shown_total - total_s) <= tol,
+                f"shown={shown_total} expected={total_s} tol={tol}")
+        shown_avg = float(group.get_by_test_id("stat-avg-duration").get_attribute("data-value"))
+        d.check("3 average duration matches", abs(shown_avg - total_s / len(alpha_runs)) <= 1.0,
+                f"shown={shown_avg} expected={total_s / len(alpha_runs)}")
         errors = sum(1 for r in alpha_runs if r["status"] in ("failed", "cancelled", "interrupted", "stopped"))
         d.check("3 errors counts the stopped run",
                 int(group.get_by_test_id("stat-errors").get_attribute("data-value")) == errors == 1)
