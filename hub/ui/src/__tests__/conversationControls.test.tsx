@@ -9,6 +9,7 @@ import { AgentOutputPanel } from '@/components/agents/AgentOutputPanel'
 let outputLines: AgentOutputLine[] = []
 let conversations: AgentConversation[] = []
 let recordedEntries: TimelineEntry[] = []
+let chatRuns: ChatHistoryResponse['runs'] = {}
 let sseConnectionState: 'closed' | 'connecting' | 'open' | 'reconnecting' = 'open'
 let roster: AgentSummary[] = []
 let launchability: Record<string, { present: boolean; authorized: boolean; runnable: boolean; reason?: string }> = {}
@@ -35,7 +36,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
     session_id: conversations[0]?.provider_session_id ?? null,
     agent: 'claude',
     entries: recordedEntries,
-    runs: {},
+    runs: chatRuns,
   })
   return {
     ...actual,
@@ -103,6 +104,18 @@ vi.mock('@/hooks/useSSE', async (importOriginal) => {
     useSSEConnectionState: () => sseConnectionState,
   }
 })
+
+// The drawer's body is covered by traces.test.tsx: here the per-turn link and the open drawer say
+// which run they were given.
+vi.mock('@/components/traces/TraceDrawer', () => ({
+  TraceButton: ({ runId, testId }: { runId?: string; testId?: string }) => (
+    <button type="button" data-testid={testId} data-run={runId}>
+      trace
+    </button>
+  ),
+  TraceDrawerPanel: ({ open, runId }: { open: boolean; runId?: string }) =>
+    open ? <div data-testid="latest-trace-drawer" data-run={runId} /> : null,
+}))
 
 const fetchMock = vi.fn()
 ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = fetchMock
@@ -789,5 +802,66 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     expect(
       screen.queryByRole('button', { name: /Pause scroll|Resume scroll/ }),
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('the conversation’s own trace of its latest run (FR-11)', () => {
+  beforeEach(() => {
+    conversations = [conversation]
+    roster = [idleAgent]
+    launchability = { claude: { present: true, authorized: true, runnable: true } }
+    sseConnectionState = 'open'
+    conversationUsage = undefined
+    fetchMock.mockReset()
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-test',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  it('opens the third run’s trace from the menu, and each turn still links its own run', async () => {
+    const out = (id: string, run: string, at: string): TimelineEntry => ({
+      id,
+      kind: 'agent_output',
+      content: `reply ${run}`,
+      timestamp: at,
+      delivery_state: 'delivered',
+      run_id: run,
+    })
+    // The route's order is oldest first; the run map is keyed by id, so its own order is no clue.
+    recordedEntries = [
+      out('o1', 'run-1', '2026-08-02T10:00:00Z'),
+      out('o2', 'run-2', '2026-08-02T10:05:00Z'),
+      out('o3', 'run-3', '2026-08-02T10:10:00Z'),
+    ]
+    chatRuns = {
+      'run-2': { status: 'completed', started_at: '2026-08-02T10:05:00Z', ended_at: '2026-08-02T10:06:00Z' },
+      'run-3': { status: 'completed', started_at: '2026-08-02T10:10:00Z', ended_at: '2026-08-02T10:11:00Z' },
+      'run-1': { status: 'completed', started_at: '2026-08-02T10:00:00Z', ended_at: '2026-08-02T10:01:00Z' },
+    }
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    await userEvent.setup().click(await screen.findByRole('menuitem', { name: 'Trace of the latest run' }))
+    expect(screen.getByTestId('latest-trace-drawer')).toHaveAttribute('data-run', 'run-3')
+
+    for (const run of ['run-1', 'run-2', 'run-3']) {
+      expect(screen.getByTestId(`turn-trace-${run}`)).toHaveAttribute('data-run', run)
+    }
+    chatRuns = {}
+  })
+
+  it('offers no latest-trace item while the conversation has no run', async () => {
+    recordedEntries = []
+    chatRuns = {}
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    await screen.findByRole('menuitem', { name: 'Fold all turns' })
+    expect(screen.queryByRole('menuitem', { name: 'Trace of the latest run' })).toBeNull()
   })
 })

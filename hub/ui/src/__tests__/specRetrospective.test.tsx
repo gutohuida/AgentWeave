@@ -14,6 +14,19 @@ import routeAnswer from './fixtures/buildRetrospectives.route.json'
  * `test_the_list_is_newest_first_with_what_the_page_shows`), and every list here is in that order.
  * The hooks and the page are real; only `fetch` is stubbed.
  */
+
+// The trace drawer itself is covered by traces.test.tsx; here a trace link is a button that reports
+// which run it was asked to open.
+const traceOpened = vi.hoisted(() => vi.fn())
+vi.mock('@/components/traces/TraceDrawer', () => ({
+  TraceButton: ({ runId, testId }: { runId?: string; testId?: string }) => (
+    <button type="button" data-testid={testId} onClick={() => traceOpened(runId)}>
+      trace
+    </button>
+  ),
+  TraceDrawerPanel: () => null,
+}))
+
 const real = routeAnswer[0] as unknown as BuildRetrospective
 const PATH = 'spec/changes/hello-file/spec.json'
 const failed: BuildRetrospective = {
@@ -227,5 +240,17 @@ describe('Review this build (FR-3)', () => {
     vi.stubGlobal('fetch', vi.fn(async () => respond(404, { detail: 'Not Found' })))
     const { container } = show()
     await waitFor(() => expect(container.querySelector('section')).toBeNull())
+  })
+})
+
+describe('a transcript read opens its run’s trace', () => {
+  it('opens each listed run’s own trace', async () => {
+    answers = { retrospectives: [real] }
+    show()
+    const newest = await screen.findByTestId('retro-newest')
+    traceOpened.mockClear()
+    const runs = real.report!.transcripts_read.map((r) => r.run_id)
+    for (const run of runs) await userEvent.click(within(newest).getByTestId(`retro-transcript-trace-${run}`))
+    expect(traceOpened.mock.calls).toEqual(runs.map((run) => [run]))
   })
 })

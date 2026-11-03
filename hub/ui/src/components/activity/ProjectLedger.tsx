@@ -1,3 +1,4 @@
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { StatePill } from '@/components/common/StatePill'
 import { Expander } from '@/components/common/Expander'
@@ -340,6 +341,12 @@ export function ProjectLedger({ onOpenTask }: { onOpenTask: (taskId: string) => 
             </span>
             <span className="aw-tl-meta aw-ledger-meta">
               {row.outcome?.replace(/_/g, ' ')} · <Time value={row.at} />
+              {row.run_id ? (
+                <>
+                  {' · '}
+                  <TraceButton runId={row.run_id} label="trace" testId={`ledger-divergence-trace-${row.id}`} />
+                </>
+              ) : null}
             </span>
           </li>
         )}

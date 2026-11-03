@@ -7,6 +7,7 @@ import { useTasks } from '@/api/tasks'
 import { Icon } from '@/components/common/Icon'
 import { QueryErrorNotice } from '@/components/common/QueryErrorNotice'
 import { LogsView } from '@/components/logs/LogsView'
+import { useTracesRequestStore } from '@/store/tracesRequestStore'
 import { TracesPage } from '@/components/traces/TracesPage'
 import { Button } from '@/components/ui/button'
 import { Segmented } from '@/components/ui/segmented'
@@ -36,6 +37,18 @@ export function ActivityScreen({
   initialView?: ActivityView
 }) {
   const [view, setView] = React.useState<ActivityView>(initialView)
+  // A run count elsewhere asking for its runs is a request for the Traces view, whatever was open.
+  // It is taken into local state and cleared from the store at once, so leaving Activity and
+  // coming back does not reopen the filtered list.
+  const waiting = useTracesRequestStore((state) => state.request)
+  const [applied, setApplied] = React.useState<typeof waiting>(null)
+  if (waiting && waiting.nonce !== applied?.nonce) {
+    setApplied(waiting)
+    setView('traces')
+  }
+  React.useEffect(() => {
+    if (waiting) useTracesRequestStore.getState().clear()
+  }, [waiting])
   // A new `initialView` (the palette's "logs") is a request to show it, even while mounted.
   const [requested, setRequested] = React.useState(initialView)
   if (requested !== initialView) {
@@ -43,12 +56,14 @@ export function ActivityScreen({
     setView(initialView)
   }
 
+  const shown: ActivityView = view
+
   return (
     <div className="aw-activity-screen">
       <div className="aw-activity-head aw-activity-bar">
         <Segmented
           label="Activity view"
-          value={view}
+          value={shown}
           onChange={setView}
           options={[
             { value: 'ledger', label: 'Ledger' },
@@ -58,15 +73,15 @@ export function ActivityScreen({
           ]}
         />
       </div>
-      <div className="aw-activity-body" data-view={view}>
-        {view === 'ledger' ? (
+      <div className="aw-activity-body" data-view={shown}>
+        {shown === 'ledger' ? (
           <ProjectLedger onOpenTask={onOpenTask} />
-        ) : view === 'activity' ? (
+        ) : shown === 'activity' ? (
           <LiveDigest onOpenConversation={onOpenConversation} />
-        ) : view === 'logs' ? (
+        ) : shown === 'logs' ? (
           <LogsView />
         ) : (
-          <TracesPage />
+          <TracesPage key={applied?.nonce ?? 0} request={applied} />
         )}
       </div>
     </div>

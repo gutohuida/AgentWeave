@@ -31,6 +31,19 @@ vi.mock('@/api/spec', async (importOriginal) => {
   }
 })
 
+
+// The trace drawer itself is covered by traces.test.tsx; here a trace link is a button that reports
+// which run it was asked to open.
+const traceOpened = vi.hoisted(() => vi.fn())
+vi.mock('@/components/traces/TraceDrawer', () => ({
+  TraceButton: ({ runId, testId }: { runId?: string; testId?: string }) => (
+    <button type="button" data-testid={testId} onClick={() => traceOpened(runId)}>
+      trace
+    </button>
+  ),
+  TraceDrawerPanel: () => null,
+}))
+
 const PATH = 'spec/changes/demo/spec.json'
 
 function amendment(overrides: Record<string, unknown>) {
@@ -284,5 +297,15 @@ describe('SpecAmendmentsPanel', () => {
     amendments = []
     const { container } = renderPanel()
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('an amendment’s run opens its trace', () => {
+  it('opens run-def’s trace from the second amendment and run-abc’s from the first', async () => {
+    renderPanel()
+    traceOpened.mockClear()
+    await userEvent.click(screen.getByTestId('amendment-run-trace-amd-2'))
+    await userEvent.click(screen.getByTestId('amendment-run-trace-amd-1'))
+    expect(traceOpened.mock.calls).toEqual([['run-def'], ['run-abc']])
   })
 })

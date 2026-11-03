@@ -1,3 +1,4 @@
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { useState } from 'react'
 import { readableApiError } from '@/api/client'
 import {
@@ -105,6 +106,12 @@ function Piece({
       {awaiting && recording && (
         <div data-testid={`evidence-held-${piece.id}`} style={{ color: 'var(--amber)' }}>
           still being recorded by run {piece.run_id}; decide once it ends
+          {piece.run_id ? (
+            <>
+              {' · '}
+              <TraceButton runId={piece.run_id} label="trace" testId={`evidence-run-trace-${piece.id}`} />
+            </>
+          ) : null}
         </div>
       )}
       {undecided && (

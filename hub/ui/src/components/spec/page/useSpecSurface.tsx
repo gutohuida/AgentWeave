@@ -19,6 +19,7 @@ import { useVaultChecked } from '@/api/vault'
 import { serializeDestination, projectDestination } from '@/lib/navigation'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
+import { openTraces } from '@/store/tracesRequestStore'
 import { useSpecDeletionStore } from '@/store/specDeletionStore'
 import { keptDetail } from '@/lib/eventSummary'
 import { useAmendmentNotices } from '../amendmentNotices'
@@ -330,9 +331,9 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     onDelete: controls?.remove,
     onStartBuild: () => onAction('build'),
     onOpenRuns: (build) => {
-      const ids = (tasks ?? []).filter((t) => t.build_id === build.id).map((t) => t.id)
-      if (host.onOpenTasks && ids.length) host.onOpenTasks(ids)
-      else toast({ title: `Build ${build.number}`, description: `${build.runs} runs. Open the Spec tab to see its tasks.` })
+      // The runs of the build's tasks, listed in Activity → Traces (FR-12).
+      const project = useConfigStore.getState().selectedProjectId
+      if (project) openTraces(project, { build: build.id, label: `build ${build.number}` })
     },
     onStopBuild: (build) =>
       stop.mutate(
