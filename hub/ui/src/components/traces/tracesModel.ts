@@ -7,6 +7,8 @@ export interface TracesFilter {
   conversation: string
   task: string
   run: string
+  /** The runs of one build's tasks; set only by a build's run count, shown as a removable chip. */
+  build: string
   range: TracesRange
   /** A calendar day (YYYY-MM-DD, the operator's own), which stands in for the range when set. */
   day: string
@@ -20,6 +22,7 @@ export const EMPTY_FILTER: TracesFilter = {
   conversation: '',
   task: '',
   run: '',
+  build: '',
   range: 'all',
   day: '',
   kind: null,
@@ -53,6 +56,7 @@ export function filtersToQuery(filter: TracesFilter, now: Date, before?: string)
   if (filter.conversation.trim()) query.conversation_id = filter.conversation.trim()
   if (filter.task.trim()) query.task_id = filter.task.trim()
   if (filter.run.trim()) query.run_id = filter.run.trim()
+  if (filter.build.trim()) query.build_id = filter.build.trim()
   if (filter.day) {
     const [y, m, d] = filter.day.split('-').map(Number)
     if (y && m && d) {
@@ -73,6 +77,7 @@ export function narrowedBy(filter: TracesFilter): boolean {
     filter.conversation.trim() ||
     filter.task.trim() ||
     filter.run.trim() ||
+    filter.build.trim() ||
     filter.day ||
     filter.range !== 'all'
   )

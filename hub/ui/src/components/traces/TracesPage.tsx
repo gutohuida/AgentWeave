@@ -32,6 +32,7 @@ import {
   type TracesFilter,
 } from '@/components/traces/tracesModel'
 import { Button } from '@/components/ui/button'
+import type { TracesRequest } from '@/store/tracesRequestStore'
 import { Segmented } from '@/components/ui/segmented'
 import { formatCount, formatTokens, formatTokensExact } from '@/lib/format'
 import { hubDate } from '@/lib/hubTime'
@@ -51,7 +52,7 @@ function Cost({ trace }: { trace: TraceSummary }) {
 }
 
 function CostText({ cost, testId = 'trace-cost' }: { cost: CostCell; testId?: string }) {
-  if (cost.kind === 'cost') return <span data-testid={testId}>{money(cost.usd)}</span>
+  if (cost.kind === 'cost') return <span data-testid={testId} data-value={cost.usd}>{money(cost.usd)}</span>
   if (cost.kind === 'unpriced') {
     return (
       <span
@@ -264,7 +265,7 @@ function Groups({
               <span className="aw-traces-subject-text">{group.label}</span>
               {group.detail ? <small>{group.detail}</small> : null}
             </span>
-            <span className="aw-traces-group-num" data-testid="traces-group-count">
+            <span className="aw-traces-group-num" data-testid="traces-group-count" data-value={t.count}>
               {formatCount(t.count)}
             </span>
             <span className="aw-traces-group-num">
@@ -276,11 +277,16 @@ function Groups({
                 <span className="aw-traces-share" style={{ ['--share' as string]: `${Math.max(2, share * 100)}%` }} />
               ) : null}
             </span>
-            <span className="aw-traces-group-num" data-testid="traces-group-duration">
+            <span
+              className="aw-traces-group-num"
+              data-testid="traces-group-duration"
+              data-value={t.duration_seconds}
+              data-avg={t.duration_avg_seconds ?? ''}
+            >
               {formatDuration(t.duration_seconds * 1000)}
               <small>{t.duration_avg_seconds === null ? '' : `${formatDuration(t.duration_avg_seconds * 1000)} avg`}</small>
             </span>
-            <span className="aw-traces-group-num" data-testid="traces-group-errors" data-bad={t.errors ? 'true' : undefined}>
+            <span className="aw-traces-group-num" data-testid="traces-group-errors" data-value={t.errors} data-bad={t.errors ? 'true' : undefined}>
               {t.errors ? plural(t.errors, 'error') : '—'}
             </span>
             <span>
@@ -302,11 +308,18 @@ function Groups({
  * choice; filters by agent, conversation, task, run and time range. A row opens its trace in the
  * drawer; the filters live here, so closing the drawer returns to the same list.
  */
-export function TracesPage() {
-  const [filter, setFilter] = React.useState<TracesFilter>(EMPTY_FILTER)
+export function TracesPage({ request = null }: { request?: TracesRequest | null }) {
+  const [filter, setFilter] = React.useState<TracesFilter>(() => ({
+    ...EMPTY_FILTER,
+    build: request?.build ?? '',
+    task: request?.task ?? '',
+    agent: request?.agent ?? '',
+  }))
   // The moment a range is measured from is taken when the filter changes, so the query key is still.
   const [anchor, setAnchor] = React.useState(() => new Date())
   const [before, setBefore] = React.useState<string | undefined>(undefined)
+  // Set when the operator lets go of the runs a count asked for (its `since` is not a filter field).
+  const [released, setReleased] = React.useState(false)
   const [opened, setOpened] = React.useState<TraceSummary | null>(null)
   const [grouping, setGrouping] = React.useState<TraceGrouping | 'none'>('none')
   const { data: agents = [], error: agentsError } = useAgents()
@@ -316,7 +329,12 @@ export function TracesPage() {
     setAnchor(new Date())
     setBefore(undefined)
   }
-  const query = React.useMemo(() => filtersToQuery(filter, anchor, before), [filter, anchor, before])
+  const query = React.useMemo(() => {
+    const q = filtersToQuery(filter, anchor, before)
+    // A run count's "since" is a bound of its own; the range selector may narrow it further, never widen it.
+    if (!released && request?.since && (!q.since || q.since < request.since)) q.since = request.since
+    return q
+  }, [filter, anchor, before, request, released])
   const { data, isLoading, error } = useTraces(query)
   // The statistics are the Hub's, over every trace the filter matches, not this page (FR-8).
   const totalsQuery = useTraceTotals(query, grouping === 'none' ? null : grouping)
@@ -411,6 +429,18 @@ export function TracesPage() {
       {agentsError ? (
         <p role="alert" className="aw-traces-error">
           {readableApiError(agentsError, 'The agents could not be listed, so the agent filter has no choices.')}
+        </p>
+      ) : null}
+
+      {request?.label && !released ? (
+        <p className="aw-traces-internal-note" data-testid="traces-request-note">
+          Showing the runs of {request.label}.{' '}
+          <button type="button" className="aw-link" onClick={() => {
+              setReleased(true)
+              change({ build: '', task: '', agent: '' })
+            }}>
+            Show all runs
+          </button>
         </p>
       ) : null}
 

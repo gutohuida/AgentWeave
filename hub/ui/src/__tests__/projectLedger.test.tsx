@@ -10,6 +10,19 @@ import type { ProjectLedger as Ledger } from '@/api/ledger'
  * re-sorted a lane fails here (CLAUDE.md: a consumer's test uses the route's real order).
  */
 
+
+// The trace drawer itself is covered by traces.test.tsx; here a trace link is a button that reports
+// which run it was asked to open.
+const traceOpened = vi.hoisted(() => vi.fn())
+vi.mock('@/components/traces/TraceDrawer', () => ({
+  TraceButton: ({ runId, testId }: { runId?: string; testId?: string }) => (
+    <button type="button" data-testid={testId} onClick={() => traceOpened(runId)}>
+      trace
+    </button>
+  ),
+  TraceDrawerPanel: () => null,
+}))
+
 const LEDGER: Ledger = {
   merges: [
     { id: 'tin-new', task_id: 'task-b', task_title: 'Tags', outcome: 'skipped', commit_sha: null, source_branch: null,
@@ -101,5 +114,14 @@ describe('ProjectLedger', () => {
     expect(row.textContent).toContain('Context readings')
     expect(row.textContent).not.toContain('warning')
     expect(row.querySelector('.aw-pill')?.className).toContain('tone-neutral')
+  })
+})
+
+describe('a divergence’s run opens its trace', () => {
+  it('opens run-a’s trace from the divergence it ended out of step', async () => {
+    traceOpened.mockClear()
+    render(<ProjectLedger onOpenTask={vi.fn()} />)
+    await userEvent.click(screen.getByTestId('ledger-divergence-trace-rdv-1'))
+    expect(traceOpened).toHaveBeenCalledExactlyOnceWith('run-a')
   })
 })
