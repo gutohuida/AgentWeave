@@ -27,7 +27,8 @@ const EXEMPT = new Set([
   'components/jobs/JobForm.tsx',
   'components/spec/LoopSettings.tsx',
   'components/spec/StartFlowDialog.tsx',
-  'components/spec/BuildDialog.tsx',
+  // Copies a `Date` it was given and moves it forward by hours: no timestamp string is parsed.
+  'components/spec/BuildPlanDialog.tsx',
   // React Query's own epoch milliseconds, measured in this browser.
   'components/logs/LogsView.tsx',
   // Epoch milliseconds this module computed itself while walking a cron expression forward —
