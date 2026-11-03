@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import readable_ids, trace_export, trace_retention, traces
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
-from ...db.models import Run, TraceSettings
+from ...db.models import Run, Task, TraceSettings
 from ...schemas.common import RequestModel
 
 router = APIRouter(prefix="/traces", tags=["traces"])
@@ -45,6 +45,7 @@ async def list_project_traces(
     run_id: Optional[str] = Query(None),
     task_id: Optional[str] = Query(None),
     conversation_id: Optional[str] = Query(None),
+    build_id: Optional[str] = Query(None, description="The runs that worked a task of this build"),
     agent: Optional[str] = Query(None, max_length=64, description="Only this agent's runs"),
     since: Optional[str] = Query(
         None, description="Started at or after: YYYY-MM-DD or ISO datetime"
@@ -59,12 +60,12 @@ async def list_project_traces(
     session: AsyncSession = Depends(get_session),
 ):
     """The project's traces, newest first. `task_id`/`conversation_id` select the traces of the
-    runs that worked that task or ran in that conversation; `agent` one agent's runs; `operation`
+    runs that worked that task (or a task of that `build_id`) or ran in that conversation; `agent` one agent's runs; `operation`
     one kind of trace; `since`/`until` the traces that started in that range."""
     project_id, _ = project
     start, end = _bounds(since, until)
     run_ids = None
-    if run_id or task_id or conversation_id or agent:
+    if run_id or task_id or conversation_id or build_id or agent:
         query = select(Run.id).where(Run.project_id == project_id)
         if run_id:
             query = query.where(Run.id == run_id)
@@ -73,6 +74,12 @@ async def list_project_traces(
             query = query.where(Run.task_id == task_id)
         if conversation_id:
             query = query.where(Run.conversation_id == conversation_id)
+        if build_id:
+            query = query.where(
+                Run.task_id.in_(
+                    select(Task.id).where(Task.build_id == build_id, Task.project_id == project_id)
+                )
+            )
         if agent:
             query = query.where(Run.agent == agent)
         run_ids = list((await session.execute(query)).scalars().all())

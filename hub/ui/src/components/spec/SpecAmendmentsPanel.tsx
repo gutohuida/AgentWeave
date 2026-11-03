@@ -1,3 +1,4 @@
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
@@ -138,7 +139,14 @@ export function AmendmentRow({
         {amendment.identifier && <span>({amendment.identifier})</span>}
         <span style={{ color: 'var(--text-3)' }}>
           · @{amendment.author}
-          {amendment.run_id ? ` in run ${amendment.run_id}` : ''} ·{' '}
+          {amendment.run_id ? ` in run ${amendment.run_id}` : ''}
+          {amendment.run_id ? (
+            <>
+              {' '}
+              <TraceButton runId={amendment.run_id} label="trace" testId={`amendment-run-trace-${amendment.id}`} />
+            </>
+          ) : null}{' '}
+          ·{' '}
           <span title={at.toLocaleString()}>{formatDistanceToNow(at, { addSuffix: true })}</span>
         </span>
         <div className="flex-1" />

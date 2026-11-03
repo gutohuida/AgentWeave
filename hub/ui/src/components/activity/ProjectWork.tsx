@@ -3,6 +3,8 @@ import { useProjectStats, ROLES, WALL_PARTS, type Grouping, type Role, type Wall
 import { LoadingThread } from '@/components/common/LoadingThread'
 import { Segmented } from '@/components/ui/segmented'
 import { formatDuration, formatMoney } from '@/lib/format'
+import { useConfigStore } from '@/store/configStore'
+import { openTraces, type TracesRequest } from '@/store/tracesRequestStore'
 
 /**
  * The project's work (`project-stats-come-from-the-same-records`): where the work went, grouped by
@@ -52,13 +54,33 @@ function RoleCell({ row, role }: { row: WorkRow; role: Role }) {
   )
 }
 
-function CostCell({ row }: { row: WorkRow }) {
+/** The run count opens Activity → Traces on exactly those runs, when the row says which they are. */
+function RunCount({ count, request }: { count: number; request?: TracesRequest }) {
+  const text = `${count} run${count === 1 ? '' : 's'}`
+  if (!request || count === 0) return <>{text}</>
+  return (
+    <button
+      type="button"
+      className="aw-link"
+      data-testid="work-runs-open"
+      title="Open these runs in Activity → Traces"
+      onClick={() => {
+        const project = useConfigStore.getState().selectedProjectId
+        if (project) openTraces(project, request)
+      }}
+    >
+      {text}
+    </button>
+  )
+}
+
+function CostCell({ row, request }: { row: WorkRow; request?: TracesRequest }) {
   const extra = [row.unpriced ? `${row.unpriced} unpriced` : null, credits(row)].filter(Boolean)
   return (
     <td className="aw-work-num" data-testid="work-cost">
       <strong>{money(row.cost_micros.total, row.runs.total)}</strong>
       <small>
-        {row.runs.total} run{row.runs.total === 1 ? '' : 's'}
+        <RunCount count={row.runs.total} request={request} />
         {extra.length ? ` · ${extra.join(' · ')}` : ''}
       </small>
     </td>
@@ -103,10 +125,10 @@ function QualityCells({ row }: { row: WorkRow }) {
   )
 }
 
-function WorkRowCells({ row, showWall }: { row: WorkRow; showWall: boolean }) {
+function WorkRowCells({ row, showWall, request }: { row: WorkRow; showWall: boolean; request?: TracesRequest }) {
   return (
     <>
-      <CostCell row={row} />
+      <CostCell row={row} request={request} />
       {ROLES.filter((r) => r !== 'other').map((role) => (
         <RoleCell key={role} row={row} role={role} />
       ))}
@@ -116,7 +138,8 @@ function WorkRowCells({ row, showWall }: { row: WorkRow; showWall: boolean }) {
   )
 }
 
-function GroupRows({ grouping, group }: { grouping: Grouping; group: WorkGroup }) {
+function GroupRows({ grouping, group, since }: { grouping: Grouping; group: WorkGroup; since: string }) {
+  const sinceIso = since ? `${since}T00:00:00Z` : undefined
   const showWall = grouping === 'spec' || grouping === 'level'
   const id = `work-row-${grouping}-${group.key ?? 'none'}`
   return (
@@ -125,14 +148,26 @@ function GroupRows({ grouping, group }: { grouping: Grouping; group: WorkGroup }
         <th scope="row" className="aw-work-name" title={group.path ?? undefined}>
           {group.label}
         </th>
-        <WorkRowCells row={group.row} showWall={showWall} />
+        <WorkRowCells
+          row={group.row}
+          showWall={showWall}
+          request={
+            grouping === 'agent' && group.key
+              ? { agent: group.key, since: sinceIso, label: `agent ${group.label}` }
+              : undefined
+          }
+        />
       </tr>
       {(group.builds ?? []).map((build, index) => (
         <tr key={build.id} className="aw-work-sub" data-testid={`work-build-${build.id}`}>
           <th scope="row" className="aw-work-name">
             Build {index + 1} · {build.level}
           </th>
-          <WorkRowCells row={build.row} showWall />
+          <WorkRowCells
+            row={build.row}
+            showWall
+            request={{ build: build.id, label: `build ${index + 1}` }}
+          />
         </tr>
       ))}
       {group.before_builds ? (
@@ -192,7 +227,7 @@ export function WorkView({
           </thead>
           <tbody>
             {tally.groups[grouping].map((group) => (
-              <GroupRows key={group.key ?? 'none'} grouping={grouping} group={group} />
+              <GroupRows key={group.key ?? 'none'} grouping={grouping} group={group} since={since} />
             ))}
           </tbody>
           <tfoot>
@@ -200,7 +235,11 @@ export function WorkView({
               <th scope="row" className="aw-work-name">
                 All
               </th>
-              <WorkRowCells row={tally.total} showWall={showWall} />
+              <WorkRowCells
+                row={tally.total}
+                showWall={showWall}
+                request={{ since: since ? `${since}T00:00:00Z` : undefined, label: 'the project' }}
+              />
             </tr>
           </tfoot>
         </table>

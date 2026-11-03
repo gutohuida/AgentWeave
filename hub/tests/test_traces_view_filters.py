@@ -131,3 +131,25 @@ async def test_a_runs_row_carries_its_fields(app, auth_headers):
     assert gone["cost_usd"] is None and gone["cost_state"] == "unpriced"
     live = rows["run-r-live"]
     assert live["cost_state"] == "running" and live["cost_usd"] is None
+
+
+@pytest.mark.asyncio
+async def test_build_filter_lists_exactly_the_runs_of_that_builds_tasks(app, auth_headers):
+    """FR-12: a build's run count opens the view filtered to the runs of that build's tasks."""
+    async with async_session_factory() as db:
+        db.add(Task(id="task-bf1", project_id=PROJECT, title="In build", build_id="build-bf1"))
+        db.add(Task(id="task-bf2", project_id=PROJECT, title="Other build", build_id="build-bf2"))
+        db.add(Task(id="task-bf3", project_id=PROJECT, title="No build"))
+        await db.commit()
+    await _run("run-bf-1", "alpha", task_id="task-bf1")
+    await _run("run-bf-2", "beta", task_id="task-bf1")
+    await _run("run-bf-3", "alpha", task_id="task-bf2")
+    await _run("run-bf-4", "alpha", task_id="task-bf3")
+
+    got = {t["run_id"] for t in await _listed(app, auth_headers, build_id="build-bf1")}
+    assert got == {"run-bf-1", "run-bf-2"}
+    got = {
+        t["run_id"] for t in await _listed(app, auth_headers, build_id="build-bf1", agent="beta")
+    }
+    assert got == {"run-bf-2"}
+    assert await _listed(app, auth_headers, build_id="build-none") == []

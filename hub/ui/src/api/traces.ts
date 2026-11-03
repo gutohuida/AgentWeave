@@ -122,6 +122,8 @@ export interface TraceFilters {
   run_id?: string
   task_id?: string
   conversation_id?: string
+  /** The runs that worked a task of this build. */
+  build_id?: string
   agent?: string
   /** Started at or after / before: ISO datetimes. */
   since?: string
