@@ -162,52 +162,174 @@ async def test_the_hub_starts_the_watcher():
     assert "watch_main_forever" in inspect.getsource(main.lifespan)
 
 
-# --- FR-3: a run main has moved past is ended and replaced ---------------------------------------
-
-#: Holds its output pipe through a grandchild, as `test_a_check_past_its_timeout_...` does: the run
-#: ends promptly only if the whole tree is ended.
-HANG = {
-    "name": "slow",
-    "command": (
-        f'{PY} -c "import subprocess,sys,time,os; '
-        "subprocess.Popen([sys.executable,'-c','import time; time.sleep(120)']) "
-        "if not os.path.exists('later.txt') else None; "
-        "time.sleep(0 if os.path.exists('later.txt') else 120)\""
-    ),
-    "timeout_seconds": 300,
-}
+# --- FR-3, superseded by `a-check-run-finishes-when-master-moves`: a run main moves past runs on --
 
 
-async def test_a_run_main_moved_past_is_superseded_and_replaced(app, tmp_path):
-    """ac-superseded."""
+class _Gate:
+    """A check that holds inside its process until the test releases it, so a main move lands while
+    it executes without a race against a sleep. *fail_if* / *fail_unless* name a file in the tree
+    it checks that decides its exit; *pass_if* passes at once (new work) without holding."""
+
+    def __init__(self, tmp_path, *, fail_if="", fail_unless="", pass_if="", fast=False):
+        ctl = tmp_path.parent / f"{tmp_path.name}-ctl"
+        ctl.mkdir(exist_ok=True)
+        self.inside, self.release = ctl / "inside", ctl / "release"
+        script = ctl / "gate.py"
+        script.write_text(
+            "import os, pathlib, sys, time\n"
+            f"if {pass_if!r} and os.path.exists({pass_if!r}):\n"
+            "    sys.exit(0)\n"
+            f"pathlib.Path({str(self.inside)!r}).touch()\n"
+            "end = time.monotonic() + 120\n"
+            f"while not pathlib.Path({str(self.release)!r}).exists() and time.monotonic() < end:\n"
+            "    time.sleep(0.05)\n"
+            f"if {fail_if!r} and os.path.exists({fail_if!r}):\n"
+            "    print('fails here'); sys.exit(3)\n"
+            f"if {fail_unless!r} and not os.path.exists({fail_unless!r}):\n"
+            "    print('fails here'); sys.exit(4)\n",
+            encoding="utf-8",
+        )
+        self.check = {
+            "name": "gate",
+            "command": f'{PY} "{script}"',
+            "timeout_seconds": 150,
+            "fast": fast,
+        }
+
+    async def entered(self):
+        deadline = time.monotonic() + 60
+        while not self.inside.exists() and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        assert self.inside.exists(), "the check never started"
+
+
+async def _executing(tmp_path, **gate):
+    """A completed task whose run is executing its (held) check; its run id, the gate, and T1."""
     task_id, _ = await _task_with_work(tmp_path)
-    await _project([HANG])
+    held = _Gate(tmp_path, **gate)
+    await _project([held.check])
+    tip = _tip(tmp_path)
     first = await project_checks.request_run("proj-test", task_id)
     assert first
-    # The check is executing: its process exists. A fixed sleep raced the checkout under load.
-    deadline = time.monotonic() + 60
-    while task_id not in project_checks._processes and time.monotonic() < deadline:
-        await asyncio.sleep(0.1)
-    assert task_id in project_checks._processes, "the check never started"
+    await held.entered()
     assert project_checks.is_running(task_id)
-    tip = _move_main(tmp_path)
+    return task_id, first, held, tip
 
-    started = time.monotonic()
-    await project_checks.refresh("proj-test")
+
+async def test_a_run_main_moved_past_runs_to_the_end(app, auth_headers, tmp_path):
+    """ac-runs-through-a-move (FR-1)."""
+    task_id, first, held, cut = await _executing(tmp_path)
+    try:
+        _move_main(tmp_path)
+        await project_checks.refresh("proj-test")
+        assert project_checks.is_running(task_id), "the move ended the run"
+    finally:
+        held.release.touch()
     await project_checks.drain()
-    assert time.monotonic() - started < 60, "the old run's process tree was not ended"
 
     runs = await _runs(task_id)
-    assert [r.state for r in runs] == ["superseded", "passed"]
-    assert runs[0].id == first and runs[0].ended_at is not None
-    assert runs[0].results == [], "the ended check is not recorded as a failure"
-    assert tip[:12] in runs[0].error
-    assert runs[1].main_sha == tip
+    assert [(r.id, r.state, r.main_sha) for r in runs] == [(first, "passed", cut)]
+    assert not runs[0].error
+    approved = await _approve(app, auth_headers, task_id)
+    assert approved.status_code == 200, approved.text
 
 
-async def test_a_move_during_the_checkout_still_ends_the_check(app, tmp_path, monkeypatch):
-    """The move lands before the check's process exists (its checkout is slow, as under load):
-    `supersede` finds nothing to end, so the check must end itself as it starts, not hang."""
+async def test_an_outside_commit_does_not_end_the_run(app, tmp_path):
+    """ac-outside-move-too (FR-1): a commit made with git directly, noticed by the watcher."""
+    task_id, first, held, cut = await _executing(tmp_path)
+    try:
+        moved = _move_main(tmp_path)
+        await project_checks.watch_main_once()
+        assert project_checks._seen_tips.get("proj-test") == moved, "the watcher did not look"
+        assert project_checks.is_running(task_id), "the outside move ended the run"
+    finally:
+        held.release.touch()
+    await project_checks.drain()
+
+    assert [(r.id, r.state, r.main_sha) for r in await _runs(task_id)] == [(first, "passed", cut)]
+
+
+async def test_new_work_still_supersedes_the_run(app, tmp_path):
+    """ac-new-completion-supersedes (FR-2): completing again with new work ends the run on the old
+    work. The gate passes at once on the new work (`more.py`), so only the old run is held."""
+    task_id, first, held, _ = await _executing(tmp_path, pass_if="more.py", fast=True)
+    try:
+        newer = commit_on_branch(
+            tmp_path, task_branch_name(task_id), "more.py", "y = 2\n", create=False
+        )
+        git(tmp_path, "checkout", "-q", "main")
+        async with async_session_factory() as session:
+            task = await session.get(Task, task_id)
+            await project_checks.fast_checks_at_completion(session, task, "builder")
+    finally:
+        held.release.touch()
+    await project_checks.drain()
+
+    runs = await _runs(task_id)
+    assert runs[0].id == first and runs[0].state == "superseded"
+    assert "completed again" in runs[0].error
+    assert [r.state for r in runs[1:]] == ["passed"]
+    assert runs[1].target_shas == [newer]
+
+
+async def test_two_moves_start_no_second_run(app, tmp_path):
+    """ac-no-second-run (FR-3)."""
+    task_id, first, held, cut = await _executing(tmp_path)
+    try:
+        for name in ("one.txt", "two.txt"):
+            _move_main(tmp_path, name)
+            await project_checks.refresh("proj-test")
+            await asyncio.sleep(0.2)  # anything the refresh started has recorded its run
+            assert [r.id for r in await _runs(task_id)] == [first], f"a run started at {name}"
+            assert project_checks.is_running(task_id)
+    finally:
+        held.release.touch()
+    await project_checks.drain()
+
+    assert [(r.id, r.state, r.main_sha) for r in await _runs(task_id)] == [(first, "passed", cut)]
+
+
+async def test_a_failure_shared_with_an_old_main_is_checked_again(app, tmp_path):
+    """ac-old-tip-failure-rerun (FR-4): T1's main fails the check too (not the task's own) and T2
+    fixes it; once the run on T1 has ended, a run on T2 starts with no approval asked."""
+    task_id, first, held, cut = await _executing(tmp_path, fail_unless="fixed.txt")
+    try:
+        fixed = _move_main(tmp_path, "fixed.txt")
+        await project_checks.refresh("proj-test")
+    finally:
+        held.release.touch()
+    await project_checks.drain()
+
+    runs = await _runs(task_id)
+    assert [(r.id, r.state, r.main_sha) for r in runs[:1]] == [(first, "failed", cut)]
+    assert not project_checks.own_failure(runs[0].results), "the failure is main's"
+    assert [(r.state, r.main_sha) for r in runs[1:]] == [("passed", fixed)]
+    async with async_session_factory() as session:
+        assert (await session.get(Task, task_id)).status == "completed", "nobody approved it"
+
+
+async def test_an_own_failure_on_an_old_tip_goes_back_once(app, tmp_path):
+    """ac-own-failure-returns (FR-5): the task's own failure on T1 returns it, as on the current
+    tip, and main having moved to T2 starts nothing more."""
+    task_id, first, held, cut = await _executing(tmp_path, fail_if="feature.py")
+    try:
+        _move_main(tmp_path)
+        await project_checks.refresh("proj-test")
+    finally:
+        held.release.touch()
+    await project_checks.drain()
+
+    runs = await _runs(task_id)
+    assert [(r.id, r.state, r.main_sha) for r in runs] == [(first, "failed", cut)]
+    assert project_checks.own_failure(runs[0].results)
+    async with async_session_factory() as session:
+        assert (await session.get(Task, task_id)).status == "revision_needed"
+
+
+async def test_a_move_during_the_checkout_does_not_end_the_check(app, tmp_path, monkeypatch):
+    """The move lands before the check's process exists (its checkout is slow, as under load). It
+    used to end the check as it started; a main move now ends nothing, so the run goes on to its
+    end on the tip it was cut from."""
     import threading
 
     entered, release = threading.Event(), threading.Event()
@@ -220,23 +342,18 @@ async def test_a_move_during_the_checkout_still_ends_the_check(app, tmp_path, mo
 
     monkeypatch.setattr(project_checks, "_checkout", slow_checkout)
     task_id, _ = await _task_with_work(tmp_path)
-    await _project([HANG])
+    await _project([PASS])
+    cut = _tip(tmp_path)
     first = await project_checks.request_run("proj-test", task_id)
     assert first
     assert await asyncio.to_thread(entered.wait, 60), "the run never reached its checkout"
-    tip = _move_main(tmp_path)
+    _move_main(tmp_path)
 
-    started = time.monotonic()
     await project_checks.refresh("proj-test")
-    assert task_id not in project_checks._processes
     release.set()
     await project_checks.drain()
-    assert time.monotonic() - started < 60, "the check started after the move was not ended"
 
-    runs = await _runs(task_id)
-    assert [r.state for r in runs] == ["superseded", "passed"]
-    assert runs[0].id == first and runs[0].results == []
-    assert runs[1].main_sha == tip
+    assert [(r.id, r.state, r.main_sha) for r in await _runs(task_id)] == [(first, "passed", cut)]
 
 
 # --- FR-4: oldest completed first ---------------------------------------------------------------
