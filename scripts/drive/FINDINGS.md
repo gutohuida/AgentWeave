@@ -41291,7 +41291,7 @@ On 2026-11-01 the operator approved `a-finished-spec-gets-a-build-retrospective`
 
 ## F1126 (B) -- work that reaches master inside a dependent task's merge is never recorded as landed
 
-**Status:** open 2026-11-03.
+**Status:** fixed 2026-11-03 (Tier 0, all three parts; `hub/tests/test_a_held_landing_is_released.py`, each test failing on master first). (a) `land_held_batch` kicks the queue whether it landed or requeued; (b) a batch held over failures main shares is requeued once main's tip differs from its base (`_release_shared_failure_holds`, run on every queue look), and the main watch kicks the queue when main moves; (c) a queued landing whose every target is already on main lands as already integrated, no batch or check, with `landed_sha` naming the main commit that carried it (`_carried`).
 **Source:** found by reading the ledger and git, reported by the operator ("the spec header is done, why is it still building?")
 **Theme:** Flows & review
 **Ready:** yes

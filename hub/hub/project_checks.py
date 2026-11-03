@@ -1727,7 +1727,7 @@ async def watch_main_once() -> None:
     merges pass silently, any other move is raised), and a project with checks whose tip is not
     the one last seen has its results refreshed. A first look counts as a move for the refresh: a
     Hub restarted after a merge has results to bring up to date."""
-    from . import main_watch
+    from . import landing_queue, main_watch
     from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 
     async with async_session_factory() as session:
@@ -1761,6 +1761,8 @@ async def watch_main_once() -> None:
                 await main_watch.observe(project_id, tip, root)
             except Exception:  # noqa: BLE001 -- the next look tries again
                 logger.warning("could not account for main moving in %s", project_id, exc_info=True)
+            # A batch held over failures main shared may pass on the new tip (F1126b).
+            landing_queue.kick(project_id)
         if has_checks and _seen_tips.get(project_id) != tip:
             await _refresh_logged(project_id)
 
