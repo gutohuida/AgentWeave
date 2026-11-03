@@ -33,6 +33,9 @@ const EXEMPT = new Set([
   // Epoch milliseconds this module computed itself while walking a cron expression forward —
   // never a Hub timestamp string, so there is nothing for `hubDate` to normalise.
   'lib/cron.ts',
+  // Local-midnight bounds built from the year/month/day the operator picked in the traces filter
+  // and `now` minus a fixed span — never a Hub timestamp string.
+  'components/traces/tracesModel.ts',
   // The helper itself.
   'lib/hubTime.ts',
 ])
