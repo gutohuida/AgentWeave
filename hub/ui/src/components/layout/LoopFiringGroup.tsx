@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { AgentConversation } from '@/api/agentChat'
 import { Icon } from '@/components/common/Icon'
+import { useLoop } from '@/api/loops'
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { loopTabId, usePanelTabsStore } from '@/store/panelTabsStore'
 import { ConversationRow } from './ConversationRow'
 
@@ -49,6 +51,12 @@ export function LoopFiringGroup({
   const holdsActive = conversations.some((c) => c.id === activeConversation)
   const [expanded, setExpanded] = useState(holdsActive)
   const openTab = usePanelTabsStore((state) => state.openTab)
+  // Which run each firing started comes from the loop's firing history, read only while the group
+  // is open; a firing the history does not name (older than its last ten, or with no run) has none.
+  const { data: loop } = useLoop(expanded ? loopId : null)
+  const runByConversation = new Map(
+    (loop?.history ?? []).flatMap((f) => (f.conversation_id && f.run_id ? [[f.conversation_id, f.run_id] as const] : [])),
+  )
 
   // Opening a firing from anywhere else — the recency view, a URL, a notification — must reveal it
   // here too, not leave the rail pointing at a collapsed row.
@@ -112,8 +120,9 @@ export function LoopFiringGroup({
       {expanded && (
         <div className="aw-rail-conversations" data-testid={`${testId}-firings`}>
           {conversations.map((conversation) => (
+            <div key={conversation.id} className="flex items-center">
+            <div className="min-w-0 flex-1">
             <ConversationRow
-              key={conversation.id}
               projectId={projectId}
               conversation={conversation}
               active={activeConversation === conversation.id}
@@ -124,6 +133,15 @@ export function LoopFiringGroup({
               /* The group row already names the loop, once, for every firing under it. */
               showLoopMarker={false}
             />
+            </div>
+            {runByConversation.has(conversation.id) ? (
+              <TraceButton
+                runId={runByConversation.get(conversation.id)}
+                label="trace"
+                testId={`${rowTestId(conversation)}-trace`}
+              />
+            ) : null}
+            </div>
           ))}
         </div>
       )}

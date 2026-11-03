@@ -139,6 +139,11 @@ class JobRunResponse(BaseModel):
     # for the same stall counts here instead of appending another row. Defaults to 1 rather than 0
     # so a row written before the column existed reads as the one firing it represents.
     tick_count: int = 1
+    # The conversation this firing used and the agent run it started in it, so a firing can open
+    # that run's trace. `run_id` is None for a firing that started no run (skipped, refused, or its
+    # run not begun yet); see `firing_runs.py`.
+    conversation_id: Optional[str] = Field(default=None, max_length=64)
+    run_id: Optional[str] = Field(default=None, max_length=64)
 
     model_config = {"from_attributes": True}
 

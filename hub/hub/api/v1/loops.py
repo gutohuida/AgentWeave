@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import EventLog, JobRun, Loop
+from ...firing_runs import run_ids_for_firings
 from ...schemas.jobs import LoopControlUpdate, LoopDetail, LoopSummary
 from ...sse import defer_broadcast
 from ...utils import persist_event
@@ -74,6 +75,7 @@ async def _get_loop_detail(session: AsyncSession, project_id: str, loop_id: str)
         .limit(10)
     )
     runs = history_result.scalars().all()
+    run_ids = await run_ids_for_firings(session, runs)
 
     events_result = await session.execute(
         select(EventLog)
@@ -106,6 +108,8 @@ async def _get_loop_detail(session: AsyncSession, project_id: str, loop_id: str)
                 "status": run.status,
                 "trigger": run.trigger,
                 "session_id": run.session_id,
+                "conversation_id": run.conversation_id,
+                "run_id": run_ids.get(run.id),
             }
             for run in runs
         ],
