@@ -18,6 +18,8 @@ export interface LoopDetail extends LoopSummary {
     status: string
     trigger: string
     session_id?: string
+    conversation_id?: string | null
+    run_id?: string | null
   }>
   /** This loop's own audit trail (design D13, task A4.1/A4.2) — control changes, staged and
    *  applied edits, how it stopped. Filtered server-side by loop id; never another loop's rows. */
@@ -52,6 +54,23 @@ export function useLoop(loopId: string | null) {
     queryKey: ['project', projectId, 'loops', loopId],
     queryFn: () => getJson<LoopDetail>(`/api/v1/projects/${projectId}/loops/${loopId}`),
     enabled: isConfigured && !!projectId && !!loopId,
+  })
+}
+
+/** The run each of these conversations' firings started, for the conversations a rail group shows
+ *  (`GET .../loops/{id}/firing-runs`). Not read from `useLoop`'s history, which holds only the
+ *  loop's last ten firings across every agent. A conversation with no run is absent. */
+export function useLoopFiringRuns(loopId: string | null, conversationIds: string[]) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<Record<string, string>>({
+    queryKey: ['project', projectId, 'loops', loopId, 'firing-runs', conversationIds],
+    queryFn: () => {
+      const query = conversationIds.map((id) => `conversation_id=${encodeURIComponent(id)}`).join('&')
+      return getJson<Record<string, string>>(
+        `/api/v1/projects/${projectId}/loops/${loopId}/firing-runs?${query}`,
+      )
+    },
+    enabled: isConfigured && !!projectId && !!loopId && conversationIds.length > 0,
   })
 }
 
