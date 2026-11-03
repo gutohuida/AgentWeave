@@ -2133,6 +2133,9 @@ async def list_traces(
     }
 
 
+#: Run ids bound per statement, under SQLite's variable limit.
+_ID_CHUNK = 500
+
 #: What the traces view groups by (FR-5).
 GROUPINGS = ("agent", "model", "task", "conversation", "kind", "day")
 
@@ -2248,48 +2251,48 @@ async def trace_totals(
         )
     ).all()
 
-    # What each matched run adds, read once per table over the same set rather than per run.
-    matched = _roots(select(TraceSpan.run_id), project_id, run_ids, operation, since, until).where(
-        TraceSpan.run_id.is_not(None)
-    )
+    # What each matched run adds, read once per table. The ids come from the roots already read,
+    # so no table re-runs the roots subquery (it matched tens of thousands of rows per table).
+    matched = sorted({row[0] for row in roots if row[0]})
     usage: Dict[str, TurnUsage] = {}
     run_rows: Dict[str, Tuple[str, Optional[str]]] = {}
     calls: Dict[Tuple[str, str], int] = {}
     waits: Dict[str, float] = {}
-    if any(row[0] for row in roots):
-        usage = {
-            u.run_id: u
-            for u in (await db.execute(select(TurnUsage).where(TurnUsage.run_id.in_(matched))))
-            .scalars()
-            .all()
-        }
-        run_rows = {
-            rid: (status, task_id)
-            for rid, status, task_id in (
-                await db.execute(select(Run.id, Run.status, Run.task_id).where(Run.id.in_(matched)))
-            ).all()
-        }
-        calls = {
-            (rid, op): count
-            for rid, op, count in (
-                await db.execute(
-                    select(TraceSpan.run_id, TraceSpan.operation, func.count())
-                    .where(
-                        TraceSpan.run_id.in_(matched),
-                        TraceSpan.operation.in_(("chat", "execute_tool")),
-                    )
-                    .group_by(TraceSpan.run_id, TraceSpan.operation)
+    for at in range(0, len(matched), _ID_CHUNK):
+        ids = matched[at : at + _ID_CHUNK]
+        for u in (
+            (await db.execute(select(TurnUsage).where(TurnUsage.run_id.in_(ids)))).scalars().all()
+        ):
+            usage[u.run_id] = u
+        for rid, status, task_id in (
+            await db.execute(select(Run.id, Run.status, Run.task_id).where(Run.id.in_(ids)))
+        ).all():
+            run_rows[rid] = (status, task_id)
+        for rid, op, count in (
+            await db.execute(
+                select(TraceSpan.run_id, TraceSpan.operation, func.count())
+                .where(
+                    TraceSpan.run_id.in_(ids),
+                    TraceSpan.operation.in_(("chat", "execute_tool")),
                 )
-            ).all()
-        }
+                .group_by(TraceSpan.run_id, TraceSpan.operation)
+            )
+        ).all():
+            calls[(rid, op)] = count
+    if matched:
+        # Waiting spans are rare: read them through the project/operation index, not per run.
+        wanted = set(matched)
         for rid, start, end in (
             await db.execute(
                 select(TraceSpan.run_id, TraceSpan.start_time, TraceSpan.end_time).where(
-                    TraceSpan.run_id.in_(matched), TraceSpan.operation.in_(_WAIT_OPERATIONS)
+                    TraceSpan.project_id == project_id,
+                    TraceSpan.operation.in_(_WAIT_OPERATIONS),
+                    TraceSpan.run_id.is_not(None),
                 )
             )
         ).all():
-            waits[rid] = waits.get(rid, 0.0) + (_seconds(start, end) or 0.0)
+            if rid in wanted:
+                waits[rid] = waits.get(rid, 0.0) + (_seconds(start, end) or 0.0)
 
     items: List[Dict[str, Any]] = []
     for run_id, op, status, start, end, ended, agent, model, task_id, conv, run_status in roots:
