@@ -284,24 +284,19 @@ describe('TracesSection recent traces', () => {
     vi.unstubAllGlobals()
   })
 
-  it("lists runs by default and the Hub's own requests, labelled, when asked", async () => {
-    render(<TracesSection />, { wrapper })
-    expect(await screen.findByText('builder')).toBeInTheDocument()
-    const listed = () => fetchMock.mock.calls.map(([url]) => String(url)).filter((url) => /\/traces\?/.test(url))
-    expect(listed()[0]).toContain('operation=invoke_agent')
-    expect(screen.getByTestId('trace-kind-invoke_agent')).toHaveAttribute('aria-pressed', 'true')
-    // F792: the list says which run was stopped; a completed one carries no badge.
-    const rows = screen.getByTestId('recent-traces').querySelectorAll('li')
-    expect(rows[0]).not.toHaveTextContent('completed')
-    expect(rows[1]).toHaveTextContent('stopped')
-
-    fireEvent.click(screen.getByTestId('trace-kind-aw.request'))
-    expect(await screen.findByText(/POST \/api\/v1\/projects/)).toBeInTheDocument()
-    expect(screen.getByText('· request')).toBeInTheDocument()
-    expect(listed().slice(-1)[0]).toContain('operation=aw.request')
-
-    fireEvent.click(screen.getByTestId('trace-kind-all'))
-    await waitFor(() => expect(listed().slice(-1)[0]).not.toContain('operation='))
+  it('has no list of traces, and links to Activity → Traces', async () => {
+    const onOpenTraces = vi.fn()
+    render(<TracesSection onOpenTraces={onOpenTraces} />, { wrapper })
+    const link = await screen.findByTestId('open-traces-view')
+    expect(screen.queryByTestId('recent-traces')).toBeNull()
+    expect(screen.queryByText('Recent traces')).toBeNull()
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/traces\?/.test(url))).toBe(false)
+    fireEvent.click(link)
+    expect(onOpenTraces).toHaveBeenCalledTimes(1)
+    // Retention, export, download and clear stay where they were.
+    expect(screen.getByTestId('trace-retention')).toBeInTheDocument()
+    expect(screen.getByLabelText('Send traces to a collector')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Download/ })).toBeInTheDocument()
   })
 
   it('saves the retention window on its own and offers the default back once one is chosen', async () => {

@@ -19,13 +19,42 @@ function TraceDrawerBody({ runId, traceId }: { runId?: string; traceId?: string 
     offset,
   )
   return (
-    <TraceView
-      detail={runId ? runData : idData}
-      isLoading={runId ? runLoading : idLoading}
-      error={runId ? runError : idError}
-      offset={offset}
-      onOffsetChange={setOffset}
-    />
+    <div data-testid="trace-detail" data-run-id={runId ?? ''} data-trace-id={traceId ?? ''}>
+      <TraceView
+        detail={runId ? runData : idData}
+        isLoading={runId ? runLoading : idLoading}
+        error={runId ? runError : idError}
+        offset={offset}
+        onOffsetChange={setOffset}
+      />
+    </div>
+  )
+}
+
+/** The trace drawer, opened and closed by its caller (a list that opens a row's trace). */
+export function TraceDrawerPanel({
+  runId,
+  traceId,
+  open,
+  onOpenChange,
+}: {
+  runId?: string
+  traceId?: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  return (
+    <Drawer
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Trace"
+      side="right"
+      width={DRAWER_WIDTH}
+      triggerRef={triggerRef}
+    >
+      {open && <TraceDrawerBody key={runId ?? traceId} runId={runId} traceId={traceId} />}
+    </Drawer>
   )
 }
 

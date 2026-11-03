@@ -33,6 +33,18 @@ export interface TraceSummary {
   end_time: string | null
   ended: boolean
   span_count: number
+  /** A run's row (the Hub adds these to a run's summary; absent on other kinds of trace). */
+  model?: string | null
+  /** The task's reference and title; `task_missing` when the run named a task that is gone. */
+  task_ref?: string | null
+  task_title?: string | null
+  task_missing?: boolean
+  conversation_title?: string | null
+  /** Recorded cost; null with `cost_state` `unpriced` (finished, unmeasured) or `running`. */
+  cost_usd?: number | null
+  cost_state?: 'measured' | 'unpriced' | 'running'
+  /** Failed, stopped (cancelled or interrupted) or ended in error. */
+  is_error?: boolean
 }
 
 export interface TraceList {
@@ -110,6 +122,10 @@ export interface TraceFilters {
   run_id?: string
   task_id?: string
   conversation_id?: string
+  agent?: string
+  /** Started at or after / before: ISO datetimes. */
+  since?: string
+  until?: string
   /** Only traces whose root is this operation. */
   operation?: TraceOperation
   before?: string
