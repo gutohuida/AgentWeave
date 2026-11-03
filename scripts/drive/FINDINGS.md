@@ -41234,6 +41234,16 @@ The check run `chk-af888521126e` reported `test_a_turn_start_that_creates_its_ch
 
 Check run `chk-7c08b3c0621e` failed `test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop` at 155 ms: 0 of 17 samples, 0 ms of the process's CPU, 0 ms collecting garbage. No thread in the process ran. The probe read the missing samples as a call keeping the GIL, which is right for a real one (`test_a_blocking_call_keeping_the_gil_counts_as_a_stall`), but here nothing was holding it for long: only the loop and control threads were at raised priority, so a normal-priority worker could lose its core with the GIL in hand. **Expected:** a stall test fails on code that holds the loop, not on the machine's scheduling.
 
+## F1125 (C) -- a gap in the lag probe's samples was read as the GIL held when the machine had stopped the whole process
+
+**Status:** fixed 2026-11-03 on `task-584ed1b29ebb` (AW-25), cause not established. F1119's HIGH priority class did not remove it: check run `chk-b698948e66b7` failed `test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop` at 167 ms with 1 of 18 samples, 0 ms of the process's CPU, the loop in its poll. Inside the process a sample needs the GIL, so a gap cannot tell a call keeping it from the machine stopping every thread. `LagProbe` now starts `hub/tests/_thread_observer.py`, a second process that samples this one's thread states every 4 ms without the GIL. A gap's share where no thread ran and one was Ready, Standby or Transition, or waited on memory, a page-in or a suspension, does not count; the rest counts in full, and an unobserved gap counts as before. A failure now prints every thread's state/reason in the gap. Tests: a whole-process `NtSuspendProcess` of 250 ms is not counted (it fails with the observer's verdict forced to "not stopped"); a `PyDLL` `Sleep` keeping the GIL still counts. 20/20 unloaded, 20/20 beside the suite at `-n 8`; never reproduced (0 stalls in 36 loaded runs), so which machine event stopped the check's process is still unknown: the next failure's thread states say. Windows only; elsewhere unchanged. A load of the full suite at `-n 20` plus a repeat loop made git fail with `0xC0000142` (desktop heap) machine-wide: do not load-test that hard on the shared machine.
+**Source:** found by driving
+**Theme:** Checks
+**Ready:** yes
+**Tier:** 0
+
+**Expected:** a stall test fails on code that holds the loop, not on the machine's scheduling or memory.
+
 ## F1124 (B) -- an author is told `ready_to_approve: true` on a document the operator's Approve then stops on
 
 **Status:** open
