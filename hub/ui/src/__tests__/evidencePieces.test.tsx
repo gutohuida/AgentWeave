@@ -15,6 +15,19 @@ vi.mock('@/hooks/useSSE', () => ({
   __resetSSEStateForTest: () => {},
 }))
 
+
+// The trace drawer itself is covered by traces.test.tsx; here a trace link is a button that reports
+// which run it was asked to open.
+const traceOpened = vi.hoisted(() => vi.fn())
+vi.mock('@/components/traces/TraceDrawer', () => ({
+  TraceButton: ({ runId, testId }: { runId?: string; testId?: string }) => (
+    <button type="button" data-testid={testId} onClick={() => traceOpened(runId)}>
+      trace
+    </button>
+  ),
+  TraceDrawerPanel: () => null,
+}))
+
 import { EvidencePieces } from '@/components/spec/EvidencePieces'
 import { useDecideEvidence } from '@/api/spec'
 
@@ -278,5 +291,17 @@ describe('evidence pieces on a requirement', () => {
         JSON.stringify(['project', 'proj-a', 'tasks']),
       ]),
     )
+  })
+})
+
+describe('a piece still being recorded names its run and opens its trace', () => {
+  it('opens run-77’s trace from the held piece', async () => {
+    cleanup()
+    useConfigStore.setState({ apiKey: 'k', hubUrl: 'http://hub.test', selectedProjectId: 'proj-a', isConfigured: true, bootstrapState: 'ready' })
+    stubHub([piece({ id: 'ev-live', run_id: 'run-77', recording_run_live: true })])
+    mount()
+    traceOpened.mockClear()
+    fireEvent.click(await screen.findByTestId('evidence-run-trace-ev-live'))
+    expect(traceOpened).toHaveBeenCalledExactlyOnceWith('run-77')
   })
 })

@@ -112,11 +112,15 @@ export function SpecDocumentFacts({
   specList,
   onOpenTasks,
   onOpenRequirement,
+  inHeader = false,
 }: {
   path: string
   specList: SpecListResponse | undefined
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenRequirement: (identifier: string) => void
+  /** In the redesigned header's second row: the facts flow beside the phase and a detail opens
+   *  over the body. A fact that could not be read is the header's notice. */
+  inHeader?: boolean
 }) {
   const [detail, setDetail] = useState<HealthFactKey | null>(null)
   const { data: specDoc, error: specError } = useSpec(path)
@@ -127,7 +131,8 @@ export function SpecDocumentFacts({
   const { data: documents, error: documentsError } = useSpecDocuments()
   const record = documents?.documents.find((entry) => entry.path === path)
   const { data: documentTasks, error: tasksError } = useDocumentTasks(record?.id ?? null)
-  const unread = [specError, coverageError, vaultCheckedError, documentsError, tasksError].some(Boolean)
+  // In the header the same failure is one of its notices (`useSpecSurface`), so it adds no height.
+  const unread = !inHeader && [specError, coverageError, vaultCheckedError, documentsError, tasksError].some(Boolean)
   const detect = useDetectDrift()
   const checkVault = useCheckVaultWarnings()
 
@@ -138,7 +143,7 @@ export function SpecDocumentFacts({
   const indexIssues = diagnostics.length + missing.length
 
   return (
-    <div data-testid="spec-document-facts">
+    <div data-testid="spec-document-facts" className={inHeader ? 'aw-sp-head-facts' : undefined}>
       {record?.acronym ? <AcronymEditor path={path} acronym={record.acronym} /> : null}
       {unread ? (
         <p className="aw-spec-message" data-tone="warn" data-testid="spec-facts-unread">

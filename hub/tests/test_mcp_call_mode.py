@@ -135,8 +135,16 @@ def _call(
     env: Dict[str, str],
     cwd: Path,
     isolated: bool = True,
-    timeout: int = 60,
 ) -> Tuple[int, Dict[str, Any], str]:
+    """Run the pin in call mode and wait for it to finish, however long the machine takes.
+
+    No deadline of its own: none of these tests claims anything about how fast a call is, and a
+    fixed 60 s one failed a correct call in a 41-minute loaded suite run (AW-26: the child was
+    still running when it was killed, and passed alone). `--list` prints ~10 KB, more than a pipe
+    holds, so the child can exit only after this worker's reader thread has drained it -- both
+    processes have to be scheduled. A call that truly hangs still fails, with every thread's
+    stack, through pytest-timeout, which CI and the project's checks both set.
+    """
     flags = ["-I", "-S"] if isolated else []
     proc = subprocess.run(
         [sys.executable, *flags, str(pin), "--call", *args],
@@ -144,7 +152,6 @@ def _call(
         text=True,
         env=env,
         cwd=cwd,
-        timeout=timeout,
     )
     lines = [line for line in proc.stdout.splitlines() if line.strip()]
     envelope = json.loads(lines[-1]) if lines else {}
@@ -536,7 +543,6 @@ def test_ask_user_unanswered_reports_the_wait_ended(pin, hub, workspace):
         ["ask_user", _questions_file(workspace)],
         env=_env(hub, workspace, AW_QUESTION_TIMEOUT="10"),
         cwd=workspace,
-        timeout=60,
     )
 
     assert code == 0, raw

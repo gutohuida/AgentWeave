@@ -194,7 +194,7 @@ def change(title, *, tasks=True, gaps=False, requirements=2):
         "scope": {"in_scope": [f"Thing {n}" for n in range(1, 6)], "non_goals": ["Everything else"]},
         "requirements": reqs, "acceptance_criteria": crits,
         "tasks": ([{"key": "t1", "title": "Do the work", "description": "Do it.",
-                    "requirements": ["r1"], "depends_on": [], "files": ["notes.txt"],
+                    "requirements": [r["key"] for r in reqs], "depends_on": [], "files": ["notes.txt"],
                     "from": None, "reviewer": None}] if tasks else []),
         "algorithms": [], "design": PARAGRAPH * 12,
         "evidence": {"checked": ["notes.txt exists"], "limits": []},
@@ -243,11 +243,15 @@ class Project:
                                                if to == "approved" else {}), **extra})
         setup(code == 200, f"{path} to {to}", f"{code} {str(out)[:800]}")
 
-    def approve(self, path):
+    def make_ready(self, path):
+        """Walk the journey to its last step and close exploration: nothing blocks approval."""
         quoted = urllib.parse.quote(path)
         api("POST", f"{self.base}/project/documents/journey?path={quoted}",
             {"size": "small", "step": "delivery", "reason": "drive setup"})
         api("POST", f"{self.base}/project/documents/close-exploration?path={quoted}")
+
+    def approve(self, path):
+        self.make_ready(path)
         self.phase(path, "approved")
 
 
@@ -351,6 +355,7 @@ def seed():
 
     # One document in each state the list marks.
     p.create(READY, change("Ready one"))
+    p.make_ready(READY)
     p.create(AMENDED, change("Amended one", tasks=False))
     p.approve(AMENDED)
     stamp_event(p.ids[AMENDED], p.pid, "amendment", {
@@ -521,7 +526,10 @@ def condensed_checks(page, where):
     header = page.locator("[data-testid=spec-document-header]").first
     clicked = False
     # Click the title, which is not a control, rather than a spot that may land on the count or a button.
-    for target in ("[data-testid=spec-document-header] :is(h1, h2, [data-testid*=title])",
+    # The condensed line comes first: the header's own left edge is the panel's Specs switcher.
+    for target in ("[data-testid=spec-header-condensed] strong",
+                   "[data-testid=spec-header-condensed]",
+                   "[data-testid=spec-document-header] :is(h1, h2, [data-testid*=title])",
                    "[data-testid=spec-document-header]"):
         spot = page.locator(target).first
         if spot.count():
@@ -663,7 +671,7 @@ def list_checks(page, scope, where, _unused):
     by_label = {(g["label"] or "").lower(): {r["name"]: r["waiting"] for r in g["rows"]} for g in groups}
     waiting = by_label.get("waiting on you", {})
     reasons = {
-        "Ready one": "ready to approve", "Amended one": "amendments to review",
+        "Ready one": "ready to approve", "Amended one": "1 amendment to review",
         "Buildable one": "ready to build", "Foldable one": "ready to fold",
     }
     got = {n: (waiting.get(n) or "").lower() for n in reasons}

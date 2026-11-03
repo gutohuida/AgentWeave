@@ -11,24 +11,19 @@ import {
 
 /**
  * Where each change's defects were caught (`a-change-is-reconciled-with-its-code-before-it-is-
- * folded`, FR-5): one row per change with a count per step, so the journey can be tuned from data.
+ * folded`, FR-5): one row per change with a count per step, folded to its total until opened, so the journey can be tuned from data.
  * The Hub derives the list from its own records; this only lays it out. Below it, the operator
  * records a defect against the open change (FR-6) — one found after fold, or by hand.
  */
 export function SpecDefectsReport({
   currentPath,
   onSelect,
-  defaultOpen = true,
-  showCount = false,
 }: {
   currentPath?: string | null
   onSelect: (path: string) => void
-  defaultOpen?: boolean
-  /** The number of defects beside the heading, so a folded report still says how many. */
-  showCount?: boolean
 }) {
   const { data, error } = useSpecDefects()
-  const [open, setOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(false)
   const changes = data?.changes ?? []
   const onChange = !!currentPath && currentPath.startsWith('spec/changes/')
 
@@ -52,11 +47,9 @@ export function SpecDefectsReport({
       >
         <Icon name={open ? 'expand_more' : 'chevron_right'} size={13} />
         Defects by step
-        {showCount ? (
-          <span className="ml-auto" style={{ color: 'var(--text-3)', fontWeight: 400 }}>
-            {changes.reduce((n, change) => n + change.defects.length, 0)}
-          </span>
-        ) : null}
+        <span className="ml-auto" data-testid="spec-defects-count" style={{ color: 'var(--text-3)', fontWeight: 400 }}>
+          {changes.reduce((n, change) => n + change.defects.length, 0)}
+        </span>
       </button>
       {open && (
         <>

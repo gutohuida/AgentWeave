@@ -73,7 +73,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
 from . import run_secrets
-from .db.models import PermissionRequest, Question, Run, TraceSettings, TraceSpan
+from .db.models import (
+    Conversation,
+    PermissionRequest,
+    Question,
+    Run,
+    Task,
+    TraceSettings,
+    TraceSpan,
+    TurnUsage,
+)
 from .runner_events import redact_secrets, redact_text_secrets
 from .subprocess_windows import no_console_kwargs
 from .version import __version__
@@ -1933,6 +1942,7 @@ def _summary(root: TraceSpan, span_count: int) -> Dict[str, Any]:
         "agent": attributes.get("gen_ai.agent.name"),
         "conversation_id": attributes.get("gen_ai.conversation.id"),
         "task_id": attributes.get("aw.task.id"),
+        "model": attributes.get("gen_ai.request.model"),
         "worker_kind": attributes.get("aw.worker.kind"),
         "run_status": attributes.get("aw.run.status"),
         "status": root.status,
@@ -1944,8 +1954,128 @@ def _summary(root: TraceSpan, span_count: int) -> Dict[str, Any]:
     }
 
 
+#: Run statuses that count as an error in the traces view (a stopped run is one; a failed tool
+#: call inside a completed run is not).
+_ERROR_RUN_STATUSES = frozenset({"failed", "cancelled", "interrupted", "stopped"})
+
+
+def _error_kind(status: Optional[str], run_status: Optional[str]) -> Optional[str]:
+    """Why a trace counts as an error (FR-6): `failed`, `stopped` (cancelled or interrupted too),
+    `trace_error` (its root ended in error), or None. A completed run with a failed tool call
+    inside it is not one: that is a child span's status, never the root's."""
+    if run_status == "failed":
+        return "failed"
+    if run_status in _ERROR_RUN_STATUSES:
+        return "stopped"
+    if status == "error":
+        return "trace_error"
+    return None
+
+
+def _cost_state(run_status: Optional[str], usage: Optional[TurnUsage], ended: bool) -> str:
+    """A run's cost as the view says it (FR-14): `measured`, `running` (no cost yet, and not
+    unpriced either), or `unpriced` (it finished and the Hub could not measure it)."""
+    if usage is not None and usage.api_equivalent_usd_micros is not None:
+        return "measured"
+    if run_status == "running" or (usage is None and not ended):
+        return "running"
+    return "unpriced"
+
+
+async def _describe_runs(
+    db: AsyncSession, project_id: str, summaries: List[Dict[str, Any]]
+) -> None:
+    """Add to each run's summary what its row shows: model, task reference and title (or that the
+    task no longer exists), conversation title, cost (or why there is none) and whether it counts
+    as an error. Other kinds of trace are left as they are."""
+    runs = [s for s in summaries if s["run_id"]]
+    for summary in summaries:
+        summary["is_error"] = _error_kind(summary["status"], summary["run_status"]) is not None
+    if not runs:
+        return
+    run_ids = [s["run_id"] for s in runs]
+    usage = {
+        u.run_id: u
+        for u in (await db.execute(select(TurnUsage).where(TurnUsage.run_id.in_(run_ids))))
+        .scalars()
+        .all()
+    }
+    run_rows = {
+        r.id: r for r in (await db.execute(select(Run).where(Run.id.in_(run_ids)))).scalars().all()
+    }
+    task_ids = {s["task_id"] for s in runs if s["task_id"]}
+    tasks = {}
+    if task_ids:
+        tasks = {
+            t.id: t
+            for t in (
+                await db.execute(
+                    select(Task).where(Task.project_id == project_id, Task.id.in_(task_ids))
+                )
+            )
+            .scalars()
+            .all()
+        }
+    conversation_ids = {s["conversation_id"] for s in runs if s["conversation_id"]}
+    titles: Dict[str, Optional[str]] = {}
+    if conversation_ids:
+        titles = dict(
+            (
+                await db.execute(
+                    select(Conversation.id, Conversation.title).where(
+                        Conversation.project_id == project_id,
+                        Conversation.id.in_(conversation_ids),
+                    )
+                )
+            ).all()
+        )
+    for summary in runs:
+        run = run_rows.get(summary["run_id"])
+        measured = usage.get(summary["run_id"])
+        status = summary["run_status"] or (run.status if run else None)
+        micros = measured.api_equivalent_usd_micros if measured else None
+        summary["cost_state"] = _cost_state(status, measured, summary["ended"])
+        summary["cost_usd"] = (
+            micros / 1_000_000
+            if micros is not None and summary["cost_state"] == "measured"
+            else None
+        )
+        summary["model"] = (measured.model if measured and measured.model else None) or (
+            summary.get("model") or None
+        )
+        task_id = summary["task_id"] or (run.task_id if run else None)
+        summary["task_id"] = task_id
+        task = tasks.get(task_id) if task_id else None
+        summary["task_ref"] = task.readable_id if task else None
+        summary["task_title"] = task.title if task else None
+        summary["task_missing"] = bool(task_id and task is None)
+        summary["conversation_title"] = titles.get(summary["conversation_id"] or "")
+
+
 def _cursor_text(span: TraceSpan) -> str:
     return f"{span.start_time.isoformat()}|{span.span_id}"
+
+
+def _roots(
+    query: Any,
+    project_id: str,
+    run_ids: Optional[Iterable[str]],
+    operation: Optional[str],
+    since: Optional[datetime],
+    until: Optional[datetime],
+) -> Any:
+    """*query* narrowed to the project's root spans that match the traces view's filters: the
+    list and the totals read the same set, so the statistics are over exactly what is listed."""
+    query = query.where(TraceSpan.project_id == project_id, TraceSpan.parent_span_id.is_(None))
+    if operation:
+        query = query.where(TraceSpan.operation == operation)
+    if run_ids is not None:
+        query = query.where(TraceSpan.run_id.in_(list(run_ids)))
+    if since is not None:
+        query = query.where(TraceSpan.start_time >= since)
+    if until is not None:
+        query = query.where(TraceSpan.start_time < until)
+    return query
 
 
 async def list_traces(
@@ -1956,16 +2086,13 @@ async def list_traces(
     before: Optional[str] = None,
     run_ids: Optional[Iterable[str]] = None,
     operation: Optional[str] = None,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """The project's traces, newest first, one page (keyset on the root's start); with
-    *operation*, only the traces whose root is that operation (D8)."""
-    query = select(TraceSpan).where(
-        TraceSpan.project_id == project_id, TraceSpan.parent_span_id.is_(None)
-    )
-    if operation:
-        query = query.where(TraceSpan.operation == operation)
-    if run_ids is not None:
-        query = query.where(TraceSpan.run_id.in_(list(run_ids)))
+    *operation*, only the traces whose root is that operation (D8); with *since* / *until*, only
+    those that started in [since, until). A run's row carries the fields the traces view lists."""
+    query = _roots(select(TraceSpan), project_id, run_ids, operation, since, until)
     if before:
         stamp, _, span_id = before.partition("|")
         at = datetime.fromisoformat(stamp)
@@ -1998,10 +2125,303 @@ async def list_traces(
                 )
             ).all()
         )
+    summaries = [_summary(row, counts.get(row.trace_id, 1)) for row in page]
+    await _describe_runs(db, project_id, summaries)
     return {
-        "traces": [_summary(row, counts.get(row.trace_id, 1)) for row in page],
+        "traces": summaries,
         "next_before": _cursor_text(page[-1]) if len(rows) > limit and page else None,
     }
+
+
+#: Run ids bound per statement, under SQLite's variable limit.
+_ID_CHUNK = 500
+
+#: What the traces view groups by (FR-5).
+GROUPINGS = ("agent", "model", "task", "conversation", "kind", "day")
+
+#: The spans inside a run that time it waiting for a permission or an answer (FR-7).
+_WAIT_OPERATIONS = ("aw.permission_wait", "aw.ask_user")
+
+_KIND_LABELS = {
+    "run": "Agent runs",
+    "worker": "Worker calls",
+    "request": "Requests",
+    "work": "Background work",
+    "event": "Events",
+}
+
+
+def _empty_totals() -> Dict[str, Any]:
+    return {
+        "count": 0,
+        "errors": 0,
+        "error_kinds": {"failed": 0, "stopped": 0, "trace_error": 0},
+        "running": 0,
+        "cost_usd_micros": None,
+        "priced": 0,
+        "unpriced": 0,
+        "duration_seconds": 0.0,
+        "duration_avg_seconds": None,
+        "tokens": None,
+        "model_calls": 0,
+        "tool_calls": 0,
+        "wait_seconds": 0.0,
+    }
+
+
+def _add(totals: Dict[str, Any], item: Dict[str, Any]) -> None:
+    totals["count"] += 1
+    if item["error_kind"]:
+        totals["errors"] += 1
+        totals["error_kinds"][item["error_kind"]] += 1
+    if item["duration"] is None:
+        totals["running"] += 1
+    else:
+        totals["duration_seconds"] += item["duration"]
+    if item["cost_state"] == "measured":
+        totals["cost_usd_micros"] = (totals["cost_usd_micros"] or 0) + item["micros"]
+        totals["priced"] += 1
+    elif item["cost_state"] == "unpriced":
+        totals["unpriced"] += 1
+    if item["tokens"] is not None:
+        if totals["tokens"] is None:
+            totals["tokens"] = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+        for key, value in item["tokens"].items():
+            totals["tokens"][key] += value
+    totals["model_calls"] += item["model_calls"]
+    totals["tool_calls"] += item["tool_calls"]
+    totals["wait_seconds"] += item["wait"]
+
+
+def _close(totals: Dict[str, Any]) -> Dict[str, Any]:
+    timed = totals["count"] - totals["running"]
+    totals["duration_avg_seconds"] = totals["duration_seconds"] / timed if timed else None
+    return totals
+
+
+def _seconds(start: Optional[datetime], end: Optional[datetime]) -> Optional[float]:
+    if start is None or end is None:
+        return None
+    return max(0.0, (end - start).total_seconds())
+
+
+async def trace_totals(
+    db: AsyncSession,
+    project_id: str,
+    *,
+    run_ids: Optional[Iterable[str]] = None,
+    operation: Optional[str] = None,
+    since: Optional[datetime] = None,
+    until: Optional[datetime] = None,
+    group_by: Optional[str] = None,
+    utc_offset_minutes: int = 0,
+) -> Dict[str, Any]:
+    """The traces view's statistics over every trace the filters match, not one page (FR-8), and,
+    with *group_by*, the same statistics for each group (FR-5).
+
+    Cost is the sum over the measured runs; a finished run the Hub could not measure is left out
+    and counted as `unpriced`, and a run still going is neither (FR-14). Errors follow
+    `_error_kind` (FR-6). Tokens, model and tool calls and waiting time are the secondary figures
+    (FR-7). *utc_offset_minutes* is the operator's own offset, so a `day` is their calendar day."""
+    if group_by is not None and group_by not in GROUPINGS:
+        raise ValueError(f"cannot group by {group_by!r}; one of {', '.join(GROUPINGS)}")
+    attributes = TraceSpan.attributes
+    roots = (
+        await db.execute(
+            _roots(
+                select(
+                    TraceSpan.run_id,
+                    TraceSpan.operation,
+                    TraceSpan.status,
+                    TraceSpan.start_time,
+                    TraceSpan.end_time,
+                    TraceSpan.ended,
+                    attributes["gen_ai.agent.name"].as_string(),
+                    attributes["gen_ai.request.model"].as_string(),
+                    attributes["aw.task.id"].as_string(),
+                    attributes["gen_ai.conversation.id"].as_string(),
+                    attributes["aw.run.status"].as_string(),
+                ),
+                project_id,
+                run_ids,
+                operation,
+                since,
+                until,
+            )
+        )
+    ).all()
+
+    # What each matched run adds, read once per table. The ids come from the roots already read,
+    # so no table re-runs the roots subquery (it matched tens of thousands of rows per table).
+    matched = sorted({row[0] for row in roots if row[0]})
+    usage: Dict[str, TurnUsage] = {}
+    run_rows: Dict[str, Tuple[str, Optional[str]]] = {}
+    calls: Dict[Tuple[str, str], int] = {}
+    waits: Dict[str, float] = {}
+    for at in range(0, len(matched), _ID_CHUNK):
+        ids = matched[at : at + _ID_CHUNK]
+        for u in (
+            (await db.execute(select(TurnUsage).where(TurnUsage.run_id.in_(ids)))).scalars().all()
+        ):
+            usage[u.run_id] = u
+        for rid, status, task_id in (
+            await db.execute(select(Run.id, Run.status, Run.task_id).where(Run.id.in_(ids)))
+        ).all():
+            run_rows[rid] = (status, task_id)
+        for rid, op, count in (
+            await db.execute(
+                select(TraceSpan.run_id, TraceSpan.operation, func.count())
+                .where(
+                    TraceSpan.run_id.in_(ids),
+                    TraceSpan.operation.in_(("chat", "execute_tool")),
+                )
+                .group_by(TraceSpan.run_id, TraceSpan.operation)
+            )
+        ).all():
+            calls[(rid, op)] = count
+    if matched:
+        # Waiting spans are rare: read them through the project/operation index, not per run.
+        wanted = set(matched)
+        for rid, start, end in (
+            await db.execute(
+                select(TraceSpan.run_id, TraceSpan.start_time, TraceSpan.end_time).where(
+                    TraceSpan.project_id == project_id,
+                    TraceSpan.operation.in_(_WAIT_OPERATIONS),
+                    TraceSpan.run_id.is_not(None),
+                )
+            )
+        ).all():
+            if rid in wanted:
+                waits[rid] = waits.get(rid, 0.0) + (_seconds(start, end) or 0.0)
+
+    items: List[Dict[str, Any]] = []
+    for run_id, op, status, start, end, ended, agent, model, task_id, conv, run_status in roots:
+        item: Dict[str, Any] = {
+            "kind": "run" if run_id else _KINDS.get(op, op),
+            "agent": agent,
+            "model": model or None,
+            "task": task_id,
+            "conversation": conv,
+            "start": start,
+            "duration": _seconds(start, end) if ended else None,
+            "cost_state": None,
+            "micros": 0,
+            "tokens": None,
+            "model_calls": 0,
+            "tool_calls": 0,
+            "wait": 0.0,
+        }
+        if run_id:
+            run = run_rows.get(run_id)
+            run_status = run_status or (run[0] if run else None)
+            item["task"] = task_id or (run[1] if run else None)
+            measured = usage.get(run_id)
+            item["cost_state"] = _cost_state(run_status, measured, bool(ended))
+            if measured is not None:
+                if item["cost_state"] == "measured":
+                    item["micros"] = measured.api_equivalent_usd_micros
+                item["model"] = measured.model or item["model"]
+                if measured.input_tokens is not None or measured.output_tokens is not None:
+                    item["tokens"] = {
+                        "input": measured.input_tokens or 0,
+                        "output": measured.output_tokens or 0,
+                        "cache_read": measured.cache_read_tokens or 0,
+                        "cache_write": measured.cache_write_tokens or 0,
+                    }
+            item["model_calls"] = calls.get((run_id, "chat"), 0)
+            item["tool_calls"] = calls.get((run_id, "execute_tool"), 0)
+            item["wait"] = waits.get(run_id, 0.0)
+        item["error_kind"] = _error_kind(status, run_status)
+        items.append(item)
+
+    overall = _empty_totals()
+    for item in items:
+        _add(overall, item)
+    answer: Dict[str, Any] = {"totals": _close(overall), "group_by": group_by, "groups": None}
+    if group_by is None:
+        return answer
+
+    offset = timedelta(minutes=utc_offset_minutes)
+    buckets: Dict[str, Dict[str, Any]] = {}
+    for item in items:
+        if group_by == "day":
+            key = (item["start"] + offset).date().isoformat()
+        else:
+            key = item[group_by] or ""
+        bucket = buckets.setdefault(key, {"key": key, "totals": _empty_totals()})
+        _add(bucket["totals"], item)
+    groups = [{"key": b["key"], "totals": _close(b["totals"])} for b in buckets.values()]
+    await _label_groups(db, project_id, group_by, groups)
+    if group_by == "day":
+        groups.sort(key=lambda g: g["key"], reverse=True)
+    else:
+        # The expensive and the busy first; a group with no measured cost after every priced one.
+        groups.sort(
+            key=lambda g: (
+                -(
+                    g["totals"]["cost_usd_micros"]
+                    if g["totals"]["cost_usd_micros"] is not None
+                    else -1
+                ),
+                -g["totals"]["count"],
+                g["label"],
+            )
+        )
+    answer["groups"] = groups
+    return answer
+
+
+async def _label_groups(
+    db: AsyncSession, project_id: str, group_by: str, groups: List[Dict[str, Any]]
+) -> None:
+    """Give each group the words it is shown by: a task's reference and title (or that it no
+    longer exists, never its raw id), a conversation's title, a kind's name."""
+    keys = [g["key"] for g in groups if g["key"]]
+    tasks: Dict[str, Task] = {}
+    titles: Dict[str, Optional[str]] = {}
+    if group_by == "task" and keys:
+        tasks = {
+            t.id: t
+            for t in (
+                await db.execute(
+                    select(Task).where(Task.project_id == project_id, Task.id.in_(keys))
+                )
+            )
+            .scalars()
+            .all()
+        }
+    if group_by == "conversation" and keys:
+        titles = dict(
+            (
+                await db.execute(
+                    select(Conversation.id, Conversation.title).where(
+                        Conversation.project_id == project_id, Conversation.id.in_(keys)
+                    )
+                )
+            ).all()
+        )
+    for group in groups:
+        key = group["key"]
+        detail: Optional[str] = None
+        missing = False
+        if group_by == "task":
+            task = tasks.get(key)
+            if not key:
+                label, detail = "No task", "Conversation turns, not a task"
+            elif task is None:
+                label, missing = "Task no longer exists", True
+            else:
+                label = task.readable_id or task.title or "Untitled task"
+                detail = task.title if task.readable_id else None
+        elif group_by == "conversation":
+            label = (
+                (titles.get(key) or "").strip() or "New conversation" if key else "No conversation"
+            )
+        elif group_by == "kind":
+            label = _KIND_LABELS.get(key, key)
+        else:
+            label = key or {"agent": "No agent", "model": "No model"}.get(group_by, "")
+        group.update({"label": label, "detail": detail, "missing": missing})
 
 
 async def get_trace(

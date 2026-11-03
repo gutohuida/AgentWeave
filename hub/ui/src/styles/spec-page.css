@@ -1,5 +1,5 @@
 /* The redesigned spec page (spec `the-spec-page-redesigned`): the document list, the header with
-   its journey ribbon and actions, the natively drawn document, the outline, the builds, and the
+   its journey and actions, the natively drawn document, the outline, the builds, and the
    conversation's panel. Tokens only (index.css, primitives.css); motion stops under reduced motion. */
 
 :root {
@@ -34,8 +34,8 @@
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
-.aw-sp-head { flex: none; padding: 0 28px 14px; border-bottom: 1px solid var(--border-region); }
-.aw-sp-head-bar { display: flex; align-items: center; gap: 6px; height: 44px; min-width: 0; }
+.aw-sp-head { position: relative; flex: none; padding: 0 28px 8px; border-bottom: 1px solid var(--border-region); }
+.aw-sp-head-bar { display: flex; align-items: center; gap: 6px; height: 40px; min-width: 0; }
 .aw-sp-history, .aw-sp-slicenav { display: inline-flex; gap: 1px; flex: none; }
 .aw-sp-history .aw-icon-button:disabled, .aw-sp-slicenav .aw-icon-button:disabled { opacity: .35; pointer-events: none; }
 .aw-sp-crumbs { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1; font-size: 12.5px; color: var(--text-3); white-space: nowrap; }
@@ -49,8 +49,6 @@
 .aw-sp-crumb-sep { flex: none; opacity: .7; }
 .aw-sp-crumb-current { min-width: 0; padding: 0 4px; color: var(--text-3); }
 
-.aw-sp-head-main { display: flex; align-items: flex-start; gap: 12px 20px; margin-top: 2px; }
-.aw-sp-head-text { min-width: 0; flex: 1; }
 .aw-sp-title { font-size: 22px; font-weight: 650; letter-spacing: -.02em; line-height: 1.22; text-wrap: balance; }
 .aw-sp-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin-top: 8px; font-size: 12.5px; color: var(--text-3); }
 .aw-sp-meta-fact { white-space: nowrap; }
@@ -96,40 +94,6 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-check-count[data-tone="blocking"] { color: var(--red); }
 .aw-sp-check-count[data-tone="warning"] { color: var(--amber); }
 .aw-sp-dot-sep { width: 3px; height: 3px; border-radius: 999px; background: var(--text-3); }
-
-/* Journey ribbon: four knots on one track; the red thread is drawn up to the current knot. */
-.aw-sp-journey {
-  position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-  max-width: 560px; margin: 16px 0 0; padding: 0; list-style: none;
-}
-.aw-sp-journey-track {
-  position: absolute; top: 5px; left: 6px; width: calc(75% - 0px); height: 2px;
-  border-radius: 999px; background: var(--border-hi);
-}
-.aw-sp-journey-thread {
-  display: block; height: 100%; width: 100%; border-radius: inherit;
-  background: var(--sp-thread);
-  transform: scaleX(var(--at)); transform-origin: left center;
-  transition: transform var(--dur-slow) var(--ease);
-}
-.aw-sp-journey-stop { position: relative; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.aw-sp-journey-knot {
-  position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center;
-  width: 12px; height: 12px; border-radius: 999px;
-  background: var(--bg); box-shadow: inset 0 0 0 2px var(--border-hi);
-  color: var(--on-accent-fill);
-  transition: background-color var(--dur-base) ease, box-shadow var(--dur-base) ease;
-}
-.aw-sp-journey-stop[data-reached="done"] .aw-sp-journey-knot { background: var(--sp-thread); box-shadow: none; }
-.aw-sp-journey-stop[data-reached="current"] .aw-sp-journey-knot { box-shadow: inset 0 0 0 2px var(--sp-thread), 0 0 0 3px color-mix(in oklab, var(--sp-thread) 20%, transparent); }
-.aw-sp-journey-stop[data-live="true"] .aw-sp-journey-knot::after {
-  content: ''; position: absolute; inset: 0; border-radius: 999px; color: var(--sp-thread);
-  animation: aw-sp-ring 1.8s var(--ease-out) infinite;
-}
-.aw-sp-journey-label { font-size: 11.5px; font-weight: 500; color: var(--text-3); white-space: nowrap; transition: color var(--dur-base) ease; }
-.aw-sp-journey-stop[data-reached="done"] .aw-sp-journey-label { color: var(--text-2); }
-.aw-sp-journey-stop[data-reached="current"] .aw-sp-journey-label { color: var(--text); font-weight: 600; }
-.aw-sp-journey-sub { color: var(--ring); font-weight: 500; }
 
 /* ── Document list ───────────────────────────────────────────────────── */
 .aw-sp-list { flex: none; display: flex; flex-direction: column; width: 272px; min-height: 0; border-right: 1px solid var(--border-region); }
@@ -180,14 +144,6 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-list-pos { width: 14px; flex: none; font-size: 10.5px; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
 .aw-sp-list-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-sp-list-meta { flex: none; font-size: 11px; font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.aw-sp-list-dot { width: 7px; height: 7px; flex: none; border-radius: 999px; background: var(--text-3); }
-.aw-sp-list-dot[data-state="writing"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-3); }
-.aw-sp-list-dot[data-state="ready"] { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ring); }
-.aw-sp-list-dot[data-state="approved"] { background: var(--green); }
-.aw-sp-list-dot[data-state="building"] { background: var(--blue); }
-.aw-sp-list-dot[data-state="current"] { background: var(--text-2); }
-.aw-sp-list-dot[data-state="archived"] { background: var(--border-hi); }
-.aw-sp-list-dot[data-state="done"] { background: var(--green); box-shadow: inset 0 0 0 1.5px var(--bg, transparent); }
 .aw-sp-list-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 10px; font-size: 12.5px; color: var(--text-3); }
 
 /* The top switcher: the list drops down beneath the open document's title. */
@@ -520,12 +476,8 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 
 /* ── The conversation's panel: one column ────────────────────────────── */
 .aw-sp-panel { border-left: 1px solid var(--border-region); }
-.aw-sp-panel .aw-sp-head, .aw-sp-head[data-compact="true"] { padding: 0 14px 12px; }
-.aw-sp-head[data-compact="true"] .aw-sp-head-main { flex-direction: column; gap: 10px; }
+.aw-sp-panel .aw-sp-head, .aw-sp-head[data-compact="true"] { padding: 0 14px 8px; }
 .aw-sp-head[data-compact="true"] .aw-sp-title { font-size: 17px; }
-.aw-sp-head[data-compact="true"] .aw-sp-actions { flex-wrap: wrap; padding-top: 0; }
-.aw-sp-head[data-compact="true"] .aw-sp-journey { margin-top: 12px; max-width: none; }
-.aw-sp-head[data-compact="true"] .aw-sp-journey-label { font-size: 11px; }
 .aw-sp-panel-tabs { flex: none; padding: 8px 14px; border-bottom: 1px solid var(--border-region); }
 .aw-sp-panel-tabs .aw-segmented { display: flex; }
 .aw-sp-panel-tabs .aw-segmented-option { flex: 1; justify-content: center; }
@@ -536,7 +488,6 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 .aw-sp-body[data-compact="true"] .aw-sp-prose { font-size: 13px; }
 
 @container spmain (max-width: 620px) {
-  .aw-sp-head-main { flex-direction: column; }
   .aw-sp-scope, .aw-sp-build-grid, .aw-sp-dialog-row { grid-template-columns: minmax(0, 1fr); }
   .aw-sp-req-tasks { order: 1; flex-basis: 100%; justify-content: flex-start; margin-left: 0; }
   .aw-sp-req-head .aw-sp-link { margin-left: auto; }
@@ -557,10 +508,10 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
 
 @media (prefers-reduced-motion: reduce) {
   [data-flash="true"] { animation: none; }
-  .aw-sp-live::after, .aw-sp-journey-stop[data-live="true"] .aw-sp-journey-knot::after,
+  .aw-sp-live::after,
   .aw-sp-phase[data-state="building"]::before, .aw-sp-status[data-status="in_progress"]::before { animation: none; }
   .aw-sp-build[data-running="true"]::before, .aw-sp-bar[data-running="true"]::after { animation: none; display: none; }
-  .aw-sp-journey-thread, .aw-sp-bar-part, .aw-sp-journey-knot, .aw-sp-journey-label, .aw-sp-collapse, .aw-sp-disclosure-chevron, .aw-sp-pick-check { transition: none; }
+  .aw-sp-bar-part, .aw-sp-collapse, .aw-sp-disclosure-chevron, .aw-sp-pick-check { transition: none; }
   /* A jump still shows where it landed, without moving. */
   [data-flash="true"] { box-shadow: 0 0 0 2px var(--ring); }
 }
@@ -575,9 +526,6 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
   --sp-ev-rejected: var(--red);
 }
 .aw-sp-pnav { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border-region); }
-.aw-sp-pnav-docs .aw-sp-switcher { width: 100%; }
-.aw-sp-pnav-docs .aw-sp-switcher-trigger { width: 100%; justify-content: flex-start; }
-.aw-sp-pnav-docs .aw-sp-switcher-chevron { margin-left: auto; }
 .aw-sp-pnav-sections { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
 .aw-sp-pnav-section {
   flex: none; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
@@ -624,12 +572,10 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
   .aw-sp-pnav-chip, .aw-sp-pnav-tray { animation: none; }
   .aw-sp-pnav-dot, .aw-sp-pnav-section { transition: none; }
 }
-.aw-sp-pnav-top { padding-bottom: 0; border-bottom: 0; }
 
 /* ── Opening a spec (SpecOpenPicker): search, shortcuts back in, then every document ── */
 .aw-sp-open { display: flex; flex-direction: column; min-height: 0; height: 100%; width: 100%; }
 .aw-sp-open[data-compact="true"] { height: auto; max-height: min(620px, 74vh); }
-.aw-sp-pnav-docs .aw-sp-switcher-pop { width: 100%; }
 .aw-sp-open-head { display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px; flex: none; }
 .aw-sp-open-title { font-size: 15px; font-weight: 650; }
 .aw-sp-open-count { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; margin-right: auto; }
@@ -681,11 +627,9 @@ button.aw-sp-check-pill:focus-visible { outline: none; box-shadow: 0 0 0 2px var
   .aw-sp-open-card, .aw-sp-open-search, .aw-sp-open-card-bar > span { animation: none; transition: none; }
 }
 
-/* ── Wired page: what sits between the header and the document ───────────── */
+/* ── Wired page ──────────────────────────────────────────────────────── */
 .aw-sp-list-footer { flex: none; padding: 8px 10px 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
 .aw-sp-override { overflow: auto; }
-.aw-sp-banner { display: flex; flex-direction: column; gap: 8px; padding: 8px 20px 0; min-width: 0; }
-.aw-sp-panel .aw-sp-banner { padding: 8px 12px 0; }
 .aw-sp-list-rowwrap { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .aw-sp-list-rowwrap > .aw-sp-list-row { flex: 1; min-width: 0; }
 .aw-sp-list-rowaction { flex: none; }

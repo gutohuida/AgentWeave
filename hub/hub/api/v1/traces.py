@@ -8,7 +8,7 @@ read as a trace id.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,7 +17,7 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import readable_ids, trace_export, trace_retention, traces
+from ... import readable_ids, trace_export, trace_retention, traces, work_tally
 from ...auth import get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Run, TraceSettings
@@ -38,6 +38,38 @@ def _bounds(since: Optional[str], until: Optional[str]):
     return start, end
 
 
+async def _run_ids(
+    session: AsyncSession,
+    project_id: str,
+    run_id: Optional[str],
+    task_id: Optional[str],
+    conversation_id: Optional[str],
+    agent: Optional[str],
+    build_id: Optional[str] = None,
+) -> Optional[List[str]]:
+    """The runs the run-side filters leave, or None when none is in force."""
+    if not (run_id or task_id or conversation_id or build_id or agent):
+        return None
+    query = select(Run.id).where(Run.project_id == project_id)
+    if run_id:
+        query = query.where(Run.id == run_id)
+    if task_id:
+        task_id = await readable_ids.resolve(session, project_id, task_id)
+        query = query.where(Run.task_id == task_id)
+    if conversation_id:
+        query = query.where(Run.conversation_id == conversation_id)
+    if build_id:
+        # The runs the build's card counts: task-bound, stall-scoped and the lead's.
+        try:
+            whole = await work_tally.tally(session, project_id, build_id=build_id)
+        except LookupError:
+            whole = {"build_runs": {}}
+        query = query.where(Run.id.in_(whole["build_runs"].get(build_id, [])))
+    if agent:
+        query = query.where(Run.agent == agent)
+    return list((await session.execute(query)).scalars().all())
+
+
 @router.get("")
 async def list_project_traces(
     limit: int = Query(50, ge=1, le=200),
@@ -45,6 +77,12 @@ async def list_project_traces(
     run_id: Optional[str] = Query(None),
     task_id: Optional[str] = Query(None),
     conversation_id: Optional[str] = Query(None),
+    build_id: Optional[str] = Query(None, description="The runs that worked a task of this build"),
+    agent: Optional[str] = Query(None, max_length=64, description="Only this agent's runs"),
+    since: Optional[str] = Query(
+        None, description="Started at or after: YYYY-MM-DD or ISO datetime"
+    ),
+    until: Optional[str] = Query(None, description="Started before: YYYY-MM-DD or ISO datetime"),
     operation: Optional[str] = Query(
         None,
         max_length=32,
@@ -54,25 +92,64 @@ async def list_project_traces(
     session: AsyncSession = Depends(get_session),
 ):
     """The project's traces, newest first. `task_id`/`conversation_id` select the traces of the
-    runs that worked that task or ran in that conversation; `operation` one kind of trace."""
+    runs that worked that task (or a task of that `build_id`) or ran in that conversation; `agent` one agent's runs; `operation`
+    one kind of trace; `since`/`until` the traces that started in that range."""
     project_id, _ = project
-    run_ids = None
-    if run_id or task_id or conversation_id:
-        query = select(Run.id).where(Run.project_id == project_id)
-        if run_id:
-            query = query.where(Run.id == run_id)
-        if task_id:
-            task_id = await readable_ids.resolve(session, project_id, task_id)
-            query = query.where(Run.task_id == task_id)
-        if conversation_id:
-            query = query.where(Run.conversation_id == conversation_id)
-        run_ids = list((await session.execute(query)).scalars().all())
+    start, end = _bounds(since, until)
+    run_ids = await _run_ids(session, project_id, run_id, task_id, conversation_id, agent, build_id)
     try:
         return await traces.list_traces(
-            session, project_id, limit=limit, before=before, run_ids=run_ids, operation=operation
+            session,
+            project_id,
+            limit=limit,
+            before=before,
+            run_ids=run_ids,
+            operation=operation,
+            since=start,
+            until=end,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"`before` is not a cursor: {exc}") from exc
+
+
+@router.get("/totals")
+async def project_trace_totals(
+    run_id: Optional[str] = Query(None),
+    task_id: Optional[str] = Query(None),
+    conversation_id: Optional[str] = Query(None),
+    build_id: Optional[str] = Query(None),
+    agent: Optional[str] = Query(None, max_length=64),
+    since: Optional[str] = Query(None),
+    until: Optional[str] = Query(None),
+    operation: Optional[str] = Query(None, max_length=32),
+    group_by: Optional[str] = Query(
+        None, description="agent, model, task, conversation, kind or day"
+    ),
+    utc_offset: int = Query(
+        0, ge=-14 * 60, le=14 * 60, description="The operator's UTC offset in minutes, for `day`"
+    ),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Statistics over every trace the list's filters match (not one page), and per group with
+    `group_by`: cost (unpriced runs left out and counted), duration, errors, then tokens, model
+    and tool calls and waiting time. Takes the list route's filters, so both read the same set."""
+    project_id, _ = project
+    start, end = _bounds(since, until)
+    run_ids = await _run_ids(session, project_id, run_id, task_id, conversation_id, agent, build_id)
+    try:
+        return await traces.trace_totals(
+            session,
+            project_id,
+            run_ids=run_ids,
+            operation=operation,
+            since=start,
+            until=end,
+            group_by=group_by or None,
+            utc_offset_minutes=utc_offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/export")

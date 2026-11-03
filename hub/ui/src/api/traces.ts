@@ -33,6 +33,18 @@ export interface TraceSummary {
   end_time: string | null
   ended: boolean
   span_count: number
+  /** A run's row (the Hub adds these to a run's summary; absent on other kinds of trace). */
+  model?: string | null
+  /** The task's reference and title; `task_missing` when the run named a task that is gone. */
+  task_ref?: string | null
+  task_title?: string | null
+  task_missing?: boolean
+  conversation_title?: string | null
+  /** Recorded cost; null with `cost_state` `unpriced` (finished, unmeasured) or `running`. */
+  cost_usd?: number | null
+  cost_state?: 'measured' | 'unpriced' | 'running'
+  /** Failed, stopped (cancelled or interrupted) or ended in error. */
+  is_error?: boolean
 }
 
 export interface TraceList {
@@ -110,6 +122,12 @@ export interface TraceFilters {
   run_id?: string
   task_id?: string
   conversation_id?: string
+  /** The runs that worked a task of this build. */
+  build_id?: string
+  agent?: string
+  /** Started at or after / before: ISO datetimes. */
+  since?: string
+  until?: string
   /** Only traces whose root is this operation. */
   operation?: TraceOperation
   before?: string
@@ -141,6 +159,67 @@ export function useTraces(filters: TraceFilters = {}, enabled = true) {
     queryFn: () =>
       getJson<TraceList>(
         `/api/v1/projects/${projectId}/traces${query({ limit: 50, ...filters })}`,
+      ),
+    enabled: enabled && isConfigured && !!projectId,
+  })
+}
+
+/** What the traces view groups by. */
+export type TraceGrouping = 'agent' | 'model' | 'task' | 'conversation' | 'kind' | 'day'
+
+/** Statistics over every trace a filter matches (not one page), or over one group of them. */
+export interface TraceTotals {
+  count: number
+  /** Failed, stopped (cancelled or interrupted) or ended in error; `error_kinds` says which. */
+  errors: number
+  error_kinds: { failed: number; stopped: number; trace_error: number }
+  /** Not ended yet: no duration, and neither priced nor unpriced. */
+  running: number
+  /** Sum over the runs whose cost was measured; null when none was (never a stand-in zero). */
+  cost_usd_micros: number | null
+  priced: number
+  /** Finished runs left out of `cost_usd_micros` because their cost could not be measured. */
+  unpriced: number
+  duration_seconds: number
+  /** Over the traces that have ended; null when none has. */
+  duration_avg_seconds: number | null
+  tokens: { input: number; output: number; cache_read: number; cache_write: number } | null
+  model_calls: number
+  tool_calls: number
+  /** Time spent waiting for a permission or an answer. */
+  wait_seconds: number
+}
+
+export interface TraceGroup {
+  key: string
+  label: string
+  /** A second line: a task's title under its reference. */
+  detail: string | null
+  /** A task group whose task no longer exists. */
+  missing: boolean
+  totals: TraceTotals
+}
+
+export interface TraceTotalsAnswer {
+  totals: TraceTotals
+  group_by: TraceGrouping | null
+  /** Every group the filter matches, in the order to show them; null when ungrouped. */
+  groups: TraceGroup[] | null
+}
+
+/** The statistics for the list's filters, over everything they match. A `before` cursor or page
+ *  size is the list's, not the totals', and is left out. `day` groups by the operator's own day. */
+export function useTraceTotals(filters: TraceFilters, groupBy: TraceGrouping | null, enabled = true) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const matching: TraceFilters = { ...filters }
+  delete matching.before
+  delete matching.limit
+  const utcOffset = -new Date().getTimezoneOffset()
+  return useQuery<TraceTotalsAnswer>({
+    queryKey: ['project', projectId, 'traces', 'totals', matching, groupBy, utcOffset],
+    queryFn: () =>
+      getJson<TraceTotalsAnswer>(
+        `/api/v1/projects/${projectId}/traces/totals${query({ ...matching, group_by: groupBy, utc_offset: utcOffset })}`,
       ),
     enabled: enabled && isConfigured && !!projectId,
   })

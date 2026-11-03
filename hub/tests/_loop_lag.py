@@ -16,6 +16,7 @@ import gc
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import Counter
@@ -115,6 +116,160 @@ def _thread_waiting_reader(native_id: int):  # noqa: ANN202
     return None
 
 
+def _find_gil() -> "tuple[int, int] | None":
+    """Where this interpreter keeps who holds its GIL, for the observer to read from outside: the
+    address of the GIL's `last_holder` (`locked` follows it) and the offset of the thread id in a
+    thread state. Found by looking rather than assumed: CPython keeps `interval`, `last_holder` and
+    `locked` in that order in `_PyRuntime.ceval.gil`, so a switch interval nothing else holds marks
+    the place, and this thread, holding the GIL, must be what it names. None on any other layout;
+    the observer then judges without it. Call with the GIL held, as any Python code is."""
+    if sys.platform != "win32" or sys.implementation.name != "cpython":
+        return None
+    import struct
+
+    try:
+        api = ctypes.pythonapi
+        runtime = ctypes.addressof(ctypes.c_char.in_dll(api, "_PyRuntime"))
+        api.PyThreadState_Get.restype = ctypes.c_void_p
+        me = api.PyThreadState_Get()
+    except (AttributeError, ValueError, OSError):
+        return None
+    was = sys.getswitchinterval()
+    sys.setswitchinterval(0.004321)
+    try:
+        marker = round(sys.getswitchinterval() * 1e6)
+        found = []
+        head = ctypes.string_at(runtime, 1024)
+        for at in range(0, len(head) - 24, 4):
+            if struct.unpack_from("<I", head, at)[0] != marker:
+                continue
+            holder_at = (at + 4 + 7) & ~7
+            holder, locked = struct.unpack_from("<Qi", head, holder_at)
+            if holder == me and locked == 1:
+                found.append(runtime + holder_at)
+    finally:
+        sys.setswitchinterval(was)
+    state = ctypes.string_at(me, 256)
+    native = threading.get_native_id()
+    offsets = [at for at in range(0, 256, 4) if struct.unpack_from("<I", state, at)[0] == native]
+    if len(found) != 1 or not offsets:
+        return None
+    return found[0], offsets[0]
+
+
+_OBSERVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_thread_observer.py")
+#: Thread states meaning "could run, but the machine has not given it a core": Ready, Standby,
+#: Transition (its kernel stack is paged out), DeferredReady. Running is 2, Waiting 5.
+_NOT_SCHEDULED = frozenset({1, 3, 6, 7})
+#: Wait reasons meaning the machine, not the code, is what the thread waits for: free memory, a page
+#: brought back in, being suspended, being swapped back in, a CPU rate cap (KWAIT_REASON).
+_MACHINE_WAITS = frozenset({1, 2, 5, 8, 9, 12, 18, 19, 23, 24})
+#: Fewer observer samples than this in a gap and it is not judged: the wall clock counts.
+_MIN_OBSERVED = 3
+
+
+class _ThreadObserver:
+    """What every thread of this process was doing, sampled from another process
+    (`_thread_observer.py`). Inside the process a sample needs the GIL, so when the probe's own
+    samples go missing they cannot say whether a thread here kept the GIL or the machine stopped
+    the whole process (F1119, AW-25). This one can, and it reads who holds the GIL (AW-27).
+    Windows only; elsewhere it has no samples and judges nothing."""
+
+    def __init__(self) -> None:
+        self._process: "subprocess.Popen[bytes] | None" = None
+        self._out = ""
+        #: (time, hard faults, GIL, {thread id: (state, wait reason, cpu in 100 ns)}), the GIL as
+        #: the id of the thread holding it, 0 when nobody did, -1 when it was not read.
+        self.samples: List[tuple] = []
+
+    async def start(self) -> None:
+        if sys.platform != "win32":
+            return
+        handle, self._out = tempfile.mkstemp(prefix="aw-thread-observer-", suffix=".txt")
+        os.close(handle)
+        gil = _find_gil()
+        self._process = subprocess.Popen(
+            [sys.executable, "-I", _OBSERVER, str(os.getpid()), self._out]
+            + ([str(part) for part in gil] if gil else []),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+        )
+        assert self._process.stdout is not None
+        # It says so once it has sampled, so the window it is there for is observed from its start.
+        await asyncio.to_thread(self._process.stdout.readline)
+
+    def stop(self) -> None:
+        if self._process is None:
+            return
+        assert self._process.stdin is not None
+        self._process.stdin.close()
+        try:
+            self._process.wait(60)
+        except subprocess.TimeoutExpired:
+            self._process.kill()  # judged without it: the wall clock counts
+            self._process.wait()
+        try:
+            with open(self._out, encoding="ascii") as handle:
+                lines = handle.read().splitlines()
+            os.remove(self._out)
+        except OSError:
+            return
+        for line in lines:
+            at, faults, gil, threads = line.split(" ", 3)
+            seen = {}
+            for thread in threads.split(","):
+                tid, state, reason, cpu = thread.split(":")
+                seen[int(tid)] = (int(state), int(reason), int(cpu))
+            self.samples.append((float(at), int(faults), int(gil), seen))
+
+    @staticmethod
+    def _machines(state: int, reason: int) -> bool:
+        """Is a thread in this state held up by the machine rather than by the code?"""
+        return state in _NOT_SCHEDULED or (state == 5 and reason in _MACHINE_WAITS)
+
+    @classmethod
+    def _stopped(cls, gil: int, threads: dict) -> bool:
+        """Was nothing in this process holding it up? Only a thread holding the GIL can keep the
+        others from running Python, so with the GIL read: nobody held it, or its holder was held
+        up by the machine (no core, memory, a page-in, a suspension). A holder that ran, or waited
+        on anything else -- a call that keeps the GIL -- is the code's. With the GIL unread: no
+        thread ran, and one was held up by the machine."""
+        if gil == 0:
+            return True  # every thread here could have taken it: none was let run (AW-27)
+        if gil > 0 and gil in threads:
+            return cls._machines(*threads[gil][:2])
+        if any(state == 2 for state, _, _ in threads.values()):
+            return False
+        return any(cls._machines(state, reason) for state, reason, _ in threads.values())
+
+    def stopped_share(self, started: float, ended: float) -> "float | None":
+        """The share of a window nothing in the process held it up, or None if it was not
+        observed through enough of it to say."""
+        seen = [(gil, threads) for at, _, gil, threads in self.samples if started <= at <= ended]
+        if len(seen) < _MIN_OBSERVED:
+            return None
+        return sum(self._stopped(*sample) for sample in seen) / len(seen)
+
+    def describe(self, started: float, ended: float) -> str:
+        seen = [s for s in self.samples if started <= s[0] <= ended]
+        if not seen:
+            return "no observer samples"
+        history = [s for s in self.samples if s[0] < started][-1:] + seen
+        holders = Counter({0: "free", -1: "unread"}.get(s[2], f"held by t{s[2]}") for s in seen)
+        parts = [
+            f"{len(seen)} observer samples, {sum(self._stopped(*s[2:]) for s in seen)} stopped, "
+            f"{seen[-1][1] - history[0][1]} hard faults, GIL "
+            + " ".join(f"{k}x{v}" for k, v in holders.most_common(3))
+        ]
+        for tid in sorted({tid for s in seen for tid in s[3]}):
+            mine = [s[3][tid] for s in history if tid in s[3]]
+            states = Counter(f"{state}/{reason}" for state, reason, _ in mine)
+            cpu = (mine[-1][2] - mine[0][2]) / 10_000  # a thread can begin or end in the window
+            common = " ".join(f"{k}x{v}" for k, v in states.most_common(3))
+            parts.append(f"t{tid} {cpu:.0f} ms {common}")
+        return "state/reason: " + "; ".join(parts)
+
+
 @dataclass
 class GitCall:
     argv: List[str]
@@ -203,7 +358,8 @@ class LagProbe:
     the loop was held, in seconds.
 
     Every hold counts, whatever held the loop: a git call, a sleep, a lock, a call that keeps the
-    GIL (on any thread: the samples go missing, and a window without them counts in full), work.
+    GIL (on any thread: the samples go missing, and a window without them counts in full, less
+    the share an observer outside the process saw the machine keep it stopped), work.
     A late wake while the loop sat in its poll is not one: it ran late. Time the loop's
     thread spent waiting on the OS counts as the wall clock says; time it spent runnable counts as
     the CPU it used, so a machine that left it without a core for 300 ms adds nothing. On a platform
@@ -226,6 +382,12 @@ class LagProbe:
         #: (start, end) of each garbage collection, which holds the GIL on whichever thread runs it.
         self._collections: List[tuple] = []
         self._collecting = 0.0
+        self._observer = _ThreadObserver()
+        #: The window `worst` was counted in, for the observer to explain once it has stopped.
+        self._worst_window = (0.0, 0.0)
+        #: (start, end, lateness, explanation) of each window the samples went missing in, judged
+        #: once the observer has stopped.
+        self._unsampled: List[tuple] = []
 
     def _on_collection(self, phase: str, info: dict) -> None:
         if phase == "start":
@@ -306,8 +468,10 @@ class LagProbe:
                 if self._waiting_to_wake(started, ended):
                     continue
                 if not self._covered(started, ended):
-                    branch = "samples missing, so read as the GIL held: the wall clock counts"
-                elif self._waiting is None:
+                    why = self._explain(started, ended, raw, cpu, "samples missing")
+                    self._unsampled.append((started, ended, late, why))
+                    continue
+                if self._waiting is None:
                     branch = "the platform cannot tell waiting: the wall clock counts"
                 elif self._waited(started, ended):
                     branch = "the loop's thread waited on the OS outside its poll"
@@ -316,8 +480,34 @@ class LagProbe:
                     late = min(late, cpu)
                     branch = "the loop's thread was runnable: its CPU counts"
             if late > self.worst:
-                self.worst = late
-                self.why = self._explain(started, ended, raw, cpu, branch)
+                self._count(late, self._explain(started, ended, raw, cpu, branch), started, ended)
+
+    def _count(self, late: float, why: str, started: float, ended: float) -> None:
+        if late > self.worst:
+            self.worst, self.why, self._worst_window = late, why, (started, ended)
+
+    def _judge_unsampled(self) -> None:
+        """A window without samples was held by a call keeping the GIL, on whichever thread, or
+        the machine did not let the process run: no core for it, memory, a page-in, a suspension,
+        or every thread left waiting with the GIL free (AW-27: 371 ms, no thread ran or could).
+        Only the observer, sampling from outside, saw which. The time nothing here held the process
+        up is not the code's; the rest counts in full, and all of it counts unobserved."""
+        for started, ended, late, why in self._unsampled:
+            stopped = self._observer.stopped_share(started, ended)
+            if stopped is None:
+                verdict = "read as the GIL held, unobserved: the wall clock counts"
+            else:
+                late *= 1 - stopped
+                verdict = (
+                    f"read as the GIL held except the {stopped:.0%} of it nothing here held the "
+                    "process up: the rest counts"
+                )
+            self._count(
+                late,
+                why.replace("samples missing", f"samples missing, {verdict}", 1),
+                started,
+                ended,
+            )
 
     def _explain(self, started: float, ended: float, raw: float, cpu: float, branch: str) -> str:
         seen = [s for s in self._loop_samples if started <= s[0] <= ended]
@@ -355,6 +545,7 @@ class LagProbe:
         # in the window is still collected and still counts.
         gc.collect()
         gc.freeze()
+        await self._observer.start()
         self._thread = threading.Thread(target=self._control, daemon=True)
         self._thread.start()
         self._task = asyncio.create_task(self._sample())
@@ -363,6 +554,7 @@ class LagProbe:
         self.why = "nothing was counted"
         self._loop_samples.clear()
         self._loop_places.clear()
+        self._unsampled.clear()
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -372,6 +564,10 @@ class LagProbe:
             await self._task
         if self._thread is not None:
             self._thread.join()
+        self._observer.stop()
+        self._judge_unsampled()
+        if self.worst:
+            self.why += f"; threads: {self._observer.describe(*self._worst_window)}"
         gc.unfreeze()
         gc.callbacks.remove(self._on_collection)
         _raise_priority(self._priority)

@@ -1,3 +1,4 @@
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
@@ -13,24 +14,7 @@ import {
   useSpecDocuments,
   type SpecAmendment,
 } from '@/api/spec'
-
-const OP_LABEL: Record<SpecAmendment['op'], string> = {
-  add_task: 'Added task',
-  add_requirement: 'Added requirement',
-  add_criterion: 'Added criterion',
-  change_criterion: 'Changed criterion',
-  remove_criterion: 'Removed criterion',
-  cannot_satisfy: 'Cannot satisfy',
-}
-
-const PROPOSED_LABEL: Record<SpecAmendment['op'], string> = {
-  add_task: 'Proposes a task',
-  add_requirement: 'Proposes a requirement',
-  add_criterion: 'Proposes a criterion',
-  change_criterion: 'Proposes changing criterion',
-  remove_criterion: 'Proposes removing criterion',
-  cannot_satisfy: 'Cannot satisfy',
-}
+import { OP_LABEL, PROPOSED_LABEL } from './amendmentLabels'
 
 /** A row whose change is in the document: applied at once, or accepted. */
 function recorded(amendment: SpecAmendment): boolean {
@@ -123,7 +107,7 @@ const RESPONSE_LABEL: Record<string, string> = {
   rejected: 'Answered: report rejected',
 }
 
-function AmendmentRow({
+export function AmendmentRow({
   path,
   amendment,
   busy,
@@ -155,7 +139,14 @@ function AmendmentRow({
         {amendment.identifier && <span>({amendment.identifier})</span>}
         <span style={{ color: 'var(--text-3)' }}>
           · @{amendment.author}
-          {amendment.run_id ? ` in run ${amendment.run_id}` : ''} ·{' '}
+          {amendment.run_id ? ` in run ${amendment.run_id}` : ''}
+          {amendment.run_id ? (
+            <>
+              {' '}
+              <TraceButton runId={amendment.run_id} label="trace" testId={`amendment-run-trace-${amendment.id}`} />
+            </>
+          ) : null}{' '}
+          ·{' '}
           <span title={at.toLocaleString()}>{formatDistanceToNow(at, { addSuffix: true })}</span>
         </span>
         <div className="flex-1" />
@@ -218,7 +209,7 @@ const DECIDED_LABEL: Record<string, string> = {
 }
 
 /** An author's or the lead's proposal (D1): nothing changed until the operator accepts it. */
-function ProposalRow({ path, amendment }: { path: string; amendment: SpecAmendment }) {
+export function ProposalRow({ path, amendment }: { path: string; amendment: SpecAmendment }) {
   const accept = useAcceptSpecAmendment()
   const decline = useDeclineSpecAmendment()
   const [declining, setDeclining] = useState(false)

@@ -1,282 +1,163 @@
-import type { SpanStatus, TraceKind } from '@/api/traces'
-import { formatDay } from '@/lib/format'
+import type { TraceFilters, TraceGroup, TraceGrouping, TraceOperation, TraceSummary, TraceTotals } from '@/api/traces'
 import { hubDate } from '@/lib/hubTime'
 
-/**
- * The traces view's model (a-traces-view-with-filters-grouping-and-stats): one listed trace, the
- * filters, the error rule, totals and grouping, as pure functions.
- *
- * `TraceRow` is the shape the view's list is proposed to carry. Today's list route
- * (`TraceSummary`) has no model, cost, tokens or call counts; FR-3/FR-4 add them. The Hub computes
- * totals and groups over everything the filter matches (FR-8); the mock computes them here from a
- * recording of every run, which is the same answer.
- */
-export interface TraceRow {
-  trace_id: string
-  run_id: string | null
-  kind: TraceKind
-  /** A Hub trace's own name ("GET /api/v1/…", "loop_tick"); null on a run. */
-  name: string | null
-  agent: string | null
-  model: string | null
-  task_id: string | null
-  /** The task's short reference ("SHR-1") and title, when the run worked one. */
-  task_ref: string | null
-  task_title: string | null
-  conversation_id: string | null
-  conversation_title: string | null
-  /** The run's outcome (`aw.run.status`): completed, failed, stopped, or null while running. */
-  run_status: string | null
-  status: SpanStatus
-  status_message: string | null
-  start_time: string
-  end_time: string | null
-  ended: boolean
-  /** Null when the Hub could not measure it: shown as unpriced, never as $0 (FR-14). */
-  cost_usd_micros: number | null
-  input_tokens: number | null
-  output_tokens: number | null
-  cache_read_tokens: number | null
-  cache_write_tokens: number | null
-  model_calls: number
-  tool_calls: number
-  tool_errors: number
-  /** Time spent waiting for a permission or an answer. */
-  wait_seconds: number
-  span_count: number
+/** What the view narrows by. `kind` is the Hub-internals choice; null is agents' runs. */
+export interface TracesFilter {
+  agent: string
+  conversation: string
+  task: string
+  run: string
+  /** The runs of one build's tasks; set only by a build's run count, shown as a removable chip. */
+  build: string
+  range: TracesRange
+  /** A calendar day (YYYY-MM-DD, the operator's own), which stands in for the range when set. */
+  day: string
+  kind: InternalKind | null
 }
 
-export type TimeRange = 'hour' | 'day' | 'week' | 'month' | 'all'
-export type TraceGrouping = 'none' | 'agent' | 'model' | 'task' | 'conversation' | 'kind' | 'day'
+export type TracesRange = 'all' | '1h' | '24h' | '7d' | '30d'
 
-/** A filter on one thing named by id, carrying the words to show for it. */
-export interface NamedFilter {
-  id: string
-  label: string
+export const EMPTY_FILTER: TracesFilter = {
+  agent: '',
+  conversation: '',
+  task: '',
+  run: '',
+  build: '',
+  range: 'all',
+  day: '',
+  kind: null,
 }
 
-export interface TraceFilters {
-  kind: TraceKind
-  agent: string | null
-  conversation: NamedFilter | null
-  task: NamedFilter | null
-  run: NamedFilter | null
-  range: TimeRange
+export const RANGES: ReadonlyArray<{ value: TracesRange; label: string; ms: number }> = [
+  { value: 'all', label: 'Any time', ms: 0 },
+  { value: '1h', label: 'Last hour', ms: 60 * 60 * 1000 },
+  { value: '24h', label: 'Last 24 hours', ms: 24 * 60 * 60 * 1000 },
+  { value: '7d', label: 'Last 7 days', ms: 7 * 24 * 60 * 60 * 1000 },
+  { value: '30d', label: 'Last 30 days', ms: 30 * 24 * 60 * 60 * 1000 },
+]
+
+/** The Hub's own kinds, offered only inside the Hub internals choice. */
+export type InternalKind = 'worker' | 'request' | 'work' | 'event'
+
+export const INTERNAL_KINDS: ReadonlyArray<{ value: InternalKind; label: string; operation: TraceOperation }> = [
+  { value: 'worker', label: 'Worker calls', operation: 'chat' },
+  { value: 'request', label: 'Requests', operation: 'aw.request' },
+  { value: 'work', label: 'Background work', operation: 'aw.work' },
+  { value: 'event', label: 'Events', operation: 'aw.event' },
+]
+
+/** The route's query for a filter. `now` is read when the range is chosen, not on every render,
+ *  so the query key stays still while the list is on screen. */
+export function filtersToQuery(filter: TracesFilter, now: Date, before?: string): TraceFilters {
+  const query: TraceFilters = {}
+  const internal = INTERNAL_KINDS.find((k) => k.value === filter.kind)
+  query.operation = internal ? internal.operation : 'invoke_agent'
+  if (filter.agent) query.agent = filter.agent
+  if (filter.conversation.trim()) query.conversation_id = filter.conversation.trim()
+  if (filter.task.trim()) query.task_id = filter.task.trim()
+  if (filter.run.trim()) query.run_id = filter.run.trim()
+  if (filter.build.trim()) query.build_id = filter.build.trim()
+  if (filter.day) {
+    const [y, m, d] = filter.day.split('-').map(Number)
+    if (y && m && d) {
+      query.since = new Date(y, m - 1, d).toISOString()
+      query.until = new Date(y, m - 1, d + 1).toISOString()
+    }
+  } else {
+    const range = RANGES.find((r) => r.value === filter.range)
+    if (range && range.ms) query.since = new Date(now.getTime() - range.ms).toISOString()
+  }
+  if (before) query.before = before
+  return query
 }
 
-export const DEFAULT_FILTERS: TraceFilters = { kind: 'run', agent: null, conversation: null, task: null, run: null, range: 'all' }
-
-export const KIND_LABELS: Record<TraceKind, string> = {
-  run: 'Agent runs',
-  worker: 'Worker calls',
-  request: 'Requests',
-  work: 'Background work',
-  event: 'Events',
+export function narrowedBy(filter: TracesFilter): boolean {
+  return !!(
+    filter.agent ||
+    filter.conversation.trim() ||
+    filter.task.trim() ||
+    filter.run.trim() ||
+    filter.build.trim() ||
+    filter.day ||
+    filter.range !== 'all'
+  )
 }
 
-export const RANGE_LABELS: Record<TimeRange, string> = {
-  hour: 'Last hour',
-  day: 'Last 24 hours',
-  week: 'Last 7 days',
-  month: 'Last 30 days',
-  all: 'All time',
+/** What a row says about the work: a task (reference and title), a task that is gone, or the
+ *  conversation it was a turn of. Never a raw id. */
+export type TraceSubject =
+  | { kind: 'task'; ref: string | null; title: string | null }
+  | { kind: 'missing-task' }
+  | { kind: 'conversation'; title: string }
+  | { kind: 'none' }
+
+export function subjectOf(trace: TraceSummary): TraceSubject {
+  if (trace.task_missing) return { kind: 'missing-task' }
+  if (trace.task_id) {
+    if (trace.task_ref || trace.task_title) {
+      return { kind: 'task', ref: trace.task_ref ?? null, title: trace.task_title ?? null }
+    }
+    return { kind: 'missing-task' }
+  }
+  if (trace.conversation_id) {
+    return { kind: 'conversation', title: trace.conversation_title?.trim() || 'New conversation' }
+  }
+  return { kind: 'none' }
 }
 
-export const GROUPING_LABELS: Record<TraceGrouping, string> = {
-  none: 'None',
-  agent: 'Agent',
-  model: 'Model',
-  task: 'Task',
-  conversation: 'Conversation',
-  kind: 'Kind',
-  day: 'Day',
+export function durationMs(trace: TraceSummary): number | null {
+  if (!trace.end_time) return null
+  return Math.max(0, hubDate(trace.end_time).getTime() - hubDate(trace.start_time).getTime())
 }
 
-const RANGE_MS: Record<Exclude<TimeRange, 'all'>, number> = {
-  hour: 3_600_000,
-  day: 86_400_000,
-  week: 7 * 86_400_000,
-  month: 30 * 86_400_000,
+/** A run's cost as its row says it: a figure, "unpriced" (finished, not measured), or nothing
+ *  yet (still running). Never $0.00 for a cost that was not measured. */
+export type CostCell = { kind: 'cost'; usd: number } | { kind: 'unpriced' } | { kind: 'none' }
+
+export function costOf(trace: TraceSummary): CostCell {
+  if (trace.cost_state === 'measured' && trace.cost_usd != null) return { kind: 'cost', usd: trace.cost_usd }
+  if (trace.cost_state === 'unpriced') return { kind: 'unpriced' }
+  return { kind: 'none' }
 }
 
-/** An error is a run that failed, was stopped (cancelled or interrupted), or whose trace ended in
- *  error (FR-6). A run that completed with a failed tool call inside is not: most runs have one. */
-export function isError(row: TraceRow): boolean {
-  return row.run_status === 'failed' || row.run_status === 'stopped' || row.status === 'error'
-}
+/** The grouping switch, in the order it is offered. `none` lists the runs ungrouped. */
+export const GROUPINGS: ReadonlyArray<{ value: TraceGrouping | 'none'; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'model', label: 'Model' },
+  { value: 'task', label: 'Task' },
+  { value: 'conversation', label: 'Conversation' },
+  { value: 'kind', label: 'Kind' },
+  { value: 'day', label: 'Day' },
+]
 
-/** Why a row counts as an error, in the operator's words; null when it does not. */
-export function errorLabel(row: TraceRow): string | null {
-  if (row.run_status === 'failed') return 'failed'
-  if (row.run_status === 'stopped') return 'stopped'
-  if (row.status === 'error') return 'ended in error'
+/** The filter that narrows the view to one group, where the list can filter by what it groups. */
+export function groupNarrow(grouping: TraceGrouping, group: TraceGroup): Partial<TracesFilter> | null {
+  if (!group.key || group.missing) return null
+  if (grouping === 'agent') return { agent: group.key }
+  if (grouping === 'task') return { task: group.key }
+  if (grouping === 'conversation') return { conversation: group.key }
+  if (grouping === 'day') return { day: group.key, range: 'all' }
   return null
 }
 
-export function durationSeconds(row: TraceRow): number | null {
-  if (!row.end_time) return null
-  return Math.max(0, (hubDate(row.end_time).getTime() - hubDate(row.start_time).getTime()) / 1000)
+/** A total's cost as it reads: a figure over the measured runs, "unpriced" when every finished
+ *  run in it went unmeasured, or nothing (still running, or the Hub's own work). Never $0.00 for
+ *  a cost that was not measured. */
+export function totalCostOf(totals: TraceTotals): CostCell {
+  if (totals.cost_usd_micros !== null) return { kind: 'cost', usd: totals.cost_usd_micros / 1_000_000 }
+  if (totals.unpriced) return { kind: 'unpriced' }
+  return { kind: 'none' }
 }
 
-export function matches(row: TraceRow, f: TraceFilters, now: Date): boolean {
-  if (row.kind !== f.kind) return false
-  if (f.agent && row.agent !== f.agent) return false
-  if (f.conversation && row.conversation_id !== f.conversation.id) return false
-  if (f.task && row.task_id !== f.task.id) return false
-  if (f.run && row.run_id !== f.run.id) return false
-  if (f.range !== 'all' && hubDate(row.start_time).getTime() < now.getTime() - RANGE_MS[f.range]) return false
-  return true
-}
-
-export interface TraceTotals {
-  count: number
-  errors: number
-  /** `errors`, by why each counts. */
-  error_kinds: { failed: number; stopped: number; trace_error: number }
-  running: number
-  /** Sum over the runs whose cost was measured; null when none was. */
-  cost_micros: number | null
-  /** Runs left out of `cost_micros` because their cost could not be measured. */
-  unpriced: number
-  duration_total: number
-  /** Over the traces that have ended; null when none has. */
-  duration_avg: number | null
-  tokens: { input: number; output: number; cache_read: number; cache_write: number } | null
-  model_calls: number
-  tool_calls: number
-  wait_seconds: number
-}
-
-export function totals(rows: readonly TraceRow[]): TraceTotals {
-  let errors = 0
-  const errorKinds = { failed: 0, stopped: 0, trace_error: 0 }
-  let running = 0
-  let cost: number | null = null
-  let unpriced = 0
-  let durationTotal = 0
-  let timed = 0
-  let tokens: TraceTotals['tokens'] = null
-  let modelCalls = 0
-  let toolCalls = 0
-  let wait = 0
-  for (const row of rows) {
-    if (isError(row)) {
-      errors += 1
-      if (row.run_status === 'failed') errorKinds.failed += 1
-      else if (row.run_status === 'stopped') errorKinds.stopped += 1
-      else errorKinds.trace_error += 1
-    }
-    const d = durationSeconds(row)
-    if (d === null) running += 1
-    else {
-      durationTotal += d
-      timed += 1
-    }
-    // A run still going has no cost yet; it is not unpriced until it ends without one.
-    if (row.kind === 'run' && row.ended) {
-      if (row.cost_usd_micros === null) unpriced += 1
-      else cost = (cost ?? 0) + row.cost_usd_micros
-    }
-    if (row.input_tokens !== null || row.output_tokens !== null) {
-      tokens ??= { input: 0, output: 0, cache_read: 0, cache_write: 0 }
-      tokens.input += row.input_tokens ?? 0
-      tokens.output += row.output_tokens ?? 0
-      tokens.cache_read += row.cache_read_tokens ?? 0
-      tokens.cache_write += row.cache_write_tokens ?? 0
-    }
-    modelCalls += row.model_calls
-    toolCalls += row.tool_calls
-    wait += row.wait_seconds
-  }
-  return {
-    count: rows.length,
-    errors,
-    error_kinds: errorKinds,
-    running,
-    cost_micros: cost,
-    unpriced,
-    duration_total: durationTotal,
-    duration_avg: timed ? durationTotal / timed : null,
-    tokens,
-    model_calls: modelCalls,
-    tool_calls: toolCalls,
-    wait_seconds: wait,
-  }
-}
-
-/** What a run's task is called on screen: its reference, and its title. A task with neither no
- *  longer exists (operator, 2026-11-02): it is named as such, never by its raw id. */
-export const GONE_TASK = 'A task that no longer exists'
-
-export function taskName(row: Pick<TraceRow, 'task_ref' | 'task_title'>): { ref: string | null; title: string } {
-  return { ref: row.task_ref, title: row.task_title ?? (row.task_ref ? 'Untitled task' : GONE_TASK) }
-}
-
-/** "claude-opus-5-5" → "Opus 5.5"; anything else as it came. */
-export function modelLabel(model: string | null): string {
-  if (!model) return 'no model'
-  const m = /^claude-([a-z]+)-(\d+)-(\d+)/.exec(model)
-  return m ? `${m[1]![0]!.toUpperCase()}${m[1]!.slice(1)} ${m[2]}.${m[3]}` : model
-}
-
-export interface TraceGroup {
-  key: string
-  label: string
-  /** A second line: the task's title under its reference, a conversation's agent. */
-  detail: string | null
-  /** The filter that narrows the view to this group, when one exists for the grouping. */
-  narrow: Partial<TraceFilters> | null
-  rows: TraceRow[]
-  totals: TraceTotals
-}
-
-function groupKey(row: TraceRow, grouping: TraceGrouping): { key: string; label: string; detail: string | null; narrow: Partial<TraceFilters> | null } {
-  switch (grouping) {
-    case 'agent':
-      return { key: row.agent ?? '', label: row.agent ?? 'No agent', detail: null, narrow: row.agent ? { agent: row.agent } : null }
-    case 'model':
-      return { key: row.model ?? '', label: modelLabel(row.model), detail: null, narrow: null }
-    case 'task':
-      return row.task_id
-        ? {
-            key: row.task_id,
-            label: taskName(row).ref ?? taskName(row).title,
-            detail: taskName(row).ref ? taskName(row).title : null,
-            narrow: { task: { id: row.task_id, label: taskName(row).ref ?? taskName(row).title } },
-          }
-        : { key: '', label: 'No task', detail: 'Runs from a conversation, not a task', narrow: null }
-    case 'conversation':
-      return row.conversation_id
-        ? {
-            key: row.conversation_id,
-            label: row.conversation_title ?? 'Untitled conversation',
-            detail: row.agent,
-            narrow: { conversation: { id: row.conversation_id, label: row.conversation_title ?? 'conversation' } },
-          }
-        : { key: '', label: 'No conversation', detail: null, narrow: null }
-    case 'kind':
-      return { key: row.kind, label: KIND_LABELS[row.kind], detail: null, narrow: null }
-    case 'day': {
-      const d = hubDate(row.start_time)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      return { key, label: formatDay(key), detail: null, narrow: null }
-    }
-    case 'none':
-      return { key: '', label: '', detail: null, narrow: null }
-  }
-}
-
-/** Groups in the order the operator reads them: days newest first, everything else by cost and
- *  then by count, so the expensive and the busy come first. */
-export function groupRows(rows: readonly TraceRow[], grouping: TraceGrouping): TraceGroup[] {
-  const byKey = new Map<string, Omit<TraceGroup, 'totals'>>()
-  for (const row of rows) {
-    const g = groupKey(row, grouping)
-    const existing = byKey.get(g.key)
-    if (existing) existing.rows.push(row)
-    else byKey.set(g.key, { ...g, rows: [row] })
-  }
-  const groups = [...byKey.values()].map((g) => ({ ...g, totals: totals(g.rows) }))
-  if (grouping === 'day') return groups.sort((a, b) => b.key.localeCompare(a.key))
-  return groups.sort((a, b) => (b.totals.cost_micros ?? -1) - (a.totals.cost_micros ?? -1) || b.totals.count - a.totals.count)
+/** Why the errors count, in the operator's words: "1 failed · 2 stopped · 1 ended in error". */
+export function errorBreakdown(totals: TraceTotals): string {
+  const k = totals.error_kinds
+  return [
+    k.failed ? `${k.failed} failed` : null,
+    k.stopped ? `${k.stopped} stopped` : null,
+    k.trace_error ? `${k.trace_error} ended in error` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
