@@ -666,7 +666,7 @@ def list_checks(page, scope, where, _unused):
     by_label = {(g["label"] or "").lower(): {r["name"]: r["waiting"] for r in g["rows"]} for g in groups}
     waiting = by_label.get("waiting on you", {})
     reasons = {
-        "Ready one": "ready to approve", "Amended one": "amendments to review",
+        "Ready one": "ready to approve", "Amended one": "1 amendment to review",
         "Buildable one": "ready to build", "Foldable one": "ready to fold",
     }
     got = {n: (waiting.get(n) or "").lower() for n in reasons}

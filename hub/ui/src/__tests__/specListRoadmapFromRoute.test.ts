@@ -33,4 +33,12 @@ describe('a slice is listed under the roadmap it names (FR-9)', () => {
     )
     expect(a.waiting).toBe('2 amendments to review')
   })
+
+  it('says "1 amendment to review" for exactly one', () => {
+    const [, , a] = listEntries(
+      specs,
+      [records[0], records[1], { ...records[2], waiting: ['amendments_to_review'], amendments: { total: 1, unreviewed: 1 } }],
+    )
+    expect(a.waiting).toBe('1 amendment to review')
+  })
 })
