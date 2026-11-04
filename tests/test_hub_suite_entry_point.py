@@ -199,3 +199,41 @@ def test_a_killed_holder_does_not_block_the_next_run(tmp_path):
     assert took < 10, f"took the lock after {took:.1f} s"
     assert nxt.returncode == 0, out
     assert "1 passed" in out
+
+
+# --- FR-8, FR-9: the guidance and the settings name the entry point ------------------------------
+
+
+def test_agent_guidance_sends_full_runs_through_the_entry_point():
+    """CLAUDE.md (loaded every request) and the testing rule say: changed tests plus the sweep set,
+    the full suite left to the Hub, and the entry point for any full run."""
+    for guidance in (REPO_ROOT / "CLAUDE.md", REPO_ROOT / ".claude" / "rules" / "testing.md"):
+        text = guidance.read_text(encoding="utf-8")
+        assert "scripts/checks/hub_suite.py" in text, guidance
+        assert "scripts/checks/sweep_check.py" in text, guidance
+        assert "hub-tests" in text, guidance
+        # No bare full-suite command left for an agent to copy.
+        assert "pytest hub/tests/ -v" not in text, guidance
+
+
+def test_the_settings_to_paste_use_the_entry_point_and_a_fast_sweep():
+    import json
+    import re
+
+    text = (REPO_ROOT / ".claude" / "reference" / "checks.md").read_text(encoding="utf-8")
+    block = re.search(r"```json\n(.*?)\n```", text, re.S)
+    assert block, "checks.md carries the whole check list as JSON"
+    checks = {c["name"]: c for c in json.loads(block.group(1))}
+    tests = checks["hub-tests"]
+    assert tests["command"] == "py -3.11 scripts/checks/hub_suite.py"
+    assert tests["phase"] == "both" and tests["paths"] == [] and not tests["fast"]
+    sweep = checks["sweep"]
+    assert sweep["command"] == "py -3.11 scripts/checks/sweep_check.py"
+    assert sweep["fast"] and sweep["phase"] == "both"
+    assert sweep["timeout_seconds"] <= 120  # FAST_CHECK_MAX_SECONDS
+    # Every entry has exactly the fields the Hub's `ProjectCheck` takes, within its bounds.
+    fields = {"name", "command", "timeout_seconds", "paths", "fast", "phase"}
+    for check in checks.values():
+        assert set(check) == fields, check["name"]
+        assert 10 <= check["timeout_seconds"] <= 3600, check["name"]
+        assert check["phase"] in ("review", "landing", "both"), check["name"]
