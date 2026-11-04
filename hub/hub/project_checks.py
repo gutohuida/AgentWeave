@@ -1289,6 +1289,12 @@ _semaphores: Dict[int, asyncio.Semaphore] = {}
 #: Set, by run id, once the run's fast checks have all decided (or the run ended): what an agent's
 #: completion waits on (D2). Gone once set; a waiter that finds none reads the recorded run.
 _fast_waiters: Dict[str, asyncio.Event] = {}
+#: By run id, when a run began waiting for a check slot (the semaphore), while it waits (F1076).
+_waiting_for_slot: Dict[str, datetime] = {}
+#: By run id, how long a run waited for its slot once it has one: its age less this is how long its
+#: checks have run. A row's `started_at` is when it was queued, and a run that waited 33 min behind
+#: another read as a 70-minute run, which the mender called hung.
+_slot_waited: Dict[str, float] = {}
 #: Recorded in `_superseded` in place of a main tip: the task's work changed under the run (a new
 #: completion), not main.
 _NEW_WORK = "new-work"
@@ -1533,7 +1539,10 @@ async def _execute(
                 # releases the waiter), so the refusal reads a decided run.
                 _fast_decided(run_id)
             if outcome is None and pairs[split:]:
+                _waiting_for_slot[run_id] = datetime.now(timezone.utc)
                 async with _semaphore():
+                    queued = _waiting_for_slot.pop(run_id)
+                    _slot_waited[run_id] = (datetime.now(timezone.utc) - queued).total_seconds()
                     outcome = await run_group(pairs[split:], merged, tree, changed, baseline)
             if outcome == "superseded":
                 return
@@ -1552,6 +1561,8 @@ async def _execute(
         )
     finally:
         _fast_decided(run_id)
+        _waiting_for_slot.pop(run_id, None)
+        _slot_waited.pop(run_id, None)
 
 
 def _fast_decided(run_id: str) -> None:
@@ -2065,8 +2076,20 @@ def _duration(seconds: float) -> str:
     return f"{int(seconds)}s" if seconds < 90 else f"{int(round(seconds / 60))}m"
 
 
+def _checks_took(run: TaskCheckRun) -> Optional[float]:
+    """How long a decided run's checks ran: the sum of its results' durations, which leaves out
+    the time it waited for a slot (F1076); its whole age where it records none."""
+    durations = [r.get("duration_seconds") for r in (run.results or []) if isinstance(r, dict)]
+    if durations and all(isinstance(d, (int, float)) for d in durations):
+        return float(sum(durations))
+    if run.started_at is None or run.ended_at is None:
+        return None
+    return (_aware(run.ended_at) - _aware(run.started_at)).total_seconds()
+
+
 async def _previous_duration(session: AsyncSession, task: Task, before: Optional[str]) -> str:
-    """How long the task's previous decided run took, else the project's latest one; `""` if none."""
+    """How long the task's previous decided run's checks took, else the project's latest one's;
+    `""` if none."""
     for where in (TaskCheckRun.task_id == task.id, TaskCheckRun.project_id == task.project_id):
         query = (
             select(TaskCheckRun)
@@ -2076,8 +2099,9 @@ async def _previous_duration(session: AsyncSession, task: Task, before: Optional
             .limit(2)
         )
         for run in (await session.execute(query)).scalars():
-            if run.id != before and run.started_at is not None and run.ended_at is not None:
-                return _duration((_aware(run.ended_at) - _aware(run.started_at)).total_seconds())
+            took = _checks_took(run) if run.id != before else None
+            if took is not None:
+                return _duration(took)
     return ""
 
 
@@ -2130,8 +2154,18 @@ async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]
         )
     previous = await _previous_duration(session, task, run_id)
     took = f" (the previous run took {previous})" if previous else ""
+    if seen.state == "running" and run is not None and run.id in _waiting_for_slot:
+        queued = (datetime.now(timezone.utc) - _waiting_for_slot[run.id]).total_seconds()
+        return ReviewWait(
+            "running",
+            run_id,
+            f"its fast checks passed and the rest have waited {_duration(queued)} for a check slot "
+            f"behind other runs, at most {MAX_CONCURRENT_RUNS} running at once{took} (check run "
+            f"{run_id}); queued is not hung, and its review is offered once they pass",
+        )
     if seen.state == "running" and run is not None and run.started_at is not None:
-        ran = (datetime.now(timezone.utc) - _aware(run.started_at)).total_seconds()
+        age = (datetime.now(timezone.utc) - _aware(run.started_at)).total_seconds()
+        ran = age - _slot_waited.get(run.id, 0.0)
         return ReviewWait(
             "running",
             run_id,

@@ -905,6 +905,17 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
             if existing is not None:
                 await end(db, existing, "resolved", "A run is executing on one of its tasks.")
             continue
+        # A check run in flight on one of the loop's tasks is progress too (F1076): queued for a slot
+        # or running, it is the Hub attending the task, and the mender woken for it could only call
+        # a healthy suite hung. In flight means in this process's registry (`is_running`), the test
+        # used for runs above, so a row left `running` with no job behind it does not count and the
+        # loop is still reported; and a job in the registry ends, since each check runs under its
+        # own timeout (`project_checks.run_one`).
+        if await _checks_in_flight(db, loop.id):
+            existing = await open_stall(db, loop.project_id, key)
+            if existing is not None:
+                await end(db, existing, "resolved", "A check run is in flight on one of its tasks.")
+            continue
         last_run = (
             await db.execute(
                 select(func.max(Run.started_at)).where(Run.project_id == loop.project_id)
@@ -938,6 +949,20 @@ async def _sweep(db: AsyncSession, now: datetime) -> int:
         )
         reported += 1
     return reported
+
+
+async def _checks_in_flight(db: AsyncSession, loop_id: str) -> bool:
+    """Whether one of *loop_id*'s open tasks has a check run this Hub is executing or queueing."""
+    from . import project_checks
+
+    open_tasks = (
+        await db.execute(
+            select(Task.id).where(
+                Task.loop_id == loop_id, Task.status.not_in(("approved", "rejected"))
+            )
+        )
+    ).scalars()
+    return any(project_checks.is_running(task_id) for task_id in open_tasks)
 
 
 async def _build_waits(db: AsyncSession, loop_id: str, now: datetime) -> bool:
