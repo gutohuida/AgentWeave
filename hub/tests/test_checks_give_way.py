@@ -6,6 +6,7 @@ included, runs below normal scheduling priority; it is off for every project unt
 turns it on. And beside each check's time limit the settings show how long it usually takes.
 """
 
+import os
 import sys
 import textwrap
 from datetime import datetime, timedelta, timezone
@@ -21,7 +22,6 @@ SETTINGS = "/api/v1/projects/proj-test/settings"
 DURATIONS = "/api/v1/projects/proj-test/checks/usual-durations"
 
 #: Windows priority classes (`GetPriorityClass`).
-NORMAL_PRIORITY_CLASS = 0x20
 BELOW_NORMAL_PRIORITY_CLASS = 0x4000
 IDLE_PRIORITY_CLASS = 0x40
 
@@ -72,8 +72,23 @@ def _below_normal(priority):
     return priority >= 10
 
 
-def _normal(priority):
-    return priority == (NORMAL_PRIORITY_CLASS if sys.platform == "win32" else 0)
+def _own_priority():
+    """The priority this test process runs at, which a check that does not give way inherits.
+
+    Not assumed normal: the project's own checks run this suite, and while that project gives way
+    the suite itself is below normal (AW-34)."""
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+        kernel32.GetPriorityClass.argtypes = [ctypes.c_void_p]
+        return kernel32.GetPriorityClass(kernel32.GetCurrentProcess())
+    return os.nice(0)
+
+
+def _unchanged(priority):
+    return priority == _own_priority()
 
 
 @pytest.mark.asyncio
@@ -102,7 +117,7 @@ async def test_giving_way_is_off_for_an_existing_and_a_new_project_and_changes_n
 ):
     """ac-priority-default-off (FR-6): a row written without the column (as every project that
     existed before migration 0161 was) and a project created through the route both read off, and
-    the same check runs at normal priority in each."""
+    the same check runs at the Hub's own priority in each."""
     async with async_session_factory() as session:
         await session.execute(
             text(
@@ -132,8 +147,8 @@ async def test_giving_way_is_off_for_an_existing_and_a_new_project_and_changes_n
             await session.commit()
             await session.refresh(project)
         parent, child = _run_and_read(project, check, out, tmp_path)
-        assert _normal(parent), (project_id, parent)
-        assert _normal(child), (project_id, child)
+        assert _unchanged(parent), (project_id, parent, _own_priority())
+        assert _unchanged(child), (project_id, child, _own_priority())
 
 
 @pytest.mark.asyncio
