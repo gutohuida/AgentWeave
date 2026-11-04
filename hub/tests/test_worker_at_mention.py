@@ -116,6 +116,8 @@ def test_interpret_restores_only_strings_and_does_not_raise() -> None:
 
 
 def test_the_checkpoint_prompt_version_is_unchanged() -> None:
+    """F409 left the prompt as it was; the title and summary (`every-checkpoint-findable-and-
+    readable`, FR-11) are what moved it to /2."""
     from hub.checkpoint_generation import CHECKPOINT_PROMPT_VERSION
 
-    assert CHECKPOINT_PROMPT_VERSION == "checkpoint/1"
+    assert CHECKPOINT_PROMPT_VERSION == "checkpoint/2"

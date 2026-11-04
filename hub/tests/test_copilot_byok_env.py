@@ -525,6 +525,8 @@ async def test_an_unbound_agents_own_provider_is_not_judged_as_one(
 # ---------------------------------------------------------------------------
 
 CHECKPOINT_BODY = {
+    "title": "Guarded entries with no postings",
+    "summary": "Pinned the empty-entry guard with a test.",
     "objective": "Refuse an entry with no postings.",
     "state": "The guard was already correct; a test now pins it.",
 }
