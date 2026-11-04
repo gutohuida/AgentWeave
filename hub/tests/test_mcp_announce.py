@@ -226,6 +226,7 @@ async def test_wait_registers_before_it_checks(app, monkeypatch):
 async def test_a_stamp_written_with_no_notify_is_seen_within_one_poll(app, monkeypatch):
     await _run("run-wait-quiet")
     monkeypatch.setattr(mcp_announce, "POLL_SECONDS", 0.1)
+    committed = {}
 
     async def stamp_quietly():
         await asyncio.sleep(0.2)
@@ -233,12 +234,16 @@ async def test_a_stamp_written_with_no_notify_is_seen_within_one_poll(app, monke
             row = await session.get(Run, "run-wait-quiet")
             row.mcp_adapter_online_at = datetime.now(timezone.utc)
             await session.commit()
+        committed["at"] = asyncio.get_running_loop().time()
 
     task = asyncio.create_task(stamp_quietly())
-    started = asyncio.get_running_loop().time()
     assert await mcp_announce.wait("run-wait-quiet", 5.0) is True
-    assert asyncio.get_running_loop().time() - started < 1.0
+    seen = asyncio.get_running_loop().time()
     await task
+    # Measured from the commit, not from the start: how long the session took to open and write
+    # is the machine's, and under load it is not small. What is meant is that the wait notices a
+    # stamp by polling rather than waiting out its timeout, so the bound is many polls, not one.
+    assert seen - committed["at"] < 2.0
 
 
 @pytest.mark.asyncio
