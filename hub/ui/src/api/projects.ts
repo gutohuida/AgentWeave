@@ -148,7 +148,12 @@ export interface ProjectCheck {
   /** Run when an agent completes its task, which is refused with the check's output when it fails
    *  (`checks-run-before-anyone-reviews`). At most 120 s. Absent on a check saved before it. */
   fast?: boolean
+  /** When it runs: in a task's run before review, in a landing batch's run, or both
+   *  (`checks-know-their-phase-and-give-way-to-the-user`). A check saved before it reads `both`. */
+  phase?: CheckPhase
 }
+
+export type CheckPhase = 'review' | 'landing' | 'both'
 
 /** The server merges a partial body onto what is stored (`projects.py`), so a caller sends only
  *  what it changes: the Overview's switch sends `allow_agent_jobs` alone, and the panel never sends

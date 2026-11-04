@@ -26,6 +26,7 @@ const COLOR: Record<TaskCheckRun['state'], string> = {
 
 const ON_MAIN_TOO = 'fails on main too, not this task’s work'
 const SKIPPED = 'skipped (no matching changes)'
+const AT_LANDING = 'runs at landing'
 
 /** A skipped check passes; anything else that timed out or exited non-zero failed. */
 const failedResult = (result: TaskCheckResult) =>
@@ -85,13 +86,16 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
   const state: TaskCheckRun['state'] | null = data.running ? 'running' : (latest?.state ?? null)
   const failing = (latest?.results ?? []).filter(failedResult)
   const skipped = (latest?.results ?? []).filter((result) => result.skipped)
+  const atLanding = data.at_landing ?? []
+  // Every check is landing-only: nothing runs before review, so nothing is waited for here.
+  const idleLabel = data.before_review === false ? 'Checks run at landing' : 'Checks have not run'
 
   return (
     <div data-testid={`task-checks-${taskId}`} className="space-y-1">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[12px] flex items-center gap-1.5" style={{ color: state ? COLOR[state] : 'var(--text-3)' }}>
           <Icon name={state === 'passed' ? 'check_circle' : state === 'failed' || state === 'error' ? 'error' : 'schedule'} size={14} />
-          {state ? LABEL[state] : 'Checks have not run'}
+          {state ? LABEL[state] : idleLabel}
           {state === 'failed' && failing.length > 0 && (
             <span>: {failing.map((result) => result.name).join(', ')}</span>
           )}
@@ -113,6 +117,16 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
           {skipped.map((result) => (
             <li key={result.name} title={result.reason}>
               {result.name} · {SKIPPED}
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* A landing-only check is said too, as what it is: not passed, not skipped (FR-2). */}
+      {atLanding.length > 0 && (
+        <ul data-testid={`task-checks-at-landing-${taskId}`} className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+          {atLanding.map((name) => (
+            <li key={name} title="Review and approval do not wait for it; it checks the merged result before the work lands.">
+              {name} · {AT_LANDING}
             </li>
           ))}
         </ul>

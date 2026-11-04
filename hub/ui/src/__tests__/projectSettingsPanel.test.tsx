@@ -45,7 +45,7 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean }> | null
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both' }> | null
   checks_auto_override: boolean
 } {
   return {
@@ -280,6 +280,83 @@ describe('Project settings → General, applied on change', () => {
     await user.click(fast)
     await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
     expect(lastPatch()).toEqual({ checks: [{ name: 'lint', command: 'ruff check .', timeout_seconds: 60 }] })
+  })
+
+  // checks-know-their-phase-and-give-way-to-the-user, FR-1 ac-phase-default: a check saved before
+  // phases reads as both, in the row and in its dialog.
+  it('shows a check saved without a phase as running both before review and at landing', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900 }],
+    }
+    render(<GeneralSection />)
+    expect(screen.queryByTestId('project-check-phase-0')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Edit hub-tests' }))
+    await screen.findByRole('dialog')
+    expect(menuSelect('Runs')).toHaveTextContent('Before review and at landing')
+  })
+
+  // FR-1 ac-phase-set: one check set to landing, the other left as both.
+  it('saves one check as landing-only and leaves the other as both', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [
+        { name: 'lint', command: 'ruff check .', timeout_seconds: 60 },
+        { name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900 },
+      ],
+    }
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit hub-tests' }))
+    await screen.findByRole('dialog')
+    await chooseMenuOption(user, 'Runs', /At landing only/)
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch()).toEqual({
+      checks: [
+        { name: 'lint', command: 'ruff check .', timeout_seconds: 60 },
+        { name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900, phase: 'landing' },
+      ],
+    })
+  })
+
+  it('says a landing-only check is landing-only in its row', () => {
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900, phase: 'landing' }],
+    }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-phase-0')).toHaveTextContent('at landing only')
+  })
+
+  // FR-4 ac-fast-refused: said in the dialog before the save, and the Hub's own refusal is shown.
+  it('refuses a fast check that is landing-only, before and after the save', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'lint', command: 'ruff check .', timeout_seconds: 60, fast: true }],
+    }
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit lint' }))
+    const dialog = await screen.findByRole('dialog')
+    await chooseMenuOption(user, 'Runs', /At landing only/)
+    expect(within(dialog).getByText(/a fast check gates an agent's completion before review, so it cannot be landing-only/i)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
+    expect(update).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    // A save that reaches the Hub anyway (another client) is refused there, and the refusal is shown.
+    await user.click(screen.getByRole('switch', { name: "Land over failures that are not the task's" }))
+    answer({
+      // The shape the settings route answers: pydantic's errors, the model validator's sentence.
+      error: new ApiError(422, JSON.stringify({
+        detail: [{
+          type: 'value_error',
+          loc: ['checks', 0],
+          msg: "Value error, 'lint' is fast, and a fast check gates an agent's completion before review, so it cannot be landing-only.",
+        }],
+      })),
+    })
+    expect(await screen.findByTestId('settings-save-refusal')).toHaveTextContent(/cannot be landing-only/)
   })
 
   it('offers the switch for landing over failures that are not the task’s, on by default', async () => {

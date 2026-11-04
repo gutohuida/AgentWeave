@@ -179,7 +179,7 @@ async def mender_land_task(
             raise HTTPException(status_code=409, detail=f"'{body.commit}' is not a commit here.")
         commit = resolved.stdout.strip()
         project = await session.get(Project, actor.project_id)
-        if project_checks.configured_checks(project):
+        if project_checks.configured_checks(project, project_checks.PHASE_LANDING):
             results = await asyncio.to_thread(
                 _run_checks, root, task.id, commit, project, project_checks
             )
@@ -265,7 +265,7 @@ def _run_checks(root, task_id, commit, project, project_checks) -> list:
     try:
         return [
             project_checks.run_one(check, path)
-            for check in project_checks.configured_checks(project)
+            for check in project_checks.configured_checks(project, project_checks.PHASE_LANDING)
         ]
     finally:
         project_checks._remove_checkout(root, path)

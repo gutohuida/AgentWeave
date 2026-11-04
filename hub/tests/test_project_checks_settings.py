@@ -12,8 +12,9 @@ CHECKS = [
     {"name": "tests", "command": "py -3.11 -m pytest -q", "timeout_seconds": 900},
 ]
 #: What is stored and read back: a check names no paths unless the operator gives some, and is not
-#: fast unless the operator marks it (`checks-run-before-anyone-reviews`, FR-1).
-SAVED = [{**check, "paths": [], "fast": False} for check in CHECKS]
+#: fast unless the operator marks it (`checks-run-before-anyone-reviews`, FR-1), and runs before
+#: review and at landing unless given a phase (`checks-know-their-phase-...`, FR-1).
+SAVED = [{**check, "paths": [], "fast": False, "phase": "both"} for check in CHECKS]
 
 
 @pytest.mark.asyncio
@@ -36,7 +37,14 @@ async def test_a_timeout_defaults_and_other_settings_are_untouched(app, auth_hea
     )
     assert saved.status_code == 200, saved.text
     assert saved.json()["checks"] == [
-        {"name": "t", "command": "pytest", "timeout_seconds": 900, "paths": [], "fast": False}
+        {
+            "name": "t",
+            "command": "pytest",
+            "timeout_seconds": 900,
+            "paths": [],
+            "fast": False,
+            "phase": "both",
+        }
     ]
     assert saved.json()["hop_budget"] == before["hop_budget"]
 
