@@ -25,7 +25,7 @@ from ._background_runs import await_background_runs as _await_background_run
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 
 
-def _git(repo: Path, *args: str) -> None:
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     # The timeout is a hang guard, not a speed assertion: a full parallel suite on Windows
     # has stalled a bare `git init` past 30s (check run chk-0e44d3828f94), so give a loaded
     # machine room, and retry `init` once because it is idempotent.
@@ -40,6 +40,7 @@ def _git(repo: Path, *args: str) -> None:
             if attempt == attempts - 1:
                 raise
     assert result.returncode == 0, result.stderr
+    return result
 
 
 def _init_repo(path: Path) -> Path:
