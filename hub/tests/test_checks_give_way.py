@@ -111,9 +111,27 @@ async def test_a_check_and_its_child_run_below_normal_while_the_project_gives_wa
     assert _below_normal(child), child
 
 
+@pytest.fixture
+def normal_process_priority():
+    """Run the test at normal priority. Other tests in the same worker raise the process class
+    (`_loop_lag._set_process_priority`) and a check inherits whatever the Hub process has, so
+    "unchanged" is only a fixed answer when the starting priority is a fixed one."""
+    if sys.platform != "win32":
+        yield
+        return
+    from ._loop_lag import _set_process_priority
+
+    was = _set_process_priority(NORMAL_PRIORITY_CLASS)
+    try:
+        yield
+    finally:
+        if was is not None:
+            _set_process_priority(was)
+
+
 @pytest.mark.asyncio
 async def test_giving_way_is_off_for_an_existing_and_a_new_project_and_changes_nothing(
-    app, auth_headers, tmp_path
+    app, auth_headers, tmp_path, normal_process_priority
 ):
     """ac-priority-default-off (FR-6): a row written without the column (as every project that
     existed before migration 0161 was) and a project created through the route both read off, and
