@@ -41246,7 +41246,7 @@ Check run `chk-7c08b3c0621e` failed `test_a_turn_start_that_creates_its_checkout
 
 ## F1124 (B) -- an author is told `ready_to_approve: true` on a document the operator's Approve then stops on
 
-**Status:** open
+**Status:** fixed 2026-11-04. A save's `warnings` carry the approval gaps (`criterion_without_check`, `no_acceptance_drive`); `ready_to_approve` is false while one is present; `submit_spec_document` names `how_to_check` and `checked_by`. Tests: `hub/tests/test_a_save_says_what_approve_would_list.py`.
 **Source:** found by using the spec flow
 **Theme:** Spec flow
 **Ready:** yes
@@ -41271,7 +41271,7 @@ On 2026-11-01 `list_tasks` with limit 1000 answered `total: 22` on `proj-d85a82b
 
 `scripts/drive/d1029_build_plan_in_spec.py:56` fixes `PORT = 8010`, and `start_hub` (:143) reuses any Hub answering there; the database can be moved with `AW_DRIVE_DB`, the port cannot. A drive that started the Hub stops it when it ends (`stop_hub`, :171). `d1101_recommended_people.py` imports these helpers. With two builds running, the second drive tests the first task's checkout, and the first drive's end kills the Hub under the second. Read, not run: no two builds have ever overlapped on this project (0 pairs of 9 builds on :8000). **Expected:** a drive's Hub is started from its own checkout on its own port and database, and a drive never reuses a Hub it cannot show came from its checkout.
 
-**Status:** open 2026-11-01. Found assessing whether a second build can run beside a first.
+**Status:** fixed 2026-11-04 for the helpers `d1029_build_plan_in_spec.py` (which d1101 and the d1029/d1031 drives import): the port is `AW_DRIVE_PORT` (default 8010), and `stop_hub` stops only the Hub `start_hub` started. The other `8010` scripts only attach to a Hub and neither start nor stop one. Tests: `hub/tests/test_a_drive_takes_its_own_port.py`. Was: open 2026-11-01. Found assessing whether a second build can run beside a first.
 
 ## F1122 (B) -- the full Hub suite runs for tasks that change nothing it covers, and it is most of the wait for review
 
@@ -41287,7 +41287,7 @@ On `proj-d85a82bf4216` since 2026-10-29, `hub-tests` ran 82 times for 29.2 hours
 
 On 2026-11-01 the operator approved `a-finished-spec-gets-a-build-retrospective`, a standalone spec, and was shown `roadmap_slice_unclaimed` ×5, one per approved roadmap with an unclaimed slice (`hub/hub/spec_service.py:1296`). It does not gate (`NOTE_CODES`, :1319), but it reads like a problem with the spec just approved. Its advice is for an author naming a slice, and it reached the operator at approval. **Expected:** the note goes to the author while writing, not to the operator approving, or is limited to a document whose subject could be one of those slices.
 
-**Status:** open 2026-11-01. Seen once, reported by the operator; not driven.
+**Status:** fixed 2026-11-04. `roadmap_slice_unclaimed` is no longer in Approve, Propose or Check; it rides a save's `warnings` for the author. Tests: `test_a_document_naming_no_slice_is_told_without_being_gated` and `test_an_author_saving_a_standalone_document_is_told_of_the_open_slice` in `hub/tests/test_a_roadmap_shows_which_of_its_slices_are_done.py`.
 
 ## F1126 (B) -- work that reaches master inside a dependent task's merge is never recorded as landed
 

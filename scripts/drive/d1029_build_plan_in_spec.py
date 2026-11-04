@@ -32,7 +32,8 @@ acceptance created, and stops the Hub if it started one.
 
     py -3.11 scripts/drive/d1029_build_plan_in_spec.py
 
-AW_DRIVE_DB names the database of an already-running :8010 when it is not the trial profile's.
+AW_DRIVE_DB names the database of an already-running Hub when it is not the trial profile's;
+AW_DRIVE_PORT (default 8010) names its port.
 """
 
 import datetime
@@ -53,7 +54,9 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8")
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-PORT = 8010
+# AW_DRIVE_PORT moves the port the way AW_DRIVE_DB moves the database (F1121): two builds that
+# drive together each take their own, and a drive stops only a Hub it started itself.
+PORT = int(os.environ.get("AW_DRIVE_PORT") or 8010)
 HUB = f"http://127.0.0.1:{PORT}"
 PROFILE = pathlib.Path.home() / ".agentweave" / "hub" / "profiles" / "trial"
 DB = pathlib.Path(os.environ.get("AW_DRIVE_DB") or PROFILE / "agentweave.db")
@@ -141,7 +144,7 @@ def poll(fn, secs=15.0, every=0.5):
 
 
 def start_hub():
-    """The trial Hub: the one already on :8010, else one started from this checkout's hub/."""
+    """The trial Hub: the one already on PORT, else one started from this checkout's hub/."""
     if api("GET", "/projects")[0] == 200:
         print(f"using the Hub already on :{PORT} (database assumed {DB})")
         return None
@@ -169,6 +172,7 @@ def start_hub():
 
 
 def stop_hub(proc):
+    """Stops the Hub `start_hub` started; `None` is one it found already running, left alone."""
     if proc is not None:
         subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
 

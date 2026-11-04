@@ -637,7 +637,7 @@ async def test_a_submission_says_whether_it_is_ready_to_approve(app, auth_header
 async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     app, auth_headers, planner
 ):
-    """The warning rides the submit response; `ready_to_approve` is decided by `blocking` alone."""
+    """The warning rides the submit response; the warning itself never blocks."""
     path = await _agent_create(app, planner, title="Slice one")
     tasks = [
         {
@@ -651,7 +651,7 @@ async def test_a_submission_warns_of_unordered_overlap_without_blocking_it(
     saved = await _agent_submit(app, planner, path, _slice_doc(roadmap=None, tasks=tasks))
     assert saved.status_code == 200, saved.text
     body = saved.json()
-    assert body["ready_to_approve"] is True
+    assert body["blocking"] == []
     overlap = [w for w in body["warnings"] if w["code"] == "unordered_file_overlap"]
     assert len(overlap) == 1
     assert "t1" in overlap[0]["message"]
