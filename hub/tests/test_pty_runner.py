@@ -448,8 +448,11 @@ class TestTerminateProcessTree:
                 time.sleep(0.1)
             assert pid_alive(pid) is False
         finally:
-            if session.isalive():
-                session.terminate(force=True)
+            # Cleanup goes through `terminate_process_tree`, which never raises for a pid that is
+            # already going away. `session.terminate(force=True)` signals via `os.kill`, and on
+            # Windows that raises `PermissionError` (WinError 5) while the ConPTY child the test
+            # just killed is still tearing down but `isalive()` has not yet turned false.
+            terminate_process_tree(pid, force=True)
 
     def test_already_dead_pid_does_not_raise(self):
         session = PtySession.spawn([sys.executable, "-c", "pass"])
