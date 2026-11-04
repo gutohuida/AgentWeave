@@ -15,6 +15,7 @@ export interface Stall {
     | 'dead_run'
     | 'stuck_task'
     | 'no_progress'
+    | 'checks_unjudged'
   reason: string
   task_id: string | null
   loop_id: string | null

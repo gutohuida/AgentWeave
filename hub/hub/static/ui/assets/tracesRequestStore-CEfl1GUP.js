@@ -1,1 +1,0 @@
-import{cw as s,ce as a,bP as o}from"./index-Cs_Xxn6q.js";let c=0;const n=o(e=>({request:null,ask:t=>e({request:{...t,nonce:++c}}),clear:()=>e({request:null})}));function u(e,t){n.getState().ask(t),s(a(e,"activity"))}export{u as o,n as u};

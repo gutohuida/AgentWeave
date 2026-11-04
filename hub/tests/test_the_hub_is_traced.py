@@ -417,13 +417,16 @@ async def test_a_warning_the_hub_logs_is_on_its_trace_and_exported_as_a_log(
     def _broken_merge(*_args, **_kwargs):
         raise RuntimeError(f"merge-tree refused the token {SECRET}")
 
-    with patch.object(project_checks, "build_merged_commit", _broken_merge):
+    with patch.object(project_checks, "merge_for_checks", _broken_merge):
         assert await project_checks.request_run(PROJECT, task_id)
         await project_checks.drain()
     await _flush()
 
     work = await _roots(app, auth_headers, "aw.work")
-    [check] = [r for r in work if r["root"]["attributes"].get("aw.work.kind") == "check_run"]
+    checks = [r for r in work if r["root"]["attributes"].get("aw.work.kind") == "check_run"]
+    # A Hub fault is retried once (`checks-know-their-phase-and-give-way-to-the-user`, FR-9).
+    assert len(checks) == 2
+    check = checks[0]
     logs = [event for span in check["spans"] for event in span["events"] if event["name"] == "log"]
     assert logs, "the runner's warning is on the check's trace"
     assert any(

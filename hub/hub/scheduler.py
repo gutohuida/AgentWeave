@@ -4881,7 +4881,7 @@ class JobScheduler:
                     for waiting_task_id, wait in decision.checks_waits:
                         if wait.needs_a_run:
                             project_checks.schedule(job.project_id, waiting_task_id)
-                        elif wait.state == "failed":
+                        elif wait.returns_the_work:
                             project_checks.schedule_return(waiting_task_id)
                 if decision.approvals:
                     # A flow-driven Fast build's finished work, its checks passed: approved by the

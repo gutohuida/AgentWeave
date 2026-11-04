@@ -38,6 +38,7 @@ const STALL_TITLE: Record<Stall['cause'], string> = {
   dead_run: 'A run stopped answering',
   stuck_task: 'A task is stuck in progress',
   no_progress: 'A loop has stopped moving',
+  checks_unjudged: 'A task’s checks could not judge its work',
 }
 
 /** `latest_integration` rides on the task list response but is not on the `Task` type yet. */
