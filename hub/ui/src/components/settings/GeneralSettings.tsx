@@ -6,7 +6,7 @@ import { Input, Textarea } from '@/components/ui/input'
 import { MenuSelect, type SelectOption } from '@/components/ui/menu'
 import { Field, SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settings'
 import { Switch } from '@/components/ui/switch'
-import type { CheckPhase, ProjectCheck, ProjectSettings } from '@/api/projects'
+import type { CheckPhase, CheckUsualDuration, CheckUsualDurations, ProjectCheck, ProjectSettings } from '@/api/projects'
 import type { ControlValue } from '@/api/modelCatalog'
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { CommittedInput } from './CommittedInput'
@@ -48,6 +48,28 @@ const PHASE_OPTIONS: ReadonlyArray<SelectOption<CheckPhase>> = [
 const FAST_NOT_LANDING_ONLY =
   "A fast check gates an agent's completion before review, so it cannot be landing-only."
 
+/** Seconds as an operator reads a check's duration: `42s`, `4m 12s`. */
+function formatSeconds(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds * 10) / 10}s`
+  const whole = Math.round(seconds)
+  const rest = whole % 60
+  return rest ? `${Math.floor(whole / 60)}m ${rest}s` : `${whole / 60}m`
+}
+
+/** How long a check usually takes, beside its time limit (FR-11). Nothing while unknown. */
+function UsualDuration({ usual, index }: { usual: CheckUsualDuration | null | undefined; index: number }) {
+  if (usual === undefined) return null
+  return (
+    <span
+      data-testid={`project-check-usual-${index}`}
+      title={usual ? `The median and longest of its last ${usual.passes} passing runs in this project` : undefined}
+    >
+      {' · '}
+      {usual ? `usually ${formatSeconds(usual.median_seconds)}, at most ${formatSeconds(usual.longest_seconds)}` : 'no passing runs yet'}
+    </span>
+  )
+}
+
 const CHECKPOINT_MODE_LABEL: Record<ProjectSettings['checkpoint_mode'], string> = {
   off: 'Off',
   offered: 'Offer me one',
@@ -62,6 +84,8 @@ export function GeneralSettings({
   folder,
   folderAvailable,
   mainBranch,
+  usualDurations,
+  usualDurationsUnreadable,
   contextWindow,
   ceilingNotes = [],
   agentsUnreadable,
@@ -83,6 +107,10 @@ export function GeneralSettings({
   /** What the Hub detects about the project's git state: whether it is a repository, and the
    *  branch it would suggest. Absent while unknown. */
   mainBranch?: { is_repository: boolean; suggestion: string | null } | null
+  /** How long each check usually takes, by name. Absent while unknown. */
+  usualDurations?: CheckUsualDurations
+  /** Why they could not be read, if they could not. */
+  usualDurationsUnreadable?: string | null
   /** The checkpoint model's window, so a threshold reads in both units. */
   contextWindow?: number | null
   /** Where an agent's checkpoint fires below the project's threshold (D10). */
@@ -258,6 +286,11 @@ export function GeneralSettings({
           control={
             <div className="aw-checks" data-testid="project-checks">
               {checks.length === 0 ? <p className="aw-checks-empty">No checks: approval merges without running anything.</p> : null}
+              {checks.length > 0 && usualDurationsUnreadable ? (
+                <p className="aw-checks-empty" data-testid="project-checks-usual-unreadable">
+                  How long each check usually takes could not be read. {usualDurationsUnreadable}
+                </p>
+              ) : null}
               {checks.map((check, i) => (
                 <div key={`${check.name}-${i}`} className="aw-check-row aw-reveal-host" data-testid={`project-check-${i}`}>
                   <Icon name="terminal" size={13} className="aw-check-icon" />
@@ -274,7 +307,8 @@ export function GeneralSettings({
                     {check.phase === 'review' || check.phase === 'landing' ? (
                       <span data-testid={`project-check-phase-${i}`}>{check.phase === 'review' ? 'before review only' : 'at landing only'} · </span>
                     ) : null}
-                    {check.timeout_seconds}s
+                    {check.timeout_seconds}s limit
+                    <UsualDuration usual={usualDurations ? (usualDurations[check.name] ?? null) : undefined} index={i} />
                   </span>
                   <span className="aw-reveal">
                     <button type="button" data-slot="icon-button" className="aw-icon-button" aria-label={`Move ${check.name} up`} title="Move up" disabled={i === 0} onClick={() => moveCheck(i, -1)}>
@@ -335,6 +369,22 @@ export function GeneralSettings({
                   { checks_auto_override: v },
                   v ? 'The Hub lands over failures that are not the task’s' : 'Failures that are not the task’s wait for you',
                 )
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label="Checks give way to me"
+          description="Every process a check starts runs below normal priority, so your own work on this machine comes first. On an idle machine the checks still get all of it."
+          changed={(settings.checks_give_way ?? false) !== PROJECT_DEFAULTS.checks_give_way}
+          onReset={() => onChange({ checks_give_way: false }, 'Checks run at normal priority again')}
+          control={
+            <Switch
+              aria-label="Checks give way to me"
+              data-testid="project-checks-give-way"
+              checked={settings.checks_give_way ?? false}
+              onCheckedChange={(v) =>
+                onChange({ checks_give_way: v }, v ? 'Checks give way to your own work' : 'Checks run at normal priority')
               }
             />
           }

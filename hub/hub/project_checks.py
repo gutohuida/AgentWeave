@@ -42,6 +42,7 @@ import os
 import re
 import shlex
 import shutil
+import statistics
 import subprocess
 import threading
 import time
@@ -125,6 +126,8 @@ def configured_checks(
     completion waits for the fast ones, and they are the start of the task's one check run (D2). A
     check saved before `fast` existed is not fast.
 
+    Each check carries the project's `give_way` (FR-5): `run_one` starts it below normal priority.
+
     *phase* `review` keeps the checks a task's pre-review run executes, `landing` those a landing
     batch's run executes (FR-2, FR-3); `None` keeps every check. Every pre-review reader -- the run,
     the review's wait, the approval gate -- asks for `review`, so a landing-only check holds none
@@ -142,6 +145,9 @@ def configured_checks(
                     "paths": [str(p) for p in check.get("paths") or [] if str(p).strip()],
                     "fast": bool(check.get("fast")),
                     "phase": (check.get("phase") if check.get("phase") in PHASES else PHASE_BOTH),
+                    # Not part of `check_digest`: priority changes how fast a check runs, not
+                    # what it finds, so a pass at either priority stays reusable.
+                    "give_way": bool(getattr(project, "checks_give_way", False)),
                 }
             )
     if phase is not None:
@@ -470,6 +476,43 @@ def _read_all(stream: Any, chunks: List[bytes]) -> None:
             chunks.append(chunk)
 
 
+#: How far below normal a check gives way on POSIX (FR-5: a niceness of at least 10).
+GIVE_WAY_NICENESS = 10
+
+
+def _spawn_arguments(check: Dict[str, Any]) -> Dict[str, Any]:
+    """How to start *check*'s command (the caller adds console suppression): through the shell,
+    and, when it gives way to the user (`checks-know-their-phase-and-give-way-to-the-user`, FR-5),
+    below normal priority.
+
+    The priority is set on the process the Hub starts, before the command runs, so every process
+    the command starts inherits it: on Windows a child of a below-normal process is created
+    below-normal unless it asks otherwise (`CreateProcess`, "priority class"); on POSIX niceness
+    is inherited across `fork` and `exec`. `nice` rather than a `preexec_fn`, which is unsafe in
+    the worker threads checks run on; a machine without `nice` falls back to it."""
+    from .pty_runner import IS_WINDOWS
+
+    if not check.get("give_way"):
+        return {"args": check["command"], "shell": True}
+    if IS_WINDOWS:
+        return {
+            "args": check["command"],
+            "shell": True,
+            "creationflags": subprocess.BELOW_NORMAL_PRIORITY_CLASS,
+        }
+    nice = shutil.which("nice")
+    if nice:
+        return {
+            "args": [nice, "-n", str(GIVE_WAY_NICENESS), "/bin/sh", "-c", check["command"]],
+            "shell": False,
+        }
+    return {
+        "args": check["command"],
+        "shell": True,
+        "preexec_fn": lambda: os.nice(GIVE_WAY_NICENESS),
+    }
+
+
 def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> Dict[str, Any]:
     from .pty_runner import IS_WINDOWS, terminate_process_tree
 
@@ -488,16 +531,17 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
             "duration_seconds": 0.0,
             "output_tail": "",
         }
+    spawn = _spawn_arguments(check)
+    creationflags = spawn.pop("creationflags", 0) | no_console_kwargs().get("creationflags", 0)
     proc = subprocess.Popen(
-        check["command"],
-        shell=True,
+        **spawn,
+        creationflags=creationflags,
         cwd=str(cwd),
         env=env,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         start_new_session=not IS_WINDOWS,
-        **no_console_kwargs(),
     )
     if owner is not None:
         _processes[owner] = proc
@@ -617,6 +661,71 @@ async def passes_on_tree(session: AsyncSession, project_id: str, tree: str) -> D
                 continue
             found[digest] = {**result, "reused_from": result.get("reused_from") or run.id}
     return found
+
+
+#: How many of a check's latest passing results its usual duration is read from (FR-11).
+USUAL_DURATION_PASSES = 20
+#: How many of a project's latest runs are searched for them.
+USUAL_DURATION_LOOKBACK = 500
+
+
+def _clean_pass_duration(result: Any) -> Optional[float]:
+    """How long *result* took, where it is a pass that ran here, once: not skipped (nothing ran),
+    not reused (its time is the run it came from), not flaky (its time is two attempts)."""
+    if not isinstance(result, dict) or not result.get("name"):
+        return None
+    if result.get("skipped") or result.get("reused_from") or result.get("flaky"):
+        return None
+    if failed(result):
+        return None
+    duration = result.get("duration_seconds")
+    if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration < 0:
+        return None
+    return float(duration)
+
+
+async def usual_durations(
+    session: AsyncSession, project_id: str, names: Sequence[str]
+) -> Dict[str, Optional[Dict[str, Any]]]:
+    """How long each check named in *names* usually takes in this project
+    (`checks-know-their-phase-and-give-way-to-the-user`, FR-11): the median and the longest of its
+    last `USUAL_DURATION_PASSES` passing results, newest first, and how many that was; `None` for a
+    check with no passing result yet."""
+    wanted: Dict[str, List[float]] = {name: [] for name in names}
+    rows = (
+        (
+            await session.execute(
+                select(TaskCheckRun)
+                .where(TaskCheckRun.project_id == project_id, TaskCheckRun.state.in_(DECIDED))
+                .order_by(TaskCheckRun.started_at.desc(), TaskCheckRun.id.desc())
+                .limit(USUAL_DURATION_LOOKBACK)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for run in rows:
+        for result in run.results or []:
+            duration = _clean_pass_duration(result)
+            if duration is None:
+                continue
+            durations = wanted.get(str(result["name"]))
+            if durations is not None and len(durations) < USUAL_DURATION_PASSES:
+                durations.append(duration)
+        if all(len(d) >= USUAL_DURATION_PASSES for d in wanted.values()):
+            break
+    answer: Dict[str, Optional[Dict[str, Any]]] = {}
+    for name, durations in wanted.items():
+        answer[name] = (
+            {
+                "median_seconds": round(statistics.median(durations), 1),
+                "longest_seconds": round(max(durations), 1),
+                "passes": len(durations),
+            }
+            if durations
+            else None
+        )
+    return answer
 
 
 def planned_results(
