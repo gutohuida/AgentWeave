@@ -739,7 +739,7 @@ export function AgentOutputPanel({
   const { data: checkpoints = [] } = useCheckpoints(currentConversationId ?? null)
   // Where this conversation came from and went. Its own checkpoints cannot say: a conversation
   // carried over holds none yet, which is why it used to read as "no checkpoint was taken".
-  const { data: conversationLineage } = useProjectCheckpoints(
+  const { data: conversationLineage, error: lineageError } = useProjectCheckpoints(
     { conversationId: currentConversationId ?? undefined },
     { enabled: Boolean(currentConversationId) },
   )
@@ -951,6 +951,9 @@ export function AgentOutputPanel({
           message: 'This conversation was carried over into a new one.',
           secondaryAction: { label: 'View checkpoint', onClick: () => openCheckpoint(carriedInto.checkpoint_id) },
         }
+      : null,
+    lineageError
+      ? { id: 'checkpoint-lineage-unread', message: 'Couldn’t read where this conversation came from or went. Checkpoints may be missing here.' }
       : null,
     submissionError ? { id: 'run-failure', message: submissionError } : null,
     sseConnectionState === 'reconnecting'

@@ -4,6 +4,7 @@ import { conversationLabel as labelOf, useProjectConversations, type AgentConver
 import { useCheckpointNotes, useProjectCheckpoints } from '@/api/checkpoints'
 import { useConfigStore } from '@/store/configStore'
 import { checkpointsDestination, type ProjectTabDestination } from '@/lib/navigation'
+import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
 import { CheckpointsPage } from './CheckpointsPage'
 import { routeFilters, type CheckpointFilters } from './checkpointModel'
 
@@ -80,7 +81,19 @@ export function CheckpointsScreen({
     )
   }
 
+  const failures: QueryFailure[] = [
+    ['the checkpoints', list.error, () => list.refetch()],
+    ['the checkpoint being opened', whole.error, () => whole.refetch()],
+    ['the agents', agents.error, () => agents.refetch()],
+    ['the open conversations', open.error, () => open.refetch()],
+    ['the archived conversations', archived.error, () => archived.refetch()],
+    ['the agent notes it carried', notes.error, () => notes.refetch()],
+    ['what the model returned', raw.error, () => raw.refetch()],
+  ]
+
   return (
+    <>
+    <QueryErrorNotice failures={failures} />
     <CheckpointsPage
       checkpoints={checkpoints}
       lineage={list.data?.lineage ?? null}
@@ -102,5 +115,6 @@ export function CheckpointsScreen({
       loading={list.isLoading}
       error={list.isError}
     />
+    </>
   )
 }
