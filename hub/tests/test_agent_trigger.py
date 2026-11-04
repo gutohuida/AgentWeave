@@ -26,7 +26,19 @@ _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 
 
 def _git(repo: Path, *args: str) -> None:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    # The timeout is a hang guard, not a speed assertion: a full parallel suite on Windows
+    # has stalled a bare `git init` past 30s (check run chk-0e44d3828f94), so give a loaded
+    # machine room, and retry `init` once because it is idempotent.
+    attempts = 2 if args[:1] == ("init",) else 1
+    for attempt in range(attempts):
+        try:
+            result = subprocess.run(
+                ["git", *args], cwd=repo, capture_output=True, text=True, timeout=120
+            )
+            break
+        except subprocess.TimeoutExpired:
+            if attempt == attempts - 1:
+                raise
     assert result.returncode == 0, result.stderr
 
 
