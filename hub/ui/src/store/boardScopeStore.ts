@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 
 /** What the Tasks board shows: every task (as the board always has), the tasks that belong to no
- *  spec, or exactly one spec's tasks. */
-export type BoardScope = { kind: 'all' } | { kind: 'none' } | { kind: 'spec'; id: string }
+ *  spec, exactly one spec's tasks, or every task of a spec whose build is running now (F1129). */
+export type BoardScope = { kind: 'all' } | { kind: 'none' } | { kind: 'building' } | { kind: 'spec'; id: string }
 
 export const ALL_SCOPE: BoardScope = { kind: 'all' }
 const SCOPE_KEY = 'aw.boardScope'
@@ -14,6 +14,7 @@ export function loadScope(projectId: string | null): BoardScope {
   try {
     const parsed = JSON.parse(localStorage.getItem(`${SCOPE_KEY}.${projectId}`) ?? 'null') as BoardScope | null
     if (parsed?.kind === 'none') return { kind: 'none' }
+    if (parsed?.kind === 'building') return { kind: 'building' }
     if (parsed?.kind === 'spec' && typeof parsed.id === 'string' && parsed.id) return { kind: 'spec', id: parsed.id }
   } catch {
     // Unreadable storage is no scope.

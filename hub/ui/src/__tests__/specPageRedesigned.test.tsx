@@ -299,6 +299,16 @@ describe('rendered-natively (FR-3)', () => {
     expect(vi.mocked(fetch).mock.calls.length).toBe(frames)
   })
 
+  it('F1129: the tasks section opens the board narrowed to this spec', async () => {
+    const onOpenTasks = vi.fn()
+    renderPage(PATH, { onOpenTasks })
+
+    fireEvent.click(await screen.findByTestId('spec-open-on-board'))
+
+    // The record's id, not the path: it is the board scope's key (`{kind:'spec', id}`).
+    expect(onOpenTasks).toHaveBeenCalledWith(expect.any(Array), DOC_ID)
+  })
+
   it('shows a held requirement as held, not as rejected', async () => {
     hub.phase = 'approved'
     const user = userEvent.setup()

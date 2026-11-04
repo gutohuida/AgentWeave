@@ -617,6 +617,19 @@ export type TaskPage = { tasks: Task[]; total: number; has_more: boolean }
  *  says so on the screen rather than silently rendering a prefix. */
 const PAGE_SIZE = 1000
 
+/** Every task of one document, past one page if need be (`useTasks`' scoped read). */
+async function readScope(projectId: string | null, specDocumentId: string): Promise<TaskPage> {
+  const url = `/api/v1/projects/${projectId}/tasks?spec_document_id=${encodeURIComponent(specDocumentId)}&limit=${PAGE_SIZE}`
+  const first = await getJson<TaskPage>(url)
+  const tasks = [...first.tasks]
+  let page = first
+  while (page.has_more && page.tasks.length > 0) {
+    page = await getJson<TaskPage>(`${url}&offset=${tasks.length}`)
+    tasks.push(...page.tasks)
+  }
+  return { tasks, total: Math.max(first.total, tasks.length), has_more: false }
+}
+
 /** `specDocumentId`, `noSpec`, `loopId` and `excludeArchivedCompleted` each scope the same query on
  *  the Hub (a precedence chain, `hub/hub/api/v1/tasks.py`), so callers pick one. `specDocumentId`
  *  and `noSpec` are the board's scopes: exactly one document's tasks, or exactly the tasks of none,
@@ -626,15 +639,24 @@ export function useTasks(options?: {
   loopId?: string
   specDocumentId?: string
   noSpec?: boolean
+  /** Every task of each of these documents, in every status (the board's Building scope). An empty
+   *  list is a scope with nothing in it, not an unscoped read. */
+  specDocumentIds?: string[]
 }) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const excludeArchivedCompleted = options?.excludeArchivedCompleted ?? false
   const loopId = options?.loopId
   const specDocumentId = options?.specDocumentId
   const noSpec = options?.noSpec ?? false
+  const specDocumentIds = options?.specDocumentIds
   return useQuery<TaskPage>({
-    queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted, loopId, ...(specDocumentId ? { specDocumentId } : {}), ...(noSpec ? { noSpec } : {}) }],
+    queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted, loopId, ...(specDocumentId ? { specDocumentId } : {}), ...(noSpec ? { noSpec } : {}), ...(specDocumentIds ? { specDocumentIds: [...specDocumentIds].sort() } : {}) }],
     queryFn: async () => {
+      if (specDocumentIds) {
+        const pages = await Promise.all(specDocumentIds.map((id) => readScope(projectId, id)))
+        const tasks = pages.flatMap((page) => page.tasks).sort((x, y) => x.created_at.localeCompare(y.created_at))
+        return { tasks, total: tasks.length, has_more: false }
+      }
       const params = new URLSearchParams()
       if (specDocumentId) params.set('spec_document_id', specDocumentId)
       else if (noSpec) params.set('no_spec', 'true')

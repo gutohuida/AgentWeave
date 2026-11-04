@@ -44,6 +44,8 @@ export interface SpecDocumentBodyProps {
   onCopyLink: (anchor: string) => void
   /** Open another document (a slice's change document). */
   onOpenDocument?: (path: string) => void
+  /** The Tasks board, narrowed to this document (F1129). Absent where the host cannot open it. */
+  onOpenBoard?: () => void
 }
 
 /** The document, drawn by the app from its structure rather than a frame of rendered HTML (FR-3),
@@ -171,6 +173,14 @@ export function SpecDocumentBody(props: SpecDocumentBodyProps) {
           onCopyLink={props.onCopyLink}
           flash={props.flash}
           findings={[]}
+          actions={
+            props.onOpenBoard && doc.tasks.length ? (
+              <button type="button" className="aw-icon-button aw-sp-section-link" data-testid="spec-open-on-board" onClick={props.onOpenBoard}>
+                <Icon name="task_alt" size={13} />
+                Open on the board
+              </button>
+            ) : null
+          }
         >
           {tasks.length ? (
             <TaskList tasks={tasks} all={doc.tasks} order={filters.order} findingsFor={(key) => findingsFor('task', key)} flash={props.flash} onJump={props.onJump} onCopyLink={props.onCopyLink} />

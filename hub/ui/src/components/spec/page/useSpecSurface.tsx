@@ -330,6 +330,10 @@ export function useSpecSurface(path: string, host: SpecSurfaceHost): SpecSurface
     onArchive: controls?.archive,
     onDelete: controls?.remove,
     onStartBuild: () => onAction('build'),
+    onOpenBoard:
+      host.onOpenTasks && record?.id
+        ? () => host.onOpenTasks?.((tasks ?? []).map((task) => task.id), record.id)
+        : undefined,
     onOpenRuns: (build) => {
       // The runs of the build's tasks, listed in Activity → Traces (FR-12).
       const project = useConfigStore.getState().selectedProjectId
