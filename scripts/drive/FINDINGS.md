@@ -41308,3 +41308,25 @@ The spec header redesign (`spdoc-407caf5abcdb`, loop `loop-d7043722a6fc`) read B
 **Tier:** 0
 
 Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `evt-dc38021f39ec`) report the approving QA2 and QA runs (`run-14a3aa435478`, `run-df2d93e14e9a`) as still running with $0 and no model. Both completed, with $0.64 and $1.01 of `claude-opus-5-5`. QA2 approved task-d0b2d5430417 at 01:24:13.31. The firing's model call took 32.3 s and its event was written at 01:24:50.42, so it assembled at about 01:24:18. The run ended at 01:24:22.19, and its `turn_usage` was observed at 01:24:22.20. QA's numbers match: approved 01:25:40.90, assembled about 01:25:41, ended 01:25:48.48. `build_retrospective.fire_after_commit` fires on the approval's commit (`task_transition_service.py`), which happens inside the reviewer's turn, before the turn's end and usage exist. **Expected:** the retrospective counts the approving run's end, cost and model.
+
+## F1128 (C) -- in the spec side screen, Approve anyway sits on top of the warning text it answers
+
+**Status:** open 2026-11-04. Reported by the operator; not driven or screenshotted yet.
+**Source:** asked for by the operator
+**Theme:** Spec flow UI
+**Ready:** yes
+**Tier:** 0
+
+When approval of a spec is refused with warnings (`approval_warnings`) and the operator opens the warning pop-up, the **Approve anyway** button (`approveAnywayLabel`, `hub/ui/src/components/spec/useSpecPhaseControls.tsx:719`) is drawn over the warning text instead of below it, at least in the spec side screen (the narrow panel). The full-width spec screen has not been checked. **Expected:** the warning text and the button never overlap at any panel width. The text wraps or scrolls, and the button stays below it. **Test:** render the warnings pop-up at the side-screen width with a long warning list, and check that the button's box does not intersect the text's.
+
+## F1129 (C) -- the task board cannot show only what is building, and a spec's tasks do not open the board narrowed to that spec
+
+**Status:** open 2026-11-04. Reported by the operator.
+**Source:** asked for by the operator
+**Theme:** Tasks board
+**Ready:** yes, needs a one-line decision on (a)'s meaning before build
+**Tier:** 0 for (b); (a) is small but may want a mock
+
+The operator finds moving around the tasks "hard and weird". Narrowing by name works, but typing a whole name every time is a chore. Two asks:
+(a) **A "building" filter on the board.** Show only tasks whose build is running (spec in its Building state, task not yet approved and landed). Today the board can be narrowed by agent, by text, and by spec through `BoardScopePicker` (`hub/ui/src/components/tasks/BoardScopePicker.tsx:60`, `BoardScope` in `hub/ui/src/store/boardScopeStore.ts:5`, which has only `all | none | spec`). Nothing selects every build in flight at once. Open: does "building" mean any task in a running build, or only tasks an agent is running right now (the board already computes `assignee_status === 'running'`, `TasksScreen.tsx:128`)?
+(b) **From a spec's tasks to the board, already narrowed to that spec.** The scope `{kind:'spec', id}` exists and persists, but the spec screen's task list offers no way into it. The only jump from a spec is the requirement-link filter (`setActiveTaskIds`, `hub/ui/src/App.tsx:120`/`:580`), which shows "N tasks linked from the specification", not the spec's own board. **Expected:** the spec's task section has an "Open on the board" action that opens Tasks with `BoardScope` set to that spec. **Test:** click it from a spec, and the board shows exactly that spec's tasks with the scope banner naming the spec.
