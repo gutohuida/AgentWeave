@@ -41246,7 +41246,7 @@ Check run `chk-7c08b3c0621e` failed `test_a_turn_start_that_creates_its_checkout
 
 ## F1124 (B) -- an author is told `ready_to_approve: true` on a document the operator's Approve then stops on
 
-**Status:** open
+**Status:** open. Recurred 2026-11-04 on `checks-know-their-phase-and-give-way-to-the-user`: three saves answered `ready_to_approve: true` with no warnings, and the operator's Approve stopped on `criterion_without_check` ×14.
 **Source:** found by using the spec flow
 **Theme:** Spec flow
 **Ready:** yes
