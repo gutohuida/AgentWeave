@@ -157,3 +157,70 @@ export function useCheckpointNotes(conversationId: string | null, enabled = true
     enabled: isConfigured && !!projectId && !!conversationId && enabled,
   })
 }
+
+/** The run a checkpoint covers, as `GET /projects/{id}/checkpoints` names it. */
+export interface CoveredRun {
+  run_id: string
+  agent: string
+  status: string
+  started_at: string | null
+  ended_at: string | null
+}
+
+export interface ProjectCheckpoint extends Checkpoint {
+  title?: string | null
+  summary?: string | null
+  covered_runs?: CoveredRun[] | null
+  /** The checkpoint this checkpoint's conversation was carried over from, when it was. */
+  carried_from?: { checkpoint_id: string; conversation_id: string; title?: string | null } | null
+}
+
+export interface ProjectCheckpointFilters {
+  agent?: string
+  trigger?: string
+  conversationId?: string
+  includeRaw?: boolean
+}
+
+export interface ProjectCheckpointList {
+  checkpoints: ProjectCheckpoint[]
+  /** Present only when a conversation was named: where it came from and where it went. */
+  lineage: {
+    conversation_id: string
+    started_from: { checkpoint_id: string; conversation_id: string; title?: string | null } | null
+    carried_into: { checkpoint_id: string; conversation_id: string } | null
+  } | null
+}
+
+/** Every checkpoint the project holds, newest first (`GET /projects/{id}/checkpoints`).
+ *  The filters narrow it and combine. */
+export function useProjectCheckpoints(filters: ProjectCheckpointFilters = {}) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const params = new URLSearchParams()
+  if (filters.agent) params.set('agent', filters.agent)
+  if (filters.trigger) params.set('trigger', filters.trigger)
+  if (filters.conversationId) params.set('conversation_id', filters.conversationId)
+  if (filters.includeRaw) params.set('include_raw', 'true')
+  const query = params.toString()
+  return useQuery<ProjectCheckpointList>({
+    queryKey: ['project', projectId, 'checkpoints', 'project-list', query],
+    queryFn: () =>
+      getJson<ProjectCheckpointList>(
+        `/api/v1/projects/${projectId}/checkpoints${query ? `?${query}` : ''}`,
+      ),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
+/** A checkpoint as its successor receives it (`GET /projects/{id}/checkpoints/{id}/rendered`). */
+export function useRenderedCheckpoint(checkpointId: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ id: string; status: string; rendered: string }>({
+    queryKey: ['project', projectId, 'checkpoints', checkpointId, 'rendered'],
+    queryFn: () =>
+      getJson<{ id: string; status: string; rendered: string }>(
+        `/api/v1/projects/${projectId}/checkpoints/${checkpointId}/rendered`,
+      ),
+    enabled: isConfigured && !!projectId && !!checkpointId,
+  })
+}
