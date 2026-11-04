@@ -139,9 +139,17 @@ cd hub/ui && npm run lint
 
 ### Testing — `py -3.11`, never bare `python`
 
+**Builders and reviewers: run the tests for the files you changed, plus the sweep set, and leave
+the full Hub suite to the Hub's `hub-tests` check** — it runs on every task and every landing, and
+agents' own full runs beside it were a large share of the machine's contention (F1122). If you do
+run the full Hub suite, run it through the entry point, which takes its turn behind any other
+full run on the machine and fits its workers to the load. Rules: `.claude/rules/testing.md`.
+
 ```bash
-pytest tests/ -v          # CLI
-pytest hub/tests/ -v      # Hub
+py -3.11 -m pytest tests/ -v                      # CLI (small; run it whole)
+py -3.11 -m pytest hub/tests/test_<what_you_changed>.py   # the Hub tests for your change
+py -3.11 scripts/checks/sweep_check.py            # the sweep set, ~1-2 min
+py -3.11 scripts/checks/hub_suite.py              # full Hub suite, only if you must: waits its turn
 ```
 
 ## Architecture rules

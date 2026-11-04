@@ -19,7 +19,7 @@ install-hub:
 	pip install -c constraints-dev.txt -e "hub/[dev]"
 
 test-hub:
-	pytest hub/tests/ -n auto --dist loadgroup
+	python scripts/checks/hub_suite.py   # one full suite at a time, workers fitted to the load
 
 # ── Both ─────────────────────────────────────────────────────────────────────
 
