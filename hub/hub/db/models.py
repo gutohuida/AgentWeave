@@ -2275,6 +2275,23 @@ class Checkpoint(Base):
     # similarity search. `recall` materialises one by id.
     citations: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
+    # --- What tells one checkpoint from another (`every-checkpoint-findable-and-readable`). ---
+    # Written by the same generation call as the body; NULL only on a checkpoint taken before that
+    # change that the one-time fill has not reached yet. `title_made_by` says who wrote them:
+    # `model` (an answer was accepted), `hub_from_body` (both answers were rejected, so they are the
+    # body's first words and opening sentences) or `hub_from_facts` (neither answer could be read,
+    # so the title is the agent, trigger and date). Never a CHECK: the fill adds no new value and a
+    # constraint here would mean recreating a table whose constraint names `0088` pinned.
+    title: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    title_made_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Why the Hub made them: what was wrong with the answers, or why none could be read. NULL when
+    # the model wrote them.
+    title_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The raw text of an answer that could not be read, kept for "show what the model returned" and
+    # never shown as the body. NULL when there was none (the worker could not be reached).
+    unreadable_answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # --- The verdict (section 6). NULL until probed. ---
     probe_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     probe_findings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)

@@ -71,6 +71,8 @@ def _patch_cli(monkeypatch, responses):
 
 
 GOOD_BODY = {
+    "title": "Added the column and its migration",
+    "summary": "Added a nullable column and its migration. Tests have not run yet.",
     "objective": "Add a column and its migration.",
     "state": "Both written; tests not yet run.",
     "decisions": ["Chose a nullable column over a default; rejected backfill as unrecoverable."],
