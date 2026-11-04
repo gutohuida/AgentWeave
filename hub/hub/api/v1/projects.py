@@ -98,6 +98,9 @@ class ProjectCheck(BaseModel):
     # completion runs the fast checks first and is refused with their output when one fails. A
     # fact about the command, so it is the operator's, beside paths and timeout. Off by default.
     fast: bool = False
+    # When the check runs (`checks-know-their-phase-and-give-way-to-the-user`, FR-1): in a task's
+    # run before review, in a landing batch's run, or both. A check saved before this reads both.
+    phase: Literal["review", "landing", "both"] = "both"
 
     model_config = {"extra": "forbid"}
 
@@ -108,6 +111,13 @@ class ProjectCheck(BaseModel):
                 f"a fast check's timeout_seconds is at most {FAST_CHECK_MAX_SECONDS} seconds "
                 f"(a completion waits for it); {self.name!r} has {self.timeout_seconds}. Lower "
                 f"its timeout or leave it not fast."
+            )
+        if self.fast and self.phase == "landing":
+            # FR-4: a fast check is what an agent's completion waits for, before any review.
+            raise ValueError(
+                f"{self.name!r} is fast, and a fast check gates an agent's completion before "
+                f"review, so it cannot be landing-only. Leave it not fast, or let it run before "
+                f"review too."
             )
         return self
 
