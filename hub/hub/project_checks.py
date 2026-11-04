@@ -10,8 +10,11 @@ configuration removed from the environment (D8), stopping at the first failure t
 Runs are started in the background, never inside a request (D5): when a task is completed outside a
 turn, when a turn bound to a completed task ends (its work is only committed then), and when the
 project's main tip moves (`refresh`: the Hub's own merge, or `watch_main_forever` noticing one made
-outside it) for a task with no pass of its work. A run main moved past is ended, recorded
-`superseded`, and replaced. At most two run at once per Hub, and one per task (D4). The approval gate
+outside it) for a task with no pass of its work. A run main moves past runs to its end and its
+result counts (`a-check-run-finishes-when-master-moves`): a pass counts on any tip, and a failure
+that is not the task's own is asked again on the tip main moved to. Only a run whose task's work a
+new completion replaced is ended, recorded `superseded`, and replaced. At most two run at once per
+Hub, and one per task (D4). The approval gate
 only *reads* what is recorded (`view`) and starts nothing: a task's run is the gate before review,
 and a pass of its work counts on any main tip; landing is gated by the batch's one run on main with
 the queued work merged (`landing_queue`, `approved-work-merges-in-batches`).
@@ -357,7 +360,8 @@ def scrub(text: str, removed: Sequence[str]) -> str:
 def run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> Dict[str, Any]:
     """Run one check to completion or its timeout; end its whole process tree on a timeout.
 
-    *owner*, a task id, registers the process so `supersede` can end its tree from the event loop.
+    *owner*, a task id, registers the process so `_stop_run_on_older_work` can end its tree from
+    the event loop.
     """
     with traces.command(check["command"], name=f"check {check['name']}") as span:
         result = _run_one(check, cwd, owner)
@@ -456,8 +460,8 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
     env.setdefault("PYTHONIOENCODING", "utf-8")
     started = time.monotonic()
     if owner is not None and owner in _superseded:
-        # Main moved while this run was still building its checkout: `supersede` found no process
-        # to end, and the caller discards this result as superseded. Nothing is started.
+        # The task's work changed while this run was still building its checkout: the stop found
+        # no process to end, and the caller discards this result as superseded. Nothing starts.
         return {
             "name": check["name"],
             "exit_code": None,
@@ -479,8 +483,8 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
     if owner is not None:
         _processes[owner] = proc
         if owner in _superseded:
-            # `supersede` sets `_superseded` before it reads `_processes`: a move that landed
-            # between the check above and this registration found no process, so end it here.
+            # The stop sets `_superseded` before it reads `_processes`: one that landed between
+            # the check above and this registration found no process, so end it here.
             terminate_process_tree(proc.pid)
     # The check ends when its process does, not when its output closes: a process it left behind
     # (or one that inherited the pipe) can hold the output open long after it exited, and waiting
@@ -1273,7 +1277,7 @@ async def _announce_finished(session: AsyncSession, run: TaskCheckRun) -> None:
 _inflight: Dict[str, "asyncio.Task[None]"] = {}
 #: The project and main tip each in-flight run was cut from, by task.
 _inflight_tips: Dict[str, Tuple[str, str]] = {}
-#: Tasks whose in-flight run main has moved past, to the tip it moved to.
+#: Tasks whose in-flight run checks work a new completion replaced (always `_NEW_WORK`).
 _superseded: Dict[str, str] = {}
 #: The check process each task's run is executing now, so a superseded run's tree can be ended.
 _processes: Dict[str, subprocess.Popen] = {}
@@ -1450,10 +1454,9 @@ async def _execute(
     path: Optional[Path] = None
 
     async def superseded() -> bool:
-        """Whether main moved past this run, or the task's work did; if so it ends recorded
-        `superseded`, not failed."""
-        new_tip = _superseded.get(task_id)
-        if new_tip is None:
+        """Whether the task's work changed under this run (a new completion); if so it ends
+        recorded `superseded`, not failed. Main moving never ends it."""
+        if task_id not in _superseded:
             return False
         await _finish(
             run_id,
@@ -1462,9 +1465,6 @@ async def _execute(
             error=(
                 "the task's work changed (it was completed again) before this run finished; a "
                 "run on the new work replaces it"
-                if new_tip == _NEW_WORK
-                else f"the main branch moved from {main_sha[:12]} to {new_tip[:12]} before this "
-                "run finished; a run on the new tip replaces it"
             ),
         )
         return True
@@ -1477,7 +1477,7 @@ async def _execute(
         baseline: _MainBaseline,
     ) -> Optional[str]:
         """Run *group* in order: `None` to go on, `"stop"` where the task's own failure decided
-        the run, `"superseded"` where main or the work moved past it."""
+        the run, `"superseded"` where the task's work changed under it."""
         nonlocal path
         for check, already in group:
             if await superseded():
@@ -1497,7 +1497,7 @@ async def _execute(
                 if failed(result) and task_id not in _superseded:
                     await baseline.record(check, result)
                 if await superseded():
-                    return "superseded"  # its tree was ended for the move: not a result
+                    return "superseded"  # its tree was ended for new work: not a result
                 result.update(tree=tree, check_digest=check_digest(check))
             results.append(result)
             await _finish(run_id, merged_sha=merged, results=list(results))
@@ -1581,12 +1581,16 @@ def schedule(project_id: str, task_id: str, targets: Optional[Sequence[str]] = N
 
 
 def _ended(project_id: str, task_id: str, job: "asyncio.Task[None]") -> None:
-    """A run's job is done: forget it, and replace it if main moved past it."""
+    """A run's job is done: forget it, and replace it if new work superseded it; otherwise ask a
+    failure of it that is not the task's own again on the current tip (FR-4)."""
+    cut = None
     if _inflight.get(task_id) is job:
         _inflight.pop(task_id, None)
-        _inflight_tips.pop(task_id, None)
+        cut = _inflight_tips.pop(task_id, None)
     if _superseded.pop(task_id, None) is not None:
         _background(_replace(project_id, task_id), f"replace the checks of {task_id}")
+    elif cut is not None:
+        _background(_check_shared_failure_again(project_id, task_id), f"recheck {task_id}")
 
 
 def _background(coro: Any, what: str) -> None:
@@ -1601,7 +1605,8 @@ def _background(coro: Any, what: str) -> None:
 
 
 async def _replace(project_id: str, task_id: str) -> None:
-    """The run main moved past is ended; start its replacement if the task still waits for review."""
+    """Start a run for *task_id* if it still waits for review: a superseded run's replacement, or
+    a shared failure asked again on the current tip."""
     try:
         async with async_session_factory() as session:
             task = await session.get(Task, task_id)
@@ -1612,20 +1617,21 @@ async def _replace(project_id: str, task_id: str) -> None:
         logger.warning("could not replace the checks of %s", task_id, exc_info=True)
 
 
-async def supersede(task_id: str, new_tip: str) -> bool:
-    """End *task_id*'s in-flight run if it was cut from a tip other than *new_tip*: its executing
-    check's process tree is ended, the run records `superseded`, and `_ended` replaces it."""
-    from .pty_runner import terminate_process_tree
-
-    job = _inflight.get(task_id)
-    cut = _inflight_tips.get(task_id)
-    if job is None or job.done() or cut is None or cut[1] == new_tip:
-        return False
-    _superseded[task_id] = new_tip
-    proc = _processes.get(task_id)
-    if proc is not None and proc.poll() is None:
-        await asyncio.to_thread(terminate_process_tree, proc.pid)
-    return True
+async def _check_shared_failure_again(project_id: str, task_id: str) -> None:
+    """A run has ended. Where it failed with no failure of the task's own, main may have moved past
+    the tip it was cut from while it ran, and the failure may be that old main's: a run is requested
+    on the current tip (`a-check-run-finishes-when-master-moves`, FR-4). `request_run` starts
+    nothing where the failure was found on the current tip. A failure of the task's own goes back to
+    its author (`return_failed_work`) and is not run again (FR-5)."""
+    try:
+        async with async_session_factory() as session:
+            latest = await latest_run(session, task_id)
+        if latest is None or latest.state != "failed" or own_failure(latest.results):
+            return
+    except Exception:  # noqa: BLE001 -- the next main move or approval asks again
+        logger.warning("could not read the ended check run of %s", task_id, exc_info=True)
+        return
+    await _replace(project_id, task_id)
 
 
 async def _awaiting_review_oldest_first(session: AsyncSession, project_id: str) -> List[str]:
@@ -1671,9 +1677,11 @@ async def _current_tip(session: AsyncSession, project: Project) -> Optional[str]
 async def refresh(project_id: str) -> None:
     """The project's main tip moved, or may have: bring every waiting result up to it.
 
-    Every in-flight run cut from another tip is superseded (and replaced once it has ended), then a
-    run is requested for each task waiting for review, oldest completed first, so the semaphore
-    admits them in that order. `request_run` starts nothing for a result already current, and a pass
+    A run is requested for each task waiting for review, oldest completed first, so the semaphore
+    admits them in that order. A task whose run is in flight is left to finish it, whatever tip it
+    was cut from (`a-check-run-finishes-when-master-moves`, FR-1, FR-3): a pass counts on any tip,
+    and a failure that is not the task's own is asked again on the current tip once the run has
+    ended (`_check_shared_failure_again`). `request_run` starts nothing for a result already current, and a pass
     of the task's work is current on any tip (`approved-work-merges-in-batches`, FR-9): only a task
     with no result, an interrupted or errored one, or a failure on an older tip is run again.
     """
@@ -1691,12 +1699,9 @@ async def refresh(project_id: str) -> None:
             latest = await latest_run(session, task_id)
             if latest is not None and latest.state == "failed" and own_failure(latest.results):
                 failing.add(task_id)
-    for task_id, (owner, _) in list(_inflight_tips.items()):
-        if owner == project_id:
-            await supersede(task_id, tip)
     for task_id in waiting:
         if is_running(task_id):
-            continue  # current, or superseded and replaced when it ends
+            continue  # it runs to its end; a shared failure is asked again then
         if task_id in failing:
             # Its latest run found a failure of its own, confirmed on its tree: the task goes back
             # to its author whatever main now holds, so checking it again on every main move is
