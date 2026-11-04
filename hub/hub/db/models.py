@@ -138,6 +138,12 @@ class Project(Base):
     checks_auto_override: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="1", nullable=False
     )
+    # Whether every process a check run starts runs below normal scheduling priority, so the
+    # operator's own work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-
+    # user`, FR-5, migration 0161). Off for new and existing projects (FR-6).
+    checks_give_way: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one;
@@ -1303,6 +1309,7 @@ STALL_CAUSES = (
     "dead_run",
     "stuck_task",
     "no_progress",
+    "checks_unjudged",
 )
 # `open` while nobody has ended it; the mender ends it `fixed` or `gave_up`; `resolved` when the
 # cause went away on its own (the work merged, the loop moved) before the mender ended it.
@@ -1344,7 +1351,8 @@ class Stall(Base):
     __table_args__ = (
         CheckConstraint(
             "cause IN ('loop_stalled', 'delivery_refused', 'integration_skipped', "
-            "'integration_failed', 'review_unstaffed', 'dead_run', 'stuck_task', 'no_progress')",
+            "'integration_failed', 'review_unstaffed', 'dead_run', 'stuck_task', 'no_progress', "
+            "'checks_unjudged')",
             name="ck_stalls_cause",
         ),
         CheckConstraint(
@@ -3327,6 +3335,9 @@ class TaskCheckRun(Base):
     results: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
     # Why the run could not run its checks (state `error`), in words an operator can act on.
     error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # What ended a run that did not judge the work (`project_checks.ENDED_BY_*`: a merge conflict,
+    # a Hub fault, a check out of time with no failing test named), null for a verdict (0162).
+    ended_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     started_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
