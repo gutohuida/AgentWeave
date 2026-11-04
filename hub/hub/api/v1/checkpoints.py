@@ -25,6 +25,7 @@ from ...db.models import (
     CheckpointNote,
     InboundQueueEntry,
     Project,
+    Run,
     Runner,
     WorkerInvocation,
 )
@@ -54,10 +55,46 @@ class CheckpointSummary(BaseModel):
     generation_error: Optional[str] = None
     cut_over_to_conversation_id: Optional[str] = None
     created_at: Optional[str] = None
+    # What tells one checkpoint from another (`every-checkpoint-findable-and-readable`). NULL only
+    # on a checkpoint the one-time fill has not reached yet.
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    title_made_by: Optional[str] = None
+    title_reason: Optional[str] = None
+    # Only when the caller asks (`include_raw`); whether there is any is `has_unreadable_answer`.
+    has_unreadable_answer: bool = False
+    unreadable_answer: Optional[str] = None
+    # The runs the checkpoint accounts for, oldest first. Empty when it recorded none.
+    covered_runs: List[dict] = []
+    # The checkpoint this one's conversation was carried over from, and the conversation this
+    # checkpoint was carried into -- both ways (FR-10).
+    carried_from: Optional[dict] = None
+    carried_into: Optional[dict] = None
 
     @classmethod
-    def of(cls, row: Checkpoint, *, generation_error: Optional[str] = None) -> "CheckpointSummary":
+    def of(
+        cls,
+        row: Checkpoint,
+        *,
+        generation_error: Optional[str] = None,
+        include_raw: bool = False,
+        covered_runs: Optional[List[dict]] = None,
+        carried_from: Optional[dict] = None,
+    ) -> "CheckpointSummary":
         return cls(
+            title=row.title,
+            summary=row.summary,
+            title_made_by=row.title_made_by,
+            title_reason=row.title_reason,
+            has_unreadable_answer=bool(row.unreadable_answer),
+            unreadable_answer=row.unreadable_answer if include_raw else None,
+            covered_runs=covered_runs or [],
+            carried_from=carried_from,
+            carried_into=(
+                {"conversation_id": row.cut_over_to_conversation_id}
+                if row.cut_over_to_conversation_id
+                else None
+            ),
             id=row.id,
             conversation_id=row.conversation_id,
             agent=row.agent,
@@ -85,6 +122,154 @@ async def _conversation_or_404(session: AsyncSession, project_id: str, conversat
     return conversation
 
 
+async def _covered_runs(session: AsyncSession, rows: List[Checkpoint]) -> dict:
+    """`{checkpoint id: [run, ...]}`: the runs each checkpoint accounts for, oldest first.
+
+    A checkpoint records the first and last run it covers; the runs between them in its
+    conversation are the ones it covers. One query for all the conversations, not one per row.
+    A checkpoint with no recorded first run covers none.
+    """
+    conversation_ids = {row.conversation_id for row in rows if row.covers_from_run_id}
+    runs_by_conversation: dict = {}
+    if conversation_ids:
+        runs = (
+            (
+                await session.execute(
+                    select(Run)
+                    .where(Run.conversation_id.in_(conversation_ids))
+                    .order_by(Run.started_at, Run.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for run in runs:
+            runs_by_conversation.setdefault(run.conversation_id, []).append(run)
+
+    covered: dict = {}
+    for row in rows:
+        picked: List[dict] = []
+        if row.covers_from_run_id:
+            through = row.covers_through_run_id or row.covers_from_run_id
+            inside = False
+            for run in runs_by_conversation.get(row.conversation_id, []):
+                if run.id == row.covers_from_run_id:
+                    inside = True
+                if inside:
+                    picked.append(
+                        {
+                            "run_id": run.id,
+                            "agent": run.agent,
+                            "status": run.status,
+                            "started_at": run.started_at.isoformat() if run.started_at else None,
+                            "ended_at": run.ended_at.isoformat() if run.ended_at else None,
+                        }
+                    )
+                if run.id == through:
+                    break
+        covered[row.id] = picked
+    return covered
+
+
+async def _carried_from(session: AsyncSession, conversation_ids: set) -> dict:
+    """`{conversation id: the checkpoint it was carried over from}` for those that were."""
+    if not conversation_ids:
+        return {}
+    sources = (
+        (
+            await session.execute(
+                select(Checkpoint).where(
+                    Checkpoint.cut_over_to_conversation_id.in_(conversation_ids)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {
+        source.cut_over_to_conversation_id: {
+            "checkpoint_id": source.id,
+            "conversation_id": source.conversation_id,
+            "title": source.title,
+        }
+        for source in sources
+    }
+
+
+async def _summaries(
+    session: AsyncSession, rows: List[Checkpoint], *, include_raw: bool = False
+) -> List[CheckpointSummary]:
+    invocation_ids = [row.worker_invocation_id for row in rows if row.worker_invocation_id]
+    errors = {}
+    if invocation_ids:
+        invocations = (
+            (
+                await session.execute(
+                    select(WorkerInvocation).where(WorkerInvocation.id.in_(invocation_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        errors = {invocation.id: invocation.error for invocation in invocations}
+    covered = await _covered_runs(session, rows)
+    carried = await _carried_from(session, {row.conversation_id for row in rows})
+    return [
+        CheckpointSummary.of(
+            row,
+            generation_error=errors.get(row.worker_invocation_id),
+            include_raw=include_raw,
+            covered_runs=covered.get(row.id),
+            carried_from=carried.get(row.conversation_id),
+        )
+        for row in rows
+    ]
+
+
+@router.get("/checkpoints")
+async def list_project_checkpoints(
+    agent: Optional[str] = None,
+    trigger: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    include_raw: bool = False,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every checkpoint the project holds, newest first, across agents and conversations --
+    archived and carried-over conversations included. `agent`, `trigger` and `conversation_id`
+    narrow it and combine. `include_raw` adds the text of an answer that could not be read.
+
+    Naming a conversation also answers where that conversation came from and went
+    (`lineage`), which its own checkpoints cannot: a conversation carried over holds none yet.
+    """
+    project_id, _ = project
+    query = select(Checkpoint).where(Checkpoint.project_id == project_id)
+    lineage = None
+    if conversation_id is not None:
+        await _conversation_or_404(session, project_id, conversation_id)
+        query = query.where(Checkpoint.conversation_id == conversation_id)
+        carried_from = (await _carried_from(session, {conversation_id})).get(conversation_id)
+        carried_into = await handover_of(session, conversation_id)
+        lineage = {
+            "conversation_id": conversation_id,
+            "started_from": carried_from,
+            "carried_into": (
+                {"checkpoint_id": carried_into[0], "conversation_id": carried_into[1]}
+                if carried_into
+                else None
+            ),
+        }
+    if agent is not None:
+        query = query.where(Checkpoint.agent == agent)
+    if trigger is not None:
+        query = query.where(Checkpoint.trigger == trigger)
+    rows = (await session.execute(query.order_by(Checkpoint.sequence.desc()))).scalars().all()
+    return {
+        "checkpoints": await _summaries(session, list(rows), include_raw=include_raw),
+        "lineage": lineage,
+    }
+
+
 @router.get("/conversations/{conversation_id}/checkpoints", response_model=List[CheckpointSummary])
 async def list_checkpoints(
     conversation_id: str,
@@ -105,23 +290,7 @@ async def list_checkpoints(
         .scalars()
         .all()
     )
-    invocation_ids = [row.worker_invocation_id for row in rows if row.worker_invocation_id]
-    errors = {}
-    if invocation_ids:
-        invocations = (
-            (
-                await session.execute(
-                    select(WorkerInvocation).where(WorkerInvocation.id.in_(invocation_ids))
-                )
-            )
-            .scalars()
-            .all()
-        )
-        errors = {invocation.id: invocation.error for invocation in invocations}
-    return [
-        CheckpointSummary.of(row, generation_error=errors.get(row.worker_invocation_id))
-        for row in rows
-    ]
+    return await _summaries(session, list(rows))
 
 
 @router.get("/conversations/{conversation_id}/checkpoint-notes")
