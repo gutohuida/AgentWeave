@@ -6,6 +6,7 @@ included, runs below normal scheduling priority; it is off for every project unt
 turns it on. And beside each check's time limit the settings show how long it usually takes.
 """
 
+import os
 import sys
 import textwrap
 from datetime import datetime, timedelta, timezone
@@ -72,8 +73,22 @@ def _below_normal(priority):
     return priority >= 10
 
 
+def _own_priority():
+    """The priority this process runs at: a check that does not give way inherits it, and a
+    process the Hub started for an agent may itself be below normal."""
+    if sys.platform == "win32":
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+        kernel32.GetPriorityClass.argtypes = [ctypes.c_void_p]
+        return kernel32.GetPriorityClass(kernel32.GetCurrentProcess())
+    return os.nice(0)
+
+
 def _normal(priority):
-    return priority == (NORMAL_PRIORITY_CLASS if sys.platform == "win32" else 0)
+    """Unchanged: the same as the priority the test process itself has."""
+    return priority == _own_priority()
 
 
 @pytest.mark.asyncio
