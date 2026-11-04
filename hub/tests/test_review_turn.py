@@ -8,7 +8,6 @@ Helpers are reused from `test_agent_trigger` rather than duplicated: `hub/tests`
 two copies of the pty fake drift.
 """
 
-import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -29,17 +28,11 @@ from hub.db.models import (
 from hub.spec_payload import SCHEMA_VERSION
 
 from ._spec_files import stored_text
-from .test_agent_trigger import _await_background_run, _fake_pty, _init_repo
+from .test_agent_trigger import _await_background_run, _fake_pty, _git, _init_repo
 
 NOW = datetime(2026, 8, 24, 12, 0, 0, tzinfo=timezone.utc)
 
 _REAL_ENSURE_REVIEW_CHECKOUT = worktrees.ensure_review_checkout
-
-
-def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
-    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
-    assert result.returncode == 0, result.stderr
-    return result
 
 
 def _author_commit(repo: Path, *, filename: str, body: str, branch="agentweave/builder") -> str:
