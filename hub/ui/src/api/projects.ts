@@ -111,6 +111,10 @@ export interface ProjectSettings {
    *  override, and files their fix task (`a-red-main-does-not-hold-the-night`). On by default;
    *  absent from a Hub older than that change, which never overrides. */
   checks_auto_override?: boolean
+  /** Whether every process a check run starts runs below normal priority, so the operator's own
+   *  work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-user`). Off by
+   *  default; absent from a Hub older than that change. */
+  checks_give_way?: boolean
   /** The posture every agent's run gets when neither its conversation nor the agent states one
    *  (reach-1019). Null is the runner's built-in posture; an agent's own default wins either way. */
   default_permission_mode?: string | null
@@ -159,6 +163,26 @@ export type CheckPhase = 'review' | 'landing' | 'both'
  *  what it changes: the Overview's switch sends `allow_agent_jobs` alone, and the panel never sends
  *  `token_budget`, whose one editor is Budgets. */
 export type ProjectSettingsInput = Partial<ProjectSettings>
+
+/** How long a check usually takes in this project: the median and longest of its last 20 passing
+ *  results (`checks-know-their-phase-and-give-way-to-the-user`, FR-11). */
+export interface CheckUsualDuration {
+  median_seconds: number
+  longest_seconds: number
+  passes: number
+}
+
+/** Each configured check's usual duration by name; null for a check with no passing run yet. */
+export type CheckUsualDurations = Record<string, CheckUsualDuration | null>
+
+export function useCheckUsualDurations(projectId: string | null) {
+  const { isConfigured } = useConfigStore()
+  return useQuery<CheckUsualDurations>({
+    queryKey: ['project', projectId, 'checks', 'usual-durations'],
+    queryFn: () => getJson<CheckUsualDurations>(`/api/v1/projects/${projectId}/checks/usual-durations`),
+    enabled: isConfigured && !!projectId,
+  })
+}
 
 /** The stored settings, which is what the panel edits. `useProjects()` cannot serve this: its
  *  summary omits every field added since it was written. */

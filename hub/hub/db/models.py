@@ -138,6 +138,12 @@ class Project(Base):
     checks_auto_override: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="1", nullable=False
     )
+    # Whether every process a check run starts runs below normal scheduling priority, so the
+    # operator's own work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-
+    # user`, FR-5, migration 0161). Off for new and existing projects (FR-6).
+    checks_give_way: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one;

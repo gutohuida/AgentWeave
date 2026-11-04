@@ -16,6 +16,7 @@ export const PROJECT_DEFAULTS: Pick<
   | 'checkpoint_mode'
   | 'checkpoint_auto_continue'
   | 'checks_auto_override'
+  | 'checks_give_way'
 > = {
   hop_budget: 6,
   turn_delivery_cap: 10,
@@ -24,6 +25,7 @@ export const PROJECT_DEFAULTS: Pick<
   checkpoint_mode: 'offered',
   checkpoint_auto_continue: false,
   checks_auto_override: true,
+  checks_give_way: false,
 }
 
 /** What each posture lets an agent do, in a sentence: the menu's second line. */
