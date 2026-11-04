@@ -68,8 +68,15 @@ def test_shim_notice_names_help(capsys):
 
 def test_no_migration_file_differs_from_master():
     root = Path(__file__).resolve().parents[2]
+    # Compare with where this tree left master, not master's tip: a migration master gained
+    # after that point would otherwise read as one this tree deleted.
+    base = subprocess.run(
+        ["git", "merge-base", "HEAD", "master"], cwd=root, capture_output=True, text=True
+    )
+    if base.returncode != 0:
+        pytest.skip(f"no master to compare with: {base.stderr.strip()}")
     result = subprocess.run(
-        ["git", "diff", "--name-status", "master", "--", "hub/hub/migrations/versions"],
+        ["git", "diff", "--name-status", base.stdout.strip(), "--", "hub/hub/migrations/versions"],
         cwd=root,
         capture_output=True,
         text=True,
