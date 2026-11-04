@@ -274,6 +274,10 @@ export interface TaskLanding {
 
 export interface TaskChecks {
   configured: boolean
+  /** Whether any check runs before review. Absent from a Hub older than check phases. */
+  before_review?: boolean
+  /** The landing-only checks by name: never in a pre-review run, they run at landing. */
+  at_landing?: string[]
   running: boolean
   /** Newest first, as the route returns them. */
   runs: TaskCheckRun[]

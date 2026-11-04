@@ -326,7 +326,7 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
                 project = await session.get(Project, project_id)
                 if project is None:
                     return True
-                checks = project_checks.configured_checks(project)
+                checks = project_checks.configured_checks(project, project_checks.PHASE_LANDING)
                 queued = list(
                     (
                         await session.execute(
