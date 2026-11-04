@@ -78,21 +78,30 @@ def a_write_during_every_git(path: str) -> Iterator[Probe]:
     def _run(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
         argv = args[0] if args else kwargs.get("args")
         if isinstance(argv, (list, tuple)) and argv and "git" in os.path.basename(str(argv[0])):
-            started = time.perf_counter()
             error = ""
-            try:
-                connection = sqlite3.connect(path, timeout=BUSY_TIMEOUT)
+            # A lock held across this git outlasts the git (>= GIT_DELAY), so it fails every attempt
+            # in a window twice that long. A short transaction of the app's own, stretched by a busy
+            # machine past one busy timeout, is gone by the next attempt -- it is not what this probes.
+            deadline = time.perf_counter() + GIT_DELAY * 2
+            while True:
+                started = time.perf_counter()
                 try:
-                    connection.execute(
-                        "INSERT INTO event_logs (id, project_id, event_type, severity, timestamp)"
-                        " VALUES (?, 'proj-test', 'lock_probe', 'info', ?)",
-                        (f"ev-probe-{uuid.uuid4().hex[:12]}", datetime.now(timezone.utc)),
-                    )
-                    connection.commit()
-                finally:
-                    connection.close()
-            except sqlite3.OperationalError as exc:
-                error = str(exc)
+                    connection = sqlite3.connect(path, timeout=BUSY_TIMEOUT)
+                    try:
+                        connection.execute(
+                            "INSERT INTO event_logs (id, project_id, event_type, severity,"
+                            " timestamp) VALUES (?, 'proj-test', 'lock_probe', 'info', ?)",
+                            (f"ev-probe-{uuid.uuid4().hex[:12]}", datetime.now(timezone.utc)),
+                        )
+                        connection.commit()
+                    finally:
+                        connection.close()
+                    error = ""
+                    break
+                except sqlite3.OperationalError as exc:
+                    error = str(exc)
+                    if time.perf_counter() >= deadline:
+                        break
             probe.writes.append(
                 {
                     "git": [str(a) for a in argv][1:9],
