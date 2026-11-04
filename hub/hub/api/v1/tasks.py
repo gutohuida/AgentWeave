@@ -1572,10 +1572,14 @@ async def task_checks(
         .scalars()
         .all()
     )
+    checks = project_checks.configured_checks(await session.get(Project, project[0]))
     return {
-        "configured": bool(
-            project_checks.configured_checks(await session.get(Project, project[0]))
-        ),
+        "configured": bool(checks),
+        # Whether any check runs before review, and the landing-only ones by name: those never
+        # appear in a pre-review run's results, and are said as 'runs at landing' rather than left
+        # out (`checks-know-their-phase-and-give-way-to-the-user`, FR-2).
+        "before_review": any(c["phase"] != project_checks.PHASE_LANDING for c in checks),
+        "at_landing": [c["name"] for c in checks if c["phase"] == project_checks.PHASE_LANDING],
         "running": project_checks.is_running(task_id),
         "runs": [project_checks.run_view(run) for run in runs],
         "landing": await landing_queue.view(session, task_id),

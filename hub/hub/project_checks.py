@@ -107,13 +107,28 @@ _REDACTED = "[redacted]"
 # --- configuration -------------------------------------------------------------------------------
 
 
-def configured_checks(project: Optional[Project]) -> List[Dict[str, Any]]:
+#: When a check runs (`checks-know-their-phase-and-give-way-to-the-user`, FR-1): in a task's
+#: pre-review run, in a landing batch's run, or in both. A check saved before `phase` was is both.
+PHASE_REVIEW = "review"
+PHASE_LANDING = "landing"
+PHASE_BOTH = "both"
+PHASES = (PHASE_REVIEW, PHASE_LANDING, PHASE_BOTH)
+
+
+def configured_checks(
+    project: Optional[Project], phase: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """The project's checks, normalised, in the order a run executes them; empty for none (null and
     `[]` mean the same).
 
     The fast checks first, then the rest, each group in the operator's order (FR-1, D1): an agent's
     completion waits for the fast ones, and they are the start of the task's one check run (D2). A
-    check saved before `fast` existed is not fast."""
+    check saved before `fast` existed is not fast.
+
+    *phase* `review` keeps the checks a task's pre-review run executes, `landing` those a landing
+    batch's run executes (FR-2, FR-3); `None` keeps every check. Every pre-review reader -- the run,
+    the review's wait, the approval gate -- asks for `review`, so a landing-only check holds none
+    of them."""
     if project is None or not project.checks:
         return []
     checks = []
@@ -126,8 +141,12 @@ def configured_checks(project: Optional[Project]) -> List[Dict[str, Any]]:
                     "timeout_seconds": int(check.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                     "paths": [str(p) for p in check.get("paths") or [] if str(p).strip()],
                     "fast": bool(check.get("fast")),
+                    "phase": (check.get("phase") if check.get("phase") in PHASES else PHASE_BOTH),
                 }
             )
+    if phase is not None:
+        excluded = PHASE_LANDING if phase == PHASE_REVIEW else PHASE_REVIEW
+        checks = [check for check in checks if check["phase"] != excluded]
     return [check for check in checks if check["fast"]] + [
         check for check in checks if not check["fast"]
     ]
@@ -1171,7 +1190,7 @@ async def view(
     """The task's check result for the work approval would merge now, or `None` where no check
     applies (no checks configured, nothing to merge, no main tip). Reads only; starts nothing."""
     project = await session.get(Project, task.project_id)
-    if not configured_checks(project) or not target_shas:
+    if not configured_checks(project, PHASE_REVIEW) or not target_shas:
         return None
     tip = await asyncio.to_thread(main_tip, root, main_branch)
     if tip is None:
@@ -1205,7 +1224,7 @@ async def view(
     # (a prerequisite merged into the branch, an unrelated main move): identical tree, identical
     # inputs, so that pass is this work's. Any other tree is checked again.
     covered = await covering_results(
-        session, task.project_id, root, tip, target_shas, configured_checks(project)
+        session, task.project_id, root, tip, target_shas, configured_checks(project, PHASE_REVIEW)
     )
     if covered is not None:
         return CheckView("passed", run, reused=covered[1])
@@ -1340,7 +1359,7 @@ async def request_run(
         async with async_session_factory() as session:
             project = await session.get(Project, project_id)
             task = await session.get(Task, task_id)
-            checks = configured_checks(project)
+            checks = configured_checks(project, PHASE_REVIEW)
             if not checks or task is None or project is None or not project.main_branch:
                 return None
             try:
@@ -1698,7 +1717,7 @@ async def refresh(project_id: str) -> None:
     """
     async with async_session_factory() as session:
         project = await session.get(Project, project_id)
-        if project is None or not configured_checks(project):
+        if project is None or not configured_checks(project, PHASE_REVIEW):
             return
         tip = await _current_tip(session, project)
         if tip is None:
@@ -1766,7 +1785,7 @@ async def watch_main_once() -> None:
             looks[project.id] = (
                 tip,
                 root,
-                bool(configured_checks(project)),
+                bool(configured_checks(project, PHASE_REVIEW)),
                 project.main_tip_seen,
             )
     for project_id, (tip, root, has_checks, seen) in looks.items():
@@ -1808,7 +1827,7 @@ async def _after_run(project_id: str, run_id: str) -> None:
 async def configured_for(session: AsyncSession, project_id: str) -> bool:
     """Whether *project_id* has checks, read through the caller's session. Never raises."""
     try:
-        return bool(configured_checks(await session.get(Project, project_id)))
+        return bool(configured_checks(await session.get(Project, project_id), PHASE_REVIEW))
     except Exception:  # noqa: BLE001
         logger.warning("could not read checks for project %s", project_id, exc_info=True)
         return False
@@ -1951,7 +1970,7 @@ async def fast_checks_at_completion(
 
     deadline = time.monotonic() + COMPLETION_BUDGET_SECONDS
     project = await session.get(Project, task.project_id)
-    checks = configured_checks(project)
+    checks = configured_checks(project, PHASE_REVIEW)
     if project is None or not project.main_branch:
         return ChecksSkipped("the project has no main branch set, so no check can run")
     if not any(c["fast"] for c in checks):
@@ -2131,7 +2150,7 @@ async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]
     from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 
     project = await session.get(Project, task.project_id)
-    if project is None or not project.main_branch or not configured_checks(project):
+    if project is None or not project.main_branch or not configured_checks(project, PHASE_REVIEW):
         return None
     try:
         root = (await resolve_project_workspace(session, task.project_id)).root

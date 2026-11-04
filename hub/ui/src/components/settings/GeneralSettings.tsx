@@ -6,7 +6,7 @@ import { Input, Textarea } from '@/components/ui/input'
 import { MenuSelect, type SelectOption } from '@/components/ui/menu'
 import { Field, SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settings'
 import { Switch } from '@/components/ui/switch'
-import type { ProjectCheck, ProjectSettings } from '@/api/projects'
+import type { CheckPhase, ProjectCheck, ProjectSettings } from '@/api/projects'
 import type { ControlValue } from '@/api/modelCatalog'
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { CommittedInput } from './CommittedInput'
@@ -36,6 +36,17 @@ const UNIT_WORD: Record<ThresholdMode, string> = { percent: '%', tokens: 'K toke
 
 /** The longest time limit a fast check may have (`project_checks.FAST_CHECK_MAX_SECONDS`). */
 const FAST_CHECK_MAX_SECONDS = 120
+
+/** When a check runs (`checks-know-their-phase-and-give-way-to-the-user`, FR-1). */
+const PHASE_OPTIONS: ReadonlyArray<SelectOption<CheckPhase>> = [
+  { value: 'both', label: 'Before review and at landing', detail: 'Checks the task before anyone reviews it, and again on the merged result before it lands.' },
+  { value: 'review', label: 'Before review only', detail: 'Not run again when approved work lands.' },
+  { value: 'landing', label: 'At landing only', detail: 'For a slow suite: review and approval do not wait for it, and it checks the merged result before it lands.' },
+]
+
+/** What the Hub answers to a fast check marked landing-only (FR-4), said before the save. */
+const FAST_NOT_LANDING_ONLY =
+  "A fast check gates an agent's completion before review, so it cannot be landing-only."
 
 const CHECKPOINT_MODE_LABEL: Record<ProjectSettings['checkpoint_mode'], string> = {
   off: 'Off',
@@ -260,6 +271,9 @@ export function GeneralSettings({
                       </span>
                     ) : null}
                     {check.fast ? <span data-testid={`project-check-fast-${i}`}>fast · </span> : null}
+                    {check.phase === 'review' || check.phase === 'landing' ? (
+                      <span data-testid={`project-check-phase-${i}`}>{check.phase === 'review' ? 'before review only' : 'at landing only'} · </span>
+                    ) : null}
                     {check.timeout_seconds}s
                   </span>
                   <span className="aw-reveal">
@@ -540,11 +554,13 @@ function CheckDialog({
   const [timeout, setTimeoutValue] = React.useState(String(initial?.timeout_seconds ?? 900))
   const [paths, setPaths] = React.useState((initial?.paths ?? []).join('\n'))
   const [fast, setFast] = React.useState(Boolean(initial?.fast))
+  const [phase, setPhase] = React.useState<CheckPhase>(initial?.phase ?? 'both')
+  const phaseError = fast && phase === 'landing' ? FAST_NOT_LANDING_ONLY : undefined
   // A completion waits for the fast checks, so none may run longer than that wait (FR-1); the Hub
   // refuses it too, and this says so before the save.
   const timeoutError = wholeNumber(10, fast ? FAST_CHECK_MAX_SECONDS : 3600, 'seconds')(timeout)
   const patterns = [...new Set(paths.split(/[\n,]/).map((p) => p.trim()).filter(Boolean))]
-  const ready = name.trim() && command.trim() && !timeoutError
+  const ready = name.trim() && command.trim() && !timeoutError && !phaseError
   return (
     <Dialog
       open={open}
@@ -556,6 +572,7 @@ function CheckDialog({
           setTimeoutValue(String(initial?.timeout_seconds ?? 900))
           setPaths((initial?.paths ?? []).join('\n'))
           setFast(Boolean(initial?.fast))
+          setPhase(initial?.phase ?? 'both')
         }
       }}
     >
@@ -579,6 +596,8 @@ function CheckDialog({
                   timeout_seconds: Number(timeout),
                   ...(patterns.length ? { paths: patterns } : {}),
                   ...(fast ? { fast: true } : {}),
+                  // Both is the default, and a check saved without a phase reads as both.
+                  ...(phase !== 'both' ? { phase } : {}),
                 })
                 setOpen(false)
               }}
@@ -619,6 +638,9 @@ function CheckDialog({
             hint={`Run when an agent completes its task, before anyone reviews it: a failure refuses the completion with the check's output, so the agent fixes it in the same turn. For quick checks like lint and format, at most ${FAST_CHECK_MAX_SECONDS} seconds.`}
           >
             <Switch id="c-fast" aria-label="Fast" checked={fast} onCheckedChange={setFast} />
+          </Field>
+          <Field label="Runs" htmlFor="c-phase" error={phaseError} hint="Before review, at landing, or both.">
+            <MenuSelect id="c-phase" label="Runs" testId="check-phase" value={phase} onChange={setPhase} options={PHASE_OPTIONS} />
           </Field>
         </div>
       </DialogContent>
