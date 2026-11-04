@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { CheckpointsPanel } from './CheckpointsPanel'
 import { useSSEConnectionState } from '@/hooks/useSSE'
 import {
   AgentSummary,
@@ -21,7 +20,7 @@ import {
   releaseConversationTask,
   type AgentConversation,
 } from '@/api/agentChat'
-import { NEW_CONVERSATION_ID } from '@/lib/navigation'
+import { NEW_CONVERSATION_ID, checkpointsDestination, goTo } from '@/lib/navigation'
 import { useQueueStatus, useQueuedEntries, releaseQueueEntry, withdrawQueueEntry } from '@/api/queue'
 import { useRunners } from '@/api/runners'
 import { overridesForRunner, runnerSetsModel } from '@/lib/runnerProvider'
@@ -31,6 +30,7 @@ import {
   cutOver,
   dismissCheckpointWarning,
   useCheckpoints,
+  useProjectCheckpoints,
 } from '@/api/checkpoints'
 import { ApiError, deleteJson, readableRefusal } from '@/api/client'
 import { useAccounting, useConversationAccounting } from '@/api/accounting'
@@ -737,7 +737,17 @@ export function AgentOutputPanel({
    * (F542).
    */
   const { data: checkpoints = [] } = useCheckpoints(currentConversationId ?? null)
-  const [checkpointsOpen, setCheckpointsOpen] = useState(false)
+  // Where this conversation came from and went. Its own checkpoints cannot say: a conversation
+  // carried over holds none yet, which is why it used to read as "no checkpoint was taken".
+  const { data: conversationLineage } = useProjectCheckpoints(
+    { conversationId: currentConversationId ?? undefined },
+    { enabled: Boolean(currentConversationId) },
+  )
+  const startedFrom = conversationLineage?.lineage?.started_from ?? null
+  const carriedInto = conversationLineage?.lineage?.carried_into ?? null
+  const openCheckpoint = (checkpointId: string) => {
+    if (projectId) goTo(checkpointsDestination(projectId, { checkpoint: checkpointId }))
+  }
   const offeredCheckpoint = checkpoints.find(
     (checkpoint) =>
       checkpoint.status === 'ready'
@@ -912,6 +922,7 @@ export function AgentOutputPanel({
             onClick: () => void handleCheckpoint(),
             pending: isSending,
           },
+          secondaryAction: { label: 'View checkpoint', onClick: () => openCheckpoint(failedAutomaticCheckpoint.id) },
         }
       : null,
     offeredCheckpoint
@@ -922,6 +933,23 @@ export function AgentOutputPanel({
             'A checkpoint is ready for this conversation. Cutting over continues in a new one '
             + 'and archives this.',
           action: { label: 'Cut over', onClick: handleCutOver, pending: isSending },
+          secondaryAction: { label: 'View checkpoint', onClick: () => openCheckpoint(offeredCheckpoint.id) },
+        }
+      : null,
+    startedFrom
+      ? {
+          id: 'checkpoint-started-from',
+          tone: 'info' as const,
+          message: `This conversation started from the checkpoint “${startedFrom.title?.trim() || 'an earlier checkpoint'}”.`,
+          secondaryAction: { label: 'View checkpoint', onClick: () => openCheckpoint(startedFrom.checkpoint_id) },
+        }
+      : null,
+    carriedInto
+      ? {
+          id: 'checkpoint-carried-into',
+          tone: 'info' as const,
+          message: 'This conversation was carried over into a new one.',
+          secondaryAction: { label: 'View checkpoint', onClick: () => openCheckpoint(carriedInto.checkpoint_id) },
         }
       : null,
     submissionError ? { id: 'run-failure', message: submissionError } : null,
@@ -1245,9 +1273,6 @@ export function AgentOutputPanel({
       style={{ background: 'var(--bg)' }}
       data-testid="conversation-panel"
     >
-      {checkpointsOpen && currentConversationId ? (
-        <CheckpointsPanel conversationId={currentConversationId} onClose={() => setCheckpointsOpen(false)} />
-      ) : null}
       <TraceDrawerPanel
         open={latestTraceOpen && latestRunId !== null}
         onOpenChange={setLatestTraceOpen}
@@ -1280,7 +1305,11 @@ export function AgentOutputPanel({
         diagnosticsHidden={diagnosticsHidden}
         onToggleDiagnostics={() => setDiagnosticsHidden(!diagnosticsHidden)}
         onFoldAll={() => setFoldAllSignal((n) => n + 1)}
-        onOpenCheckpoints={currentConversationId ? () => setCheckpointsOpen(true) : undefined}
+        onOpenCheckpoints={
+          currentConversationId && projectId
+            ? () => goTo(checkpointsDestination(projectId, { conversation: currentConversationId }))
+            : undefined
+        }
         onOpenTrace={latestRunId ? () => setLatestTraceOpen(true) : undefined}
         onOpenAgentSettings={onOpenAgentSettings}
         onTogglePanel={onTogglePanel}

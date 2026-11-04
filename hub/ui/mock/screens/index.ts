@@ -16,6 +16,7 @@ const AgentSettings = React.lazy(() => import('./AgentSettings'))
 const AppSettings = React.lazy(() => import('./AppSettings'))
 const Thread = React.lazy(() => import('./Thread'))
 const Traces = React.lazy(() => import('./Traces'))
+const Checkpoints = React.lazy(() => import('./Checkpoints'))
 
 export function screenFor(route: MockRoute): ScreenComponent {
   switch (route.kind) {
@@ -34,7 +35,7 @@ export function screenFor(route: MockRoute): ScreenComponent {
     case 'app-settings':
       return AppSettings
     case 'tab':
-      return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity, thread: Thread }[route.tab]
+      return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity, thread: Thread, checkpoints: Checkpoints }[route.tab]
   }
 }
 
@@ -44,6 +45,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'overview', label: 'Overview', route: { kind: 'tab', tab: 'overview' } },
   { id: 'tasks', label: 'Tasks', route: { kind: 'tab', tab: 'tasks' } },
   { id: 'spec', label: 'Spec', route: { kind: 'tab', tab: 'spec' } },
+  { id: 'checkpoints', label: 'Checkpoints', route: { kind: 'tab', tab: 'checkpoints' } },
   { id: 'vault', label: 'Vault', route: { kind: 'tab', tab: 'vault' } },
   { id: 'jobs', label: 'Jobs', route: { kind: 'tab', tab: 'jobs' } },
   { id: 'activity', label: 'Activity', route: { kind: 'tab', tab: 'activity' } },

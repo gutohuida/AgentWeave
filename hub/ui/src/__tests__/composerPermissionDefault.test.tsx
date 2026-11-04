@@ -73,7 +73,7 @@ vi.mock('@/api/permissions', () => ({
 vi.mock('@/api/checkpoints', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/checkpoints')>()
   // The mutations stay real — they go through the mocked fetch, which is what these assert on.
-  return { ...actual, useCheckpoints: () => ({ data: [] }) }
+  return { ...actual, useCheckpoints: () => ({ data: [] }), useProjectCheckpoints: () => ({ data: undefined }) }
 })
 
 vi.mock('@/api/queue', () => ({

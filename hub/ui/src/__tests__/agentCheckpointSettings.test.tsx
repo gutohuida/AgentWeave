@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { useConfigStore } from '@/store/configStore'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import type { AgentSummary } from '@/api/agents'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
@@ -90,6 +91,17 @@ describe('per-agent checkpoint policy', () => {
     modeMutate.mockReset()
     grantMutate.mockReset()
     roster = [agent()]
+  })
+
+  it('opens the Checkpoints tab narrowed to this agent (FR-5)', () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-test' })
+    window.history.replaceState(null, '', '/')
+    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByTestId('agent-checkpoints-link'))
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('tab')).toBe('checkpoints')
+    expect(params.get('ckptAgent')).toBe('claude-1')
+    expect(params.has('ckptConversation')).toBe(false)
   })
 
   it('inherits the project by default rather than showing a value nobody set', () => {

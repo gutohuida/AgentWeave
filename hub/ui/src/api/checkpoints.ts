@@ -170,6 +170,14 @@ export interface CoveredRun {
 export interface ProjectCheckpoint extends Checkpoint {
   title?: string | null
   summary?: string | null
+  /** `model`, or who made it in the model's place: `hub_from_body`, `hub_from_facts`. */
+  title_made_by?: string | null
+  /** Why the model's answers were rejected or could not be read. */
+  title_reason?: string | null
+  has_unreadable_answer?: boolean
+  /** Only when the list was asked for it (`includeRaw`). */
+  unreadable_answer?: string | null
+  carried_into?: { conversation_id: string } | null
   covered_runs?: CoveredRun[] | null
   /** The checkpoint this checkpoint's conversation was carried over from, when it was. */
   carried_from?: { checkpoint_id: string; conversation_id: string; title?: string | null } | null
@@ -194,8 +202,16 @@ export interface ProjectCheckpointList {
 
 /** Every checkpoint the project holds, newest first (`GET /projects/{id}/checkpoints`).
  *  The filters narrow it and combine. */
-export function useProjectCheckpoints(filters: ProjectCheckpointFilters = {}) {
+export function useProjectCheckpoints(
+  filters: ProjectCheckpointFilters = {},
+  options: { enabled?: boolean } = {},
+) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const queryClient = useQueryClient()
+  useSSE((event) => {
+    if (event.type !== 'checkpoint_ready' && event.type !== 'conversation_cut_over') return
+    queryClient.invalidateQueries({ queryKey: ['project', projectId, 'checkpoints', 'project-list'] })
+  })
   const params = new URLSearchParams()
   if (filters.agent) params.set('agent', filters.agent)
   if (filters.trigger) params.set('trigger', filters.trigger)
@@ -208,7 +224,7 @@ export function useProjectCheckpoints(filters: ProjectCheckpointFilters = {}) {
       getJson<ProjectCheckpointList>(
         `/api/v1/projects/${projectId}/checkpoints${query ? `?${query}` : ''}`,
       ),
-    enabled: isConfigured && !!projectId,
+    enabled: isConfigured && !!projectId && (options.enabled ?? true),
   })
 }
 

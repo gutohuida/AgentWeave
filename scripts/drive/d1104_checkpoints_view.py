@@ -27,7 +27,6 @@ Master, recorded at the end of this file.
 """
 
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -77,9 +76,7 @@ def browser_steps(pid, alpha_conv, beta_checkpoint, alpha_checkpoint, successor)
         page.add_init_script(seed)
         page.goto(HUB, wait_until="domcontentloaded")
         page.wait_for_timeout(3000)
-        tab = page.get_by_role("tab", name=re.compile(r"^Checkpoints")).or_(
-            page.get_by_text("Checkpoints", exact=True)
-        )
+        tab = page.get_by_test_id("project-tab-checkpoints")
         has_tab = tab.count() > 0
         check("the project has a Checkpoints tab", has_tab, "no tab named Checkpoints", fatal=False)
         if not has_tab:
@@ -89,35 +86,41 @@ def browser_steps(pid, alpha_conv, beta_checkpoint, alpha_checkpoint, successor)
         tab.first.click()
         page.wait_for_timeout(2500)
         page.screenshot(path=str(SHOTS / "tab.png"))
-        text = page.inner_text("body")
-        row = page.locator("[data-testid^='checkpoint-row-']")
-        got = row.filter(has_text=ALPHA)
-        check("the checkpoint is listed", got.count() >= 1, f"{row.count()} rows")
+        rows = page.locator("[data-testid^='checkpoint-row-']")
+        got = rows.filter(has_text=ALPHA)
+        check("the checkpoint is listed", got.count() >= 1, f"{rows.count()} rows")
         stored = ro("select title, summary from checkpoints where id=?", (alpha_checkpoint,))[0]
+        mine = page.get_by_test_id(f"checkpoint-row-{alpha_checkpoint}")
+        text = mine.inner_text() if mine.count() else ""
         check("it shows the title its generation wrote", bool(stored[0]) and stored[0] in text, repr(stored[0]))
         check("it shows the summary its generation wrote", bool(stored[1]) and stored[1][:40] in text, repr(stored[1])[:80])
-        check("it names its agent and conversation", ALPHA in text and alpha_conv[:8] in text)
-        check("'the operator asked' replaces 'operator'", "the operator asked" in text.lower())
-        check("both agents' checkpoints are listed unnarrowed", BETA in text)
+        conversation_title = ro("select title from conversations where id=?", (alpha_conv,))[0][0]
+        check("it names its agent and conversation", ALPHA in text and bool(conversation_title) and conversation_title in text,
+              f"conversation titled {conversation_title!r}")
+        check("'the operator asked' replaces 'operator'", "the operator asked" in text.lower() and "operator" not in text.lower().replace("the operator asked", ""))
+        check("both agents' checkpoints are listed unnarrowed", rows.filter(has_text=BETA).count() >= 1)
 
-        agent_filter = page.get_by_test_id("checkpoints-filter-agent")
-        agent_filter.select_option(ALPHA)
+        page.get_by_test_id("checkpoints-filter-agent").click()
+        page.get_by_role("menuitemradio", name=ALPHA).click()
         page.wait_for_timeout(1500)
-        narrowed = page.inner_text("body")
-        check("narrowing to Alpha hides Beta's checkpoints", BETA not in narrowed.split("Checkpoints", 1)[-1])
-        page.locator("[data-testid^='checkpoint-row-']").filter(has_text=ALPHA).first.click()
+        check("narrowing to Alpha hides Beta's checkpoints",
+              rows.filter(has_text=BETA).count() == 0 and rows.filter(has_text=ALPHA).count() >= 1,
+              f"{rows.count()} rows")
+        mine.click()
         page.wait_for_timeout(2000)
         page.screenshot(path=str(SHOTS / "open.png"))
-        opened = page.inner_text("body")
-        check("opening it shows formatted text", page.locator("[data-testid='checkpoint-body'] h2, [data-testid='checkpoint-body'] li").count() > 0)
+        body = page.get_by_test_id("checkpoint-body")
+        check("opening it shows formatted text", body.locator("h1, h2, h3, li, p").count() > 0 and "## " not in body.inner_text())
         runs = [r[0] for r in ro("select id from runs where conversation_id=? order by started_at", (alpha_conv,))]
-        check("opening it shows the runs it covers", all(r[:8] in opened for r in runs), f"{len(runs)} runs")
+        shown = page.locator("[data-testid^='checkpoint-run-trace-']")
+        check("opening it shows the runs it covers", shown.count() == len(runs) and len(runs) >= 2,
+              f"{shown.count()} shown, {len(runs)} runs")
 
-        page.goto(f"{HUB}/#/conversations/{successor}", wait_until="domcontentloaded")
+        page.goto(f"{HUB}/?project={pid}&agent={ALPHA}&conversation={successor}", wait_until="domcontentloaded")
         page.wait_for_timeout(3000)
         page.screenshot(path=str(SHOTS / "successor.png"))
         check("the successor shows the checkpoint it started from",
-              "started from" in page.inner_text("body").lower(), successor)
+              "started from the checkpoint" in page.inner_text("body").lower(), successor)
         browser.close()
     return True
 
@@ -177,3 +180,8 @@ if __name__ == "__main__":
 # On master (2026-11-04, AW_DRIVE_PORT=8044): setup, both checkpoints and the cutover pass; then
 #   FAIL the project has a Checkpoints tab -- no tab named Checkpoints
 #   FAILED: the project has a Checkpoints tab          (exit 1)
+#
+# On this change (2026-11-04, :8010, real Haiku turns): every step passes -- the Checkpoints tab lists the
+# checkpoint with its generated title and summary, its agent, "The operator asked" and its conversation's
+# title; narrowing to Alpha leaves only Alpha's rows; opening it shows a formatted body and both runs it
+# covers; the successor conversation says it started from the checkpoint.   ALL PASS (exit 0)

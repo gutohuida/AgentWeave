@@ -101,7 +101,7 @@ vi.mock('@/api/permissions', async (importOriginal) => ({
 
 vi.mock('@/api/checkpoints', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/checkpoints')>()
-  return { ...actual, useCheckpoints: () => ({ data: [] }) }
+  return { ...actual, useCheckpoints: () => ({ data: [] }), useProjectCheckpoints: () => ({ data: undefined }) }
 })
 
 vi.mock('@/api/queue', () => ({
