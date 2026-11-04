@@ -26,8 +26,10 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -55,7 +57,9 @@ logger = logging.getLogger(__name__)
 
 # Bumped whenever the prompt changes. Recorded on every `WorkerInvocation`, so a change in output
 # quality is attributable to the prompt that produced it rather than guessed at.
-CHECKPOINT_PROMPT_VERSION = "checkpoint/1"
+CHECKPOINT_PROMPT_VERSION = "checkpoint/2"
+# /2 (`every-checkpoint-findable-and-readable`, FR-11): the same call also writes a title and a
+# summary, both required and both limited, so a checkpoint can be told apart without opening it.
 # /2 (F360): the task rule asked for "every task the checkpoint says is assigned to this agent",
 # while a loop checkpoint lists the loop's whole queue under a note saying so. A reader following
 # the rule found no assignment stated and answered nothing, and `grade_probe` -- which compares
@@ -76,8 +80,19 @@ class CheckpointBody(BaseModel):
     Deliberately absent: files changed, tasks, questions, timestamps, runner, model. Those are
     computed. A model asked for a timestamp it could not obtain invented one — observed — and the
     only reliable fix is not to ask.
+
+    `title` and `summary` are required by the prompt but optional here, on purpose: an answer
+    that omits them must still *parse*, so that its readable sections survive a rejection
+    (FR-13). Whether they are present and within the limits is `title_problem`'s judgement, not
+    the schema's — a schema violation would discard the whole answer.
     """
 
+    title: Optional[str] = Field(
+        default=None, description="What this checkpoint is about: at most 8 words, 60 characters."
+    )
+    summary: Optional[str] = Field(
+        default=None, description="At most two sentences and 300 characters."
+    )
     objective: str = Field(description="What this conversation is for, in one or two sentences.")
     state: str = Field(description="Where the work actually got to.")
     decisions: List[str] = Field(
@@ -109,6 +124,8 @@ never seen it, can pick the work up.
 
 Reply with a single JSON object and nothing else, matching exactly:
 {{
+  "title": string,
+  "summary": string,
   "objective": string,
   "state": string,
   "decisions": [string],
@@ -124,7 +141,10 @@ model was used — those are recorded separately and anything you write about th
 - "dead_ends" each say what was tried and the symptom that showed it had failed.
 - "next_actions" are ordered, and the first must be executable without any further decision.
 - If you do not know something, say so. Do not invent a fact you cannot see below.
-{anchor_section}{notes_section}
+- "title" is required: at most 8 words and 60 characters, saying what this conversation did, so it can be told apart from others in a list.
+- "summary" is required: at most two sentences and 300 characters.
+- An answer without a title or a summary, or with either over its limit, is rejected; it is not shortened for you.
+{rejection_section}{anchor_section}{notes_section}
 --- conversation since{anchor_phrase} ---
 {transcript}
 --- end ---"""
@@ -136,6 +156,10 @@ record what has changed; do not restate it wholesale.
 --- previous checkpoint ---
 {anchor_body}
 --- end previous checkpoint ---
+"""
+
+_REJECTION_SECTION = """
+Your previous answer was rejected: {reason}. Reply again with the whole JSON object, correcting that.
 """
 
 _NOTES_SECTION = """
@@ -234,11 +258,19 @@ async def _transcript_since(db, conversation: Conversation, anchor: Optional[Che
 
 
 def build_generation_prompt(
-    *, transcript: str, anchor_body: Optional[str] = None, notes: Optional[str] = None
+    *,
+    transcript: str,
+    anchor_body: Optional[str] = None,
+    notes: Optional[str] = None,
+    rejection: Optional[str] = None,
 ) -> str:
+    """The generation prompt. *rejection* is what was wrong with the previous answer, when this
+    is the second asking (FR-13)."""
     anchor_section = _ANCHOR_SECTION.format(anchor_body=anchor_body) if anchor_body else ""
     notes_section = _NOTES_SECTION.format(notes=notes) if notes else ""
+    rejection_section = _REJECTION_SECTION.format(reason=rejection) if rejection else ""
     return _GENERATION_PROMPT.format(
+        rejection_section=rejection_section,
         anchor_section=anchor_section,
         notes_section=notes_section,
         anchor_phrase=" the previous checkpoint" if anchor_body else " it began",
@@ -276,6 +308,176 @@ def render_body(body: CheckpointBody, *, notes_incorporated: bool) -> str:
     return "\n".join(parts)
 
 
+# --------------------------------------------------------------------------- title and summary
+#
+# Limits agreed with the operator on 2026-11-02. Going over is a rejection, never a cut: a title
+# shortened by the Hub mid-thought reads as the model's own and says less than either.
+TITLE_MAX_WORDS = 8
+TITLE_MAX_CHARS = 60
+SUMMARY_MAX_SENTENCES = 2
+SUMMARY_MAX_CHARS = 300
+
+# Who wrote a checkpoint's title and summary (`Checkpoint.title_made_by`).
+MADE_BY_MODEL = "model"
+MADE_BY_HUB_FROM_BODY = "hub_from_body"
+MADE_BY_HUB_FROM_FACTS = "hub_from_facts"
+
+# Outcomes a second asking cannot change: the call is refused before any model is reached, the
+# same way, every time -- a spent budget, a CLI or model the Hub cannot run, a runner whose record
+# or provider is damaged. Asking again would only record a second identical refusal. A timeout or
+# a CLI that exited non-zero did reach for a model and may not fail twice, so it is asked again.
+_NOT_WORTH_ASKING_AGAIN = frozenset(
+    {"budget_exhausted", "unsupported_cli", "unknown_model", "spawn_failed"}
+)
+# Outcomes where a model answered at all, so there is something to tell it was wrong.
+_ANSWERED = frozenset({"unparseable", "schema_invalid"})
+
+# A sentence ends at terminal punctuation followed by whitespace. Deliberately simple: an
+# abbreviation miscounted makes a valid summary read as three sentences, which costs one more
+# asking, never a wrong record.
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+# Plain words for the triggers a facts title names. An unknown one is spelled out from its id.
+_TRIGGER_WORDS = {
+    "task_completion": "task finished",
+    "operator": "operator asked",
+    "context_pressure": "context grew long",
+    "delegation": "delegated",
+    "run_failure": "run failed",
+}
+
+
+def _words(text: str) -> List[str]:
+    return re.findall(r"\S+", text or "")
+
+
+def _sentences(text: str) -> List[str]:
+    return [part for part in _SENTENCE_END.split((text or "").strip()) if part.strip()]
+
+
+def title_problem(title: Optional[str], summary: Optional[str]) -> Optional[str]:
+    """What is wrong with an answer's title and summary, in words the model is told on the second
+    asking, or None when both are present and within the limits (FR-13)."""
+    problems: List[str] = []
+    title = (title or "").strip()
+    summary = (summary or "").strip()
+    if not title:
+        problems.append("the title was missing")
+    else:
+        words = len(_words(title))
+        if words > TITLE_MAX_WORDS:
+            problems.append(f"the title has {words} words; at most {TITLE_MAX_WORDS} are allowed")
+        if len(title) > TITLE_MAX_CHARS:
+            problems.append(
+                f"the title has {len(title)} characters; at most {TITLE_MAX_CHARS} are allowed"
+            )
+    if not summary:
+        problems.append("the summary was missing")
+    else:
+        sentences = len(_sentences(summary))
+        if sentences > SUMMARY_MAX_SENTENCES:
+            problems.append(
+                f"the summary has {sentences} sentences; at most {SUMMARY_MAX_SENTENCES} are "
+                "allowed"
+            )
+        if len(summary) > SUMMARY_MAX_CHARS:
+            problems.append(
+                f"the summary has {len(summary)} characters; at most {SUMMARY_MAX_CHARS} are "
+                "allowed"
+            )
+    return "; ".join(problems) if problems else None
+
+
+def plain_text(body: str) -> str:
+    """A rendered checkpoint body without its markdown scaffolding: no headings, no bullet marks,
+    no `_None recorded._` placeholders. What "the first words of its body" are read from."""
+    kept: List[str] = []
+    for line in (body or "").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("_") and stripped.endswith("_"):
+            continue  # an italic placeholder the renderer wrote, not the model
+        stripped = re.sub(r"^[-*+]\s+|^\d+\.\s+", "", stripped)
+        kept.append(stripped.replace("**", "").replace("`", ""))
+    return " ".join(kept)
+
+
+def title_from_text(text: str) -> Optional[str]:
+    """The first words of *text*, within both title limits, or None when it has no words.
+
+    Taken from its first sentence only, so a short opening sentence is not run into the next.
+    """
+    sentences = _sentences(text)
+    text = sentences[0] if sentences else text
+    words = _words(text)[:TITLE_MAX_WORDS]
+    while words and len(" ".join(words)) > TITLE_MAX_CHARS:
+        words.pop()
+    if not words:
+        first = _words(text)[:1]
+        return first[0][:TITLE_MAX_CHARS] if first else None
+    title = " ".join(words).rstrip(".,;:!?-—")
+    return title or " ".join(words)
+
+
+def summary_from_text(text: str) -> Optional[str]:
+    """The opening sentences of *text*, within both summary limits, or None when it is empty.
+
+    A first sentence longer than the whole limit is cut at a word and marked with an ellipsis:
+    the summary is the Hub's own, marked as such, and something is better than nothing.
+    """
+    sentences = _sentences(text)
+    if not sentences:
+        return None
+    kept: List[str] = []
+    for sentence in sentences[:SUMMARY_MAX_SENTENCES]:
+        candidate = " ".join(kept + [sentence.strip()])
+        if len(candidate) > SUMMARY_MAX_CHARS:
+            break
+        kept.append(sentence.strip())
+    if kept:
+        return " ".join(kept)
+    cut = sentences[0][: SUMMARY_MAX_CHARS - 1]
+    if " " in cut:
+        cut = cut[: cut.rindex(" ")]
+    return cut.rstrip() + "…"
+
+
+def trigger_words(trigger: str) -> str:
+    return _TRIGGER_WORDS.get(trigger) or (trigger or "unknown trigger").replace("_", " ")
+
+
+def title_from_facts(agent: str, trigger: str, when: datetime) -> str:
+    """A title made from what the Hub knows when no answer could be read: agent, trigger, date."""
+    title = f"{agent}: {trigger_words(trigger)}, {when.date().isoformat()}"
+    return title if len(title) <= TITLE_MAX_CHARS else title[:TITLE_MAX_CHARS]
+
+
+def summary_from_facts(checkpoint: Checkpoint) -> str:
+    """What the Hub recorded itself, counted, for a checkpoint with no readable answer."""
+    files = len(checkpoint.files_changed or [])
+    tasks = len((checkpoint.tasks or {}).get("items") or [])
+    questions = len(checkpoint.open_questions or [])
+    citations = len(checkpoint.citations or [])
+    return (
+        "No written summary: the model's answers could not be read. "
+        f"The Hub recorded {files} changed file(s), {tasks} task(s), {questions} open "
+        f"question(s) and {citations} citation(s)."
+    )
+
+
+def unreadable_reason(outcome: str, error: Optional[str]) -> str:
+    """Why an answer could not be read, as the operator and the second asking read it."""
+    if outcome in _ANSWERED:
+        return f"the answer could not be read ({error or outcome})"
+    return f"no answer was returned ({outcome}: {error or 'no detail'})"
+
+
+def _rejection_record(reasons: List[str]) -> str:
+    labels = ("first answer", "second answer")
+    return "; ".join(f"{labels[i] if i < 2 else 'answer'}: {r}" for i, r in enumerate(reasons))
+
+
 def _task_name(item: Dict) -> str:
     """What a checkpoint calls a task, and so what the probe expects its reader to answer. A
     checkpoint written before `readable_id` holds the stored id alone."""
@@ -290,6 +492,11 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
     """
     tasks_payload = checkpoint.tasks or {}
     lines: List[str] = [f"# Checkpoint {checkpoint.id}", ""]
+    if checkpoint.title:
+        made_by_hub = checkpoint.title_made_by not in (None, MADE_BY_MODEL)
+        lines.append(f"Title: {checkpoint.title}" + (" (made by the Hub)" if made_by_hub else ""))
+    if checkpoint.summary:
+        lines.append(f"Summary: {checkpoint.summary}")
     lines.append(f"Conversation: {checkpoint.conversation_id}")
     lines.append(f"Agent: {checkpoint.agent}")
     lines.append(f"Trigger: {checkpoint.trigger}")
@@ -512,6 +719,117 @@ async def _repo_root_for(db, conversation: Conversation) -> Optional[Path]:
     return workspace.root
 
 
+@dataclass
+class GenerationAnswer:
+    """What asking for a checkpoint came to, over at most two askings (FR-13).
+
+    `accepted` is an answer whose title and summary passed; `readable` the last answer that parsed
+    but was rejected; neither, when nothing could be read. `reason` says what was wrong with each
+    asking, for the record; `unreadable_answer` is the raw text of an answer that could not be
+    read, kept for "show what the model returned" and never used as the body.
+    """
+
+    accepted: Optional[CheckpointBody] = None
+    readable: Optional[CheckpointBody] = None
+    reason: Optional[str] = None
+    unreadable_answer: Optional[str] = None
+    invocation_id: Optional[str] = None
+    askings: int = 0
+
+
+async def ask_for_checkpoint(
+    *,
+    project_id: str,
+    conversation_id: Optional[str],
+    prompt_for: Callable[[Optional[str]], str],
+    cli: str,
+    model: Optional[str],
+    runner_id: Optional[str],
+    initiator: Initiator,
+    kind: str = "checkpoint",
+) -> GenerationAnswer:
+    """Ask the model for a checkpoint, and once more if its answer is rejected.
+
+    *prompt_for* builds the prompt given what was wrong with the previous answer (None on the
+    first asking), so the second asking names it. An answer is accepted only with a title and a
+    summary within the limits; one that parses without them is kept as `readable`, so its sections
+    survive a second rejection. A refusal no second asking can change (a spent budget, a CLI or
+    model the Hub cannot run) is not asked again.
+    """
+    answer = GenerationAnswer()
+    reasons: List[str] = []
+    rejection: Optional[str] = None
+    for _ in range(2):
+        result = await run_worker(
+            project_id=project_id,
+            kind=kind,
+            prompt=prompt_for(rejection),
+            prompt_version=CHECKPOINT_PROMPT_VERSION,
+            output_model=CheckpointBody,
+            cli=cli,
+            model=model,
+            runner_id=runner_id,
+            conversation_id=conversation_id,
+            initiator=initiator,
+        )
+        answer.askings += 1
+        answer.invocation_id = result.invocation_id
+        if result.ok and isinstance(result.parsed, CheckpointBody):
+            problem = title_problem(result.parsed.title, result.parsed.summary)
+            if problem is None:
+                answer.accepted = result.parsed
+                answer.reason = None
+                return answer
+            answer.readable = result.parsed
+            rejection = problem
+        else:
+            problem = unreadable_reason(result.outcome, result.error)
+            if (result.answer_text or "").strip():
+                answer.unreadable_answer = result.answer_text
+            # Only a model that answered is told what was wrong; one never reached is simply
+            # asked again, with nothing to correct.
+            rejection = problem if result.outcome in _ANSWERED else None
+        reasons.append(problem)
+        answer.reason = _rejection_record(reasons)
+        if result.outcome in _NOT_WORTH_ASKING_AGAIN:
+            break
+    return answer
+
+
+def apply_title(checkpoint: Checkpoint, answer: GenerationAnswer, *, fallback_text: str) -> None:
+    """Give *checkpoint* its title and summary from *answer*, or make them (FR-13).
+
+    The model's when an answer was accepted. Otherwise the Hub's: from *fallback_text* (the body's
+    first words and opening sentences) when an answer could be read, else from the agent, trigger
+    and date, keeping any unreadable raw text aside. Always leaves a title — a checkpoint never
+    ends with no information. Does not commit.
+    """
+    if answer.accepted is not None:
+        checkpoint.title = (answer.accepted.title or "").strip()
+        checkpoint.summary = (answer.accepted.summary or "").strip()
+        checkpoint.title_made_by = MADE_BY_MODEL
+        checkpoint.title_reason = None
+        checkpoint.unreadable_answer = None
+        return
+    title = title_from_text(fallback_text) if answer.readable is not None else None
+    if title is not None:
+        checkpoint.title = title
+        checkpoint.summary = summary_from_text(fallback_text) or title
+        checkpoint.title_made_by = MADE_BY_HUB_FROM_BODY
+        # The body is the readable answer; a raw text kept beside it would be a second, junk one.
+        checkpoint.unreadable_answer = None
+    else:
+        checkpoint.title = title_from_facts(
+            checkpoint.agent,
+            checkpoint.trigger,
+            checkpoint.created_at or datetime.now(timezone.utc),
+        )
+        checkpoint.summary = summary_from_facts(checkpoint)
+        checkpoint.title_made_by = MADE_BY_HUB_FROM_FACTS
+        checkpoint.unreadable_answer = answer.unreadable_answer
+    checkpoint.title_reason = answer.reason
+
+
 async def generate_checkpoint(
     db,
     conversation: Conversation,
@@ -571,34 +889,25 @@ async def generate_checkpoint(
     # usable below rather than re-loading on next access.
     await db.commit()
 
-    result = await run_worker(
+    answer = await ask_for_checkpoint(
         project_id=conversation.project_id,
-        kind="checkpoint",
-        prompt=build_generation_prompt(
+        conversation_id=conversation.id,
+        prompt_for=lambda rejection: build_generation_prompt(
             transcript=transcript,
             anchor_body=anchor.body if anchor else None,
             notes=notes,
+            rejection=rejection,
         ),
-        prompt_version=CHECKPOINT_PROMPT_VERSION,
-        output_model=CheckpointBody,
         cli=cli,
         model=model,
         runner_id=runner_id,
-        conversation_id=conversation.id,
         initiator=initiator,
     )
 
-    body = (
-        render_body(result.parsed, notes_incorporated=bool(notes))
-        if result.ok and result.parsed is not None
-        else None
-    )
+    readable = answer.accepted or answer.readable
+    body = render_body(readable, notes_incorporated=bool(notes)) if readable else None
     if body is None:
-        logger.info(
-            "checkpoint for %s has no written half: worker %s",
-            conversation.id,
-            result.outcome,
-        )
+        logger.info("checkpoint for %s has no written half: %s", conversation.id, answer.reason)
 
     checkpoint = await create_checkpoint(
         db,
@@ -607,7 +916,7 @@ async def generate_checkpoint(
         envelope=envelope,
         body=body,
         anchor=anchor,
-        worker_invocation_id=result.invocation_id,
+        worker_invocation_id=answer.invocation_id,
         runner=cli,
         model=model,
         loop=loop,
@@ -618,6 +927,7 @@ async def generate_checkpoint(
     checkpoint.citations = await build_citations(
         db, conversation.id, [run.id for run in covered_runs]
     )
+    apply_title(checkpoint, answer, fallback_text=plain_text(body or ""))
 
     if note is not None:
         # Marked consumed even when generation failed. The notes described a moment that has now
