@@ -667,7 +667,16 @@ async def lifespan(app: FastAPI):
     from .db_maintenance import maintain_forever
 
     maintenance = asyncio.create_task(maintain_forever())
+    # Checkpoints taken before titles existed are given one, once, off every request's path; the
+    # pass resumes at each start until none is left (`every-checkpoint-findable-and-readable`,
+    # FR-12).
+    from .checkpoint_fill import run_fill
+
+    checkpoint_fill = asyncio.create_task(run_fill())
     yield
+    checkpoint_fill.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await checkpoint_fill
     maintenance.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await maintenance
