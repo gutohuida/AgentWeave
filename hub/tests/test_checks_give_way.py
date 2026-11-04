@@ -22,6 +22,7 @@ SETTINGS = "/api/v1/projects/proj-test/settings"
 DURATIONS = "/api/v1/projects/proj-test/checks/usual-durations"
 
 #: Windows priority classes (`GetPriorityClass`).
+NORMAL_PRIORITY_CLASS = 0x20
 BELOW_NORMAL_PRIORITY_CLASS = 0x4000
 IDLE_PRIORITY_CLASS = 0x40
 
@@ -73,10 +74,8 @@ def _below_normal(priority):
 
 
 def _own_priority():
-    """The priority this test process runs at, which a check that does not give way inherits.
-
-    Not assumed normal: the project's own checks run this suite, and while that project gives way
-    the suite itself is below normal (AW-34)."""
+    """The priority this process runs at: a check that does not give way inherits it, and a
+    process the Hub started for an agent may itself be below normal."""
     if sys.platform == "win32":
         import ctypes
 
@@ -87,7 +86,8 @@ def _own_priority():
     return os.nice(0)
 
 
-def _unchanged(priority):
+def _normal(priority):
+    """Unchanged: the same as the priority the test process itself has."""
     return priority == _own_priority()
 
 
@@ -117,7 +117,7 @@ async def test_giving_way_is_off_for_an_existing_and_a_new_project_and_changes_n
 ):
     """ac-priority-default-off (FR-6): a row written without the column (as every project that
     existed before migration 0161 was) and a project created through the route both read off, and
-    the same check runs at the Hub's own priority in each."""
+    the same check runs at normal priority in each."""
     async with async_session_factory() as session:
         await session.execute(
             text(
@@ -147,8 +147,8 @@ async def test_giving_way_is_off_for_an_existing_and_a_new_project_and_changes_n
             await session.commit()
             await session.refresh(project)
         parent, child = _run_and_read(project, check, out, tmp_path)
-        assert _unchanged(parent), (project_id, parent, _own_priority())
-        assert _unchanged(child), (project_id, child, _own_priority())
+        assert _normal(parent), (project_id, parent)
+        assert _normal(child), (project_id, child)
 
 
 @pytest.mark.asyncio
