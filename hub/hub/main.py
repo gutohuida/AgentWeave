@@ -597,10 +597,12 @@ async def lifespan(app: FastAPI):
     await reconcile_interrupted_runs()
     await reconcile_stale_job_runs()
     # A check run a previous Hub left `running` is `interrupted` (approval-runs-the-projects-checks
-    # D4); approval re-runs it when asked.
-    from .project_checks import interrupt_leftover_runs
+    # D4), and run again now for a task still waiting for review: nothing about its work was judged
+    # (`checks-know-their-phase-and-give-way-to-the-user`, FR-8).
+    from .project_checks import interrupt_leftover_runs, schedule_rerun_after_hub_stop
 
     await interrupt_leftover_runs()
+    schedule_rerun_after_hub_stop()
     # A landing batch a previous Hub left checking is queued again in order, and one that had moved
     # main is recorded landed from main's history: nothing lost, nothing merged twice
     # (`approved-work-merges-in-batches`, FR a-restart-loses-and-repeats-nothing).

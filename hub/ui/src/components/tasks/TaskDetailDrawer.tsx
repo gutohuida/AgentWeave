@@ -397,7 +397,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
       const target = event.target as Node
       const inPanel = panelRef.current?.contains(target) ?? false
       const inPortaledPopper = target instanceof Element && target.closest('[data-radix-popper-content-wrapper]') !== null
-      if (!inPanel && !inPortaledPopper) {
+      // Likewise a drawer opened from inside the panel (a run's trace): portalled, so outside
+      // `panelRef`, and closing this panel would unmount it with the panel.
+      const inOverlayLayer = target instanceof Element && target.closest('[data-aw-overlay-layer]') !== null
+      if (!inPanel && !inPortaledPopper && !inOverlayLayer) {
         onClose()
       }
     }

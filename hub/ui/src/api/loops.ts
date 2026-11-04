@@ -18,6 +18,8 @@ export interface LoopDetail extends LoopSummary {
     status: string
     trigger: string
     session_id?: string
+    conversation_id?: string | null
+    run_id?: string | null
   }>
   /** This loop's own audit trail (design D13, task A4.1/A4.2) — control changes, staged and
    *  applied edits, how it stopped. Filtered server-side by loop id; never another loop's rows. */

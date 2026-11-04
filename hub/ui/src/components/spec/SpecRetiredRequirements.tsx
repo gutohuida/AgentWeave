@@ -30,6 +30,8 @@ interface SpecRetiredRequirementsProps {
   path: string
   /** Switches to the Tasks tab, filtered — the same navigation the coverage bar uses. */
   onOpenTasks?: (taskIds: string[]) => void
+  /** Starts with the list open: the redesigned header's notice line is already the toggle. */
+  defaultOpen?: boolean
 }
 
 /**
@@ -40,9 +42,9 @@ interface SpecRetiredRequirementsProps {
  * every screen while tasks and evidence still point at it. Mounted after the coverage bar, which
  * covers the active ones; this is only ever about the retired.
  */
-export function SpecRetiredRequirements({ path, onOpenTasks }: SpecRetiredRequirementsProps) {
+export function SpecRetiredRequirements({ path, onOpenTasks, defaultOpen = false }: SpecRetiredRequirementsProps) {
   const { data, isError, error } = useSpecRequirements(path)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [expanded, setExpanded] = useState<string | null>(null)
 
   // A failed read says so, in the Hub's words — never a list that silently is not there (F197).

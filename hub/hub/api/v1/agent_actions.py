@@ -302,6 +302,9 @@ async def list_shared_tasks(
         agent=agent,
         task_status=task_status,
         spec_document_id=None,
+        # F1120: every Query parameter is passed. One left out keeps its `Query(...)` default, an
+        # object that is truthy, so an omitted `no_spec` listed only the tasks with no spec.
+        no_spec=False,
         exclude_archived_completed=False,
         loop_id=None,
         offset=offset,

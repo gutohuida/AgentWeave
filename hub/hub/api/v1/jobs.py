@@ -26,6 +26,7 @@ from ...db.models import (
     SpecDocument,
     Task,
 )
+from ...firing_runs import run_ids_for_firings
 from ...loop_ending import ARCHIVED_WITH_JOB_REASON, end_loop
 from ...operator_direction import require_operator_direction
 from ...scheduler import FiringDecision, cron_day_ambiguity_reason
@@ -1133,7 +1134,7 @@ async def get_job(
         "loop": loop_summaries.get(job_id),
         # The model `GET /jobs/{id}/history` answers with, not a hand-built copy: the copy carried
         # six keys and dropped `error_summary` and `tick_count`, the two a failure is read by (F226).
-        "history": [JobRunResponse.model_validate(run) for run in runs],
+        "history": await _firing_responses(session, runs),
     }
 
     return job_dict
@@ -1675,6 +1676,15 @@ async def archive_job(
     return job
 
 
+async def _firing_responses(session: AsyncSession, runs: List[JobRun]) -> List[JobRunResponse]:
+    """The firings as the history answers them, each with the run it started (None if none)."""
+    run_ids = await run_ids_for_firings(session, runs)
+    responses = [JobRunResponse.model_validate(run) for run in runs]
+    for response in responses:
+        response.run_id = run_ids.get(response.id)
+    return responses
+
+
 @router.get("/{job_id}/history", response_model=List[JobRunResponse])
 async def get_job_history(
     job_id: str,
@@ -1690,7 +1700,7 @@ async def get_job_history(
 
     q = select(JobRun).where(JobRun.job_id == job_id).order_by(JobRun.fired_at.desc()).limit(limit)
     result = await session.execute(q)
-    return result.scalars().all()
+    return await _firing_responses(session, result.scalars().all())
 
 
 async def _loop_in_flight_decision(session: AsyncSession, job: AIJob) -> Optional[FiringDecision]:

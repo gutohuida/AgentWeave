@@ -9,6 +9,8 @@ import { ConversationLink } from '@/components/agents/ConversationLink'
 import { TraceButton } from '@/components/traces/TraceDrawer'
 import { useTaskStory, type StoryEvent, type TaskStory as Story } from '@/api/tasks'
 import { hubDate } from '@/lib/hubTime'
+import { useConfigStore } from '@/store/configStore'
+import { openTraces } from '@/store/tracesRequestStore'
 import { evidenceTone, statusTone } from '@/lib/storyTones'
 import { formatAiCreditAmount, formatAiCredits } from '@/components/accounting/accountingDisplay'
 import { LoadingThread } from '@/components/common/LoadingThread'
@@ -133,7 +135,24 @@ function Summary({ story }: { story: Story }) {
       </div>
       <div>
         <span className="aw-story-label">Runs</span>
-        <span className="aw-story-value">{summary.runs}</span>
+        <span className="aw-story-value">
+          {summary.runs > 0 ? (
+            <button
+              type="button"
+              className="aw-link"
+              data-testid={`task-story-runs-open-${task.id}`}
+              title="Open these runs in Activity → Traces"
+              onClick={() => {
+                const project = useConfigStore.getState().selectedProjectId
+                if (project) openTraces(project, { task: task.id, label: `task ${task.title}` })
+              }}
+            >
+              {summary.runs}
+            </button>
+          ) : (
+            summary.runs
+          )}
+        </span>
       </div>
       <div>
         <span className="aw-story-label aw-story-label-row">

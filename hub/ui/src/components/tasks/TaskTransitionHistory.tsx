@@ -1,5 +1,6 @@
 import { Icon } from '@/components/common/Icon'
 import { useTaskTransitions } from '@/api/tasks'
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { hubDate } from '@/lib/hubTime'
 
 /**
@@ -71,6 +72,12 @@ export function TaskTransitionHistory({ taskId, open }: { taskId: string; open: 
                 <strong style={{ color: 'var(--text)' }}>{who}</strong> {verb}{' '}
                 <code>{row.from_status}</code> → <code>{row.to_status}</code>
                 {when ? <> · {when.toLocaleString()}</> : null}
+                {row.run_id ? (
+                  <>
+                    {' · '}
+                    <TraceButton runId={row.run_id} label="trace" testId={`task-transition-trace-${row.id}`} />
+                  </>
+                ) : null}
                 {row.policy_digest ? (
                   <>
                     {' '}

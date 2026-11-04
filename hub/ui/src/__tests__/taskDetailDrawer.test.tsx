@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Task } from '@/api/tasks'
 import { ApiError } from '@/api/client'
 import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer'
+import { Drawer } from '@/components/layout/Drawer'
 
 /**
  * F5 — the task, opened (`design.md` D8).
@@ -215,6 +216,24 @@ describe('opening and closing the drawer', () => {
     // input the selection opens, are both still there.
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByTestId('task-block-reason-task-1')).toBeInTheDocument()
+  })
+
+  it('does not close on a click inside a drawer opened from it — a run’s trace, portalled outside the panel', async () => {
+    // Regression (operator, 2026-11-03): opening a run's trace from the task's story and clicking
+    // anything inside it dropped back to the board. The trace is a `Drawer` (Radix Dialog) portalled
+    // to `document.body`; the click read as one on the board, the task drawer closed, and the trace
+    // unmounted with it.
+    const onClose = vi.fn()
+    render(
+      <div>
+        <TaskDetailDrawer task={makeTask()} onClose={onClose} />
+        <Drawer open onOpenChange={vi.fn()} title="Trace" side="right" width={600} triggerRef={{ current: null }}>
+          <button type="button" data-testid="inside-the-trace">a span</button>
+        </Drawer>
+      </div>,
+    )
+    await userEvent.click(screen.getByTestId('inside-the-trace'))
+    expect(onClose).not.toHaveBeenCalled()
   })
 })
 

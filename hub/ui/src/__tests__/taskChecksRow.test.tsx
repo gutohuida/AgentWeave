@@ -195,3 +195,32 @@ describe('checks-wait-less — a skipped check is shown, never left out', () => 
     expect(screen.getByText('main moved')).toBeInTheDocument()
   })
 })
+
+// checks-know-their-phase-and-give-way-to-the-user, FR-2 ac-landing-only: a landing-only check is
+// in no pre-review run's results, and is said as running at landing, not as passed or skipped.
+describe('a landing-only check reads as running at landing', () => {
+  beforeEach(() => {
+    rerun.mockReset()
+  })
+
+  it('lists it beside a passed pre-review run', () => {
+    checks = {
+      configured: true,
+      before_review: true,
+      at_landing: ['hub-tests'],
+      running: false,
+      runs: [run('passed', { results: [{ name: 'lint', exit_code: 0, timed_out: false, duration_seconds: 1, output_tail: '' }] })],
+    }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByText('Checks passed')).toBeInTheDocument()
+    expect(screen.getByTestId('task-checks-at-landing-task-1')).toHaveTextContent('hub-tests · runs at landing')
+    expect(screen.queryByTestId('task-checks-skipped-task-1')).toBeNull()
+  })
+
+  it('says the checks run at landing where every check is landing-only', () => {
+    checks = { configured: true, before_review: false, at_landing: ['hub-tests'], running: false, runs: [] }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByText('Checks run at landing')).toBeInTheDocument()
+    expect(screen.queryByText('Checks have not run')).toBeNull()
+  })
+})

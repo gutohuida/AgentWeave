@@ -5,18 +5,12 @@ import {
   downloadTraceExport,
   useClearTraces,
   useTraceSettings,
-  useTraces,
   useUpdateTraceSettings,
-  type TraceOperation,
   type TraceSettings,
-  type TraceSummary,
 } from '@/api/traces'
-import { Badge } from '@/components/common/Badge'
 import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { parseHeaderLines } from '@/components/environment/traceHeaders'
-import { TraceButton } from '@/components/traces/TraceDrawer'
-import { formatDuration } from '@/components/traces/traceModel'
 import { Button } from '@/components/ui/button'
 import { hubDate } from '@/lib/hubTime'
 import { useConfigStore } from '@/store/configStore'
@@ -25,26 +19,7 @@ import { LoadingThread } from '@/components/common/LoadingThread'
 const DESCRIPTION =
   'Every run is recorded as a trace: its model calls, tool calls, permission decisions and waits. So is what the Hub does around them: the requests that changed or failed, its events, its background work and the commands it ran, and its warnings. Export them as OTLP, or send them to a collector as they finish.'
 
-/** The list's kinds, runs first: the Hub's own requests, events and work outnumber them. */
-const KINDS: { operation: TraceOperation | undefined; label: string }[] = [
-  { operation: 'invoke_agent', label: 'Runs' },
-  { operation: 'chat', label: 'Workers' },
-  { operation: 'aw.request', label: 'Requests' },
-  { operation: 'aw.work', label: 'Work' },
-  { operation: 'aw.event', label: 'Events' },
-  { operation: undefined, label: 'All' },
-]
-
-const KIND_LABEL: Record<TraceSummary['kind'], string | null> = {
-  run: null,
-  worker: 'worker',
-  request: 'request',
-  event: 'event',
-  work: 'work',
-}
-
 const DAY_MS = 24 * 60 * 60 * 1000
-const RECENT_LIMIT = 10
 
 function when(value: string | null): string {
   return value ? format(hubDate(value), 'MMM d, yyyy HH:mm') : '—'
@@ -55,96 +30,6 @@ function rangeSentence(since: string, until: string): string {
   if (since) return `recorded from ${since} onward`
   if (until) return `recorded before ${until}`
   return 'this project holds, of every date'
-}
-
-function RecentTraces() {
-  const [operation, setOperation] = useState<TraceOperation | undefined>('invoke_agent')
-  const [before, setBefore] = useState<string | undefined>(undefined)
-  const { data, isLoading, error } = useTraces({ limit: RECENT_LIMIT, before, operation })
-  const filter = (
-    <div className="mb-2 flex flex-wrap gap-1" role="group" aria-label="Kind of trace">
-      {KINDS.map((kind) => (
-        <Button
-          key={kind.label}
-          type="button"
-          size="xs"
-          variant={operation === kind.operation ? 'primary' : 'outline'}
-          aria-pressed={operation === kind.operation}
-          data-testid={`trace-kind-${kind.operation ?? 'all'}`}
-          onClick={() => {
-            setOperation(kind.operation)
-            setBefore(undefined)
-          }}
-        >
-          {kind.label}
-        </Button>
-      ))}
-    </div>
-  )
-  let body
-  if (isLoading) {
-    body = <LoadingThread label="Loading traces" size="inline" />
-  } else if (error) {
-    body = (
-      <p role="alert" className="text-xs" style={{ color: 'var(--red)' }}>
-        {readableApiError(error, 'The traces could not be listed.')}
-      </p>
-    )
-  } else if ((data?.traces ?? []).length === 0) {
-    body = <p className="text-xs" style={{ color: 'var(--text-3)' }}>{before ? 'No older traces.' : 'No traces of this kind yet.'}</p>
-  }
-  if (body) {
-    return (
-      <div className="w-full max-w-[520px]">
-        {filter}
-        {body}
-      </div>
-    )
-  }
-  const traces = data?.traces ?? []
-  return (
-    <div className="w-full max-w-[520px]" data-testid="recent-traces">
-      {filter}
-      <ul className="space-y-0.5">
-        {traces.map((trace) => {
-          const duration = trace.end_time
-            ? formatDuration(Math.max(0, hubDate(trace.end_time).getTime() - hubDate(trace.start_time).getTime()))
-            : 'running'
-          return (
-            <li key={trace.trace_id} className="flex items-center gap-2 text-[11.5px]">
-              <span className="w-[104px] shrink-0 tabular-nums" style={{ color: 'var(--text-3)' }}>
-                {format(hubDate(trace.start_time), 'MMM d HH:mm:ss')}
-              </span>
-              <span className="min-w-0 flex-1 truncate" style={{ color: 'var(--text)' }} title={trace.name}>
-                {trace.agent ?? trace.name}
-                {KIND_LABEL[trace.kind] ? <span style={{ color: 'var(--text-3)' }}> · {KIND_LABEL[trace.kind]}</span> : null}
-              </span>
-              {trace.status === 'error' && <Badge variant="danger">error</Badge>}
-              {trace.status !== 'error' && trace.run_status && trace.run_status !== 'completed' && trace.ended && (
-                <Badge variant="default">{trace.run_status}</Badge>
-              )}
-              <span className="shrink-0 tabular-nums" style={{ color: 'var(--text-2)' }}>
-                {duration} · {trace.span_count}
-              </span>
-              <TraceButton traceId={trace.trace_id} label="Open" title="Open this trace" testId={`recent-trace-${trace.trace_id}`} />
-            </li>
-          )
-        })}
-      </ul>
-      <div className="mt-2 flex gap-2">
-        {before && (
-          <Button type="button" variant="outline" size="xs" onClick={() => setBefore(undefined)}>
-            Newest
-          </Button>
-        )}
-        {data?.next_before && (
-          <Button type="button" variant="outline" size="xs" onClick={() => setBefore(data.next_before ?? undefined)}>
-            Older
-          </Button>
-        )}
-      </div>
-    </div>
-  )
 }
 
 /** How long this project's traces are kept. Saved on its own, apart from the export settings. */
@@ -199,7 +84,7 @@ function RetentionRow({ settings }: { settings: TraceSettings }) {
   )
 }
 
-export function TracesSection() {
+export function TracesSection({ onOpenTraces }: { onOpenTraces?: () => void } = {}) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: settings, error: loadError, isLoading } = useTraceSettings()
   const update = useUpdateTraceSettings()
@@ -316,8 +201,10 @@ export function TracesSection() {
         </div>
       </SettingsRow>
       <RetentionRow key={projectId} settings={settings} />
-      <SettingsRow label="Recent traces" description="The newest traces of one kind. Open one to see its spans.">
-        <RecentTraces />
+      <SettingsRow label="Browse traces" description="Every run, and the Hub's own traces, filtered and opened, are in Activity.">
+        <Button type="button" variant="outline" size="sm" data-testid="open-traces-view" onClick={onOpenTraces}>
+          Open Activity → Traces
+        </Button>
       </SettingsRow>
 
       <form id="trace-settings-form" onSubmit={handleSave}>

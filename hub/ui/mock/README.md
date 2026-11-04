@@ -75,6 +75,24 @@ it renders ("it should look exactly like that"). The same screen is `#thread` in
 feed without chapters, kept for checks of a surface that pages. `py -3.11 mock/shoot.py`-style
 screenshots land in `mock/loom-shots/` (PNGs are ignored).
 
+## The traces view (mock, 2026-11-02)
+
+Spec `spec/changes/a-traces-view-with-filters-grouping-and-stats`. The components are
+`src/components/traces/TracesPage.tsx` and its pure model `tracesModel.ts` (filters, the error rule,
+totals, grouping); `src/styles/traces.css` styles them. The run drawer is the app's own
+`TraceDrawer`, now also usable controlled. The fixtures are recorded read-only from the operator's
+Hub by `py -3.11 mock/record_traces.py <db> <project>`: every run trace, the newest 200 of each kind
+of the Hub's own, and 22 whole run traces (the newest five and every error).
+
+```
+http://localhost:5199/mock.html#traces     # Activity → Traces
+```
+
+Decided by the operator on 2026-11-02 after driving it: the view is a fourth view inside Activity
+(an own tab was the other choice shown, and is retired); the Hub's own traces sit behind a quieter
+"Hub internals" menu rather than beside agent runs; a task with no reference or title is "A task
+that no longer exists", never its raw id.
+
 ## The Spec page, redesigned (mock, 2026-10-26)
 
 Spec `spec/changes/the-spec-page-redesigned`. The components are in `src/components/spec/page/`
@@ -96,3 +114,21 @@ http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/spec?st
 
 The mock bar switches the state and, on the tab, the list between a left column and a top switcher
 (the document's open question 2). The panel sits at its narrowest width (360px) below a 1200px window.
+
+## The Build dialog (mock, approved 2026-11-03)
+
+Roadmap `building-a-spec-ties-together-from-plan-to-board`, slice `build-dialog-overhaul`. The component
+is `src/components/spec/BuildPlanDialog.tsx`, styled by `src/styles/build-plan.css`. It takes the
+Hub's `SpecRecommendedBuild` and the document's tasks and answers `BuildChoices`, so applying it
+replaces `BuildDialog` in `useSpecPhaseControls` without redrawing. The recommendation over the
+recorded document's five tasks is simulated (`// mock state`, `PLAN_RECOMMENDED` in `specMock.ts`):
+one task names an agent that is not open (Codex), and two give no reason.
+```
+http://localhost:5199/mock.html#tab/spec?state=approved     # then Build in the header
+```
+Decided by the operator on 2026-11-03 after looking at it in dark and light: two sections, "How it
+runs" and "Who builds and checks", with a row per task showing its builder, its checker and each
+reason; the separate Builders list and Flow agent control are gone (the builders are those the table
+names, and the default builder works the flow); the window end is a short list of ends, not a date
+input; the Fast level hides the checker column. Agents carry their colour and their model; reasons
+are plain muted text, not italic. The dialog is 760px, the widest in the app, for the table.

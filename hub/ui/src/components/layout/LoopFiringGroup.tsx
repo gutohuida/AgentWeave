@@ -121,7 +121,9 @@ export function LoopFiringGroup({
               agentColor={agentColor}
               agentName={agentName}
               testId={rowTestId(conversation)}
-              /* The group row already names the loop, once, for every firing under it. */
+              /* The group row already names the loop, once, for every firing under it. A firing's
+                 trace is opened from the conversation's own 'Trace of the latest run' control, not
+                 from a per-row button here (operator, 2026-11-03). */
               showLoopMarker={false}
             />
           ))}

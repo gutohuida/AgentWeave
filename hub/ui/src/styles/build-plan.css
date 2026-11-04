@@ -1,0 +1,63 @@
+/* The Build dialog around one plan (slice `build-dialog-overhaul`): how the build runs, its default
+   people, and every task's builder and checker beside the document's reasons. Tokens only. */
+
+.aw-bp { display: flex; flex-direction: column; gap: 18px; }
+.aw-bp-lede { font-size: 12.5px; color: var(--text-2); }
+
+.aw-bp-section { display: flex; flex-direction: column; gap: 10px; }
+.aw-bp-heading {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-3); padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+
+.aw-bp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
+.aw-bp-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.aw-bp-setting { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.aw-bp-setting > .aw-segmented { align-self: flex-start; }
+.aw-bp-setting .aw-select-trigger { align-self: flex-start; }
+.aw-bp-label { font-size: 12.5px; font-weight: 500; color: var(--text-2); }
+.aw-bp-note { font-size: 12px; line-height: 1.45; color: var(--text-3); }
+.aw-bp-fact { font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.aw-bp-why { font-size: 11.5px; line-height: 1.45; color: var(--text-3); }
+.aw-bp-none { opacity: .75; }
+.aw-bp-warn { font-size: 11.5px; line-height: 1.45; color: var(--amber); }
+
+.aw-bp-defaults { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
+
+.aw-bp-table { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.aw-bp-row {
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px; padding: 10px 12px; align-items: start;
+  border-top: 1px solid var(--border);
+}
+.aw-bp-row:first-child { border-top: 0; }
+.aw-bp-row[data-checks="false"] { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.aw-bp-row-head {
+  padding-block: 7px; background: var(--surface-2);
+  font-size: 11px; font-weight: 600; letter-spacing: .03em; color: var(--text-3);
+}
+.aw-bp-row[data-same="true"] { background: color-mix(in oklab, var(--amber) 6%, transparent); }
+.aw-bp-task { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; row-gap: 2px; align-items: baseline; }
+.aw-bp-task .aw-bp-warn { grid-column: 2; }
+.aw-bp-num { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-3); }
+.aw-bp-title { font-size: 13px; line-height: 1.4; color: var(--text); }
+.aw-bp-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.aw-bp-cell .aw-select-trigger { width: 100%; }
+
+.aw-bp-differs { display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; color: var(--text-3); }
+.aw-bp-reset {
+  font-size: 11.5px; color: var(--ring); background: none; border: 0; padding: 0; cursor: pointer;
+}
+.aw-bp-reset:hover { text-decoration: underline; }
+.aw-bp-reset:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); border-radius: 3px; }
+
+.aw-bp-missing { margin-right: auto; align-self: center; font-size: 12px; color: var(--amber); }
+.aw-bp-changed { margin-right: auto; align-self: center; font-size: 12px; color: var(--text-3); }
+
+@media (max-width: 720px) {
+  .aw-bp-grid, .aw-bp-defaults { grid-template-columns: minmax(0, 1fr); }
+  .aw-bp-row { grid-template-columns: minmax(0, 1fr); }
+  .aw-bp-row-head { display: none; }
+}
+
+.aw-bp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 999px; }

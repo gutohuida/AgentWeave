@@ -198,7 +198,7 @@ export function ConversationBar({
                 {checkpointCount > 0 ? `Checkpoints (${checkpointCount})` : 'Checkpoints'}
               </MenuItem>
             ) : null}
-            {onOpenTrace ? <MenuItem icon="monitoring" onSelect={onOpenTrace}>Trace of the last turn</MenuItem> : null}
+            {onOpenTrace ? <MenuItem icon="monitoring" onSelect={onOpenTrace}>Trace of the latest run</MenuItem> : null}
             <MenuItem icon={diagnosticsHidden ? 'visibility' : 'visibility_off'} onSelect={onToggleDiagnostics}>
               {diagnosticsHidden ? 'Show diagnostics' : 'Hide diagnostics'}
             </MenuItem>

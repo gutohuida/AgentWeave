@@ -6,7 +6,7 @@ import contextlib
 import copy
 import logging
 from datetime import datetime
-from typing import List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, create_model, field_validator, model_validator
@@ -15,7 +15,7 @@ from pydantic.fields import FieldInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import manager
+from ... import manager, project_checks
 from ...agent_activity import latest_activity_by_agent
 from ...agent_status import effective_heartbeat_status
 from ...auth import get_operator, get_operator_project
@@ -98,6 +98,9 @@ class ProjectCheck(BaseModel):
     # completion runs the fast checks first and is refused with their output when one fails. A
     # fact about the command, so it is the operator's, beside paths and timeout. Off by default.
     fast: bool = False
+    # When the check runs (`checks-know-their-phase-and-give-way-to-the-user`, FR-1): in a task's
+    # run before review, in a landing batch's run, or both. A check saved before this reads both.
+    phase: Literal["review", "landing", "both"] = "both"
 
     model_config = {"extra": "forbid"}
 
@@ -108,6 +111,13 @@ class ProjectCheck(BaseModel):
                 f"a fast check's timeout_seconds is at most {FAST_CHECK_MAX_SECONDS} seconds "
                 f"(a completion waits for it); {self.name!r} has {self.timeout_seconds}. Lower "
                 f"its timeout or leave it not fast."
+            )
+        if self.fast and self.phase == "landing":
+            # FR-4: a fast check is what an agent's completion waits for, before any review.
+            raise ValueError(
+                f"{self.name!r} is fast, and a fast check gates an agent's completion before "
+                f"review, so it cannot be landing-only. Leave it not fast, or let it run before "
+                f"review too."
             )
         return self
 
@@ -183,6 +193,10 @@ class ProjectSettings(BaseModel):
     # and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5). On by default; off is
     # the behaviour before that change: such an approval waits for the operator's reason.
     checks_auto_override: bool = True
+    # Whether every process a check run starts runs below normal scheduling priority, beneath the
+    # operator's own work (`checks-know-their-phase-and-give-way-to-the-user`, FR-5). Off by
+    # default, for new and existing projects alike (FR-6).
+    checks_give_way: bool = False
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one.
@@ -563,6 +577,31 @@ async def get_project_settings(
 ) -> ProjectSettings:
     project = await _operator_project_row(project_identity[0], session)
     return await _project_settings(session, project)
+
+
+class CheckUsualDuration(BaseModel):
+    """How long a check usually takes here: its last passing results' median and longest."""
+
+    median_seconds: float
+    longest_seconds: float
+    passes: int
+
+
+@router.get("/{project_id}/checks/usual-durations")
+async def get_check_usual_durations(
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> Dict[str, Optional[CheckUsualDuration]]:
+    """Each configured check's usual duration, by name, shown beside its time limit
+    (`checks-know-their-phase-and-give-way-to-the-user`, FR-11). Null for a check with no
+    passing result yet."""
+    project = await _operator_project_row(project_identity[0], session)
+    names = [check["name"] for check in project_checks.configured_checks(project)]
+    found = await project_checks.usual_durations(session, project.id, names)
+    return {
+        name: CheckUsualDuration(**usual) if usual is not None else None
+        for name, usual in found.items()
+    }
 
 
 @router.get("/{project_id}/main-branch-suggestion")

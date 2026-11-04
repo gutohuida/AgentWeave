@@ -1,5 +1,6 @@
 import { Icon } from '@/components/common/Icon'
 import { StatusBadge } from '@/components/common/Badge'
+import { TraceButton } from '@/components/traces/TraceDrawer'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import type { Job, JobRun } from '@/api/jobs'
 import { formatAgo, formatDateTime } from '@/lib/format'
@@ -98,6 +99,9 @@ export function RunHistory({
               <span className="aw-job-detail-muted" data-testid={`job-run-ticks-${run.id}`}>
                 re-checked {run.tick_count} times
               </span>
+            ) : null}
+            {run.run_id ? (
+              <TraceButton runId={run.run_id} label="trace" testId={`job-run-trace-${run.id}`} />
             ) : null}
             <time className="aw-job-detail-muted" dateTime={run.fired_at} title={formatDateTime(run.fired_at, now)}>
               {formatAgo(run.fired_at, now)} ago

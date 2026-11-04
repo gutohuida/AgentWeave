@@ -37,11 +37,12 @@ export default function Activity({ go, now }: ScreenProps) {
         <Segmented
           label="Activity view"
           value={view}
-          onChange={setView}
+          onChange={(v) => (v === 'traces' ? go({ kind: 'traces' }) : setView(v as typeof view))}
           options={[
             { value: 'ledger', label: 'Ledger' },
             { value: 'activity', label: 'Activity' },
             { value: 'logs', label: 'Logs' },
+            { value: 'traces', label: 'Traces' },
           ]}
         />
         <span className="aw-activity-note">The last 200 events</span>

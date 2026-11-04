@@ -33,10 +33,13 @@ export function Drawer({
       <Dialog.Portal>
         {/* `z-50`, matching every other modal in the app — see `SpecDocumentPicker` for what
             happens without it. */}
-        <Dialog.Overlay style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'var(--scrim)' }} />
+        {/* `data-aw-overlay-layer` marks both as a layer above whatever opened it: a panel that closes
+            on a click outside itself (the task drawer) must not read a click in here as one. */}
+        <Dialog.Overlay data-aw-overlay-layer="" style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'var(--scrim)' }} />
         <Dialog.Content
           aria-label={title}
           data-testid="workspace-drawer"
+          data-aw-overlay-layer=""
           // Restore focus to the control that opened the drawer rather than relying on which
           // element happened to be focused at mount time.
           onCloseAutoFocus={(event) => {

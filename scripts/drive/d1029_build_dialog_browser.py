@@ -91,26 +91,37 @@ def drive(state):
             page.screenshot(path=str(d.TMP / "no_build_button.png"), full_page=True)
             d.check("1 the spec page offers Build", False, "see no_build_button.png", fatal=True)
         page.get_by_role("button", name="Build…").first.click()
-        dialog = page.get_by_test_id("build-dialog")
+        dialog = page.get_by_role("dialog")
         dialog.wait_for(timeout=10000)
         page.screenshot(path=str(d.TMP / "build_dialog.png"), full_page=True)
 
-        def value(test_id):
-            return page.get_by_test_id(test_id).input_value()
+        def shown_by(name):
+            return dialog.get_by_role("button", name=name, exact=True).inner_text().strip()
 
-        shown = {k: value(k) for k in ("build-builder", "build-checker", "build-task-builder-t1",
-                                       "build-task-checker-t1", "build-task-builder-t2",
-                                       "build-task-checker-t2")}
+        # The redesigned dialog (`the-build-dialog-redesigned`): themed menus labelled by their
+        # task's title, no native select, and the default people above the table.
+        native = dialog.locator("select, input[type=checkbox], input[type=date], input[type=datetime-local]")
+        d.check("0 the dialog has no native select, checkbox or date input", native.count() == 0,
+                f"{native.count()} found")
+        d.check("0b it has both sections",
+                dialog.get_by_role("heading", name="How it runs").count() == 1
+                and dialog.get_by_role("heading", name="Who builds and checks").count() == 1)
+        shown = {
+            "builder": shown_by("Default builder"),
+            "checker": shown_by("Default checker"),
+            "t1-builder": shown_by("Add hello.txt: builder"),
+            "t1-checker": shown_by("Add hello.txt: checker"),
+            "t2-builder": shown_by("Add bye.txt: builder"),
+            "t2-checker": shown_by("Add bye.txt: checker"),
+        }
         d.check("1a Developer and QA are selected as the defaults",
-                shown["build-builder"] == DEFAULT_BUILDER and shown["build-checker"] == DEFAULT_CHECKER,
-                f"{shown}")
+                shown["builder"] == DEFAULT_BUILDER and shown["checker"] == DEFAULT_CHECKER, f"{shown}")
         d.check("1b t1 shows DeveloperOpus and QA2",
-                shown["build-task-builder-t1"] == T1_BUILDER
-                and shown["build-task-checker-t1"] == T1_CHECKER, f"{shown}")
-        d.check("1c t2, which names nobody, shows the defaults' blanks",
-                shown["build-task-builder-t2"] == "" and shown["build-task-checker-t2"] == "",
-                f"{shown}")
-        page.get_by_test_id("build-confirm").click()
+                shown["t1-builder"] == T1_BUILDER and shown["t1-checker"] == T1_CHECKER, f"{shown}")
+        d.check("1c t2, which names nobody, falls to the defaults",
+                shown["t2-builder"] == f"Default ({DEFAULT_BUILDER})"
+                and shown["t2-checker"] == f"Default ({DEFAULT_CHECKER})", f"{shown}")
+        dialog.get_by_test_id("build-confirm").click()
         page.wait_for_timeout(4000)
         page.screenshot(path=str(d.TMP / "after_confirm.png"), full_page=True)
         browser.close()

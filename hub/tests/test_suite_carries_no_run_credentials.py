@@ -71,6 +71,12 @@ def test_a_suite_run_inside_an_agent_run_writes_nothing_to_its_hub():
                 "HUB_URL": f"http://127.0.0.1:{server.server_port}",
             }
         )
+        # No deadline of its own: the wait is for the child to exit, which is the event this test
+        # means. A fixed `timeout=300` here was a race with machine load, not a check: the child
+        # is a whole pytest start (plugins, this suite's conftest, the Hub app import) and takes
+        # ~7 s idle, but in check run chk-15fe5a97f5c8 (a 39-minute suite beside running agents)
+        # it ran past 300 s, and its rerun alone took 198 s. A child that really hangs is ended
+        # by the suite's own per-test `--timeout` (CI and the project's checks both pass one).
         child = subprocess.run(
             [
                 sys.executable,
@@ -85,7 +91,6 @@ def test_a_suite_run_inside_an_agent_run_writes_nothing_to_its_hub():
             env=env,
             capture_output=True,
             text=True,
-            timeout=300,
         )
     finally:
         server.shutdown()

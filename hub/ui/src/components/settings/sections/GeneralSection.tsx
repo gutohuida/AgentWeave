@@ -2,6 +2,7 @@ import * as React from 'react'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
 import {
+  useCheckUsualDurations,
   useMainBranchSuggestion,
   useProjectSettings,
   useProjects,
@@ -42,6 +43,7 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
   const project = projects.find((item) => item.id === projectId)
   const { data: settings, error: readError, refetch } = useProjectSettings(projectId ?? null)
   const { data: mainBranch } = useMainBranchSuggestion(projectId ?? null)
+  const { data: usualDurations, error: usualDurationsError } = useCheckUsualDurations(projectId ?? null)
   const { data: runners = [], error: runnersError } = useRunners()
   const { data: agents = [], isError: agentsFailed } = useAgents()
   const { data: catalog } = useModelCatalog()
@@ -138,6 +140,8 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
         folder={project.path_display ?? project.working_directory ?? ''}
         folderAvailable={project.directory_state === 'available'}
         mainBranch={mainBranch ?? null}
+        usualDurations={usualDurations}
+        usualDurationsUnreadable={usualDurationsError ? readableApiError(usualDurationsError, 'The Hub did not return a reason.') : null}
         contextWindow={contextWindow}
         ceilingNotes={projectCeilingNotes(settings.checkpoint_threshold_mode, settings.checkpoint_threshold_value, agents)}
         agentsUnreadable={agentsFailed}

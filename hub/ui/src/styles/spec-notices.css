@@ -43,26 +43,26 @@ button.aw-notice-summary:hover { color: var(--text); }
   transform-origin: top right;
 }
 
-/* C: cards in the page's right-hand column. */
-.aw-notice-stack { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
-.aw-notice-stack-head { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
-.aw-notice-stack .aw-notice-summary { white-space: normal; }
+/* Inside a notice, a message block drawn for the old banner sits flat: the notice is its frame. */
+.aw-notice-body .aw-spec-message { margin: 0; padding: 0; background: none; border: 0; }
+.aw-notice-summary-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── The two-row header ─────────────────────────────────────────────── */
-.aw-sp-head[data-design="compact"] { padding: 0 28px 8px; }
-.aw-sp-head[data-design="compact"] .aw-sp-head-bar { height: 40px; }
-.aw-sp-head[data-design="compact"] .aw-sp-head-bar .aw-sp-crumbs { flex: 0 1 auto; }
+.aw-sp-head .aw-sp-head-bar .aw-sp-crumbs { flex: 0 1 auto; }
 .aw-sp-head-spacer { flex: 1; }
-.aw-sp-head[data-design="compact"] .aw-sp-actions { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.aw-sp-head .aw-sp-actions { display: inline-flex; align-items: center; gap: 6px; flex: none; padding-top: 0; }
 .aw-sp-head-row2 { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; min-width: 0; }
-.aw-sp-head[data-design="compact"] .aw-sp-title { font-size: 19px; line-height: 1.25; text-wrap: initial; }
-.aw-sp-head[data-design="compact"][data-compact="true"] .aw-sp-title { font-size: 17px; }
+.aw-sp-head .aw-sp-title { font-size: 19px; line-height: 1.25; text-wrap: initial; }
+.aw-sp-head[data-compact="true"] .aw-sp-title { font-size: 17px; }
 .aw-sp-head-row2 .aw-sp-meta { margin-top: 0; flex-wrap: wrap; gap: 4px 10px; }
+/* The health facts flow beside the phase; a fact's detail opens over the body, not into it. */
+.aw-sp-head-facts { display: contents; }
 .aw-sp-head-row2 .aw-health { margin: 0; clip-path: none; }
-.aw-sp-head[data-design="compact"] .aw-notices,
-.aw-sp-head[data-design="compact"] .aw-notice-list { margin-top: 6px; }
-.aw-sp-head[data-design="compact"] .aw-notices .aw-notice-list { margin-top: 0; }
-.aw-sp-head[data-design="compact"] .aw-notices[data-open="true"] { max-height: 40vh; overflow: auto; }
+.aw-sp-head-row2 .aw-spec-detail {
+  position: absolute; z-index: 30; top: 100%; left: 16px; right: 16px; margin-top: 2px;
+  border: 1px solid var(--border-hi); border-radius: var(--radius-lg);
+  box-shadow: 0 18px 48px -20px var(--scrim), inset 0 1px var(--lift-hi);
+}
 
 /* The journey as four knots beside the phase. */
 .aw-sp-minijourney { display: inline-flex; align-items: center; gap: 0; flex: none; }
@@ -72,23 +72,15 @@ button.aw-notice-summary:hover { color: var(--text); }
 .aw-sp-minijourney-link { width: 10px; height: 1.5px; background: var(--text-3); opacity: .5; }
 .aw-sp-minijourney-link[data-reached="done"] { background: var(--sp-thread); opacity: 1; }
 
-/* Condensed: one line while the body is scrolled. */
+/* Condensed: one line while the body is scrolled; clicking it expands the header again. */
 .aw-sp-head[data-condensed="true"] { padding-bottom: 0; }
-.aw-sp-head[data-condensed="true"] .aw-sp-head-row2,
-.aw-sp-head[data-condensed="true"] .aw-notices,
+.aw-sp-head[data-condensed="true"] .aw-sp-head-bar { cursor: pointer; }
 .aw-sp-head[data-condensed="true"] .aw-sp-crumbs,
 .aw-sp-head[data-condensed="true"] .aw-sp-slicenav { display: none; }
-.aw-sp-head-condensed-title { display: none; min-width: 0; align-items: center; gap: 10px; cursor: pointer; }
-.aw-sp-head[data-condensed="true"] .aw-sp-head-condensed-title { display: inline-flex; }
+.aw-sp-head-condensed-title { display: inline-flex; min-width: 0; align-items: center; gap: 10px; padding: 0 4px; border-radius: var(--radius-sm); text-align: left; }
+.aw-sp-head-condensed-title:hover { background: var(--row-hover); }
+.aw-sp-head-condensed-title:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 .aw-sp-head-condensed-title strong { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.aw-sp-panel-tabs[data-design="compact"] { padding: 4px 14px; }
 
-/* The panel's navigation: stacked rows today, or one row (being mocked). */
-.aw-sp-pnav-stack { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.aw-sp-pnav[data-inline="true"] { padding: 6px 14px; }
-.aw-sp-pnav-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; min-width: 0; }
-.aw-sp-pnav-row > .aw-segmented { flex: none; }
-.aw-sp-pnav-row .aw-sp-pnav-sections { flex: none; }
-.aw-sp-pnav-row .aw-sp-pnav-strip { flex: 1 1 220px; }
-.aw-sp-pnav-row .aw-sp-pnav-filter { flex: none; }
-.aw-sp-pnav-row .aw-sp-pnav-filter-btn { padding-inline: 6px; }
+/* Above the builds in the body: the newest build's strip and Close as already built. */
+.aw-sp-build-actions { display: flex; flex-direction: column; gap: 6px; margin: 18px 0 0; font-size: 12px; color: var(--text-2); }

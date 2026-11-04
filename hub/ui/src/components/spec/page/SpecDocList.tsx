@@ -33,7 +33,6 @@ export function SpecDocList({
   hideHead = false,
   footer,
   rowAction,
-  marker = 'dot',
 }: {
   entries: SpecListEntry[]
   active: string | null
@@ -52,8 +51,6 @@ export function SpecDocList({
   footer?: React.ReactNode
   /** Beside a row (Adopt, on a document the Hub keeps no record of). */
   rowAction?: (entry: SpecListEntry) => React.ReactNode
-  /** How a row shows its state (being mocked): today's dot, an icon per state, or a word. */
-  marker?: ListMarker
 }) {
   const groups = arrangeList(entries, prefs)
   const shown = groups.reduce((n, g) => n + g.entries.length + (g.roadmap ? 1 : 0), 0)
@@ -119,12 +116,12 @@ export function SpecDocList({
         {groups.map((g, gi) => (
           <div key={g.roadmap?.path ?? g.label ?? `run-${gi}`} className="aw-sp-list-group" data-roadmap={g.roadmap ? 'true' : 'false'}>
             {g.label ? <div className="aw-sp-list-label">{g.label}</div> : null}
-            {g.roadmap ? <Row entry={g.roadmap} active={active} onOpen={onOpen} now={now} roadmap slices={g.entries.length} action={rowAction} marker={marker} /> : null}
+            {g.roadmap ? <Row entry={g.roadmap} active={active} onOpen={onOpen} now={now} roadmap slices={g.entries.length} action={rowAction} /> : null}
             {g.entries.length ? (
               <ol className="aw-sp-list-rows" data-slices={g.roadmap ? 'true' : 'false'}>
                 {g.entries.map((e, i) => (
                   <li key={e.path}>
-                    <Row entry={e} active={active} onOpen={onOpen} now={now} position={g.roadmap ? i + 1 : undefined} action={rowAction} marker={marker} showWaiting={prefs.order === 'attention'} />
+                    <Row entry={e} active={active} onOpen={onOpen} now={now} position={g.roadmap ? i + 1 : undefined} action={rowAction} showWaiting={prefs.order === 'attention'} />
                   </li>
                 ))}
               </ol>
@@ -156,10 +153,8 @@ function Row({
   slices,
   position,
   action,
-  marker = 'dot',
   showWaiting = false,
 }: {
-  marker?: ListMarker
   showWaiting?: boolean
   entry: SpecListEntry
   active: string | null
@@ -178,7 +173,6 @@ function Row({
       className="aw-sp-list-row"
       data-active={e.path === active ? 'true' : 'false'}
       data-roadmap={roadmap ? 'true' : undefined}
-      data-marker={marker}
       data-state={e.shown}
       aria-current={e.path === active ? 'page' : undefined}
       onClick={() => onOpen(e.path)}
@@ -189,19 +183,13 @@ function Row({
       ) : position !== undefined ? (
         <span className="aw-sp-list-pos">{position}</span>
       ) : null}
-      {marker.startsWith('icon') ? <StateIcon state={e.shown} set={marker as IconSet} /> : marker === 'dot' ? <span className="aw-sp-list-dot" data-state={e.shown} aria-hidden="true" /> : null}
+      <StateIcon state={e.shown} />
       <span className="aw-sp-list-name">{e.title}</span>
-      {e.building && !marker.startsWith('icon') ? <span className="aw-sp-live" title="A build is running" aria-label="A build is running" /> : null}
-      {marker === 'pill' && !roadmap ? (
-        <span className="aw-sp-list-pill" data-state={e.shown}>
-          {SHOWN_LABEL[e.shown]}
-        </span>
-      ) : null}
       {showWaiting && e.waiting ? (
         <span className="aw-sp-list-waiting">{e.waiting}</span>
       ) : roadmap && slices !== undefined ? (
         <span className="aw-sp-list-meta">{slices}</span>
-      ) : marker === 'pill' ? null : (
+      ) : (
         <span className="aw-sp-list-meta">{formatAgo(e.updatedAt, now)}</span>
       )}
     </button>
@@ -281,23 +269,22 @@ export function SpecDocSwitcher({ title, children }: { title: string; children: 
   )
 }
 
-export type IconSet = 'icon' | 'icon-paper' | 'icon-circles' | 'icon-milestones'
-export type ListMarker = 'dot' | 'pill' | IconSet
-
-/** Being mocked: four sets of marks, one per state. Building keeps the hammer in every set, and
- *  done is always a solid green disc, so a finished spec reads as finished whichever set wins. */
-const STATE_ICONS: Record<IconSet, Record<SpecListEntry['shown'], string>> = {
-  icon: { writing: 'circle_dashed', ready: 'circle_dot', approved: 'flag', building: 'hammer', done: 'check', current: 'menu_book', archived: 'archive' },
-  'icon-paper': { writing: 'file_pen_line', ready: 'send', approved: 'stamp', building: 'hammer', done: 'check', current: 'library_books', archived: 'archive' },
-  'icon-circles': { writing: 'circle_dashed', ready: 'circle_dot', approved: 'circle', building: 'hammer', done: 'check', current: 'book_marked', archived: 'remove_circle' },
-  'icon-milestones': { writing: 'pencil', ready: 'hourglass', approved: 'thumbs_up', building: 'hammer', done: 'trophy', current: 'library_books', archived: 'archive' },
+/** One icon per state, so no two share a mark: building keeps the hammer, and done is a solid
+ *  green disc with a check, so a finished spec cannot be mistaken for an approved one. */
+const STATE_ICONS: Record<SpecListEntry['shown'], string> = {
+  writing: 'file_pen_line',
+  ready: 'send',
+  approved: 'stamp',
+  building: 'hammer',
+  done: 'check',
+  current: 'library_books',
+  archived: 'archive',
 }
 
-/** One mark per state, told apart by shape as well as colour: done is a filled green badge. */
-export function StateIcon({ state, set }: { state: SpecListEntry['shown']; set: IconSet }) {
+export function StateIcon({ state }: { state: SpecListEntry['shown'] }) {
   return (
-    <span className="aw-sp-list-mark" data-state={state} data-set={set} aria-hidden="true">
-      <Icon name={STATE_ICONS[set][state]} size={state === 'done' ? 10 : 13} weight={state === 'done' ? 700 : undefined} />
+    <span className="aw-sp-list-mark" data-state={state} {...(state === 'building' ? { role: 'img', 'aria-label': 'A build is running' } : { 'aria-hidden': true })}>
+      <Icon name={STATE_ICONS[state]} size={state === 'done' ? 10 : 13} weight={state === 'done' ? 700 : undefined} />
     </span>
   )
 }

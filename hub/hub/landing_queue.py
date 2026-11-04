@@ -326,7 +326,7 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
                 project = await session.get(Project, project_id)
                 if project is None:
                     return True
-                checks = project_checks.configured_checks(project)
+                checks = project_checks.configured_checks(project, project_checks.PHASE_LANDING)
                 queued = list(
                     (
                         await session.execute(
@@ -342,6 +342,7 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
                 nowhere = await _landing_nowhere(session, queued)
             if not queued:
                 return True
+            carried = await _carried(project_id, queued) if checks else {}
             alone = (
                 queued[0]
                 if not checks
@@ -349,16 +350,20 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
                     (
                         landing
                         for landing in queued
-                        if landing.unchecked or not landing.targets or landing.task_id in nowhere
+                        if landing.unchecked
+                        or not landing.targets
+                        or landing.task_id in nowhere
+                        or landing.id in carried
                     ),
                     None,
                 )
             )
             if alone is not None:
-                # Unchecked by the operator's override, a project without checks, or nothing a
-                # check could run on (the landing records why nothing merged): the merge approval
-                # always made, one landing at a time.
-                await land_by_merge(alone.id)
+                # Unchecked by the operator's override, a project without checks, nothing a check
+                # could run on (the landing records why nothing merged), or work another task's
+                # merge already carried to main (F1126c): the merge approval always made, one
+                # landing at a time.
+                await land_by_merge(alone.id, carried_by=carried.get(alone.id))
                 continue
             waited = time.time() - min(landing.order_key for landing in queued)
             if not ignore_window and waited < BATCH_GATHER_SECONDS:
@@ -401,6 +406,42 @@ async def _settle_failed_batch(project_id: str, error: str) -> None:
         logger.warning("could not settle the failed batch of %s", project_id, exc_info=True)
 
 
+async def _carried(project_id: str, landings: Sequence[TaskLanding]) -> Dict[str, str]:
+    """The landings among *landings* whose every target is already in main -- carried there inside
+    another task's merge (a dependent that brought this work in) -- each with the main commit that
+    carried its last target. They land as already integrated, with no batch and no check (F1126c).
+    """
+    candidates = [landing for landing in landings if target_shas(landing)]
+    if not candidates:
+        return {}
+    root, tip = await _main_root_and_tip(project_id)
+    if root is None or tip is None:
+        return {}
+
+    def _look() -> Dict[str, str]:
+        out: Dict[str, str] = {}
+        for landing in candidates:
+            shas = target_shas(landing)
+            if not all(sha == tip or _is_ancestor(root, sha, tip) for sha in shas):
+                continue
+            out[landing.id] = _carrier(root, shas[-1], tip)
+        return out
+
+    return await blocking.run(_look)
+
+
+def _carrier(root: Path, sha: str, tip: str) -> str:
+    """The first commit on main's first-parent line that holds *sha* (*sha* itself where it is on
+    that line)."""
+    on_line = project_checks._git(root, "rev-list", "--first-parent", tip)
+    if sha in (on_line.stdout or "").split():
+        return sha
+    listed = project_checks._git(
+        root, "rev-list", "--first-parent", "--ancestry-path", "--reverse", f"{sha}..{tip}"
+    )
+    return next((line for line in (listed.stdout or "").split() if line), sha)
+
+
 async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding]) -> Set[str]:
     """The tasks among *landings* whose build lands nowhere (slice D): recorded, never merged."""
     from .builds import LANDING_NOWHERE
@@ -421,7 +462,9 @@ async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding
 
 async def _release_holds(project_id: str) -> None:
     """A landing held on a prerequisite goes back to the queue once that prerequisite landed or is
-    queued again (it then lands first)."""
+    queued again (it then lands first); a batch held over failures main shares goes back once main
+    moved from the commit it was checked on, since the new main may pass (F1126b)."""
+    await _release_shared_failure_holds(project_id)
     async with async_session_factory() as session:
         held = list(
             (
@@ -442,6 +485,69 @@ async def _release_holds(project_id: str) -> None:
                 changed = True
         if changed:
             await session.commit()
+
+
+async def _main_root_and_tip(project_id: str) -> Tuple[Optional[Path], Optional[str]]:
+    """The project's checkout and its main tip, or `(None, None)` where either cannot be read."""
+    from . import project_workspace
+
+    async with async_session_factory() as session:
+        project = await session.get(Project, project_id)
+        if project is None or not project.main_branch:
+            return None, None
+        main_branch = project.main_branch
+        try:
+            root = (await project_workspace.resolve_project_workspace(session, project_id)).root
+        except Exception:  # noqa: BLE001 -- nothing to compare against: left as it is
+            return None, None
+        await session.commit()
+    return root, await blocking.run(project_checks.main_tip, root, main_branch)
+
+
+async def _release_shared_failure_holds(project_id: str) -> None:
+    async with async_session_factory() as session:
+        batches = list(
+            (
+                await session.execute(
+                    select(LandingBatch).where(
+                        LandingBatch.project_id == project_id, LandingBatch.state == "held"
+                    )
+                )
+            ).scalars()
+        )
+    if not batches:
+        return
+    _, tip = await _main_root_and_tip(project_id)
+    if tip is None:
+        return
+    moved = [batch.id for batch in batches if batch.base_sha != tip]
+    if not moved:
+        return
+    released: List[str] = []
+    async with async_session_factory() as session:
+        for batch_id in moved:
+            batch = await session.get(LandingBatch, batch_id)
+            if batch is None or batch.state != "held":
+                continue
+            rows = (
+                await session.execute(
+                    select(TaskLanding).where(
+                        TaskLanding.batch_id == batch_id,
+                        TaskLanding.state == HELD,
+                        TaskLanding.waits_on.is_(None),
+                    )
+                )
+            ).scalars()
+            for row in rows:
+                row.state, row.batch_id, row.reason = QUEUED, None, ""
+                released.append(row.id)
+            batch.state, batch.ended_at = "superseded", _now()
+            batch.error = (
+                f"the main branch moved from {(batch.base_sha or '?')[:12]} to {tip[:12]} while "
+                "the batch was held: checked again on the new tip"
+            )
+        await session.commit()
+        await _announce(session, released)
 
 
 async def latest_landing(session: AsyncSession, task_id: str) -> Optional[TaskLanding]:
@@ -540,9 +646,12 @@ async def _drop_unapproved(landings: List[TaskLanding]) -> List[TaskLanding]:
 # --- landing by merge (no checks, an unchecked override, nothing to check) -----------------------
 
 
-async def land_by_merge(landing_id: str) -> List[task_integration.IntegrationResult]:
+async def land_by_merge(
+    landing_id: str, *, carried_by: Optional[str] = None
+) -> List[task_integration.IntegrationResult]:
     """Land one landing with the merge approval always made, and record what happened. The git runs
-    with no transaction open; the records are written once it returns."""
+    with no transaction open; the records are written once it returns. *carried_by* names the main
+    commit that already holds the work (F1126c), recorded as what landed it."""
     from . import project_workspace
     from .builds import LANDING_NOWHERE, LANDS_NOWHERE
     from .db.models import Build
@@ -629,7 +738,7 @@ async def land_by_merge(landing_id: str) -> List[task_integration.IntegrationRes
                         for target in targets
                     ]
                 )
-        await _record_merge(session, landing_id, results, root)
+        await _record_merge(session, landing_id, results, root, carried_by=carried_by)
     return results
 
 
@@ -650,6 +759,8 @@ async def _record_merge(
     landing_id: str,
     results: List[task_integration.IntegrationResult],
     root: Optional[Path],
+    *,
+    carried_by: Optional[str] = None,
 ) -> None:
     """Write a merge landing's integration records and its state in one short transaction."""
     from .task_transition_service import _redrain_after_commit
@@ -685,6 +796,8 @@ async def _record_merge(
     landing.state = LANDED if landed else NOT_LANDED
     landing.reason = "" if landed else next((r.reason for r in results if r.reason), "")
     landing.landed_sha = next((r.commit_sha for r in results if r.outcome == ti.MERGED), None)
+    if landed and landing.landed_sha is None:
+        landing.landed_sha = carried_by
     landing.ended_at = _now()
     merged = any(result.outcome == ti.MERGED for result in results)
     project_id = task.project_id
@@ -1437,18 +1550,23 @@ async def land_held_batch(batch_id: str, reason: str) -> bool:
             row = await session.get(TaskLanding, landing.id)
             row.state = CHECKING
         await session.commit()
-    async with _lock(project_id):
-        return await _land_batch(
-            root,
-            main_branch,
-            batch_id,
-            base,
-            landings,
-            prefixes,
-            len(prefixes),
-            Chain(),
-            (reason, OVERRIDE_BY_OPERATOR),
-        )
+    try:
+        async with _lock(project_id):
+            return await _land_batch(
+                root,
+                main_branch,
+                batch_id,
+                base,
+                landings,
+                prefixes,
+                len(prefixes),
+                Chain(),
+                (reason, OVERRIDE_BY_OPERATOR),
+            )
+    finally:
+        # Landed or requeued because main moved: either way the queue looks again now, not at the
+        # next unrelated approval or restart (F1126a).
+        kick(project_id)
 
 
 async def _land_batch(

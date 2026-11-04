@@ -1,9 +1,8 @@
 import { Icon } from '@/components/common/Icon'
 import { SpecDefectsReport } from './SpecDefectsReport'
 
-/** Pinned under the spec list: the Evidence entry and the defects report. With `tidy` (being
- *  mocked, spec `the-spec-header-redesigned`) the report starts folded to one line with its count,
- *  so it no longer pushes the list of specs off the screen. */
+/** Pinned under the spec list: the Evidence entry and the defects report, which starts folded to
+ *  one line with its count so it does not push the list of specs off the screen (FR-8). */
 export function SpecListFooter({
   onOpenEvidence,
   evidenceOpen,
@@ -11,7 +10,6 @@ export function SpecListFooter({
   evidenceError,
   currentPath,
   onSelect,
-  tidy = false,
 }: {
   onOpenEvidence?: () => void
   evidenceOpen: boolean
@@ -19,7 +17,6 @@ export function SpecListFooter({
   evidenceError: boolean
   currentPath: string | null
   onSelect: (path: string) => void
-  tidy?: boolean
 }) {
   return (
     <>
@@ -40,7 +37,7 @@ export function SpecListFooter({
           </span>
         </button>
       ) : null}
-      <SpecDefectsReport currentPath={currentPath} onSelect={onSelect} defaultOpen={!tidy} showCount={tidy} />
+      <SpecDefectsReport currentPath={currentPath} onSelect={onSelect} />
     </>
   )
 }

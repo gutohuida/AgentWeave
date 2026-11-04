@@ -45,8 +45,9 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean }> | null
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both' }> | null
   checks_auto_override: boolean
+  checks_give_way?: boolean
 } {
   return {
     name: 'Website',
@@ -85,6 +86,8 @@ let projectAgents: AgentWithCompaction[] = []
 let projectAgentsFailed = false
 let projectsError: Error | null = null
 let runnersError: Error | null = null
+let usualDurationsError: Error | null = null
+let usualDurations: Record<string, { median_seconds: number; longest_seconds: number; passes: number } | null> | undefined
 
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),
@@ -97,6 +100,7 @@ vi.mock('@/api/projects', () => ({
     data: settingsError ? undefined : settings, error: settingsError, isError: settingsError !== null, refetch: refetchSettings,
   }),
   useMainBranchSuggestion: () => ({ data: suggestion }),
+  useCheckUsualDurations: () => ({ data: usualDurations, error: usualDurationsError }),
   useUpdateProjectSettings: () => ({ mutate: update, isPending: false, error: null }),
   useRelocateProject: () => ({ mutate: relocate, isPending: false, error: null, isError: false }),
   useDeleteProject: () => ({
@@ -153,6 +157,8 @@ describe('Project settings → General, applied on change', () => {
     projectAgentsFailed = false
     projectsError = null
     runnersError = null
+    usualDurations = undefined
+    usualDurationsError = null
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
   })
 
@@ -282,6 +288,83 @@ describe('Project settings → General, applied on change', () => {
     expect(lastPatch()).toEqual({ checks: [{ name: 'lint', command: 'ruff check .', timeout_seconds: 60 }] })
   })
 
+  // checks-know-their-phase-and-give-way-to-the-user, FR-1 ac-phase-default: a check saved before
+  // phases reads as both, in the row and in its dialog.
+  it('shows a check saved without a phase as running both before review and at landing', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900 }],
+    }
+    render(<GeneralSection />)
+    expect(screen.queryByTestId('project-check-phase-0')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Edit hub-tests' }))
+    await screen.findByRole('dialog')
+    expect(menuSelect('Runs')).toHaveTextContent('Before review and at landing')
+  })
+
+  // FR-1 ac-phase-set: one check set to landing, the other left as both.
+  it('saves one check as landing-only and leaves the other as both', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [
+        { name: 'lint', command: 'ruff check .', timeout_seconds: 60 },
+        { name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900 },
+      ],
+    }
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit hub-tests' }))
+    await screen.findByRole('dialog')
+    await chooseMenuOption(user, 'Runs', /At landing only/)
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch()).toEqual({
+      checks: [
+        { name: 'lint', command: 'ruff check .', timeout_seconds: 60 },
+        { name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900, phase: 'landing' },
+      ],
+    })
+  })
+
+  it('says a landing-only check is landing-only in its row', () => {
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'hub-tests', command: 'pytest hub', timeout_seconds: 900, phase: 'landing' }],
+    }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-phase-0')).toHaveTextContent('at landing only')
+  })
+
+  // FR-4 ac-fast-refused: said in the dialog before the save, and the Hub's own refusal is shown.
+  it('refuses a fast check that is landing-only, before and after the save', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'lint', command: 'ruff check .', timeout_seconds: 60, fast: true }],
+    }
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit lint' }))
+    const dialog = await screen.findByRole('dialog')
+    await chooseMenuOption(user, 'Runs', /At landing only/)
+    expect(within(dialog).getByText(/a fast check gates an agent's completion before review, so it cannot be landing-only/i)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
+    expect(update).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    // A save that reaches the Hub anyway (another client) is refused there, and the refusal is shown.
+    await user.click(screen.getByRole('switch', { name: "Land over failures that are not the task's" }))
+    answer({
+      // The shape the settings route answers: pydantic's errors, the model validator's sentence.
+      error: new ApiError(422, JSON.stringify({
+        detail: [{
+          type: 'value_error',
+          loc: ['checks', 0],
+          msg: "Value error, 'lint' is fast, and a fast check gates an agent's completion before review, so it cannot be landing-only.",
+        }],
+      })),
+    })
+    expect(await screen.findByTestId('settings-save-refusal')).toHaveTextContent(/cannot be landing-only/)
+  })
+
   it('offers the switch for landing over failures that are not the task’s, on by default', async () => {
     const user = userEvent.setup()
     render(<GeneralSection />)
@@ -290,6 +373,43 @@ describe('Project settings → General, applied on change', () => {
     expect(screen.getByText(/also fails on main, or passed when rerun on its own/)).toBeInTheDocument()
     await user.click(toggle)
     expect(lastPatch()).toEqual({ checks_auto_override: false })
+  })
+
+  it('shows how long each check usually takes beside its time limit, or that none has passed yet', () => {
+    settings = {
+      ...makeSettings(),
+      checks: [
+        { name: 'suite', command: 'pytest', timeout_seconds: 900 },
+        { name: 'lint', command: 'ruff check .', timeout_seconds: 120 },
+      ],
+    }
+    usualDurations = { suite: { median_seconds: 252, longest_seconds: 29.5, passes: 20 }, lint: null }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-0')).toHaveTextContent('900s limit · usually 4m 12s, at most 29.5s')
+    expect(screen.getByTestId('project-check-usual-0')).toHaveAttribute('title', 'The median and longest of its last 20 passing runs in this project')
+    expect(screen.getByTestId('project-check-1')).toHaveTextContent('120s limit · no passing runs yet')
+  })
+
+  it('says nothing about usual durations while they are unknown', () => {
+    settings = { ...makeSettings(), checks: [{ name: 'suite', command: 'pytest', timeout_seconds: 900 }] }
+    render(<GeneralSection />)
+    expect(screen.queryByTestId('project-check-usual-0')).not.toBeInTheDocument()
+  })
+
+  it('says when the usual durations could not be read', () => {
+    settings = { ...makeSettings(), checks: [{ name: 'suite', command: 'pytest', timeout_seconds: 900 }] }
+    usualDurationsError = new Error('Hub unreachable')
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-checks-usual-unreadable')).toHaveTextContent('could not be read')
+  })
+
+  it('offers the switch for checks giving way to the operator, off by default', async () => {
+    const user = userEvent.setup()
+    render(<GeneralSection />)
+    const toggle = screen.getByRole('switch', { name: 'Checks give way to me' })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    await user.click(toggle)
+    expect(lastPatch()).toEqual({ checks_give_way: true })
   })
 
   it('shows the paths of a saved check and keeps them through an edit', async () => {
