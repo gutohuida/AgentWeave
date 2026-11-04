@@ -6,6 +6,8 @@ import re
 from hub.spec_payload import SCHEMA_VERSION
 
 from ._spec_versions import content_version
+from .test_spec_documents_api import _submit
+from .test_spec_documents_api import run_headers as run_headers  # noqa: F401  (the fixture)
 
 BASE = "/api/v1/projects/proj-test/project"
 ROADMAP = "spec/changes/the-roadmap/spec.json"
@@ -94,8 +96,8 @@ async def test_each_slice_says_where_it_stands(app, auth_headers, tmp_path):
 
 
 async def test_a_document_naming_no_slice_is_told_without_being_gated(app, auth_headers, tmp_path):
-    """F704: an unclaimed slice is a note, never a gap. FAILS before: approval answered 409
-    `approval_warnings`, so every unrelated change needed Approve anyway while a slice was open."""
+    """F704: an unclaimed slice is a note, never a gap, and F1123: not shown at approval. FAILS before: approval answered 409
+    `approval_warnings`, then listed the note to the operator."""
     await _roadmap_with_first_claimed(app, auth_headers)
     created = await app.post(
         f"{BASE}/documents", json={"path": LOOSE, "title": "Not a slice"}, headers=auth_headers
@@ -123,9 +125,9 @@ async def test_a_document_naming_no_slice_is_told_without_being_gated(app, auth_
 
     assert approved.status_code == 200, approved.text
     body = approved.json()
-    [note] = [n for n in body["approval_notes"] if n["code"] == "roadmap_slice_unclaimed"]
-    assert "second" in note["message"]
-    assert "first" not in re.findall(r"names: ([^.]*)", note["message"])[0]
+    # F1123: the advice is for an author naming a slice; the operator approving never sees it.
+    assert not [n for n in body.get("approval_notes", []) if n["code"] == "roadmap_slice_unclaimed"]
+    assert "roadmap_slice_unclaimed" not in approved.text
     assert not body.get("approval_warnings_overridden"), body
 
 
@@ -133,3 +135,20 @@ async def test_no_gap_without_an_approved_roadmap(app, auth_headers, tmp_path):
     await _write(app, auth_headers, LOOSE, "Not a slice", _change("Not a slice"))
     response = await _approve(app, auth_headers, LOOSE, anyway=False)
     assert "roadmap_slice_unclaimed" not in response.text
+
+
+async def test_an_author_saving_a_standalone_document_is_told_of_the_open_slice(
+    app, auth_headers, run_headers
+):
+    """F1123: the advice moved to where an author reads it, the save result's warnings."""
+    await _roadmap_with_first_claimed(app, auth_headers)
+    created = await app.post(
+        f"{BASE}/documents", json={"path": LOOSE, "title": "Not a slice"}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+
+    saved = await _submit(app, run_headers, _change("Not a slice"), path=LOOSE)
+
+    assert saved.status_code == 200, saved.text
+    notes = [w for w in saved.json()["warnings"] if w["code"] == "roadmap_slice_unclaimed"]
+    assert notes and "second" in notes[0]["message"]

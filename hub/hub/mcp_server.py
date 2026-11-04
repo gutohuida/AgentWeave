@@ -5315,7 +5315,10 @@ def submit_spec_document(
                  do with it). Collapsing them hides which side of a boundary a defect is on.
 
     `acceptance_criteria` — objects with `key`, `requirement` (a requirement's key), and
-      `given`/`when`/`then`. One per behaviour, binary pass or fail. A requirement's criteria
+      `given`/`when`/`then`, and `how_to_check` (the command or click path that shows it holds)
+      and `checked_by` (who checks it, e.g. "agent" or "operator"). One per behaviour, binary
+      pass or fail. A criterion without `how_to_check` or `checked_by` draws a
+      `criterion_without_check` warning, and approval lists it. A requirement's criteria
       become the standard rendered into the implementer's and the reviewer's turn once a task
       satisfying it is materialised.
 
@@ -5381,8 +5384,10 @@ def submit_spec_document(
       roadmap is approved and holds that slice. Include it in every later submission.
 
     Returns the path, the phase, the identifier assigned to each requirement key, `blocking` —
-    what would refuse its approval right now — and `ready_to_approve`, which is false while
-    anything blocks. A saved document is not a ready one: say it is ready only when that field is
+    what would refuse its approval right now — `warnings`, which include what approval lists as
+    missing (a criterion with no `how_to_check`/`checked_by`, a first task that is not the
+    acceptance drive) — and `ready_to_approve`, which is false while anything blocks or any such
+    approval gap is present. A saved document is not a ready one: say it is ready only when that field is
     true.
     """
     document: Dict[str, Any] = {

@@ -2821,7 +2821,7 @@ async def submit_spec_document(
     and refusing it would make exploring impossible. `blocking` says what approval would refuse,
     exactly as the operator's Check reports it.
     """
-    from ... import project_workspace, spec_lifecycle, spec_service
+    from ... import project_workspace, spec_completeness, spec_lifecycle, spec_service
     from ...spec_manifest import SpecPathError, validate_spec_path
 
     try:
@@ -2869,7 +2869,9 @@ async def submit_spec_document(
         "identifiers": result.identifiers,
         "blocking": result.blocking,
         # F502: an agent read the call's success beside eight blocking findings as "ready".
-        "ready_to_approve": not result.blocking,
+        # F1124: and no gap Approve would list, which the warnings carry.
+        "ready_to_approve": not result.blocking
+        and not any(w.get("code") in spec_completeness.APPROVAL_GAP_CODES for w in result.warnings),
         "divergence": result.divergence,
         "warnings": result.warnings,
     }
