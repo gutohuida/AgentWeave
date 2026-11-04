@@ -1583,12 +1583,73 @@ async def _fire_automatic(project_id: str, document_id: str, task_id: str) -> No
 
 _PENDING_KEY = "build_retrospective_pending"
 
+#: Firings waiting for the run that approved their last task to end, by that run's id. An approval
+#: by a reviewer happens inside the reviewer's turn, whose end and usage are recorded only when it
+#: ends: assembled at the approval, the record read the approving run as still running, with no
+#: cost and no model (:8000, 2026-11-04, run-14a3aa435478 and run-df2d93e14e9a).
+_waiting_on_run: Dict[str, List[Tuple[str, str, str]]] = {}
+_run_end_timers: Dict[str, "asyncio.Task[None]"] = {}
+#: How long a firing waits for its approving run to end before it fires anyway: a run that dies
+#: without its end being recorded (a `dead_run` stall) must not hold the build's review forever.
+RUN_END_WAIT_SECONDS = 15 * 60.0
 
-def fire_after_commit(session: AsyncSession, task: Task) -> None:
+
+def fire_after_commit(session: AsyncSession, task: Task, run_id: Optional[str] = None) -> None:
     """Fire for *task*, its document's last open task just approved, once the session's root
-    transaction commits, and never if it does not. Whether the job is on is judged when it fires."""
+    transaction commits, and never if it does not. Whether the job is on is judged when it fires.
+
+    *run_id*: the run that approved it, where a run did. The firing then waits for that run to end
+    (`after_run`), so the record holds its end, model and cost."""
     pending = session.sync_session.info.setdefault(_PENDING_KEY, {})
-    pending[(task.project_id, task.spec_document_id)] = task.id
+    pending[(task.project_id, task.spec_document_id)] = (task.id, run_id)
+
+
+def after_run(project_id: str, run_id: str) -> None:
+    """*run_id* has ended and its usage is committed: fire what waited for it. Never raises; called
+    right after the run's closing commit, beside `flow_advance.after_run`."""
+    timer = _run_end_timers.pop(run_id, None)
+    if timer is not None:
+        timer.cancel()
+    waiting = _waiting_on_run.pop(run_id, [])
+    if not waiting:
+        return
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    for project_id, document_id, task_id in waiting:
+        _spawn(_fire_automatic(project_id, document_id, task_id))
+
+
+def _fire_waiting(run_id: str) -> None:
+    _run_end_timers.pop(run_id, None)
+    for project_id, document_id, task_id in _waiting_on_run.pop(run_id, []):
+        _spawn(_fire_automatic(project_id, document_id, task_id))
+
+
+async def _fire_if_run_ended(run_id: str) -> None:
+    """Fire what waits on *run_id* now where it has already ended (or does not exist); else leave
+    it to `after_run`, with `RUN_END_WAIT_SECONDS` as the backstop."""
+    try:
+        async with async_session_factory() as db:
+            run = await db.get(Run, run_id)
+            ended = run is None or run.status != "running"
+    except Exception:  # noqa: BLE001 -- a background task must not raise; fire rather than lose it
+        logger.warning("could not read run %s for the retrospective", run_id, exc_info=True)
+        ended = True
+    if ended:
+        _fire_waiting(run_id)
+    elif run_id in _waiting_on_run and run_id not in _run_end_timers:
+        # Not in `_in_flight`: `settled` waits for firings, not for a run that has not ended.
+        _run_end_timers[run_id] = asyncio.get_running_loop().create_task(_backstop(run_id))
+
+
+async def _backstop(run_id: str) -> None:
+    try:
+        await asyncio.sleep(RUN_END_WAIT_SECONDS)
+    except asyncio.CancelledError:
+        return
+    _fire_waiting(run_id)
 
 
 async def settled() -> None:
@@ -1609,8 +1670,13 @@ def _fire_pending(session: Session) -> None:
     except RuntimeError:
         logger.warning("no event loop to fire the retrospective; it will not fire for this event")
         return
-    for (project_id, document_id), task_id in pending.items():
-        _spawn(_fire_automatic(project_id, document_id, task_id))
+    for (project_id, document_id), (task_id, run_id) in pending.items():
+        if run_id is None:
+            _spawn(_fire_automatic(project_id, document_id, task_id))
+            continue
+        # Parked first, then checked: `after_run` may come at any await, and whichever pops it fires.
+        _waiting_on_run.setdefault(run_id, []).append((project_id, document_id, task_id))
+        _spawn(_fire_if_run_ended(run_id))
 
 
 @event.listens_for(Session, "after_transaction_end")
