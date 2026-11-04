@@ -1101,7 +1101,7 @@ async def apply_transition(
         if wait is not None:
             if wait.needs_a_run:
                 project_checks.schedule(task.project_id, task.id)
-            elif wait.state == "failed":
+            elif wait.returns_the_work:
                 project_checks.schedule_return(task.id)
             raise ChecksPendingError(task, wait)
 

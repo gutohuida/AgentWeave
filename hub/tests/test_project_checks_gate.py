@@ -268,25 +268,28 @@ async def test_nothing_is_said_without_checks(app, tmp_path):
 @pytest.mark.asyncio
 async def test_an_errored_result_does_not_hold_approval(app, auth_headers, tmp_path, monkeypatch):
     """F516 under `approved-work-merges-in-batches`: an error is the Hub failing to produce a
-    result, not a verdict. It holds no approval and approving starts no run; the batch checks it."""
+    result, not a verdict. It holds no approval and approving starts no run; the batch checks it.
+    Since `checks-know-their-phase-and-give-way-to-the-user` (FR-9) an error is retried once, so the
+    checkout fails twice here: the second error is the operator's, and approval is not held."""
     task_id, work = await _task_with_work(tmp_path)
     real = project_checks._checkout
     calls = []
 
     def flaky(root, task, commit):
         calls.append(commit)
-        if len(calls) == 1:
+        if len(calls) <= 2:
             raise RuntimeError("git worktree add timed out")
         return real(root, task, commit)
 
     monkeypatch.setattr(project_checks, "_checkout", flaky)
     await _checked(task_id, [PASS])
-    assert [r.state for r in await _runs(task_id)] == ["error"]
+    await project_checks.drain()
+    assert [r.state for r in await _runs(task_id)] == ["error", "error"]
 
     approved = await _approve(app, auth_headers, task_id)
     assert approved.status_code == 200, approved.text
     await project_checks.drain()
-    assert [r.state for r in await _runs(task_id)] == ["error"]
+    assert [r.state for r in await _runs(task_id)] == ["error", "error"]
     await landing_queue.drain()
     assert work in commits_on(tmp_path, "main")
 

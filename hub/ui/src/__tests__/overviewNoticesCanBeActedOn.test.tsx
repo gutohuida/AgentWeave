@@ -373,3 +373,27 @@ describe('the other notices', () => {
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 })
+
+describe('a task whose checks could not judge its work (`checks_unjudged`)', () => {
+  it('is listed under Needs you with the error and the task, opened from the row, and dismissable', () => {
+    const onOpen = vi.fn()
+    openStalls = [
+      stall({
+        id: 'stall-u',
+        key: 'checks_unjudged:task-u',
+        cause: 'checks_unjudged',
+        task_id: 'task-u',
+        reason: 'The checks of CKT-3 (“Route the runs”) ended twice in a row without judging its work: git worktree add failed (check run chk-2)',
+      }),
+    ]
+    render(<OverviewScreen onNavigate={onOpen} />)
+
+    const row = rowOf('A task’s checks could not judge its work')
+    expect(within(row).getByText(/git worktree add failed \(check run chk-2\)\./)).toBeInTheDocument()
+    expect(within(row).getByText(/CKT-3/)).toBeInTheDocument()
+    fireEvent.click(within(row).getByRole('button', { name: 'Open task' }))
+    expect(onOpen).toHaveBeenCalledWith('tasks')
+    fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' }))
+    expect(endStallMutate.mock.calls[endStallMutate.mock.calls.length - 1][0]).toBe('stall-u')
+  })
+})

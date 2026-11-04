@@ -30,6 +30,13 @@ re-runs nothing. A different tree is always checked again. A failure is never re
 A failure is confirmed before it is charged to the task: the failed tests (pytest node ids parsed
 from the output) or else the whole check are run once more on the same tree. Only a reproduced
 failure stands; one that passes the second time passes, and the result records the flake.
+
+Only a result that judged the work counts against the task (`checks-know-their-phase-and-give-way-
+to-the-user`, FR-7-FR-10). A run that did not is recorded `error` with what ended it (`ended_by`): a
+merge conflict sends the task back to its builder as merge-needed, and no run starts on the same
+work again; a Hub fault, or a check that ran out of time naming no failing test, is retried once on
+the current tip, and a second in a row is a `checks_unjudged` stall on the operator's Needs-you list,
+the task left where it is. A run the Hub's stop interrupted is requested again at the next start.
 """
 
 from __future__ import annotations
@@ -79,6 +86,12 @@ DECIDED = ("passed", "failed", "error")
 SUPERSEDED = "superseded"
 #: The task states whose results are refreshed when main moves: those waiting for review.
 AWAITING_REVIEW = ("completed", "under_review")
+#: What ended an `error` run, which did not judge the work (`TaskCheckRun.ended_by`).
+ENDED_BY_CONFLICT = "conflict"
+ENDED_BY_FAULT = "fault"
+ENDED_BY_TIMEOUT = "timeout"
+#: The stall a task's second run in a row that did not judge its work raises (FR-9).
+UNJUDGED_STALL = "checks_unjudged"
 #: How often each project's main tip is read, to notice a move made outside the Hub. Two looks fit
 #: inside the 120 seconds the refresh promises.
 WATCH_SECONDS = 30.0
@@ -256,6 +269,15 @@ def build_merged_commit(
     to merge the next target onto. The commits are unreferenced; nothing moves a branch, and no
     checkout or index changes. A target already in the base is skipped, as `integrate` skips it.
     """
+    commit, why, _ = merge_for_checks(root, main_sha, target_shas)
+    return commit, why
+
+
+def merge_for_checks(
+    root: Path, main_sha: str, target_shas: Sequence[str]
+) -> Tuple[Optional[str], str, bool]:
+    """`build_merged_commit`, and whether a `None` was a merge conflict (FR-7) rather than git
+    failing otherwise; *why* names the conflicting files."""
     base = main_sha
     for target in target_shas:
         ancestor = _git(root, "merge-base", "--is-ancestor", target, base)
@@ -264,11 +286,24 @@ def build_merged_commit(
         merged = _git(root, "merge-tree", "--write-tree", "--name-only", base, target)
         lines = merged.stdout.splitlines()
         if merged.returncode != 0 or not lines:
-            paths = [line.strip() for line in lines[1:] if line.strip()][:10]
-            return None, (
-                f"{target[:12]} does not merge cleanly onto {base[:12]}"
-                + (f" ({', '.join(paths)})" if paths else "")
-                + ", so there is no merged work to check"
+            # The conflicted paths follow the tree line, up to a blank line and git's messages.
+            paths = []
+            for line in lines[1:]:
+                if not line.strip():
+                    break
+                paths.append(line.strip())
+            paths = paths[:10]
+            if merged.returncode != 1 or not lines:
+                # 1 is a conflict; anything else (a bad object, git itself failing) is a fault.
+                return None, f"git merge-tree failed: {merged.stderr.strip()[:300]}", False
+            return (
+                None,
+                (
+                    f"{target[:12]} does not merge cleanly onto {base[:12]}"
+                    + (f" ({', '.join(paths)})" if paths else "")
+                    + ", so there is no merged work to check"
+                ),
+                True,
             )
         tree = lines[0].strip()
         commit = _git(
@@ -283,9 +318,9 @@ def build_merged_commit(
             f"agentweave checks: {target[:12]} onto {base[:12]}",
         )
         if commit.returncode != 0:
-            return None, f"git commit-tree failed: {commit.stderr.strip()[:300]}"
+            return None, f"git commit-tree failed: {commit.stderr.strip()[:300]}", False
         base = commit.stdout.strip()
-    return base, ""
+    return base, "", False
 
 
 def _checkout_path(root: Path, task_id: str) -> Path:
@@ -594,6 +629,10 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
         excerpt = failure_excerpt(text)
         if excerpt:
             result["failure_excerpt"] = excerpt
+    if timed_out:
+        named = named_failures(text)
+        if named:
+            result["named_failures"] = named
     return result
 
 
@@ -832,6 +871,31 @@ def summary_counts(output: str) -> Optional[Dict[str, int]]:
                 counts[kind] = counts.get(kind, 0) + int(number)
             return counts
     return None
+
+
+#: A test pytest reported failed or erroring as it went: the short summary's `FAILED x::t`, xdist's
+#: `[gw0] [ 5%] FAILED x::t`, or verbose `x::t FAILED`.
+_NAMED_FAILURE_RE = re.compile(
+    r"(?:\b(?:FAILED|ERROR) (\S+::\S+))|(?:(\S+::\S+) (?:FAILED|ERROR)\b)", re.MULTILINE
+)
+
+
+def named_failures(output: str) -> List[str]:
+    """Every test *output* names as failed or erroring, whether or not pytest got as far as its
+    final count: what a check that ran out of time had already found (FR-10)."""
+    ids: List[str] = []
+    for match in _NAMED_FAILURE_RE.finditer(output):
+        node = _XDIST_GROUP_RE.sub("", (match.group(1) or match.group(2)).strip())
+        if node and node not in ids:
+            ids.append(node)
+    return ids
+
+
+def unjudged_timeout(result: Dict[str, Any]) -> bool:
+    """A check that ran out of time without naming a failing test: it says nothing about the work,
+    so it is not the task's failure (FR-10). One that named a failure before its time ran out still
+    is, as before."""
+    return bool(result.get("timed_out")) and not result.get("named_failures")
 
 
 def failed_test_ids(output: str) -> List[str]:
@@ -1226,6 +1290,53 @@ async def latest_run(session: AsyncSession, task_id: str) -> Optional[TaskCheckR
     )
 
 
+async def _latest_two(session: AsyncSession, task_id: str) -> List[TaskCheckRun]:
+    return list(
+        (
+            await session.execute(
+                select(TaskCheckRun)
+                .where(TaskCheckRun.task_id == task_id)
+                .order_by(TaskCheckRun.started_at.desc(), TaskCheckRun.id.desc())
+                .limit(2)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def conflicted(run: Optional[TaskCheckRun]) -> bool:
+    """A run that found the task's work does not merge onto main (FR-7)."""
+    return run is not None and run.state == "error" and run.ended_by == ENDED_BY_CONFLICT
+
+
+def unjudged(run: Optional[TaskCheckRun]) -> bool:
+    """A run that ended without judging the work for a reason the Hub retries once (FR-9, FR-10):
+    a Hub fault, or a check out of time naming no failing test. A conflict is the builder's, and an
+    `error` recorded before `ended_by` existed reads as before."""
+    return (
+        run is not None
+        and run.state == "error"
+        and run.ended_by in (ENDED_BY_FAULT, ENDED_BY_TIMEOUT)
+    )
+
+
+async def _unjudged_stands(
+    session: AsyncSession, latest: Optional[TaskCheckRun], targets: Sequence[str]
+) -> bool:
+    """Whether no new run may start on *targets* without the operator's re-run: the latest run on
+    exactly this work conflicted (only a new commit changes that, FR-7), or it and the run before it
+    both ended without a verdict (FR-9: one retry, then the operator)."""
+    if latest is None or list(latest.target_shas or []) != list(targets):
+        return False
+    if conflicted(latest):
+        return True
+    if not unjudged(latest):
+        return False
+    runs = await _latest_two(session, latest.task_id)
+    return len(runs) == 2 and unjudged(runs[1]) and list(runs[1].target_shas or []) == list(targets)
+
+
 @dataclass
 class CheckView:
     """What the gate may say about a task's checks right now."""
@@ -1352,6 +1463,9 @@ async def _finish(run_id: str, **fields: Any) -> None:
         await session.commit()
         if fields.get("state") in DECIDED:
             await _announce_finished(session, run)
+        project_id, task_id = run.project_id, run.task_id
+    if fields.get("state") in ("passed", "failed"):
+        await _resolve_unjudged(project_id, task_id)
     if fields.get("state") in DECIDED:
         await _after_decided(run_id)
 
@@ -1486,6 +1600,12 @@ async def request_run(
             if not targets:
                 return None
             latest = await latest_run(session, task_id)
+            if not force and await _unjudged_stands(session, latest, targets):
+                # The same work conflicted with main, which only its builder can change (FR-7), or
+                # ended twice without a verdict and is on the operator's Needs-you list (FR-9).
+                if latest is not None and latest.ended_by == ENDED_BY_CONFLICT:
+                    schedule_return(task_id)
+                return latest.id if latest is not None else None
             if (
                 not force
                 and latest is not None
@@ -1519,6 +1639,7 @@ async def request_run(
                 run.ended_at = datetime.now(timezone.utc)
                 session.add(run)
                 await session.commit()
+                await _resolve_unjudged(project_id, task_id)
                 return run.id
             session.add(run)
             await session.commit()
@@ -1586,6 +1707,8 @@ async def _execute(
     so nothing executes twice. The checkout is made once and kept while the rest queue."""
     results: List[Dict[str, Any]] = []
     path: Optional[Path] = None
+    #: The check that ran out of time naming no failing test, once one has.
+    timed_out: Optional[Dict[str, Any]] = None
 
     async def superseded() -> bool:
         """Whether the task's work changed under this run (a new completion); if so it ends
@@ -1611,8 +1734,9 @@ async def _execute(
         baseline: _MainBaseline,
     ) -> Optional[str]:
         """Run *group* in order: `None` to go on, `"stop"` where the task's own failure decided
-        the run, `"superseded"` where the task's work changed under it."""
-        nonlocal path
+        the run, `"superseded"` where the task's work changed under it, `"timeout"` where a check
+        ran out of time naming no failing test, which judged nothing (FR-10)."""
+        nonlocal path, timed_out
         for check, already in group:
             if await superseded():
                 return "superseded"
@@ -1621,6 +1745,13 @@ async def _execute(
                 if path is None:
                     path = await asyncio.to_thread(_checkout, root, task_id, merged)
                 result = await asyncio.to_thread(run_one, check, path, task_id)
+                if unjudged_timeout(result) and task_id not in _superseded:
+                    # Not confirmed, and main not asked: running out of time again, or on main,
+                    # would say no more about the work. The run is retried instead (FR-9).
+                    result.update(tree=tree, check_digest=check_digest(check))
+                    results.append(result)
+                    timed_out = check
+                    return "timeout"
                 if failed(result) and task_id not in _superseded:
                     # Confirmed on the same tree before main is asked (a flake that passes the
                     # second time needs no baseline); only a reproduced failure stands.
@@ -1648,9 +1779,16 @@ async def _execute(
         if prepared is not None:
             merged, tree, changed, planned = prepared
         else:
-            built, why = await asyncio.to_thread(build_merged_commit, root, main_sha, targets)
+            built, why, conflict = await asyncio.to_thread(
+                merge_for_checks, root, main_sha, targets
+            )
             if built is None:
-                await _finish(run_id, state="error", error=why)
+                await _finish(
+                    run_id,
+                    state="error",
+                    error=why,
+                    ended_by=ENDED_BY_CONFLICT if conflict else ENDED_BY_FAULT,
+                )
                 return
             merged = built
             tree = await asyncio.to_thread(tree_of, root, merged)
@@ -1680,12 +1818,29 @@ async def _execute(
             await baseline.close()
         if await superseded():
             return
+        if outcome == "timeout" and timed_out is not None:
+            await _finish(
+                run_id,
+                state="error",
+                ended_by=ENDED_BY_TIMEOUT,
+                merged_sha=merged,
+                results=list(results),
+                error=(
+                    f"the check {timed_out['name']} ran past its {timed_out['timeout_seconds']}s "
+                    "time limit and named no failing test, so it says nothing about the work"
+                ),
+            )
+            return
         state = "failed" if any(failed(r) for r in results) else "passed"
         await _finish(run_id, state=state, merged_sha=merged, results=list(results))
     except Exception as exc:  # noqa: BLE001 -- a run must end recorded, never `running` forever
         logger.warning("check run %s failed to complete", run_id, exc_info=True)
         await _finish(
-            run_id, state="error", results=list(results), error=f"{type(exc).__name__}: {exc}"
+            run_id,
+            state="error",
+            ended_by=ENDED_BY_FAULT,
+            results=list(results),
+            error=f"{type(exc).__name__}: {exc}",
         )
     finally:
         _fast_decided(run_id)
@@ -1765,12 +1920,59 @@ async def _check_shared_failure_again(project_id: str, task_id: str) -> None:
     try:
         async with async_session_factory() as session:
             latest = await latest_run(session, task_id)
-        if latest is None or latest.state != "failed" or own_failure(latest.results):
-            return
+            if unjudged(latest):
+                # Did not judge the work (FR-9, FR-10): asked once more on the current tip, unless
+                # this was that once, which goes to the operator instead.
+                if await _unjudged_stands(session, latest, list(latest.target_shas or [])):
+                    await _surface_unjudged(session, latest)
+                    return
+            elif latest is None or latest.state != "failed" or own_failure(latest.results):
+                return
     except Exception:  # noqa: BLE001 -- the next main move or approval asks again
         logger.warning("could not read the ended check run of %s", task_id, exc_info=True)
         return
     await _replace(project_id, task_id)
+
+
+async def _surface_unjudged(session: AsyncSession, run: TaskCheckRun) -> None:
+    """Put *run*, the second in a row on its task's work to end without a verdict, on the
+    operator's Needs-you list as a `checks_unjudged` stall: no run is requested, the task is not
+    moved, and the mender is not woken -- nothing it can do re-runs a check (FR-9)."""
+    from . import stalls
+
+    task = await session.get(Task, run.task_id)
+    label = (task.readable_id or task.id) if task is not None else run.task_id
+    title = task.title if task is not None else run.task_id
+    text = (
+        f"The checks of {label} (“{title}”) ended twice in a row without judging its "
+        f"work, so they are not run again on their own: {run.error} (check run {run.id}). "
+        f"Re-run them from the task once the cause is fixed."
+    )
+    await stalls.record(
+        session,
+        run.project_id,
+        cause=UNJUDGED_STALL,
+        subject=run.task_id,
+        text=text,
+        task_id=run.task_id,
+        loop_id=task.loop_id if task is not None else None,
+    )
+
+
+async def _resolve_unjudged(project_id: str, task_id: str) -> None:
+    """A run on the task judged its work: its `checks_unjudged` stall, if open, is over. Never
+    raises."""
+    from . import stalls
+
+    try:
+        async with async_session_factory() as session:
+            open_one = await stalls.open_stall(
+                session, project_id, stalls.stall_key(UNJUDGED_STALL, task_id)
+            )
+            if open_one is not None:
+                await stalls.end(session, open_one, "resolved", "a later check run judged the work")
+    except Exception:  # noqa: BLE001
+        logger.warning("could not end the unjudged-checks stall of %s", task_id, exc_info=True)
 
 
 async def _awaiting_review_oldest_first(session: AsyncSession, project_id: str) -> List[str]:
@@ -1980,6 +2182,42 @@ async def interrupt_leftover_runs() -> int:
         )
         await session.commit()
         return int(result.rowcount or 0)
+
+
+async def rerun_after_hub_stop() -> int:
+    """At startup, after `interrupt_leftover_runs`: request a run now for every task still waiting
+    for its pre-review result whose latest run the Hub's stop interrupted (FR-8). Nothing about its
+    work was judged, so it does not wait for main to move or an approval. How many were requested;
+    never raises."""
+    try:
+        async with async_session_factory() as session:
+            projects = [
+                project.id
+                for project in (await session.execute(select(Project))).scalars()
+                if project.main_branch and configured_checks(project, PHASE_REVIEW)
+            ]
+            interrupted: List[Tuple[str, str]] = []
+            for project_id in projects:
+                for task_id in await _awaiting_review_oldest_first(session, project_id):
+                    latest = await latest_run(session, task_id)
+                    if latest is not None and latest.state == "interrupted":
+                        interrupted.append((project_id, task_id))
+    except Exception:  # noqa: BLE001 -- the main watch's first look still refreshes them
+        logger.warning("could not read the check runs the Hub's stop interrupted", exc_info=True)
+        return 0
+    requested = 0
+    for project_id, task_id in interrupted:
+        try:
+            if await request_run(project_id, task_id) is not None:
+                requested += 1
+        except Exception:  # noqa: BLE001 -- one task's failure does not hold the others
+            logger.warning("could not re-run the interrupted checks of %s", task_id, exc_info=True)
+    return requested
+
+
+def schedule_rerun_after_hub_stop() -> None:
+    """Fire-and-forget `rerun_after_hub_stop`, for `main.lifespan`. Never raises."""
+    _background(rerun_after_hub_stop(), "re-run the check runs the Hub's stop interrupted")
 
 
 # --- checks before review (`checks-run-before-anyone-reviews`) -----------------------------------
@@ -2241,7 +2479,8 @@ def _aware(moment: datetime) -> datetime:
 class ReviewWait:
     """Why a review of a completed task waits for its checks (FR-6, D6)."""
 
-    #: `running`, `missing`, `stale`, `interrupted`, or `failed` (the task's own failure).
+    #: `running`, `missing`, `stale`, `interrupted`, `failed` (the task's own failure), or
+    #: `conflict` (its work does not merge onto main, FR-7).
     state: str
     run_id: Optional[str]
     reason: str
@@ -2250,11 +2489,27 @@ class ReviewWait:
     def needs_a_run(self) -> bool:
         return self.state in ("missing", "stale", "interrupted")
 
+    @property
+    def returns_the_work(self) -> bool:
+        """Whether the work goes back to its builder (`schedule_return`) rather than waiting."""
+        return self.state in ("failed", "conflict")
+
+
+def _conflict_wait(run: TaskCheckRun) -> ReviewWait:
+    return ReviewWait(
+        "conflict",
+        run.id,
+        f"its work does not merge onto the main branch ({run.error}; check run {run.id}), so it "
+        f"goes back to its builder rather than to a reviewer",
+    )
+
 
 async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]:
     """Whether a review of *task*'s work must wait for its check run, and why; `None` where it need
     not (no checks apply, or they passed, or decided with no failure of the task's own, or the Hub
-    could not produce a result -- the reviewer is told that as today). Reads only; starts nothing.
+    could not produce a result -- the reviewer is told that as today). A run that found the work
+    does not merge onto main holds it as `conflict`: it goes back to its builder (FR-7). Reads
+    only; starts nothing.
     """
     from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 
@@ -2268,8 +2523,22 @@ async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]
     targets = await check_targets(session, task, root, awaiting_review=True)
     seen = await view(session, task, root, project.main_branch, targets)
     if seen is None or seen.state in ("passed", "error"):
+        if seen is not None and seen.state == "error" and conflicted(seen.run):
+            return _conflict_wait(seen.run)
         return None
     run = seen.run
+    # On an older main tip (`stale`), but no run follows on this work without the operator: it
+    # conflicted (FR-7), or ended twice without a verdict (FR-9) and the review goes on.
+    if (
+        run is not None
+        and run.state == "error"
+        and run.target_shas
+        and await _unjudged_stands(session, run, list(run.target_shas))
+    ):
+        tip = await asyncio.to_thread(main_tip, root, project.main_branch)
+        pending = await asyncio.to_thread(unmerged, root, tip, targets) if tip else []
+        if pending == list(run.target_shas):
+            return _conflict_wait(run) if conflicted(run) else None
     run_id = run.id if run is not None else None
     if seen.state == "failed":
         if run is None or not own_failure(run.results):
@@ -2325,13 +2594,16 @@ async def return_failed_work(run_id: str) -> bool:
     from .run_task_binding import withdraw_review_entries_for
     from .sse import sse_manager
     from .task_transition_service import ORIGIN_CHECKS, TransitionRefusedError, apply_transition
-    from .task_transitions import operator
+    from .task_transitions import SEND_BACK_MERGE_NEEDED, operator
     from .utils import persist_event
 
     try:
         async with async_session_factory() as session:
             run = await session.get(TaskCheckRun, run_id)
-            if run is None or run.state != "failed" or not own_failure(run.results):
+            conflict = conflicted(run)
+            if run is None or not (
+                conflict or (run.state == "failed" and own_failure(run.results))
+            ):
                 return False
             task = await session.get(Task, run.task_id)
             if task is None or task.status != "completed":
@@ -2350,7 +2622,19 @@ async def return_failed_work(run_id: str) -> bool:
             targets = await check_targets(session, task, root, awaiting_review=True)
             if await asyncio.to_thread(unmerged, root, tip, targets) != list(run.target_shas or []):
                 return False
-            report = failure_report(run.results or [], run_id=run.id, merged_sha=run.merged_sha)
+            if conflict:
+                # FR-7: the builder can resolve it; nothing re-runs until its branch moves.
+                report = (
+                    f"The task's work could not be checked: {run.error} (check run {run.id}). "
+                    f"Merge {project.main_branch} into the task's branch, resolve the conflicts "
+                    f"and complete the task again; its checks run on the new commit."
+                )
+                reason_class = SEND_BACK_MERGE_NEEDED
+                note = f"the task's work does not merge onto {project.main_branch} (check run {run.id})"
+            else:
+                report = failure_report(run.results or [], run_id=run.id, merged_sha=run.merged_sha)
+                reason_class = send_back_class(run.results)
+                note = f"the project's checks failed on check run {run.id}"
             # Read before the write lock: the send-back holds the task's accepted evidence, less
             # what already landed (`a-checks-send-back-returns-the-task-s-accepted-evidence`, FR-2).
             from .requirement_evidence import own_accepted_commits_on_main
@@ -2379,10 +2663,10 @@ async def return_failed_work(run_id: str) -> bool:
                     operator(),
                     origin=ORIGIN_CHECKS,
                     verdict_reason=report,
-                    note=f"the project's checks failed on check run {run.id}",
+                    note=note,
                     accepted_on_main=on_main,
-                    reason_class=send_back_class(run.results),
-                    reason=f"The project's checks failed on check run {run.id}.",
+                    reason_class=reason_class,
+                    reason=f"{note[0].upper()}{note[1:]}.",
                 )
             except TransitionRefusedError:
                 logger.warning("could not return %s for its failed checks", task.id, exc_info=True)
