@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -74,7 +74,20 @@ _TRANSCRIPT_CHAR_LIMIT = 60_000
 _ENTRY_CHAR_LIMIT = 4_000
 
 
-class CheckpointBody(BaseModel):
+class CheckpointTitle(BaseModel):
+    """What tells one checkpoint from another. Asked for on its own only by the one-time fill of
+    checkpoints taken before titles existed (`checkpoint_fill`); generation asks for it as part of
+    `CheckpointBody`. Optional for the reason `CheckpointBody` gives."""
+
+    title: Optional[str] = Field(
+        default=None, description="What this checkpoint is about: at most 8 words, 60 characters."
+    )
+    summary: Optional[str] = Field(
+        default=None, description="At most two sentences and 300 characters."
+    )
+
+
+class CheckpointBody(CheckpointTitle):
     """The judgement half. Every field here is something the Hub cannot determine for itself.
 
     Deliberately absent: files changed, tasks, questions, timestamps, runner, model. Those are
@@ -87,12 +100,6 @@ class CheckpointBody(BaseModel):
     the schema's — a schema violation would discard the whole answer.
     """
 
-    title: Optional[str] = Field(
-        default=None, description="What this checkpoint is about: at most 8 words, 60 characters."
-    )
-    summary: Optional[str] = Field(
-        default=None, description="At most two sentences and 300 characters."
-    )
     objective: str = Field(description="What this conversation is for, in one or two sentences.")
     state: str = Field(description="Where the work actually got to.")
     decisions: List[str] = Field(
@@ -726,11 +733,14 @@ class GenerationAnswer:
     `accepted` is an answer whose title and summary passed; `readable` the last answer that parsed
     but was rejected; neither, when nothing could be read. `reason` says what was wrong with each
     asking, for the record; `unreadable_answer` is the raw text of an answer that could not be
-    read, kept for "show what the model returned" and never used as the body.
+    read, kept for "show what the model returned" and never used as the body. `answered` is
+    whether a model was reached at all, by either asking: the one-time fill leaves a checkpoint
+    for its next start when it was not.
     """
 
-    accepted: Optional[CheckpointBody] = None
-    readable: Optional[CheckpointBody] = None
+    accepted: Optional[CheckpointTitle] = None
+    readable: Optional[CheckpointTitle] = None
+    answered: bool = False
     reason: Optional[str] = None
     unreadable_answer: Optional[str] = None
     invocation_id: Optional[str] = None
@@ -747,6 +757,8 @@ async def ask_for_checkpoint(
     runner_id: Optional[str],
     initiator: Initiator,
     kind: str = "checkpoint",
+    output_model: Type[CheckpointTitle] = CheckpointBody,
+    prompt_version: str = CHECKPOINT_PROMPT_VERSION,
 ) -> GenerationAnswer:
     """Ask the model for a checkpoint, and once more if its answer is rejected.
 
@@ -764,8 +776,8 @@ async def ask_for_checkpoint(
             project_id=project_id,
             kind=kind,
             prompt=prompt_for(rejection),
-            prompt_version=CHECKPOINT_PROMPT_VERSION,
-            output_model=CheckpointBody,
+            prompt_version=prompt_version,
+            output_model=output_model,
             cli=cli,
             model=model,
             runner_id=runner_id,
@@ -774,7 +786,8 @@ async def ask_for_checkpoint(
         )
         answer.askings += 1
         answer.invocation_id = result.invocation_id
-        if result.ok and isinstance(result.parsed, CheckpointBody):
+        answer.answered = answer.answered or result.ok or result.outcome in _ANSWERED
+        if result.ok and isinstance(result.parsed, output_model):
             problem = title_problem(result.parsed.title, result.parsed.summary)
             if problem is None:
                 answer.accepted = result.parsed
@@ -800,8 +813,9 @@ def apply_title(checkpoint: Checkpoint, answer: GenerationAnswer, *, fallback_te
     """Give *checkpoint* its title and summary from *answer*, or make them (FR-13).
 
     The model's when an answer was accepted. Otherwise the Hub's: from *fallback_text* (the body's
-    first words and opening sentences) when an answer could be read, else from the agent, trigger
-    and date, keeping any unreadable raw text aside. Always leaves a title — a checkpoint never
+    first words and opening sentences) when it has any -- generation's body exists only when an
+    answer could be read; the fill's existed before it asked -- else from the agent, trigger and
+    date, keeping any unreadable raw text aside. Always leaves a title — a checkpoint never
     ends with no information. Does not commit.
     """
     if answer.accepted is not None:
@@ -811,7 +825,7 @@ def apply_title(checkpoint: Checkpoint, answer: GenerationAnswer, *, fallback_te
         checkpoint.title_reason = None
         checkpoint.unreadable_answer = None
         return
-    title = title_from_text(fallback_text) if answer.readable is not None else None
+    title = title_from_text(fallback_text)
     if title is not None:
         checkpoint.title = title
         checkpoint.summary = summary_from_text(fallback_text) or title
