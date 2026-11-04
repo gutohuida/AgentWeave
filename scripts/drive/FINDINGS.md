@@ -41311,7 +41311,7 @@ Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `
 
 ## F1128 (C) -- in the spec side screen, Approve anyway sits on top of the warning text it answers
 
-**Status:** open 2026-11-04. Reported by the operator; not driven or screenshotted yet.
+**Status:** fixed 2026-11-04 in `b00cf59` (Developer, Tier 0): the warning block and Approve anyway are stacked. Test: `specApprovalWarnings.test.tsx`. Verified by the Architect on the merged tree: lint, tsc and 63 vitest pass. Not driven in the app.
 **Source:** asked for by the operator
 **Theme:** Spec flow UI
 **Ready:** yes
@@ -41321,7 +41321,7 @@ When approval of a spec is refused with warnings (`approval_warnings`) and the o
 
 ## F1129 (C) -- the task board cannot show only what is building, and a spec's tasks do not open the board narrowed to that spec
 
-**Status:** open 2026-11-04. Reported by the operator.
+**Status:** fixed 2026-11-04 in `b00cf59` (Developer, Tier 0). (a) A Building board scope, meaning every task in a running build (Architect's reading; the operator did not pick). (b) Open on the board from a spec. Test: `boardBuildingScope.test.tsx`. Not driven in the app.
 **Source:** asked for by the operator
 **Theme:** Tasks board
 **Ready:** yes, needs a one-line decision on (a)'s meaning before build
@@ -41330,3 +41330,13 @@ When approval of a spec is refused with warnings (`approval_warnings`) and the o
 The operator finds moving around the tasks "hard and weird". Narrowing by name works, but typing a whole name every time is a chore. Two asks:
 (a) **A "building" filter on the board.** Show only tasks whose build is running (spec in its Building state, task not yet approved and landed). Today the board can be narrowed by agent, by text, and by spec through `BoardScopePicker` (`hub/ui/src/components/tasks/BoardScopePicker.tsx:60`, `BoardScope` in `hub/ui/src/store/boardScopeStore.ts:5`, which has only `all | none | spec`). Nothing selects every build in flight at once. Open: does "building" mean any task in a running build, or only tasks an agent is running right now (the board already computes `assignee_status === 'running'`, `TasksScreen.tsx:128`)?
 (b) **From a spec's tasks to the board, already narrowed to that spec.** The scope `{kind:'spec', id}` exists and persists, but the spec screen's task list offers no way into it. The only jump from a spec is the requirement-link filter (`setActiveTaskIds`, `hub/ui/src/App.tsx:120`/`:580`), which shows "N tasks linked from the specification", not the spec's own board. **Expected:** the spec's task section has an "Open on the board" action that opens Tasks with `BoardScope` set to that spec. **Test:** click it from a spec, and the board shows exactly that spec's tasks with the scope banner naming the spec.
+
+## F1130 (B) -- a peer's reply to an agent whose conversation was carried over never arrives
+
+**Status:** open 2026-11-04. Seen twice in one day; not reproduced in a test.
+**Source:** found by using the product (Architect)
+**Theme:** Messaging & conversations
+**Ready:** yes
+**Tier:** 0
+
+The Architect's conversation was carried over from checkpoint ckpt-6785fdba929e. Afterwards, it sent Developer two Tier 0 one-shots by `send_message` and asked for a reply each time. Developer committed both (`b4c1103` at about 10:35, `b00cf59` at about 13:53), but no reply reached the Architect's new conversation, and the Architect found both commits only by reading git. Before the carry-over, the Architect had read `reply_bound_conversation` in `hub/hub/conversations.py` as delivering to the newest open continuation conversation. It is not established whether Developer sent a reply at all, or sent one that went to the archived predecessor. **Expected:** a reply addressed to an agent reaches the conversation that agent is working in now. If no reply was sent, the delegation's sender learns the delegated turn ended. **Check first:** Developer's runs after `msg-73a1b23ba7a6` for a `send_message` call, and where its message row was delivered.
