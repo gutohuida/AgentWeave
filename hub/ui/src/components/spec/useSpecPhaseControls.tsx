@@ -1,13 +1,14 @@
 import { useSpecDeletionStore } from '@/store/specDeletionStore'
 import * as React from 'react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
 import { DeleteConfirmDialog } from '@/components/common/DeleteConfirmDialog'
 import { FoldIntoCapabilityDialog } from '@/components/spec/FoldIntoCapabilityDialog'
 import { RetireCapabilityDialog } from '@/components/spec/RetireCapabilityDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
-import { BuildDialog } from '@/components/spec/BuildDialog'
+import { BuildPlanDialog } from '@/components/spec/BuildPlanDialog'
+import { parsePayload } from '@/components/spec/page/adapt'
 import { BuildStatusStrip } from '@/components/spec/BuildStatusStrip'
 import { ReconcileSummary } from '@/components/spec/ReconcileSummary'
 import { CloseAlreadyBuilt } from '@/components/spec/CloseAlreadyBuilt'
@@ -214,6 +215,27 @@ export function useSpecPhaseControls(
   const [buildMessages, setBuildMessages] = useState<string[]>([])
   const [pendingApproval, setPendingApproval] = useState<PendingApproval>({ build: false })
 
+  // What the Build dialog lists, held stable: the dialog re-opens its plan when these change.
+  const declaredTasks = useMemo(
+    () =>
+      (specDoc ? parsePayload(specDoc.content)?.tasks : undefined)?.map((task) => ({
+        key: task.key,
+        title: task.title || task.key,
+      })) ?? [],
+    [specDoc],
+  )
+  const buildAgents = useMemo(
+    () =>
+      (agentsError ? [] : (openAgentsData ?? [])).map((agent) => ({
+        name: agent.name,
+        detail: agent.context_usage?.model ?? agent.display_model ?? undefined,
+        colorIndex: agent.color_index,
+      })),
+    [agentsError, openAgentsData],
+  )
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the moment the dialog opened
+  const buildOpenedAt = useMemo(() => new Date(), [building])
+
   const inline = options.inlineFindings === true
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
@@ -238,7 +260,6 @@ export function useSpecPhaseControls(
     document.phase === 'approved' &&
     foldState !== undefined &&
     foldState.state !== 'folded'
-  const openAgents = agentsError ? [] : (openAgentsData ?? [])
 
   const busy =
     setJourney.isPending ||
@@ -865,17 +886,24 @@ export function useSpecPhaseControls(
       )}
 
       {building && (
-        <BuildDialog
+        <BuildPlanDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) setBuilding(null)
+          }}
           title={document.title}
           approve={building === 'approve'}
           recommended={specDocError ? undefined : specDoc?.recommended_build}
-          openAgents={openAgents.map((agent) => agent.name)}
+          tasks={declaredTasks}
+          agents={buildAgents}
+          now={buildOpenedAt}
           isPending={build.isPending || approveAndBuild.isPending}
           error={buildRefusal}
-          onCancel={() => setBuilding(null)}
-          onConfirm={(choices) =>
-            building === 'approve' ? onApproveAndBuild(choices) : onBuild(choices)
-          }
+          onConfirm={(shown) => {
+            // Fast has no checker: the dialog hides them, so none is sent (FR-7).
+            const choices = shown.level === 'fast' ? { ...shown, checker: '', task_checkers: {} } : shown
+            return building === 'approve' ? onApproveAndBuild(choices) : onBuild(choices)
+          }}
         />
       )}
 

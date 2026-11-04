@@ -10,6 +10,7 @@
  * (F190).
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
@@ -88,7 +89,13 @@ vi.mock('@/api/client', async (importOriginal) => {
   }
 })
 vi.mock('@/api/agents', () => ({
-  useAgents: () => ({ data: [{ name: 'dev' }, { name: 'qa' }], isError: false }),
+  useAgents: () => ({
+    data: [
+      { name: 'dev', color_index: 0 },
+      { name: 'qa', color_index: 1 },
+    ],
+    isError: false,
+  }),
 }))
 
 function doc(overrides: Record<string, unknown> = {}) {
@@ -224,24 +231,17 @@ describe('Approve, Approve and build, and Build (recommendation-prefills)', () =
     expect(posts[0].body).not.toHaveProperty('delivery_agent')
   })
 
-  it('opens Approve and build with the recommended agent, reviewer and reasons filled in', async () => {
+  it('opens Approve and build with the recommended checker, reasons and schedule filled in', async () => {
     recommended = RECOMMENDED
     renderPhaseBar()
     await loaded()
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
 
-    const dialog = await screen.findByTestId('build-dialog')
-    expect(within(dialog).getByTestId('build-agent')).toHaveValue('dev')
-    expect(within(dialog).getByTestId('build-reason-agent')).toHaveTextContent(
-      'dev built the module it changes.',
-    )
-    expect(within(dialog).getByTestId('build-checker')).toHaveValue('qa')
-    expect(within(dialog).getByTestId('build-reason-checker')).toHaveTextContent(
-      'qa reviewed the last slice.',
-    )
-    expect(within(dialog).getByTestId('build-reason-mode')).toHaveTextContent('three tasks')
-    expect(within(dialog).getByTestId('build-cron')).toHaveTextContent('*/10 * * * *')
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Default checker' })).toHaveTextContent('qa')
+    expect(within(dialog).getByText('qa reviewed the last slice.')).toBeInTheDocument()
+    expect(within(dialog).getByText(/looks for work/)).toBeInTheDocument()
   })
 
   it('approves and builds in one request, keeping the recommendation', async () => {
@@ -258,22 +258,24 @@ describe('Approve, Approve and build, and Build (recommendation-prefills)', () =
     expect(posts[0].body).not.toHaveProperty('delivery_agent')
   })
 
-  it('sends the agent the operator chose instead, or "" for no flow', async () => {
+  it('sends the flow agent the operator chose instead, and no flow when it is handed out by hand', async () => {
     recommended = RECOMMENDED
     renderPhaseBar()
     await loaded()
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
-    fireEvent.change(await screen.findByTestId('build-agent'), { target: { value: 'qa' } })
+    await userEvent.click(await screen.findByRole('button', { name: 'Default builder' }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /qa/ }))
     fireEvent.click(screen.getByTestId('build-confirm'))
     await waitFor(() => expect(posts).toHaveLength(1))
     expect(posts[0].body).toMatchObject({ delivery_agent: 'qa' })
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
-    fireEvent.change(await screen.findByTestId('build-agent'), { target: { value: '__no_flow__' } })
+    await userEvent.click(await screen.findByRole('radio', { name: /By hand/ }))
     fireEvent.click(screen.getByTestId('build-confirm'))
     await waitFor(() => expect(posts).toHaveLength(2))
-    expect(posts[1].body).toMatchObject({ delivery_agent: '' })
+    expect(posts[1].body).toMatchObject({ driver: 'hand' })
+    expect(posts[1].body).not.toHaveProperty('delivery_agent')
   })
 
   it('offers Build on an approved document, opening with the recommendation, later than approval', async () => {
@@ -282,8 +284,8 @@ describe('Approve, Approve and build, and Build (recommendation-prefills)', () =
     renderPhaseBar()
 
     fireEvent.click(await screen.findByRole('button', { name: 'Build…' }))
-    const dialog = await screen.findByTestId('build-dialog')
-    expect(within(dialog).getByTestId('build-agent')).toHaveValue('dev')
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Default checker' })).toHaveTextContent('qa')
     fireEvent.click(within(dialog).getByTestId('build-confirm'))
 
     await waitFor(() => expect(posts).toHaveLength(1))
@@ -305,7 +307,7 @@ describe('Approve, Approve and build, and Build (recommendation-prefills)', () =
     renderPhaseBar()
     await loaded()
     fireEvent.click(screen.getByRole('button', { name: 'Approve and build…' }))
-    expect(await screen.findByTestId('build-no-recommendation')).toBeInTheDocument()
+    expect(await screen.findByText(/recommends no build/)).toBeInTheDocument()
   })
 })
 
