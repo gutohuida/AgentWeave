@@ -159,6 +159,9 @@ def configured_checks(
                     "paths": [str(p) for p in check.get("paths") or [] if str(p).strip()],
                     "fast": bool(check.get("fast")),
                     "phase": (check.get("phase") if check.get("phase") in PHASES else PHASE_BOTH),
+                    # The report and re-run command (FR-1); `None` for a check without them.
+                    "report_path": str(check.get("report_path") or "").strip() or None,
+                    "rerun_command": str(check.get("rerun_command") or "").strip() or None,
                     # Not part of `check_digest`: priority changes how fast a check runs, not
                     # what it finds, so a pass at either priority stays reusable.
                     # A fast check never gives way: the completion waits on it
@@ -570,6 +573,7 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
             "duration_seconds": 0.0,
             "output_tail": "",
         }
+    clear_report(check, cwd)
     spawn = _spawn_arguments(check)
     creationflags = spawn.pop("creationflags", 0) | no_console_kwargs().get("creationflags", 0)
     proc = subprocess.Popen(
@@ -625,11 +629,21 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
         "duration_seconds": round(time.monotonic() - started, 1),
         "output_tail": text[-OUTPUT_TAIL_CHARS:],
     }
+    if check.get("report_path"):
+        # The report names the failing tests; the console is for people (FR-2).
+        _judge_by_report(check, cwd, result, timed_out)
+        if failed(result) and not timed_out:
+            excerpt = failure_excerpt(text)
+            if excerpt:
+                result["failure_excerpt"] = excerpt
+        return result
     if not timed_out and proc.returncode not in (0, None):
         # Read from the whole output, not the stored tail: the summary may be longer than it.
         node_ids = failed_test_ids(text)
         if node_ids:
             result["failed_tests"] = node_ids
+        else:
+            result["whole_check"] = NO_REPORT_CONFIGURED
         excerpt = failure_excerpt(text)
         if excerpt:
             result["failure_excerpt"] = excerpt
@@ -638,6 +652,211 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
         if named:
             result["named_failures"] = named
     return result
+
+
+# --- the check's report (`checks-report-which-tests-failed-in-any-language`) --------------------
+
+#: Where a re-run command takes the ids of the tests to re-run (FR-1, FR-6).
+TESTS_PLACEHOLDER = "{tests}"
+#: Past this a re-run command with its ids substituted is not run: Windows' command interpreter
+#: refuses a command line over 8,191 characters, so the check is re-run as a whole (FR-6).
+MAX_RERUN_COMMAND_CHARS = 8000
+#: A report larger than this is not read (it is unreadable): the check's own file, but a task's
+#: work can write it.
+MAX_REPORT_BYTES = 64 * 1024 * 1024
+#: Why a failing check names no test (FR-4, FR-5), recorded in its result as `whole_check`.
+NO_REPORT_CONFIGURED = "no report configured"
+REPORT_MISSING = "report missing"
+REPORT_UNREADABLE = "report unreadable"
+REPORT_NAMES_NO_FAILURE = "report names no failing test"
+#: A report that was there and parsed, as a result's `report`.
+REPORT_READ = "read"
+
+
+@dataclass
+class TestReport:
+    """What a JUnit XML report says: each testcase's id (`classname::name`, FR-2) and whether it
+    failed (`True`), passed (`False`) or was skipped (`None`), and the file a testcase names where it
+    names one. An id recorded twice (the same classname and name in two files) failed if either
+    did."""
+
+    __test__ = False  # not a pytest test class, whatever its name
+
+    outcomes: Dict[str, Optional[bool]]
+    files: Dict[str, str]
+
+    @property
+    def failing(self) -> List[str]:
+        return [test for test, failed_ in self.outcomes.items() if failed_]
+
+
+def report_file(check: Dict[str, Any], cwd: Path) -> Optional[Path]:
+    """The file *check*'s report is written to when it runs in *cwd*, or `None` for a check without
+    one or whose path would leave *cwd* (the settings route refuses those; read defensively)."""
+    relative = check.get("report_path")
+    if not relative:
+        return None
+    base = Path(cwd).resolve()
+    path = (base / str(relative)).resolve()
+    if path == base or base not in path.parents:
+        return None
+    return path
+
+
+def clear_report(check: Dict[str, Any], cwd: Path) -> None:
+    """Remove whatever is at *check*'s report path before it runs (FR-4), so only a report the run
+    itself writes is read: a re-run in the full run's directory would otherwise read the full
+    run's report as its own."""
+    path = report_file(check, cwd)
+    if path is None:
+        return
+    try:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("could not remove check %s's old report %s", check.get("name"), path)
+
+
+def _relative_file(value: str, cwd: Path) -> str:
+    """A testcase's `file` as a path relative to *cwd* where it lies inside it (Node writes it
+    absolute), with forward slashes; else as written."""
+    written = value.strip()
+    candidate = Path(written)
+    if candidate.is_absolute():
+        try:
+            return candidate.resolve().relative_to(Path(cwd).resolve()).as_posix()
+        except (OSError, ValueError):
+            pass
+    text = written.replace("\\", "/")
+    return text[2:] if text.startswith("./") else text
+
+
+def parse_report(text: str, cwd: Path) -> Optional[TestReport]:
+    """The testcases of a JUnit XML report's *text*, or `None` where it is not one: empty, not
+    XML, declaring a DTD or entities (never expanded: a task's work can write the file), or with a
+    root other than `testsuites` or `testsuite`."""
+    import xml.etree.ElementTree as ElementTree
+
+    if not text.strip() or "<!DOCTYPE" in text or "<!ENTITY" in text:
+        return None
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError:
+        return None
+    if root.tag not in ("testsuites", "testsuite"):
+        return None
+    outcomes: Dict[str, Optional[bool]] = {}
+    files: Dict[str, str] = {}
+    for case in root.iter("testcase"):
+        test = f"{case.get('classname') or ''}::{case.get('name') or ''}"
+        failed_ = case.find("failure") is not None or case.find("error") is not None
+        skipped_ = not failed_ and case.find("skipped") is not None
+        if failed_ or test not in outcomes:
+            outcomes[test] = None if skipped_ else failed_
+        elif outcomes[test] is None and not skipped_:
+            outcomes[test] = False
+        if case.get("file") and (failed_ or test not in files):
+            files[test] = _relative_file(str(case.get("file")), cwd)
+    return TestReport(outcomes=outcomes, files=files)
+
+
+def read_report(check: Dict[str, Any], cwd: Path) -> Tuple[Optional[TestReport], str]:
+    """*check*'s report after it ran in *cwd*, and how it read: `read`, or why there is none to
+    judge by (`no report configured`, `report missing`, `report unreadable`; FR-4)."""
+    if not check.get("report_path"):
+        return None, NO_REPORT_CONFIGURED
+    path = report_file(check, cwd)
+    if path is None or not path.is_file():
+        return None, REPORT_MISSING
+    try:
+        if path.stat().st_size > MAX_REPORT_BYTES:
+            return None, REPORT_UNREADABLE
+        raw = path.read_bytes()
+    except OSError:
+        return None, REPORT_UNREADABLE
+    report = parse_report(_decode_output(raw), cwd)
+    return (report, REPORT_READ) if report is not None else (None, REPORT_UNREADABLE)
+
+
+def _judge_by_report(
+    check: Dict[str, Any], cwd: Path, result: Dict[str, Any], timed_out: bool
+) -> None:
+    """Record in *result* what *check*'s report names (FR-2, FR-5). The exit code has already
+    decided pass or fail; the report only names which tests failed, and a failure it cannot name is
+    the whole check's, with the reason (FR-4). A re-run of named tests (`rerun_tests`) also records
+    which of them its report shows passing, so that a pass proves they ran."""
+    report, how = read_report(check, cwd)
+    result["report"] = how
+    asked = list(check.get("rerun_tests") or [])
+    if asked and report is not None:
+        result["passed_tests"] = [test for test in asked if report.outcomes.get(test) is False]
+    if timed_out:
+        if report is not None and report.failing:
+            result["named_failures"] = report.failing
+        return
+    if not failed(result):
+        return  # a report naming failures does not fail a check that exited 0 (FR-5)
+    failing = report.failing if report is not None else []
+    if not failing:
+        result["whole_check"] = how if report is None else REPORT_NAMES_NO_FAILURE
+        return
+    result["failed_tests"] = failing
+    # Always set for a report's ids, empty when the report gives no file (pytest's xunit2): an id
+    # whose file is unknown counts as touched (`touched_tests`), never as a file guessed from it.
+    result["test_files"] = {test: report.files[test] for test in failing if test in report.files}
+
+
+def _shell_argument(test: str) -> Optional[str]:
+    """*test* quoted as one argument for the shell a check runs in, or `None` where it cannot be
+    passed through that shell as itself."""
+    from .pty_runner import IS_WINDOWS
+
+    if not test or any(char in test for char in "\r\n\x00"):
+        return None
+    if IS_WINDOWS:
+        # cmd.exe expands `%` even inside quotes, and a quote or a trailing backslash would end
+        # the argument early when the program splits its command line.
+        if '"' in test or "%" in test or test.endswith("\\"):
+            return None
+        return f'"{test}"'
+    return shlex.quote(test)
+
+
+def rerun_command(check: Dict[str, Any], tests: Sequence[str]) -> Optional[str]:
+    """*check*'s re-run command with `{tests}` replaced by *tests*, each one argument (FR-6), or
+    `None` where it has none, an id cannot be passed through the shell, or the command would be
+    longer than `MAX_RERUN_COMMAND_CHARS`: the check is then re-run as a whole."""
+    template = str(check.get("rerun_command") or "")
+    if TESTS_PLACEHOLDER not in template or not tests:
+        return None
+    quoted = [_shell_argument(test) for test in tests]
+    if any(argument is None for argument in quoted):
+        return None
+    command = template.replace(TESTS_PLACEHOLDER, " ".join(str(q) for q in quoted))
+    return command if len(command) <= MAX_RERUN_COMMAND_CHARS else None
+
+
+def rerun_check(check: Dict[str, Any], tests: Sequence[str]) -> Optional[Dict[str, Any]]:
+    """The check that re-runs exactly *tests* -- confirming a failure, asking main, narrowing a
+    landing batch -- or `None` to re-run *check* as a whole.
+
+    Through the check's re-run command where it has one (FR-6), its report read by the same rules.
+    A check naming a report but no re-run command is re-run as a whole. One with neither keeps the
+    pytest narrowing until that is retired (task `retire`), so this repository's checks are not
+    judged as a whole before they have their report settings."""
+    if not tests:
+        return None
+    if check.get("rerun_command"):
+        command = rerun_command(check, tests)
+        if command is None:
+            return None
+        return {**check, "command": command, "rerun_tests": list(tests)}
+    if check.get("report_path"):
+        return None
+    narrowed = narrowed_command(check["command"], tests)
+    return {**check, "command": narrowed} if narrowed is not None else None
 
 
 _FAILURES_HEADER_RE = re.compile(r"^=+ (?:FAILURES|ERRORS) =+\s*$", re.MULTILINE)
@@ -661,10 +880,10 @@ def check_digest(check: Dict[str, Any]) -> str:
     """What makes two runs of a check the same check: everything the operator configured that can
     change its result. Not `fast`, which changes when it runs (D1), so marking a check fast keeps
     its passes reusable."""
-    payload = json.dumps(
-        {key: check.get(key) for key in ("name", "command", "timeout_seconds", "paths")},
-        sort_keys=True,
-    )
+    identity = {key: check.get(key) for key in ("name", "command", "timeout_seconds", "paths")}
+    # Only where set, so a check without a report keeps the digest (and the passes) it had.
+    identity.update({key: check[key] for key in ("report_path", "rerun_command") if check.get(key)})
+    payload = json.dumps(identity, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -981,7 +1200,11 @@ def narrowed_command(command: str, node_ids: Sequence[str]) -> Optional[str]:
 
 def proves_the_tests_pass(result: Dict[str, Any], node_ids: Sequence[str]) -> bool:
     """Whether a narrowed re-run passed and really ran the tests it named: exit 0, nothing failed,
-    and at least one passed test per node id (a node id that selects nothing would be no proof)."""
+    and at least one passed test per node id (a node id that selects nothing would be no proof).
+    A re-run that names a report proves it by its report: every id there, passing (FR-6)."""
+    if "report" in result:
+        passed = set(result.get("passed_tests") or [])
+        return not failed(result) and bool(node_ids) and all(t in passed for t in node_ids)
     counts = summary_counts(str(result.get("output_tail") or ""))
     return (
         not failed(result)
@@ -994,7 +1217,11 @@ def proves_the_tests_pass(result: Dict[str, Any], node_ids: Sequence[str]) -> bo
 
 def reproduces_a_test_failure(result: Dict[str, Any]) -> bool:
     """Whether a narrowed re-run failed *a test* (pytest's exit 1 with a failure counted), not on
-    its own invocation: a usage error (exit 4) or nothing collected (exit 5) proves nothing."""
+    its own invocation: a usage error (exit 4) or nothing collected (exit 5) proves nothing.
+    A re-run that names a report reproduces one where it failed and its report names a failing
+    test; a failure it names no test for proves nothing (FR-5, FR-6)."""
+    if "report" in result:
+        return failed(result) and not result.get("timed_out") and bool(result.get("failed_tests"))
     counts = summary_counts(str(result.get("output_tail") or ""))
     return (
         result.get("exit_code") == 1
@@ -1013,14 +1240,26 @@ def test_file(node_id: str) -> str:
     return _node_key(node_id).split("::", 1)[0]
 
 
-def touched_tests(node_ids: Sequence[str], changed: Optional[Sequence[str]]) -> List[str]:
+def touched_tests(
+    node_ids: Sequence[str],
+    changed: Optional[Sequence[str]],
+    files: Optional[Dict[str, str]] = None,
+) -> List[str]:
     """The node ids whose file is among *changed*, the paths the task's merged work changes against
     the run's main commit (FR-4): a test the task touched is the task's to make pass. Unknown changes
-    count every id as touched -- an override is never automatic on a guess."""
+    count every id as touched -- an override is never automatic on a guess. A report's ids take
+    their file from the report (*files*, `checks-report-which-tests-failed-in-any-language` FR-2),
+    and one whose report gives no file (pytest's default xunit2) is unknown, so touched: its
+    classname is not a path. *files* `None` means pytest node ids, whose path part is the file.
+    """
     if changed is None:
         return list(node_ids)
     paths = {_node_key(path) for path in changed}
-    return [node for node in node_ids if test_file(node) in paths]
+    if not paths:
+        return []  # the work changes no file: no failing test can be one it touched
+    if files is None:
+        return [node for node in node_ids if test_file(node) in paths]
+    return [node for node in node_ids if node not in files or _node_key(files[node]) in paths]
 
 
 def _still_failing(again: Dict[str, Any], node_ids: Sequence[str]) -> List[str]:
@@ -1053,10 +1292,10 @@ def confirm_failure(
     its failure stands and is compared with main like a reproduced one.
     """
     node_ids = list(result.get("failed_tests") or [])
-    narrowed = narrowed_command(check["command"], node_ids) if node_ids else None
+    narrowed = rerun_check(check, node_ids)
     how, again = "check", None
     if narrowed is not None:
-        again = run_one({**check, "command": narrowed}, cwd, owner)
+        again = run_one(narrowed, cwd, owner)
         if proves_the_tests_pass(again, node_ids) or reproduces_a_test_failure(again):
             how = "tests"
         else:
@@ -1070,8 +1309,11 @@ def confirm_failure(
         "timed_out": again["timed_out"],
         "duration_seconds": again["duration_seconds"],
     }
+    for key in ("report", "whole_check"):
+        if key in again:
+            attempt[key] = again[key]  # what the re-run's own report said (FR-4)
     if how == "tests":
-        touched = touched_tests(node_ids, changed)
+        touched = touched_tests(node_ids, changed, result.get("test_files"))
         result["touched_tests"] = touched
         stays = _still_failing(again, node_ids) if failed(again) else []
         flaked = [node for node in node_ids if node not in stays and node not in touched]
@@ -1257,11 +1499,9 @@ class _MainBaseline:
             if self.path is None:
                 self.path = await asyncio.to_thread(_checkout, self.root, self.name, self.main_sha)
             node_ids = list(result.get("compared_tests") or [])
-            narrowed = narrowed_command(check["command"], node_ids) if node_ids else None
+            narrowed = rerun_check(check, node_ids)
             if narrowed is not None:
-                on_main = await asyncio.to_thread(
-                    run_one, {**check, "command": narrowed}, self.path, self.task_id
-                )
+                on_main = await asyncio.to_thread(run_one, narrowed, self.path, self.task_id)
                 if _record_main_tests(result, on_main, node_ids):
                     return
             _record_main_result(
