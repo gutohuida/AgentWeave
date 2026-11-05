@@ -128,7 +128,7 @@ async def test_a_fast_check_keeps_normal_priority_while_the_others_give_way(
         project = await session.get(Project, "proj-test")
 
     configured = {c["name"]: c for c in project_checks.configured_checks(project)}
-    for name, out in (("quick", fast_out), ("suite", slow_out)):
+    for name in ("quick", "suite"):
         result = project_checks.run_one(configured[name], tmp_path)
         assert result["exit_code"] == 0, result["output_tail"]
     fast_priorities = [int((fast_out / role).read_text()) for role in ("parent", "child")]
