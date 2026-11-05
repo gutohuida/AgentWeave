@@ -237,7 +237,8 @@ def cmd_stop(args: argparse.Namespace) -> int:
     # --- Native mode: check PID file first ---
     pid = _hub_pid_running(port=port, profile=profile)
     if pid is not None:
-        if _hub_native_confirmed(port):
+        answer = _hub_native_answer(port, patience=_HUB_STOP_PATIENCE_SECONDS)
+        if answer == _HUB_ANSWERED:
             print_info(f"Stopping Hub (native, PID {pid})...")
             _hub_kill_pid(pid)
             with contextlib.suppress(OSError):
@@ -245,6 +246,15 @@ def cmd_stop(args: argparse.Namespace) -> int:
             _report_app_windows_closed(port)
             print_success("Hub stopped")
             return 0
+        if answer == _HUB_SILENT:
+            # Something holds the port and the PID lives, but no health answer came in time: a
+            # Hub busy with work, most likely — exactly when the window's "Stop it all" is chosen.
+            # Neither killed on a guess nor forgotten: the PID file stays, and the stop says so.
+            print_error(
+                f"The Hub on port {port} (PID {pid}) did not answer within "
+                f"{_HUB_STOP_PATIENCE_SECONDS} s, so it was not stopped. Try again."
+            )
+            return 1
         # PID is alive but nothing is serving the Hub on the recorded port — most
         # likely a recycled PID owned by an unrelated process. Never kill it; just
         # discard the stale PID file and fall through to the Docker check.
@@ -767,6 +777,54 @@ def _hub_kill_pid(pid: int) -> None:
         pass
 
 
+#: What a Hub's health endpoint said: answered 200; nothing serving there (refused, or not a Hub's
+#: answer); or something holds the port but did not answer in time.
+_HUB_ANSWERED = "answered"
+_HUB_ABSENT = "absent"
+_HUB_SILENT = "silent"
+
+#: How long `agentweave stop` keeps asking a Hub that holds its port but has not answered. A Hub
+#: busy with a turn answered /health slower than 2 s in AWOAW-3's drive; taking that as "a recycled
+#: PID" deleted the PID file and left the Hub serving. Within the 30 s a close has to stop it.
+_HUB_STOP_PATIENCE_SECONDS = 15
+_HUB_HEALTH_ATTEMPT_SECONDS = 5.0
+
+
+def _hub_native_answer(port: int, patience: float = 0.0) -> str:
+    """Ask the Hub's health endpoint on ``port``, for up to ``patience`` seconds, what is there.
+
+    Returns `_HUB_ANSWERED`, `_HUB_ABSENT` or `_HUB_SILENT`. A timeout is silence, never absence:
+    only a refused connection, or an answer that is not a Hub's 200, says no Hub is serving.
+    """
+    import socket as _socket
+    import time as _time
+    import urllib.error as _err
+    import urllib.request as _req
+
+    deadline = _time.monotonic() + patience
+    while True:
+        remaining = deadline - _time.monotonic()
+        timeout = max(2.0, min(_HUB_HEALTH_ATTEMPT_SECONDS, remaining))
+        try:
+            with _req.urlopen(_hub_health_url(port), timeout=timeout) as resp:
+                return _HUB_ANSWERED if resp.status == 200 else _HUB_ABSENT
+        except _err.HTTPError:
+            return _HUB_ABSENT
+        except (_err.URLError, OSError) as exc:
+            reason = exc.reason if isinstance(exc, _err.URLError) else exc
+            if not isinstance(reason, (_socket.timeout, TimeoutError)):
+                return _HUB_ABSENT
+            # Windows retries a refused loopback connect for about 2 s, so a closed port can
+            # time out too: only a port that accepts a connection is a Hub too busy to answer.
+            # The OS accepts on the Hub's behalf, so a busy Hub still accepts at once.
+            if not _hub_port_accepts(port, timeout=1.0):
+                return _HUB_ABSENT
+        except Exception:
+            return _HUB_ABSENT
+        if _time.monotonic() >= deadline:
+            return _HUB_SILENT
+
+
 def _hub_native_confirmed(port: int) -> bool:
     """Return True if a Hub health endpoint actually responds on ``port``.
 
@@ -774,13 +832,7 @@ def _hub_native_confirmed(port: int) -> bool:
     the stored PID may belong to an unrelated process. Confirming the Hub is
     genuinely serving on the recorded port prevents killing a bystander process.
     """
-    import urllib.request as _req
-
-    try:
-        with _req.urlopen(_hub_health_url(port), timeout=2) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
+    return _hub_native_answer(port) == _HUB_ANSWERED
 
 
 def _hub_profile_data_dir(profile: str = "default") -> Path:
@@ -1267,7 +1319,8 @@ class _AppWindowCloser:
         decision, work = desktop_window.close_decision(
             lambda: False,  # read already, in `on_closing`
             lambda: _hub_work_running(self.port),
-            lambda: _hub_native_confirmed(self.port),
+            # Up unless nothing is there: a Hub too busy to answer is asked about, not stopped.
+            lambda: _hub_native_answer(self.port) != _HUB_ABSENT,
         )
         if decision == desktop_window.CLOSE_ASKS:
             self._ask(work or {})

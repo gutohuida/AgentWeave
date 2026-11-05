@@ -108,7 +108,9 @@ def asks(hwnd: int, wording: str) -> bool:
     if not user32.IsWindow(hwnd):
         d.note("the window closed instead of asking")
         return False
-    if uia(hwnd, wording) == "found":
+    # The close asks the Hub first, off the window's thread; a Hub busy with a turn on a loaded
+    # machine took longer than 3 s to answer, so the prompt is looked for until it shows.
+    if d.wait_for(lambda: uia(hwnd, wording) == "found", 25, 1.0):
         return True
     # Say what is there instead: a native message box (the page could not show the prompt), or
     # what the page's accessibility tree holds.

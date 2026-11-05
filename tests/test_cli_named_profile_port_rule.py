@@ -94,7 +94,7 @@ def test_reset_of_a_named_profile_stops_the_hub_it_finds_on_that_profiles_port(
             )
         ),
     )
-    monkeypatch.setattr(cli, "_hub_native_confirmed", lambda port: True)
+    monkeypatch.setattr(cli, "_hub_native_answer", lambda port, patience=0: cli._HUB_ANSWERED)
     monkeypatch.setattr(cli, "_hub_kill_pid", killed.append)
     monkeypatch.setattr(cli, "_report_app_windows_closed", lambda port: None)
 

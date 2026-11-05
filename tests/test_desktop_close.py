@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 import types
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional
@@ -46,6 +47,8 @@ class _FakeHub:
         self.work: Optional[Dict[str, Any]] = dict(_IDLE)
         self.work_status = 200
         self.asked: List[str] = []
+        #: Seconds each `/health` answer is held back, in order; the rest answer at once.
+        self.health_delays: List[float] = []
         hub = self
 
         class _Handler(BaseHTTPRequestHandler):
@@ -55,6 +58,8 @@ class _FakeHub:
             def do_GET(self) -> None:  # noqa: N802
                 hub.asked.append(self.path)
                 if self.path == "/health":
+                    if hub.health_delays:
+                        time.sleep(hub.health_delays.pop(0))
                     self._send(200, {"status": "ok", "runtime": "native"})
                 elif self.path == "/api/v1/setup/token":
                     self._send(200, {"api_key": "aw_live_test"})
@@ -90,6 +95,8 @@ def hub(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "HUB_DIR", tmp_path)
     monkeypatch.setattr(cli, "_hub_url", lambda port=8000: f"http://127.0.0.1:{port}")
     fake = _FakeHub()
+    # Something listens on the fake Hub's port, and on no other.
+    monkeypatch.setattr(cli, "_hub_port_accepts", lambda port, timeout=0.3: port == fake.port)
     killed: List[int] = []
     monkeypatch.setattr(cli, "_hub_kill_pid", lambda pid: killed.append(pid))
     # The PID is this test process's own: alive, and never actually killed (recorded above).
@@ -449,3 +456,49 @@ def test_a_close_while_the_question_is_unanswered_shows_it_again(hub, monkeypatc
     window = _open(hub, monkeypatch, life)
     assert len(window.prompts) == 2
     assert hub.killed == []
+
+
+# --- a busy Hub slow to answer its health check (QA's send-back of AWOAW-3) ---------------------
+
+
+def test_stop_it_all_waits_for_a_busy_hub_slow_to_answer_its_health_check(hub, monkeypatch):
+    """The first `/health` outlasts an attempt; the stop asks again rather than taking the Hub for
+    a recycled PID, deleting its PID file and leaving it serving."""
+    monkeypatch.setattr(cli, "_HUB_HEALTH_ATTEMPT_SECONDS", 2.0)
+    hub.work = _ONE_TURN
+
+    def life(window, bridge):
+        assert window.close() is False
+        assert window.prompted.wait(5)
+        hub.health_delays = [3.0]
+        assert bridge.close_choice("stop") is True
+
+    _open(hub, monkeypatch, life)
+    assert hub.killed == [hub.pid]
+    assert hub.asked.count("/health") >= 2
+    assert not cli._hub_pid_file(hub.port).exists()
+
+
+def test_a_hub_that_never_answers_is_neither_killed_nor_forgotten(hub, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_HUB_HEALTH_ATTEMPT_SECONDS", 2.0)
+    monkeypatch.setattr(cli, "_HUB_STOP_PATIENCE_SECONDS", 3)
+    hub.health_delays = [5.0, 5.0, 5.0]
+    import argparse
+
+    code = cli.cmd_stop(argparse.Namespace(port=hub.port, profile="default", local=False))
+    assert code == 1
+    assert hub.killed == []
+    assert cli._hub_pid_file(hub.port).exists()
+    assert "did not answer" in capsys.readouterr().out
+
+
+def test_health_answers_tell_silence_from_absence(hub):
+    assert cli._hub_native_answer(hub.port) == cli._HUB_ANSWERED
+    hub.health_delays = [3.0]
+    assert cli._hub_native_answer(hub.port) == cli._HUB_SILENT
+    import socket
+
+    with socket.socket() as free:
+        free.bind(("127.0.0.1", 0))
+        port = free.getsockname()[1]
+    assert cli._hub_native_answer(port) == cli._HUB_ABSENT
