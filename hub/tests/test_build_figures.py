@@ -125,7 +125,10 @@ async def test_a_builds_figures_split_its_time_cost_and_runs(
     read = await app.get(f"{BASE}/builds/{build_id}/figures", headers=auth_headers)
 
     assert read.status_code == 200, read.text
-    assert read.json() == {
+    figures = read.json()
+    landing = figures.pop("landing")  # t1 is approved and has not landed: waiting since 700 s
+    assert (landing["landed"], landing["waiting"]) == (0, 1)
+    assert figures == {
         "id": build_id,
         "runs": 2,
         "time": {
@@ -138,7 +141,16 @@ async def test_a_builds_figures_split_its_time_cost_and_runs(
         },
         "cost": {"build": 3.0, "review": 1.0, "lead": 0.0, "mend": 0.0},
         "unpriced": 0,
-        "checks": {"runs": 1, "passed": 1, "failed": 0, "seconds": 100},
+        "checks": {
+            "runs": 1,
+            "passed": 1,
+            "failed": 0,
+            "seconds": 100,
+            "timed_out": 0,
+            "running_seconds": 100,
+            "waiting_seconds": None,
+            "no_slot_runs": 1,
+        },
     }
 
 
