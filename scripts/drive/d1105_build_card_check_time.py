@@ -91,6 +91,7 @@ def main():
     state = {}
     try:
         root.mkdir(parents=True)
+        state["root"] = root
         d.git(root, "init", "-q", "-b", "main")
         (root / "README.md").write_text("Scratch.\n", encoding="utf-8")
         d.git(root, "add", ".")
