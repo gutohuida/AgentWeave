@@ -205,8 +205,18 @@ def main():
             try:
                 page.get_by_text("Wall time").first.wait_for(timeout=30000)
                 text = page.locator("body").inner_text()
-                d.check("page: a Checks meter is drawn beside Wall time",
-                        page.get_by_text("Checks", exact=True).count() > 0, text[:300])
+                # The wall bar's legend also says "Checks", so look for the meter itself: a bar
+                # of its own (role=img) titled Checks, with running and waiting as parts.
+                labels = [x for x in page.get_by_role("img").evaluate_all(
+                    "els => els.map(e => e.getAttribute('aria-label') || '')")
+                    if x.lower().startswith("checks")]
+                meter = labels[0] if labels else ""
+                d.check("page: a Checks meter of its own is drawn, with running and waiting parts",
+                        "running" in meter.lower() and "waiting" in meter.lower(), f"{labels}")
+                shown = {format_duration(round(total) + k) for k in range(-3, 4)}
+                d.check("page: the Checks meter's total equals the check-run route's sum",
+                        any(f"total {t}" in meter or meter.endswith(t) or t in meter for t in shown),
+                        f"meter {meter!r}, route {total:.1f}s (accepts {sorted(shown)[:3]}...)")
                 d.check("page: the landing wait is shown",
                         page.get_by_text("landing wait", exact=False).count() > 0, text[:300])
             except Exception as exc:  # noqa: BLE001 -- reported as the check's detail
@@ -224,6 +234,15 @@ def main():
     for name in bad:
         print("  FAILED:", name)
     sys.exit(1 if bad else 0)
+
+
+def format_duration(seconds):
+    """Port of hub/ui/src/lib/format.ts formatDuration, which the card uses."""
+    s = max(0, round(seconds))
+    if s < 60:
+        return f"{s}s"
+    m = s // 60
+    return f"{m}m {s % 60}s" if m < 60 else f"{m // 60}h {m % 60}m"
 
 
 def tidy(state):
