@@ -113,6 +113,29 @@ def test_a_rerun_is_serial_and_writes_the_report(tree: Path) -> None:
     assert args[-1] == "hub/tests/test_x.py::TestY::test_a"
 
 
+def test_tidy_report_removes_only_the_testcases_own_file_group(tmp_path: Path) -> None:
+    report = tmp_path / "r.xml"
+    report.write_text(
+        '<testsuites><testsuite name="pytest">'
+        '<testcase classname="hub.tests.test_x.TestY" name="test_a@hub/tests/test_x.py"'
+        r' file="hub\tests\test_x.py" />'
+        '<testcase classname="hub.tests.test_x" name="test_b[a@b]" file="hub/tests/test_x.py" />'
+        '<testcase classname="hub.tests.test_x" name="test_c@other" file="hub/tests/test_x.py" />'
+        "</testsuite></testsuites>",
+        encoding="utf-8",
+    )
+    junit_rerun.tidy_report(report)
+    names = [case.get("name") for case in ElementTree.parse(report).getroot().iter("testcase")]
+    assert names == ["test_a", "test_b[a@b]", "test_c@other"]
+
+
+def test_tidy_report_leaves_a_missing_or_unreadable_report(tmp_path: Path) -> None:
+    junit_rerun.tidy_report(tmp_path / "missing.xml")
+    (tmp_path / "bad.xml").write_text("not xml", encoding="utf-8")
+    junit_rerun.tidy_report(tmp_path / "bad.xml")
+    assert (tmp_path / "bad.xml").read_text(encoding="utf-8") == "not xml"
+
+
 # --- hub_suite.py ------------------------------------------------------------------------------
 
 
@@ -196,6 +219,17 @@ class TestOuter:
 """
 
 
+#: As `hub/tests/conftest.py` does: every test grouped by its file for `--dist loadgroup`, which
+#: makes xdist append `@<file>` to each node id.
+GROUPED = """import pytest
+
+
+def pytest_collection_modifyitems(config, items):
+    for item in items:
+        item.add_marker(pytest.mark.xdist_group(name=item.nodeid.split("::")[0]))
+"""
+
+
 def _failing_ids(report: Path) -> dict:
     """Each failing testcase's `classname::name` to its file, as the Hub reads them."""
     root = ElementTree.parse(report).getroot()
@@ -207,12 +241,25 @@ def _failing_ids(report: Path) -> dict:
 
 
 def test_a_reports_failing_ids_rerun_alone_and_name_themselves_again(tree: Path) -> None:
+    """In parallel under loadgroup, as the hub-tests check runs, then re-run serially: the id is
+    the same in both reports, with no xdist group in it."""
     (tree / "hub" / "tests" / "test_x.py").write_text(FAILING, encoding="utf-8")
+    (tree / "hub" / "tests" / "conftest.py").write_text(GROUPED, encoding="utf-8")
     env = {**os.environ, "AW_HUB_SUITE_LOCK_DIR": str(tree)}
     script = str(CHECKS / "hub_suite.py")
     report = tree / "out" / "report.xml"
     full = subprocess.run(
-        [sys.executable, script, "--report", "out/report.xml", "hub/tests", "-n", "0", "-q"],
+        [
+            sys.executable,
+            script,
+            "--report",
+            "out/report.xml",
+            "hub/tests",
+            "-n",
+            "2",
+            "--dist",
+            "loadgroup",
+        ],
         cwd=tree,
         env=env,
         capture_output=True,

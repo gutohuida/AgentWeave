@@ -14,6 +14,11 @@ is the current directory, so a classname is the test's path from here with dots
 compares with the files a task changed. Left to itself pytest would take `hub/` as the rootdir of a
 Hub test (`hub/pyproject.toml` configures pytest) and write `tests.test_x.TestY`.
 
+Under `--dist loadgroup` xdist appends `@<group>` to the node id of a grouped test, and so to its
+report name, and `hub/tests/conftest.py` groups every Hub test by its file: a parallel run's name
+would be `test_a@hub/tests/test_x.py` and a serial re-run's `test_a`, so the same test would not
+match itself. `tidy_report` removes that suffix where it is the testcase's own file.
+
 An id is turned back into a pytest node id by `node_id`: the longest dotted prefix of the classname
 that names a `.py` file under the rootdir is the module, the rest of the classname are classes, and
 the name (with any `[parameters]`) is the test.
@@ -21,6 +26,7 @@ the name (with any `[parameters]`) is the test.
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
@@ -39,6 +45,23 @@ def report_args(report: str) -> List[str]:
     """The pytest arguments that write the report to *report*, ids rooted at the current
     directory."""
     return [f"--junitxml={report}", "-o", JUNIT_FAMILY, "--rootdir=."]
+
+
+def tidy_report(report: Path) -> None:
+    """Remove from each testcase name in *report* the `@<group>` xdist's loadgroup added, where the
+    group is the testcase's own file; leave a missing or unreadable report as it is."""
+    try:
+        tree = ElementTree.parse(report)
+    except (OSError, ElementTree.ParseError):
+        return
+    changed = False
+    for case in tree.getroot().iter("testcase"):
+        name, file = case.get("name") or "", (case.get("file") or "").replace("\\", "/")
+        if file and name.replace("\\", "/").endswith("@" + file):
+            case.set("name", name[: -len(file) - 1])
+            changed = True
+    if changed:
+        tree.write(report, encoding="utf-8", xml_declaration=True)
 
 
 def node_id(test_id: str, root: Path) -> Optional[str]:

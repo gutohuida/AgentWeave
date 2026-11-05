@@ -277,10 +277,14 @@ def main(
         say(f"re-running {len(rerun_ids)} test(s) serially, without the suite lock")
         code = (run_pytest or _run_pytest)(pytest_args)
         say(f"ended at {now_text()} with exit {code}")
-        return code
-    if report:
+    elif report:
         args = [*(args or DEFAULT_ARGS), *junit_rerun.report_args(report)]
-    return run(args, run_pytest=run_pytest, **run_options)
+        code = run(args, run_pytest=run_pytest, **run_options)
+    else:
+        return run(args, run_pytest=run_pytest, **run_options)
+    if report:
+        junit_rerun.tidy_report(Path(report))
+    return code
 
 
 if __name__ == "__main__":

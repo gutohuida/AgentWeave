@@ -72,10 +72,14 @@ def main(argv: list[str], run_pytest: Optional[Callable[[list[str]], int]] = Non
         sys.path.insert(0, str(REPO_ROOT))
     try:
         args = pytest_args(argv)
+        report = junit_rerun.parse_options(argv)[0]
     except junit_rerun.UsageError as exc:
         print(f"sweep: {exc}", flush=True)
         return 4  # pytest's usage error
-    return (run_pytest or _run_pytest)(args)
+    code = (run_pytest or _run_pytest)(args)
+    if report:
+        junit_rerun.tidy_report(Path(report))
+    return code
 
 
 if __name__ == "__main__":

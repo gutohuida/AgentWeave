@@ -216,24 +216,29 @@ def test_agent_guidance_sends_full_runs_through_the_entry_point():
         assert "pytest hub/tests/ -v" not in text, guidance
 
 
-def test_the_settings_to_paste_use_the_entry_point_and_a_fast_sweep():
+def test_the_settings_to_paste_use_the_entry_point_and_write_reports():
+    """checks.md shows exactly `scripts/checks/check_settings.json`, the list the operator applies
+    and the d1105 drive applies (`checks-report-which-tests-failed-in-any-language`, FR-9)."""
     import json
     import re
 
     text = (REPO_ROOT / ".claude" / "reference" / "checks.md").read_text(encoding="utf-8")
     block = re.search(r"```json\n(.*?)\n```", text, re.S)
     assert block, "checks.md carries the whole check list as JSON"
+    delivered = REPO_ROOT / "scripts" / "checks" / "check_settings.json"
+    assert json.loads(block.group(1)) == json.loads(delivered.read_text(encoding="utf-8"))
     checks = {c["name"]: c for c in json.loads(block.group(1))}
-    tests = checks["hub-tests"]
-    assert tests["command"] == "py -3.11 scripts/checks/hub_suite.py"
-    assert tests["phase"] == "both" and tests["paths"] == [] and not tests["fast"]
-    sweep = checks["sweep"]
-    assert sweep["command"] == "py -3.11 scripts/checks/sweep_check.py"
-    assert sweep["fast"] and sweep["phase"] == "both"
-    assert sweep["timeout_seconds"] <= 120  # FAST_CHECK_MAX_SECONDS
-    # Every entry has exactly the fields the Hub's `ProjectCheck` takes, within its bounds.
+    for name, script in (("hub-tests", "hub_suite.py"), ("sweep", "sweep_check.py")):
+        check = checks[name]
+        report = check["report_path"]
+        assert check["command"] == f"py -3.11 scripts/checks/{script} --report {report}"
+        assert check["rerun_command"] == f"{check['command']} --rerun {{tests}}"
+        assert report.startswith(".agentweave/")  # gitignored at any depth
+    assert checks["hub-tests"]["paths"] == [] and not checks["hub-tests"]["fast"]
+    # Every entry has only the fields the Hub's `ProjectCheck` takes, within its bounds.
     fields = {"name", "command", "timeout_seconds", "paths", "fast", "phase"}
     for check in checks.values():
-        assert set(check) == fields, check["name"]
+        assert fields <= set(check) <= fields | {"report_path", "rerun_command"}, check["name"]
         assert 10 <= check["timeout_seconds"] <= 3600, check["name"]
         assert check["phase"] in ("review", "landing", "both"), check["name"]
+        assert not check["fast"] or check["timeout_seconds"] <= 120, check["name"]
