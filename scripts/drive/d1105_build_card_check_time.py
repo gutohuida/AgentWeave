@@ -25,7 +25,9 @@ build is stopped, the flow's job archived, the scratch project's directory remov
     py -3.11 scripts/drive/d1105_build_card_check_time.py
 """
 
+import os
 import shutil
+import stat
 import sys
 import time
 import urllib.parse
@@ -266,7 +268,13 @@ def tidy(state):
             code, _ = d.api("POST", f"{base}/jobs/{state['job']}/archive")
             print(f"archived job {state['job']}: {code}")
     if state.get("root"):
-        shutil.rmtree(state["root"], ignore_errors=True)
+        def _writable(func, path, _exc):
+            # git's object files are read-only on Windows; clear the bit and retry.
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+
+        shutil.rmtree(state["root"], onerror=_writable)
+        print(f"scratch removed: {not os.path.exists(state['root'])}")
 
 
 if __name__ == "__main__":
