@@ -36,7 +36,11 @@ def _entries(result: Any) -> List[Dict[str, Any]]:
     if not found and project_checks.failed(result):
         # A failure named by no test: a timeout, a non-pytest check. Main's answer decides.
         origin = CAUGHT if project_checks.preexisting(result) else INTRODUCED
-        found.append({"test": None, "kind": "check failed", "origin": origin})
+        entry = {"test": None, "kind": "check failed", "origin": origin}
+        if result.get("whole_check"):
+            # Why it names no test (`checks-report-which-tests-failed-in-any-language`, FR-4).
+            entry["whole_check"] = str(result["whole_check"])
+        found.append(entry)
     for entry in found:
         entry["check"] = str(result.get("name") or "check")
         entry["changed_by_build"] = entry["test"] in touched
