@@ -111,6 +111,36 @@ async def test_a_check_and_its_child_run_below_normal_while_the_project_gives_wa
     assert _below_normal(child), child
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gives_way", [True, False])
+async def test_a_fast_check_keeps_normal_priority_while_the_others_give_way(
+    app, auth_headers, tmp_path, gives_way, normal_process_priority
+):
+    """fast-not-lowered / off-unchanged (`quick-checks-run-at-normal-priority`, FR-1)."""
+    fast, fast_out = _reporting_check(tmp_path / "fast")
+    slow, slow_out = _reporting_check(tmp_path / "slow")
+    fast = {**fast, "name": "quick", "fast": True}
+    saved = await app.put(
+        SETTINGS, json={"checks": [fast, slow], "checks_give_way": gives_way}, headers=auth_headers
+    )
+    assert saved.status_code == 200, saved.text
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+
+    configured = {c["name"]: c for c in project_checks.configured_checks(project)}
+    for name in ("quick", "suite"):
+        result = project_checks.run_one(configured[name], tmp_path)
+        assert result["exit_code"] == 0, result["output_tail"]
+    fast_priorities = [int((fast_out / role).read_text()) for role in ("parent", "child")]
+    slow_priorities = [int((slow_out / role).read_text()) for role in ("parent", "child")]
+
+    assert all(_normal(p) for p in fast_priorities), fast_priorities
+    if gives_way:
+        assert all(_below_normal(p) for p in slow_priorities), slow_priorities
+    else:
+        assert all(_normal(p) for p in slow_priorities), slow_priorities
+
+
 @pytest.fixture
 def normal_process_priority():
     """Run the test at normal priority. Other tests in the same worker raise the process class
