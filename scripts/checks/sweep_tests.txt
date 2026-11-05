@@ -46,6 +46,7 @@ hub/tests/test_task_attribution.py
 hub/tests/test_task_lifecycle_bands.py
 hub/tests/test_task_transitions.py
 hub/tests/test_task_workspace_scheme.py
+hub/tests/test_the_hub_reads_no_test_runner.py
 hub/tests/test_the_sweep_set_is_current.py
 hub/tests/test_vault_archive.py
 hub/tests/test_workspace_writes.py

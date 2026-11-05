@@ -261,16 +261,31 @@ async def test_a_hub_fault_is_retried_once_then_put_on_needs_you(
 # ---------------------------------------------------------------------------------------------
 
 
-def _sleeper(tmp_path: Path, *, prints: str = "", only_where: str = "") -> dict:
-    """A check that prints *prints* and sleeps past its 2 s limit, where *only_where* exists (or
-    always); elsewhere it passes at once."""
+def _sleeper(tmp_path: Path, *, prints: str = "", only_where: str = "", reports: str = "") -> dict:
+    """A check that prints *prints*, writes a JUnit report naming *reports* failed (when given), and
+    sleeps past its 2 s limit, where *only_where* exists (or always); elsewhere it passes at once.
+    """
     guard = f"if not os.path.exists({only_where!r}):\n    sys.exit(0)\n" if only_where else ""
+    report = ""
+    if reports:
+        classname, name = reports.split("::", 1)
+        xml = (
+            f'<testsuites><testcase classname="{classname}" name="{name}">'
+            "<failure message='assert 1 == 2'/></testcase></testsuites>"
+        )
+        report = f"open('report.xml', 'w', encoding='utf-8').write({xml!r})\n"
     command = _script(
         tmp_path,
-        f"sleeper-{'named' if prints else 'quiet'}",
-        f"import os, sys, time\n{guard}print({prints!r}, flush=True)\ntime.sleep(10)\n",
+        f"sleeper-{'named' if reports else 'quiet'}-{'printed' if prints else 'silent'}",
+        f"import os, sys, time\n{guard}print({prints!r}, flush=True)\n{report}time.sleep(10)\n",
     )
-    return {"name": "hub-tests", "command": command, "timeout_seconds": 2, "fast": False}
+    return {
+        "name": "hub-tests",
+        "command": command,
+        "timeout_seconds": 2,
+        "fast": False,
+        "report_path": "report.xml",
+    }
 
 
 @pytest.mark.usefixtures("no_agent_cli_spawn")
@@ -311,7 +326,10 @@ async def test_a_check_out_of_time_that_named_a_failing_test_is_still_the_tasks(
         tmp_path,
         checks=lambda repo: [
             _sleeper(
-                tmp_path, prints="FAILED tests/x.py::t - assert 1 == 2", only_where="ledger.py"
+                tmp_path,
+                prints="FAILED tests/x.py::t - assert 1 == 2",
+                only_where="ledger.py",
+                reports="tests.x::t",
             )
         ],
     )
@@ -323,7 +341,7 @@ async def test_a_check_out_of_time_that_named_a_failing_test_is_still_the_tasks(
     assert run.state == "failed" and run.ended_by is None
     task = await _task("task-1")
     assert task.status == "revision_needed"
-    assert "tests/x.py::t" in (task.notes or ""), task.notes
+    assert "tests.x::t" in (task.notes or ""), task.notes
     assert await _unjudged_stalls("task-1") == []
 
 
@@ -350,20 +368,16 @@ def test_a_conflict_is_told_apart_from_git_failing(tmp_path):
     assert merged is None and not conflict
 
 
-def test_named_failures_reads_what_pytest_printed_before_it_was_ended():
-    output = (
-        "tests/a.py::one PASSED\n"
-        "tests/a.py::two FAILED\n"
-        "[gw1] [ 40%] FAILED tests/b.py::three[x-1]\n"
-        "FAILED tests/c.py::four - assert 0\n"
-        "[the check ran past its 2s timeout and was ended]\n"
-    )
-    assert project_checks.named_failures(output) == [
-        "tests/a.py::two",
-        "tests/b.py::three[x-1]",
-        "tests/c.py::four",
-    ]
-    assert project_checks.named_failures("collected 10 items\n....") == []
+def test_a_timeout_names_only_what_its_report_says_not_what_it_printed(tmp_path):
+    """FR-7: a check ended at its time limit names the failures its report recorded before it was
+    ended; a `FAILED x::t` it printed names nothing."""
+    printed = _sleeper(tmp_path, prints="FAILED tests/a.py::two - assert 0")
+    result = project_checks.run_one(printed, tmp_path)
+    assert result["timed_out"] and "named_failures" not in result
+    assert project_checks.unjudged_timeout(result)
+    reported = _sleeper(tmp_path, prints="FAILED tests/a.py::two", reports="tests.a::two")
+    result = project_checks.run_one(reported, tmp_path)
+    assert result["named_failures"] == ["tests.a::two"]
 
 
 def test_a_timeout_is_unjudged_only_without_a_named_failure():

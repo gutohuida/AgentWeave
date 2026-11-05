@@ -15,7 +15,8 @@ first; their targets are merged onto main's tip with plumbing (`build_chain`), o
 task, and the project's checks run once on the last prefix (`run_batch_checks`). On a pass main is
 fast-forwarded to exactly that commit, so what lands is what was checked; a main that moved under the
 batch refuses the fast-forward and the batch is built again on the new tip. A failure of the batch's
-own is narrowed over the prefixes to the first task that breaks it, re-running only the failed tests,
+own is narrowed over the prefixes to the first task that breaks it, re-running only the failed tests
+through the check's re-run command,
 and that task alone goes back to its author; failures main shares follow slice M's rule for the
 whole batch (the Hub's override where allowed, else the operator's one reason).
 
@@ -1912,13 +1913,14 @@ async def _narrow(
     chain: Chain,
 ) -> bool:
     """Find the first task whose work, on the ones before it, makes the failing tests fail: binary
-    search over the prefixes, running only the failed node ids (or the failing check where it cannot
-    be narrowed). That task goes back to its author; the ones before it land if they already passed
+    search over the prefixes, running the check's re-run command with only the failed test ids (or
+    the failing check where it has no re-run command or the ids are too long for one,
+    `checks-report-which-tests-failed-in-any-language` FR-6). That task goes back to its author; the ones before it land if they already passed
     on exactly their prefix, else they and the ones after it are queued again at the head."""
     check = next(c for c in checks if c["name"] == failing.get("name"))
     ids = _failing_ids(failing)
-    narrowed = project_checks.rerun_check(check, ids)
-    probe = narrowed or check
+    rerun = project_checks.rerun_check(check, ids)
+    probe = rerun or check
     owner = f"batch-{batch_id}.narrow"
     log: List[Dict[str, Any]] = []
 
@@ -1929,7 +1931,7 @@ async def _narrow(
                 result = await asyncio.to_thread(project_checks.run_one, probe, path, owner)
         finally:
             await asyncio.to_thread(project_checks._remove_checkout, root, path)
-        if narrowed:
+        if rerun:
             failing_here = project_checks.reproduces_a_test_failure(result) or (
                 project_checks.failed(result)
                 and not project_checks.proves_the_tests_pass(result, ids)
@@ -1942,7 +1944,7 @@ async def _narrow(
                 "task": tasks[k - 1],
                 "commit": prefixes[k - 1],
                 "command": probe["command"],
-                "tests": ids if narrowed else [],
+                "tests": ids if rerun else [],
                 "exit_code": result.get("exit_code"),
                 "failed": failing_here,
             }
