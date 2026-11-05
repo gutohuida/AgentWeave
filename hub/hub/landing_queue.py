@@ -1255,6 +1255,7 @@ async def _end_batch(batch_id: str, state: str, **fields: Any) -> None:
             setattr(batch, name, value)
         if state not in ("checking", "held", "landing"):
             batch.ended_at = _now()
+        await _close_batch_run(session, batch)
         await session.commit()
 
 
@@ -1266,6 +1267,8 @@ class BatchChecks:
     results: List[Dict[str, Any]] = field(default_factory=list)
     run_id: Optional[str] = None
     error: str = ""
+    #: A check ran out of time naming no failing test: nothing was judged, so no task's to blame.
+    unjudged: bool = False
 
 
 async def run_batch_checks(
@@ -1309,6 +1312,7 @@ async def run_batch_checks(
     path: Optional[Path] = None
     baseline = project_checks._MainBaseline(root, owner, base)
     state, error = "passed", ""
+    unjudged = False
     try:
         async with project_checks._semaphore():
             for check, already in zip(checks, planned, strict=True):
@@ -1319,6 +1323,17 @@ async def run_batch_checks(
                             project_checks._checkout, root, owner, merged
                         )
                     result = await asyncio.to_thread(project_checks.run_one, check, path, owner)
+                    if project_checks.unjudged_timeout(result):
+                        # Out of time naming no failing test: it says nothing about the work, so
+                        # it is neither confirmed nor narrowed (FR-10, as a task's own run).
+                        result.update(tree=tree, check_digest=project_checks.check_digest(check))
+                        results.append(result)
+                        unjudged = True
+                        error = UNJUDGED_TIMEOUT + (
+                            f" the check {check['name']} ran past its "
+                            f"{check.get('timeout_seconds')}s time limit and named no failing test"
+                        )
+                        break
                     if project_checks.failed(result):
                         await asyncio.to_thread(
                             project_checks.confirm_failure, check, path, result, owner, changed
@@ -1342,18 +1357,31 @@ async def run_batch_checks(
         if path is not None:
             await asyncio.to_thread(project_checks._remove_checkout, root, path)
         await baseline.close()
-    if state != "error":
+    if unjudged:
+        state = "error"
+    elif state != "error":
         state = "failed" if any(project_checks.failed(r) for r in results) else "passed"
-    await _record_run(run_id, results, state=state, error=error)
+    await _record_run(
+        run_id,
+        results,
+        state=state,
+        error=error,
+        ended_by=project_checks.ENDED_BY_TIMEOUT if unjudged else None,
+    )
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)
         batch.results = results
         await session.commit()
-    return BatchChecks(state=state, results=results, run_id=run_id, error=error)
+    return BatchChecks(state=state, results=results, run_id=run_id, error=error, unjudged=unjudged)
 
 
 async def _record_run(
-    run_id: str, results: List[Dict[str, Any]], *, state: Optional[str] = None, error: str = ""
+    run_id: str,
+    results: List[Dict[str, Any]],
+    *,
+    state: Optional[str] = None,
+    error: str = "",
+    ended_by: Optional[str] = None,
 ) -> None:
     async with async_session_factory() as session:
         run = await session.get(TaskCheckRun, run_id)
@@ -1362,7 +1390,53 @@ async def _record_run(
         run.results = list(results)
         if state is not None:
             run.state, run.error, run.ended_at = state, error, _now()
+            if ended_by is not None:
+                run.ended_by = ended_by
         await session.commit()
+
+
+#: A batch's `error` begins with this where its checks ran out of time and judged nothing.
+UNJUDGED_TIMEOUT = "unjudged timeout:"
+
+
+def _close_check_run(run: Optional[TaskCheckRun], batch: LandingBatch) -> None:
+    """End *run* if it is still `running`, with what its *batch* recorded: `passed` where the batch
+    landed, else `error` with the batch's reason. A run left `running` inflates the build's check
+    seconds for good."""
+    if run is None or run.state != "running":
+        return
+    if batch.state == "landed":
+        run.state, run.error = "passed", ""
+    else:
+        run.state, run.error = "error", batch.error or f"the batch ended {batch.state}"
+    run.ended_at = _now()
+
+
+async def _close_batch_run(session: AsyncSession, batch: Optional[LandingBatch]) -> None:
+    if batch is not None and batch.check_run_id and batch.state not in ("checking", "landing"):
+        _close_check_run(await session.get(TaskCheckRun, batch.check_run_id), batch)
+
+
+async def _previous_batch_unjudged(batch_id: str, project_id: str, task_ids: List[str]) -> bool:
+    """Whether the batch before *batch_id* over the same work also ended unjudged on a timeout."""
+    async with async_session_factory() as session:
+        previous = (
+            (
+                await session.execute(
+                    select(LandingBatch)
+                    .where(LandingBatch.project_id == project_id, LandingBatch.id != batch_id)
+                    .order_by(LandingBatch.created_at.desc())
+                    .limit(1)
+                )
+            )
+            .scalars()
+            .first()
+        )
+    return (
+        previous is not None
+        and (previous.error or "").startswith(UNJUDGED_TIMEOUT)
+        and list(previous.task_ids or []) == list(task_ids)
+    )
 
 
 async def _decide(
@@ -1378,6 +1452,25 @@ async def _decide(
     outcome: BatchChecks,
     chain: Chain,
 ) -> bool:
+    if outcome.unjudged:
+        # Nobody's failure: no narrowing, no send-back. Retried once, then the operator's (FR-9).
+        if await _previous_batch_unjudged(batch_id, project_id, tasks):
+            why = (
+                f"{outcome.error}; it did so twice in a row, so nothing was judged: land the "
+                "batch with one reason, or run the checks again"
+            )
+            await _end_batch(batch_id, "held", error=why)
+            async with async_session_factory() as session:
+                for landing in landings:
+                    row = await session.get(TaskLanding, landing.id)
+                    if row is not None and row.state == CHECKING:
+                        row.state, row.reason = HELD, why
+                await session.commit()
+                await _announce(session, [landing.id for landing in landings])
+            return True
+        await _requeue([landing.id for landing in landings])
+        await _end_batch(batch_id, "failed", error=outcome.error)
+        return False
     if outcome.state == "error":
         await _requeue([landing.id for landing in landings])
         await _end_batch(batch_id, "failed", error=outcome.error)
@@ -1746,6 +1839,7 @@ async def _record_landed(
             row.override_reason = row.override_reason or override
             row.override_by = row.override_by or batch.override_by
         batch.state, batch.ended_at = "landed", _now()
+        await _close_batch_run(session, batch)
         _redrain_after_commit(session, project_id)
         await session.commit()
         await _announce(session, [landing.id for landing in landings])
@@ -1786,6 +1880,7 @@ async def _not_landed(
             row.state, row.reason, row.ended_at = NOT_LANDED, reason, _now()
         if batch is not None:
             batch.state, batch.error, batch.ended_at = "failed", reason, _now()
+            await _close_batch_run(session, batch)
         await session.commit()
         await _announce(session, [landing.id for landing in landings])
 
@@ -2158,6 +2253,32 @@ async def _settle_open_batch(
     await _requeue([landing.id for landing in landings])
     await _end_batch(batch.id, "interrupted", error=error)
     return False
+
+
+async def close_orphaned_check_runs() -> int:
+    """At startup, before the leftover-run interruption: a check run still `running` for a batch
+    that is no longer checking is ended with what the batch recorded."""
+    closed = 0
+    async with async_session_factory() as session:
+        batches = (
+            (
+                await session.execute(
+                    select(LandingBatch).where(
+                        LandingBatch.check_run_id.is_not(None),
+                        LandingBatch.state.not_in(("checking", "landing")),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for batch in batches:
+            run = await session.get(TaskCheckRun, batch.check_run_id)
+            if run is not None and run.state == "running":
+                _close_check_run(run, batch)
+                closed += 1
+        await session.commit()
+    return closed
 
 
 async def reconcile_at_startup() -> Dict[str, int]:
