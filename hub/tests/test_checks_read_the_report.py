@@ -410,6 +410,38 @@ def test_a_failing_test_in_a_file_the_task_changed_is_touched_by_its_reported_fi
     assert result["compared_tests"] == ["test::adds"] and "flaky" not in result
 
 
+def test_a_reported_failure_with_no_file_is_touched_when_the_task_changed_files(where):
+    """pytest's default xunit2 report names no file: the id's file is unknown, so a failure that
+    passes its re-run stands rather than being cleared as flaky on a file guessed from its
+    classname (an override is never automatic on a guess)."""
+    cwd, log = where
+    report = (
+        '<testsuites><testcase classname="pkg.test_same.TestA" name="test_same">'
+        "<failure/></testcase></testsuites>"
+    )
+    check = _check(
+        _command(cwd, log, "full", 1, report),
+        report_path="report.xml",
+        rerun_command=_rerun(cwd, log, "pass"),
+    )
+    result = project_checks.run_one(check, cwd)
+    assert result["failed_tests"] == ["pkg.test_same.TestA::test_same"]
+    assert result["test_files"] == {}
+    project_checks.confirm_failure(check, cwd, result, None, changed=["pkg/test_same.py"])
+    assert result["touched_tests"] == ["pkg.test_same.TestA::test_same"]
+    assert result["compared_tests"] == ["pkg.test_same.TestA::test_same"]
+    assert "flaky" not in result and project_checks.failed(result)
+
+
+def test_touched_tests_on_a_recorded_xunit2_report_counts_every_failure(tmp_path):
+    report = project_checks.parse_report(_recorded("pytest_xunit2.xml", tmp_path), tmp_path)
+    assert report is not None and report.files == {}
+    touched = project_checks.touched_tests(report.failing, ["pkg/test_same.py"], report.files)
+    assert touched == report.failing and len(touched) == 3
+    # A pytest node id (no report) still takes its file from its path part.
+    assert project_checks.touched_tests(["a/t.py::x", "b/t.py::y"], ["a/t.py"]) == ["a/t.py::x"]
+
+
 @pytest.mark.asyncio
 async def test_main_is_asked_through_the_rerun_command(tmp_path, tmp_path_factory):
     """Comparing with main runs the re-run command with the compared ids on main's tree."""

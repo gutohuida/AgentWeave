@@ -799,9 +799,9 @@ def _judge_by_report(
         result["whole_check"] = how if report is None else REPORT_NAMES_NO_FAILURE
         return
     result["failed_tests"] = failing
-    files = {test: report.files[test] for test in failing if report and test in report.files}
-    if files:
-        result["test_files"] = files
+    # Always set for a report's ids, empty when the report gives no file (pytest's xunit2): an id
+    # whose file is unknown counts as touched (`touched_tests`), never as a file guessed from it.
+    result["test_files"] = {test: report.files[test] for test in failing if test in report.files}
 
 
 def _shell_argument(test: str) -> Optional[str]:
@@ -1244,13 +1244,18 @@ def touched_tests(
     """The node ids whose file is among *changed*, the paths the task's merged work changes against
     the run's main commit (FR-4): a test the task touched is the task's to make pass. Unknown changes
     count every id as touched -- an override is never automatic on a guess. A report's ids take
-    their file from the report (*files*, `checks-report-which-tests-failed-in-any-language` FR-2).
+    their file from the report (*files*, `checks-report-which-tests-failed-in-any-language` FR-2),
+    and one whose report gives no file (pytest's default xunit2) is unknown, so touched: its
+    classname is not a path. *files* `None` means pytest node ids, whose path part is the file.
     """
     if changed is None:
         return list(node_ids)
     paths = {_node_key(path) for path in changed}
-    files = files or {}
-    return [node for node in node_ids if _node_key(files.get(node) or test_file(node)) in paths]
+    if not paths:
+        return []  # the work changes no file: no failing test can be one it touched
+    if files is None:
+        return [node for node in node_ids if test_file(node) in paths]
+    return [node for node in node_ids if node not in files or _node_key(files[node]) in paths]
 
 
 def _still_failing(again: Dict[str, Any], node_ids: Sequence[str]) -> List[str]:
