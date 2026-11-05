@@ -13,8 +13,10 @@ CHECKS = [
 ]
 #: What is stored and read back: a check names no paths unless the operator gives some, and is not
 #: fast unless the operator marks it (`checks-run-before-anyone-reviews`, FR-1), and runs before
-#: review and at landing unless given a phase (`checks-know-their-phase-...`, FR-1).
-SAVED = [{**check, "paths": [], "fast": False, "phase": "both"} for check in CHECKS]
+#: review and at landing unless given a phase (`checks-know-their-phase-...`, FR-1), and names no
+#: report or re-run command unless given them (`checks-report-which-tests-failed-...`, FR-1).
+NO_REPORT = {"report_path": None, "rerun_command": None}
+SAVED = [{**check, "paths": [], "fast": False, "phase": "both", **NO_REPORT} for check in CHECKS]
 
 
 @pytest.mark.asyncio
@@ -44,6 +46,7 @@ async def test_a_timeout_defaults_and_other_settings_are_untouched(app, auth_hea
             "paths": [],
             "fast": False,
             "phase": "both",
+            **NO_REPORT,
         }
     ]
     assert saved.json()["hop_budget"] == before["hop_budget"]

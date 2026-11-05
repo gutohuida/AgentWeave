@@ -1917,8 +1917,8 @@ async def _narrow(
     on exactly their prefix, else they and the ones after it are queued again at the head."""
     check = next(c for c in checks if c["name"] == failing.get("name"))
     ids = _failing_ids(failing)
-    narrowed = project_checks.narrowed_command(check["command"], ids) if ids else None
-    probe = {**check, "command": narrowed} if narrowed else check
+    narrowed = project_checks.rerun_check(check, ids)
+    probe = narrowed or check
     owner = f"batch-{batch_id}.narrow"
     log: List[Dict[str, Any]] = []
 

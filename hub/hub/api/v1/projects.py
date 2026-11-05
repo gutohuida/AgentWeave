@@ -101,8 +101,38 @@ class ProjectCheck(BaseModel):
     # When the check runs (`checks-know-their-phase-and-give-way-to-the-user`, FR-1): in a task's
     # run before review, in a landing batch's run, or both. A check saved before this reads both.
     phase: Literal["review", "landing", "both"] = "both"
+    # The JUnit XML report the check writes, relative to the directory it runs in, and a command
+    # that re-runs named tests, its `{tests}` replaced by their ids
+    # (`checks-report-which-tests-failed-in-any-language`, FR-1). A check without a report is
+    # judged as a whole; one saved before these existed has neither.
+    report_path: Optional[str] = Field(default=None, max_length=255)
+    rerun_command: Optional[str] = Field(default=None, max_length=2000)
 
     model_config = {"extra": "forbid"}
+
+    @field_validator("report_path")
+    @classmethod
+    def relative_report(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        path = value.strip().replace("\\", "/")
+        if path.startswith("/") or ":" in path or ".." in path.split("/"):
+            raise ValueError(
+                f"report_path is relative to the directory the check runs in: {value!r}"
+            )
+        return path
+
+    @field_validator("rerun_command")
+    @classmethod
+    def names_the_tests(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        if project_checks.TESTS_PLACEHOLDER not in value:
+            raise ValueError(
+                f"rerun_command must contain {project_checks.TESTS_PLACEHOLDER}, where the Hub "
+                f"puts the ids of the tests to re-run"
+            )
+        return value.strip()
 
     @model_validator(mode="after")
     def fast_is_bounded(self) -> "ProjectCheck":

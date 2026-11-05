@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.110" timestamp="2026-11-05T19:28:53.790053+00:00" hostname="recorded"><testcase classname="pkg.test_same.TestA" name="test_same" file="pkg\test_same.py" line="4" time="0.002"><failure message="AssertionError: A fails&#10;assert False">self = &lt;pkg.test_same.TestA object at 0x000002194D7D2510&gt;
+
+    def test_same(self):
+&gt;       assert False, "A fails"
+E       AssertionError: A fails
+E       assert False
+
+pkg\test_same.py:6: AssertionError</failure></testcase></testsuite></testsuites>
