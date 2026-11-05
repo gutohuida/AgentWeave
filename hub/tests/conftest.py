@@ -1085,6 +1085,80 @@ def drain_conversation():
     return _drain
 
 
+@pytest.fixture(scope="session")
+def _migration_template_dir(tmp_path_factory):
+    """One directory per pytest session, shared by every xdist worker, for prepared migration climbs."""
+    base = tmp_path_factory.getbasetemp()
+    directory = (
+        base.parent if os.environ.get("PYTEST_XDIST_WORKER") else base
+    ) / "migration-climbs"
+    directory.mkdir(exist_ok=True)
+    return directory
+
+
+_REVISION_FILE_MEMO: "dict[int, object]" = {}
+
+
+def _revision_file_memo(real_load, make):  # noqa: ANN001, ANN202
+    """One memoising loader per process, however many tests install it (the real one is never wrapped twice)."""
+    return _REVISION_FILE_MEMO.setdefault(id(real_load), make(real_load))
+
+
+@pytest.fixture(autouse=True)
+def _migration_tests_share_prepared_databases(request, monkeypatch):
+    """In the migration test modules, serve a climb from an empty file out of a once-built copy.
+
+    See `migration_templates`. `alembic.command.upgrade` is looked up at call time by every
+    migration test, so patching the attribute reaches all of them.
+    """
+    if request.node.get_closest_marker("real_alembic_run") or not request.module.__name__.rsplit(
+        ".", 1
+    )[-1].startswith("test_migration"):
+        yield
+        return
+    from alembic import command
+    from alembic import util as alembic_util
+
+    from .migration_templates import (
+        caching_downgrade,
+        caching_upgrade,
+        copying_create_all,
+        remembering_revision_files,
+        without_fsync,
+    )
+
+    monkeypatch.setattr(
+        alembic_util,
+        "load_python_file",
+        _revision_file_memo(alembic_util.load_python_file, remembering_revision_files),
+    )
+    from hub.db import sqlite_pragmas
+
+    if hasattr(request.module, "_create_all_at"):
+        monkeypatch.setattr(
+            request.module,
+            "_create_all_at",
+            copying_create_all(
+                request.module._create_all_at, request.getfixturevalue("_migration_template_dir")
+            ),
+        )
+
+    monkeypatch.setattr(
+        sqlite_pragmas, "apply_pragmas", without_fsync(sqlite_pragmas.apply_pragmas)
+    )
+    monkeypatch.setattr(
+        command,
+        "upgrade",
+        caching_upgrade(command.upgrade, request.getfixturevalue("_migration_template_dir")),
+    )
+    monkeypatch.setattr(
+        command,
+        "downgrade",
+        caching_downgrade(command.downgrade, request.getfixturevalue("_migration_template_dir")),
+    )
+    yield
+
+
 @pytest.fixture(autouse=True)
 def _no_real_worktree_provision(monkeypatch):
     """Every agent trigger calls worktrees.resolve_agent_workspace, which (for a

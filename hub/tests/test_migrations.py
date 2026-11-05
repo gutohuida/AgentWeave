@@ -567,6 +567,7 @@ async def test_init_db_alembic_failure_does_not_raise(tmp_path, monkeypatch) -> 
     assert True, "Alembic upgrade failed silently — exception was caught"
 
 
+@pytest.mark.real_alembic_run
 def test_run_async_migrations_uses_the_same_busy_timeout_as_the_main_engine(tmp_path) -> None:
     """F292 investigation, 2026-09-06: alembic's own engine used to have no `connect_args`
     at all, so on SQLite it ran with the driver's default 5s busy timeout while the main
@@ -597,6 +598,7 @@ def test_run_async_migrations_uses_the_same_busy_timeout_as_the_main_engine(tmp_
     )
 
 
+@pytest.mark.real_alembic_run
 def test_run_async_migrations_disposes_its_engine_even_when_a_migration_raises(tmp_path) -> None:
     """F292 investigation, 2026-09-06: `await connectable.dispose()` used to sit after the
     `async with connectable.connect()` block rather than in a `finally`, so a migration
