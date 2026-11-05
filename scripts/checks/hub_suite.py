@@ -2,10 +2,15 @@
 
 The hub-tests check, agents and the operator all run the full suite through this script:
 
-    py -3.11 scripts/checks/hub_suite.py [pytest arguments...]
+    py -3.11 scripts/checks/hub_suite.py [--report PATH] [pytest arguments...]
+    py -3.11 scripts/checks/hub_suite.py [--report PATH] --rerun ID [ID ...]
 
 With no arguments it runs `hub/tests -q --dist loadgroup -p no:cacheprovider --timeout=600`.
 Arguments given are passed to pytest unchanged, plus `-n <workers>` unless they already set one.
+
+`--report PATH` writes the JUnit XML report the Hub reads the failing tests from, and `--rerun`
+runs only the given `classname::name` ids, serially, without waiting for the suite lock: it is not
+the full suite (spec `checks-report-which-tests-failed-in-any-language`, FR-9; `junit_rerun.py`).
 
 Two things it adds over calling pytest directly (spec `agentweave-s-checks-fit-a-busy-machine`):
 
@@ -36,6 +41,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import junit_rerun  # noqa: E402 -- beside this script, which is run by path
 
 DEFAULT_ARGS = ["hub/tests", "-q", "--dist", "loadgroup", "-p", "no:cacheprovider", "--timeout=600"]
 POLL_SECONDS = 0.5
@@ -251,5 +259,29 @@ def _run_pytest(args: list[str]) -> int:
     return int(pytest.main(args))
 
 
+def main(
+    argv: list[str],
+    *,
+    run_pytest: Optional[Callable[[list[str]], int]] = None,
+    **run_options,
+) -> int:
+    """Run the suite, or with `--rerun` only the named tests; `--report` writes the report."""
+    try:
+        report, rerun_ids, args = junit_rerun.parse_options(argv)
+        if rerun_ids is not None:
+            pytest_args = junit_rerun.rerun_args(rerun_ids, report, Path.cwd())
+    except junit_rerun.UsageError as exc:
+        say(str(exc))
+        return 4  # pytest's usage error
+    if rerun_ids is not None:
+        say(f"re-running {len(rerun_ids)} test(s) serially, without the suite lock")
+        code = (run_pytest or _run_pytest)(pytest_args)
+        say(f"ended at {now_text()} with exit {code}")
+        return code
+    if report:
+        args = [*(args or DEFAULT_ARGS), *junit_rerun.report_args(report)]
+    return run(args, run_pytest=run_pytest, **run_options)
+
+
 if __name__ == "__main__":
-    sys.exit(run(sys.argv[1:]))
+    sys.exit(main(sys.argv[1:]))

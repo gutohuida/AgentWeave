@@ -24,8 +24,9 @@ Steps:
 
   repo  (FR-9 repo-per-test) -- a clone of this checkout opened as a project, with the check
         settings the build delivers (DELIVERED, below) applied exactly. The task adds one failing
-        Hub test inside a test class. PASS needs: the settings read back as delivered; the failing
-        check names exactly that test; and its confirmation re-ran that test alone. Skipped, with
+        Hub test inside a test class, and lists it in the sweep set so `sweep` meets it before
+        review even where `hub-tests` runs only at landing. PASS needs: the settings read back
+        as delivered; the failing check names exactly that test; and its confirmation re-ran that test alone. Skipped, with
         a message, until DELIVERED exists (the repo-settings task delivers it). It runs the
         delivered checks for real, so it takes as long as hub-tests does (10-20 minutes).
 
@@ -91,6 +92,7 @@ process.exit(run.status === null ? 1 : run.status);
 NODE_ID = "test::adds two numbers"
 
 REPO_TEST_FILE = "hub/tests/test_d1105_drive_fails_on_purpose.py"
+SWEEP_SET = "scripts/checks/sweep_tests.txt"
 REPO_TEST = '''"""Added by scripts/drive/d1105_checks_report_tests.py on a scratch clone; never on main."""
 
 
@@ -378,7 +380,13 @@ def repo_step(hub: Hub, keep: list, delivered: pathlib.Path) -> None:
     )
     if saved is None:
         return
-    task = project.task_with_work("Add a failing Hub test", {REPO_TEST_FILE: REPO_TEST})
+    # Listed in the sweep set too, so `sweep` (before review) meets it whatever phase `hub-tests`
+    # runs in: the operator's runs only at landing, which a task's own run never reaches.
+    sweep_set = (root / SWEEP_SET).read_text(encoding="utf-8").rstrip("\n") + "\n"
+    task = project.task_with_work(
+        "Add a failing Hub test",
+        {REPO_TEST_FILE: REPO_TEST, SWEEP_SET: sweep_set + REPO_TEST_FILE + "\n"},
+    )
     run = project.wait_run(task, minutes=60)
     note(f"run {run['id']}: {run['state']} {run.get('error') or ''}")
     failing = [r for r in run.get("results") or [] if r.get("exit_code") not in (0, None)
