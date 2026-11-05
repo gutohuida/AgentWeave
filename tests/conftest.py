@@ -74,3 +74,17 @@ def _nothing_listens_locally(monkeypatch: pytest.MonkeyPatch) -> None:
     simulates a running Hub says so by patching the probe over this, as it fakes `/health`.
     """
     monkeypatch.setattr("agentweave.cli._hub_port_accepts", lambda port, timeout=0.3: False)
+
+
+@pytest.fixture(autouse=True)
+def _no_app_window_is_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make "is an app window open on this Hub?" answer no, as on CI's runners.
+
+    A launch against a running Hub first looks for its open window (`_focus_open_app_window`) by
+    reading the window markers and then the real window list. Most tests leave `HUB_DIR` at the
+    real `~/.agentweave/hub`, where the operator's own :8000 window has a marker, so without this a
+    test on port 8000 would bring the operator's window to the front and skip what it tests. A test
+    of that decision patches the window list over this.
+    """
+    monkeypatch.setattr("agentweave.desktop_window.find_app_window", lambda pid: None)
+    monkeypatch.setattr("agentweave.desktop_window.pid_alive", lambda pid: True)

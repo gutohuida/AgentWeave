@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import __version__
+from . import __version__, desktop_window
 from .utils import load_dotenv, now_iso, print_error, print_info, print_success, print_warning
 
 logger = logging.getLogger(__name__)
@@ -1104,9 +1104,86 @@ def _set_windows_app_user_model_id() -> None:
     try:
         import ctypes
 
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AgentWeave.Hub")
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(desktop_window.APP_ID)
     except Exception:
         pass
+
+
+def _app_window_geometry_file(port: int) -> Path:
+    """Where the window for the Hub on `port` keeps its size and position, beside its storage.
+    Per port, so a window on a scratch Hub never moves the operator's own."""
+    return HUB_DIR / "app-window" / f"window-{port}.json"
+
+
+def _app_window_geometry(port: int) -> Dict[str, Any]:
+    """`webview.create_window` keyword arguments that reopen the window as it was left (D3)."""
+    return desktop_window.window_kwargs(
+        desktop_window.read_geometry(_app_window_geometry_file(port)),
+        desktop_window.on_a_screen,
+        desktop_window.primary_work_area,
+    )
+
+
+def _make_window_ours(window: Any, port: int) -> None:
+    """Give the window AgentWeave's taskbar identity before it shows (D1), and remember its
+    geometry when it closes (D3).
+
+    pywebview's `before_show` runs on the UI thread once the form has a handle and before it is
+    shown; `closing` runs there too, before the form goes, which is when its placement can still
+    be read. Best effort: a backend without these keeps today's window.
+    """
+    handle: Dict[str, Optional[int]] = {"hwnd": None}
+
+    def _before_show(window: Any) -> None:
+        hwnd = desktop_window.window_handle(window)
+        handle["hwnd"] = hwnd
+        if hwnd:
+            target, arguments = _resolve_shortcut_target()
+            desktop_window.set_window_identity(
+                hwnd, desktop_window.relaunch_command(target, arguments), _app_icon_path()
+            )
+
+    def _closing(window: Any) -> None:
+        hwnd = handle["hwnd"] or desktop_window.window_handle(window)
+        geometry = desktop_window.placement(hwnd) if hwnd else None
+        if geometry is not None:
+            desktop_window.write_geometry(_app_window_geometry_file(port), geometry)
+
+    with contextlib.suppress(AttributeError, TypeError):
+        window.events.before_show += _before_show
+    with contextlib.suppress(AttributeError, TypeError):
+        window.events.closing += _closing
+
+
+def _marker_pid(marker: Path) -> Optional[int]:
+    """The process that wrote a window marker, from its name `window-<port>-<pid>-<thread>.open`."""
+    parts = marker.stem.split("-")
+    try:
+        return int(parts[2])
+    except (IndexError, ValueError):
+        return None
+
+
+def _focus_open_app_window(port: int) -> bool:
+    """If an app window is open on the Hub at `port`, restore it and bring it to the front (D2).
+
+    Returns whether one is open: the caller then opens no second window. A marker whose process
+    has gone is stale (a window that crashed never removed it) and is cleared; one whose process
+    lives but shows no app window is passed over, so the launch opens a window of its own.
+    """
+    for marker in _app_window_markers(port):
+        pid = _marker_pid(marker)
+        if pid is None:
+            continue
+        hwnd = desktop_window.find_app_window(pid)
+        if hwnd is None:
+            if not desktop_window.pid_alive(pid):
+                with contextlib.suppress(OSError):
+                    marker.unlink()
+            continue
+        desktop_window.focus_window(hwnd, owner_pid=pid)
+        return True
+    return False
 
 
 def _enable_default_context_menus(window: Any) -> None:
@@ -1338,13 +1415,19 @@ def _open_app_window_native(url: str) -> bool:
     _set_windows_app_user_model_id()
 
     try:
+        import urllib.parse as _parse
+
+        port = _parse.urlsplit(url).port or DEFAULT_HUB_PORT
         # `text_select=True`: pywebview's default injects `body { user-select: none }` into every
         # page, so nothing in the app could be selected or copied — an agent's answer included
         # (F344). The app is a document as much as a control surface; it selects like a browser.
         bridge = _AppWindowApi()
-        window = webview.create_window("AgentWeave", url, text_select=True, js_api=bridge)
+        window = webview.create_window(
+            "AgentWeave", url, text_select=True, js_api=bridge, **_app_window_geometry(port)
+        )
         bridge._window = window
         _enable_default_context_menus(window)
+        _make_window_ours(window, port)
         marker = _app_window_register(url, window)
         try:
             _allow_sound_before_a_click()
@@ -1434,7 +1517,9 @@ def _play_opening_sound(short: bool) -> None:
 
 
 def _open_app_with_splash(
-    start: Callable[[], Tuple[Optional[str], Optional[str]]], warm: bool
+    start: Callable[[], Tuple[Optional[str], Optional[str]]],
+    warm: bool,
+    port: int = DEFAULT_HUB_PORT,
 ) -> Optional[int]:
     """Open the app window on the splash at once, run `start` behind it, then show the app.
 
@@ -1469,6 +1554,7 @@ def _open_app_with_splash(
             text_select=True,
             background_color=_SPLASH_BACKGROUND,
             js_api=bridge,
+            **_app_window_geometry(port),
         )
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")
@@ -1477,6 +1563,7 @@ def _open_app_with_splash(
         return None
     bridge._window = window
     _enable_default_context_menus(window)
+    _make_window_ours(window, port)
 
     loaded = threading.Event()
 
@@ -1628,11 +1715,17 @@ def _hub_native_start(
         with _req.urlopen(health_url, timeout=2) as resp:
             if resp.status == 200:
                 print_info(f"Hub is already running at {_hub_url(port)}")
+                # One window per Hub (D2): a window already open on it is brought back instead,
+                # and this launch exits. No window open: one is opened on the running Hub, which
+                # is not restarted, so the work it is running carries on (FR-5).
+                if app and _focus_open_app_window(port):
+                    print_info("AgentWeave is already open; brought its window to the front.")
+                    return 0
                 if app:
                     print_info("Opening Hub in app mode...")
                     # A warm open: the short splash, while the project is registered behind it.
                     code = _open_app_with_splash(
-                        lambda: (_hub_resolve_launch_url(port, cwd), None), warm=True
+                        lambda: (_hub_resolve_launch_url(port, cwd), None), warm=True, port=port
                     )
                     if code is not None:
                         return code
@@ -1769,7 +1862,7 @@ def _hub_native_start(
         if detach:
             if app:
                 print_info("Opening Hub in app mode...")
-                code = _open_app_with_splash(_bring_up, warm=False)
+                code = _open_app_with_splash(_bring_up, warm=False, port=port)
                 if code is not None:
                     return code
             launch_url, _failure = _bring_up()

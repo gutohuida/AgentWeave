@@ -446,7 +446,8 @@ class TestAppModeNativeWindow:
 
         assert cli._open_app_window_native("http://127.0.0.1:8000") is True
         # pywebview fires before_show with the window; that subscribes to initialisation...
-        (on_before_show,) = window.events.before_show.handlers
+        # (the second before_show handler writes the taskbar identity: test_desktop_window.py)
+        on_before_show, _identity = window.events.before_show.handlers
         on_before_show(window)
         (on_initialized,) = window.native.webview.CoreWebView2InitializationCompleted.handlers
         # ...whose handler, run after pywebview's own, turns the menu back on.
