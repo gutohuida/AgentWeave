@@ -45,7 +45,7 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both' }> | null
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null }> | null
   checks_auto_override: boolean
   checks_give_way?: boolean
 } {
@@ -333,6 +333,70 @@ describe('Project settings → General, applied on change', () => {
     }
     render(<GeneralSection />)
     expect(screen.getByTestId('project-check-phase-0')).toHaveTextContent('at landing only')
+  })
+
+  // checks-report-which-tests-failed-in-any-language FR-8 settings-examples.
+  it('shows the report path and re-run command fields with five examples, the id form and the whole-check note', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'unit', command: 'npx vitest run', timeout_seconds: 900, report_path: 'report.xml', rerun_command: 'node rerun-vitest.mjs {tests}' }],
+    }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-report-0')).toHaveTextContent('report report.xml, re-runs by test')
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Report path')).toHaveValue('report.xml')
+    expect(within(dialog).getByLabelText('Re-run command')).toHaveValue('node rerun-vitest.mjs {tests}')
+    const examples = within(dialog).getAllByTestId('check-report-example').map((li) => li.textContent ?? '')
+    expect(examples).toHaveLength(5)
+    for (const [i, runner] of ['pytest', 'Vitest or Jest', 'Node’s test runner', 'Go (gotestsum)', 'cargo-nextest'].entries()) {
+      expect(examples[i].startsWith(`${runner}:`)).toBe(true)
+      expect(examples[i]).toContain('{tests}')
+    }
+    expect(within(dialog).getByTestId('check-report-id-form')).toHaveTextContent(/classname and name joined by ::/)
+    expect(within(dialog).getByTestId('check-report-id-form')).toHaveTextContent(/as separate arguments/)
+    expect(within(dialog).getByTestId('check-report-whole-note')).toHaveTextContent(/without a report is judged as a whole/)
+    expect(within(dialog).getByTestId('check-report-whole-note')).toHaveTextContent(/nothing is re-run or narrowed test by test/)
+  })
+
+  it('saves a report path and re-run command, and sends neither when they are empty', async () => {
+    const user = userEvent.setup()
+    const view = render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: /Add check/ }))
+    let dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name'), 'unit')
+    await user.type(within(dialog).getByLabelText('Command'), 'pytest --junitxml=report.xml')
+    await user.type(within(dialog).getByLabelText('Report path'), ' report.xml ')
+    // userEvent reads `{` as a key descriptor; `{{` types one brace.
+    await user.type(within(dialog).getByLabelText('Re-run command'), 'python rerun_pytest.py {{tests}')
+    await user.click(within(dialog).getByRole('button', { name: 'Add check' }))
+    expect(lastPatch()).toEqual({
+      checks: [{ name: 'unit', command: 'pytest --junitxml=report.xml', timeout_seconds: 900, report_path: 'report.xml', rerun_command: 'python rerun_pytest.py {tests}' }],
+    })
+    settings = { ...makeSettings(), checks: lastPatch().checks as typeof settings.checks }
+    view.unmount()
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    dialog = await screen.findByRole('dialog')
+    await user.clear(within(dialog).getByLabelText('Report path'))
+    await user.clear(within(dialog).getByLabelText('Re-run command'))
+    await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch()).toEqual({ checks: [{ name: 'unit', command: 'pytest --junitxml=report.xml', timeout_seconds: 900 }] })
+  })
+
+  // FR-1 placeholder-required: said in the dialog before the save.
+  it('refuses a re-run command without {tests} before the save', async () => {
+    const user = userEvent.setup()
+    settings = { ...makeSettings(), checks: [{ name: 'unit', command: 'npm test', timeout_seconds: 900 }] }
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Re-run command'), 'npm test --')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('{tests}')
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
+    await user.type(within(dialog).getByLabelText('Re-run command'), ' {{tests}')
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeEnabled()
   })
 
   // FR-4 ac-fast-refused: said in the dialog before the save, and the Hub's own refusal is shown.

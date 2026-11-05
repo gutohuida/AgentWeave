@@ -48,6 +48,56 @@ const PHASE_OPTIONS: ReadonlyArray<SelectOption<CheckPhase>> = [
 const FAST_NOT_LANDING_ONLY =
   "A fast check gates an agent's completion before review, so it cannot be landing-only."
 
+/** Where the Hub puts the ids of the tests to re-run (`project_checks.TESTS_PLACEHOLDER`). */
+const TESTS_PLACEHOLDER = '{tests}'
+
+/** A working report path and re-run command per runner (`checks-report-which-tests-failed-in-any-language`,
+ *  FR-8). Each re-run goes through a small script in the project that turns the ids back into its
+ *  runner's selectors: the Hub keeps no knowledge of any runner. */
+const REPORT_EXAMPLES: ReadonlyArray<{ runner: string; command: string; report: string; rerun: string; wrapper: string }> = [
+  {
+    runner: 'pytest',
+    command: 'pytest --junitxml=report.xml -o junit_family=xunit1',
+    report: 'report.xml',
+    rerun: 'python rerun_pytest.py {tests}',
+    wrapper: 'turns tests.test_api.TestLogin::test_ok into tests/test_api.py::TestLogin::test_ok and runs pytest with the same --junitxml.',
+  },
+  {
+    runner: 'Vitest or Jest',
+    command: 'npx vitest run --reporter=junit --outputFile=report.xml',
+    report: 'report.xml',
+    rerun: 'node rerun-vitest.mjs {tests}',
+    wrapper: 'runs each id’s file (its classname) with -t matching its name; for Jest, jest-junit and --testNamePattern.',
+  },
+  {
+    runner: 'Node’s test runner',
+    command: 'node --test --test-reporter=junit --test-reporter-destination=report.xml',
+    report: 'report.xml',
+    rerun: 'node rerun.mjs {tests}',
+    wrapper: 'runs node --test with the same reporter and a --test-name-pattern for each name.',
+  },
+  {
+    runner: 'Go (gotestsum)',
+    command: 'gotestsum --junitfile report.xml -- ./...',
+    report: 'report.xml',
+    rerun: 'sh rerun-go.sh {tests}',
+    wrapper: "runs gotestsum --junitfile report.xml -- -run '^(TestA|TestB)$' on each id’s package (its classname).",
+  },
+  {
+    runner: 'cargo-nextest',
+    command: 'cargo nextest run --profile ci',
+    report: 'target/nextest/ci/junit.xml',
+    rerun: 'sh rerun-nextest.sh {tests}',
+    wrapper: `drops each id’s binary (its classname) and runs cargo nextest run --profile ci -E 'test(=name)'; the ci profile sets [profile.ci.junit] path = "junit.xml".`,
+  },
+]
+
+/** Why a re-run command cannot be saved, said before the Hub refuses it (FR-1). */
+function rerunCommandError(value: string): string | undefined {
+  if (!value.trim() || value.includes(TESTS_PLACEHOLDER)) return undefined
+  return `A re-run command needs ${TESTS_PLACEHOLDER}, where the Hub puts the ids of the tests to re-run.`
+}
+
 /** Seconds as an operator reads a check's duration: `42s`, `4m 12s`. */
 function formatSeconds(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds * 10) / 10}s`
@@ -304,6 +354,12 @@ export function GeneralSettings({
                       </span>
                     ) : null}
                     {check.fast ? <span data-testid={`project-check-fast-${i}`}>fast · </span> : null}
+                    {check.report_path ? (
+                      <span data-testid={`project-check-report-${i}`} title={check.rerun_command ? `Re-runs failing tests with ${check.rerun_command}` : 'Re-runs failing tests by running the whole check'}>
+                        report {check.report_path}
+                        {check.rerun_command ? ', re-runs by test' : ''} ·{' '}
+                      </span>
+                    ) : null}
                     {check.phase === 'review' || check.phase === 'landing' ? (
                       <span data-testid={`project-check-phase-${i}`}>{check.phase === 'review' ? 'before review only' : 'at landing only'} · </span>
                     ) : null}
@@ -605,12 +661,15 @@ function CheckDialog({
   const [paths, setPaths] = React.useState((initial?.paths ?? []).join('\n'))
   const [fast, setFast] = React.useState(Boolean(initial?.fast))
   const [phase, setPhase] = React.useState<CheckPhase>(initial?.phase ?? 'both')
+  const [reportPath, setReportPath] = React.useState(initial?.report_path ?? '')
+  const [rerun, setRerun] = React.useState(initial?.rerun_command ?? '')
+  const rerunError = rerunCommandError(rerun)
   const phaseError = fast && phase === 'landing' ? FAST_NOT_LANDING_ONLY : undefined
   // A completion waits for the fast checks, so none may run longer than that wait (FR-1); the Hub
   // refuses it too, and this says so before the save.
   const timeoutError = wholeNumber(10, fast ? FAST_CHECK_MAX_SECONDS : 3600, 'seconds')(timeout)
   const patterns = [...new Set(paths.split(/[\n,]/).map((p) => p.trim()).filter(Boolean))]
-  const ready = name.trim() && command.trim() && !timeoutError && !phaseError
+  const ready = name.trim() && command.trim() && !timeoutError && !phaseError && !rerunError
   return (
     <Dialog
       open={open}
@@ -623,6 +682,8 @@ function CheckDialog({
           setPaths((initial?.paths ?? []).join('\n'))
           setFast(Boolean(initial?.fast))
           setPhase(initial?.phase ?? 'both')
+          setReportPath(initial?.report_path ?? '')
+          setRerun(initial?.rerun_command ?? '')
         }
       }}
     >
@@ -648,6 +709,9 @@ function CheckDialog({
                   ...(fast ? { fast: true } : {}),
                   // Both is the default, and a check saved without a phase reads as both.
                   ...(phase !== 'both' ? { phase } : {}),
+                  // Neither is sent when empty: a check without a report reads as having neither.
+                  ...(reportPath.trim() ? { report_path: reportPath.trim() } : {}),
+                  ...(rerun.trim() ? { rerun_command: rerun.trim() } : {}),
                 })
                 setOpen(false)
               }}
@@ -692,6 +756,39 @@ function CheckDialog({
           <Field label="Runs" htmlFor="c-phase" error={phaseError} hint="Before review, at landing, or both.">
             <MenuSelect id="c-phase" label="Runs" testId="check-phase" value={phase} onChange={setPhase} options={PHASE_OPTIONS} />
           </Field>
+          <Field
+            label="Report path"
+            htmlFor="c-report"
+            hint="Optional. The JUnit XML file the command writes, relative to the directory the check runs in (the repository root), read after every run to name the tests that failed."
+          >
+            <Input id="c-report" className="font-mono" value={reportPath} placeholder="report.xml" onChange={(e) => setReportPath(e.target.value)} />
+          </Field>
+          <Field
+            label="Re-run command"
+            htmlFor="c-rerun"
+            error={rerunError}
+            hint={`Optional. Runs only the named tests, writing the same report: ${TESTS_PLACEHOLDER} is replaced by their ids, each a separate argument.`}
+          >
+            <Input id="c-rerun" className="font-mono" value={rerun} placeholder="python rerun_pytest.py {tests}" aria-invalid={Boolean(rerunError)} onChange={(e) => setRerun(e.target.value)} />
+          </Field>
+          <div className="aw-field-note flex flex-col gap-1" data-tone="hint" data-testid="check-report-explained">
+            <p data-testid="check-report-id-form">
+              A test&rsquo;s id is its report&rsquo;s classname and name joined by <code>::</code>, like{' '}
+              <code>tests.test_api.TestLogin::test_ok</code>. The re-run command receives the ids as separate arguments, so a small script in the project
+              turns them into its runner&rsquo;s selectors.
+            </p>
+            <p data-testid="check-report-whole-note">
+              A check without a report is judged as a whole: a failure names no test, and nothing is re-run or narrowed test by test.
+            </p>
+            <ul className="flex flex-col gap-1" data-testid="check-report-examples">
+              {REPORT_EXAMPLES.map((example) => (
+                <li key={example.runner} data-testid="check-report-example">
+                  <strong>{example.runner}</strong>: command <code>{example.command}</code>, report path <code>{example.report}</code>, re-run{' '}
+                  <code>{example.rerun}</code>, which {example.wrapper}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
