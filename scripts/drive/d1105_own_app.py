@@ -15,8 +15,10 @@ Steps, each named after the criterion it checks:
             this process with SHGetPropertyStoreForWindow: app identity, relaunch command, relaunch
             display name, relaunch icon.
   console   (FR-3 no-console) -- the window list is sampled every 100 ms from the first launch to
-            the end of the close; a visible console or terminal window belonging to a process the
-            app started (or a new terminal window titled after one) fails it.
+            the end of the own-hub step, so it covers a project being used (the busy Hub's agent
+            turn spawns claude and powershell); a visible console or terminal window belonging to a
+            process any of the three apps started (or a new terminal window titled after one) fails
+            it.
   second    (FR-4 second-launch-focuses) -- the window is minimized and the app launched again:
             one window, one Hub process, the same window restored and in front, the launcher gone.
   close     (FR-7 close-idle) -- WM_CLOSE to the window with nothing running: no prompt, and within
@@ -29,7 +31,8 @@ Steps, each named after the criterion it checks:
 
 Before the change (today's master) the drive fails on: the relaunch command (and the window's own
 app identity, name and icon) being absent, the second launch opening a second window and staying,
-and the Hub surviving the close. It cleans up after itself either way (`agentweave stop` on each
+and the Hub surviving the close. Each run starts from fresh scratch profiles and project folders,
+named for the run, so a second run sees nothing the first one left. It cleans up after itself either way (`agentweave stop` on each
 scratch port, then killing what it started).
 
   py -3.11 scripts/drive/d1105_own_app.py                 # every step
@@ -46,6 +49,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -59,7 +63,10 @@ from ctypes import wintypes
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HUB_HOME = pathlib.Path.home() / ".agentweave" / "hub"
 FORBIDDEN_PORTS = {8000, 8010}
-PROFILE = "d1105own"
+PROFILE_PREFIX = "d1105own"
+SCRATCH = pathlib.Path(tempfile.gettempdir()) / "agentweave-d1105-own-app"
+RUN = time.strftime("%H%M%S")  # names this run's profiles and project folders
+PROFILE = f"{PROFILE_PREFIX}{RUN}"
 HAIKU = "claude-haiku-4-5-20251001"
 CLOSE_LIMIT = 30.0
 failures: list[str] = []
@@ -340,7 +347,7 @@ def project_dir(name: str) -> pathlib.Path:
     """A scratch git repository the launch registers as its project (the shortcut's cwd)."""
     # Outside this checkout: a task worktree lives under a `.agentweave/` folder, and a launch from
     # inside one registered no project (2026-11-05, the first run of this drive).
-    path = pathlib.Path(tempfile.gettempdir()) / "agentweave-d1105-own-app" / name
+    path = SCRATCH / RUN / name
     path.mkdir(parents=True, exist_ok=True)
     if not (path / ".git").exists():
         (path / "README.md").write_text("own-app drive\n", encoding="utf-8")
@@ -640,9 +647,24 @@ def start_turn(app: App) -> tuple[str | None, str]:
             "powershell -NoProfile -Command Start-Sleep -Seconds 150 . Then reply with the word done.",
         },
     )
-    if not isinstance(run, dict) or "run_id" not in run:
+    if not isinstance(run, dict):
         return None, f"trigger: {code} {run}"
-    return run["run_id"], ""
+    if run.get("run_id"):
+        return run["run_id"], ""
+    entry = run.get("queue_entry_id")
+    if entry:  # queued rather than started: wait for the queue to deliver it to a run
+        delivered = wait_for(
+            lambda: (
+                app.db("select delivered_in_run_id from inbound_queue_entries where id=?", (entry,))
+                or [[None]]
+            )[0][0],
+            60,
+            1.0,
+        )
+        if delivered:
+            note(f"the trigger was queued ({entry}); it started as run {delivered}")
+            return delivered, ""
+    return None, f"trigger: {code} {json.dumps(run)[:600]}"
 
 
 def run_status(app: App, run_id: str) -> str:
@@ -754,6 +776,18 @@ def idle_hub_running(app: App) -> bool:
     return bool(hub_pids(app.port)) or not port_free(app.port)
 
 
+def clear_scratch() -> None:
+    """Remove the scratch profiles and project folders of every run of this drive, this one's too.
+
+    A second run must see nothing the first left: a reused profile kept the earlier run's agent,
+    runner and an orphaned 'running' run, and its trigger was queued instead of started (QA,
+    2026-11-05). Each run also names its own, so a folder Windows still holds open is never reused.
+    """
+    profiles = HUB_HOME / "profiles"
+    for path in [*profiles.glob(PROFILE_PREFIX + "*"), SCRATCH]:
+        shutil.rmtree(path, ignore_errors=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8171, help="first of three scratch ports")
@@ -770,24 +804,38 @@ def main() -> int:
     target, args = shortcut_command()
     note(f"shortcut command: {target} {' '.join(args)} (+ --profile/--port)")
 
+    clear_scratch()
     app = App(ports[0], PROFILE, project_dir("main"))
-    watch = ConsoleWatch(lambda: app.pids).start()  # the Hub and its runs descend from these
+    idle = App(ports[1], PROFILE + "a", project_dir("idle"))
+    busy = App(ports[2], PROFILE + "b", project_dir("busy"))
+    # The Hubs and their runs descend from the launchers; the watch spans all three apps, through
+    # the own-hub step's agent turn, so "a project is used" is inside it.
+    watch = ConsoleWatch(lambda: app.pids | idle.pids | busy.pids).start()
     try:
-        first = app.launch()
-        hwnd = app.wait_window(first)
-        if check("the app window opens", hwnd is not None, f"launcher pid {first.pid}"):
-            check("the Hub answers", app.wait_healthy())
-            time.sleep(6.0)  # past the splash, into the app, the project registered
-            step_identity(app, hwnd)
-            step_second_launch(app, hwnd)
-            if user32.IsWindow(hwnd):
-                step_close_idle(app, hwnd)
+        try:
+            first = app.launch()
+            hwnd = app.wait_window(first)
+            if check("the app window opens", hwnd is not None, f"launcher pid {first.pid}"):
+                check("the Hub answers", app.wait_healthy())
+                time.sleep(6.0)  # past the splash, into the app, the project registered
+                step_identity(app, hwnd)
+                step_second_launch(app, hwnd)
+                if user32.IsWindow(hwnd):
+                    step_close_idle(app, hwnd)
+        finally:
+            app.cleanup()
+        if not opts.skip_own_hub:
+            try:
+                step_own_hub(idle, busy)
+            finally:
+                idle.cleanup()
+                busy.cleanup()
     finally:
         time.sleep(1.0)
         watch.stop()
-        app.cleanup()
+        clear_scratch()
     check(
-        "console: no console or terminal window of the app's appeared during start, use and close",
+        "console: no console or terminal window of the apps' appeared during start, use and close",
         not watch.ours,
         f"{list(watch.ours.values())}" if watch.ours else "",
     )
@@ -795,15 +843,6 @@ def main() -> int:
         note(
             f"unattributed terminal windows that also appeared (not counted): {list(watch.others.values())}"
         )
-
-    if not opts.skip_own_hub:
-        idle = App(ports[1], PROFILE + "a", project_dir("idle"))
-        busy = App(ports[2], PROFILE + "b", project_dir("busy"))
-        try:
-            step_own_hub(idle, busy)
-        finally:
-            idle.cleanup()
-            busy.cleanup()
 
     print(f"\n{len(failures)} FAIL" if failures else "\nALL PASS")
     for name in failures:
