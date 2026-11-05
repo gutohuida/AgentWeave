@@ -139,7 +139,8 @@ def configured_checks(
     completion waits for the fast ones, and they are the start of the task's one check run (D2). A
     check saved before `fast` existed is not fast.
 
-    Each check carries the project's `give_way` (FR-5): `run_one` starts it below normal priority.
+    Each check not marked fast carries the project's `give_way` (FR-5): `run_one` starts it below
+    normal priority.
 
     *phase* `review` keeps the checks a task's pre-review run executes, `landing` those a landing
     batch's run executes (FR-2, FR-3); `None` keeps every check. Every pre-review reader -- the run,
@@ -160,7 +161,10 @@ def configured_checks(
                     "phase": (check.get("phase") if check.get("phase") in PHASES else PHASE_BOTH),
                     # Not part of `check_digest`: priority changes how fast a check runs, not
                     # what it finds, so a pass at either priority stays reusable.
-                    "give_way": bool(getattr(project, "checks_give_way", False)),
+                    # A fast check never gives way: the completion waits on it
+                    # (`quick-checks-run-at-normal-priority`, FR-1).
+                    "give_way": bool(getattr(project, "checks_give_way", False))
+                    and not check.get("fast"),
                 }
             )
     if phase is not None:

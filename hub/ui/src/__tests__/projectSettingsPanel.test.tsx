@@ -412,6 +412,11 @@ describe('Project settings → General, applied on change', () => {
     expect(lastPatch()).toEqual({ checks_give_way: true })
   })
 
+  it('says checks marked fast keep normal priority when checks give way', () => {
+    render(<GeneralSection />)
+    expect(screen.getByText(/Checks marked fast keep normal priority/)).toBeInTheDocument()
+  })
+
   it('shows the paths of a saved check and keeps them through an edit', async () => {
     const user = userEvent.setup()
     settings = {

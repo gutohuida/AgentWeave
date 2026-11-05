@@ -375,7 +375,7 @@ export function GeneralSettings({
         />
         <SettingsRow
           label="Checks give way to me"
-          description="Every process a check starts runs below normal priority, so your own work on this machine comes first. On an idle machine the checks still get all of it."
+          description="Every process a check starts runs below normal priority, so your own work on this machine comes first. Checks marked fast keep normal priority; only the other checks give way. On an idle machine the checks still get all of it."
           changed={(settings.checks_give_way ?? false) !== PROJECT_DEFAULTS.checks_give_way}
           onReset={() => onChange({ checks_give_way: false }, 'Checks run at normal priority again')}
           control={
