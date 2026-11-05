@@ -54,7 +54,7 @@ vi.mock('@/api/permissions', () => ({
 
 vi.mock('@/api/checkpoints', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/checkpoints')>()
-  return { ...actual, useCheckpoints: () => ({ data: [] }) }
+  return { ...actual, useCheckpoints: () => ({ data: [] }), useProjectCheckpoints: () => ({ data: undefined }) }
 })
 
 // The button renders because an undelivered entry names the conversation on screen — exactly the

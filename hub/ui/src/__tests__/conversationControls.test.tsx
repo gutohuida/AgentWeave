@@ -61,7 +61,7 @@ vi.mock('@/api/permissions', () => ({
 vi.mock('@/api/checkpoints', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/checkpoints')>()
   // The mutations stay real — they go through the mocked fetch, which is what these assert on.
-  return { ...actual, useCheckpoints: () => ({ data: [] }) }
+  return { ...actual, useCheckpoints: () => ({ data: [] }), useProjectCheckpoints: () => ({ data: undefined }) }
 })
 
 vi.mock('@/api/queue', () => ({
@@ -820,6 +820,18 @@ describe('the conversation’s own trace of its latest run (FR-11)', () => {
       isConfigured: true,
       bootstrapState: 'ready',
     })
+  })
+
+  it('opens the Checkpoints tab narrowed to this conversation from the menu (FR-5)', async () => {
+    window.history.replaceState(null, '', '/')
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    await userEvent.setup().click(await screen.findByTestId('conversation-checkpoints-toggle'))
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('tab')).toBe('checkpoints')
+    expect(params.get('ckptConversation')).toBe('conv-old')
+    expect(screen.queryByTestId('checkpoints-panel')).not.toBeInTheDocument()
   })
 
   it('opens the third run’s trace from the menu, and each turn still links its own run', async () => {

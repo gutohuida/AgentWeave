@@ -44,11 +44,12 @@ vi.mock('@/api/permissions', () => ({
 }))
 
 let offeredCheckpoints: unknown[] = []
+let conversationLineage: unknown = undefined
 
 vi.mock('@/api/checkpoints', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/checkpoints')>()
   // The mutations stay real — they go through the mocked fetch, which is what these assert on.
-  return { ...actual, useCheckpoints: () => ({ data: offeredCheckpoints }) }
+  return { ...actual, useCheckpoints: () => ({ data: offeredCheckpoints }), useProjectCheckpoints: () => ({ data: conversationLineage }) }
 })
 
 vi.mock('@/api/queue', () => ({
@@ -116,6 +117,8 @@ describe('agent conversation handoff', () => {
     }]
     checkpointStatus = 'ready'
     offeredCheckpoints = []
+    conversationLineage = undefined
+    window.history.replaceState(null, '', '/')
     fetchMock.mockReset()
     fetchMock.mockImplementation((url, init) => {
       const path = String(url)
@@ -286,6 +289,66 @@ describe('agent conversation handoff', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
     expect(calledUrl(0)).toContain('/checkpoints/ckpt-auto/cutover')
     await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith('conv-successor'))
+  })
+
+  it('opens the checkpoint the carry-over offer names, not a list (FR-14)', async () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-test' })
+    offeredCheckpoints = [{
+      id: 'ckpt-auto', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure',
+      status: 'ready', lineage_id: 'ckpt-auto',
+    }]
+    const user = userEvent.setup()
+    render(<ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />)
+    await user.click(screen.getByTestId('banner-dismiss-checkpoint-offered'))
+    const params = new URLSearchParams(window.location.search)
+    expect(params.get('tab')).toBe('checkpoints')
+    expect(params.get('checkpoint')).toBe('ckpt-auto')
+  })
+
+  it('opens the failed automatic checkpoint its notice names (FR-14)', async () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-test' })
+    offeredCheckpoints = [{
+      id: 'ckpt-new', conversation_id: 'conv-old', agent: 'claude', trigger: 'context_pressure',
+      status: 'unwritten', lineage_id: 'ckpt-new', generation_error: 'timed out',
+    }]
+    const user = userEvent.setup()
+    render(<ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />)
+    await user.click(screen.getByTestId('banner-dismiss-checkpoint-failed'))
+    expect(new URLSearchParams(window.location.search).get('checkpoint')).toBe('ckpt-new')
+  })
+
+  it('shows the checkpoint a carried-over conversation started from, and opens it (FR-10, FR-14)', async () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-test' })
+    conversationLineage = {
+      checkpoints: [],
+      lineage: {
+        conversation_id: 'conv-successor',
+        started_from: { checkpoint_id: 'ckpt-c', conversation_id: 'conv-old', title: 'Routes list checkpoints' },
+        carried_into: null,
+      },
+    }
+    const user = userEvent.setup()
+    render(<ControlledConversation agent={agent} conversationId="conv-successor" onSelectConversation={vi.fn()} />)
+    expect(screen.getByTestId('conversation-banner')).toHaveTextContent('started from the checkpoint “Routes list checkpoints”')
+    await user.click(screen.getByTestId('banner-dismiss-checkpoint-started-from'))
+    expect(new URLSearchParams(window.location.search).get('checkpoint')).toBe('ckpt-c')
+  })
+
+  it('says where a carried-over conversation went, and opens the checkpoint that took it there (FR-10)', async () => {
+    useConfigStore.setState({ selectedProjectId: 'proj-test' })
+    conversationLineage = {
+      checkpoints: [],
+      lineage: {
+        conversation_id: 'conv-old',
+        started_from: null,
+        carried_into: { checkpoint_id: 'ckpt-c', conversation_id: 'conv-successor' },
+      },
+    }
+    const user = userEvent.setup()
+    render(<ControlledConversation agent={agent} conversationId="conv-old" onSelectConversation={vi.fn()} />)
+    expect(screen.getByTestId('conversation-banner')).toHaveTextContent('carried over into a new one')
+    await user.click(screen.getByTestId('banner-dismiss-checkpoint-carried-into'))
+    expect(new URLSearchParams(window.location.search).get('checkpoint')).toBe('ckpt-c')
   })
 
   it('does not offer a checkpoint that is unwritten or failed', () => {

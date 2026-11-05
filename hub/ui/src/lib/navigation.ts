@@ -23,7 +23,7 @@ export interface RailProject {
  *  is still how that is done. This is the other thing: a place to go when the specification is what
  *  you are working on rather than what you are working *beside* — the document and its navigation,
  *  no conversation (operator, 2026-08-10: "just to focus on spec"). */
-export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'spec', 'vault', 'jobs', 'activity'] as const
+export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'spec', 'checkpoints', 'vault', 'jobs', 'activity'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 /** What each project tab is called on screen (the top bar). */
@@ -32,6 +32,7 @@ export const TAB_LABELS: Record<ProjectTab, string> = {
   thread: 'Thread',
   tasks: 'Tasks',
   spec: 'Spec',
+  checkpoints: 'Checkpoints',
   vault: 'Vault',
   jobs: 'Jobs',
   activity: 'Activity',
@@ -127,6 +128,12 @@ export type WorkspaceDestination =
       focus?: string | null
       // The Thread tab's address (FR-10): the knot to bring into view with its ancestors open.
       knot?: string | null
+      // The Checkpoints tab's address: the checkpoint opened, and how the list is narrowed. Named
+      // apart from `agent`/`conversation` because those two URL parameters mean a conversation.
+      checkpoint?: string | null
+      checkpointAgent?: string | null
+      checkpointTrigger?: string | null
+      checkpointConversation?: string | null
     }
   | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
@@ -151,6 +158,12 @@ export type WorkspaceDestination =
   // point of this being a destination of its own (the app has no other settings entry there).
   | { kind: 'app-settings'; projectId: string | null; section: AppSettingsSection }
   | { kind: 'zero' }
+
+/** A project destination that is one of the tabs (not the project's configuration). */
+export type ProjectTabDestination = Exclude<
+  Extract<WorkspaceDestination, { kind: 'project' }>,
+  { tab: 'environment' }
+>
 
 /** Collection-shaped from day one, even while one authenticated project is visible. */
 export function buildRailProjects(
@@ -187,6 +200,34 @@ export function threadDestination(
   return cleaned
     ? { kind: 'project', projectId, tab: 'thread', knot: cleaned }
     : { kind: 'project', projectId, tab: 'thread' }
+}
+
+const CHECKPOINT_TOKEN = /^[A-Za-z0-9_.:@ -]{1,80}$/
+
+export interface CheckpointsAddress {
+  checkpoint?: string | null
+  agent?: string | null
+  trigger?: string | null
+  conversation?: string | null
+}
+
+/** The Checkpoints tab: open one checkpoint, or the list narrowed to an agent, a trigger or a
+ *  conversation. A value that does not parse is dropped, never an error. */
+export function checkpointsDestination(
+  projectId: string,
+  address: CheckpointsAddress = {},
+): ProjectTabDestination {
+  const clean = (value: string | null | undefined) => (value && CHECKPOINT_TOKEN.test(value) ? value : null)
+  const destination: ProjectTabDestination = { kind: 'project', projectId, tab: 'checkpoints' }
+  const checkpoint = clean(address.checkpoint)
+  const agent = clean(address.agent)
+  const trigger = clean(address.trigger)
+  const conversation = clean(address.conversation)
+  if (checkpoint) destination.checkpoint = checkpoint
+  if (agent) destination.checkpointAgent = agent
+  if (trigger) destination.checkpointTrigger = trigger
+  if (conversation) destination.checkpointConversation = conversation
+  return destination
 }
 
 /** The Spec tab's evidence view, optionally focused on a task id or a requirement identifier. */
@@ -412,6 +453,13 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   if (destination.tab === 'environment') {
     params.set('section', destination.environmentSection ?? DEFAULT_ENVIRONMENT_SECTION)
   }
+  if (destination.tab === 'checkpoints') {
+    if (destination.checkpoint) params.set('checkpoint', destination.checkpoint)
+    if (destination.checkpointAgent) params.set('ckptAgent', destination.checkpointAgent)
+    if (destination.checkpointTrigger) params.set('ckptTrigger', destination.checkpointTrigger)
+    if (destination.checkpointConversation) params.set('ckptConversation', destination.checkpointConversation)
+    return `?${params.toString()}`
+  }
   if (destination.tab === 'thread' && destination.knot) {
     params.set('knot', destination.knot)
     return `?${params.toString()}`
@@ -503,6 +551,14 @@ export function parseDestination(search: string): WorkspaceDestination | null {
     ? (rawTab as ProjectTab)
     : DEFAULT_TAB
   if (tab === 'thread') return threadDestination(projectId, params.get('knot'))
+  if (tab === 'checkpoints') {
+    return checkpointsDestination(projectId, {
+      checkpoint: params.get('checkpoint'),
+      agent: params.get('ckptAgent'),
+      trigger: params.get('ckptTrigger'),
+      conversation: params.get('ckptConversation'),
+    })
+  }
   if (tab === 'spec' && params.get('view') === 'evidence') {
     return evidenceDestination(projectId, params.get('focus'))
   }
