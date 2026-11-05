@@ -134,7 +134,7 @@ def run_once(ids: "list[str]", inject: bool) -> "tuple[dict[str, bool], dict[str
                 for tag in ("failure", "error", "skipped"):
                     found = case.find(tag)
                     if found is not None:
-                        why[key] = f"{tag}: {(found.get('message') or '').splitlines()[0][:300]}"
+                        why[key] = f"{tag}: {(found.get('message') or '').splitlines()[0][:1200]}"
         return verdict, why
 
 
