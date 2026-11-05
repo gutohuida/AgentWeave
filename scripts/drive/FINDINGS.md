@@ -41308,3 +41308,13 @@ The spec header redesign (`spdoc-407caf5abcdb`, loop `loop-d7043722a6fc`) read B
 **Tier:** 0
 
 Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `evt-dc38021f39ec`) report the approving QA2 and QA runs (`run-14a3aa435478`, `run-df2d93e14e9a`) as still running with $0 and no model. Both completed, with $0.64 and $1.01 of `claude-opus-5-5`. QA2 approved task-d0b2d5430417 at 01:24:13.31. The firing's model call took 32.3 s and its event was written at 01:24:50.42, so it assembled at about 01:24:18. The run ended at 01:24:22.19, and its `turn_usage` was observed at 01:24:22.20. QA's numbers match: approved 01:25:40.90, assembled about 01:25:41, ended 01:25:48.48. `build_retrospective.fire_after_commit` fires on the approval's commit (`task_transition_service.py`), which happens inside the reviewer's turn, before the turn's end and usage exist. **Expected:** the retrospective counts the approving run's end, cost and model.
+
+## F1128 (B) -- `/health` runs git on the event loop to compute the UI staleness warning, holding the whole Hub about 300 ms every 30 s
+
+**Status:** open
+**Source:** found by driving: the lag probe added to `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2)
+**Theme:** Hub responsiveness
+**Ready:** yes
+**Tier:** 0
+
+`GET /health` (`hub/hub/main.py`, `health()`) is `async` and calls `_ui_staleness_warning()` directly. On a cold or expired cache (`UI_STALENESS_TTL_SECONDS`, 30 s) that runs `_compute_ui_staleness_warning` → `ui_source_fingerprint` → `subprocess.run` of git (`main.py` ~146, the listing) and `_git_normalised_hashes` (~195, one or two more), plus a stat of every UI source file, all on the event loop's thread. Measured with `LagProbe` on an otherwise idle test run, 2026-11-05: "the loop stalled 300 ms ... seen at 13x subprocess.py:550 run < main.py:195 _git_normalised_hashes | 5x ... main.py:146 ui_source_fingerprint". The app shell's own route (`main.py` ~628) calls the same function. Every caller that polls `/health` (the CLI, the desktop shell, a supervising script) therefore freezes every other request and stream for the length of three git processes, once per TTL, and longer on a busy machine. **Expected:** the staleness check runs off the loop (`asyncio.to_thread`, or computed in the background and only read by `/health`). **Test:** `/health` with an expired cache inside a `LagProbe` window must stay under `STALL_LIMIT`, with `slow_git` showing no git call on the loop. The slow-share tests warm the cache before their probe window for now, with a comment naming this finding; remove that warm-up when this is fixed.

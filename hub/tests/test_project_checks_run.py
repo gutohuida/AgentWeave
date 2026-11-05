@@ -96,6 +96,10 @@ def test_a_check_past_its_timeout_has_its_process_tree_ended(tmp_path):
     started = time.monotonic()
     result = project_checks.run_one(hang, tmp_path)
     assert result["timed_out"] and result["exit_code"] is None
+    # Load cannot carry this past 60 s: what it measures is a 3 s timeout plus ending a tree of two
+    # processes, which a busy machine stretches by seconds. The only way past 60 is waiting for the
+    # grandchild's own 120 s sleep to end, which is what an unended tree does; the gap between the
+    # two is a minute, not a margin.
     assert time.monotonic() - started < 60, "the tree was not ended"
     assert project_checks.failed(result)
 
