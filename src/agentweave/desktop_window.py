@@ -10,6 +10,8 @@ answers "nothing" rather than raising, and a Win32 call that fails leaves today'
 - D2: a launch that finds the window already open restores it and brings it to the front itself.
 - D3: the window's restored size, position and maximized state, read with GetWindowPlacement when
   it closes and passed to `webview.create_window` when it next opens.
+- D4/D5: what a close does: close the window only (the rollback setting on), stop the Hub (nothing
+  running), or ask (work running, or a Hub that is up and would not say), and the words for it.
 """
 
 from __future__ import annotations
@@ -451,3 +453,121 @@ def primary_work_area() -> Optional[Dict[str, int]]:
         }
     except Exception:
         return None
+
+
+# --- D4/D5: what closing the window does --------------------------------------------------------
+
+#: The three ways a close can go (D4): close the window and leave the Hub running, close it and
+#: stop the Hub, or keep it open and ask the operator.
+CLOSE_WINDOW_ONLY = "close"
+CLOSE_AND_STOP = "stop"
+CLOSE_ASKS = "ask"
+
+#: The operator's answers to the prompt, as the page sends them through the window's bridge.
+CHOICE_STOP = "stop"
+CHOICE_KEEP = "keep"
+CHOICE_CANCEL = "cancel"
+CHOICES = (CHOICE_STOP, CHOICE_KEEP, CHOICE_CANCEL)
+
+
+def read_keeps_running(path: Path) -> bool:
+    """The rollback setting (D5): does closing the window leave AgentWeave running? Off unless
+    stored on."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return bool(isinstance(data, dict) and data.get("keep_running") is True)
+
+
+def write_keeps_running(path: Path, on: bool) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"keep_running": bool(on)}), encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
+def close_decision(
+    keeps_running: Callable[[], bool],
+    work_running: Callable[[], Optional[Dict[str, Any]]],
+    hub_up: Callable[[], bool],
+) -> tuple:
+    """What a close does, as `(CLOSE_*, work)` (D4, D5).
+
+    The setting is read first, and when it is on the Hub is never asked. Otherwise the Hub's
+    answer decides: nothing running stops it, anything running asks. A Hub that does not answer
+    is only taken as having nothing to protect when it is not up at all; one still up but not
+    answering is asked about, never guessed idle (the hazard's mitigation), with `unknown` set.
+    """
+    if keeps_running():
+        return CLOSE_WINDOW_ONLY, None
+    work = work_running()
+    if work is None:
+        if hub_up():
+            return CLOSE_ASKS, {"unknown": True}
+        return CLOSE_AND_STOP, None
+    if work.get("running"):
+        return CLOSE_ASKS, work
+    return CLOSE_AND_STOP, None
+
+
+def _plural(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
+def describe_work(work: Dict[str, Any]) -> str:
+    """What is running, in words: "1 agent turn, 2 check runs and the build Close means stop"."""
+    if work.get("unknown"):
+        return "AgentWeave could not say what is running"
+    parts = []
+    if work.get("turns"):
+        parts.append(_plural(int(work["turns"]), "agent turn", "agent turns"))
+    if work.get("check_runs"):
+        parts.append(_plural(int(work["check_runs"]), "check run", "check runs"))
+    if work.get("landings"):
+        parts.append(_plural(int(work["landings"]), "landing", "landings"))
+    builds = [b.get("title") for b in work.get("build_list") or [] if b.get("title")]
+    if builds:
+        names = ", ".join(builds)
+        parts.append(f"the build {names}" if len(builds) == 1 else f"the builds {names}")
+    elif work.get("builds"):
+        parts.append(_plural(int(work["builds"]), "build", "builds"))
+    if not parts:
+        return "Work is running"
+    text = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    return text[0].upper() + text[1:] + (" is running" if len(parts) == 1 else " are running")
+
+
+_MB_YESNOCANCEL = 0x3
+_MB_ICONWARNING = 0x30
+_MB_DEFBUTTON3 = 0x200
+_IDYES = 6
+_IDNO = 7
+
+
+def ask_natively(hwnd: Optional[int], work: Dict[str, Any]) -> str:
+    """The three-way prompt as a native message box, when the page cannot show it (the splash,
+    or a page that has not loaded): Yes stops it all, No keeps it running, Cancel cancels."""
+    if not _windows():
+        return CHOICE_CANCEL
+    try:
+        import ctypes
+
+        text = (
+            f"{describe_work(work)}.\n\n"
+            "Yes: stop it all and close.\n"
+            "No: keep it running in the background and close the window.\n"
+            "Cancel: leave everything as it is."
+        )
+        answer = ctypes.windll.user32.MessageBoxW(  # type: ignore[attr-defined]
+            hwnd or 0, text, APP_NAME, _MB_YESNOCANCEL | _MB_ICONWARNING | _MB_DEFBUTTON3
+        )
+    except Exception:
+        return CHOICE_CANCEL
+    if answer == _IDYES:
+        return CHOICE_STOP
+    if answer == _IDNO:
+        return CHOICE_KEEP
+    return CHOICE_CANCEL

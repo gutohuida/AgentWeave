@@ -745,7 +745,14 @@ def _hub_kill_pid(pid: int) -> None:
     try:
         if sys.platform == "win32":
             if not _hub_break_windows(pid):
-                _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=15)
+                # CREATE_NO_WINDOW: the app window's close runs this from `pythonw`, which has no
+                # console, so taskkill got a console window of its own (AWOAW-3's drive).
+                _sp.run(
+                    ["taskkill", "/PID", str(pid), "/F"],
+                    capture_output=True,
+                    timeout=15,
+                    creationflags=0x08000000,
+                )
         else:
             os.kill(pid, 15)  # SIGTERM
             for _ in range(10):
@@ -1124,35 +1131,191 @@ def _app_window_geometry(port: int) -> Dict[str, Any]:
     )
 
 
-def _make_window_ours(window: Any, port: int) -> None:
-    """Give the window AgentWeave's taskbar identity before it shows (D1), and remember its
-    geometry when it closes (D3).
+def _make_window_ours(window: Any, port: int, closer: Optional["_AppWindowCloser"] = None) -> None:
+    """Give the window AgentWeave's taskbar identity before it shows (D1), remember its geometry
+    when it closes (D3), and let `closer` decide what the close does (D4).
 
     pywebview's `before_show` runs on the UI thread once the form has a handle and before it is
     shown; `closing` runs there too, before the form goes, which is when its placement can still
-    be read. Best effort: a backend without these keeps today's window.
+    be read and when the close can still be cancelled (a handler answering False). Best effort: a
+    backend without these keeps today's window.
     """
     handle: Dict[str, Optional[int]] = {"hwnd": None}
 
     def _before_show(window: Any) -> None:
         hwnd = desktop_window.window_handle(window)
         handle["hwnd"] = hwnd
+        if closer is not None:
+            closer.hwnd = hwnd
         if hwnd:
             target, arguments = _resolve_shortcut_target()
             desktop_window.set_window_identity(
                 hwnd, desktop_window.relaunch_command(target, arguments), _app_icon_path()
             )
 
-    def _closing(window: Any) -> None:
+    def _closing(window: Any) -> Optional[bool]:
         hwnd = handle["hwnd"] or desktop_window.window_handle(window)
         geometry = desktop_window.placement(hwnd) if hwnd else None
         if geometry is not None:
             desktop_window.write_geometry(_app_window_geometry_file(port), geometry)
+        if closer is not None:
+            return closer.on_closing()
+        return None
 
     with contextlib.suppress(AttributeError, TypeError):
         window.events.before_show += _before_show
     with contextlib.suppress(AttributeError, TypeError):
         window.events.closing += _closing
+
+
+def _app_close_setting_file(port: int) -> Path:
+    """The rollback setting for the window on `port` (D5), beside its geometry: per port, like it,
+    so a scratch Hub's window never changes what closing the operator's own window does."""
+    return HUB_DIR / "app-window" / f"close-{port}.json"
+
+
+#: How long a close waits for the Hub to say what is running. Off the window's thread, so the window
+#: stays live meanwhile; generous, because a Hub busy with a turn and a check run answered slower
+#: than 3 s in the drive and was then asked about rather than stopped.
+_WORK_ANSWER_SECONDS = 10
+
+
+def _hub_work_running(port: int) -> Optional[Dict[str, Any]]:
+    """The Hub's instance-wide answer to "what work is running" (`GET /api/v1/work/running`), or
+    None when it could not be had: no token, no answer, or not an answer."""
+    import urllib.request as _req
+
+    timeout = _WORK_ANSWER_SECONDS
+    try:
+        with _req.urlopen(_hub_setup_token_url(port), timeout=timeout) as resp:
+            token = json.loads(resp.read()).get("api_key")
+        if not token:
+            return None
+        request = _req.Request(
+            f"{_hub_url(port)}/api/v1/work/running",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with _req.urlopen(request, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+    except Exception:
+        return None
+    return data if isinstance(data, dict) and "running" in data else None
+
+
+class _AppWindowCloser:
+    """What closing the app window does to the Hub on its port (D4, D5).
+
+    `on_closing` runs in pywebview's cancellable `closing` event, on the window's thread. With the
+    rollback setting on, the window just closes. Otherwise the close is held (cancelled) while the
+    Hub is asked, off the window's thread, what work is running: nothing, and the window is closed
+    and the Hub stopped once it has gone; something, and the page shows the three-way prompt, whose
+    answer comes back through the bridge as `choose`. The stop is `agentweave stop`'s own path for this window's port
+    and profile, which stops that port's Hub and nothing else (FR-10), run by `after_closed` once
+    `webview.start` has returned.
+
+    A close while the window still shows the splash is decided the same way: a Hub that is not up
+    yet has nothing to protect and is stopped (after the start-up has finished, so a Hub still being
+    spawned is not left behind), and one already running with work is asked about. A close that
+    `agentweave stop` asked for (its marker deleted) is never second-guessed.
+    """
+
+    def __init__(self, port: int, profile: str = "default", local: bool = False) -> None:
+        self.port = port
+        self.profile = profile
+        self.local = local
+        self.window: Any = None
+        self.hwnd: Optional[int] = None
+        self.marker: Optional[Path] = None
+        self.stop_after = False
+        self._chosen: Optional[str] = None
+        self._asking = False
+        self._work: Optional[Dict[str, Any]] = None
+
+    def keeps_running(self) -> bool:
+        return desktop_window.read_keeps_running(_app_close_setting_file(self.port))
+
+    def set_keeps_running(self, on: bool) -> bool:
+        return desktop_window.write_keeps_running(_app_close_setting_file(self.port), on)
+
+    def on_closing(self) -> bool:
+        """Whether the close may go ahead now; False cancels it."""
+        if self._chosen is not None:
+            return True
+        if self.marker is not None and not self.marker.exists():
+            return True
+        import threading
+
+        if self._asking:
+            # Asked already and not answered (or the answer was lost): show the question again
+            # rather than refusing the close silently.
+            if self._work is not None:
+                threading.Thread(
+                    target=self._ask, args=(self._work,), name="aw-app-close", daemon=True
+                ).start()
+            return False
+        # The setting is read here, before anything asks the Hub (D5).
+        if self.keeps_running():
+            return True
+        self._asking = True
+        self._work = None
+        # The Hub and the page are reached off the window's thread: a slow answer must not freeze
+        # the window, and `evaluate_js` waits on that thread.
+        threading.Thread(target=self._decide, name="aw-app-close", daemon=True).start()
+        return False
+
+    def _decide(self) -> None:
+        decision, work = desktop_window.close_decision(
+            lambda: False,  # read already, in `on_closing`
+            lambda: _hub_work_running(self.port),
+            lambda: _hub_native_confirmed(self.port),
+        )
+        if decision == desktop_window.CLOSE_ASKS:
+            self._ask(work or {})
+        else:
+            self.choose(desktop_window.CHOICE_STOP)
+
+    def _ask(self, work: Dict[str, Any]) -> None:
+        shown = False
+        with contextlib.suppress(Exception):
+            shown = bool(
+                self.window.evaluate_js(
+                    "window.awClosePrompt ? (window.awClosePrompt("
+                    + json.dumps(work)
+                    + "), true) : false"
+                )
+            )
+        if shown:
+            self._work = work  # the page's prompt can be shown again on the next close
+        else:
+            self.choose(desktop_window.ask_natively(self.hwnd, work))
+
+    def choose(self, choice: Any) -> bool:
+        """The operator's answer to the prompt: stop it all, keep it running, or cancel."""
+        if choice not in desktop_window.CHOICES:
+            return False
+        self._asking = False
+        if choice == desktop_window.CHOICE_CANCEL:
+            return True
+        self._chosen = choice
+        if choice == desktop_window.CHOICE_STOP:
+            self.stop_after = True
+        if self.window is not None:
+            with contextlib.suppress(Exception):
+                self.window.destroy()
+        return True
+
+    @property
+    def decided(self) -> bool:
+        """Has a close been decided (the window is going)?"""
+        return self._chosen is not None
+
+    def after_closed(self) -> None:
+        """Stop the Hub, once the window has gone, when the close decided to."""
+        if not self.stop_after:
+            return
+        self.stop_after = False
+        with contextlib.suppress(Exception):
+            cmd_stop(argparse.Namespace(port=self.port, profile=self.profile, local=self.local))
 
 
 def _marker_pid(marker: Path) -> Optional[int]:
@@ -1349,9 +1512,21 @@ class _AppWindowApi:
     exposed to the page.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, closer: Optional[_AppWindowCloser] = None) -> None:
         self._window: Any = None
         self._watching = False
+        self._closer = closer
+
+    def close_choice(self, choice: Any) -> bool:
+        """The close prompt's answer: `stop`, `keep` or `cancel` (D4)."""
+        return self._closer.choose(choice) if self._closer is not None else False
+
+    def close_keeps_running(self) -> bool:
+        """App settings reads 'Closing the window leaves AgentWeave running' (D5)."""
+        return self._closer.keeps_running() if self._closer is not None else False
+
+    def set_close_keeps_running(self, on: Any) -> bool:
+        return self._closer.set_keeps_running(bool(on)) if self._closer is not None else False
 
     def foreground(self) -> bool:
         return _foreground_is_ours()
@@ -1401,11 +1576,12 @@ class _AppWindowApi:
         return True
 
 
-def _open_app_window_native(url: str) -> bool:
+def _open_app_window_native(url: str, profile: str = "default", local: bool = False) -> bool:
     """Open `url` in a native OS window via pywebview.
 
     Returns True if the pywebview path ran, False if pywebview is not installed
-    or failed to open a window (caller falls back to `_open_app_window`).
+    or failed to open a window (caller falls back to `_open_app_window`). `profile` and `local`
+    are the Hub's, for the stop a close may run (D4).
     """
     try:
         import webview  # type: ignore[import]
@@ -1421,14 +1597,17 @@ def _open_app_window_native(url: str) -> bool:
         # `text_select=True`: pywebview's default injects `body { user-select: none }` into every
         # page, so nothing in the app could be selected or copied — an agent's answer included
         # (F344). The app is a document as much as a control surface; it selects like a browser.
-        bridge = _AppWindowApi()
+        closer = _AppWindowCloser(port, profile, local)
+        bridge = _AppWindowApi(closer)
         window = webview.create_window(
             "AgentWeave", url, text_select=True, js_api=bridge, **_app_window_geometry(port)
         )
         bridge._window = window
+        closer.window = window
         _enable_default_context_menus(window)
-        _make_window_ours(window, port)
+        _make_window_ours(window, port, closer)
         marker = _app_window_register(url, window)
+        closer.marker = marker
         try:
             _allow_sound_before_a_click()
             webview.start(icon=_app_icon_path(), **_app_window_storage())
@@ -1436,6 +1615,7 @@ def _open_app_window_native(url: str) -> bool:
             if marker is not None:
                 with contextlib.suppress(OSError):
                     marker.unlink()
+        closer.after_closed()
         return True
     except Exception as exc:
         print_error(f"Native app window unavailable ({exc}); falling back to browser.")
@@ -1450,6 +1630,9 @@ _SPLASH_MIN_WARM = 1.2
 _SPLASH_FAIL_SECONDS = 2.5
 # The ink of the app's dark ground, so nothing flashes white between the splash and the app.
 _SPLASH_BACKGROUND = "#0A0A0B"
+# A close on the splash that stops the Hub waits at most this long for the start-up to finish:
+# past the Hub's 60 s health wait and the project registration's 10 s.
+_SPLASH_STOP_WAIT_SECONDS = 90
 
 
 def _asset_path(name: str) -> Optional[Path]:
@@ -1520,6 +1703,7 @@ def _open_app_with_splash(
     start: Callable[[], Tuple[Optional[str], Optional[str]]],
     warm: bool,
     port: int = DEFAULT_HUB_PORT,
+    profile: str = "default",
 ) -> Optional[int]:
     """Open the app window on the splash at once, run `start` behind it, then show the app.
 
@@ -1546,7 +1730,8 @@ def _open_app_with_splash(
     import time as _time
 
     _set_windows_app_user_model_id()
-    bridge = _AppWindowApi()
+    closer = _AppWindowCloser(port, profile)
+    bridge = _AppWindowApi(closer)
     try:
         window = webview.create_window(
             "AgentWeave",
@@ -1562,8 +1747,9 @@ def _open_app_with_splash(
     if window is None:
         return None
     bridge._window = window
+    closer.window = window
     _enable_default_context_menus(window)
-    _make_window_ours(window, port)
+    _make_window_ours(window, port, closer)
 
     loaded = threading.Event()
 
@@ -1574,8 +1760,15 @@ def _open_app_with_splash(
         window.events.loaded += _on_loaded
 
     state: Dict[str, Any] = {"code": 0, "started": False, "url": None, "marker": None}
+    work_done = threading.Event()
 
     def _work() -> None:
+        try:
+            _start_and_show()
+        finally:
+            work_done.set()
+
+    def _start_and_show() -> None:
         state["started"] = True
         loaded.wait(timeout=10)
         shown_at = _time.monotonic()
@@ -1603,7 +1796,10 @@ def _open_app_with_splash(
         with contextlib.suppress(Exception):
             delay = float(window.evaluate_js("awSplashLeave()") or 0) / 1000
         _time.sleep(max(0.0, min(delay, 3.0)))
+        if closer.decided:  # closed on the splash: no app to show
+            return
         state["marker"] = _app_window_register(url, window)
+        closer.marker = state["marker"]
         window.load_url(url)
 
     try:
@@ -1616,9 +1812,14 @@ def _open_app_with_splash(
         if state["url"]:
             _open_app_window(state["url"])
     finally:
+        if closer.stop_after and state["started"]:
+            # Closed on the splash: let the start-up finish first, so the stop finds the Hub it
+            # spawned (its PID file) rather than racing it.
+            work_done.wait(timeout=_SPLASH_STOP_WAIT_SECONDS)
         if state["marker"] is not None:
             with contextlib.suppress(OSError):
                 state["marker"].unlink()
+    closer.after_closed()
     return int(state["code"])
 
 
@@ -1725,12 +1926,15 @@ def _hub_native_start(
                     print_info("Opening Hub in app mode...")
                     # A warm open: the short splash, while the project is registered behind it.
                     code = _open_app_with_splash(
-                        lambda: (_hub_resolve_launch_url(port, cwd), None), warm=True, port=port
+                        lambda: (_hub_resolve_launch_url(port, cwd), None),
+                        warm=True,
+                        port=port,
+                        profile=profile,
                     )
                     if code is not None:
                         return code
                 url = _hub_resolve_launch_url(port, cwd)
-                if app and not _open_app_window_native(url):
+                if app and not _open_app_window_native(url, profile=profile):
                     _open_app_window(url)
                 return 0
     except Exception:
@@ -1862,13 +2066,13 @@ def _hub_native_start(
         if detach:
             if app:
                 print_info("Opening Hub in app mode...")
-                code = _open_app_with_splash(_bring_up, warm=False, port=port)
+                code = _open_app_with_splash(_bring_up, warm=False, port=port, profile=profile)
                 if code is not None:
                     return code
             launch_url, _failure = _bring_up()
             if launch_url is None:
                 return 1
-            if app and not _open_app_window_native(launch_url):
+            if app and not _open_app_window_native(launch_url, profile=profile):
                 _open_app_window(launch_url)
         else:
             # Foreground mode — block until Ctrl+C
@@ -1947,7 +2151,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
                 print_info(f"Hub is already running at {hub_url}")
                 if app:
                     print_info("Opening Hub in app mode...")
-                    if not _open_app_window_native(hub_url):
+                    if not _open_app_window_native(hub_url, local=local):
                         _open_app_window(hub_url)
                 return 0
     except Exception:
@@ -2040,7 +2244,7 @@ def cmd_hub_start(args: argparse.Namespace) -> int:
     print_success(f"Hub ready at {hub_url}")
     if app:
         print_info("Opening Hub in app mode...")
-        if not _open_app_window_native(hub_url):
+        if not _open_app_window_native(hub_url, local=local):
             _open_app_window(hub_url)
     return 0
 

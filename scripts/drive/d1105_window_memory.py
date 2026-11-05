@@ -1,8 +1,9 @@
 """Acceptance drive for AWOAW-2's FR-5 and FR-6 (spec agentweave-is-its-own-app-on-windows).
 
-FR-5 reopen-keeps-work: a window closed while its Hub stays in the background (today's close; once
-AWOAW-3 makes close mean stop, this step needs its rollback setting on), a real Haiku turn started,
-then the app launched: the window opens on the same Hub process and the turn completes.
+FR-5 reopen-keeps-work: a window closed while its Hub stays in the background (close means stop
+since AWOAW-3, so the drive turns the rollback setting on for its port, as App settings writes it),
+a real Haiku turn started, then the app launched: the window opens on the same Hub process and the
+turn completes.
 FR-6 window-reopens-maximized: closed maximized -> reopens maximized; closed at 1200x800 at
 (130, 70) -> reopens there; remembered off every screen -> reopens on the primary at 1200x800.
 
@@ -33,6 +34,10 @@ PORT = 8174
 app = d.App(PORT, d.PROFILE_PREFIX + d.RUN + "g", d.project_dir("geo"))
 geo_file = d.HUB_HOME / "app-window" / f"window-{PORT}.json"
 geo_file.unlink(missing_ok=True)
+# The rollback setting (D5) for this scratch port only: every close here leaves the Hub running.
+close_file = d.HUB_HOME / "app-window" / f"close-{PORT}.json"
+close_file.parent.mkdir(parents=True, exist_ok=True)
+close_file.write_text(json.dumps({"keep_running": True}), encoding="utf-8")
 
 
 def rect(hwnd):
@@ -134,6 +139,7 @@ try:
 finally:
     app.cleanup()
     geo_file.unlink(missing_ok=True)
+    close_file.unlink(missing_ok=True)
     d.clear_scratch()
 print("\n%d FAIL" % len(d.failures) if d.failures else "\nALL PASS", d.failures)
 sys.exit(1 if d.failures else 0)
