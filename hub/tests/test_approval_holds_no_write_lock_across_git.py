@@ -30,6 +30,7 @@ import pytest
 from hub import worktrees
 from hub.db.engine import engine
 
+from ._loop_lag import STALL_LIMIT, LagProbe
 from .test_approvals_and_evidence_never_freeze_the_hub import (
     _REAL_ENSURE_TASK_WORKTREE,
     _completed_task_with_accepted_work,
@@ -120,9 +121,12 @@ def a_write_during_every_git(path: str) -> Iterator[Probe]:
         subprocess.run = real
 
 
-def assert_no_write_waited(probe: Probe) -> None:
+def assert_no_write_waited(probe: Probe, lag: LagProbe) -> None:
+    """No write waited for git, and the loop was never held meanwhile: git and its writes run on
+    worker threads, so a 250 ms hold of the loop anywhere on the path counts too."""
     assert probe.writes, "nothing ran git, so this measured nothing"
     assert not probe.failed, probe.failed
+    assert lag.worst < STALL_LIMIT, f"the loop stalled {lag.worst * 1000:.0f} ms: {lag.why}"
 
 
 @pytest.mark.asyncio
@@ -136,12 +140,13 @@ async def test_approving_holds_no_write_lock_while_it_merges_and_releases(
     path = await database_file()
 
     with a_write_during_every_git(path) as probe:
-        approved = await app.patch(
-            f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers
-        )
+        async with LagProbe() as lag:
+            approved = await app.patch(
+                f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers
+            )
 
     assert approved.status_code == 200, approved.text
-    assert_no_write_waited(probe)
+    assert_no_write_waited(probe, lag)
     assert any("merge" in w["git"] for w in probe.writes), "the merge ran no git"
     # The same outcome as before: merged, recorded, released.
     assert work in commits_on(tmp_path, "main")
@@ -164,10 +169,11 @@ async def test_retrying_an_integration_holds_no_write_lock_while_it_merges(
     path = await database_file()
 
     with a_write_during_every_git(path) as probe:
-        retried = await app.post(f"{TASKS}/{task}/integrations/retry", headers=auth_headers)
+        async with LagProbe() as lag:
+            retried = await app.post(f"{TASKS}/{task}/integrations/retry", headers=auth_headers)
 
     assert retried.status_code == 200, retried.text
-    assert_no_write_waited(probe)
+    assert_no_write_waited(probe, lag)
     assert work in commits_on(tmp_path, "main")
 
 
@@ -183,12 +189,13 @@ async def test_releasing_a_rejected_tasks_checkout_holds_no_write_lock(
     path = await database_file()
 
     with a_write_during_every_git(path) as probe:
-        rejected = await app.patch(
-            f"{TASKS}/{task}", json={"status": "rejected"}, headers=auth_headers
-        )
+        async with LagProbe() as lag:
+            rejected = await app.patch(
+                f"{TASKS}/{task}", json={"status": "rejected"}, headers=auth_headers
+            )
 
     assert rejected.status_code == 200, rejected.text
-    assert_no_write_waited(probe)
+    assert_no_write_waited(probe, lag)
     assert not checkout.exists()
     assert git(tmp_path, "rev-parse", "--verify", worktrees.task_branch_name(task)).returncode == 0
 
@@ -208,11 +215,12 @@ async def test_landing_a_batch_holds_no_write_lock_while_git_or_a_check_runs(
 
     try:
         with a_write_during_every_git(path) as probe:
-            await landing_queue.drain()
+            async with LagProbe() as lag:
+                await landing_queue.drain()
     finally:
         landing_queue.cancel_timers()
 
-    assert_no_write_waited(probe)
+    assert_no_write_waited(probe, lag)
     for work in works:
         assert work in commits_on(tmp_path, "main")
     assert counter.exists()

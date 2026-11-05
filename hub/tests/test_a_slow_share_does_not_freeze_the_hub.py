@@ -11,21 +11,27 @@ import pytest
 from hub import project_lifecycle
 from hub.api.v1 import fs_browse
 
+from ._loop_lag import STALL_LIMIT, LagProbe
+
 # Only a blocked loop ever waits this out, so it can be far above any delay a loaded machine adds.
 _STALL = 60.0
 
 
 class _Stall:
     """Blocks the wrapped call, as an unreachable share's resolve/scandir does, until /health has
-    answered. Run on the loop, nothing can answer /health, so the call waits out `_STALL`."""
+    answered. Run on the loop, nothing can answer /health, so the call waits out `_STALL`. It also records whether it ran on the loop's
+    thread, which does not depend on how busy the machine is."""
 
     def __init__(self) -> None:
         self.entered = threading.Event()
         self.answered = threading.Event()
         self.health_answered_during_it = False
+        self.loop_thread = threading.current_thread()
+        self.on_loop: "list[bool]" = []
 
     def wrapping(self, real):
         def wrapper(*args, **kwargs):
+            self.on_loop.append(threading.current_thread() is self.loop_thread)
             self.entered.set()
             self.health_answered_during_it = self.answered.wait(_STALL)
             return real(*args, **kwargs)
@@ -34,13 +40,22 @@ class _Stall:
 
 
 async def _health_answers_during(app, stall: _Stall, slow_request) -> bool:
-    task = asyncio.create_task(slow_request())
-    while not stall.entered.is_set():
-        await asyncio.sleep(0.01)
-    response = await app.get("/health")
-    assert response.status_code == 200
-    stall.answered.set()
-    await task
+    """Whether /health answered while the slow call was held, with the call made off the loop and
+    the loop never held past the probe's limit meanwhile: a share's call made on the loop holds it
+    for as long as the share does, and a 250 ms hold anywhere in the request still counts."""
+    # /health computes its UI staleness warning with git on the loop, once per 30 s (F1128): a
+    # stall of the probing request's own, not of the path this guards. Paid before the window.
+    assert (await app.get("/health")).status_code == 200
+    async with LagProbe() as probe:
+        task = asyncio.create_task(slow_request())
+        while not stall.entered.is_set():
+            await asyncio.sleep(0.01)
+        response = await app.get("/health")
+        assert response.status_code == 200
+        stall.answered.set()
+        await task
+    assert stall.on_loop and not any(stall.on_loop), "the slow call ran on the loop"
+    assert probe.worst < STALL_LIMIT, f"the loop stalled {probe.worst * 1000:.0f} ms: {probe.why}"
     return stall.health_answered_during_it
 
 

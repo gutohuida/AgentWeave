@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from hub import project_workspace
+from hub.api.v1 import spec as spec_api
 from hub.spec_documents import write_document
 
 from ._spec_files import stored_text
@@ -96,7 +97,14 @@ async def test_a_warm_spec_list_reads_and_resolves_nothing_it_already_knows(
 
 
 @pytest.mark.asyncio
-async def test_a_warm_document_list_reads_no_file_again(app, auth_headers, tmp_path, counting):
+async def test_a_warm_document_list_reads_no_file_again(
+    app, auth_headers, tmp_path, counting, monkeypatch
+):
+    # The ready verdicts expire after `_READY_VERDICT_SECONDS` of wall clock, deliberately. On a
+    # busy machine the first listing of 30 documents outlasted 15 s, so the second found every
+    # verdict expired and read each document twice (60 reads; HTPBM-2). That expiry is not what is
+    # judged here, so it is held open for the length of the test.
+    monkeypatch.setattr(spec_api, "_READY_VERDICT_SECONDS", 3600.0)
     await _documents(app, auth_headers)
     first = await app.get(f"{BASE}/documents", headers=auth_headers)
     assert first.status_code == 200, first.text

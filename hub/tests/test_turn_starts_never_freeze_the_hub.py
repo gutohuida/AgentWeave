@@ -182,11 +182,16 @@ async def test_a_turn_starts_git_is_not_queued_behind_streaming_runs(task_turn, 
         for _ in READERS:
             assert await asyncio.wait_for(asyncio.to_thread(reading.acquire, True, 10), 15)
         with slow_git(threading.current_thread()) as git:
-            asked = time.perf_counter()
             await asyncio.wait_for(start(), timeout=20)
         off_loop = [call for call in git.calls if not call.on_loop]
         assert off_loop and not git.on_loop, [call.argv[:3] for call in git.on_loop]
-        assert off_loop[0].started - asked < 0.100
+        # Not queued behind the readers: every git ran on the Hub's own blocking pool, never the
+        # default executor the eight readers fill. Which pool it ran on does not depend on the
+        # machine; how soon it began did (it was `started - asked < 0.100`). A git queued behind
+        # them could not begin before `release`, which only the `finally` sets.
+        assert all(call.thread.startswith("aw-blocking") for call in off_loop), [
+            (call.argv[:3], call.thread) for call in off_loop
+        ]
         assert spawned
     finally:
         release.set()

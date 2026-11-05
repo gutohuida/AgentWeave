@@ -12,9 +12,8 @@ blocking call placed on the event loop (--inject-freeze), and prints each test's
 
 Exit code 0 only when every selected test passed every repetition (normal mode), or failed every
 repetition (--inject-freeze mode, restricted to the never-freezes tests that run a LagProbe).
---inject-freeze starts a 250 ms time.sleep on the loop 50 ms after every LagProbe window opens, which
-is a real freeze in the path the test guards; tests that measure stalls another way (their own
-probe) are reported as "not injectable" until the build gives them a hook.
+--inject-freeze puts a 250 ms time.sleep on the loop as soon as every LagProbe window opens, which is
+a real freeze in the path the test guards; it runs the never-freezes tests (`_FREEZE_GUARDS`) only.
 """
 
 from __future__ import annotations
@@ -34,12 +33,36 @@ ROOT = Path(__file__).resolve().parents[2]
 LIST = ROOT / "scripts" / "checks" / "steady_tests.txt"
 HUB = ROOT / "hub"
 FREEZE_SECONDS = 0.25
-#: Files whose tests open a LagProbe window; only these can have a freeze injected through it.
-_PROBE_FILES = (
-    "test_approvals_and_evidence_never_freeze_the_hub.py",
-    "test_turn_starts_never_freeze_the_hub.py",
-    "test_spec_lists_reuse_parsed_documents.py",
-    "test_streamed_lines_are_recorded_in_batches.py",
+#: The never-freezes tests (FR-3): each guards a Hub path against holding the event loop, and judges
+#: it inside a LagProbe window, so --inject-freeze puts its 250 ms hold in exactly that path. The rest
+#: of the family is in the steady set but guards something a loop hold does not move, so a freeze
+#: injected there proves nothing either way:
+#:   test_loop_lag_probe.py (25)  tests of the probe itself; each places a real hold and asserts how
+#:                                the probe reads it, which is FR-3's proof for the probe
+#:   test_turn_starts_...:: test_a_turn_starts_git_is_not_queued_behind_streaming_runs  which pool
+#:                                git runs on (its default executor is full, so no probe can start)
+#:   test_turn_starts_...:: test_serialized_git_never_overlaps_even_when_its_caller_is_cancelled
+#:                                that two gits never overlap; no Hub path, no loop
+#:   test_main_watch_...:: test_a_stretch_longer_than_the_list_says_how_many_more  a pure function
+#:   test_spec_lists_reuse_parsed_documents.py (3)  counts of reads and resolutions
+#:   test_streamed_lines_are_recorded_in_batches.py (3)  stored lines, a statement count, a latency
+_FREEZE_GUARDS = (
+    "hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_approving_releases_and_merges_without_stalling_the_loop",
+    "hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_recording_evidence_and_detecting_drift_never_stall_the_loop",
+    "hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_a_run_ends_restamp_never_stalls_the_loop",
+    "hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_staffing_a_review_never_stalls_the_loop",
+    "hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_briefing_the_mender_never_stalls_the_loop",
+    "hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_refreshing_reachability_answers_as_before_from_one_hop",
+    "hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_folder_listing_does_not_block_other_requests",
+    "hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_open_does_not_block_other_requests",
+    "hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_create_does_not_block_other_requests",
+    "hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_relocate_does_not_block_other_requests",
+    "hub/tests/test_main_watch_does_not_freeze_the_hub.py::test_a_stalled_resolve_does_not_block_the_loop_during_a_watch_pass",
+    "hub/tests/test_approval_holds_no_write_lock_across_git.py::test_approving_holds_no_write_lock_while_it_merges_and_releases",
+    "hub/tests/test_approval_holds_no_write_lock_across_git.py::test_retrying_an_integration_holds_no_write_lock_while_it_merges",
+    "hub/tests/test_approval_holds_no_write_lock_across_git.py::test_releasing_a_rejected_tasks_checkout_holds_no_write_lock",
+    "hub/tests/test_approval_holds_no_write_lock_across_git.py::test_landing_a_batch_holds_no_write_lock_while_git_or_a_check_runs",
+    "hub/tests/test_turn_starts_never_freeze_the_hub.py::test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop",
 )
 
 
@@ -56,7 +79,9 @@ def pytest_configure(config):  # noqa: ANN001, ANN201
 
     async def _enter(self):  # noqa: ANN001, ANN202
         result = await real_enter(self)
-        asyncio.get_running_loop().call_later(0.05, _time.sleep, FREEZE_SECONDS)
+        # The next thing the loop runs once the window is open, so it always lands inside it,
+        # however short the guarded path is.
+        asyncio.get_running_loop().call_soon(_time.sleep, FREEZE_SECONDS)
         return result
 
     _loop_lag.LagProbe.__aenter__ = _enter
@@ -86,7 +111,7 @@ def _node_key(classname: str, name: str) -> str:
     return file + "::" + (klass + "::" if klass else "") + name
 
 
-def run_once(ids: "list[str]", inject: bool) -> "dict[str, bool]":
+def run_once(ids: "list[str]", inject: bool) -> "tuple[dict[str, bool], dict[str, str]]":
     with tempfile.TemporaryDirectory() as tmp:
         xml_path = Path(tmp) / "result.xml"
         env = dict(os.environ)
@@ -99,13 +124,18 @@ def run_once(ids: "list[str]", inject: bool) -> "dict[str, bool]":
         cmd += [i[len("hub/") :] for i in ids]
         subprocess.run(cmd, cwd=HUB, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         verdict: "dict[str, bool]" = {}
+        why: "dict[str, str]" = {}
         if xml_path.exists():
             for case in ET.parse(xml_path).getroot().iter("testcase"):
                 key = _node_key(case.get("classname", ""), case.get("name", ""))
                 bad = case.find("failure") is not None or case.find("error") is not None
                 skipped = case.find("skipped") is not None
                 verdict[key] = not bad and not skipped
-        return verdict
+                for tag in ("failure", "error", "skipped"):
+                    found = case.find(tag)
+                    if found is not None:
+                        why[key] = f"{tag}: {(found.get('message') or '').splitlines()[0][:1200]}"
+        return verdict, why
 
 
 def main() -> int:
@@ -118,7 +148,10 @@ def main() -> int:
     rows = read_list()
     ids = [t for t, _ in rows]
     if args.inject_freeze:
-        ids = [t for t in ids if Path(t.split("::")[0]).name in _PROBE_FILES]
+        missing = [t for t in _FREEZE_GUARDS if t not in ids]
+        if missing:
+            raise SystemExit(f"never-freezes tests not in the steady set: {missing}")
+        ids = [t for t in ids if t in _FREEZE_GUARDS]
     passes: Counter = Counter()
     workers, stop = [], multiprocessing.Event()
     if args.load:
@@ -130,11 +163,14 @@ def main() -> int:
     started = time.monotonic()
     try:
         for n in range(args.repeat):
-            verdict = run_once(ids, args.inject_freeze)
+            verdict, why = run_once(ids, args.inject_freeze)
             for i in ids:
                 if verdict.get(i) is True:
                     passes[i] += 1
             print(f"repetition {n + 1}/{args.repeat}: {sum(1 for i in ids if verdict.get(i))}/{len(ids)} passed", flush=True)
+            for i in ids:
+                if verdict.get(i) is not True:
+                    print(f"    not passed: {i}  ({why.get(i, 'no result')})", flush=True)
     finally:
         stop.set()
         for p in workers:

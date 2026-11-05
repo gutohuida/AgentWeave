@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -80,14 +79,24 @@ def _script(tmp_path: Path, name: str, body: str) -> str:
     return f'{PY} "{path}"'
 
 
-def _lint(tmp_path: Path, *, sleep: float = 0.0, fast: bool = True) -> dict:
-    """Fails where any Python file of the checked tree holds `# BAD`, like ruff on an unused import."""
+def _lint(
+    tmp_path: Path, *, sleep: float = 0.0, fast: bool = True, until: "Path | None" = None
+) -> dict:
+    """Fails where any Python file of the checked tree holds `# BAD`, like ruff on an unused import.
+    With `until`, it first holds until that file exists (at most 50 s, inside its 60 s timeout), so
+    a test can keep it running for as long as it needs to, whatever the machine's load."""
+    hold = ""
+    if until is not None:
+        hold = (
+            "end = time.monotonic() + 50\n"
+            f"while not pathlib.Path({str(until)!r}).exists() and time.monotonic() < end:\n"
+            "    time.sleep(0.05)\n"
+        )
     command = _script(
         tmp_path,
-        f"lint{int(sleep)}",
+        f"lint{int(sleep)}{'-held' if until is not None else ''}",
         "import pathlib, sys, time\n"
-        f"time.sleep({sleep})\n"
-        "bad = [p for p in pathlib.Path('.').rglob('*.py')\n"
+        f"time.sleep({sleep})\n" + hold + "bad =[p for p in pathlib.Path('.').rglob('*.py')\n"
         "       if '.agentweave' not in p.parts and '# BAD' in p.read_text(encoding='utf-8')]\n"
         "for p in bad:\n"
         f"    print(p.as_posix() + ':1:1: ' + {LINT_OUTPUT!r})\n"
@@ -286,18 +295,23 @@ async def test_a_fast_check_past_the_budget_does_not_hold_the_completion(
 ):
     monkeypatch.setattr(project_checks, "COMPLETION_BUDGET_SECONDS", 2.0)
     await _builder_task(tmp_path, content=BAD_LINE)
-    await _configure([_lint(tmp_path, sleep=6)])
+    # The check holds until the test releases it, after the completion has answered. A completion
+    # held by it waits out the check's 50 s hold and then finds the run finished, so the verdict is
+    # the run's state when the completion answers, not a duration compared against the machine's
+    # load (it was `elapsed < 7.0` against a 6 s check, which a busy machine could cross).
+    release = _scripts(tmp_path) / "release-fast"
+    await _configure([_lint(tmp_path, until=release)])
 
-    started = time.monotonic()
-    completed = await _complete(app)
-    elapsed = time.monotonic() - started
+    try:
+        completed = await _complete(app)
 
-    assert completed.status_code == 200, completed.text
-    assert elapsed < 2.0 + 5.0, elapsed
-    assert (await _task()).status == "completed"
-    [run] = await _runs()
-    assert run.state == "running"
-    await project_checks.drain()
+        assert completed.status_code == 200, completed.text
+        assert (await _task()).status == "completed"
+        [run] = await _runs()
+        assert run.state == "running", "the completion waited for the fast check past the budget"
+    finally:
+        release.touch()
+        await project_checks.drain()
 
 
 async def test_a_fast_failure_found_after_the_budget_returns_the_task(app, tmp_path, monkeypatch):

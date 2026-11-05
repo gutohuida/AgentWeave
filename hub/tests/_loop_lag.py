@@ -275,6 +275,8 @@ class GitCall:
     argv: List[str]
     started: float
     on_loop: bool
+    #: The name of the thread that ran it: which pool it waited in does not depend on the machine.
+    thread: str = ""
 
 
 @dataclass
@@ -295,7 +297,14 @@ def slow_git(loop_thread: threading.Thread) -> Iterator[GitLog]:
         argv = args[0] if args else kwargs.get("args")
         if isinstance(argv, (list, tuple)) and argv and "git" in os.path.basename(str(argv[0])):
             on_loop = threading.current_thread() is loop_thread
-            log.calls.append(GitCall([str(a) for a in argv], time.perf_counter(), on_loop))
+            log.calls.append(
+                GitCall(
+                    [str(a) for a in argv],
+                    time.perf_counter(),
+                    on_loop,
+                    threading.current_thread().name,
+                )
+            )
             time.sleep(GIT_DELAY)
         return real(*args, **kwargs)
 

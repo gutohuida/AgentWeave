@@ -511,30 +511,37 @@ def test_a_check_ends_when_its_process_does_not_when_its_output_closes(tmp_path_
 
     The xdist check above timed out on 2026-10-30 with `1 passed` already printed: the run
     waited for the end of its output, which something still holding the pipe kept open.
+
+    The verdict is that the check ended while the holder was still alive, holding the pipe, not a
+    duration: the holder outlives the check's timeout many times over, so a run waiting for its
+    output to close times out instead, however fast or slow the machine is. (It was
+    `duration_seconds < 20` against a 20 s timeout and a 60 s holder.)
     """
+    from hub.pty_runner import pid_alive, terminate_process_tree
+
     outside = tmp_path_factory.mktemp("lingering")
     pid_file = outside / "holder.pid"
     script = outside / "leave_a_holder.py"
     script.write_text(
         "import subprocess, sys\n"
         "holder = subprocess.Popen(\n"
-        "    [sys.executable, '-c', 'import time; time.sleep(60)'], stdout=sys.stdout\n"
+        "    [sys.executable, '-c', 'import time; time.sleep(900)'], stdout=sys.stdout\n"
         ")\n"
         f"open({str(pid_file)!r}, 'w').write(str(holder.pid))\n"
         "print('1 passed')\n",
         encoding="utf-8",
     )
+    holder_alive_at_the_end = None
     try:
         result = project_checks.run_one(
-            {"name": "lingering", "command": f'{PY} "{script}"', "timeout_seconds": 20},
+            {"name": "lingering", "command": f'{PY} "{script}"', "timeout_seconds": 120},
             outside,
         )
+        holder_alive_at_the_end = pid_file.exists() and pid_alive(int(pid_file.read_text()))
     finally:
         if pid_file.exists():
-            from hub.pty_runner import terminate_process_tree
-
             terminate_process_tree(int(pid_file.read_text()))
     assert not result["timed_out"], result["output_tail"]
     assert result["exit_code"] == 0, result["output_tail"]
     assert "1 passed" in result["output_tail"]
-    assert result["duration_seconds"] < 20
+    assert holder_alive_at_the_end, "the check ended only once its output's holder had gone"

@@ -88,7 +88,9 @@ async def test_a_job_registers_while_another_session_holds_the_write_lock(live_s
     ), "the job never reached the scheduler"
     # A registration that needed the lock could only finish once the writer let go, which it does
     # after this block -- i.e. never before the 30s busy timeout. Anything well under that tells
-    # the two apart; 1s was a wall-clock guess a loaded gate machine could miss.
+    # the two apart; 1s was a wall-clock guess a loaded gate machine could miss. Load cannot carry
+    # a registration that needs no lock to 10 s: it is a few in-memory calls, which a busy machine
+    # stretches by milliseconds, while one that needs the lock cannot finish before the 30 s.
     assert elapsed < 10.0, f"registration waited {elapsed:.2f}s on a lock it should not need"
 
 
