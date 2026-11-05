@@ -155,6 +155,12 @@ export interface ProjectCheck {
   /** When it runs: in a task's run before review, in a landing batch's run, or both
    *  (`checks-know-their-phase-and-give-way-to-the-user`). A check saved before it reads `both`. */
   phase?: CheckPhase
+  /** The JUnit XML file the check writes, relative to the directory it runs in
+   *  (`checks-report-which-tests-failed-in-any-language`, FR-1). Absent: judged as a whole. */
+  report_path?: string | null
+  /** Re-runs named tests: `{tests}` is replaced by their ids, `classname::name`, one argument each.
+   *  The Hub refuses one without `{tests}`. */
+  rerun_command?: string | null
 }
 
 export type CheckPhase = 'review' | 'landing' | 'both'
