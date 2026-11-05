@@ -3356,6 +3356,11 @@ class TaskCheckRun(Base):
     # a Hub fault, a check out of time with no failing test named), null for a verdict (0162).
     ended_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     started_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    # When the run got a check slot (`project_checks._semaphore`): `started_at` is when it was
+    # queued, so the slot wait is this less that, and its checks ran from this to `ended_at`. Null
+    # for a run that never got one -- ended or superseded while waiting, or with only fast checks --
+    # and for every row written before 0164 (`the-build-card-shows-where-check-time-went` FR-1).
+    slot_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (

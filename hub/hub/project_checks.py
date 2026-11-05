@@ -1565,10 +1565,6 @@ _semaphores: Dict[int, asyncio.Semaphore] = {}
 _fast_waiters: Dict[str, asyncio.Event] = {}
 #: By run id, when a run began waiting for a check slot (the semaphore), while it waits (F1076).
 _waiting_for_slot: Dict[str, datetime] = {}
-#: By run id, how long a run waited for its slot once it has one: its age less this is how long its
-#: checks have run. A row's `started_at` is when it was queued, and a run that waited 33 min behind
-#: another read as a 70-minute run, which the mender called hung.
-_slot_waited: Dict[str, float] = {}
 #: Recorded in `_superseded` in place of a main tip: the task's work changed under the run (a new
 #: completion), not main.
 _NEW_WORK = "new-work"
@@ -1579,6 +1575,23 @@ def _semaphore() -> asyncio.Semaphore:
     if loop_id not in _semaphores:
         _semaphores[loop_id] = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
     return _semaphores[loop_id]
+
+
+async def _took_slot(run_id: str) -> None:
+    """Record on *run_id*'s row that it got a check slot now (`slot_at`), where it is still running.
+
+    A row's `started_at` is when it was queued, and a run that waited 33 min behind another read as
+    a 70-minute run, which the mender called hung (F1076). Held in memory, the wait was lost at a
+    restart; on the row it survives one, and the build's tally splits waiting from running by it
+    (`the-build-card-shows-where-check-time-went` FR-1). Called at every place a run takes
+    `_semaphore()` -- a task's run here, a landing batch's in `landing_queue` -- and only once it
+    holds the slot, so a run ended or superseded while waiting records none."""
+    async with async_session_factory() as session:
+        run = await session.get(TaskCheckRun, run_id)
+        if run is None or run.state != "running":
+            return
+        run.slot_at = datetime.now(timezone.utc)
+        await session.commit()
 
 
 def is_running(task_id: str) -> bool:
@@ -1839,9 +1852,14 @@ async def _execute(
             if outcome is None and pairs[split:]:
                 _waiting_for_slot[run_id] = datetime.now(timezone.utc)
                 async with _semaphore():
-                    queued = _waiting_for_slot.pop(run_id)
-                    _slot_waited[run_id] = (datetime.now(timezone.utc) - queued).total_seconds()
-                    outcome = await run_group(pairs[split:], merged, tree, changed, baseline)
+                    _waiting_for_slot.pop(run_id, None)
+                    if await superseded():
+                        # Its work changed while it waited: it ends here without running, so it
+                        # took no slot (FR-1).
+                        outcome = "superseded"
+                    else:
+                        await _took_slot(run_id)
+                        outcome = await run_group(pairs[split:], merged, tree, changed, baseline)
             if outcome == "superseded":
                 return
         finally:
@@ -1877,7 +1895,6 @@ async def _execute(
     finally:
         _fast_decided(run_id)
         _waiting_for_slot.pop(run_id, None)
-        _slot_waited.pop(run_id, None)
 
 
 def _fast_decided(run_id: str) -> None:
@@ -2597,8 +2614,9 @@ async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]
             f"{run_id}); queued is not hung, and its review is offered once they pass",
         )
     if seen.state == "running" and run is not None and run.started_at is not None:
-        age = (datetime.now(timezone.utc) - _aware(run.started_at)).total_seconds()
-        ran = age - _slot_waited.get(run.id, 0.0)
+        # From when it got its slot: `started_at` is when it was queued (F1076).
+        since = _aware(run.slot_at) if run.slot_at is not None else _aware(run.started_at)
+        ran = (datetime.now(timezone.utc) - since).total_seconds()
         return ReviewWait(
             "running",
             run_id,
