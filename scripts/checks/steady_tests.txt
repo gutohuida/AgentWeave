@@ -1,0 +1,78 @@
+# The steady set: tests whose verdict must not depend on how busy the machine is.
+# One per line: <pytest node id from the repo root> | <the record that put it there>.
+# Read by scripts/drive/d1105_steady_under_load.py. Spec: hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time (FR-1).
+# Sources: never-freezes family; 'Fix flaky test' tasks 2026-10-28..2026-11-04 on :8000 (and the tests named in the
+# 'Fix 2 tests the approval checks found failing on main or flaky' task descriptions); six wall-clock assertions.
+hub/tests/test_loop_lag_probe.py::test_a_blocking_call_on_the_loop_counts_as_a_stall | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_counted_stall_says_why_it_was_counted | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_collecting_a_heap_built_before_the_window_does_not_count | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_collecting_what_the_window_allocated_counts_as_a_stall | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_the_probe_leaves_nothing_frozen | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_the_probe_raises_the_whole_process_and_puts_it_back | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_work_held_on_the_loop_counts_as_a_stall | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_an_idle_loop_reads_as_polling | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_lock_wait_and_a_call_holding_the_gil_count_as_stalls | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_worker_thread_holding_the_gil_counts_as_a_stall | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_blocking_call_keeping_the_gil_counts_as_a_stall | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_starting_a_thread_behind_a_gil_holder_counts_as_a_stall | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_the_machine_stopping_the_whole_process_does_not_count | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_call_keeping_the_gil_is_not_read_as_the_machine | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_the_observer_describes_threads_that_begin_or_end_in_the_window | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[0-threads0-True] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[3-threads1-False] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[3-threads2-False] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[3-threads3-False] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[3-threads4-True] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[3-threads5-True] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[-1-threads6-False] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[-1-threads7-True] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_a_gap_is_the_codes_only_while_something_here_holds_the_gil[-1-threads8-False] | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_loop_lag_probe.py::test_the_observer_reads_which_thread_holds_the_gil | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_approving_releases_and_merges_without_stalling_the_loop | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_recording_evidence_and_detecting_drift_never_stall_the_loop | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_a_run_ends_restamp_never_stalls_the_loop | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_staffing_a_review_never_stalls_the_loop | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_briefing_the_mender_never_stalls_the_loop | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py::test_refreshing_reachability_answers_as_before_from_one_hop | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_folder_listing_does_not_block_other_requests | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_open_does_not_block_other_requests | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_create_does_not_block_other_requests | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_relocate_does_not_block_other_requests | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_main_watch_does_not_freeze_the_hub.py::test_a_stalled_resolve_does_not_block_the_loop_during_a_watch_pass | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_main_watch_does_not_freeze_the_hub.py::test_a_stretch_longer_than_the_list_says_how_many_more | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approval_holds_no_write_lock_across_git.py::test_approving_holds_no_write_lock_while_it_merges_and_releases | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approval_holds_no_write_lock_across_git.py::test_retrying_an_integration_holds_no_write_lock_while_it_merges | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approval_holds_no_write_lock_across_git.py::test_releasing_a_rejected_tasks_checkout_holds_no_write_lock | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_approval_holds_no_write_lock_across_git.py::test_landing_a_batch_holds_no_write_lock_while_git_or_a_check_runs | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_turn_starts_never_freeze_the_hub.py::test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_turn_starts_never_freeze_the_hub.py::test_a_turn_starts_git_is_not_queued_behind_streaming_runs | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_turn_starts_never_freeze_the_hub.py::test_serialized_git_never_overlaps_even_when_its_caller_is_cancelled | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_spec_lists_reuse_parsed_documents.py::test_a_warm_spec_list_reads_and_resolves_nothing_it_already_knows | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_spec_lists_reuse_parsed_documents.py::test_a_warm_document_list_reads_no_file_again | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_spec_lists_reuse_parsed_documents.py::test_a_changed_file_is_seen_by_the_next_listing | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_streamed_lines_are_recorded_in_batches.py::test_two_hundred_lines_are_all_stored_before_the_run_is_reported_finished | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_streamed_lines_are_recorded_in_batches.py::test_a_line_reaches_open_streams_within_250_ms_of_the_hub_receiving_it | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_streamed_lines_are_recorded_in_batches.py::test_streamed_lines_cost_few_statements_each | never-freezes family: built on hub/tests/_loop_lag.py or guards a path against freezing the loop
+hub/tests/test_checks_run_before_review.py::test_ending_a_run_on_older_work_counts_against_the_budget | Fix flaky test task task-836406cf30c2
+hub/tests/test_the_shell_judge_reads_a_word_whole.py::test_the_1_7b_rows_name_the_claimed_reason | Fix flaky test task task-152ebf2e077a
+hub/tests/test_ui_staleness.py::TestUiStalenessWarning::test_warns_when_source_is_newer | Fix flaky test task task-94746675a7ac
+hub/tests/test_checks_reuse_a_pass_and_confirm_a_failure.py::test_pytest_xdist_sizes_auto_by_the_variable | Fix flaky test task task-ecc5aa118360
+hub/tests/test_a_spec_is_done_when_its_work_has_landed.py::test_a_cap_holding_a_fix_task_shows_on_its_card_and_the_build_still_reads_finished | Fix flaky test task task-ccce1d170d90
+hub/tests/test_suite_carries_no_run_credentials.py::test_a_suite_run_inside_an_agent_run_writes_nothing_to_its_hub | Fix flaky test task task-e9057de5e816
+hub/tests/test_mcp_call_mode.py::test_call_mode_does_not_import_fastmcp | Fix flaky test task task-26dacec80975
+hub/tests/test_scheduler.py::test_a_firing_that_staffs_a_review_stages_review_task_id_not_task_id | Fix flaky test task task-bfdc54992eb9
+hub/tests/test_pty_runner.py::TestTerminateProcessTree::test_kills_a_long_running_process | Fix flaky test task task-5663d11f3aae
+hub/tests/test_pull_the_thread_feed.py::test_a_busy_project_opens_inside_a_second | Fix flaky test task task-c9d09a9fd379 (description)
+hub/tests/test_open_streams_hold_no_connection.py::test_more_operator_streams_than_the_pool_holds_all_open | Fix flaky test task task-c9d09a9fd379 (description)
+hub/tests/test_the_mcp_server_never_guesses_a_hub.py::test_a_server_started_without_a_hub_address_exits_naming_the_variable | Fix flaky test task task-7f2fb437c91d (description)
+hub/tests/test_unchanged_git_facts_are_not_recomputed.py::test_a_read_request_resolves_a_name_once_and_never_beyond_itself | Fix flaky test task task-7f2fb437c91d (description)
+hub/tests/test_task_integration.py::test_later_commits_on_the_branch_are_not_merged | Fix flaky test task task-5c5845f0ae6d (description)
+hub/tests/test_a_stalled_project_wakes_the_mender.py::test_a_stall_wakes_the_mender_once | Fix flaky test task task-5c5845f0ae6d (description)
+hub/tests/test_checks_give_way.py::test_giving_way_is_off_for_an_existing_and_a_new_project_and_changes_nothing | Fix flaky test task task-07368545e839 (description)
+hub/tests/test_mcp_announce.py::test_a_stamp_written_with_no_notify_is_seen_within_one_poll | Fix flaky test task task-07368545e839 (description)
+hub/tests/test_a_task_waits_while_its_run_waits.py::test_the_ask_records_the_deadline_of_the_wait_it_starts | wall-clock assertion at line 507 (spec evidence)
+hub/tests/test_checks_reuse_a_pass_and_confirm_a_failure.py::test_a_check_ends_when_its_process_does_not_when_its_output_closes | wall-clock assertion at line 540 (spec evidence)
+hub/tests/test_checks_run_before_review.py::test_a_fast_check_past_the_budget_does_not_hold_the_completion | wall-clock assertion at line 296 (spec evidence)
+hub/tests/test_copilot_acp_refusal_continuation.py::test_the_continuation_uses_the_remaining_deadline | wall-clock assertion at line 645 (spec evidence)
+hub/tests/test_project_checks_run.py::test_a_check_past_its_timeout_has_its_process_tree_ended | wall-clock assertion at line 99 (spec evidence)
+hub/tests/test_scheduler_store_is_in_memory.py::test_a_job_registers_while_another_session_holds_the_write_lock | wall-clock assertion at line 92 (spec evidence)
