@@ -41338,3 +41338,23 @@ Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `
 **Tier:** 0
 
 `_attach_requirements` (`hub/hub/api/v1/tasks.py:178`), which every task view runs, calls `spec_reading.payloads_for_documents`, and that calls `spec_documents.read_document` once per linked document (`hub/hub/spec_reading.py:61`): `ProjectWorkspace.resolve_relative` (`project_workspace.py:79`, `Path.resolve` → `ntpath.realpath`, two `GetFinalPathNameByHandle` calls on Windows) and then a full `read_text`, all on the event loop's thread. `slice_drafting.offer_for` (`hub/hub/slice_drafting.py:160`, `spec_documents.read_payload`) does the same on the same request. Counted on the loop during one `PATCH /tasks/{id}` to `rejected`, 2026-11-05: five `realpath`s from `_attach_requirements` and one from `offer_for`. Idle they take well under 1 ms each. On a loaded drive repetition the same test failed with "the loop stalled 265 ms: the loop's thread waited on the OS outside its poll ... 0 ms of the thread's CPU ... seen at 10x <frozen ntpath>", which is the loop thread blocked on the filesystem inside one of those calls (1 of 10 loaded repetitions; it did not recur in 17 targeted runs). Every other request and stream waits while a task is listed or moved. **Expected:** the document reads behind a task view run off the loop (`await blocking.run(...)` around `payloads_for_documents`' reads and `offer_for`'s `read_payload`), or come from the listing cache (`read_listed_document`). **Test:** the existing test is left unchanged; a probe that counts filesystem calls on the loop's thread during a task PATCH should find none with the fix.
+
+## F1133 (B) -- a landing batch whose check ran out of time is narrowed and a task is sent back for it
+
+**Status:** fixed (2026-11-05, AW-39): `run_batch_checks` treats `project_checks.unjudged_timeout` as unjudged (no confirmation, no narrowing); `_decide` retries the batch once and holds it for the operator on a second consecutive one. Test: `hub/tests/test_a_landing_timeout_is_unjudged.py`.
+**Source:** found by driving: the operator's Hub, batch `lbat-88e85abef018`, 2026-11-05 (ruff printed "All checks passed!", then ran past its 120 s limit; the batch ended "task-1ab6c8aa23a1 broke its checks" and AWOAW-3 went back to its builder)
+**Theme:** Landing queue
+**Ready:** yes
+**Tier:** 0
+
+`landing_queue._decide` / `_narrow` never consulted `unjudged_timeout`, so a timeout that named no failing test was blamed on the culprit of a binary search. **Expected:** nobody sent back; retried once as `hub-fault-retried-once` does for per-task runs, then surfaced.
+
+## F1134 (B) -- a batch that ends leaves its check run `running` forever
+
+**Status:** fixed (2026-11-05, AW-39): `_end_batch`, `_record_landed` and `_not_landed` end the batch's `TaskCheckRun` with the batch's outcome (`passed` where landed, else `error` with its reason); `close_orphaned_check_runs` does the same at Hub start, before the leftover-run interruption. Test: `hub/tests/test_a_landing_timeout_is_unjudged.py`.
+**Source:** found by driving: the operator's Hub, batch `lbat-5f7eb508e749` landed 16:47 while `chk-c220c528582d` stayed `running` with no `ended_at`, inflating work tallies' check seconds
+**Theme:** Landing queue
+**Ready:** yes
+**Tier:** 0
+
+Any path that moved the batch past `checking` without `run_batch_checks` reaching its final `_record_run` (a cancelled task, a reconcile settling the batch) left the run open.

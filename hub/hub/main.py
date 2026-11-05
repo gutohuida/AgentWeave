@@ -599,8 +599,14 @@ async def lifespan(app: FastAPI):
     # A check run a previous Hub left `running` is `interrupted` (approval-runs-the-projects-checks
     # D4), and run again now for a task still waiting for review: nothing about its work was judged
     # (`checks-know-their-phase-and-give-way-to-the-user`, FR-8).
+    from . import landing_queue
     from .project_checks import interrupt_leftover_runs, schedule_rerun_after_hub_stop
 
+    # A run left `running` by a batch that is no longer checking takes the batch's outcome first.
+    try:
+        await landing_queue.close_orphaned_check_runs()
+    except Exception:  # noqa: BLE001 -- the interruption below still ends it
+        logger.warning("could not close check runs of ended batches", exc_info=True)
     await interrupt_leftover_runs()
     schedule_rerun_after_hub_stop()
     # A landing batch a previous Hub left checking is queued again in order, and one that had moved
