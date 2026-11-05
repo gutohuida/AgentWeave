@@ -37,7 +37,9 @@ def running_hub(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_hub_resolve_launch_url", lambda port, cwd: cli._hub_url(port))
     opened: list = []
     monkeypatch.setattr(
-        cli, "_open_app_with_splash", lambda start, warm, port=8000: opened.append(port) or 0
+        cli,
+        "_open_app_with_splash",
+        lambda start, warm, port=8000, profile="default": opened.append(port) or 0,
     )
     started: list = []
     monkeypatch.setattr(cli, "_hub_pid_running", lambda **kw: started.append(kw))

@@ -1,4 +1,8 @@
-"""GET /api/v1/projects/{project_id}/status — project health snapshot."""
+"""GET /api/v1/projects/{project_id}/status — project health snapshot.
+
+GET /api/v1/work/running — the instance-wide answer to "what work is running", which the app
+window asks before closing stops the Hub (change `agentweave-is-its-own-app-on-windows`, D4).
+"""
 
 import asyncio
 from datetime import datetime, timedelta, timezone
@@ -8,13 +12,28 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...auth import get_project
+from ... import builds as builds_module
+from ... import landing_queue
+from ...auth import get_operator, get_project
 from ...db.engine import get_session
-from ...db.models import InboundQueueEntry, Message, Question, Task
+from ...db.models import (
+    Build,
+    InboundQueueEntry,
+    Message,
+    OperatorCredential,
+    Project,
+    Question,
+    Run,
+    SpecDocument,
+    Task,
+    TaskCheckRun,
+    TaskLanding,
+)
 from ...schemas.common import StatusResponse
 from ...schemas.messages import OPERATOR_SENDER
 
 router = APIRouter(prefix="/status", tags=["status"])
+instance_router = APIRouter(prefix="/work", tags=["status"])
 
 _ACTIVE_TASK_STATUSES = ["in_progress", "assigned", "pending"]
 
@@ -102,3 +121,64 @@ async def get_status(
         question_counts={"unanswered": unanswered_qs or 0, "total": total_qs or 0},
         agents_active=agents_active,
     )
+
+
+#: A landing in one of these is being worked on now: queued for the next batch, in a batch being
+#: checked, or moving main. `held` is not: it waits on a prerequisite or the operator, and would
+#: wait the same with the Hub stopped.
+_LANDING_IN_PROGRESS = (landing_queue.QUEUED, landing_queue.CHECKING, landing_queue.LANDING)
+
+
+@instance_router.get("/running")
+async def get_work_running(
+    operator: OperatorCredential = Depends(get_operator),
+    session: AsyncSession = Depends(get_session),
+):
+    """What work is running on this Hub, across every project (FR-9).
+
+    Work is an agent turn, a check run, a landing, or a build that has not ended, even between its
+    firings, because a build holds tasks in flight. An enabled job or loop that is not a build is
+    not work: with no turn in progress it only misses firings while the Hub is stopped (operator,
+    2026-11-04). Its turns, while one runs, are counted as turns.
+    """
+    del operator
+    turns = (
+        await session.execute(
+            select(Run.agent, Project.name)
+            .join(Project, Project.id == Run.project_id)
+            .where(Run.status == "running")
+            .order_by(Run.started_at)
+        )
+    ).all()
+    check_runs = await session.scalar(
+        select(func.count()).select_from(TaskCheckRun).where(TaskCheckRun.state == "running")
+    )
+    landings = await session.scalar(
+        select(func.count())
+        .select_from(TaskLanding)
+        .where(TaskLanding.state.in_(_LANDING_IN_PROGRESS))
+    )
+    build_rows = (
+        await session.execute(
+            select(Build.id, SpecDocument.title, SpecDocument.path, Project.name)
+            .join(Project, Project.id == Build.project_id)
+            .outerjoin(SpecDocument, SpecDocument.id == Build.document_id)
+            .where(Build.state == builds_module.RUNNING)
+            .order_by(Build.created_at)
+        )
+    ).all()
+    builds = [
+        {"id": row[0], "title": row[1] or row[2] or row[0], "project": row[3]} for row in build_rows
+    ]
+    counts = {
+        "turns": len(turns),
+        "check_runs": check_runs or 0,
+        "landings": landings or 0,
+        "builds": len(builds),
+    }
+    return {
+        "running": any(counts.values()),
+        **counts,
+        "turn_agents": [{"agent": row[0], "project": row[1]} for row in turns],
+        "build_list": builds,
+    }

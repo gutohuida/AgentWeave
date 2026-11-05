@@ -38,7 +38,7 @@ def native_hub(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_APP_WINDOW_POLL_SECONDS", 0.02, raising=False)
     killed = []
     monkeypatch.setattr(cli, "_hub_pid_running", lambda **kw: 4242)
-    monkeypatch.setattr(cli, "_hub_native_confirmed", lambda port: True)
+    monkeypatch.setattr(cli, "_hub_native_answer", lambda port, patience=0: cli._HUB_ANSWERED)
     monkeypatch.setattr(cli, "_hub_kill_pid", killed.append)
     fake = _BlockingWebview()
     monkeypatch.setitem(sys.modules, "webview", fake)

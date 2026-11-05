@@ -13,6 +13,11 @@ interface AppWindowApi {
   attention?: (count: number) => Promise<unknown>
   foreground?: () => Promise<boolean>
   sound?: (enabled: boolean) => Promise<unknown>
+  /** The close prompt's answer (`components/app/ClosePrompt`). */
+  close_choice?: (choice: 'stop' | 'keep' | 'cancel') => Promise<unknown>
+  /** App settings' 'Closing the window leaves AgentWeave running', kept by the launcher. */
+  close_keeps_running?: () => Promise<boolean>
+  set_close_keeps_running?: (on: boolean) => Promise<boolean>
 }
 
 export function appWindowApi(): AppWindowApi | null {

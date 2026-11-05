@@ -556,7 +556,7 @@ class TestAppModeNativeWindow:
 
         calls = []
         monkeypatch.setattr(
-            cli, "_open_app_window_native", lambda url: calls.append(("native", url)) or True
+            cli, "_open_app_window_native", lambda url, **_kw: calls.append(("native", url)) or True
         )
         monkeypatch.setattr(cli, "_open_app_window", lambda url: calls.append(("fallback", url)))
 
@@ -590,7 +590,7 @@ class TestAppModeNativeWindow:
         monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResp())
 
         calls = []
-        monkeypatch.setattr(cli, "_open_app_window_native", lambda url: False)
+        monkeypatch.setattr(cli, "_open_app_window_native", lambda url, **_kw: False)
         monkeypatch.setattr(cli, "_open_app_window", lambda url: calls.append(("fallback", url)))
 
         result = cli._hub_native_start(

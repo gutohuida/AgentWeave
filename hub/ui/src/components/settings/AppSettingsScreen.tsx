@@ -1,6 +1,8 @@
 import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { Segmented } from '@/components/ui/segmented'
+import { Switch } from '@/components/ui/switch'
+import { appWindowApi } from '@/hooks/useNotifications'
 import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settings'
 import { applyColorMode } from '@/lib/colorMode'
 import type { AppSettingsSection } from '@/lib/navigation'
@@ -46,7 +48,12 @@ export function AppSettingsScreen({
       body = <AppearanceSettings />
       break
     case 'connection':
-      body = <ConnectionSettings onOpenSetup={onOpenSetup} />
+      body = (
+        <>
+          <ConnectionSettings onOpenSetup={onOpenSetup} />
+          <CloseSettings />
+        </>
+      )
       break
   }
   return (
@@ -106,6 +113,67 @@ function ConnectionSettings({ onOpenSetup }: { onOpenSetup: () => void }) {
               Change
             </Button>
           </div>
+        }
+      />
+    </SettingsGroup>
+  )
+}
+
+/**
+ * 'Closing the window leaves AgentWeave running' (change `agentweave-is-its-own-app-on-windows`,
+ * D5): the rollback to how closing worked before close-means-stop. The launcher keeps it, beside
+ * the window's size and place, because it reads it before it asks the Hub anything; the page reads
+ * and writes it through the window's bridge. Shown only in the app window, the one place it acts.
+ */
+export function CloseSettings() {
+  const [keepsRunning, setKeepsRunning] = React.useState<boolean | null>(null)
+
+  React.useEffect(() => {
+    let live = true
+    const read = () => {
+      const api = appWindowApi()
+      if (!api?.close_keeps_running) return
+      api
+        .close_keeps_running()
+        .then((on) => {
+          if (live) setKeepsRunning(Boolean(on))
+        })
+        .catch(() => {})
+    }
+    read()
+    // pywebview injects its bridge once the page has loaded; a page that rendered first asks again.
+    window.addEventListener('pywebviewready', read)
+    return () => {
+      live = false
+      window.removeEventListener('pywebviewready', read)
+    }
+  }, [])
+
+  if (keepsRunning === null) return null
+  const change = (on: boolean) => {
+    setKeepsRunning(on)
+    appWindowApi()
+      ?.set_close_keeps_running?.(on)
+      ?.then((saved) => {
+        if (!saved) setKeepsRunning(!on)
+      })
+      .catch(() => setKeepsRunning(!on))
+  }
+  return (
+    <SettingsGroup
+      title="Closing the window"
+      description="Closing the window stops AgentWeave, and asks first when work is running."
+    >
+      <SettingsRow
+        label="Closing the window leaves AgentWeave running"
+        description="The window closes and the Hub and its agents carry on, as before. Kept by this app, for this Hub."
+        control={
+          <Switch
+            checked={keepsRunning}
+            onCheckedChange={change}
+            aria-label="Closing the window leaves AgentWeave running"
+            data-testid="close-keeps-running"
+          />
         }
       />
     </SettingsGroup>

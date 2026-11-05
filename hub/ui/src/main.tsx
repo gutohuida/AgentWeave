@@ -10,6 +10,7 @@ import './styles/primitives.css'
 import './styles/shell.css'
 import App from './App.tsx'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
+import { ClosePrompt } from './components/app/ClosePrompt'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,5 +28,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <App />
       </QueryClientProvider>
     </ErrorBoundary>
+    {/* Outside the boundary: a page that crashed can still answer the window's close. */}
+    <ClosePrompt />
   </React.StrictMode>,
 )

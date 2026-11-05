@@ -108,7 +108,9 @@ ASFW_ANY = 0xFFFFFFFF
 CONSOLE_CLASSES = {"ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS"}
 # A new terminal window owned by Windows Terminal (not by our process tree, since Windows 11 hands a
 # new console to the default terminal) is ours if its title names one of the app's own processes.
-OURS_IN_TITLE = re.compile(r"python|uvicorn|agentweave|claude|conhost|openconsole", re.I)
+OURS_IN_TITLE = re.compile(
+    r"python|uvicorn|agentweave|claude|conhost|openconsole|taskkill|docker", re.I
+)
 
 
 def _text(fn, hwnd: int) -> str:
@@ -253,7 +255,8 @@ def processes() -> list[dict]:
         timeout=60,
         creationflags=0x08000000,  # CREATE_NO_WINDOW: the drive itself must not flash a console
     )
-    rows = json.loads(done.stdout or "[]")
+    # strict=False: a command line may carry a control character (2026-11-05).
+    rows = json.loads(done.stdout or "[]", strict=False)
     return rows if isinstance(rows, list) else [rows]
 
 
@@ -450,7 +453,11 @@ class App:
         rows = processes()
         leftover = descendants(rows, set(hub_pids(self.port, rows)) | self.pids)
         for pid in leftover:
-            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                creationflags=0x08000000,
+            )
         for proc in self.launchers:
             try:
                 proc.wait(timeout=10)
@@ -545,6 +552,10 @@ def step_identity(app: App, hwnd: int) -> None:
 
 
 def step_second_launch(app: App, hwnd: int) -> None:
+    # The window registers itself (its marker) once it has left the splash for the app; a launch
+    # before that is a launch during start-up, not one "while the app window is open".
+    registered = wait_for(lambda: list(HUB_HOME.glob(f"window-{app.port}-*.open")), 60, 0.5)
+    note(f"window marker for :{app.port}: {[m.name for m in registered or []]}")
     user32.ShowWindow(hwnd, SW_MINIMIZE)
     time.sleep(1.0)
     check("second: the window was minimized before the launch", bool(user32.IsIconic(hwnd)))
@@ -673,7 +684,14 @@ def run_status(app: App, run_id: str) -> str:
 
 
 def choose_in_page(hwnd: int, label: str) -> bool:
-    """Invoke the page's button whose name starts with `label`, by UI Automation, as a click."""
+    """Invoke the page's button whose name starts with `label`, by UI Automation, as a click.
+
+    Retried for 20 s: WebView2 builds its page's accessibility tree only once something asks, so
+    the first look can see an empty document (2026-11-05, AWOAW-3's drive)."""
+    return bool(wait_for(lambda: _choose_in_page(hwnd, label), 20, 1.0))
+
+
+def _choose_in_page(hwnd: int, label: str) -> bool:
     script = rf"""
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $root = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]{hwnd})
