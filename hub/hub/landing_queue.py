@@ -1316,6 +1316,7 @@ async def run_batch_checks(
     unjudged = False
     try:
         async with project_checks._semaphore():
+            await project_checks._took_slot(run_id)  # FR-1: the batch's wait survives a restart
             for check, already in zip(checks, planned, strict=True):
                 result = already or project_checks.skipped(check, changed)
                 if result is None:

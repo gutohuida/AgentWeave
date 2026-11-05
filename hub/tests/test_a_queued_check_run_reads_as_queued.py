@@ -54,9 +54,9 @@ async def test_a_run_waiting_for_a_slot_says_it_is_queued_not_running(
             slots.release()
     await project_checks.drain()
     async with async_session_factory() as db:
-        assert (await db.get(TaskCheckRun, run_id)).state == "passed"
+        run = await db.get(TaskCheckRun, run_id)
+    assert run.state == "passed" and run.slot_at is not None and run.slot_at > run.started_at
     assert run_id not in project_checks._waiting_for_slot
-    assert run_id not in project_checks._slot_waited
 
 
 async def test_a_previous_runs_duration_leaves_out_its_wait_for_a_slot():
