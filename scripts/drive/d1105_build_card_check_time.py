@@ -36,7 +36,7 @@ from playwright.sync_api import sync_playwright
 d.TMP = d.TMP.parent.parent / "drive1105-build-card-check-time" / d.STAMP
 DOC = "spec/changes/two-notes/spec.json"
 B1, B2, CHECKER = "BuilderOne", "BuilderTwo", "Checker"
-LIMIT = 25 * 60
+LIMIT = 25 * 60  # a Haiku build+review+land of two tasks takes 10-20 min; the log prints progress
 SECONDS_PER_CHECK = 25
 TOLERANCE = 2.0  # seconds: timestamps are stored to the microsecond, the figure rounds
 
@@ -213,10 +213,11 @@ def main():
                 meter = labels[0] if labels else ""
                 d.check("page: a Checks meter of its own is drawn, with running and waiting parts",
                         "running" in meter.lower() and "waiting" in meter.lower(), f"{labels}")
-                shown = {format_duration(round(total) + k) for k in range(-3, 4)}
-                d.check("page: the Checks meter's total equals the check-run route's sum",
-                        any(f"total {t}" in meter or meter.endswith(t) or t in meter for t in shown),
-                        f"meter {meter!r}, route {total:.1f}s (accepts {sorted(shown)[:3]}...)")
+                parts = meter_seconds(meter)
+                got = sum(parts.get(k, 0) for k in ("running", "waiting"))
+                d.check("page: the Checks meter's running + waiting parts add up to the check-run route's sum",
+                        {"running"} <= parts.keys() and abs(got - total) <= TOLERANCE + 1,
+                        f"meter {meter!r} parts {parts}, route {total:.1f}s")
                 d.check("page: the landing wait is shown",
                         page.get_by_text("landing wait", exact=False).count() > 0, text[:300])
             except Exception as exc:  # noqa: BLE001 -- reported as the check's detail
@@ -236,13 +237,22 @@ def main():
     sys.exit(1 if bad else 0)
 
 
-def format_duration(seconds):
-    """Port of hub/ui/src/lib/format.ts formatDuration, which the card uses."""
-    s = max(0, round(seconds))
-    if s < 60:
-        return f"{s}s"
-    m = s // 60
-    return f"{m}m {s % 60}s" if m < 60 else f"{m // 60}h {m % 60}m"
+def meter_seconds(label):
+    """`{part: seconds}` from a Bar's aria-label such as `Checks: Running 22s, Waiting 1m 5s`.
+
+    Durations use hub/ui/src/lib/format.ts formatDuration: `Ns`, `Nm Ns`, `Nh Nm`. A part whose figure
+    is not a duration (`unknown`) is left out. Matching whole words keeps `6s` from reading as `16s`.
+    """
+    import re
+
+    out = {}
+    for name, figure in re.findall(r"(\w[\w ]*?) (\d+h \d+m|\d+m \d+s|\d+s)(?=,|$)", label.split(":", 1)[-1]):
+        h = re.fullmatch(r"(\d+)h (\d+)m", figure)
+        m = re.fullmatch(r"(\d+)m (\d+)s", figure)
+        sec = (int(h[1]) * 3600 + int(h[2]) * 60 if h else
+               int(m[1]) * 60 + int(m[2]) if m else int(figure[:-1]))
+        out[name.strip().lower()] = sec
+    return out
 
 
 def tidy(state):
