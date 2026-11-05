@@ -264,7 +264,7 @@ export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): 
 
 // ── Builds ──────────────────────────────────────────────────────────────
 
-const NO_FIGURES: Pick<BuildFigures, 'runs' | 'time' | 'cost' | 'unpriced' | 'checks'> = {
+const NO_FIGURES: Pick<BuildFigures, 'runs' | 'time' | 'cost' | 'unpriced' | 'checks' | 'landing'> = {
   runs: 0,
   time: { building: 0, reviewing: 0, checks: 0, held: 0, review: 0, waiting: 0 },
   cost: { build: 0, review: 0, lead: 0, mend: 0 },
@@ -300,6 +300,7 @@ export function buildViews(builds: SpecBuild[], tasks: Task[], figures: Record<s
       runs: mine.runs,
       unpriced: mine.unpriced,
       checks: mine.checks,
+      landing: mine.landing,
     }
   })
 }

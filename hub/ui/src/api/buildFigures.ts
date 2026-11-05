@@ -14,7 +14,29 @@ export interface BuildFigures {
   cost: { build: number | null; review: number | null; lead: number | null; mend: number | null }
   /** Runs counted beside the cost: no cost was reported for them. */
   unpriced: number
-  checks: { runs: number; passed: number; failed: number; seconds: number }
+  checks: BuildChecks
+  /** Time from a task's last approval to its landing on main. */
+  landing?: BuildLanding
+}
+
+/** The build's check runs. `waiting_seconds` is null when no run has a recorded slot time. */
+export interface BuildChecks {
+  runs: number
+  passed: number
+  failed: number
+  seconds: number
+  timed_out?: number
+  running_seconds?: number
+  waiting_seconds?: number | null
+  no_slot_runs?: number
+}
+
+export interface BuildLanding {
+  landed: number
+  total_seconds: number
+  longest_seconds: number
+  waiting: number
+  longest_waiting_seconds: number
 }
 
 const LIVE_REFRESH_MS = 5000
