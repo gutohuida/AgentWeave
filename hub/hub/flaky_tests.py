@@ -66,7 +66,7 @@ def _aware(value: Optional[datetime]) -> Optional[datetime]:
 def flakes_in(results: Any) -> List[Tuple[str, List[str], str]]:
     """The flakes one run's results recorded: (check name, failed test ids, how it was re-run).
 
-    An empty test list means the whole check was re-run (pytest did not name every failure)."""
+    An empty test list means the whole check was re-run (its report named no failing test)."""
     found: List[Tuple[str, List[str], str]] = []
     for result in results or []:
         if not isinstance(result, dict) or not isinstance(result.get("flaky"), dict):
@@ -81,7 +81,8 @@ def flakes_in(results: Any) -> List[Tuple[str, List[str], str]]:
 @dataclass
 class FlakyTest:
     check: str
-    #: The pytest node id, or None when the whole check flaked without naming a test.
+    #: The test id the check's report gave (`classname::name`), or None when the whole check
+    #: flaked without naming a test.
     test: Optional[str]
     occurrences: int = 0
     first_seen: Optional[datetime] = None
@@ -192,7 +193,7 @@ def fix_task_text(flaky: Iterable[Dict[str, Any]]) -> Tuple[str, str]:
         )
     lines += [
         "",
-        "Done when each listed test passes 20 consecutive runs under `-n 8` alongside the full "
+        "Done when each listed test passes 20 consecutive runs under load alongside the full "
         "suite, and the fix explains the race it removed.",
     ]
     return title, "\n".join(lines)
@@ -245,7 +246,8 @@ async def record_flake(run_id: str, result: Dict[str, Any]) -> None:
 
 
 def normalised_test(test: str) -> str:
-    return test.strip().replace("\\", "/")
+    """A test id as recorded: the report's own, so nothing but surrounding space is changed."""
+    return test.strip()
 
 
 async def _fix_events(session: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
@@ -308,6 +310,18 @@ def fix_task_text_for(
     main = (run.main_sha or "")[:12]
     on_main = [e for e in entries if e["kind"] != "flaky"]
     flaky = [e for e in entries if e["kind"] == "flaky"]
+    # The file each test's report gave, where it gave one (`checks-report-which-tests-failed-in-
+    # any-language` FR-2): an id is `classname::name`, which need not say where the test is.
+    files: Dict[Tuple[str, str], str] = {}
+    for result in run.results or []:
+        if isinstance(result, dict) and isinstance(result.get("test_files"), dict):
+            for test, path in result["test_files"].items():
+                files[(str(result.get("name")), str(test))] = str(path)
+
+    def where(entry: Dict[str, str]) -> str:
+        path = files.get((entry["check"], entry["test"]))
+        return f"{entry['check']}, in {path}" if path else entry["check"]
+
     if len(entries) == 1:
         entry = entries[0]
         title = (
@@ -324,10 +338,10 @@ def fix_task_text_for(
         "",
     ]
     for entry in on_main:
-        lines.append(f"- `{entry['test']}` ({entry['check']}): fails on main at {main} too")
+        lines.append(f"- `{entry['test']}` ({where(entry)}): fails on main at {main} too")
     for entry in flaky:
         lines.append(
-            f"- `{entry['test']}` ({entry['check']}): flaky -- failed in the run and passed when "
+            f"- `{entry['test']}` ({where(entry)}): flaky -- failed in the run and passed when "
             "rerun on its own"
         )
     excerpts = []

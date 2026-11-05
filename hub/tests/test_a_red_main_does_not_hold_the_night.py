@@ -7,7 +7,8 @@ waited with it. Whether main failed the same *test* was never recorded.
 
 This is the slice's acceptance drive. Real git repositories, a real pytest check run by the Hub on
 the merged commit and on main, and the real agent route (`PATCH /agent-actions/tasks/{id}` with a
-reviewer's run credential).
+reviewer's run credential). The check writes a JUnit report and re-runs its failing tests through
+the project's own wrapper (`checks-report-which-tests-failed-in-any-language`, FR-2, FR-6).
 """
 
 from __future__ import annotations
@@ -25,16 +26,21 @@ from hub.db.models import AIJob, EventLog, Loop, Project, Run, SpecDocument, Tas
 from hub.requirement_gate import approval_held_for_operator
 from hub.worktrees import task_branch_name
 
+from .test_a_failing_batch_is_narrowed import RERUN
 from .test_task_integration import commit_on_branch, commits_on, git, make_repo, set_main_branch
 
 pytestmark = pytest.mark.asyncio
 
 PY = f'"{sys.executable}"'
-#: The project's check: plain pytest over the checked tree, as the operator's `hub-tests` is.
+#: The project's check: plain pytest over the checked tree writing a report, as the operator's
+#: `hub-tests` is, re-run through the wrapper `_repo` commits.
 PYTEST = {
     "name": "pytest",
-    "command": f"{PY} -m pytest -q -p no:cacheprovider -p no:randomly",
+    "command": f"{PY} -m pytest -q -p no:cacheprovider -p no:randomly "
+    "-o junit_family=xunit1 --junitxml=report.xml",
     "timeout_seconds": 120,
+    "report_path": "report.xml",
+    "rerun_command": f"{PY} rerun.py {{tests}}",
 }
 #: Main is red: `test_a` fails there. `test_b` passes on main.
 LEDGER = "A = 1\nB = 2\n"
@@ -43,8 +49,9 @@ TESTS = (
     "def test_a():\n    assert ledger.A == 2, 'main is red'\n\n\n"
     "def test_b():\n    assert ledger.B == 2\n"
 )
-TEST_A = "test_ledger.py::test_a"
-TEST_B = "test_ledger.py::test_b"
+#: The tests as the report names them: `classname::name`.
+TEST_A = "test_ledger::test_a"
+TEST_B = "test_ledger::test_b"
 TASK = "task-c0ffee00a001"
 TASK2 = "task-c0ffee00a002"
 LOOP = "loop-red-main"
@@ -84,7 +91,13 @@ def _flaky_test(counter: Path) -> str:
 def _repo(repo: Path, files=None) -> None:
     """A repository whose main holds the ledger and its tests (red on `test_a`)."""
     make_repo(repo)
-    for name, content in {"ledger.py": LEDGER, "test_ledger.py": TESTS, **(files or {})}.items():
+    for name, content in {
+        "ledger.py": LEDGER,
+        "test_ledger.py": TESTS,
+        "rerun.py": RERUN,
+        ".gitignore": "report.xml\n",
+        **(files or {}),
+    }.items():
         (repo / name).write_text(content, encoding="utf-8")
         git(repo, "add", name)
     git(repo, "commit", "-q", "-m", "the ledger and its tests")
@@ -342,7 +355,7 @@ async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
     from hub import flaky_tests
 
     [fix] = await _fix_tasks()
-    assert "test_timing.py::test_flaky" in fix.title and "flaky" in fix.description
+    assert "test_timing::test_flaky" in fix.title and "flaky" in fix.description
     async with async_session_factory() as session:
         listed = await flaky_tests.report(session, "proj-test")
     assert listed["flaky"] == [] and listed["handled"]["task_id"] == fix.id, listed
@@ -352,7 +365,7 @@ async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
     transition = await _approval(TASK)
     assert transition.override_by == "hub"
     reason = transition.override_reason or ""
-    assert "test_timing.py::test_flaky" in reason and "passed when rerun on its own" in reason
+    assert "test_timing::test_flaky" in reason and "passed when rerun on its own" in reason
     assert fix.id in reason
 
 
@@ -386,7 +399,7 @@ async def test_a_touched_test_is_the_tasks(app, tmp_path, tmp_path_factory):
     run = await _latest_run(TASK2)
     assert run.state == "failed", run.results
     [result] = run.results
-    assert result["touched_tests"] == ["test_timing.py::test_flaky"]
+    assert result["touched_tests"] == ["test_timing::test_flaky"]
     assert await _fix_tasks() == []
 
 

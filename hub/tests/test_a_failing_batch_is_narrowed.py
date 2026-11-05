@@ -2,9 +2,11 @@
 narrow-and-hold).
 
 The roadmap's done criterion: a deliberately broken task among four is the only one sent back. Real
-git, and the project's check a plain pytest run over the checked tree, with a `conftest.py` on main
-that records every run's selected test ids in a file outside the repository -- so "the check ran on
-the whole tree twice and the narrowed runs ran one test" is counted, not inferred.
+git, and the project's check a plain pytest run over the checked tree writing a JUnit report, re-run
+through the project's own wrapper (`rerun.py`, `checks-report-which-tests-failed-in-any-language`
+FR-6), with a `conftest.py` on main that records every run's selected test ids in a file outside the
+repository -- so "the check ran on the whole tree twice and the narrowed runs ran one test" is
+counted, not inferred.
 """
 
 from __future__ import annotations
@@ -37,9 +39,20 @@ pytestmark = pytest.mark.asyncio
 PY = f'"{sys.executable}"'
 PYTEST = {
     "name": "pytest",
-    "command": f"{PY} -m pytest -q -p no:cacheprovider -p no:randomly",
+    "command": f"{PY} -m pytest -q -p no:cacheprovider -p no:randomly "
+    "-o junit_family=xunit1 --junitxml=report.xml",
     "timeout_seconds": 120,
+    "report_path": "report.xml",
+    "rerun_command": f"{PY} rerun.py {{tests}}",
 }
+#: The project's re-run wrapper: each `classname::name` id to a pytest node id, then pytest.
+RERUN = """import subprocess, sys
+ids = [i.split("::", 1) for i in sys.argv[1:]]
+nodes = [module.replace(".", "/") + ".py::" + name for module, name in ids]
+sys.exit(subprocess.call([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                          "-p", "no:randomly", "-o", "junit_family=xunit1",
+                          "--junitxml=report.xml", *nodes]))
+"""
 TASKS = "/api/v1/projects/proj-test/tasks"
 #: Fails once `broken.txt` exists: the file a broken task adds.
 SUITE = (
@@ -47,10 +60,12 @@ SUITE = (
     "def test_ok():\n    assert True\n\n\n"
     "def test_no_marker():\n    assert not os.path.exists('broken.txt'), 'broken'\n"
 )
-NO_MARKER = "test_suite.py::test_no_marker"
+#: The failing test as its report names it (`classname::name`), and as the conftest's ledger does.
+NO_MARKER = "test_suite::test_no_marker"
+NO_MARKER_NODE = "test_suite.py::test_no_marker"
 #: Main is red here: `test_red` fails on main and on every task's tree.
 RED = "def test_red():\n    assert 1 == 2, 'main is red'\n"
-RED_ID = "test_red.py::test_red"
+RED_ID = "test_red::test_red"
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +80,8 @@ def _repo(root: Path, ledger: Path, extra: Optional[Dict[str, str]] = None) -> N
     make_repo(root)
     files = {
         "test_suite.py": SUITE,
+        "rerun.py": RERUN,
+        ".gitignore": "report.xml\n",
         "conftest.py": (
             "def pytest_collection_modifyitems(session, config, items):\n"
             f"    with open(r'{ledger}', 'a', encoding='utf-8') as out:\n"
@@ -241,7 +258,7 @@ async def test_a_broken_task_among_four_is_the_only_one_sent_back(
     runs = _runs(ledger)
     whole = [run for run in runs if len(run) >= 2]
     assert len(whole) == 2, runs
-    assert all(run == [NO_MARKER] for run in runs if len(run) < 2), runs
+    assert all(run == [NO_MARKER_NODE] for run in runs if len(run) < 2), runs
     narrowing = first.narrowing
     assert 1 <= len(narrowing) <= 2, narrowing
     assert all(step["tests"] == [NO_MARKER] for step in narrowing), narrowing

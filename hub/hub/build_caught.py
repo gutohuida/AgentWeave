@@ -25,6 +25,10 @@ def _entries(result: Any) -> List[Dict[str, Any]]:
     if not isinstance(result, dict) or result.get("skipped"):
         return []
     touched = set(result.get("touched_tests") or [])
+    # The file the check's report gave for each failing test (FR-2): what `touched_tests` judged
+    # "this build changed the file" by, shown beside the test.
+    recorded = result.get("test_files")
+    files: Dict[str, Any] = recorded if isinstance(recorded, dict) else {}
     found: List[Dict[str, Any]] = []
     for test in result.get("own_tests") or []:
         found.append({"test": test, "kind": "fails on this work", "origin": INTRODUCED})
@@ -34,7 +38,7 @@ def _entries(result: Any) -> List[Dict[str, Any]]:
     for test in result.get("flaky_tests") or flaky.get("tests") or []:
         found.append({"test": test, "kind": project_checks.FLAKY, "origin": CAUGHT})
     if not found and project_checks.failed(result):
-        # A failure named by no test: a timeout, a non-pytest check. Main's answer decides.
+        # A failure named by no test: a timeout, a check without a report. Main's answer decides.
         origin = CAUGHT if project_checks.preexisting(result) else INTRODUCED
         entry = {"test": None, "kind": "check failed", "origin": origin}
         if result.get("whole_check"):
@@ -44,6 +48,8 @@ def _entries(result: Any) -> List[Dict[str, Any]]:
     for entry in found:
         entry["check"] = str(result.get("name") or "check")
         entry["changed_by_build"] = entry["test"] in touched
+        if entry["test"] and files.get(entry["test"]):
+            entry["file"] = str(files[entry["test"]])
         if entry["changed_by_build"]:
             entry["origin"] = INTRODUCED
     return found

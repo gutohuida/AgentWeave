@@ -27,8 +27,10 @@ reused for the same merged *tree* and the same check (`check_digest`), whatever 
 a prerequisite merged into the task branch, or a main move that leaves the merged tree as it was,
 re-runs nothing. A different tree is always checked again. A failure is never reused.
 
-A failure is confirmed before it is charged to the task: the failed tests (pytest node ids parsed
-from the output) or else the whole check are run once more on the same tree. Only a reproduced
+A failure is confirmed before it is charged to the task: the failed tests (the ids the check's
+JUnit XML report names, re-run through the check's own re-run command) or else the whole check are
+run once more on the same tree. The Hub reads no test runner's console output for results and
+rewrites no check's command (`checks-report-which-tests-failed-in-any-language`, FR-7). Only a reproduced
 failure stands; one that passes the second time passes, and the result records the flake.
 
 Only a result that judged the work counts against the task (`checks-know-their-phase-and-give-way-
@@ -53,7 +55,7 @@ import statistics
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -97,8 +99,6 @@ UNJUDGED_STALL = "checks_unjudged"
 WATCH_SECONDS = 30.0
 #: How many of a project's latest decided runs are searched for a passing result on the same tree.
 REUSE_LOOKBACK = 200
-#: A failing check's failed tests are re-run by node id only up to this many; more re-runs the check.
-MAX_RERUN_TESTS = 50
 #: The longest timeout a check marked fast may have (`checks-run-before-anyone-reviews`, FR-1): an
 #: agent's completion waits for the fast checks, so none of them may run for longer than that wait.
 FAST_CHECK_MAX_SECONDS = 120
@@ -629,28 +629,8 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
         "duration_seconds": round(time.monotonic() - started, 1),
         "output_tail": text[-OUTPUT_TAIL_CHARS:],
     }
-    if check.get("report_path"):
-        # The report names the failing tests; the console is for people (FR-2).
-        _judge_by_report(check, cwd, result, timed_out)
-        if failed(result) and not timed_out:
-            excerpt = failure_excerpt(text)
-            if excerpt:
-                result["failure_excerpt"] = excerpt
-        return result
-    if not timed_out and proc.returncode not in (0, None):
-        # Read from the whole output, not the stored tail: the summary may be longer than it.
-        node_ids = failed_test_ids(text)
-        if node_ids:
-            result["failed_tests"] = node_ids
-        else:
-            result["whole_check"] = NO_REPORT_CONFIGURED
-        excerpt = failure_excerpt(text)
-        if excerpt:
-            result["failure_excerpt"] = excerpt
-    if timed_out:
-        named = named_failures(text)
-        if named:
-            result["named_failures"] = named
+    # The report names the failing tests; the console is for people (FR-2, FR-7).
+    _judge_by_report(check, cwd, result, timed_out)
     return result
 
 
@@ -684,6 +664,8 @@ class TestReport:
 
     outcomes: Dict[str, Optional[bool]]
     files: Dict[str, str]
+    #: What the report says about each failing testcase: its failure (or error) message and text.
+    messages: Dict[str, str] = field(default_factory=dict)
 
     @property
     def failing(self) -> List[str]:
@@ -749,6 +731,7 @@ def parse_report(text: str, cwd: Path) -> Optional[TestReport]:
         return None
     outcomes: Dict[str, Optional[bool]] = {}
     files: Dict[str, str] = {}
+    messages: Dict[str, str] = {}
     for case in root.iter("testcase"):
         test = f"{case.get('classname') or ''}::{case.get('name') or ''}"
         failed_ = case.find("failure") is not None or case.find("error") is not None
@@ -759,7 +742,13 @@ def parse_report(text: str, cwd: Path) -> Optional[TestReport]:
             outcomes[test] = False
         if case.get("file") and (failed_ or test not in files):
             files[test] = _relative_file(str(case.get("file")), cwd)
-    return TestReport(outcomes=outcomes, files=files)
+        element = case.find("failure")
+        if element is None:
+            element = case.find("error")
+        if element is not None and test not in messages:
+            said = [str(element.get("message") or "").strip(), (element.text or "").strip()]
+            messages[test] = "\n".join(part for part in said if part)
+    return TestReport(outcomes=outcomes, files=files, messages=messages)
 
 
 def read_report(check: Dict[str, Any], cwd: Path) -> Tuple[Optional[TestReport], str]:
@@ -798,14 +787,17 @@ def _judge_by_report(
         return
     if not failed(result):
         return  # a report naming failures does not fail a check that exited 0 (FR-5)
-    failing = report.failing if report is not None else []
-    if not failing:
+    if report is None or not report.failing:
         result["whole_check"] = how if report is None else REPORT_NAMES_NO_FAILURE
         return
+    failing = report.failing
     result["failed_tests"] = failing
     # Always set for a report's ids, empty when the report gives no file (pytest's xunit2): an id
     # whose file is unknown counts as touched (`touched_tests`), never as a file guessed from it.
     result["test_files"] = {test: report.files[test] for test in failing if test in report.files}
+    excerpt = failure_excerpt(report, failing)
+    if excerpt:
+        result["failure_excerpt"] = excerpt
 
 
 def _shell_argument(test: str) -> Optional[str]:
@@ -842,35 +834,23 @@ def rerun_check(check: Dict[str, Any], tests: Sequence[str]) -> Optional[Dict[st
     """The check that re-runs exactly *tests* -- confirming a failure, asking main, narrowing a
     landing batch -- or `None` to re-run *check* as a whole.
 
-    Through the check's re-run command where it has one (FR-6), its report read by the same rules.
-    A check naming a report but no re-run command is re-run as a whole. One with neither keeps the
-    pytest narrowing until that is retired (task `retire`), so this repository's checks are not
-    judged as a whole before they have their report settings."""
-    if not tests:
+    Only through the check's re-run command (FR-6), its report read by the same rules; a check
+    without one is re-run as a whole. The check's own command is never rewritten (FR-7)."""
+    command = rerun_command(check, tests)
+    if command is None:
         return None
-    if check.get("rerun_command"):
-        command = rerun_command(check, tests)
-        if command is None:
-            return None
-        return {**check, "command": command, "rerun_tests": list(tests)}
-    if check.get("report_path"):
-        return None
-    narrowed = narrowed_command(check["command"], tests)
-    return {**check, "command": narrowed} if narrowed is not None else None
+    return {**check, "command": command, "rerun_tests": list(tests)}
 
 
-_FAILURES_HEADER_RE = re.compile(r"^=+ (?:FAILURES|ERRORS) =+\s*$", re.MULTILINE)
+def failure_excerpt(report: TestReport, failing: Sequence[str]) -> str:
+    """What the report says about each of the *failing* tests -- its id, then its failure message and
+    text -- up to `OUTPUT_TAIL_CHARS`, or `""` where it says nothing.
 
-
-def failure_excerpt(output: str) -> str:
-    """The start of pytest's FAILURES (or ERRORS) section, where the tracebacks are, or `""`.
-
-    The stored tail of a long suite holds only the summary, so a failure's traceback was lost:
-    two gate runs on 2026-10-25 kept `FAILED <node id>` and nothing that said why."""
-    found = _FAILURES_HEADER_RE.search(output)
-    if found is None or len(output) - found.start() <= OUTPUT_TAIL_CHARS:
-        return ""  # none, or already inside the tail
-    return output[found.start() : found.start() + OUTPUT_TAIL_CHARS]
+    The stored tail of a long suite holds only its end, so a failure's traceback was lost: two gate
+    runs on 2026-10-25 kept the failing id and nothing that said why. The report keeps it for every
+    runner, so no console output is searched for it (FR-7)."""
+    parts = [f"{test}\n{report.messages[test]}" for test in failing if report.messages.get(test)]
+    return "\n\n".join(parts)[:OUTPUT_TAIL_CHARS]
 
 
 # --- reuse and confirmation ----------------------------------------------------------------------
@@ -1027,93 +1007,6 @@ async def covering_results(
     return prepared[0], [result for result in prepared[3] if result is not None]
 
 
-#: A pytest short-summary line: `FAILED <node id>[@<xdist group>][ - <message>]`.
-_SUMMARY_LINE_RE = re.compile(r"^(?:FAILED|ERROR) (.+?)(?: - .*)?$", re.MULTILINE)
-_XDIST_GROUP_RE = re.compile(r"@[^\[\]@:]*$")
-_SAFE_NODE_ID_RE = re.compile(r"^[\w./\\:\-\[\]@ ,=+]+$")
-_COUNT_RE = re.compile(r"\b(\d+) (passed|failed|errors?|skipped|deselected|xfailed|xpassed)\b")
-#: pytest's final line: its counts, then ` in <seconds>s`.
-_FINAL_LINE_RE = re.compile(r"\bin \d+(?:\.\d+)?s\b")
-#: pytest options whose value is the next word; kept with it when a command is narrowed to node ids.
-_VALUE_OPTIONS = frozenset(
-    {
-        "-n",
-        "--numprocesses",
-        "--maxprocesses",
-        "--dist",
-        "--tx",
-        "-p",
-        "-c",
-        "-k",
-        "-m",
-        "-o",
-        "--override-ini",
-        "--rootdir",
-        "--confcutdir",
-        "--basetemp",
-        "--tb",
-        "-W",
-        "--pythonwarnings",
-        "--timeout",
-        "--timeout-method",
-        "--maxfail",
-        "--durations",
-        "-r",
-        "--import-mode",
-        "--capture",
-        "--color",
-        "--log-level",
-        "--log-cli-level",
-        "--junitxml",
-        "--junit-xml",
-        "--cov",
-        "--cov-report",
-        "--ignore",
-        "--ignore-glob",
-        "--deselect",
-        "--max-worker-restart",
-        "--asyncio-mode",
-    }
-)
-#: Options that would choose a different set of tests than the node ids given.
-_SELECTION_OPTIONS = frozenset(
-    {"--lf", "--last-failed", "--ff", "--failed-first", "--sw", "--stepwise", "--stepwise-skip"}
-)
-_PYTEST_RE = re.compile(r"(?:^|(?<=\s))(?:\S*[\\/])?(?:py\.test|pytest)(?:\.exe)?(?=\s|$)")
-
-
-def summary_counts(output: str) -> Optional[Dict[str, int]]:
-    """The counts on pytest's final line (`2 failed, 8903 passed, ... in 645.88s`), or `None` where
-    the output ends without one."""
-    for line in reversed(output.strip().splitlines()[-20:]):
-        found = _COUNT_RE.findall(line)
-        if found and _FINAL_LINE_RE.search(line):
-            counts: Dict[str, int] = {}
-            for number, kind in found:
-                kind = "error" if kind.startswith("error") else kind
-                counts[kind] = counts.get(kind, 0) + int(number)
-            return counts
-    return None
-
-
-#: A test pytest reported failed or erroring as it went: the short summary's `FAILED x::t`, xdist's
-#: `[gw0] [ 5%] FAILED x::t`, or verbose `x::t FAILED`.
-_NAMED_FAILURE_RE = re.compile(
-    r"(?:\b(?:FAILED|ERROR) (\S+::\S+))|(?:(\S+::\S+) (?:FAILED|ERROR)\b)", re.MULTILINE
-)
-
-
-def named_failures(output: str) -> List[str]:
-    """Every test *output* names as failed or erroring, whether or not pytest got as far as its
-    final count: what a check that ran out of time had already found (FR-10)."""
-    ids: List[str] = []
-    for match in _NAMED_FAILURE_RE.finditer(output):
-        node = _XDIST_GROUP_RE.sub("", (match.group(1) or match.group(2)).strip())
-        if node and node not in ids:
-            ids.append(node)
-    return ids
-
-
 def unjudged_timeout(result: Dict[str, Any]) -> bool:
     """A check that ran out of time without naming a failing test: it says nothing about the work,
     so it is not the task's failure (FR-10). One that named a failure before its time ran out still
@@ -1121,123 +1014,23 @@ def unjudged_timeout(result: Dict[str, Any]) -> bool:
     return bool(result.get("timed_out")) and not result.get("named_failures")
 
 
-def failed_test_ids(output: str) -> List[str]:
-    """The node ids pytest's short summary names as failed or erroring, or `[]` unless every failure
-    the final count reports is named (a truncated summary is not a list of the failures)."""
-    ids: List[str] = []
-    for match in _SUMMARY_LINE_RE.finditer(output):
-        node = _XDIST_GROUP_RE.sub("", match.group(1).strip())
-        if node and node not in ids:
-            ids.append(node)
-    counts = summary_counts(output)
-    if not ids or counts is None:
-        return []
-    if counts.get("failed", 0) + counts.get("error", 0) != len(ids) or len(ids) > MAX_RERUN_TESTS:
-        return []
-    if not all(_SAFE_NODE_ID_RE.match(node) for node in ids):
-        return []
-    return ids
-
-
-#: pytest-xdist's options: the worker count, which a narrowed run sets to 0 (serial), and the
-#: distribution options, which mean nothing without workers and are dropped (`rerun-on-its-own`).
-_WORKER_OPTIONS = frozenset({"-n", "--numprocesses"})
-_DISTRIBUTION_OPTIONS = frozenset({"--dist", "--maxprocesses", "--tx"})
-_SHORT_WORKERS_RE = re.compile(r"^-n(?!-)\S+$")
-
-
-def narrowed_command(command: str, node_ids: Sequence[str]) -> Optional[str]:
-    """*command* run on *node_ids* alone and serially, or `None` if it is not a plain pytest
-    invocation that can be narrowed safely: its options are kept, the paths it names are replaced by
-    the node ids, and an xdist worker count is set to 0 with the distribution options dropped
-    (`a-red-main-does-not-hold-the-night`, FR-2). A command without `-n` is already serial and gains
-    nothing: `-n 0` needs xdist installed.
-
-    The night of 2026-10-26/27 a timing test passed one narrowed rerun under `-n auto` and failed the
-    next while another suite ran; serial removes the load the rerun made for itself. The same
-    command is what main is asked with, so the two trees are compared like for like."""
-    found = _PYTEST_RE.search(command)
-    if found is None or not node_ids:
-        return None
-    prefix, rest = command[: found.end()], command[found.end() :]
-    if any(char in rest for char in "&|;<>^%!`$()"):
-        return None  # a pipeline or a second command after pytest: not narrowed
-    try:
-        words = shlex.split(rest, posix=False)
-    except ValueError:
-        return None
-    kept: List[str] = []
-    take_value = False
-    drop_value = False
-    serial = False
-    for word in words:
-        if take_value:
-            kept.append(word)
-            take_value = False
-        elif drop_value:
-            drop_value = False
-        elif word.startswith("-"):
-            option = word.split("=", 1)[0]
-            if option in _SELECTION_OPTIONS:
-                continue
-            if option in _WORKER_OPTIONS or _SHORT_WORKERS_RE.match(word):
-                serial = True
-                drop_value = option in _WORKER_OPTIONS and "=" not in word
-                continue
-            if option in _DISTRIBUTION_OPTIONS:
-                drop_value = "=" not in word
-                continue
-            kept.append(word)
-            take_value = word in _VALUE_OPTIONS
-        # anything else is a path or node id the original run selected; the node ids replace it
-    if take_value or drop_value:
-        return None
-    if serial:
-        kept[:0] = ["-n", "0"]
-    quoted = " ".join(f'"{node}"' for node in node_ids)
-    return " ".join(part for part in (prefix, *kept, "--", quoted) if part)
-
-
 def proves_the_tests_pass(result: Dict[str, Any], node_ids: Sequence[str]) -> bool:
-    """Whether a narrowed re-run passed and really ran the tests it named: exit 0, nothing failed,
-    and at least one passed test per node id (a node id that selects nothing would be no proof).
-    A re-run that names a report proves it by its report: every id there, passing (FR-6)."""
-    if "report" in result:
-        passed = set(result.get("passed_tests") or [])
-        return not failed(result) and bool(node_ids) and all(t in passed for t in node_ids)
-    counts = summary_counts(str(result.get("output_tail") or ""))
-    return (
-        not failed(result)
-        and counts is not None
-        and not counts.get("failed")
-        and not counts.get("error")
-        and counts.get("passed", 0) >= len(node_ids)
-    )
+    """Whether a re-run of named tests passed and really ran them: exit 0 and its report shows
+    every id passing (FR-6). An id that selects nothing, or a re-run with no report, is no proof."""
+    passed = set(result.get("passed_tests") or [])
+    return not failed(result) and bool(node_ids) and all(test in passed for test in node_ids)
 
 
 def reproduces_a_test_failure(result: Dict[str, Any]) -> bool:
-    """Whether a narrowed re-run failed *a test* (pytest's exit 1 with a failure counted), not on
-    its own invocation: a usage error (exit 4) or nothing collected (exit 5) proves nothing.
-    A re-run that names a report reproduces one where it failed and its report names a failing
-    test; a failure it names no test for proves nothing (FR-5, FR-6)."""
-    if "report" in result:
-        return failed(result) and not result.get("timed_out") and bool(result.get("failed_tests"))
-    counts = summary_counts(str(result.get("output_tail") or ""))
-    return (
-        result.get("exit_code") == 1
-        and counts is not None
-        and bool(counts.get("failed") or counts.get("error"))
-    )
+    """Whether a re-run of named tests failed *a test*: it failed and its report names a failing
+    test. A failure it names no test for (a usage error, nothing collected, no report) proves
+    nothing (FR-5, FR-6)."""
+    return failed(result) and not result.get("timed_out") and bool(result.get("failed_tests"))
 
 
-def _node_key(node_id: str) -> str:
-    """A node id as compared across runs and trees: pytest prints the separators of the platform."""
-    return node_id.strip().replace("\\", "/")
-
-
-def test_file(node_id: str) -> str:
-    """The repository-relative file a pytest node id names (its path part)."""
-    return _node_key(node_id).split("::", 1)[0]
+def _path_key(path: str) -> str:
+    """A repository path as compared with the paths git reports: forward slashes."""
+    return path.strip().replace("\\", "/")
 
 
 def touched_tests(
@@ -1245,31 +1038,27 @@ def touched_tests(
     changed: Optional[Sequence[str]],
     files: Optional[Dict[str, str]] = None,
 ) -> List[str]:
-    """The node ids whose file is among *changed*, the paths the task's merged work changes against
+    """The test ids whose file is among *changed*, the paths the task's merged work changes against
     the run's main commit (FR-4): a test the task touched is the task's to make pass. Unknown changes
-    count every id as touched -- an override is never automatic on a guess. A report's ids take
-    their file from the report (*files*, `checks-report-which-tests-failed-in-any-language` FR-2),
-    and one whose report gives no file (pytest's default xunit2) is unknown, so touched: its
-    classname is not a path. *files* `None` means pytest node ids, whose path part is the file.
-    """
+    count every id as touched -- an override is never automatic on a guess. An id takes its file
+    from the report (*files*, `checks-report-which-tests-failed-in-any-language` FR-2); one whose
+    report gives no file is unknown, so touched: an id is never read as a path."""
     if changed is None:
         return list(node_ids)
-    paths = {_node_key(path) for path in changed}
+    paths = {_path_key(path) for path in changed}
     if not paths:
         return []  # the work changes no file: no failing test can be one it touched
-    if files is None:
-        return [node for node in node_ids if test_file(node) in paths]
-    return [node for node in node_ids if node not in files or _node_key(files[node]) in paths]
+    files = files or {}
+    return [node for node in node_ids if node not in files or _path_key(files[node]) in paths]
 
 
 def _still_failing(again: Dict[str, Any], node_ids: Sequence[str]) -> List[str]:
-    """Which of *node_ids* a narrowed rerun that reproduced a failure failed again: the ones its
-    summary names, where it names failures among them; else all of them (not known which)."""
-    named = {_node_key(node) for node in again.get("failed_tests") or []}
-    keys = {_node_key(node) for node in node_ids}
-    if not named or not named <= keys:
+    """Which of *node_ids* a re-run that reproduced a failure failed again: the ones its report
+    names, where it names failures among them; else all of them (not known which)."""
+    named = set(again.get("failed_tests") or [])
+    if not named or not named <= set(node_ids):
         return list(node_ids)
-    return [node for node in node_ids if _node_key(node) in named]
+    return [node for node in node_ids if node in named]
 
 
 def confirm_failure(
@@ -1282,8 +1071,8 @@ def confirm_failure(
     """Run a failed check's failure once more on the same tree, and record what happened in
     *result* (blocking; the caller runs it in a thread).
 
-    The failed tests alone, serially, where pytest named every one and the command can be narrowed
-    to them (`a-red-main-does-not-hold-the-night`, FR-2), else the whole check. Reproduced: *result*
+    The failed tests alone, through the check's re-run command, where its report named them and the
+    command with them substituted is short enough (FR-6), else the whole check. Reproduced: *result*
     keeps its failure and gains `confirmed`, and `compared_tests` names the ids main is asked about
     (`_MainBaseline`): those that failed again, and any in a file the task changed. A named id that
     passed the rerun is recorded in `flaky_tests`. Passed: *result* passes, and `flaky` keeps the
@@ -1299,7 +1088,7 @@ def confirm_failure(
         if proves_the_tests_pass(again, node_ids) or reproduces_a_test_failure(again):
             how = "tests"
         else:
-            again = None  # the narrowed command proved nothing either way: run the check
+            again = None  # the re-run proved nothing either way: run the check
     if again is None:
         again = run_one(check, cwd, owner)
     attempt = {
@@ -1361,8 +1150,8 @@ def failed(result: Dict[str, Any]) -> bool:
 
 def preexisting(result: Dict[str, Any]) -> bool:
     """A failure main shares (F605): every test the task's tree failed (after its rerun) fails on
-    the main tip the run was cut from too, compared by pytest node id where pytest named them
-    (`a-red-main-does-not-hold-the-night`, FR-1), else the same check failed there. A run recorded
+    the main tip the run was cut from too, compared by test id where the check's report named
+    them (`a-red-main-does-not-hold-the-night`, FR-1), else the same check failed there. A run recorded
     before this field existed reads as not pre-existing, i.e. as before."""
     return failed(result) and bool(result.get("preexisting"))
 
@@ -1397,15 +1186,15 @@ def not_the_tasks(
     results: Optional[Sequence[Dict[str, Any]]], *, excluded: Sequence[str] = ()
 ) -> Optional[List[Dict[str, str]]]:
     """Every failure and flake in a run's *results*, as `{"check", "test", "kind"}`, where each one
-    is provably not the task's -- the same node id fails on main too, or passed when rerun on its
+    is provably not the task's -- the same test id fails on main too, or passed when rerun on its
     own -- else `None` (`a-red-main-does-not-hold-the-night`, FR-1, FR-4). `[]` for a run with
     neither: nothing to override.
 
     `None` for any failure that is the task's or that cannot be told apart: an id that passes on
     main, a failing or flaky test in a file the task changed, an id in *excluded* (the ids a
-    Hub-filed fix task was filed for), and a failure compared check-level -- a non-pytest check, a
-    timeout, a truncated summary, more than `MAX_RERUN_TESTS`, a command that cannot be narrowed,
-    no main answer. Those keep the answer they had before. A whole-check flake (no test named)
+    Hub-filed fix task was filed for), and a failure compared check-level -- a check without a
+    report or a re-run command, a timeout, a report naming no failing test, a re-run command too
+    long with the ids substituted, no main answer. Those keep the answer they had before. A whole-check flake (no test named)
     passes as before and is not listed: there is no test to name."""
     found: List[Dict[str, str]] = []
     for result in results or []:
@@ -1432,8 +1221,8 @@ def not_the_tasks(
                 return None  # cannot pass with one; read defensively
             tests = result.get("flaky_tests") or result["flaky"].get("tests") or []
             found += [{"check": check, "test": t, "kind": FLAKY} for t in tests]
-    keys = {_node_key(node) for node in excluded}
-    if any(_node_key(entry["test"]) in keys for entry in found):
+    keys = {node.strip() for node in excluded}
+    if any(entry["test"].strip() in keys for entry in found):
         return None
     return found
 
@@ -1451,7 +1240,7 @@ def _record_main_result(result: Dict[str, Any], on_main: Dict[str, Any]) -> None
 def _record_main_tests(
     result: Dict[str, Any], on_main: Dict[str, Any], node_ids: Sequence[str]
 ) -> bool:
-    """Main's answer for exactly *node_ids*, run with the serial narrowed command (FR-1): each id
+    """Main's answer for exactly *node_ids*, run with the check's re-run command (FR-1): each id
     that fails there is shared, each that passes is the task's own. Exit codes and counts are never
     compared. `False` where the run named no answer per id (it ran nothing, or failed without naming
     every failure): the caller asks the whole check instead, as before this change."""
@@ -1461,9 +1250,9 @@ def _record_main_tests(
         failing = list(on_main["failed_tests"])
     else:
         return False
-    keys = {_node_key(node) for node in failing}
-    shared = [node for node in node_ids if _node_key(node) in keys]
-    own = [node for node in node_ids if _node_key(node) not in keys]
+    keys = set(failing)
+    shared = [node for node in node_ids if node in keys]
+    own = [node for node in node_ids if node not in keys]
     result["on_main"] = {
         "exit_code": on_main["exit_code"],
         "timed_out": on_main["timed_out"],
@@ -1480,9 +1269,8 @@ class _MainBaseline:
     """The main tip the run was cut from, checked out on the first failure and kept for the rest.
 
     A failing check is run there at once (F605, D1): its answer decides whether the run goes on.
-    Where the task's tree named its failed tests and they stood their serial rerun
-    (`compared_tests`), main runs the same serial command narrowed to exactly those ids (FR-1);
-    otherwise the whole check. Best-effort: a baseline that cannot be taken leaves the result as it
+    Where the task's tree named its failed tests and they stood their re-run (`compared_tests`),
+    main runs the same re-run command with exactly those ids (FR-1); otherwise the whole check. Best-effort: a baseline that cannot be taken leaves the result as it
     was, charged to the task, and `unavailable` (no main answer is never an automatic override).
     """
 
@@ -2676,6 +2464,10 @@ def failure_report(
             if result.get("timed_out")
             else f"exited {result.get('exit_code')}"
         )
+        # The tests its report named (FR-2), whatever the runner printed.
+        named = list(result.get("failed_tests") or result.get("named_failures") or [])
+        if named:
+            how += f"; failing tests: {', '.join(named)}"
         output = str(result.get("failure_excerpt") or result.get("output_tail") or "").strip()
         lines.append(f"\n{result.get('name')} {how}:\n{output[-OUTPUT_TAIL_CHARS:]}")
     return "\n".join(lines)

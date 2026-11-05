@@ -438,8 +438,11 @@ def test_touched_tests_on_a_recorded_xunit2_report_counts_every_failure(tmp_path
     assert report is not None and report.files == {}
     touched = project_checks.touched_tests(report.failing, ["pkg/test_same.py"], report.files)
     assert touched == report.failing and len(touched) == 3
-    # A pytest node id (no report) still takes its file from its path part.
-    assert project_checks.touched_tests(["a/t.py::x", "b/t.py::y"], ["a/t.py"]) == ["a/t.py::x"]
+    # An id is never read as a path (FR-7): with no file recorded, every failure is touched.
+    assert project_checks.touched_tests(["a/t.py::x", "b/t.py::y"], ["a/t.py"]) == [
+        "a/t.py::x",
+        "b/t.py::y",
+    ]
 
 
 @pytest.mark.asyncio
