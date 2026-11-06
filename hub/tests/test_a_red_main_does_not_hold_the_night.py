@@ -400,7 +400,11 @@ async def test_a_touched_test_is_the_tasks(app, tmp_path, tmp_path_factory):
     assert run.state == "failed", run.results
     [result] = run.results
     assert result["touched_tests"] == ["test_timing::test_flaky"]
-    assert await _fix_tasks() == []
+    # The touched flake is the task's and files nothing. test_a, unlisted, has now failed for two
+    # tasks in a row: re-run alone on main, it fails there, so it is listed as failing on main
+    # with an unassigned fix task (`failures-already-known-are-on-a-list-not-re-argued`, FR-13).
+    [fix] = await _fix_tasks()
+    assert TEST_A in fix.title and fix.assignee is None, fix.title
 
 
 async def test_a_fix_task_cannot_land_itself(app, tmp_path):

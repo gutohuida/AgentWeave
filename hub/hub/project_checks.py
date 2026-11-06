@@ -63,7 +63,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import flaky_tests, readable_ids, traces
+from . import flaky_tests, known_failing, readable_ids, traces
 from .db.engine import async_session_factory
 from .db.models import Project, Run, Task, TaskCheckRun, TaskTransition
 from .subprocess_windows import no_console_kwargs
@@ -781,6 +781,11 @@ def _judge_by_report(
     asked = list(check.get("rerun_tests") or [])
     if asked and report is not None:
         result["passed_tests"] = [test for test in asked if report.outcomes.get(test) is False]
+    watched = list(check.get("watch_tests") or [])
+    if watched and report is not None:
+        # The listed tests this run ran and passed: a run that did not run one says nothing of it
+        # (`failures-already-known-are-on-a-list-not-re-argued`, FR-4; `known_failing.watching`).
+        result["watched_passed"] = [test for test in watched if report.outcomes.get(test) is False]
     if timed_out:
         if report is not None and report.failing:
             result["named_failures"] = report.failing
@@ -1804,7 +1809,20 @@ async def _execute(
                     if result.get("flaky"):
                         # Raised to the operator, not only to the reviewer (`flaky_tests`).
                         await flaky_tests.record_flake(run_id, result)
-                if failed(result) and task_id not in _superseded:
+                if (
+                    failed(result)
+                    and task_id not in _superseded
+                    and not await known_failing.judge_unlisted(
+                        project_id=project_id,
+                        task_id=task_id,
+                        run_id=run_id,
+                        root=root,
+                        main_sha=main_sha,
+                        check=check,
+                        result=result,
+                    )
+                ):
+                    # Main is asked unless the twice rule already asked it (FR-13).
                     await baseline.record(check, result)
                 if await superseded():
                     return "superseded"  # its tree was ended for new work: not a result
@@ -1818,6 +1836,9 @@ async def _execute(
                 return "stop"
         return None
 
+    project_id = await _project_of(run_id)
+    # Each check is told the tests on the known-failing list, so its report says which it passed.
+    checks = await known_failing.watching(project_id, checks)
     try:
         if await superseded():
             return
@@ -1895,6 +1916,12 @@ async def _execute(
     finally:
         _fast_decided(run_id)
         _waiting_for_slot.pop(run_id, None)
+
+
+async def _project_of(run_id: str) -> str:
+    async with async_session_factory() as session:
+        run = await session.get(TaskCheckRun, run_id)
+        return run.project_id if run is not None else ""
 
 
 def _fast_decided(run_id: str) -> None:

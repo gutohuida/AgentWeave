@@ -1309,6 +1309,10 @@ async def run_batch_checks(
         batch.check_run_id = run_id
         await session.commit()
     planned = project_checks.planned_results(checks, changed, tree, passes)
+    from . import known_failing
+
+    # Told the listed tests, so a batch that lands says which of them it ran and passed (FR-4).
+    checks = await known_failing.watching(project_id, checks)
     results: List[Dict[str, Any]] = []
     path: Optional[Path] = None
     baseline = project_checks._MainBaseline(root, owner, base)
@@ -1843,9 +1847,19 @@ async def _record_landed(
         batch.state, batch.ended_at = "landed", _now()
         await _close_batch_run(session, batch)
         _redrain_after_commit(session, project_id)
+        check_run_id = batch.check_run_id
         await session.commit()
         await _announce(session, [landing.id for landing in landings])
+        run = await session.get(TaskCheckRun, check_run_id) if check_run_id else None
+        ran_on_landed = run is not None and bool(prefixes) and run.merged_sha == prefixes[-1]
     await _refresh_reachability(project_id, root)
+    if ran_on_landed:
+        # Main is now exactly the tree this run checked: a run on main's tree (`failures-already-
+        # known-are-on-a-list-not-re-argued`, FR-3, FR-4). Not where the batch was narrowed, whose
+        # run checked more than landed.
+        from . import known_failing
+
+        await known_failing.record_run(check_run_id, on_main=prefixes[-1])
 
 
 async def _not_landed(

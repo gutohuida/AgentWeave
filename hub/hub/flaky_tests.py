@@ -395,11 +395,15 @@ async def file_fix_task(run_id: str) -> Optional[str]:
     and unassigned. Filed with the operator's authority, as `POST /checks/flaky/handled` files one.
     A flake's filing marks the flaky-test list handled with the task, so the Overview does not ask
     for it twice."""
-    from . import flow_advance, project_checks, requirement_gate
+    from . import flow_advance, known_failing, project_checks, requirement_gate
     from .api.v1.tasks import create_task_for_actor
     from .schemas.tasks import TaskCreate
     from .task_transitions import operator
 
+    # The run is read into the known-failing list first: a flake it found gets its entry and
+    # owner fix task there (`failures-already-known-are-on-a-list-not-re-argued`, FR-2, FR-5), and
+    # that filing is recorded as this module's, so the filing below leaves its test alone.
+    await known_failing.record_run(run_id)
     try:
         async with _filing_lock(), async_session_factory() as session:
             run = await session.get(TaskCheckRun, run_id)
