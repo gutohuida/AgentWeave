@@ -14,8 +14,9 @@ CHECKS = [
 #: What is stored and read back: a check names no paths unless the operator gives some, and is not
 #: fast unless the operator marks it (`checks-run-before-anyone-reviews`, FR-1), and runs before
 #: review and at landing unless given a phase (`checks-know-their-phase-...`, FR-1), and names no
-#: report or re-run command unless given them (`checks-report-which-tests-failed-...`, FR-1).
-NO_REPORT = {"report_path": None, "rerun_command": None}
+#: report or re-run command unless given them (`checks-report-which-tests-failed-...`, FR-1), and no
+#: command for a change (`a-check-can-run-only-the-tests-for-what-a-task-changed`, FR-7).
+NO_REPORT = {"report_path": None, "rerun_command": None, "change_command": None}
 SAVED = [{**check, "paths": [], "fast": False, "phase": "both", **NO_REPORT} for check in CHECKS]
 
 

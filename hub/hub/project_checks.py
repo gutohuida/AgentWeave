@@ -162,6 +162,9 @@ def configured_checks(
                     # The report and re-run command (FR-1); `None` for a check without them.
                     "report_path": str(check.get("report_path") or "").strip() or None,
                     "rerun_command": str(check.get("rerun_command") or "").strip() or None,
+                    # The command for a change (`a-check-can-run-only-the-tests-for-what-a-task-
+                    # changed`, FR-1); `None` for a check without one.
+                    "change_command": str(check.get("change_command") or "").strip() or None,
                     # Not part of `check_digest`: priority changes how fast a check runs, not
                     # what it finds, so a pass at either priority stays reusable.
                     # A fast check never gives way: the completion waits on it
@@ -849,6 +852,71 @@ def rerun_check(check: Dict[str, Any], tests: Sequence[str]) -> Optional[Dict[st
     return {**check, "command": command, "rerun_tests": list(tests)}
 
 
+# --- the command for a change (`a-check-can-run-only-the-tests-for-what-a-task-changed`) ---------
+
+#: Where a check's command for a change takes the path of the file listing the changed files (FR-1).
+CHANGED_FILES_PLACEHOLDER = "{changed_files}"
+#: Why a check with a command for a change ran its full command before review (FR-2).
+CHANGE_UNKNOWN = "the files the task changed could not be read, so the check ran in full"
+
+
+def for_change(
+    checks: Sequence[Dict[str, Any]], changed: Optional[Sequence[str]]
+) -> List[Dict[str, Any]]:
+    """*checks* as a task's pre-review run executes them: each one with a command for a change
+    carries `changed_files`, the files the task changed, each once (FR-1) -- or, where those are not
+    known, `full_because` and its own command (FR-2). Its `command` is left as it is: only
+    `sized_command` puts the command for a change in place, so a confirmation, which reads
+    `command` and the re-run command, runs as a check without one (FR-3)."""
+    sized = []
+    for check in checks:
+        if check.get("change_command"):
+            if changed is None:
+                check = {**check, "full_because": CHANGE_UNKNOWN}
+            else:
+                check = {**check, "changed_files": list(dict.fromkeys(changed))}
+        sized.append(check)
+    return sized
+
+
+def changed_files_list(root: Path, task_id: str) -> Path:
+    """The file a task's run lists its changed files in: beside the run's checkout, not inside
+    it, so the tree the check reads is exactly the merged work."""
+    return root / CHECKS_DIR / f"{task_id}.changed-files.txt"
+
+
+def sized_command(check: Dict[str, Any], listing: Path) -> Optional[Dict[str, Any]]:
+    """*check* running its command for a change on the files *listing* names, written here; `None`
+    for a check not sized to the change, or a list path the shell cannot be handed (it runs in
+    full)."""
+    if check.get("changed_files") is None:
+        return None
+    argument = _shell_argument(str(listing))
+    if argument is None:
+        return None
+    listing.parent.mkdir(parents=True, exist_ok=True)
+    listing.write_text(
+        "".join(f"{path}\n" for path in check["changed_files"]), encoding="utf-8", newline="\n"
+    )
+    command = str(check["change_command"]).replace(CHANGED_FILES_PLACEHOLDER, argument)
+    return {**check, "command": command}
+
+
+def sizing(check: Dict[str, Any], ran: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """What a pre-review result records about its size (FR-2, FR-4): sized to the change and with
+    how many files, where *ran* (`sized_command`'s check) ran; in full, and why, where a check with a
+    command for a change did not; nothing for a check without one."""
+    if not check.get("change_command"):
+        return {}
+    if ran is not None:
+        return {"sized_to_change": True, "changed_file_count": len(check["changed_files"])}
+    return {
+        "sized_to_change": False,
+        "full_because": check.get("full_because")
+        or "the list of changed files could not be passed to the command, so the check ran in full",
+    }
+
+
 def failure_excerpt(report: TestReport, failing: Sequence[str]) -> str:
     """What the report says about each of the *failing* tests -- its id, then its failure message and
     text -- up to `OUTPUT_TAIL_CHARS`, or `""` where it says nothing.
@@ -870,6 +938,14 @@ def check_digest(check: Dict[str, Any]) -> str:
     identity = {key: check.get(key) for key in ("name", "command", "timeout_seconds", "paths")}
     # Only where set, so a check without a report keeps the digest (and the passes) it had.
     identity.update({key: check[key] for key in ("report_path", "rerun_command") if check.get(key)})
+    if check.get("changed_files") is not None:
+        # A run of the command for a change is another check: a pass of it is reused only for the
+        # same list of changed files (FR-6), and never as a pass of the full command -- which is
+        # what a landing batch looks it up as. The full command's digest leaves the command for a
+        # change out, so its passes stay reusable as before.
+        identity.update(
+            change_command=check["change_command"], changed_files=list(check["changed_files"])
+        )
     payload = json.dumps(identity, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
@@ -1613,7 +1689,8 @@ async def _prepare(
         tree = await asyncio.to_thread(tree_of, root, merged)
         changed = await asyncio.to_thread(changed_paths, root, tip, merged)
         passes = await passes_on_tree(session, project_id, tree) if tree else {}
-        return merged, tree, changed, planned_results(checks, changed, tree, passes)
+        planned = planned_results(for_change(checks, changed), changed, tree, passes)
+        return merged, tree, changed, planned
     except Exception:  # noqa: BLE001 -- not reusing is always safe: the checks run
         logger.debug("could not prepare a check run", exc_info=True)
         return None
@@ -1670,10 +1747,20 @@ async def _execute(
             if await superseded():
                 return "superseded"
             result = already or skipped(check, changed)
+            if already is not None and not already.get("skipped"):
+                # A reused pass says what it is a pass of: its digest matched this sizing.
+                result.update(sizing(check, check if "changed_files" in check else None))
             if result is None:
                 if path is None:
                     path = await asyncio.to_thread(_checkout, root, task_id, merged)
-                result = await asyncio.to_thread(run_one, check, path, task_id)
+                ran = await asyncio.to_thread(
+                    sized_command, check, changed_files_list(root, task_id)
+                )
+                if ran is None and check.get("changed_files") is not None:
+                    # Not sized after all: it runs, and is reused, as the full command.
+                    check = {k: v for k, v in check.items() if k != "changed_files"}
+                result = await asyncio.to_thread(run_one, ran or check, path, task_id)
+                result.update(sizing(check, ran))
                 if unjudged_timeout(result) and task_id not in _superseded:
                     # Not confirmed: running out of time again would say no more about the work.
                     # The run is retried instead (FR-9).
@@ -1736,6 +1823,8 @@ async def _execute(
             tree = await asyncio.to_thread(tree_of, root, merged)
             changed = await asyncio.to_thread(changed_paths, root, main_sha, merged)
             planned = [None] * len(checks)
+        # Each check with a command for a change is sized to it here, before review only (FR-3).
+        checks = for_change(checks, changed)
         pairs = list(zip(checks, planned, strict=True))
         split = sum(1 for check in checks if check.get("fast"))
         try:
