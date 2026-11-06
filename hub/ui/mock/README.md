@@ -146,7 +146,7 @@ files missing, a carried-over pair and a checkpoint covering no run.
 http://localhost:5199/mock.html#tab/checkpoints
 ```
 
-## A trace of a whole conversation (mock, 2026-11-06)
+## A trace of a whole conversation (mock, approved 2026-11-06)
 
 Spec `spec/changes/a-trace-of-a-whole-conversation`. The components are
 `src/components/traces/ConversationTrace.tsx` and its pure model `conversationTraceModel.ts` (turn
@@ -160,3 +160,6 @@ three of this repository's conversations, recorded read-only from the operator's
 http://localhost:5199/mock.html#conversation-trace/conv-c6c83418230a   # 24 turns, carried over from conv-18c9f0a31db7
 http://localhost:5199/mock.html#conversation-trace/conv-b7158addff32   # QA, 17 turns over two days
 ```
+
+Approved by the operator on 2026-11-06 as it renders ("Perfect. Loved it."), including the author's choices: gaps over
+20 minutes fold, an unfolded turn's spans draw on its own scale, overlapping axis labels move to hover text.
