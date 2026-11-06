@@ -254,6 +254,16 @@ export interface TaskLandingBatch {
   error: string
 }
 
+/** A known-failing entry as a landing recorded going past it (`known_failing.snapshot`). */
+export interface TaskLandingEntry {
+  id: string
+  check: string
+  /** Null when the whole check is listed. */
+  test: string | null
+  kind: 'fails on main' | 'flaky'
+  fix_task_id: string | null
+}
+
 /** The task's latest landing: approved work on its way to the main branch. */
 export interface TaskLanding {
   id: string
@@ -266,6 +276,10 @@ export interface TaskLanding {
   /** The commit main was moved to when it landed. */
   landed_sha: string | null
   override_reason: string | null
+  /** The known-failing entries its batch's checks went past, once landed (`known_failing.
+   *  went_past`, FR-10): each as it stood then, kept after the entry itself comes off the list.
+   *  Absent from a Hub older than the list. */
+  went_past?: TaskLandingEntry[]
   batch: TaskLandingBatch | null
   /** Its place in the project's queue (1 is next), while queued. */
   position: number | null

@@ -100,6 +100,34 @@ describe("the drawer shows approved work's landing beside Land", () => {
     )
   })
 
+  it('names the known-failing entries a landed batch went past, and none for a landing that went past nothing', () => {
+    // `failures-already-known-are-on-a-list-not-re-argued` FR-10, ac-landing-record: the route's
+    // `went_past`, each entry as `known_failing.snapshot` records it.
+    const line = show(
+      landing('landed', {
+        landed_sha: 'b'.repeat(40),
+        batch: batch({ state: 'landed' }),
+        went_past: [
+          { id: 'kf-red', check: 'hub-tests', test: 'tests/test_a.py::test_red', kind: 'fails on main', fix_task_id: 'task-fix-red' },
+          { id: 'kf-lag', check: 'hub-tests', test: 'tests/test_b.py::test_lag', kind: 'flaky', fix_task_id: 'task-fix-lag' },
+        ],
+      }),
+    )
+    expect(line).toHaveTextContent('Landed on main at bbbbbbbb')
+    const past = screen.getByTestId('task-landing-went-past-task-1')
+    expect(past).toHaveTextContent('Landed past 2 known failures')
+    const items = Array.from(past.querySelectorAll('li')).map((li) => li.textContent)
+    expect(items).toEqual([
+      'tests/test_a.py::test_red (hub-tests, fails on main; fix task task-fix-red)',
+      'tests/test_b.py::test_lag (hub-tests, flaky; fix task task-fix-lag)',
+    ])
+  })
+
+  it('shows no went-past list for a landing with none, or from a Hub older than the list', () => {
+    show(landing('landed', { landed_sha: 'b'.repeat(40), went_past: [] }))
+    expect(screen.queryByTestId('task-landing-went-past-task-1')).toBeNull()
+  })
+
   it('shows why a task was sent back, with the failing output', () => {
     const report = 'Landing batch lbat-1 found that task task-1\'s work ... FAILED test_suite.py::test_no_marker'
     expect(show(landing('sent_back', { reason: report }))).toHaveTextContent('Sent back by its landing batch')

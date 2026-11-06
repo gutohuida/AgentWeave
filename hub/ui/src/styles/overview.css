@@ -83,6 +83,10 @@
 }
 .aw-ov-row-icon[data-kind="merged"] { color: var(--purple); background: color-mix(in oklab, var(--purple) 12%, var(--surface-2)); }
 .aw-ov-row-icon[data-kind="approved"] { color: var(--green); background: color-mix(in oklab, var(--green) 12%, var(--surface-2)); }
+/* The known-failing list (`KnownFailingList`): a row to read, with the fix-task link at its end. */
+.aw-ov-row-icon[data-kind="main"] { color: var(--red); background: color-mix(in oklab, var(--red) 12%, var(--surface-2)); }
+.aw-ov-row-icon[data-kind="flaky"] { color: var(--amber); background: color-mix(in oklab, var(--amber) 12%, var(--surface-2)); }
+.aw-ov-kf-row:hover { background: transparent; }
 .aw-ov-row-text { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
 .aw-ov-row-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-ov-row-title strong { font-weight: 600; color: var(--agent-accent, var(--text)); }

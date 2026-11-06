@@ -403,16 +403,6 @@ async def _file_fix_task(
         session=session,
         before_commit=recorded,
     )
-    if entry.kind == FLAKY:
-        # The Overview's flaky-test list, until the list replaces it there (task `ui`), stops
-        # asking for a flake that now has its fix task, as the filing it replaces did.
-        # Through the entry's own sighting, which is after its run started.
-        started = max(
-            _aware(getattr(run, "started_at", None)) or _now(), _aware(entry.last_seen) or _now()
-        )
-        await flaky_tests.mark_handled(
-            session, entry.project_id, through=started.isoformat(), task_id=created.id, count=1
-        )
     return created.id
 
 

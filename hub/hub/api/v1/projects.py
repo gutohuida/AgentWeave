@@ -218,11 +218,9 @@ class ProjectSettings(BaseModel):
     # Run on main plus a task's would-merge commit when the task completes; approval reads the
     # result. Null means no checks, and approval is unchanged.
     checks: Optional[List[ProjectCheck]] = Field(default=None, max_length=20)
-    # Whether the Hub lands an approval over failures that are provably not the task's (the same
-    # test ids fail on main too, or passed when rerun on their own), recording its own override,
-    # and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5). On by default; off is
-    # the behaviour before that change: such an approval waits for the operator's reason.
-    checks_auto_override: bool = True
+    # 'The Hub may override checks' is gone: the known-failing list replaced what it governed
+    # (`failures-already-known-are-on-a-list-not-re-argued`, FR-15, migration 0167), and with
+    # `extra="forbid"` a request that still sends it is refused.
     # Whether every process a check run starts runs below normal scheduling priority, beneath the
     # operator's own work (`checks-know-their-phase-and-give-way-to-the-user`, FR-5). Off by
     # default, for new and existing projects alike (FR-6).

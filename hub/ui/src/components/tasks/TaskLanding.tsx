@@ -1,7 +1,12 @@
 import { useState } from 'react'
 
 import { readableApiError } from '@/api/client'
-import { useLandHeldLanding, useTaskChecks, type TaskLanding as Landing } from '@/api/tasks'
+import {
+  useLandHeldLanding,
+  useTaskChecks,
+  type TaskLanding as Landing,
+  type TaskLandingEntry as LandingEntry,
+} from '@/api/tasks'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -47,6 +52,26 @@ function HeldOnMain({ taskId }: { taskId: string }) {
         </p>
       )}
     </form>
+  )
+}
+
+/** The known-failing entries a landed batch went past (FR-10): failures that were main's or a
+ *  flake's, each with the fix task that owns it, so the work landed without them held against it. */
+function WentPast({ taskId, entries }: { taskId: string; entries: LandingEntry[] }) {
+  return (
+    <div data-testid={`task-landing-went-past-${taskId}`} style={{ color: 'var(--text-2)' }}>
+      <p>
+        Landed past {entries.length} known {entries.length === 1 ? 'failure' : 'failures'}:
+      </p>
+      <ul className="list-disc pl-4">
+        {entries.map((entry) => (
+          <li key={entry.id}>
+            <code>{entry.test ?? `the whole ${entry.check} check`}</code> ({entry.check}, {entry.kind}
+            {entry.fix_task_id ? `; fix task ${entry.fix_task_id}` : ''})
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -121,6 +146,7 @@ export function TaskLanding({ taskId }: { taskId: string }) {
           {landing.reason.slice(-1500)}
         </pre>
       )}
+      {landing.state === 'landed' && landing.went_past?.length ? <WentPast taskId={taskId} entries={landing.went_past} /> : null}
       {landing.state === 'landed' && (landing.override_reason || landing.batch?.override_reason) && (
         <p style={{ color: 'var(--text-2)' }}>
           Landed over failures main shares: {landing.override_reason || landing.batch?.override_reason}

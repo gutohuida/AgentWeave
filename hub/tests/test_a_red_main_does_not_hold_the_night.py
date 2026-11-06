@@ -409,15 +409,15 @@ async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
 
     run = await _latest_run(TASK)
     assert run.state == "passed", run.results
-    # The flake is listed with its fix task, which marks the flaky list handled.
-    from hub import flaky_tests
+    # The flake is listed with its fix task.
+    from hub import known_failing
 
     [fix] = await _fix_tasks()
     assert "test_timing::test_flaky" in fix.title and "flaky" in fix.description
     assert fix.loop_id is None and fix.status == "pending"
     async with async_session_factory() as session:
-        listed = await flaky_tests.report(session, "proj-test")
-    assert listed["flaky"] == [] and listed["handled"]["task_id"] == fix.id, listed
+        listed = (await known_failing.view(session, "proj-test"))["entries"]
+    assert [(e["kind"], e["fix_task"]["id"]) for e in listed] == [("flaky", fix.id)], listed
     approved = await _reviewer_approves(app, TASK)
 
     assert approved.status_code == 200, approved.text

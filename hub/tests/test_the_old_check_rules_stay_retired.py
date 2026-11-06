@@ -5,8 +5,9 @@ Before the list, the completion and landing gates re-ran every failure on a chec
 (`_MainBaseline`) to decide whose it was; a batch whose failures main shared was held for the
 operator (`_main_shares_the_failure`) and released when main moved (`_release_shared_failure_holds`);
 a batch that timed out twice was held too; the Hub landed over a shared failure on its own, as the
-project's `checks_auto_override` allowed; and flaky tests were rebuilt from thirty days of check runs
-and event-log rows. Each of those is a shape in the source, so this test reads the Hub's source for
+project's `checks_auto_override` allowed; flaky tests were rebuilt from thirty days of check runs
+and event-log rows; and the Overview's flaky list was dealt with by marking it "handled". The
+setting itself is gone too (FR-15), so its name appears nowhere in the Hub but its migrations. Each of those is a shape in the source, so this test reads the Hub's source for
 each one and fails, naming the file and line, if it is back. Each pattern is proven against the code
 it was written to catch, so a pattern that silently stopped matching fails too.
 
@@ -53,10 +54,16 @@ RETIRED: Dict[str, Tuple[str, Tuple[str, ...], str]] = {
         (),
         "refusal.automatic_override = await automatic_override(session, task, view)",
     ),
-    "a read of checks_auto_override outside the settings it is stored in": (
-        r"checks_auto_override",
-        ("requirement_gate.py", "landing_queue.py", "project_checks.py", "flaky_tests.py"),
+    "the checks_auto_override setting, anywhere outside the migrations (FR-15)": (
+        r"\bchecks_auto_override\b",
+        (),
         'return bool(getattr(project, "checks_auto_override", True))',
+    ),
+    "the flaky list and its 'handled' action, which the known-failing list replaced (FR-11)": (
+        r"checks/flaky|[\"']/flaky(/handled)?[\"']|\bmark_handled\b|\bHANDLED_EVENT\b"
+        r"|\bchecks_flaky_handled\b",
+        (),
+        '@checks_router.post("/flaky/handled")\nawait flaky_tests.mark_handled(session, project_id)',
     ),
     "the event-log flaky reconstruction": (
         r"\bWINDOW_DAYS\b|select\(\s*TaskCheckRun\.id,\s*TaskCheckRun\.task_id"

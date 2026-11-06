@@ -15,7 +15,6 @@ export const PROJECT_DEFAULTS: Pick<
   | 'allow_agent_jobs'
   | 'checkpoint_mode'
   | 'checkpoint_auto_continue'
-  | 'checks_auto_override'
   | 'checks_give_way'
 > = {
   hop_budget: 6,
@@ -24,7 +23,6 @@ export const PROJECT_DEFAULTS: Pick<
   allow_agent_jobs: true,
   checkpoint_mode: 'offered',
   checkpoint_auto_continue: false,
-  checks_auto_override: true,
   checks_give_way: false,
 }
 

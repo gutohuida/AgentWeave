@@ -131,13 +131,6 @@ class Project(Base):
     # `{"name", "command", "timeout_seconds"}` the Hub runs on the work a task's approval would
     # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
     checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    # Whether the Hub lands an approval over check failures that are provably not the task's --
-    # the same test ids fail on main too, or passed when rerun on their own -- recording its own
-    # override, and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5, migration
-    # 0151). On by default for new and existing projects; off is the behaviour before that change.
-    checks_auto_override: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="1", nullable=False
-    )
     # Whether every process a check run starts runs below normal scheduling priority, so the
     # operator's own work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-
     # user`, FR-5, migration 0161). Off for new and existing projects (FR-6).
