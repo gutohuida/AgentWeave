@@ -52,8 +52,6 @@ from .test_task_integration import (  # noqa: F401 -- `builder` is a fixture
 
 GIT_DELAY = 0.25
 BUSY_TIMEOUT = 0.1
-#: A write that waits for nobody commits in milliseconds; one that waits for git fails at 0.1 s.
-WRITE_BOUND = 1.0
 
 
 @dataclass
@@ -62,13 +60,38 @@ class Probe:
 
     @property
     def failed(self) -> List[dict]:
-        return [w for w in self.writes if w["error"] or w["seconds"] > WRITE_BOUND]
+        """The writes a lock held across their git refused. Not how long a write took: with a
+        100 ms busy timeout, a write that commits waited at most that long for anybody's lock, and
+        any time beyond it is the machine's (1.756 s for one that waited for nobody, AW-40)."""
+        return [w for w in self.writes if w["error"]]
 
 
 async def database_file() -> str:
     async with engine.connect() as connection:
         rows = (await connection.exec_driver_sql("PRAGMA database_list")).all()
     return next(row[2] for row in rows if row[1] == "main")
+
+
+def _write_until(path: str, window: float) -> str:
+    """Insert and commit an event row from a second connection, retrying for *window* seconds;
+    answer "" once one commits, else the last error."""
+    deadline = time.perf_counter() + window
+    while True:
+        try:
+            connection = sqlite3.connect(path, timeout=BUSY_TIMEOUT)
+            try:
+                connection.execute(
+                    "INSERT INTO event_logs (id, project_id, event_type, severity,"
+                    " timestamp) VALUES (?, 'proj-test', 'lock_probe', 'info', ?)",
+                    (f"ev-probe-{uuid.uuid4().hex[:12]}", datetime.now(timezone.utc)),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            return ""
+        except sqlite3.OperationalError as exc:
+            if time.perf_counter() >= deadline:
+                return str(exc)
 
 
 @contextlib.contextmanager
@@ -78,31 +101,22 @@ def a_write_during_every_git(path: str) -> Iterator[Probe]:
 
     def _run(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
         argv = args[0] if args else kwargs.get("args")
-        if isinstance(argv, (list, tuple)) and argv and "git" in os.path.basename(str(argv[0])):
-            error = ""
-            # A lock held across this git outlasts the git (>= GIT_DELAY), so it fails every attempt
-            # in a window twice that long. A short transaction of the app's own, stretched by a busy
-            # machine past one busy timeout, is gone by the next attempt -- it is not what this probes.
-            deadline = time.perf_counter() + GIT_DELAY * 2
-            while True:
-                started = time.perf_counter()
-                try:
-                    connection = sqlite3.connect(path, timeout=BUSY_TIMEOUT)
-                    try:
-                        connection.execute(
-                            "INSERT INTO event_logs (id, project_id, event_type, severity,"
-                            " timestamp) VALUES (?, 'proj-test', 'lock_probe', 'info', ?)",
-                            (f"ev-probe-{uuid.uuid4().hex[:12]}", datetime.now(timezone.utc)),
-                        )
-                        connection.commit()
-                    finally:
-                        connection.close()
-                    error = ""
-                    break
-                except sqlite3.OperationalError as exc:
-                    error = str(exc)
-                    if time.perf_counter() >= deadline:
-                        break
+        if not (
+            isinstance(argv, (list, tuple)) and argv and "git" in os.path.basename(str(argv[0]))
+        ):
+            return real(*args, **kwargs)
+        started = time.perf_counter()
+        # A lock held across this git is held before it starts and still held when it returns, so
+        # a write fails both sides of it. A short transaction of the app's own, however far a busy
+        # machine stretches it, cannot also span the slowed git between the two -- it is not what
+        # this probes, so a write refused before the git is tried again after it.
+        error = _write_until(path, GIT_DELAY * 2)
+        time.sleep(GIT_DELAY)
+        try:
+            return real(*args, **kwargs)
+        finally:
+            if error:
+                error = _write_until(path, GIT_DELAY * 2)
             probe.writes.append(
                 {
                     "git": [str(a) for a in argv][1:9],
@@ -111,8 +125,6 @@ def a_write_during_every_git(path: str) -> Iterator[Probe]:
                     "thread": threading.current_thread().name,
                 }
             )
-            time.sleep(GIT_DELAY)
-        return real(*args, **kwargs)
 
     subprocess.run = _run
     try:

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAgents } from '@/api/agents'
 import { conversationLabel as labelOf, useProjectConversations, type AgentConversation } from '@/api/agentChat'
-import { useCheckpointNotes, useProjectCheckpoints } from '@/api/checkpoints'
+import { startFromCheckpoint, useCheckpointNotes, useProjectCheckpoints } from '@/api/checkpoints'
 import { useConfigStore } from '@/store/configStore'
 import { checkpointsDestination, type ProjectTabDestination } from '@/lib/navigation'
 import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
@@ -22,6 +23,7 @@ export function CheckpointsScreen({
   onOpenConversation: (agent: string, conversationId: string) => void
 }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
+  const queryClient = useQueryClient()
   const filters: CheckpointFilters = {
     agent: destination.checkpointAgent ?? '',
     trigger: destination.checkpointTrigger ?? '',
@@ -37,6 +39,7 @@ export function CheckpointsScreen({
   const opened = inList ?? whole.data?.checkpoints.find((checkpoint) => checkpoint.id === selectedId) ?? null
 
   const agents = useAgents('all')
+  const openAgents = useAgents('open')
   const open = useProjectConversations(projectId, 'open')
   const archived = useProjectConversations(projectId, 'archived')
   const conversations = useMemo<AgentConversation[]>(
@@ -53,6 +56,7 @@ export function CheckpointsScreen({
     for (const checkpoint of checkpoints) names.add(checkpoint.agent)
     return [...names].sort()
   }, [agents.data, checkpoints])
+  const startAgents = useMemo(() => (openAgents.data ?? []).map((agent) => agent.name).sort(), [openAgents.data])
   const conversationOptions = conversations
     .filter((c) => !filters.agent || c.agent === filters.agent)
     .map((c) => ({ id: c.id, label: labelOf(c) }))
@@ -85,6 +89,7 @@ export function CheckpointsScreen({
     ['the checkpoints', list.error, () => list.refetch()],
     ['the checkpoint being opened', whole.error, () => whole.refetch()],
     ['the agents', agents.error, () => agents.refetch()],
+    ['the agents a conversation can start with', openAgents.error, () => openAgents.refetch()],
     ['the open conversations', open.error, () => open.refetch()],
     ['the archived conversations', archived.error, () => archived.refetch()],
     ['the agent notes it carried', notes.error, () => notes.refetch()],
@@ -100,6 +105,7 @@ export function CheckpointsScreen({
       filters={filters}
       onFilters={(next) => go(next)}
       agents={agentNames}
+      startAgents={startAgents}
       conversations={conversationOptions}
       conversationLabel={conversationLabel}
       selectedId={selectedId}
@@ -111,6 +117,13 @@ export function CheckpointsScreen({
       onOpenConversation={(agent, conversationId) => {
         const owner = agent ?? byId.get(conversationId)?.agent ?? opened?.agent
         if (owner) onOpenConversation(owner, conversationId)
+      }}
+      onStart={async (checkpointId, agent, message) => {
+        if (!projectId) return
+        const started = await startFromCheckpoint(projectId, checkpointId, agent, message)
+        await queryClient.invalidateQueries({ queryKey: ['project', projectId, 'checkpoints'] })
+        await queryClient.invalidateQueries({ queryKey: ['project', projectId, 'conversations'] })
+        onOpenConversation(started.agent, started.conversation_id)
       }}
       loading={list.isLoading}
       error={list.isError}
