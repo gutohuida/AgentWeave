@@ -1,5 +1,9 @@
 # Testbed
 
+drive-235540-a-t2-again
+
+drive-235540-a-t2
+
 Scratch space for exercising AgentWeave **as a user would**, without polluting the repository.
 
 This repo is where AgentWeave is *developed*, not a project that *uses* it. Running
@@ -32,3 +36,4 @@ throwaway projects as you like and delete them freely.
   manual and exploratory runs only.
 - **Nothing here is a fixture.** No test, script, or CI job may depend on a path under `testbed/`.
   Treat it as disposable.
+drive-235540-a-t1
