@@ -339,6 +339,8 @@ def drive(hub: Hub, keep: bool) -> None:
 
         # landing: approve task 1; its batch runs the full command
         before = len(read_log(runs_path))
+        # A completed task is approved from review: `completed -> approved` is refused (409).
+        hub.request("PATCH", f"/projects/{project.id}/tasks/{task1}", {"status": "under_review"})
         code, res = hub.request("PATCH", f"/projects/{project.id}/tasks/{task1}", {"status": "approved"})
         note(f"approve -> HTTP {code}" + (f" {json.dumps(res)[:200]}" if code >= 300 else ""))
         wait_for(lambda: any(e["mode"] == "full" for e in read_log(runs_path)[before:]), 10)
