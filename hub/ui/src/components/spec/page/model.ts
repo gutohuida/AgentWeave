@@ -5,6 +5,7 @@
  *  helpers here are pure (filtering, ordering, which actions a state offers) so the same rules hold
  *  in the Spec tab and the conversation's side panel. */
 
+import type { BuildChecks, BuildLanding } from '@/api/buildFigures'
 import type { BuildCaught } from '@/api/spec'
 
 export type SpecKind = 'change-spec' | 'roadmap' | 'capability' | 'baseline' | 'system-map'
@@ -193,7 +194,8 @@ export interface BuildView {
   /** Runs counted beside the cost: none reported one. */
   unpriced: number
   /** The build's check runs, on a line of their own. */
-  checks: { runs: number; passed: number; failed: number; seconds: number }
+  checks: BuildChecks
+  landing?: BuildLanding
 }
 
 export interface StartBuildChoice {

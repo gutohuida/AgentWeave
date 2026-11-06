@@ -718,14 +718,14 @@ export function useSpecPhaseControls(
   const offersApproveAnyway = gapsOverridable && document.phase === 'exploring'
   const approveAnywayLabel = pendingApproval.build ? 'Approve and build anyway' : 'Approve anyway'
   const gapList = showGaps ? (
-    <div className="aw-spec-message" data-tone="warn" data-testid="approval-warnings">
+    <div className="aw-spec-message" data-tone="warn" data-stack="true" data-testid="approval-warnings">
       <span className="aw-spec-message-text">{gapsSummary}</span>
+      <GapLines gaps={gaps} />
       {offersApproveAnyway && (
         <Button variant="primary" size="xs" data-testid="spec-approve-anyway" disabled={busy} onClick={onApproveAnyway}>
           {approveAnywayLabel}
         </Button>
       )}
-      <GapLines gaps={gaps} />
     </div>
   ) : null
 

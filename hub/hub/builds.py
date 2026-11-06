@@ -46,7 +46,10 @@ LEVELS: Tuple[str, ...] = (FAST, REVIEWED, GATED)
 
 LANDING_MAIN = "main"
 LANDING_NOWHERE = "nowhere"
-LANDINGS: Tuple[str, ...] = (LANDING_MAIN, LANDING_NOWHERE)
+#: One GitHub pull request against the project's main branch (`a-build-lands-as-one-pull-
+#: request`); only in a project whose `pr_landing` setting is on (FR-1).
+LANDING_PULL_REQUEST = "pull_request"
+LANDINGS: Tuple[str, ...] = (LANDING_MAIN, LANDING_NOWHERE, LANDING_PULL_REQUEST)
 
 RUNNING = "running"
 STOPPED = "stopped"
@@ -54,6 +57,13 @@ FINISHED = "finished"
 
 #: The integration record's reason for a task of a build that lands nowhere (`landing`).
 LANDS_NOWHERE = "the build lands nowhere, so its approved work is not merged into any branch"
+
+#: The integration record's reason where a pull request build's landing reaches the merge path
+#: anyway: never merged into main, which is what landing as a PR exists to avoid. Its approved work
+#: is pushed to the PR (`pull_requests.land`); the landing queue routes it there first.
+LANDS_ON_A_PULL_REQUEST = (
+    "the build lands as a pull request, so its approved work is not merged into main by the Hub"
+)
 
 #: The evidence rule each level implies (design D1): Fast as `sketch` (silent), Reviewed as
 #: `contract` (reported, never refused), Gated as `gate` (refused until accepted).
@@ -72,16 +82,6 @@ def rigor_for_level(level: Optional[str]) -> Optional[str]:
     return _RIGOR.get(level or "")
 
 
-def allows_automatic_override(level: Optional[str]) -> bool:
-    """Whether slice M's automatic check override may land work at *level* (design D5).
-
-    True at Fast and Reviewed (still subject to M's project setting), never at Gated: the operator
-    picks Gated to judge every landing, so a Hub judgement that a failure is not the task's does
-    not land it there. A task outside any build (None) is not held back by a level.
-    """
-    return level != GATED
-
-
 def usd(micros: Optional[int]) -> Optional[float]:
     return None if micros is None else round(micros / MICROS, 6)
 
@@ -91,6 +91,20 @@ def micros_of(dollars: Optional[float]) -> Optional[int]:
 
 
 # --- reads ---------------------------------------------------------------------------------------
+
+
+def pull_request_view(build: Build) -> Optional[Dict[str, Any]]:
+    """The build's pull request as the build reads it (FR-13): its number, link, state, when the Hub
+    last asked GitHub and GitHub's last error. None for a build that does not land as one."""
+    if build.landing != LANDING_PULL_REQUEST:
+        return None
+    return {
+        "number": build.pr_number,
+        "url": build.pr_url,
+        "state": build.pr_state,
+        "last_asked_at": _iso(build.pr_last_asked_at),
+        "error": build.pr_error,
+    }
 
 
 async def running_build(session: AsyncSession, document_id: str) -> Optional[Build]:
@@ -195,6 +209,7 @@ async def view(session: AsyncSession, build: Build) -> Dict[str, Any]:
         "window_start": _iso(build.window_start),
         "window_end": _iso(build.window_end),
         "landing": build.landing,
+        "pull_request": pull_request_view(build),
         "loop_id": build.loop_id,
         "stop_reason": build.stop_reason,
         "reopenings": list(build.reopenings or []),
@@ -345,6 +360,7 @@ async def document_entry(session: AsyncSession, build: Build) -> Dict[str, Any]:
         "window_start": _iso(build.window_start),
         "window_end": _iso(build.window_end),
         "landing": build.landing,
+        "pull_request": pull_request_view(build),
         "started_at": _iso(build.created_at),
         "ended_at": _iso(build.stopped_at) if build.state != RUNNING else None,
         "stop_reason": build.stop_reason,

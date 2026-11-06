@@ -446,7 +446,8 @@ class TestAppModeNativeWindow:
 
         assert cli._open_app_window_native("http://127.0.0.1:8000") is True
         # pywebview fires before_show with the window; that subscribes to initialisation...
-        (on_before_show,) = window.events.before_show.handlers
+        # (the second before_show handler writes the taskbar identity: test_desktop_window.py)
+        on_before_show, _identity = window.events.before_show.handlers
         on_before_show(window)
         (on_initialized,) = window.native.webview.CoreWebView2InitializationCompleted.handlers
         # ...whose handler, run after pywebview's own, turns the menu back on.
@@ -555,7 +556,7 @@ class TestAppModeNativeWindow:
 
         calls = []
         monkeypatch.setattr(
-            cli, "_open_app_window_native", lambda url: calls.append(("native", url)) or True
+            cli, "_open_app_window_native", lambda url, **_kw: calls.append(("native", url)) or True
         )
         monkeypatch.setattr(cli, "_open_app_window", lambda url: calls.append(("fallback", url)))
 
@@ -589,7 +590,7 @@ class TestAppModeNativeWindow:
         monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: FakeResp())
 
         calls = []
-        monkeypatch.setattr(cli, "_open_app_window_native", lambda url: False)
+        monkeypatch.setattr(cli, "_open_app_window_native", lambda url, **_kw: False)
         monkeypatch.setattr(cli, "_open_app_window", lambda url: calls.append(("fallback", url)))
 
         result = cli._hub_native_start(

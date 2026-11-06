@@ -106,11 +106,6 @@ export interface ProjectSettings {
   /** Commands the Hub runs on the work a task's approval would merge; approval is refused until
    *  they pass. Null means no checks, and approval is unchanged. Only the operator sets these. */
   checks: ProjectCheck[] | null
-  /** Whether the Hub lands an approval over check failures that are provably not the task's (the
-   *  same test ids fail on main too, or passed when rerun on their own), recording its own
-   *  override, and files their fix task (`a-red-main-does-not-hold-the-night`). On by default;
-   *  absent from a Hub older than that change, which never overrides. */
-  checks_auto_override?: boolean
   /** Whether every process a check run starts runs below normal priority, so the operator's own
    *  work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-user`). Off by
    *  default; absent from a Hub older than that change. */
@@ -155,6 +150,16 @@ export interface ProjectCheck {
   /** When it runs: in a task's run before review, in a landing batch's run, or both
    *  (`checks-know-their-phase-and-give-way-to-the-user`). A check saved before it reads `both`. */
   phase?: CheckPhase
+  /** The JUnit XML file the check writes, relative to the directory it runs in
+   *  (`checks-report-which-tests-failed-in-any-language`, FR-1). Absent: judged as a whole. */
+  report_path?: string | null
+  /** Re-runs named tests: `{tests}` is replaced by their ids, `classname::name`, one argument each.
+   *  The Hub refuses one without `{tests}`. */
+  rerun_command?: string | null
+  /** What runs in a task's pre-review run in place of `command`, where the files the task changed
+   *  are known: `{changed_files}` is replaced by the path of a file listing them. The Hub refuses
+   *  one without `{changed_files}`. Landings and main runs keep running `command`. */
+  change_command?: string | null
 }
 
 export type CheckPhase = 'review' | 'landing' | 'both'

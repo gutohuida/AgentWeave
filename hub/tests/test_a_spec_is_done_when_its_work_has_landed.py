@@ -7,8 +7,7 @@ from sqlalchemy import update
 
 from hub.builds import LANDS_NOWHERE
 from hub.db.engine import async_session_factory
-from hub.db.models import Build, EventLog, TaskCheckRun, TaskLanding
-from hub.flaky_tests import FIX_TASK_EVENT
+from hub.db.models import Build, TaskCheckRun, TaskLanding
 from hub.task_integration import NO_TASK_BRANCH
 
 from .test_a_build_has_a_driver_a_level_and_its_people import (
@@ -135,16 +134,18 @@ async def test_a_cap_holding_a_fix_task_shows_on_its_card_and_the_build_still_re
                         "preexisting": True,
                         "shared_tests": ["tests/a.py::t"],
                         "own_tests": [],
+                        # The known-failing entry it went past, as the gate records it.
+                        "listed": [
+                            {
+                                "id": "kf-a",
+                                "check": "hub-tests",
+                                "test": "tests/a.py::t",
+                                "kind": "fails on main",
+                                "fix_task_id": "task-the-hubs-fix",
+                            }
+                        ],
                     }
                 ],
-            )
-        )
-        db.add(
-            EventLog(
-                project_id=P,
-                id="event-fix-1",
-                event_type=FIX_TASK_EVENT,
-                data={"task_id": "task-the-hubs-fix", "tests": ["tests/a.py::t"]},
             )
         )
         await db.commit()
@@ -204,6 +205,15 @@ async def test_a_failure_of_the_builds_own_work_reads_as_introduced(
                         "exit_code": 1,
                         "own_tests": ["tests/b.py::t"],
                         "shared_tests": ["tests/c.py::t"],
+                        "listed": [
+                            {
+                                "id": "kf-c",
+                                "check": "hub-tests",
+                                "test": "tests/c.py::t",
+                                "kind": "fails on main",
+                                "fix_task_id": None,
+                            }
+                        ],
                         "touched_tests": ["tests/c.py::t"],
                     }
                 ],

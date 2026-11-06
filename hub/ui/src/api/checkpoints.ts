@@ -88,6 +88,31 @@ export async function cutOver(
   )
 }
 
+export interface StartedFromCheckpoint {
+  checkpoint_id: string
+  conversation_id: string
+  agent: string
+  title: string | null
+  queue_entry_id: string
+  started: boolean
+  waiting_reason?: string | null
+}
+
+/** Start a new conversation of `agent` whose first input is this checkpoint (and the optional
+ *  message). The original conversation and the checkpoint's carry-over are left as they were. */
+export async function startFromCheckpoint(
+  projectId: string,
+  checkpointId: string,
+  agent: string,
+  message?: string,
+): Promise<StartedFromCheckpoint> {
+  const note = message?.trim()
+  return postJson<StartedFromCheckpoint>(
+    `/api/v1/projects/${projectId}/checkpoints/${checkpointId}/start`,
+    note ? { agent, message: note } : { agent },
+  )
+}
+
 export interface ContinueResult {
   agent: string
   conversation_id: string
@@ -155,5 +180,98 @@ export function useCheckpointNotes(conversationId: string | null, enabled = true
         `/api/v1/projects/${projectId}/conversations/${conversationId}/checkpoint-notes`,
       ),
     enabled: isConfigured && !!projectId && !!conversationId && enabled,
+  })
+}
+
+/** The run a checkpoint covers, as `GET /projects/{id}/checkpoints` names it. */
+export interface CoveredRun {
+  run_id: string
+  agent: string
+  status: string
+  started_at: string | null
+  ended_at: string | null
+}
+
+export interface ProjectCheckpoint extends Checkpoint {
+  title?: string | null
+  summary?: string | null
+  /** `model`, or who made it in the model's place: `hub_from_body`, `hub_from_facts`. */
+  title_made_by?: string | null
+  /** Why the model's answers were rejected or could not be read. */
+  title_reason?: string | null
+  has_unreadable_answer?: boolean
+  /** Only when the list was asked for it (`includeRaw`). */
+  unreadable_answer?: string | null
+  carried_into?: { conversation_id: string } | null
+  covered_runs?: CoveredRun[] | null
+  /** The checkpoint this checkpoint's conversation was carried over from, when it was. */
+  carried_from?: { checkpoint_id: string; conversation_id: string; title?: string | null } | null
+  /** Conversations the operator started from this checkpoint, oldest first; not the carry-over. */
+  started_conversations?: Array<{
+    conversation_id: string
+    agent: string
+    title?: string | null
+    lifecycle?: string
+    created_at?: string | null
+  }> | null
+}
+
+export interface ProjectCheckpointFilters {
+  agent?: string
+  trigger?: string
+  conversationId?: string
+  includeRaw?: boolean
+}
+
+export interface ProjectCheckpointList {
+  checkpoints: ProjectCheckpoint[]
+  /** Present only when a conversation was named: where it came from and where it went. */
+  lineage: {
+    conversation_id: string
+    started_from: { checkpoint_id: string; conversation_id: string; title?: string | null } | null
+    /** The checkpoint the operator started this conversation from, if they did. */
+    started_from_checkpoint?: { checkpoint_id: string; conversation_id: string | null; title?: string | null } | null
+    carried_into: { checkpoint_id: string; conversation_id: string } | null
+  } | null
+}
+
+/** Every checkpoint the project holds, newest first (`GET /projects/{id}/checkpoints`).
+ *  The filters narrow it and combine. */
+export function useProjectCheckpoints(
+  filters: ProjectCheckpointFilters = {},
+  options: { enabled?: boolean } = {},
+) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const queryClient = useQueryClient()
+  useSSE((event) => {
+    if (event.type !== 'checkpoint_ready' && event.type !== 'conversation_cut_over') return
+    queryClient.invalidateQueries({ queryKey: ['project', projectId, 'checkpoints', 'project-list'] })
+  })
+  const params = new URLSearchParams()
+  if (filters.agent) params.set('agent', filters.agent)
+  if (filters.trigger) params.set('trigger', filters.trigger)
+  if (filters.conversationId) params.set('conversation_id', filters.conversationId)
+  if (filters.includeRaw) params.set('include_raw', 'true')
+  const query = params.toString()
+  return useQuery<ProjectCheckpointList>({
+    queryKey: ['project', projectId, 'checkpoints', 'project-list', query],
+    queryFn: () =>
+      getJson<ProjectCheckpointList>(
+        `/api/v1/projects/${projectId}/checkpoints${query ? `?${query}` : ''}`,
+      ),
+    enabled: isConfigured && !!projectId && (options.enabled ?? true),
+  })
+}
+
+/** A checkpoint as its successor receives it (`GET /projects/{id}/checkpoints/{id}/rendered`). */
+export function useRenderedCheckpoint(checkpointId: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ id: string; status: string; rendered: string }>({
+    queryKey: ['project', projectId, 'checkpoints', checkpointId, 'rendered'],
+    queryFn: () =>
+      getJson<{ id: string; status: string; rendered: string }>(
+        `/api/v1/projects/${projectId}/checkpoints/${checkpointId}/rendered`,
+      ),
+    enabled: isConfigured && !!projectId && !!checkpointId,
   })
 }

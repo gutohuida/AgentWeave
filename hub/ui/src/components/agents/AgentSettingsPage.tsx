@@ -38,7 +38,8 @@ import {
   AgentIdentitySettings,
   type AgentPatch,
 } from './settings/AgentSettingsSections'
-import type { AgentSettingsSection } from '@/lib/navigation'
+import { checkpointsDestination, goTo, type AgentSettingsSection } from '@/lib/navigation'
+import { useConfigStore } from '@/store/configStore'
 import { hubDate } from '@/lib/hubTime'
 import { PERMISSION_WAIT_FALLBACK_SECONDS, QUESTION_WAIT_FALLBACK_SECONDS } from '@/lib/agentWaits'
 
@@ -358,6 +359,23 @@ function SectionContent({ agent, section }: { agent: AgentSummary; section: Agen
             description="When this agent's conversations are checkpointed, and how full the context gets first. The Hub writes the checkpoint from the conversation's own record; the agent is not asked to."
           >
             <CheckpointOverrideSetting agent={agent} />
+          </SettingsRow>
+          <SettingsRow
+            label="Checkpoints taken"
+            description="Every checkpoint this agent has produced, across its conversations."
+          >
+            <button
+              type="button"
+              data-slot="agent-checkpoints-link"
+              data-testid="agent-checkpoints-link"
+              className="aw-link"
+              onClick={() => {
+                const projectId = useConfigStore.getState().selectedProjectId
+                if (projectId) goTo(checkpointsDestination(projectId, { agent: agent.name }))
+              }}
+            >
+              Show this agent’s checkpoints
+            </button>
           </SettingsRow>
         </SettingsSection>
       )

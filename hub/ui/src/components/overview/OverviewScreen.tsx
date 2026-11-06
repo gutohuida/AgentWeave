@@ -7,7 +7,7 @@ import { useQueueStatuses } from '@/api/queue'
 import { readableApiError } from '@/api/client'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
-import { useFlakyTests, useHandleFlakyTests } from '@/api/flakyTests'
+import { useKnownFailing } from '@/api/knownFailing'
 import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
 import { useReopeningWarnings } from '@/api/reopeningWarnings'
 import { offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
@@ -23,6 +23,7 @@ import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { AgentPostureChips } from './AgentPostureChips'
+import { KnownFailingList } from './KnownFailingList'
 import { ReopeningWarnings } from './ReopeningWarnings'
 import { OverviewView, type AgentStripItem, type FinishedItem, type NeedItem, type RunningItem } from './OverviewView'
 
@@ -70,8 +71,7 @@ export function OverviewScreen({
   const { data: questions = [], error: questionsError, refetch: refetchQuestions } = useQuestions(false)
   const { data: openStalls = [], error: stallsError, refetch: refetchStalls } = useOpenStalls()
   const endStall = useEndStall()
-  const { data: flakyReport, error: flakyError, refetch: refetchFlaky } = useFlakyTests()
-  const handleFlaky = useHandleFlakyTests()
+  const { data: knownFailing, error: knownFailingError, refetch: refetchKnownFailing } = useKnownFailing()
   const { data: mainNotices = [], error: mainNoticesError, refetch: refetchMainNotices } = useOpenMainNotices()
   const markSeen = useMarkMainNoticeSeen()
   const { data: offers = [], error: offersError, refetch: refetchOffers } = useNextSliceOffers()
@@ -79,7 +79,6 @@ export function OverviewScreen({
   const declineOffer = useDeclineNextSliceOffer()
   const [offerAgent, setOfferAgent] = React.useState<Record<string, string>>({})
   const { data: reopenings = [], error: reopeningsError, refetch: refetchReopenings } = useReopeningWarnings()
-  const flaky = flakyReport?.flaky ?? []
   const { data: taskPage, error: tasksError, refetch: refetchTasks } = useTasks()
   const { data: conversationPage, error: conversationsError, refetch: refetchConversations } = useProjectConversations(projectId || null)
   const { data: ledger, error: ledgerError, refetch: refetchLedger } = useProjectLedger()
@@ -88,7 +87,7 @@ export function OverviewScreen({
     ['the agents', agentsError, refetchAgents],
     ['the questions', questionsError, refetchQuestions],
     ['the stalls', stallsError, refetchStalls],
-    ['the flaky tests', flakyError, refetchFlaky],
+    ['the known-failing list', knownFailingError, refetchKnownFailing],
     ['the tasks', tasksError, refetchTasks],
     ['the conversations', conversationsError, refetchConversations],
     ['the ledger', ledgerError, refetchLedger],
@@ -280,38 +279,6 @@ export function OverviewScreen({
         onClick: () => markSeen.mutate(notice.id, { onError: refusal('The notice was not marked seen') }),
       },
     })),
-    // Tests the approval checks saw fail and then pass when re-run (`hub/hub/flaky_tests.py`):
-    // approval went on, so nothing else asks anyone to fix them. One row for the whole list,
-    // handed to a task as a round of fixing.
-    ...(flaky.length
-      ? [
-          {
-            id: 'flaky-tests',
-            kind: 'flaky' as const,
-            agent: null,
-            title: `${flaky.length} flaky test${flaky.length === 1 ? '' : 's'} in the approval checks`,
-            detail: sentence(
-              flaky
-                .slice(0, 3)
-                .map((f) => `${f.test ?? `the ${f.check} check`} (${f.occurrences}×)`)
-                .join(', ') + (flaky.length > 3 ? `, and ${flaky.length - 3} more` : ''),
-            ),
-            at: flaky[0].last_seen ?? new Date().toISOString(),
-            primary: {
-              label: 'Create a fix task',
-              onClick: () =>
-                handleFlaky.mutate(true, {
-                  onSuccess: (r) => {
-                    toast({ title: 'Made a task to fix the flaky tests', tone: 'success' })
-                    if (r.task_id) openTask(r.task_id)
-                  },
-                  onError: refusal('The fix task was not made'),
-                }),
-            },
-            secondary: { label: 'Dismiss', onClick: () => handleFlaky.mutate(false, { onError: refusal('The flaky tests were not dismissed') }) },
-          } satisfies NeedItem,
-        ]
-      : []),
   ]
 
   const running: RunningItem[] = conversations
@@ -439,6 +406,10 @@ export function OverviewScreen({
       onOpenLedger={() => onNavigate('activity')}
       onOpenQuestions={() => onNavigate('questions')}
       onAddAgent={onAddAgent}
+      knownFailing={
+        // A Hub older than the list answers null: it has none to show, so no section.
+        knownFailing ? <KnownFailingList entries={knownFailing} onOpenTask={openTask} now={now} /> : null
+      }
       notice={
         reopenings.length > 0 || failures.some(([, error]) => error) || accounting?.budget.exhausted ? (
           <>

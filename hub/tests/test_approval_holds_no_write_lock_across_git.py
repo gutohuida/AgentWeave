@@ -30,6 +30,7 @@ import pytest
 from hub import worktrees
 from hub.db.engine import engine
 
+from ._loop_lag import STALL_LIMIT, LagProbe
 from .test_approvals_and_evidence_never_freeze_the_hub import (
     _REAL_ENSURE_TASK_WORKTREE,
     _completed_task_with_accepted_work,
@@ -51,8 +52,6 @@ from .test_task_integration import (  # noqa: F401 -- `builder` is a fixture
 
 GIT_DELAY = 0.25
 BUSY_TIMEOUT = 0.1
-#: A write that waits for nobody commits in milliseconds; one that waits for git fails at 0.1 s.
-WRITE_BOUND = 1.0
 
 
 @dataclass
@@ -61,13 +60,38 @@ class Probe:
 
     @property
     def failed(self) -> List[dict]:
-        return [w for w in self.writes if w["error"] or w["seconds"] > WRITE_BOUND]
+        """The writes a lock held across their git refused. Not how long a write took: with a
+        100 ms busy timeout, a write that commits waited at most that long for anybody's lock, and
+        any time beyond it is the machine's (1.756 s for one that waited for nobody, AW-40)."""
+        return [w for w in self.writes if w["error"]]
 
 
 async def database_file() -> str:
     async with engine.connect() as connection:
         rows = (await connection.exec_driver_sql("PRAGMA database_list")).all()
     return next(row[2] for row in rows if row[1] == "main")
+
+
+def _write_until(path: str, window: float) -> str:
+    """Insert and commit an event row from a second connection, retrying for *window* seconds;
+    answer "" once one commits, else the last error."""
+    deadline = time.perf_counter() + window
+    while True:
+        try:
+            connection = sqlite3.connect(path, timeout=BUSY_TIMEOUT)
+            try:
+                connection.execute(
+                    "INSERT INTO event_logs (id, project_id, event_type, severity,"
+                    " timestamp) VALUES (?, 'proj-test', 'lock_probe', 'info', ?)",
+                    (f"ev-probe-{uuid.uuid4().hex[:12]}", datetime.now(timezone.utc)),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            return ""
+        except sqlite3.OperationalError as exc:
+            if time.perf_counter() >= deadline:
+                return str(exc)
 
 
 @contextlib.contextmanager
@@ -77,22 +101,22 @@ def a_write_during_every_git(path: str) -> Iterator[Probe]:
 
     def _run(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
         argv = args[0] if args else kwargs.get("args")
-        if isinstance(argv, (list, tuple)) and argv and "git" in os.path.basename(str(argv[0])):
-            started = time.perf_counter()
-            error = ""
-            try:
-                connection = sqlite3.connect(path, timeout=BUSY_TIMEOUT)
-                try:
-                    connection.execute(
-                        "INSERT INTO event_logs (id, project_id, event_type, severity, timestamp)"
-                        " VALUES (?, 'proj-test', 'lock_probe', 'info', ?)",
-                        (f"ev-probe-{uuid.uuid4().hex[:12]}", datetime.now(timezone.utc)),
-                    )
-                    connection.commit()
-                finally:
-                    connection.close()
-            except sqlite3.OperationalError as exc:
-                error = str(exc)
+        if not (
+            isinstance(argv, (list, tuple)) and argv and "git" in os.path.basename(str(argv[0]))
+        ):
+            return real(*args, **kwargs)
+        started = time.perf_counter()
+        # A lock held across this git is held before it starts and still held when it returns, so
+        # a write fails both sides of it. A short transaction of the app's own, however far a busy
+        # machine stretches it, cannot also span the slowed git between the two -- it is not what
+        # this probes, so a write refused before the git is tried again after it.
+        error = _write_until(path, GIT_DELAY * 2)
+        time.sleep(GIT_DELAY)
+        try:
+            return real(*args, **kwargs)
+        finally:
+            if error:
+                error = _write_until(path, GIT_DELAY * 2)
             probe.writes.append(
                 {
                     "git": [str(a) for a in argv][1:9],
@@ -101,8 +125,6 @@ def a_write_during_every_git(path: str) -> Iterator[Probe]:
                     "thread": threading.current_thread().name,
                 }
             )
-            time.sleep(GIT_DELAY)
-        return real(*args, **kwargs)
 
     subprocess.run = _run
     try:
@@ -111,9 +133,12 @@ def a_write_during_every_git(path: str) -> Iterator[Probe]:
         subprocess.run = real
 
 
-def assert_no_write_waited(probe: Probe) -> None:
+def assert_no_write_waited(probe: Probe, lag: LagProbe) -> None:
+    """No write waited for git, and the loop was never held meanwhile: git and its writes run on
+    worker threads, so a 250 ms hold of the loop anywhere on the path counts too."""
     assert probe.writes, "nothing ran git, so this measured nothing"
     assert not probe.failed, probe.failed
+    assert lag.worst < STALL_LIMIT, f"the loop stalled {lag.worst * 1000:.0f} ms: {lag.why}"
 
 
 @pytest.mark.asyncio
@@ -127,12 +152,13 @@ async def test_approving_holds_no_write_lock_while_it_merges_and_releases(
     path = await database_file()
 
     with a_write_during_every_git(path) as probe:
-        approved = await app.patch(
-            f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers
-        )
+        async with LagProbe() as lag:
+            approved = await app.patch(
+                f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers
+            )
 
     assert approved.status_code == 200, approved.text
-    assert_no_write_waited(probe)
+    assert_no_write_waited(probe, lag)
     assert any("merge" in w["git"] for w in probe.writes), "the merge ran no git"
     # The same outcome as before: merged, recorded, released.
     assert work in commits_on(tmp_path, "main")
@@ -155,10 +181,11 @@ async def test_retrying_an_integration_holds_no_write_lock_while_it_merges(
     path = await database_file()
 
     with a_write_during_every_git(path) as probe:
-        retried = await app.post(f"{TASKS}/{task}/integrations/retry", headers=auth_headers)
+        async with LagProbe() as lag:
+            retried = await app.post(f"{TASKS}/{task}/integrations/retry", headers=auth_headers)
 
     assert retried.status_code == 200, retried.text
-    assert_no_write_waited(probe)
+    assert_no_write_waited(probe, lag)
     assert work in commits_on(tmp_path, "main")
 
 
@@ -174,12 +201,13 @@ async def test_releasing_a_rejected_tasks_checkout_holds_no_write_lock(
     path = await database_file()
 
     with a_write_during_every_git(path) as probe:
-        rejected = await app.patch(
-            f"{TASKS}/{task}", json={"status": "rejected"}, headers=auth_headers
-        )
+        async with LagProbe() as lag:
+            rejected = await app.patch(
+                f"{TASKS}/{task}", json={"status": "rejected"}, headers=auth_headers
+            )
 
     assert rejected.status_code == 200, rejected.text
-    assert_no_write_waited(probe)
+    assert_no_write_waited(probe, lag)
     assert not checkout.exists()
     assert git(tmp_path, "rev-parse", "--verify", worktrees.task_branch_name(task)).returncode == 0
 
@@ -199,11 +227,12 @@ async def test_landing_a_batch_holds_no_write_lock_while_git_or_a_check_runs(
 
     try:
         with a_write_during_every_git(path) as probe:
-            await landing_queue.drain()
+            async with LagProbe() as lag:
+                await landing_queue.drain()
     finally:
         landing_queue.cancel_timers()
 
-    assert_no_write_waited(probe)
+    assert_no_write_waited(probe, lag)
     for work in works:
         assert work in commits_on(tmp_path, "main")
     assert counter.exists()

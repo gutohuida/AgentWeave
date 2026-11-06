@@ -4,6 +4,11 @@ The gate re-runs a failure once and lets approval go on when the second attempt 
 (`project_checks.confirm_failure`). Before `flaky_tests`, the only trace of that was the run's own
 result and one sentence in the reviewer's briefing: nobody was ever asked to fix the test, so the
 same flakes cost a gate run each, flow after flow (loop-df5f74816122 hit three of them in one day).
+
+Since the known-failing list (`failures-already-known-are-on-a-list-not-re-argued`, FR-12) a flake
+is the list's flaky entry, with its own fix task: nothing is reconstructed from old check runs or
+the event log. The Overview reads that list (`GET /checks/known-failing`, FR-11), which replaced
+the flaky list and its "handled" action.
 """
 
 from __future__ import annotations
@@ -14,7 +19,7 @@ from sqlalchemy import select
 
 from hub import flaky_tests, project_checks
 from hub.db.engine import async_session_factory
-from hub.db.models import EventLog, Task, TaskCheckRun
+from hub.db.models import EventLog, KnownFailingTest, Task, TaskCheckRun
 
 from .test_checks_reuse_a_pass_and_confirm_a_failure import _counting
 from .test_project_checks_run import _project, _task_with_work
@@ -38,30 +43,26 @@ def _flaky_result(name: str, tests: list) -> dict:
     }
 
 
-async def _run_row(task_id: str, results: list, *, started_at: datetime) -> str:
+async def _entry(
+    test: str, *, check="hub-tests", kind="flaky", seen: datetime, fix_task_id=None
+) -> str:
+    entry_id = f"kf-{abs(hash((check, test, kind))) % 10**10:010d}"
     async with async_session_factory() as session:
-        run_id = f"chk-{abs(hash((task_id, started_at))) % 10**12:012d}"
         session.add(
-            TaskCheckRun(
-                id=run_id,
+            KnownFailingTest(
+                id=entry_id,
                 project_id="proj-test",
-                task_id=task_id,
-                main_sha="0" * 40,
-                target_shas=[],
-                state="passed",
-                results=results,
-                started_at=started_at,
-                ended_at=started_at,
+                check_name=check,
+                test=test,
+                kind=kind,
+                first_seen=seen,
+                last_seen=seen,
+                added_by_run=f"chk-{entry_id[-6:]}",
+                fix_task_id=fix_task_id,
             )
         )
         await session.commit()
-    return run_id
-
-
-async def _task(task_id: str) -> None:
-    async with async_session_factory() as session:
-        session.add(Task(id=task_id, project_id="proj-test", title=task_id, status="under_review"))
-        await session.commit()
+    return entry_id
 
 
 async def test_the_gate_raises_a_flake_it_records(app, auth_headers, tmp_path, tmp_path_factory):
@@ -82,92 +83,70 @@ async def test_the_gate_raises_a_flake_it_records(app, auth_headers, tmp_path, t
             .scalars()
             .all()
         )
+        [run] = (await session.execute(select(TaskCheckRun))).scalars().all()
     assert [e.data["check"] for e in events] == ["suite"]
     assert events[0].data["task_id"] == task_id and events[0].severity == "warn"
+    assert run.state == "passed" and run.results[0]["flaky"]["how"] == "check"
 
-    r = await app.get(f"{P}/checks/flaky", headers=auth_headers)
+    # A whole-check flake names no test, so nothing goes on the list (FR-2 lists tests): the Logs
+    # row above is its trace.
+    r = await app.get(f"{P}/checks/known-failing", headers=auth_headers)
     assert r.status_code == 200, r.text
-    [entry] = r.json()["flaky"]
-    assert entry["check"] == "suite" and entry["test"] is None and entry["occurrences"] == 1
-    assert entry["task_ids"] == [task_id]
+    assert r.json()["entries"] == []
 
 
-async def test_flakes_are_listed_per_test_most_recent_first(app, auth_headers):
+async def test_the_list_holds_flakes_and_main_failures_most_recent_first(app, auth_headers):
     now = datetime.now(timezone.utc)
-    for t in ("task-a", "task-b"):
-        await _task(t)
-    await _run_row(
-        "task-a",
-        [_flaky_result("hub-tests", ["t.py::test_x"])],
-        started_at=now - timedelta(hours=5),
-    )
-    await _run_row(
-        "task-b",
-        [_flaky_result("hub-tests", ["t.py::test_x", "t.py::test_y"])],
-        started_at=now - timedelta(hours=1),
-    )
-    await _run_row(
-        "task-b", [_flaky_result("hub-tests", ["t.py::old"])], started_at=now - timedelta(days=40)
-    )
+    await _entry("t.py::test_x", seen=now - timedelta(hours=5))
+    await _entry("t.py::test_y", seen=now - timedelta(hours=1))
+    await _entry("t.py::red", kind="fails on main", seen=now)
 
-    body = (await app.get(f"{P}/checks/flaky", headers=auth_headers)).json()
-    by_test = {f["test"]: f for f in body["flaky"]}
-    assert set(by_test) == {
-        "t.py::test_x",
-        "t.py::test_y",
-    }, "a flake outside the window is not listed"
-    assert by_test["t.py::test_x"]["occurrences"] == 2
-    assert by_test["t.py::test_x"]["task_ids"] == ["task-a", "task-b"]
-    assert body["flaky"][0]["last_seen"] >= body["flaky"][1]["last_seen"]
+    body = (await app.get(f"{P}/checks/known-failing", headers=auth_headers)).json()
+    assert [(e["test"], e["kind"]) for e in body["entries"]] == [
+        ("t.py::red", "fails on main"),
+        ("t.py::test_y", "flaky"),
+        ("t.py::test_x", "flaky"),
+    ]
+    assert body["entries"][0]["check"] == "hub-tests"
 
 
-async def test_handing_the_list_to_a_task_names_every_test_and_quiets_it_until_one_flakes_again(
-    app, auth_headers
-):
+async def test_no_flake_is_read_back_from_old_check_runs(app, auth_headers):
+    """FR-12: the reconstruction of flaky tests from check runs and event logs is gone. A run that
+    recorded a flake, with no entry on the list, lists nothing."""
     now = datetime.now(timezone.utc)
-    await _task("task-a")
-    await _run_row(
-        "task-a",
-        [_flaky_result("hub-tests", ["t.py::test_x"]), _flaky_result("lint", [])],
-        started_at=now - timedelta(hours=2),
-    )
+    async with async_session_factory() as session:
+        session.add(Task(id="task-a", project_id="proj-test", title="a", status="under_review"))
+        session.add(
+            TaskCheckRun(
+                id="chk-oldflake01",
+                project_id="proj-test",
+                task_id="task-a",
+                main_sha="0" * 40,
+                target_shas=[],
+                state="passed",
+                results=[_flaky_result("hub-tests", ["t.py::test_x"])],
+                started_at=now - timedelta(hours=1),
+                ended_at=now - timedelta(hours=1),
+            )
+        )
+        await session.commit()
 
-    r = await app.post(
+    body = (await app.get(f"{P}/checks/known-failing", headers=auth_headers)).json()
+    assert body["entries"] == []
+
+
+async def test_the_flaky_list_and_its_handled_action_are_gone(app, auth_headers):
+    """FR-11: the known-failing list is shown in place of the flaky list. Every entry has its own
+    fix task, so there is no list-wide task to make and nothing to dismiss."""
+    await _entry("t.py::test_x", seen=datetime.now(timezone.utc))
+
+    assert (await app.get(f"{P}/checks/flaky", headers=auth_headers)).status_code == 404
+    handled = await app.post(
         f"{P}/checks/flaky/handled", json={"create_task": True}, headers=auth_headers
     )
-    assert r.status_code == 200, r.text
-    task_id = r.json()["task_id"]
-    task = (await app.get(f"{P}/tasks/{task_id}", headers=auth_headers)).json()
-    assert task["status"] == "pending" and task["assignee"] is None
-    assert "Fix 2 flaky tests" in task["title"]
-    assert "`t.py::test_x`" in task["description"] and "check `lint`" in task["description"]
-
-    after = (await app.get(f"{P}/checks/flaky", headers=auth_headers)).json()
-    assert after["flaky"] == [] and after["handled"]["task_id"] == task_id
-
-    # The fix did not hold: the same test flakes again, and is open again.
-    await _run_row(
-        "task-a",
-        [_flaky_result("hub-tests", ["t.py::test_x"])],
-        started_at=now + timedelta(seconds=1),
-    )
-    again = (await app.get(f"{P}/checks/flaky", headers=auth_headers)).json()
-    assert [f["test"] for f in again["flaky"]] == ["t.py::test_x"]
-
-
-async def test_dismissing_makes_no_task_and_an_empty_list_cannot_be_handled(app, auth_headers):
-    now = datetime.now(timezone.utc)
-    await _task("task-a")
-    await _run_row("task-a", [_flaky_result("hub-tests", ["t.py::test_x"])], started_at=now)
-
-    r = await app.post(
-        f"{P}/checks/flaky/handled", json={"create_task": False}, headers=auth_headers
-    )
-    assert r.status_code == 200 and r.json()["task_id"] is None
-    assert (await app.get(f"{P}/checks/flaky", headers=auth_headers)).json()["flaky"] == []
-    assert (
-        await app.post(f"{P}/checks/flaky/handled", json={}, headers=auth_headers)
-    ).status_code == 409
+    assert handled.status_code in (404, 405), handled.text
+    async with async_session_factory() as session:
+        assert (await session.execute(select(Task))).scalars().all() == []
 
 
 def test_a_whole_check_flake_and_a_named_test_flake_are_both_read():

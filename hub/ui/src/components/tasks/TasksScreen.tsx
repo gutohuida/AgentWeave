@@ -69,10 +69,10 @@ export function TasksScreen({
   // The picker's specs and counts, and whether a remembered spec still has tasks, come from the
   // Hub's per-document totals: not capped at a page, and not hiding an archived spec's finished work.
   const { data: boardsData, error: boardsError } = useTaskBoards()
+  const { data: specDocuments } = useSpecDocuments()
   const storedScope = useBoardScopeStore((state) => (projectId ? state.scopes[projectId] : undefined))
   const setStoredScope = useBoardScopeStore((state) => state.setScope)
   const rememberedScope = React.useMemo(() => storedScope ?? loadScope(projectId), [storedScope, projectId])
-  const { data: specDocuments } = useSpecDocuments()
   // A remembered spec that holds no task any more opens as All.
   const scope: BoardScope =
     rememberedScope.kind === 'spec' &&
@@ -81,12 +81,20 @@ export function TasksScreen({
       ? ALL_SCOPE
       : rememberedScope
   const narrowed = activeTaskIds !== null
+  // Specs with a build running now: the list route says so per document (`build`, present only
+  // while a build runs). The Building scope is every task of those, whatever its own status.
+  const buildingIds = React.useMemo(
+    () => (specDocuments?.documents ?? []).filter((document) => document.build).map((document) => document.id),
+    [specDocuments],
+  )
   const scopeOptions =
     narrowed || scope.kind === 'all'
       ? { excludeArchivedCompleted: !narrowed }
       : scope.kind === 'none'
         ? { noSpec: true }
-        : { specDocumentId: scope.id }
+        : scope.kind === 'building'
+          ? { specDocumentIds: buildingIds }
+          : { specDocumentId: scope.id }
   const { data: taskPage, isLoading, isError } = useTasks(scopeOptions)
   const { data: agents = [], error: agentsError } = useAgents()
   const { data: allowed, error: transitionsError } = useAllowedTransitions()
@@ -146,7 +154,7 @@ export function TasksScreen({
   }, [boardsData, specTitles])
   const noSpecCount = (boardsData?.boards ?? []).find((board) => !board.spec_document_id)?.total ?? 0
   const scopeName =
-    scope.kind === 'none' ? 'No spec' : scope.kind === 'spec'
+    scope.kind === 'none' ? 'No spec' : scope.kind === 'building' ? 'Building' : scope.kind === 'spec'
       ? (specTitles.get(scope.id) ?? pickerSpecs.find((spec) => spec.id === scope.id)?.title ?? scope.id)
       : 'All'
   const chooseScope = (next: BoardScope) => {
@@ -388,6 +396,7 @@ export function TasksScreen({
               scopeLabel={scopeName}
               specs={pickerSpecs}
               noSpecCount={noSpecCount}
+              buildingCount={buildingIds.length}
               onChoose={chooseScope}
             />
           }

@@ -41246,7 +41246,7 @@ Check run `chk-7c08b3c0621e` failed `test_a_turn_start_that_creates_its_checkout
 
 ## F1124 (B) -- an author is told `ready_to_approve: true` on a document the operator's Approve then stops on
 
-**Status:** open. Recurred 2026-11-04 on `checks-know-their-phase-and-give-way-to-the-user`: three saves answered `ready_to_approve: true` with no warnings, and the operator's Approve stopped on `criterion_without_check` ×14.
+**Status:** fixed 2026-11-04. A save's `warnings` carry the approval gaps (`criterion_without_check`, `no_acceptance_drive`); `ready_to_approve` is false while one is present; `submit_spec_document` names `how_to_check` and `checked_by`. Tests: `hub/tests/test_a_save_says_what_approve_would_list.py`.
 **Source:** found by using the spec flow
 **Theme:** Spec flow
 **Ready:** yes
@@ -41271,7 +41271,7 @@ On 2026-11-01 `list_tasks` with limit 1000 answered `total: 22` on `proj-d85a82b
 
 `scripts/drive/d1029_build_plan_in_spec.py:56` fixes `PORT = 8010`, and `start_hub` (:143) reuses any Hub answering there; the database can be moved with `AW_DRIVE_DB`, the port cannot. A drive that started the Hub stops it when it ends (`stop_hub`, :171). `d1101_recommended_people.py` imports these helpers. With two builds running, the second drive tests the first task's checkout, and the first drive's end kills the Hub under the second. Read, not run: no two builds have ever overlapped on this project (0 pairs of 9 builds on :8000). **Expected:** a drive's Hub is started from its own checkout on its own port and database, and a drive never reuses a Hub it cannot show came from its checkout.
 
-**Status:** open 2026-11-01. Found assessing whether a second build can run beside a first.
+**Status:** fixed 2026-11-04 for the helpers `d1029_build_plan_in_spec.py` (which d1101 and the d1029/d1031 drives import): the port is `AW_DRIVE_PORT` (default 8010), and `stop_hub` stops only the Hub `start_hub` started. The other `8010` scripts only attach to a Hub and neither start nor stop one. Tests: `hub/tests/test_a_drive_takes_its_own_port.py`. Was: open 2026-11-01. Found assessing whether a second build can run beside a first.
 
 ## F1122 (B) -- the full Hub suite runs for tasks that change nothing it covers, and it is most of the wait for review
 
@@ -41287,7 +41287,7 @@ On `proj-d85a82bf4216` since 2026-10-29, `hub-tests` ran 82 times for 29.2 hours
 
 On 2026-11-01 the operator approved `a-finished-spec-gets-a-build-retrospective`, a standalone spec, and was shown `roadmap_slice_unclaimed` ×5, one per approved roadmap with an unclaimed slice (`hub/hub/spec_service.py:1296`). It does not gate (`NOTE_CODES`, :1319), but it reads like a problem with the spec just approved. Its advice is for an author naming a slice, and it reached the operator at approval. **Expected:** the note goes to the author while writing, not to the operator approving, or is limited to a document whose subject could be one of those slices.
 
-**Status:** open 2026-11-01. Seen once, reported by the operator; not driven.
+**Status:** fixed 2026-11-04. `roadmap_slice_unclaimed` is no longer in Approve, Propose or Check; it rides a save's `warnings` for the author. Tests: `test_a_document_naming_no_slice_is_told_without_being_gated` and `test_an_author_saving_a_standalone_document_is_told_of_the_open_slice` in `hub/tests/test_a_roadmap_shows_which_of_its_slices_are_done.py`.
 
 ## F1126 (B) -- work that reaches master inside a dependent task's merge is never recorded as landed
 
@@ -41309,8 +41309,59 @@ The spec header redesign (`spdoc-407caf5abcdb`, loop `loop-d7043722a6fc`) read B
 
 Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `evt-dc38021f39ec`) report the approving QA2 and QA runs (`run-14a3aa435478`, `run-df2d93e14e9a`) as still running with $0 and no model. Both completed, with $0.64 and $1.01 of `claude-opus-5-5`. QA2 approved task-d0b2d5430417 at 01:24:13.31. The firing's model call took 32.3 s and its event was written at 01:24:50.42, so it assembled at about 01:24:18. The run ended at 01:24:22.19, and its `turn_usage` was observed at 01:24:22.20. QA's numbers match: approved 01:25:40.90, assembled about 01:25:41, ended 01:25:48.48. `build_retrospective.fire_after_commit` fires on the approval's commit (`task_transition_service.py`), which happens inside the reviewer's turn, before the turn's end and usage exist. **Expected:** the retrospective counts the approving run's end, cost and model.
 
-## F1128 (C) -- in the spec side screen, Approve anyway sits on top of the warning text it answers
+## F1128 (B) -- `/health` runs git on the event loop to compute the UI staleness warning, holding the whole Hub about 300 ms every 30 s
 
+**Status:** open
+**Source:** found by driving: the lag probe added to `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2)
+**Theme:** Hub responsiveness
+**Ready:** yes
+**Tier:** 0
+
+`GET /health` (`hub/hub/main.py`, `health()`) is `async` and calls `_ui_staleness_warning()` directly. On a cold or expired cache (`UI_STALENESS_TTL_SECONDS`, 30 s) that runs `_compute_ui_staleness_warning` → `ui_source_fingerprint` → `subprocess.run` of git (`main.py` ~146, the listing) and `_git_normalised_hashes` (~195, one or two more), plus a stat of every UI source file, all on the event loop's thread. Measured with `LagProbe` on an otherwise idle test run, 2026-11-05: "the loop stalled 300 ms ... seen at 13x subprocess.py:550 run < main.py:195 _git_normalised_hashes | 5x ... main.py:146 ui_source_fingerprint". The app shell's own route (`main.py` ~628) calls the same function. Every caller that polls `/health` (the CLI, the desktop shell, a supervising script) therefore freezes every other request and stream for the length of three git processes, once per TTL, and longer on a busy machine. **Expected:** the staleness check runs off the loop (`asyncio.to_thread`, or computed in the background and only read by `/health`). **Test:** `/health` with an expired cache inside a `LagProbe` window must stay under `STALL_LIMIT`, with `slow_git` showing no git call on the loop. The slow-share tests warm the cache before their probe window for now, with a comment naming this finding; remove that warm-up when this is fixed.
+
+## F1131 (B) -- opening a project runs git on the event loop to detect its main branch, holding the whole Hub for one to three git processes
+
+**Status:** open
+**Source:** found by driving: the lag probe in `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_open_does_not_block_other_requests` under `scripts/drive/d1105_steady_under_load.py --load` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2; traced by QA2's review)
+**Theme:** Hub responsiveness
+**Ready:** yes
+**Tier:** 0
+
+`POST /projects/open` (`hub/hub/api/v1/projects.py`, `open_project`) awaits `_adopt_detected_main_branch`, which calls `task_integration.is_repository(workspace.root)` (`projects.py:476`) and `task_integration.detect_main_branch(workspace.root)` (`projects.py:478`) directly. Both run `git rev-parse` through `task_integration._git` → `traces.run` → `subprocess.run` on the event loop's thread: one call for a folder that is not a repository (a fault is never cached by `git_facts`, so it is asked again on every open), and up to one per `MAIN_BRANCH_NAMES` entry for one that is. `GET /projects/{id}/main-branch-suggestion` (`projects.py:631-633`, `suggest_main_branch`) does the same, calling `detect_main_branch` and `is_repository` inline. Idle each git call stays under the probe's 100 ms limit; with every CPU busy it does not. Measured 2026-11-05 at ed750999 beside 20 CPU spinners: the test failed 4 of 5 runs alone (126/207/308/309 ms) and 1 of 2 drive repetitions ("the loop stalled 148 ms"), each failure showing the loop's own thread in `subprocess.run < traces.py:1409 run < task_integration.py:165 _git < :183 _ask (repository_fault)`. Every other request and stream waits for those git processes while a project opens. **Expected:** the detection runs off the loop (`await blocking.run(...)` / `asyncio.to_thread` around `is_repository` and `detect_main_branch` in both routes). **Test:** the existing `test_a_slow_project_open_does_not_block_other_requests` is left unchanged and must pass `d1105_steady_under_load.py --load`; a matching probe on `main-branch-suggestion` should be added with the fix.
+
+## F1132 (B) -- a task view reads its spec documents on the event loop, so moving a task can hold the whole Hub on a busy disk
+
+**Status:** open
+**Source:** found by driving: the lag probe in `hub/tests/test_approval_holds_no_write_lock_across_git.py::test_releasing_a_rejected_tasks_checkout_holds_no_write_lock` under `scripts/drive/d1105_steady_under_load.py --load` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2)
+**Theme:** Hub responsiveness
+**Ready:** yes
+**Tier:** 0
+
+`_attach_requirements` (`hub/hub/api/v1/tasks.py:178`), which every task view runs, calls `spec_reading.payloads_for_documents`, and that calls `spec_documents.read_document` once per linked document (`hub/hub/spec_reading.py:61`): `ProjectWorkspace.resolve_relative` (`project_workspace.py:79`, `Path.resolve` → `ntpath.realpath`, two `GetFinalPathNameByHandle` calls on Windows) and then a full `read_text`, all on the event loop's thread. `slice_drafting.offer_for` (`hub/hub/slice_drafting.py:160`, `spec_documents.read_payload`) does the same on the same request. Counted on the loop during one `PATCH /tasks/{id}` to `rejected`, 2026-11-05: five `realpath`s from `_attach_requirements` and one from `offer_for`. Idle they take well under 1 ms each. On a loaded drive repetition the same test failed with "the loop stalled 265 ms: the loop's thread waited on the OS outside its poll ... 0 ms of the thread's CPU ... seen at 10x <frozen ntpath>", which is the loop thread blocked on the filesystem inside one of those calls (1 of 10 loaded repetitions; it did not recur in 17 targeted runs). Every other request and stream waits while a task is listed or moved. **Expected:** the document reads behind a task view run off the loop (`await blocking.run(...)` around `payloads_for_documents`' reads and `offer_for`'s `read_payload`), or come from the listing cache (`read_listed_document`). **Test:** the existing test is left unchanged; a probe that counts filesystem calls on the loop's thread during a task PATCH should find none with the fix.
+
+## F1133 (B) -- a landing batch whose check ran out of time is narrowed and a task is sent back for it
+
+**Status:** fixed (2026-11-05, AW-39): `run_batch_checks` treats `project_checks.unjudged_timeout` as unjudged (no confirmation, no narrowing); `_decide` retries the batch once and holds it for the operator on a second consecutive one. Test: `hub/tests/test_a_landing_timeout_is_unjudged.py`.
+**Source:** found by driving: the operator's Hub, batch `lbat-88e85abef018`, 2026-11-05 (ruff printed "All checks passed!", then ran past its 120 s limit; the batch ended "task-1ab6c8aa23a1 broke its checks" and AWOAW-3 went back to its builder)
+**Theme:** Landing queue
+**Ready:** yes
+**Tier:** 0
+
+`landing_queue._decide` / `_narrow` never consulted `unjudged_timeout`, so a timeout that named no failing test was blamed on the culprit of a binary search. **Expected:** nobody sent back; retried once as `hub-fault-retried-once` does for per-task runs, then surfaced.
+
+## F1134 (B) -- a batch that ends leaves its check run `running` forever
+
+**Status:** fixed (2026-11-05, AW-39): `_end_batch`, `_record_landed` and `_not_landed` end the batch's `TaskCheckRun` with the batch's outcome (`passed` where landed, else `error` with its reason); `close_orphaned_check_runs` does the same at Hub start, before the leftover-run interruption. Test: `hub/tests/test_a_landing_timeout_is_unjudged.py`.
+**Source:** found by driving: the operator's Hub, batch `lbat-5f7eb508e749` landed 16:47 while `chk-c220c528582d` stayed `running` with no `ended_at`, inflating work tallies' check seconds
+**Theme:** Landing queue
+**Ready:** yes
+**Tier:** 0
+
+Any path that moved the batch past `checking` without `run_batch_checks` reaching its final `_record_run` (a cancelled task, a reconcile settling the batch) left the run open.
+
+## F1135 (C) -- in the spec side screen, Approve anyway sits on top of the warning text it answers
+
+**Renumbered:** was F1128 on `agentweave/Architect`; it collided with master's F1128 on merge (2026-11-06).
 **Status:** fixed 2026-11-04 in `b00cf59` (Developer, Tier 0): the warning block and Approve anyway are stacked. Test: `specApprovalWarnings.test.tsx`. Verified by the Architect on the merged tree: lint, tsc and 63 vitest pass. Not driven in the app.
 **Source:** asked for by the operator
 **Theme:** Spec flow UI
@@ -41340,3 +41391,13 @@ The operator finds moving around the tasks "hard and weird". Narrowing by name w
 **Tier:** 0
 
 The Architect's conversation was carried over from checkpoint ckpt-6785fdba929e. Afterwards, it sent Developer two Tier 0 one-shots by `send_message` and asked for a reply each time. Developer committed both (`b4c1103` at about 10:35, `b00cf59` at about 13:53), but no reply reached the Architect's new conversation, and the Architect found both commits only by reading git. Before the carry-over, the Architect had read `reply_bound_conversation` in `hub/hub/conversations.py` as delivering to the newest open continuation conversation. It is not established whether Developer sent a reply at all, or sent one that went to the archived predecessor. **Expected:** a reply addressed to an agent reaches the conversation that agent is working in now. If no reply was sent, the delegation's sender learns the delegated turn ended. **Check first:** Developer's runs after `msg-73a1b23ba7a6` for a `send_message` call, and where its message row was delivered.
+
+## F1136 (C) -- a save answers `ready_to_approve: true` on a document with no requirements and four unresolved questions
+
+**Status:** open 2026-11-06. Not reproduced in a test.
+**Source:** found by using the spec flow (Architect)
+**Theme:** Spec flow
+**Ready:** yes
+**Tier:** 0
+
+On 2026-11-06 the first save of `spec/changes/a-trace-of-a-whole-conversation` (no requirements, four open questions all `resolved: false`) answered `blocking: []` and `ready_to_approve: true`, with `no_requirements` and four `unresolved_question` entries in `warnings`. F1124's fix makes `ready_to_approve` false for the approval gaps (`criterion_without_check`, `no_acceptance_drive`) but not for these two, so an author reading the flag is told a document that asserts nothing is ready. **Expected:** `ready_to_approve` is false while a document has no requirements or an unresolved question.

@@ -8,6 +8,8 @@ export type CheckpointOperation = {
   status: 'writing' | 'succeeded' | 'failed'
   message: string
   successorConversationId?: string
+  /** The checkpoint being written or written, once there is one to open. */
+  checkpointId?: string
   startedAt: number
 }
 
@@ -55,6 +57,7 @@ export function writeCheckpoint(
   const promise = (async () => {
     try {
       const checkpoint = await takeCheckpoint(projectId, conversationId)
+      const checkpointId = checkpoint.id
       if (checkpoint.status !== 'ready') {
         const reason = checkpoint.generation_error?.trim()
         update({
@@ -64,6 +67,7 @@ export function writeCheckpoint(
             : checkpoint.status === 'failed'
               ? 'Checkpoint failed its own checks — nothing was cut over.'
               : 'Checkpoint has no written summary — nothing was cut over.',
+          checkpointId,
         })
         return null
       }
@@ -72,6 +76,7 @@ export function writeCheckpoint(
         status: 'succeeded',
         message: 'Checkpoint written — continuing in the successor conversation.',
         successorConversationId: result.successor_conversation_id,
+        checkpointId,
       })
       return result
     } catch (error) {

@@ -159,6 +159,13 @@ button.aw-spec-list-label:focus-visible { outline: none; box-shadow: inset 0 0 0
 .aw-spec-message[data-tone="warn"] { background: color-mix(in oklab, var(--amber) 10%, transparent); }
 .aw-spec-message[data-tone="error"] { background: color-mix(in oklab, var(--red) 10%, transparent); color: var(--text); }
 .aw-spec-message-text { flex: 1; min-width: min(200px, 100%); line-height: 1.45; }
+/* A message with a list and a button (F1128): the text and its list, then the button below them in
+   normal flow, so a narrow panel wraps the text and never lays the button over it. A long list
+   scrolls inside the block instead of pushing the button out of reach. */
+.aw-spec-message[data-stack="true"] { flex-direction: column; align-items: flex-start; flex-wrap: nowrap; }
+.aw-spec-message[data-stack="true"] > .aw-spec-message-text { flex: none; min-width: 0; max-width: 100%; }
+.aw-spec-message[data-stack="true"] > ul { max-height: 40vh; overflow-y: auto; }
+.aw-spec-message[data-stack="true"] > button { flex: none; }
 .aw-spec-message ul { width: 100%; min-width: 0; margin: 0; padding-left: 18px; color: var(--text-2); }
 .aw-spec-journey { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .aw-spec-journey-step {

@@ -132,6 +132,8 @@ export interface AgentConversation {
    * be read anywhere, is the mechanism enforcing invisibly.
    */
   task_id?: string | null
+  /** The checkpoint the operator started this conversation from, when they did. */
+  started_from_checkpoint_id?: string | null
 }
 
 export interface ProjectConversations {

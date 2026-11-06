@@ -18,6 +18,9 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Run
 from hub.launchability import record_harness_mcp_status
 
+#: Far longer than any load stretches a request: a wait that reaches it missed the notification.
+SLOW = 30.0
+
 
 async def _run(run_id: str, *, token: str | None = None, stamped: bool = False) -> dict[str, str]:
     token = token or f"aw_run_{run_id}-secret"
@@ -171,20 +174,29 @@ async def test_wait_returns_at_once_when_the_run_is_already_stamped(app):
 
 
 @pytest.mark.asyncio
-async def test_wait_returns_soon_after_the_announce_arrives_during_it(app):
+async def test_wait_returns_soon_after_the_announce_arrives_during_it(app, monkeypatch):
+    """The announce's notification is what ends the wait. Polling and the timeout are both pushed
+    far out, so a wait that missed it would sit for `SLOW` seconds; one woken by it returns as soon
+    as the loop schedules it. Measured from the announce, not from the start: how long the request
+    took to open a session and commit is the machine's, and under load it is not small."""
     headers = await _run("run-wait-live")
+    monkeypatch.setattr(mcp_announce, "POLL_SECONDS", SLOW)  # a re-check cannot rescue it
+    announced = {}
 
-    async def announce_later():
-        await asyncio.sleep(0.2)
-        await app.post("/api/v1/agent-actions/mcp-adapter-online", headers=headers)
+    async def announce_once_waiting():
+        # The wait is registered before the announce is sent, so it arrives during the wait.
+        while "run-wait-live" not in mcp_announce._waiters:
+            await asyncio.sleep(0.01)
+        resp = await app.post("/api/v1/agent-actions/mcp-adapter-online", headers=headers)
+        assert resp.status_code == 204
+        announced["at"] = asyncio.get_running_loop().time()
 
-    task = asyncio.create_task(announce_later())
-    started = asyncio.get_running_loop().time()
-    assert await mcp_announce.wait("run-wait-live", 5.0) is True
-    # Well short of the 5 s timeout a missed announce would wait out; loose enough for a machine
-    # running the suite under -n auto beside live agents.
-    assert asyncio.get_running_loop().time() - started < 4.0
+    task = asyncio.create_task(announce_once_waiting())
+    assert await mcp_announce.wait("run-wait-live", SLOW) is True
+    seen = asyncio.get_running_loop().time()
     await task
+    # The notify runs inside the route, so the wait can end before the request has returned.
+    assert seen - announced["at"] < SLOW / 3
 
 
 @pytest.mark.asyncio
@@ -226,6 +238,7 @@ async def test_wait_registers_before_it_checks(app, monkeypatch):
 async def test_a_stamp_written_with_no_notify_is_seen_within_one_poll(app, monkeypatch):
     await _run("run-wait-quiet")
     monkeypatch.setattr(mcp_announce, "POLL_SECONDS", 0.1)
+    committed = {}
 
     async def stamp_quietly():
         await asyncio.sleep(0.2)
@@ -233,12 +246,16 @@ async def test_a_stamp_written_with_no_notify_is_seen_within_one_poll(app, monke
             row = await session.get(Run, "run-wait-quiet")
             row.mcp_adapter_online_at = datetime.now(timezone.utc)
             await session.commit()
+        committed["at"] = asyncio.get_running_loop().time()
 
     task = asyncio.create_task(stamp_quietly())
-    started = asyncio.get_running_loop().time()
     assert await mcp_announce.wait("run-wait-quiet", 5.0) is True
-    assert asyncio.get_running_loop().time() - started < 1.0
+    seen = asyncio.get_running_loop().time()
     await task
+    # Measured from the commit, not from the start: how long the session took to open and write
+    # is the machine's, and under load it is not small. What is meant is that the wait notices a
+    # stamp by polling rather than waiting out its timeout, so the bound is many polls, not one.
+    assert seen - committed["at"] < 2.0
 
 
 @pytest.mark.asyncio

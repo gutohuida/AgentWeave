@@ -119,6 +119,16 @@ class Project(Base):
     # restart neither loses a move made while the Hub was down nor raises one twice; null until the
     # first look, which records the tip and raises nothing.
     main_tip_seen: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Whether a build may land as a GitHub pull request (`a-build-lands-as-one-pull-request`,
+    # FR-1, migration 0168). Off until the operator turns it on: pushing publishes the work.
+    pr_landing: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # With PR landing on, whether the build branch on GitHub carries one commit holding the whole
+    # build instead of one commit per task as built (FR-7).
+    pr_single_commit: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     # --- Evidence retention (UNUSED) ---
     # Nothing reads or writes this column. It held a retention policy that no cleaner ever applied;
@@ -131,13 +141,6 @@ class Project(Base):
     # `{"name", "command", "timeout_seconds"}` the Hub runs on the work a task's approval would
     # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
     checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    # Whether the Hub lands an approval over check failures that are provably not the task's --
-    # the same test ids fail on main too, or passed when rerun on their own -- recording its own
-    # override, and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5, migration
-    # 0151). On by default for new and existing projects; off is the behaviour before that change.
-    checks_auto_override: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="1", nullable=False
-    )
     # Whether every process a check run starts runs below normal scheduling priority, so the
     # operator's own work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-
     # user`, FR-5, migration 0161). Off for new and existing projects (FR-6).
@@ -547,6 +550,13 @@ class Conversation(Base):
     # meant. A successor is created NULL, so dismissing is final for a conversation and not for
     # a line of work.
     checkpoint_warning: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # The checkpoint the operator started this conversation from (`checkpoint_start.py`), or NULL.
+    # Not the carry-over: a successor is found by `Checkpoint.cut_over_to_conversation_id`, and a
+    # checkpoint is carried over once but may start any number of conversations. Not a ForeignKey,
+    # for the reason `Checkpoint.cut_over_to_conversation_id` gives (migration `0165`).
+    started_from_checkpoint_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
@@ -2275,6 +2285,23 @@ class Checkpoint(Base):
     # similarity search. `recall` materialises one by id.
     citations: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
+    # --- What tells one checkpoint from another (`every-checkpoint-findable-and-readable`). ---
+    # Written by the same generation call as the body; NULL only on a checkpoint taken before that
+    # change that the one-time fill has not reached yet. `title_made_by` says who wrote them:
+    # `model` (an answer was accepted), `hub_from_body` (both answers were rejected, so they are the
+    # body's first words and opening sentences) or `hub_from_facts` (neither answer could be read,
+    # so the title is the agent, trigger and date). Never a CHECK: the fill adds no new value and a
+    # constraint here would mean recreating a table whose constraint names `0088` pinned.
+    title: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    title_made_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Why the Hub made them: what was wrong with the answers, or why none could be read. NULL when
+    # the model wrote them.
+    title_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The raw text of an answer that could not be read, kept for "show what the model returned" and
+    # never shown as the body. NULL when there was none (the worker could not be reached).
+    unreadable_answer: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # --- The verdict (section 6). NULL until probed. ---
     probe_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     probe_findings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
@@ -3339,6 +3366,11 @@ class TaskCheckRun(Base):
     # a Hub fault, a check out of time with no failing test named), null for a verdict (0162).
     ended_by: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     started_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    # When the run got a check slot (`project_checks._semaphore`): `started_at` is when it was
+    # queued, so the slot wait is this less that, and its checks ran from this to `ended_at`. Null
+    # for a run that never got one -- ended or superseded while waiting, or with only fast checks --
+    # and for every row written before 0164 (`the-build-card-shows-where-check-time-went` FR-1).
+    slot_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (
@@ -3390,6 +3422,17 @@ class Build(Base):
     # "dismissed_at", "cleared_at"}`. The last is the Overview's warning until dismissed or ended.
     reopenings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # A build landing as a pull request (`a-build-lands-as-one-pull-request`, migration 0168): its
+    # PR on GitHub once one is opened, the state the Hub last read (`draft`, `ready`, `merged`,
+    # `closed`), when it last asked GitHub, the commit it last pushed to the build branch (a
+    # single-commit push replaces only that, FR-7) and GitHub's error from a failed push or ask.
+    # All null on a build landing on main or nowhere.
+    pr_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pr_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    pr_state: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    pr_last_asked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    pr_pushed_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    pr_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # The lead's build conversation, where its briefs are queued (driver `lead`).
     lead_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     stop_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -3496,3 +3539,80 @@ class LandingBatch(Base):
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (Index("ix_landing_batches_project", "project_id", "created_at"),)
+
+
+class KnownFailingTest(Base):
+    """One entry on a project's known-failing list (`failures-already-known-are-on-a-list-not-re-
+    argued`, FR-1, migration 0165).
+
+    `check_name` is the check's name; `test` the test's id from that check's report, or `""` for the
+    whole check (a check that names no failing test). `kind` is `fails on main` or `flaky`
+    (`project_checks.FAILS_ON_MAIN`, `FLAKY`). `added_by_run` is the run that added it: a
+    `TaskCheckRun` id, or a `MainCheckRun` id for a run on main's tree. `fix_task_id` is its owner
+    fix task. `passes` counts the consecutive runs that ran the test and passed it, and
+    `counted_runs` names them, so a run read twice counts once (FR-4). An entry that
+    comes off the list is deleted; its fix task keeps a note naming the main commit (FR-14).
+    """
+
+    __tablename__ = "known_failing_tests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    check_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    test: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    first_seen: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    added_by_run: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Not a ForeignKey, for the SQLite column-drop reason `Task.spec_document_id` gives.
+    fix_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    passes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # The runs `passes` counted since it last started again: at most `FLAKY_PASSES_TO_CLEAR`.
+    counted_runs: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+
+    __table_args__ = (
+        Index("uq_known_failing_tests_test", "project_id", "check_name", "test", unique=True),
+    )
+
+
+class UnlistedTestFailure(Base):
+    """The last task whose confirmation re-run failed a test that is not on the list (FR-13,
+    migration 0165): when a *different* task fails it next, with no pass of it in between, the Hub
+    runs that test alone on main's tree once. Deleted when the test passes in a run or is listed."""
+
+    __tablename__ = "unlisted_test_failures"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    check_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    test: Mapped[str] = mapped_column(String(1024), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("uq_unlisted_test_failures_test", "project_id", "check_name", "test", unique=True),
+    )
+
+
+class MainCheckRun(Base):
+    """A run of checks on main's tree that no task asked for (FR-3, FR-13, migration 0165).
+
+    `reason` `outside_commit`: the full run made once on a main commit the Hub did not land.
+    `single_test`: one test re-run alone after it failed for two tasks in a row (`tests` names it).
+    `results` as `TaskCheckRun.results`; `state` `running`, `passed`, `failed` or `error`."""
+
+    __tablename__ = "main_check_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    main_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    tests: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="running")
+    results: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (Index("ix_main_check_runs_project", "project_id", "main_sha", "reason"),)

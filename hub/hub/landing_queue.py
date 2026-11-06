@@ -15,9 +15,12 @@ first; their targets are merged onto main's tip with plumbing (`build_chain`), o
 task, and the project's checks run once on the last prefix (`run_batch_checks`). On a pass main is
 fast-forwarded to exactly that commit, so what lands is what was checked; a main that moved under the
 batch refuses the fast-forward and the batch is built again on the new tip. A failure of the batch's
-own is narrowed over the prefixes to the first task that breaks it, re-running only the failed tests,
-and that task alone goes back to its author; failures main shares follow slice M's rule for the
-whole batch (the Hub's override where allowed, else the operator's one reason).
+own is narrowed over the prefixes to the first task that breaks it, re-running only the failed tests
+through the check's re-run command, and that task alone goes back to its author. Whose a failure is,
+the project's known-failing list decides (`known_failing.judge`): a batch whose only failures are on
+it lands past them, and its landings name the entries (`failures-already-known-are-on-a-list-not-
+re-argued`, FR-7, FR-10). A check that ran out of time naming no failing test is run again once,
+then narrowed like a failure; no batch is ever held for the operator (FR-9).
 
 **No database write transaction is open while git or a check runs.** Each state change is its own
 short transaction, committed before the git that follows it, so a restart can tell what happened
@@ -340,8 +343,20 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
                     ).scalars()
                 )
                 nowhere = await _landing_nowhere(session, queued)
+                on_a_pr = await _landing_on_a_pull_request(session, queued)
             if not queued:
                 return True
+            pr_landing = next((landing for landing in queued if landing.id in on_a_pr), None)
+            if pr_landing is not None:
+                # A pull request build's task is pushed to its PR, never merged into main
+                # (`a-build-lands-as-one-pull-request`): checked alone on the build branch.
+                from . import pull_requests
+
+                pushed = await pull_requests.land(pr_landing.id, checks)
+                if not pushed:
+                    _arm_timer(project_id, BATCH_GATHER_SECONDS)
+                    return False
+                continue
             carried = await _carried(project_id, queued) if checks else {}
             alone = (
                 queued[0]
@@ -442,29 +457,46 @@ def _carrier(root: Path, sha: str, tip: str) -> str:
     return next((line for line in (listed.stdout or "").split() if line), sha)
 
 
-async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding]) -> Set[str]:
-    """The tasks among *landings* whose build lands nowhere (slice D): recorded, never merged."""
-    from .builds import LANDING_NOWHERE
+async def _tasks_of_builds_landing(
+    session: AsyncSession, landings: Sequence[TaskLanding], landing: str
+) -> Set[str]:
     from .db.models import Build
 
-    ids = [landing.task_id for landing in landings]
+    ids = [row.task_id for row in landings]
     if not ids:
         return set()
     rows = (
         await session.execute(
             select(Task.id)
             .join(Build, Build.id == Task.build_id)
-            .where(Task.id.in_(ids), Build.landing == LANDING_NOWHERE)
+            .where(Task.id.in_(ids), Build.landing == landing)
         )
     ).all()
     return {row[0] for row in rows}
 
 
+async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding]) -> Set[str]:
+    """The tasks among *landings* whose build lands nowhere (slice D): recorded, never merged."""
+    from .builds import LANDING_NOWHERE
+
+    return await _tasks_of_builds_landing(session, landings, LANDING_NOWHERE)
+
+
+async def _landing_on_a_pull_request(
+    session: AsyncSession, landings: Sequence[TaskLanding]
+) -> Set[str]:
+    """The landings among *landings* of a build landing as a pull request: approval and evidence
+    landings are pushed to the PR (`pull_requests.land`); a mend's resolution merges as before."""
+    from .builds import LANDING_PULL_REQUEST
+
+    tasks = await _tasks_of_builds_landing(session, landings, LANDING_PULL_REQUEST)
+    return {row.id for row in landings if row.task_id in tasks and row.kind != "resolution"}
+
+
 async def _release_holds(project_id: str) -> None:
     """A landing held on a prerequisite goes back to the queue once that prerequisite landed or is
-    queued again (it then lands first); a batch held over failures main shares goes back once main
-    moved from the commit it was checked on, since the new main may pass (F1126b)."""
-    await _release_shared_failure_holds(project_id)
+    queued again (it then lands first). No batch is held for the operator
+    (`failures-already-known-are-on-a-list-not-re-argued`, FR-9)."""
     async with async_session_factory() as session:
         held = list(
             (
@@ -502,52 +534,6 @@ async def _main_root_and_tip(project_id: str) -> Tuple[Optional[Path], Optional[
             return None, None
         await session.commit()
     return root, await blocking.run(project_checks.main_tip, root, main_branch)
-
-
-async def _release_shared_failure_holds(project_id: str) -> None:
-    async with async_session_factory() as session:
-        batches = list(
-            (
-                await session.execute(
-                    select(LandingBatch).where(
-                        LandingBatch.project_id == project_id, LandingBatch.state == "held"
-                    )
-                )
-            ).scalars()
-        )
-    if not batches:
-        return
-    _, tip = await _main_root_and_tip(project_id)
-    if tip is None:
-        return
-    moved = [batch.id for batch in batches if batch.base_sha != tip]
-    if not moved:
-        return
-    released: List[str] = []
-    async with async_session_factory() as session:
-        for batch_id in moved:
-            batch = await session.get(LandingBatch, batch_id)
-            if batch is None or batch.state != "held":
-                continue
-            rows = (
-                await session.execute(
-                    select(TaskLanding).where(
-                        TaskLanding.batch_id == batch_id,
-                        TaskLanding.state == HELD,
-                        TaskLanding.waits_on.is_(None),
-                    )
-                )
-            ).scalars()
-            for row in rows:
-                row.state, row.batch_id, row.reason = QUEUED, None, ""
-                released.append(row.id)
-            batch.state, batch.ended_at = "superseded", _now()
-            batch.error = (
-                f"the main branch moved from {(batch.base_sha or '?')[:12]} to {tip[:12]} while "
-                "the batch was held: checked again on the new tip"
-            )
-        await session.commit()
-        await _announce(session, released)
 
 
 async def latest_landing(session: AsyncSession, task_id: str) -> Optional[TaskLanding]:
@@ -653,7 +639,12 @@ async def land_by_merge(
     with no transaction open; the records are written once it returns. *carried_by* names the main
     commit that already holds the work (F1126c), recorded as what landed it."""
     from . import project_workspace
-    from .builds import LANDING_NOWHERE, LANDS_NOWHERE
+    from .builds import (
+        LANDING_NOWHERE,
+        LANDING_PULL_REQUEST,
+        LANDS_NOWHERE,
+        LANDS_ON_A_PULL_REQUEST,
+    )
     from .db.models import Build
 
     if not await _claim([landing_id], LANDING, None):
@@ -675,6 +666,8 @@ async def land_by_merge(
         build = await session.get(Build, task.build_id) if task.build_id else None
         if build is not None and build.landing == LANDING_NOWHERE and not resolution:
             results = [ti.IntegrationResult(outcome=ti.SKIPPED, reason=LANDS_NOWHERE)]
+        elif build is not None and build.landing == LANDING_PULL_REQUEST and not resolution:
+            results = [ti.IntegrationResult(outcome=ti.SKIPPED, reason=LANDS_ON_A_PULL_REQUEST)]
         elif not project.main_branch:
             results = [ti.IntegrationResult(outcome=ti.SKIPPED, reason=ti.NO_MAIN_BRANCH)]
         else:
@@ -1255,6 +1248,7 @@ async def _end_batch(batch_id: str, state: str, **fields: Any) -> None:
             setattr(batch, name, value)
         if state not in ("checking", "held", "landing"):
             batch.ended_at = _now()
+        await _close_batch_run(session, batch)
         await session.commit()
 
 
@@ -1266,6 +1260,8 @@ class BatchChecks:
     results: List[Dict[str, Any]] = field(default_factory=list)
     run_id: Optional[str] = None
     error: str = ""
+    #: A check ran out of time naming no failing test: nothing was judged, so no task's to blame.
+    unjudged: bool = False
 
 
 async def run_batch_checks(
@@ -1278,7 +1274,8 @@ async def run_batch_checks(
     landings: Sequence[TaskLanding],
 ) -> BatchChecks:
     """The project's checks, once, on *merged* (main's tip *base* with the batch's work), through
-    `project_checks`' runner, semaphore, confirmation and main baseline. Recorded as a
+    `project_checks`' runner, semaphore and confirmation; a failure is judged against the
+    known-failing list (`known_failing.judge`), never on a checkout of main. Recorded as a
     `TaskCheckRun` on the batch's first task, so a pass of this tree is reused like any other."""
     owner = f"batch-{batch_id}"
     run_id = f"chk-{short_id()}"
@@ -1305,12 +1302,17 @@ async def run_batch_checks(
         batch.check_run_id = run_id
         await session.commit()
     planned = project_checks.planned_results(checks, changed, tree, passes)
+    from . import known_failing
+
+    # Told the listed tests, so a batch that lands says which of them it ran and passed (FR-4).
+    checks = await known_failing.watching(project_id, checks)
     results: List[Dict[str, Any]] = []
     path: Optional[Path] = None
-    baseline = project_checks._MainBaseline(root, owner, base)
     state, error = "passed", ""
+    unjudged = False
     try:
         async with project_checks._semaphore():
+            await project_checks._took_slot(run_id)  # FR-1: the batch's wait survives a restart
             for check, already in zip(checks, planned, strict=True):
                 result = already or project_checks.skipped(check, changed)
                 if result is None:
@@ -1319,6 +1321,17 @@ async def run_batch_checks(
                             project_checks._checkout, root, owner, merged
                         )
                     result = await asyncio.to_thread(project_checks.run_one, check, path, owner)
+                    if project_checks.unjudged_timeout(result):
+                        # Out of time naming no failing test: it says nothing about the work, so
+                        # it is neither confirmed nor narrowed (FR-10, as a task's own run).
+                        result.update(tree=tree, check_digest=project_checks.check_digest(check))
+                        results.append(result)
+                        unjudged = True
+                        error = UNJUDGED_TIMEOUT + (
+                            f" the check {check['name']} ran past its "
+                            f"{check.get('timeout_seconds')}s time limit and named no failing test"
+                        )
+                        break
                     if project_checks.failed(result):
                         await asyncio.to_thread(
                             project_checks.confirm_failure, check, path, result, owner, changed
@@ -1329,7 +1342,16 @@ async def run_batch_checks(
 
                             await flaky_tests.record_flake(run_id, result)
                     if project_checks.failed(result):
-                        await baseline.record(check, result)
+                        # Whose it is, the list decides (FR-7): nothing runs on main for it.
+                        await known_failing.judge(
+                            project_id=project_id,
+                            task_id=None,
+                            run_id=run_id,
+                            root=root,
+                            main_sha=base,
+                            check=check,
+                            result=result,
+                        )
                     result.update(tree=tree, check_digest=project_checks.check_digest(check))
                 results.append(result)
                 await _record_run(run_id, results)
@@ -1341,19 +1363,35 @@ async def run_batch_checks(
     finally:
         if path is not None:
             await asyncio.to_thread(project_checks._remove_checkout, root, path)
-        await baseline.close()
-    if state != "error":
+    if unjudged:
+        state = "error"
+    elif state != "error":
         state = "failed" if any(project_checks.failed(r) for r in results) else "passed"
-    await _record_run(run_id, results, state=state, error=error)
+    await _record_run(
+        run_id,
+        results,
+        state=state,
+        error=error,
+        ended_by=project_checks.ENDED_BY_TIMEOUT if unjudged else None,
+    )
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)
         batch.results = results
         await session.commit()
-    return BatchChecks(state=state, results=results, run_id=run_id, error=error)
+    if any(isinstance(r, dict) and r.get("flaky") for r in results):
+        # A flake is listed from any run (FR-2), whether or not the batch then lands; a landed
+        # batch's run is read again as a run on main's tree, counting nothing twice.
+        await known_failing.record_run(run_id)
+    return BatchChecks(state=state, results=results, run_id=run_id, error=error, unjudged=unjudged)
 
 
 async def _record_run(
-    run_id: str, results: List[Dict[str, Any]], *, state: Optional[str] = None, error: str = ""
+    run_id: str,
+    results: List[Dict[str, Any]],
+    *,
+    state: Optional[str] = None,
+    error: str = "",
+    ended_by: Optional[str] = None,
 ) -> None:
     async with async_session_factory() as session:
         run = await session.get(TaskCheckRun, run_id)
@@ -1362,7 +1400,53 @@ async def _record_run(
         run.results = list(results)
         if state is not None:
             run.state, run.error, run.ended_at = state, error, _now()
+            if ended_by is not None:
+                run.ended_by = ended_by
         await session.commit()
+
+
+#: A batch's `error` begins with this where its checks ran out of time and judged nothing.
+UNJUDGED_TIMEOUT = "unjudged timeout:"
+
+
+def _close_check_run(run: Optional[TaskCheckRun], batch: LandingBatch) -> None:
+    """End *run* if it is still `running`, with what its *batch* recorded: `passed` where the batch
+    landed, else `error` with the batch's reason. A run left `running` inflates the build's check
+    seconds for good."""
+    if run is None or run.state != "running":
+        return
+    if batch.state == "landed":
+        run.state, run.error = "passed", ""
+    else:
+        run.state, run.error = "error", batch.error or f"the batch ended {batch.state}"
+    run.ended_at = _now()
+
+
+async def _close_batch_run(session: AsyncSession, batch: Optional[LandingBatch]) -> None:
+    if batch is not None and batch.check_run_id and batch.state not in ("checking", "landing"):
+        _close_check_run(await session.get(TaskCheckRun, batch.check_run_id), batch)
+
+
+async def _previous_batch_unjudged(batch_id: str, project_id: str, task_ids: List[str]) -> bool:
+    """Whether the batch before *batch_id* over the same work also ended unjudged on a timeout."""
+    async with async_session_factory() as session:
+        previous = (
+            (
+                await session.execute(
+                    select(LandingBatch)
+                    .where(LandingBatch.project_id == project_id, LandingBatch.id != batch_id)
+                    .order_by(LandingBatch.created_at.desc())
+                    .limit(1)
+                )
+            )
+            .scalars()
+            .first()
+        )
+    return (
+        previous is not None
+        and (previous.error or "").startswith(UNJUDGED_TIMEOUT)
+        and list(previous.task_ids or []) == list(task_ids)
+    )
 
 
 async def _decide(
@@ -1378,23 +1462,48 @@ async def _decide(
     outcome: BatchChecks,
     chain: Chain,
 ) -> bool:
+    """What a batch's checks decide. Never held for the operator
+    (`failures-already-known-are-on-a-list-not-re-argued`, FR-9): a batch whose only failures are on
+    the known-failing list lands past them; one with a failure of its own, or whose check ran out of
+    time naming no failing test twice in a row, is narrowed to the task whose part first fails or
+    times out, which goes back to its author."""
+    if outcome.unjudged:
+        # Nobody's failure yet: queued again once, as a run that judged nothing (AW-39); a second
+        # in a row is narrowed like a failure (FR-9).
+        if not await _previous_batch_unjudged(batch_id, project_id, tasks):
+            await _requeue([landing.id for landing in landings])
+            await _end_batch(batch_id, "failed", error=outcome.error)
+            return False
+        timed = next(r for r in outcome.results if project_checks.unjudged_timeout(r))
+        return await _narrow(
+            root,
+            main_branch,
+            project_id,
+            batch_id,
+            base,
+            tasks,
+            prefixes,
+            landings,
+            checks,
+            outcome,
+            timed,
+            chain,
+            timed_out=True,
+        )
     if outcome.state == "error":
         await _requeue([landing.id for landing in landings])
         await _end_batch(batch_id, "failed", error=outcome.error)
         return False  # the Hub could not produce a result: tried again at the next kick
-    if outcome.state == "passed":
-        override = await _flake_override(project_id, landings, outcome)
-        await _land_batch(
-            root, main_branch, batch_id, base, landings, prefixes, len(prefixes), chain, override
-        )
-        return True  # whether it landed or was queued again, the loop looks at the queue next
     own = [
         r for r in outcome.results if project_checks.failed(r) and not project_checks.preexisting(r)
     ]
     if not own:
-        return await _main_shares_the_failure(
-            root, main_branch, project_id, batch_id, base, landings, prefixes, chain, outcome
+        # Passed, or failed only where the list says the failure is not the work's: it lands, and
+        # the entries it went past stay on the batch's results for its landings to name (FR-10).
+        await _land_batch(
+            root, main_branch, batch_id, base, landings, prefixes, len(prefixes), chain, None
         )
+        return True  # whether it landed or was queued again, the loop looks at the queue next
     return await _narrow(
         root,
         main_branch,
@@ -1411,116 +1520,11 @@ async def _decide(
     )
 
 
-async def _flake_override(
-    project_id: str, landings: Sequence[TaskLanding], outcome: BatchChecks
-) -> Optional[Tuple[str, str]]:
-    """A pass that held a flake of a named test lands as before, with the Hub's override naming it
-    and the flaky test's fix task filed (slice M)."""
-    found = project_checks.not_the_tasks(outcome.results, excluded=await _filed_for(landings))
-    if not found or not await _override_allowed(landings):
-        return None
-    from . import flaky_tests
-
-    await flaky_tests.file_fix_task(outcome.run_id or "")
-    return await _hub_override_reason(project_id, outcome, found), OVERRIDE_BY_HUB
-
-
-async def _filed_for(landings: Sequence[TaskLanding]) -> List[str]:
-    """The test ids any task in the batch was filed by the Hub to fix: never overridden on a batch
-    that carries that fix task (slice M, FR-4)."""
-    from . import flaky_tests
-
-    tests: List[str] = []
-    async with async_session_factory() as session:
-        for landing in landings:
-            task = await session.get(Task, landing.task_id)
-            if task is not None:
-                tests += await flaky_tests.filed_for(session, task)
-    return tests
-
-
-async def _override_allowed(landings: Sequence[TaskLanding]) -> bool:
-    from . import requirement_gate
-
-    async with async_session_factory() as session:
-        for landing in landings:
-            task = await session.get(Task, landing.task_id)
-            if task is None or not await requirement_gate.automatic_override_allowed(session, task):
-                return False
-    return True
-
-
-async def _hub_override_reason(
-    project_id: str, outcome: BatchChecks, found: List[Dict[str, str]]
-) -> str:
-    from . import flaky_tests, requirement_gate
-
-    async with async_session_factory() as session:
-        run = await session.get(TaskCheckRun, outcome.run_id) if outcome.run_id else None
-        by_test = await flaky_tests.fix_tasks_by_test(session, project_id, open_only=False)
-    return requirement_gate.override_reason_for(
-        {
-            "run_id": outcome.run_id,
-            "main_sha": run.main_sha if run is not None else None,
-            "failures": found,
-            "fix_tasks": {
-                entry["test"]: by_test[flaky_tests.normalised_test(entry["test"])]
-                for entry in found
-                if flaky_tests.normalised_test(entry["test"]) in by_test
-            },
-        }
-    )
-
-
-async def _main_shares_the_failure(
-    root: Path,
-    main_branch: str,
-    project_id: str,
-    batch_id: str,
-    base: str,
-    landings: List[TaskLanding],
-    prefixes: List[str],
-    chain: Chain,
-    outcome: BatchChecks,
-) -> bool:
-    """Every confirmed failure fails on main too: slice M's decision, once for the batch. No
-    narrowing: the failure is not any task's."""
-    found = project_checks.not_the_tasks(outcome.results, excluded=await _filed_for(landings))
-    if found and await _override_allowed(landings):
-        from . import flaky_tests
-
-        await flaky_tests.file_fix_task(outcome.run_id or "")
-        reason = await _hub_override_reason(project_id, outcome, found)
-        await _land_batch(
-            root,
-            main_branch,
-            batch_id,
-            base,
-            landings,
-            prefixes,
-            len(prefixes),
-            chain,
-            (reason, OVERRIDE_BY_HUB),
-        )
-        return True
-    why = (
-        "the batch's checks fail, and they fail on main too, so the failure is not this work's; "
-        "land the batch with one reason, or fix main first"
-    )
-    await _end_batch(batch_id, "held", error=why)
-    async with async_session_factory() as session:
-        for landing in landings:
-            row = await session.get(TaskLanding, landing.id)
-            if row is not None and row.state == CHECKING:
-                row.state, row.reason = HELD, why
-        await session.commit()
-        await _announce(session, [landing.id for landing in landings])
-    return True
-
-
 async def land_held_batch(batch_id: str, reason: str) -> bool:
-    """The operator lands a batch held over failures main shares, with one reason for all of it.
-    `False` where the batch is not held or main moved (its tasks are queued again)."""
+    """The operator lands a held batch with one reason for all of it. `False` where the batch is
+    not held or main moved (its tasks are queued again). No batch is held since the known-failing
+    list (FR-9), and one held before it is queued again at startup, so this answers `False`; it
+    goes with its route and the landing drawer's button (task `ui`)."""
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)
         if batch is None or batch.state != "held" or not batch.prefixes:
@@ -1746,10 +1750,21 @@ async def _record_landed(
             row.override_reason = row.override_reason or override
             row.override_by = row.override_by or batch.override_by
         batch.state, batch.ended_at = "landed", _now()
+        await _close_batch_run(session, batch)
         _redrain_after_commit(session, project_id)
+        check_run_id = batch.check_run_id
         await session.commit()
         await _announce(session, [landing.id for landing in landings])
+        run = await session.get(TaskCheckRun, check_run_id) if check_run_id else None
+        ran_on_landed = run is not None and bool(prefixes) and run.merged_sha == prefixes[-1]
     await _refresh_reachability(project_id, root)
+    if ran_on_landed:
+        # Main is now exactly the tree this run checked: a run on main's tree (`failures-already-
+        # known-are-on-a-list-not-re-argued`, FR-3, FR-4). Not where the batch was narrowed, whose
+        # run checked more than landed.
+        from . import known_failing
+
+        await known_failing.record_run(check_run_id, on_main=prefixes[-1])
 
 
 async def _not_landed(
@@ -1786,6 +1801,7 @@ async def _not_landed(
             row.state, row.reason, row.ended_at = NOT_LANDED, reason, _now()
         if batch is not None:
             batch.state, batch.error, batch.ended_at = "failed", reason, _now()
+            await _close_batch_run(session, batch)
         await session.commit()
         await _announce(session, [landing.id for landing in landings])
 
@@ -1815,15 +1831,23 @@ async def _narrow(
     outcome: BatchChecks,
     failing: Dict[str, Any],
     chain: Chain,
+    *,
+    timed_out: bool = False,
 ) -> bool:
     """Find the first task whose work, on the ones before it, makes the failing tests fail: binary
-    search over the prefixes, running only the failed node ids (or the failing check where it cannot
-    be narrowed). That task goes back to its author; the ones before it land if they already passed
-    on exactly their prefix, else they and the ones after it are queued again at the head."""
+    search over the prefixes, running the check's re-run command with only the failed test ids (or
+    the failing check where it has no re-run command or the ids are too long for one,
+    `checks-report-which-tests-failed-in-any-language` FR-6). That task goes back to its author;
+    the ones before it land if they already passed on exactly their prefix, else they and the ones
+    after it are queued again at the head.
+
+    *timed_out*: *failing* ran out of time naming no failing test, twice in a row. The check is run
+    whole on each prefix, and the first whose run fails or times out is the task sent back, with the
+    reason 'timed out' (`failures-already-known-are-on-a-list-not-re-argued`, FR-9)."""
     check = next(c for c in checks if c["name"] == failing.get("name"))
     ids = _failing_ids(failing)
-    narrowed = project_checks.narrowed_command(check["command"], ids) if ids else None
-    probe = {**check, "command": narrowed} if narrowed else check
+    rerun = project_checks.rerun_check(check, ids)
+    probe = rerun or check
     owner = f"batch-{batch_id}.narrow"
     log: List[Dict[str, Any]] = []
 
@@ -1834,7 +1858,15 @@ async def _narrow(
                 result = await asyncio.to_thread(project_checks.run_one, probe, path, owner)
         finally:
             await asyncio.to_thread(project_checks._remove_checkout, root, path)
-        if narrowed:
+        if (
+            rerun
+            and result.get("report") == project_checks.REPORT_READ
+            and not (result.get("ran_tests") or result.get("failed_tests"))
+        ):
+            # Its report read and ran none of the ids: they are in no test file of this prefix
+            # (a test the culprit adds), so it does not fail them, whatever the exit code.
+            failing_here = False
+        elif rerun:
             failing_here = project_checks.reproduces_a_test_failure(result) or (
                 project_checks.failed(result)
                 and not project_checks.proves_the_tests_pass(result, ids)
@@ -1847,7 +1879,7 @@ async def _narrow(
                 "task": tasks[k - 1],
                 "commit": prefixes[k - 1],
                 "command": probe["command"],
-                "tests": ids if narrowed else [],
+                "tests": ids if rerun else [],
                 "exit_code": result.get("exit_code"),
                 "failed": failing_here,
             }
@@ -1867,13 +1899,27 @@ async def _narrow(
         batch.narrowing = log
         await session.commit()
     before = tasks[: culprit - 1]
-    report = _failure_report(batch_id, outcome, failing, tasks[culprit - 1], before)
+    if timed_out:
+        report = _timeout_report(
+            batch_id,
+            outcome,
+            {**failing, "timeout_seconds": check.get("timeout_seconds")},
+            tasks[culprit - 1],
+            before,
+        )
+        reason = (
+            f"timed out: the check `{failing.get('name')}` ran past its time limit on its work in "
+            f"landing batch {batch_id}, twice in a row."
+        )
+    else:
+        report = _failure_report(batch_id, outcome, failing, tasks[culprit - 1], before)
+        reason = f"The project's checks failed on its work in landing batch {batch_id}."
     await _send_back(
         landings[culprit - 1].id,
         batch_id,
         report,
         project_checks.send_back_class([failing]),
-        f"The project's checks failed on its work in landing batch {batch_id}.",
+        reason,
     )
     after = landings[culprit:]
     # A task after the culprit built on its work waits for it.
@@ -1938,6 +1984,29 @@ def _failure_report(
         + (f" ({', '.join(ids)})" if ids else "")
         + f" (check run {outcome.run_id}). It goes back to its author; the rest of the batch lands "
         "without it.\n\n" + output[-project_checks.OUTPUT_TAIL_CHARS :]
+    )
+
+
+def _timeout_report(
+    batch_id: str,
+    outcome: BatchChecks,
+    failing: Dict[str, Any],
+    culprit: str,
+    before: Sequence[str],
+) -> str:
+    on = (
+        "landed on " + ", ".join(before) + " in the same batch"
+        if before
+        else "on the main branch alone"
+    )
+    output = str(failing.get("output_tail") or "").strip()
+    return (
+        f"Timed out: landing batch {batch_id}'s check `{failing.get('name')}` ran past its "
+        f"{failing.get('timeout_seconds') or ''}s time limit twice in a row, naming no failing test "
+        f"(check run {outcome.run_id}), and task {culprit}'s work, {on}, is the first it runs out "
+        "of time on. It goes back to its author; the rest of the batch lands without it. A check "
+        "that ran out of time on a loaded machine may pass when run again.\n\n"
+        + output[-project_checks.OUTPUT_TAIL_CHARS :]
     )
 
 
@@ -2035,6 +2104,9 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
         "waits_on": landing.waits_on,
         "landed_sha": landing.landed_sha,
         "override_reason": landing.override_reason,
+        # The known-failing entries its batch's checks went past (FR-10): what main still fails, or
+        # what flaked, that did not hold this work.
+        "went_past": [],
         "batch": None,
         "position": None,
         "queued_at": landing.created_at.isoformat() if landing.created_at else None,
@@ -2092,6 +2164,10 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
                 "override_by": batch.override_by,
                 "error": batch.error,
             }
+            if landing.state == LANDED:
+                from . import known_failing
+
+                out["went_past"] = known_failing.went_past(batch.results)
     return out
 
 
@@ -2160,6 +2236,63 @@ async def _settle_open_batch(
     return False
 
 
+async def close_orphaned_check_runs() -> int:
+    """At startup, before the leftover-run interruption: a check run still `running` for a batch
+    that is no longer checking is ended with what the batch recorded."""
+    closed = 0
+    async with async_session_factory() as session:
+        batches = (
+            (
+                await session.execute(
+                    select(LandingBatch).where(
+                        LandingBatch.check_run_id.is_not(None),
+                        LandingBatch.state.not_in(("checking", "landing")),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for batch in batches:
+            run = await session.get(TaskCheckRun, batch.check_run_id)
+            if run is not None and run.state == "running":
+                _close_check_run(run, batch)
+                closed += 1
+        await session.commit()
+    return closed
+
+
+async def _requeue_batches_held_before_the_list() -> int:
+    """A batch a Hub before the known-failing list held for the operator (over failures main
+    shared, or a second timeout) is ended and its landings queued again, to be decided against the
+    list: no batch is held any longer (`failures-already-known-are-on-a-list-not-re-argued`,
+    FR-9). The number of landings queued again."""
+    async with async_session_factory() as session:
+        batches = list(
+            (
+                await session.execute(select(LandingBatch).where(LandingBatch.state == HELD))
+            ).scalars()
+        )
+        requeued: List[str] = []
+        for batch in batches:
+            for row in (
+                await session.execute(
+                    select(TaskLanding).where(
+                        TaskLanding.batch_id == batch.id,
+                        TaskLanding.state == HELD,
+                        TaskLanding.waits_on.is_(None),
+                    )
+                )
+            ).scalars():
+                row.state, row.batch_id, row.reason = QUEUED, None, ""
+                requeued.append(row.id)
+            batch.state, batch.ended_at = "superseded", _now()
+            batch.error = "held for the operator before the known-failing list: decided again"
+            await _close_batch_run(session, batch)
+        await session.commit()
+    return len(requeued)
+
+
 async def reconcile_at_startup() -> Dict[str, int]:
     """After a restart, lose and repeat nothing (FR a-restart-loses-and-repeats-nothing).
 
@@ -2171,6 +2304,7 @@ async def reconcile_at_startup() -> Dict[str, int]:
     from . import project_workspace
 
     counts = {"interrupted": 0, "landed": 0, "requeued": 0}
+    counts["requeued"] += await _requeue_batches_held_before_the_list()
     async with async_session_factory() as session:
         open_batches = list(
             (

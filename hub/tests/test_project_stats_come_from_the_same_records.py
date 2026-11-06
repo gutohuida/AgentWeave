@@ -585,7 +585,16 @@ async def test_checks_have_their_own_line_apart_from_any_agents_time(app, auth_h
 
     stats = await read(app, auth_headers)
 
-    line = {"runs": 3, "passed": 2, "failed": 1, "seconds": (4 + 3 + 2) * 60}
+    line = {
+        "runs": 3,
+        "passed": 2,
+        "failed": 1,
+        "seconds": (4 + 3 + 2) * 60,
+        "timed_out": 0,
+        "running_seconds": (4 + 3 + 2) * 60,
+        "waiting_seconds": None,  # no run recorded a slot time
+        "no_slot_runs": 3,
+    }
     page = (await app.get(f"{BASE}/project/builds/b-a/figures", headers=auth_headers)).json()
     assert page["checks"] == line
     row = entry(stats["groups"]["spec"], "doc-a")["row"]

@@ -132,3 +132,16 @@ reason; the separate Builders list and Flow agent control are gone (the builders
 names, and the default builder works the flow); the window end is a short list of ends, not a date
 input; the Fast level hides the checker column. Agents carry their colour and their model; reasons
 are plain muted text, not italic. The dialog is 760px, the widest in the app, for the table.
+
+## The Checkpoints tab (mock, 2026-11-04)
+
+Spec `spec/changes/every-checkpoint-findable-and-readable`. The components are
+`src/components/checkpoints/CheckpointsPage.tsx` (rows, filters, the opened checkpoint) and its pure
+wording in `checkpointModel.ts`; `src/styles/checkpoints.css` styles them. `CheckpointsScreen.tsx` is
+the container the app uses. The mock feeds the page hand-written fixtures (`// mock state`) that cover
+each trigger and status, a title the Hub made from the body and one from its facts, a probe that found
+files missing, a carried-over pair and a checkpoint covering no run.
+
+```
+http://localhost:5199/mock.html#tab/checkpoints
+```

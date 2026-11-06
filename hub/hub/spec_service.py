@@ -310,6 +310,12 @@ async def _apply_and_write(
     )
 
     blocking, warnings = await _completeness_report(session, workspace, document, payload)
+    # F1123: the unclaimed-slice advice is for the author naming a slice, so it rides the save
+    # result only; Approve, Propose and Check no longer show it to the operator.
+    warnings.extend(
+        f.to_dict()
+        for f in await _unclaimed_slices(session, workspace, document.project_id, payload)
+    )
     return SaveResult(
         path=document.path,
         phase=document.phase,
@@ -381,6 +387,8 @@ async def _completeness_report(
         f.to_dict()
         for f in (
             *gaps,
+            # F1124: what Approve would list, so an author is not told "ready" and then stopped.
+            *spec_completeness.approval_gaps(payload),
             *spec_completeness.overlap_warnings(payload),
             *spec_completeness.undeclared_files_warnings(payload),
             *spec_completeness.test_only_task_warnings(payload),
@@ -1274,7 +1282,8 @@ async def _unclaimed_slices(
 ) -> List[spec_completeness.Finding]:
     """A change document naming no slice, while an approved roadmap has slices nobody claims
     (F674): a note (`NOTE_CODES`), neither a refusal nor a gap. A change that is no slice has no way
-    to answer it, so as a gap it made every unrelated approval need Approve anyway (F704)."""
+    to answer it, so as a gap it made every unrelated approval need Approve anyway (F704). Told to
+    the author in a save's `warnings` only (F1123), never to the operator at approval."""
     if payload.kind != "change-spec" or payload.roadmap is not None:
         return []
     roadmaps = (
@@ -1363,7 +1372,6 @@ async def _completeness(
         approved_document_paths=approved_paths,
         roadmaps=roadmaps,
     )
-    findings += await _unclaimed_slices(session, workspace, document.project_id, payload)
     if to_phase == spec_lifecycle.APPROVED:
         # A document whose import source is not approved is approved anyway and the reference
         # recorded as `document_not_approved` (task-dependencies, settled). A document whose

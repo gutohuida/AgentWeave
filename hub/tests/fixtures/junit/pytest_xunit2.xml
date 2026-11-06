@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="5" time="0.119" timestamp="2026-11-05T19:28:02.695262+00:00" hostname="recorded"><testcase classname="pkg.test_same.TestA" name="test_same" time="0.001"><failure message="AssertionError: A fails&#10;assert False">self = &lt;pkg.test_same.TestA object at 0x00000249F4595C10&gt;
+
+    def test_same(self):
+&gt;       assert False, "A fails"
+E       AssertionError: A fails
+E       assert False
+
+pkg\test_same.py:6: AssertionError</failure></testcase><testcase classname="pkg.test_same.TestB" name="test_same" time="0.001" /><testcase classname="pkg.test_same" name="test_module_level" time="0.001"><failure message="assert 1 == 2">def test_module_level():
+&gt;       assert 1 == 2
+E       assert 1 == 2
+
+pkg\test_same.py:15: AssertionError</failure></testcase><testcase classname="pkg.test_same" name="test_param[1]" time="0.001" /><testcase classname="pkg.test_same" name="test_param[2]" time="0.001"><failure message="assert 2 == 1">n = 2
+
+    @pytest.mark.parametrize("n", [1, 2])
+    def test_param(n):
+&gt;       assert n == 1
+E       assert 2 == 1
+
+pkg\test_same.py:20: AssertionError</failure></testcase></testsuite></testsuites>

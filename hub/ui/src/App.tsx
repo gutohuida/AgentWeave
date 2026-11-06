@@ -46,6 +46,7 @@ import { useBoardScopeStore } from '@/store/boardScopeStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
+import { CheckpointsScreen } from '@/components/checkpoints/CheckpointsScreen'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import {
   ActivityScreen,
@@ -568,6 +569,14 @@ export default function App() {
         >
           {specView}
         </SpecPage>
+      )
+    } else if (destination.tab === 'checkpoints') {
+      projectContent = (
+        <CheckpointsScreen
+          destination={destination}
+          onNavigate={navigateTo}
+          onOpenConversation={openConversation}
+        />
       )
     } else if (destination.tab === 'vault') {
       projectContent = <VaultScreen />

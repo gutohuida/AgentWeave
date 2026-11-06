@@ -38,6 +38,7 @@ from .db.models import (
     Stall,
     Task,
     TaskCheckRun,
+    TaskLanding,
     TaskTransition,
     TurnUsage,
     WorkerInvocation,
@@ -73,7 +74,11 @@ class _Acc:
         self.v: Dict[str, Any] = {}
 
     def add(self, key: str, value: Any) -> None:
-        if value is not None:
+        if value is None:
+            return
+        if key.startswith("max."):  # a longest, not a sum
+            self.v[key] = max(self.v.get(key, 0), value)
+        else:
             self.v[key] = self.v.get(key, 0) + value
 
     def add_all(self, values: Dict[str, Any]) -> None:
@@ -102,6 +107,18 @@ class _Acc:
                 "passed": g("checks.passed", 0),
                 "failed": g("checks.failed", 0),
                 "seconds": g("checks.seconds", 0),
+                "timed_out": g("checks.timed_out", 0),
+                "running_seconds": g("checks.running", 0),
+                # Unknown (None) until some run reports a slot time (check-time FR-3).
+                "waiting_seconds": g("checks.waiting"),
+                "no_slot_runs": g("checks.no_slot", 0),
+            },
+            "landing": {
+                "landed": g("landing.landed", 0),
+                "total_seconds": g("landing.total", 0),
+                "longest_seconds": g("max.landing.longest", 0),
+                "waiting": g("landing.waiting", 0),
+                "longest_waiting_seconds": g("max.landing.waiting", 0),
             },
             "send_backs": {"made": g("sendbacks.made", 0), "received": g("sendbacks.received", 0)},
             "pieces": {s: g(f"pieces.{s}", 0) for s in PIECE_STATES},
@@ -483,16 +500,70 @@ async def tally(
         if since is not None and started < since:
             continue
         ended = _aware(check.ended_at)
-        secs = _seconds(started, ended or (now if check.state == "running" else started))
-        book.book(
-            {
-                "checks.runs": 1,
-                "checks.seconds": secs,
-                "checks.passed": 1 if check.state == "passed" else 0,
-                "checks.failed": 1 if check.state == "failed" else 0,
-            },
-            task_scope(check.task_id),
+        stop = ended or (now if check.state == "running" else started)
+        secs = _seconds(started, stop)
+        slot = _aware(check.slot_at)
+        waited: Optional[int] = None
+        if slot is not None:
+            slot = min(max(slot, started), max(stop, started))
+            waited = _seconds(started, slot)
+        timed_out = check.ended_by == "timeout" or any(
+            isinstance(r, dict) and r.get("timed_out") for r in (check.results or [])
         )
+        values = {
+            "checks.runs": 1,
+            "checks.seconds": secs,
+            "checks.passed": 1 if check.state == "passed" else 0,
+            "checks.failed": 1 if check.state == "failed" and not timed_out else 0,
+            "checks.timed_out": 1 if timed_out else 0,
+            "checks.running": secs - (waited or 0),
+            "checks.waiting": waited,
+            "checks.no_slot": 1 if slot is None else 0,
+        }
+        book.book(values, task_scope(check.task_id))
+
+    # ------------------------------------------------------------------------------------------
+    # Landing wait: from a task's last approval to its landing on main
+    # ------------------------------------------------------------------------------------------
+    landing_where = TaskLanding.project_id == project_id
+    if focus is not None:
+        landing_where = landing_where & TaskLanding.task_id.in_(scoped_ids)
+    landings_by_task: Dict[str, List[Any]] = {}
+    for landing in (
+        (
+            await session.execute(
+                select(TaskLanding).where(landing_where).order_by(TaskLanding.created_at)
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        landings_by_task.setdefault(landing.task_id, []).append(landing)
+    for tid, rows in by_task_rows.items():
+        approvals = [_aware(r.created_at) for r in rows if r.to_status == "approved"]
+        task = tasks.get(tid)
+        if not approvals or task is None:
+            continue
+        approved_at = approvals[-1]
+        if since is not None and approved_at < since:
+            continue
+        mine = landings_by_task.get(tid, [])
+        landed = [
+            _aware(lg.ended_at)
+            for lg in mine
+            if lg.state == "landed"
+            and lg.ended_at is not None
+            and _aware(lg.ended_at) >= approved_at
+        ]
+        if landed:
+            wait = _seconds(approved_at, min(landed))
+            book.book(
+                {"landing.landed": 1, "landing.total": wait, "max.landing.longest": wait},
+                task_scope(tid),
+            )
+        elif task.status == "approved":  # a landing that was skipped still has not reached main
+            wait = _seconds(approved_at, now)
+            book.book({"landing.waiting": 1, "max.landing.waiting": wait}, task_scope(tid))
 
     # ------------------------------------------------------------------------------------------
     # Send-backs, once each; the reviews that sent work back beside a failing check
@@ -875,6 +946,7 @@ def build_figures(whole: Dict[str, Any], build: Build) -> Dict[str, Any]:
         },
         "unpriced": row["unpriced"],
         "checks": row["checks"],
+        "landing": row["landing"],
     }
 
 

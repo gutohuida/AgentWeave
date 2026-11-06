@@ -203,11 +203,11 @@ class GateRefusal:
     # Set when the operator's stated reason cleared a failed or errored check result; the caller
     # records the reason on the transition.
     checks_overridden: bool = False
-    # Set where every failure of the checks is provably not the task's -- the same test ids fail on
-    # main too, or passed when rerun on their own -- and the project lets the Hub override them
-    # (`a-red-main-does-not-hold-the-night`, D3): the approval lands, and the caller records the
-    # Hub's override on the transition. Never a refusal: absent from `refuses`.
-    automatic_override: Optional[Dict[str, Any]] = None
+    # Set where the checks' result went past entries on the project's known-failing list -- every
+    # failure is listed, or a pass held a flake (`failures-already-known-are-on-a-list-not-re-
+    # argued`, FR-7): the approval goes on, and the caller records the entries on the transition
+    # (`went_past_reason`). A record, not a decision, at every build level. Never a refusal.
+    went_past: Optional[Dict[str, Any]] = None
     # F695: an approved prerequisite's commit the task's branch does not contain -- its merge
     # conflicted and was left for the author. A seventh kind of claim: "this is missing work it
     # was built on". See `_check_prerequisites_merged`.
@@ -578,23 +578,9 @@ class GateRefusal:
                 else f"exited {failure.get('exit_code')}"
             )
             if failure.get("preexisting"):
-                how += " (and fails on main too)"
+                how += " (on the known-failing list, so not this task's)"
             tail = str(failure.get("output_tail") or "")[-CHECK_TAIL_IN_MESSAGE:].strip()
             parts.append(f"`{failure.get('name')}` {how}:" + NEWLINE + tail)
-        if state == "preexisting":
-            # F605 (fix-D13): no send-back line; the failure is main's, and the hold is the operator's.
-            return (
-                "This task's checks fail, and they fail on main too, so the failure is not this "
-                "task's work. "
-                + (NEWLINE * 2).join(parts)
-                + NEWLINE * 2
-                + (
-                    "Land it with an override reason, or fix main first."
-                    if self.for_operator
-                    else "Approval waits on the operator: land it with an override reason, or fix "
-                    "main first. A reviewer should not send it back for this."
-                )
-            )
         return (
             "This task's checks failed on the work approval would merge, so approving would land "
             "work that breaks the project. "
@@ -1158,8 +1144,9 @@ async def _check_checks(
     main with the queued work merged, so approval no longer waits for a per-task result. A missing,
     running, errored, interrupted or stale result refuses nothing and starts nothing, and a pass on
     any earlier main tip counts. What still refuses is the task's own confirmed failure on these
-    same merge targets, whatever main tip it ran on. A failure main shares, or a flake, refuses
-    nothing either: the batch applies slice M's rule to it. Reads only; never runs a check.
+    same merge targets, whatever main tip it ran on. A failure on the known-failing list, or a
+    flake, refuses nothing, at every build level (`failures-already-known-are-on-a-list-not-re-
+    argued`, FR-7). Reads only; never runs a check.
 
     The operator's reason over a failed result lands that task alone, unchecked
     (`overrode_own_failure`), as approving over failing checks always has.
@@ -1172,9 +1159,9 @@ async def _check_checks(
         return
     run = view.run
     if view.state == "passed":
-        # A pass that holds a flake of a named test still lands, as before; it is recorded as the
-        # Hub's override naming the test (`flake-recorded-on-approval`).
-        refusal.automatic_override = await automatic_override(session, task, view)
+        # A pass that holds a flake of a named test still lands, as before; it is recorded with the
+        # approval, naming the test (`flake-recorded-on-approval`).
+        refusal.went_past = await went_past(session, task, view)
         return
     failed_here = view.state == "failed"
     if not failed_here and run is not None and run.state == "failed" and view.state == "stale":
@@ -1192,9 +1179,8 @@ async def _check_checks(
         refusal.overrode_own_failure = True
         return
     if not project_checks.own_failure(run.results):
-        # Main's failure or a flake: the Hub's override where M allows it (recorded on the
-        # approval, as before); otherwise the batch holds the landing for the operator.
-        refusal.automatic_override = await automatic_override(session, task, view)
+        # Only failures on the known-failing list: not the work's, recorded on the approval.
+        refusal.went_past = await went_past(session, task, view)
         return
     results = list(run.results or [])
     failing = [r for r in results if project_checks.failed(r)]
@@ -1209,38 +1195,15 @@ async def _check_checks(
     )
 
 
-async def automatic_override_allowed(session: AsyncSession, task: Task) -> bool:
-    """Whether the Hub may land *task* over failures that are not its own, and file their fix task
-    (`a-red-main-does-not-hold-the-night`, FR-5): the project's `checks_auto_override`, on by
-    default. **The one place this policy is asked**: slice D adds its per-level rule here
-    (`builds.allows_automatic_override(level)`, never at Gated). Never raises."""
-    from .builds import allows_automatic_override
-    from .db.models import Project
+async def went_past(session: AsyncSession, task: Task, view: Any) -> Optional[Dict[str, Any]]:
+    """What the checks' *view* went past, for the approval to record, or `None` where nothing: the
+    known-failing entries a failed run's failures are on, and the flakes a passing run held
+    (`failures-already-known-are-on-a-list-not-re-argued`, FR-7), each with its fix task as the
+    list names it now. Reads only; decides nothing.
 
-    # A task in a Gated build is never landed over its checks by the Hub: the operator chose Gated
-    # to judge every landing (`a-build-has-a-driver-a-level-and-its-people`, D5).
-    if task.build_id and not allows_automatic_override(task.level):
-        return False
-    try:
-        project = await session.get(Project, task.project_id)
-    except Exception:  # noqa: BLE001 -- no answer is no override
-        logger.warning("could not read the override setting of %s", task.project_id, exc_info=True)
-        return False
-    return project is not None and bool(getattr(project, "checks_auto_override", True))
-
-
-async def automatic_override(
-    session: AsyncSession, task: Task, view: Any
-) -> Optional[Dict[str, Any]]:
-    """The Hub's override for approving *task* over its checks' *view*, or `None` where there is none
-    to make (`a-red-main-does-not-hold-the-night`, D3): every failure and flake must be provably not
-    the task's (`project_checks.not_the_tasks`, which excludes, among others, the ids a Hub-filed
-    fix task was filed for), and the project must allow it (`automatic_override_allowed`).
-
-    `{"run_id", "main_sha", "failures": [{"check", "test", "kind"}], "fix_tasks": {test: task}}`;
-    `override_reason_for` words it for the transition. Reads only."""
-    from . import flaky_tests, project_checks
-    from .db.models import TaskCheckRun
+    `{"run_id", "main_sha", "failures": [{"check", "test", "kind", "fix_task_id"}]}`."""
+    from . import known_failing, project_checks
+    from .db.models import KnownFailingTest
 
     run = view.run
     results = view.reused if view.state == "passed" and view.reused is not None else None
@@ -1248,52 +1211,68 @@ async def automatic_override(
         if run is None:
             return None
         results = list(run.results or [])
-    if not await automatic_override_allowed(session, task):
-        return None
-    found = project_checks.not_the_tasks(
-        results, excluded=await flaky_tests.filed_for(session, task)
-    )
+    found: List[Dict[str, Any]] = [
+        {
+            "check": entry.get("check"),
+            "test": entry.get("test"),
+            "kind": entry.get("kind"),
+            "fix_task_id": entry.get("fix_task_id"),
+        }
+        for entry in known_failing.went_past(results)
+    ]
+    for result in results:
+        if not isinstance(result, dict) or project_checks.failed(result):
+            continue
+        flaky = result.get("flaky") if isinstance(result.get("flaky"), dict) else None
+        if flaky is None or flaky.get("how") != "tests" or result.get("touched_tests"):
+            continue
+        for test in result.get("flaky_tests") or flaky.get("tests") or []:
+            found.append(
+                {
+                    "check": str(result.get("name") or "check"),
+                    "test": str(test),
+                    "kind": project_checks.FLAKY,
+                    "fix_task_id": None,
+                }
+            )
     if not found:
         return None
-    source = run
-    if view.reused is not None and view.state == "passed":
-        # A pass of the same tree reused from another run: that run found the flake.
-        reused_from = next(
-            (r.get("reused_from") for r in results if isinstance(r, dict) and r.get("flaky")),
-            None,
-        )
-        source = await session.get(TaskCheckRun, reused_from) if reused_from else run
-    by_test = await flaky_tests.fix_tasks_by_test(session, task.project_id, open_only=False)
+    owners = {
+        (check, test or None): fix
+        for check, test, fix in (
+            await session.execute(
+                select(
+                    KnownFailingTest.check_name, KnownFailingTest.test, KnownFailingTest.fix_task_id
+                ).where(KnownFailingTest.project_id == task.project_id)
+            )
+        ).all()
+    }
+    for entry in found:
+        entry["fix_task_id"] = entry["fix_task_id"] or owners.get((entry["check"], entry["test"]))
     return {
-        "run_id": source.id if source is not None else None,
-        "main_sha": source.main_sha if source is not None else None,
+        "run_id": run.id if run is not None else None,
+        "main_sha": run.main_sha if run is not None else None,
         "failures": found,
-        "fix_tasks": {
-            entry["test"]: by_test[flaky_tests.normalised_test(entry["test"])]
-            for entry in found
-            if flaky_tests.normalised_test(entry["test"]) in by_test
-        },
     }
 
 
-def override_reason_for(decided: Dict[str, Any]) -> str:
-    """The `override_reason` the approval transition records for the Hub's override: each check
-    and test id and why it is not the task's, the check run, the main commit and the fix task."""
-    main = str(decided.get("main_sha") or "")[:12] or "the main branch"
+def went_past_reason(decided: Dict[str, Any]) -> str:
+    """The `override_reason` the approval transition records for what its checks went past: each
+    check and test and why it is not the task's, the check run and each entry's fix task."""
     parts = []
     for entry in decided.get("failures") or []:
+        what = entry.get("test") or "the whole check"
         why = (
-            f"fails on main at {main} too"
-            if entry["kind"] == "fails on main"
-            else "passed when rerun on its own"
+            "passed when rerun on its own"
+            if entry.get("kind") == "flaky"
+            else "is on the known-failing list as failing on main"
         )
-        parts.append(f"`{entry['check']}` {entry['test']} {why}")
-    fixes = sorted(set((decided.get("fix_tasks") or {}).values()))
-    fix = f"; fix task {', '.join(fixes)}" if fixes else "; no fix task was filed for them yet"
+        fix = f" (fix task {entry['fix_task_id']})" if entry.get("fix_task_id") else ""
+        parts.append(f"`{entry.get('check')}` {what} {why}{fix}")
     return (
-        "The Hub approved over failures that were not this task's: "
+        "Approved past failures that are not this task's: "
         + "; ".join(parts)
-        + f" (check run {decided.get('run_id')}, main {main}{fix})."
+        + f" (check run {decided.get('run_id')})."
     )
 
 
@@ -1482,11 +1461,6 @@ DIAGNOSTIC_HOLD_REMEDY = (
     "a requirement it serves cannot be satisfied as written; correct the document"
 )
 DRIFT_HOLD_REMEDY = "resolve the drift candidate on a requirement it serves"
-#: F605 (fix-D13): a check that fails on main too is nobody's to fix on this task.
-PREEXISTING_CHECKS_HOLD_REMEDY = (
-    "its checks fail on main too, so the failure is not its own; land it with an override "
-    "reason, or fix main first"
-)
 
 
 @dataclass(frozen=True)
@@ -1516,8 +1490,6 @@ def _operator_only_remedy(refusal: GateRefusal, *, may_accept: bool, task_id: st
     for entry in refusal.blocking:
         if entry.get("state") == requirement_coverage.DRIFTING:
             return DRIFT_HOLD_REMEDY
-    if any(entry.get("state") == "preexisting" for entry in refusal.checks):
-        return PREEXISTING_CHECKS_HOLD_REMEDY
     if may_accept:
         return None
     # The task's own evidence is decided by the verdict on it (vis-D4), so it is never the
@@ -1549,18 +1521,13 @@ async def approval_held_for_operator(
     operator whatever the candidate is granted; anything else is logged at warning and is "not
     held", so no caller fails because a diagnostic could not be computed.
     """
-    from . import project_checks, requirement_evidence, task_integration
+    from . import requirement_evidence, task_integration
     from .spec_lifecycle import Actor
 
     try:
         awaiting = await task_integration.awaiting_targets(session, task)
         _, rigors = await _enforced_requirements(session, task)
-        if (
-            not awaiting
-            and spec_rigor.GATE not in rigors.values()
-            # F605: a check failing on main too holds approval for the operator.
-            and not await project_checks.configured_for(session, task.project_id)
-        ):
+        if not awaiting and spec_rigor.GATE not in rigors.values():
             return None
 
         token = task_integration.GIT_TIMEOUT_SECONDS.set(

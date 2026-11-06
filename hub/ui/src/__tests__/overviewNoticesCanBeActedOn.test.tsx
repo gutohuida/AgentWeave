@@ -37,7 +37,6 @@ vi.mock('@/api/nextSlice', async (importOriginal) => ({
 let questions: Question[] = []
 let openStalls: Stall[] = []
 let tasks: Array<Record<string, unknown>> = []
-let flakyReport: Record<string, unknown> | null = null
 let queueStatuses: Array<Record<string, unknown>> = []
 
 const answerMutate = vi.fn()
@@ -46,7 +45,6 @@ const declineMutateAsync = vi.fn()
 const updateTaskMutate = vi.fn()
 const endStallMutate = vi.fn()
 const retryMutate = vi.fn()
-const handleFlakyMutate = vi.fn()
 const toastSpy = vi.fn()
 
 vi.mock('@/lib/toast', () => ({ toast: (input: unknown) => toastSpy(input) }))
@@ -80,10 +78,8 @@ vi.mock('@/api/queue', () => ({
   useQueueStatus: () => ({ data: queueStatuses[0], error: null }),
 }))
 vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
-vi.mock('@/api/flakyTests', () => ({
-  useFlakyTests: () => ({ data: flakyReport }),
-  useHandleFlakyTests: () => ({ mutate: handleFlakyMutate }),
-}))
+// The known-failing list is a list to read, not a row that needs the operator (FR-11).
+vi.mock('@/api/knownFailing', () => ({ useKnownFailing: () => ({ data: null }) }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: { budget: { exhausted: false } } }) }))
 
 function question(overrides: Partial<Question> = {}): Question {
@@ -147,10 +143,9 @@ const MERGED_ELSEWHERE = {
 beforeEach(() => {
   questions = []
   openStalls = []
-  flakyReport = null
   queueStatuses = []
   tasks = []
-  for (const fn of [answerMutate, declineMutate, declineMutateAsync, updateTaskMutate, endStallMutate, retryMutate, handleFlakyMutate, toastSpy]) fn.mockReset()
+  for (const fn of [answerMutate, declineMutate, declineMutateAsync, updateTaskMutate, endStallMutate, retryMutate, toastSpy]) fn.mockReset()
   declineMutateAsync.mockResolvedValue({})
   mainNotices = []
   nextSliceOffers = []
@@ -329,38 +324,33 @@ describe('every row has a clearing control', () => {
       stall({ id: 'stall-c', key: 'integration_failed:task-c', cause: 'integration_failed', task_id: 'task-c' }),
       stall({ id: 'stall-x' }),
     ]
-    flakyReport = { window_days: 30, handled: null, flaky: [{ check: 'lint', test: null, occurrences: 1, first_seen: '2026-10-20T07:00:00Z', last_seen: '2026-10-20T07:00:00Z', task_ids: [], run_ids: [] }] }
     render(<OverviewScreen onNavigate={vi.fn()} />)
 
     const items = Array.from(document.querySelectorAll('.aw-ov-need')) as HTMLElement[]
-    expect(items).toHaveLength(6)
-    const clearing = /^(Decline|Resume work|Try again|Dismiss|Create a fix task|Answer)$/
+    expect(items).toHaveLength(5)
+    const clearing = /^(Decline|Resume work|Try again|Dismiss|Answer)$/
     for (const item of items) {
       const labels = within(item).getAllByRole('button').map((b) => b.textContent ?? '')
       expect(labels.some((label) => clearing.test(label)), `a row offered only ${labels.join(', ')}`).toBe(true)
     }
   })
 
-  it('toasts the Hub’s reason and keeps the row when a stall dismissal, a resume or a flaky dismissal is refused', () => {
+  it('toasts the Hub’s reason and keeps the row when a stall dismissal or a resume is refused', () => {
     tasks = [{ id: 'task-11', title: 'Wire the exporter', status: 'blocked', assignee: 'builder', blocked_reason: 'needs credentials', updated: '2026-10-20T09:30:00Z', latest_integration: null }]
     openStalls = [stall({ id: 'stall-x' })]
-    flakyReport = { window_days: 30, handled: null, flaky: [{ check: 'lint', test: null, occurrences: 1, first_seen: '2026-10-20T07:00:00Z', last_seen: '2026-10-20T07:00:00Z', task_ids: [], run_ids: [] }] }
     const fail = (detail: string) => (_vars: unknown, options?: { onError?: (e: unknown) => void }) => options?.onError?.(refused(detail))
     endStallMutate.mockImplementation(fail('Stall already ended elsewhere.'))
     updateTaskMutate.mockImplementation(fail('A review is open on that task.'))
-    handleFlakyMutate.mockImplementation(fail('The flaky list is locked.'))
     render(<OverviewScreen onNavigate={vi.fn()} />)
 
     fireEvent.click(within(rowOf('A task is stuck in progress')).getByRole('button', { name: 'Dismiss' }))
     fireEvent.click(within(rowOf('“Wire the exporter” is waiting on you')).getByRole('button', { name: 'Resume work' }))
-    fireEvent.click(within(rowOf('1 flaky test in the approval checks')).getByRole('button', { name: 'Dismiss' }))
 
-    for (const detail of ['Stall already ended elsewhere.', 'A review is open on that task.', 'The flaky list is locked.']) {
+    for (const detail of ['Stall already ended elsewhere.', 'A review is open on that task.']) {
       expect(toastSpy).toHaveBeenCalledWith(expect.objectContaining({ tone: 'error', description: expect.stringContaining(detail) }))
     }
     expect(screen.getByText('A task is stuck in progress')).toBeInTheDocument()
     expect(screen.getByText('“Wire the exporter” is waiting on you')).toBeInTheDocument()
-    expect(screen.getByText('1 flaky test in the approval checks')).toBeInTheDocument()
   })
 })
 

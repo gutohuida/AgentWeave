@@ -599,46 +599,23 @@ async def _checks_sentence(session: AsyncSession, task: Task) -> Optional[str]:
         failing = [r for r in view.run.results or [] if project_checks.failed(r)]
         names = ", ".join(f"`{r.get('name')}`" for r in failing)
         tail = str((failing[-1].get("output_tail") if failing else "") or "")[-600:].strip()
-        # The gate's own decision, so the briefing and the approval cannot disagree
-        # (`a-red-main-does-not-hold-the-night`, FR-8): failures that are main's or flakes are not
-        # the task's work, and the reviewer is not told to send it back for them.
-        from .requirement_gate import automatic_override
+        # The gate's own decision, so the briefing and the approval cannot disagree: failures on
+        # the known-failing list are not the task's work, and the reviewer is not told to send it
+        # back for them (`failures-already-known-are-on-a-list-not-re-argued`, FR-7).
+        if failing and not project_checks.own_failure(failing):
+            from .known_failing import went_past
 
-        try:
-            decided = await automatic_override(session, task, view)
-        except Exception:  # noqa: BLE001 -- a briefing never fails over a diagnostic
-            logger.warning("could not decide the override for task %s", task.id, exc_info=True)
-            decided = None
-        if decided is not None:
-            main = str(decided.get("main_sha") or "")[:12]
-            tests = "; ".join(
-                f"`{e['test']}` ({e['check']}) "
-                + (
-                    f"fails on main at {main} too"
-                    if e["kind"] == project_checks.FAILS_ON_MAIN
-                    else "passed when rerun on its own"
-                )
-                for e in decided["failures"]
-            )
-            fixes = sorted(set((decided.get("fix_tasks") or {}).values()))
-            fix = (
-                f" Fix task {', '.join(f'`{t}`' for t in fixes)} covers them."
-                if fixes
-                else " The Hub files a fix task for them."
+            listed = "; ".join(
+                f"`{e.get('test') or 'the whole check'}` ({e.get('check')}, "
+                + (f"fix task `{e['fix_task_id']}`" if e.get("fix_task_id") else "no fix task yet")
+                + ")"
+                for e in went_past(failing)
             )
             return (
                 f"**This task's checks fail ({names}), and the failure is not this task's work:** "
-                f"{tests} (check run {decided.get('run_id')}). Approving lands it with an override "
-                f"the Hub records.{fix} Judge the work itself; do not send it back for these."
-            )
-        if failing and all(project_checks.preexisting(r) for r in failing):
-            # F605: the whole check fails on main too, and the Hub cannot tell the failures apart
-            # by test (or may not override them): the approval waits on the operator.
-            return (
-                f"**This task's checks fail ({names}), and they fail on main too**, so the failure "
-                f"is not this task's work. Last output: {tail!r}. Approving queues it; its landing "
-                "waits on the operator, who lands it with an override reason or fixes main first; "
-                "do not send it back for this."
+                f"every failure is on the project's known-failing list: {listed} (check run "
+                f"{view.run.id}). Approving lands it past them. Judge the work itself; do not send "
+                "it back for these."
             )
         return (
             f"**This task's checks failed** ({names}) on the work approval would merge, so "

@@ -1,0 +1,54 @@
+# The sweep set: Hub test files that scan the repository or the UI source instead of importing
+# the code they guard (spec `agentweave-s-checks-fit-a-busy-machine`, FR-5). A change selected by
+# what it imports never reaches them, so they run as their own fast check:
+#
+#     py -3.11 scripts/checks/sweep_check.py
+#
+# A file belongs here when it walks or globs a source tree of this repository (hub/hub, src,
+# scripts, the charters) or reads a file under hub/ui/src. Every entry was audited by hand on
+# 2026-11-04, starting from probe 2's heuristic list of 34. hub/tests/test_the_sweep_set_is_current.py
+# fails when a test file that scans the tree is missing from this list, or when an entry here
+# names a file that no longer exists.
+#
+# Removed from probe 2's list, each read and found not to scan:
+#   test_a_write_outside_the_workspace_is_recorded.py  reads one doc and mkdocs.yml
+#   test_agent_trigger.py              compares one module path; reads only tmp files
+#   test_aw_tool_help.py               one `git diff` of the migrations directory, no scan
+#   test_copilot_acp_mapper.py         reads one archived evidence log and a fixture
+#   test_database_journal.py           locates alembic.ini and the hub dir to start a subprocess
+#   test_dependency_ceilings.py        reads the two pyproject.toml files
+#   test_fastmcp_api_contract.py       reads the two pyproject.toml files
+#   test_operator_is_a_reserved_agent_name.py  parses one CLI module, src/agentweave/constants.py
+#   test_setup.py                      checks the built bundle's index.html exists
+#   test_timestamp_serialization.py    reads hub/hub/db/models.py; names hub/ui/src only in prose
+#   test_tool_server_pin.py            globs tmp directories only
+#   test_ui_build_stamp.py             builds and globs tmp repos; loads one script by path
+# Added: test_task_attribution.py (rglobs the hub package via `__import__("hub").__file__`, which
+# probe 2's pattern did not match) and the currency test itself (it walks hub/tests).
+
+hub/tests/test_a_refused_review_leaves_nothing_behind.py
+hub/tests/test_agent_facing_text.py
+hub/tests/test_an_event_is_announced_after_commit.py
+hub/tests/test_charters_api.py
+hub/tests/test_conversation_contract.py
+hub/tests/test_conversation_task_binding.py
+hub/tests/test_database_backups.py
+hub/tests/test_every_send_back_says_why.py
+hub/tests/test_firing_decision_is_shared.py
+hub/tests/test_manager_jobs.py
+hub/tests/test_no_console_flash.py
+hub/tests/test_no_runner_literals.py
+hub/tests/test_rebinding_an_agents_runner_starts_clean.py
+hub/tests/test_spec_journey_words.py
+hub/tests/test_spec_storage_seam.py
+hub/tests/test_surface_ceilings.py
+hub/tests/test_task_attribution.py
+hub/tests/test_task_lifecycle_bands.py
+hub/tests/test_task_transitions.py
+hub/tests/test_task_workspace_scheme.py
+hub/tests/test_the_hub_reads_no_test_runner.py
+hub/tests/test_the_old_check_rules_stay_retired.py
+hub/tests/test_the_sweep_set_is_current.py
+hub/tests/test_vault_archive.py
+hub/tests/test_workspace_writes.py
+hub/tests/test_write_paths_on_run_events.py

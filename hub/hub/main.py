@@ -599,8 +599,14 @@ async def lifespan(app: FastAPI):
     # A check run a previous Hub left `running` is `interrupted` (approval-runs-the-projects-checks
     # D4), and run again now for a task still waiting for review: nothing about its work was judged
     # (`checks-know-their-phase-and-give-way-to-the-user`, FR-8).
+    from . import landing_queue
     from .project_checks import interrupt_leftover_runs, schedule_rerun_after_hub_stop
 
+    # A run left `running` by a batch that is no longer checking takes the batch's outcome first.
+    try:
+        await landing_queue.close_orphaned_check_runs()
+    except Exception:  # noqa: BLE001 -- the interruption below still ends it
+        logger.warning("could not close check runs of ended batches", exc_info=True)
     await interrupt_leftover_runs()
     schedule_rerun_after_hub_stop()
     # A landing batch a previous Hub left checking is queued again in order, and one that had moved
@@ -667,7 +673,16 @@ async def lifespan(app: FastAPI):
     from .db_maintenance import maintain_forever
 
     maintenance = asyncio.create_task(maintain_forever())
+    # Checkpoints taken before titles existed are given one, once, off every request's path; the
+    # pass resumes at each start until none is left (`every-checkpoint-findable-and-readable`,
+    # FR-12).
+    from .checkpoint_fill import run_fill
+
+    checkpoint_fill = asyncio.create_task(run_fill())
     yield
+    checkpoint_fill.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await checkpoint_fill
     maintenance.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await maintenance

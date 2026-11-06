@@ -181,6 +181,8 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
         />
       </div>
 
+      <ChecksMeter build={b} />
+
       {b.caught.length ? (
         <div className="aw-sp-caught" data-testid="build-caught">
           <div className="aw-sp-meter-title">Caught during this build</div>
@@ -213,6 +215,48 @@ function BuildCard({ build: b, now, flash, onOpenRuns, onStop }: { build: BuildV
         ) : null}
       </div>
     </li>
+  )
+}
+
+/** The build's check time, split into running and waiting for a slot, with the timed-out count and
+ *  the landing wait beside it. An unknown figure reads "unknown", never 0. */
+function ChecksMeter({ build: b }: { build: BuildView }) {
+  const c = b.checks
+  const l = b.landing
+  if (!c.runs && !l?.landed && !l?.waiting) return null
+  const waiting = c.waiting_seconds ?? null
+  const running = c.running_seconds ?? (waiting === null ? c.seconds : c.seconds - waiting)
+  const unknownRuns = c.no_slot_runs ?? 0
+  const waitingFigure = waiting === null ? 'unknown' : `${formatDuration(waiting)}${unknownRuns ? ` · ${unknownRuns} run${unknownRuns === 1 ? '' : 's'} with no slot time` : ''}`
+  return (
+    <div className="aw-sp-checks-meter" data-testid="build-checks-meter">
+      <Meter
+        title="Checks"
+        figure={formatDuration(c.seconds)}
+        parts={[
+          { key: 'running', label: 'Running', value: running, tone: 'var(--ring)', figure: formatDuration(running) },
+          { key: 'waiting', label: 'Waiting for a slot', value: waiting ?? 0, tone: 'var(--amber)', figure: waitingFigure },
+        ]}
+        total={c.seconds}
+        running={b.running}
+      />
+      <ul className="aw-sp-legend" data-testid="build-checks-beside">
+        <li>
+          <span className="aw-sp-legend-label">Timed out</span>
+          <span className="aw-sp-legend-figure" data-testid="build-checks-timed-out">
+            {c.timed_out === undefined ? 'unknown' : c.timed_out}
+          </span>
+        </li>
+        <li>
+          <span className="aw-sp-legend-label">Landing wait</span>
+          <span className="aw-sp-legend-figure" data-testid="build-landing-wait">
+            {l
+              ? `${l.landed ? `${formatDuration(l.total_seconds)} total, longest ${formatDuration(l.longest_seconds)}` : 'none landed yet'}${l.waiting ? ` · ${l.waiting} still waiting, longest ${formatDuration(l.longest_waiting_seconds)}` : ''}`
+              : 'unknown'}
+          </span>
+        </li>
+      </ul>
+    </div>
   )
 }
 

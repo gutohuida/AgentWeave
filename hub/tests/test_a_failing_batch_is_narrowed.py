@@ -2,9 +2,11 @@
 narrow-and-hold).
 
 The roadmap's done criterion: a deliberately broken task among four is the only one sent back. Real
-git, and the project's check a plain pytest run over the checked tree, with a `conftest.py` on main
-that records every run's selected test ids in a file outside the repository -- so "the check ran on
-the whole tree twice and the narrowed runs ran one test" is counted, not inferred.
+git, and the project's check a plain pytest run over the checked tree writing a JUnit report, re-run
+through the project's own wrapper (`rerun.py`, `checks-report-which-tests-failed-in-any-language`
+FR-6), with a `conftest.py` on main that records every run's selected test ids in a file outside the
+repository -- so "the check ran on the whole tree twice and the narrowed runs ran one test" is
+counted, not inferred.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from hub import landing_queue
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     AIJob,
-    EventLog,
+    KnownFailingTest,
     LandingBatch,
     Loop,
     Project,
@@ -37,9 +39,20 @@ pytestmark = pytest.mark.asyncio
 PY = f'"{sys.executable}"'
 PYTEST = {
     "name": "pytest",
-    "command": f"{PY} -m pytest -q -p no:cacheprovider -p no:randomly",
+    "command": f"{PY} -m pytest -q -p no:cacheprovider -p no:randomly "
+    "-o junit_family=xunit1 --junitxml=report.xml",
     "timeout_seconds": 120,
+    "report_path": "report.xml",
+    "rerun_command": f"{PY} rerun.py {{tests}}",
 }
+#: The project's re-run wrapper: each `classname::name` id to a pytest node id, then pytest.
+RERUN = """import subprocess, sys
+ids = [i.split("::", 1) for i in sys.argv[1:]]
+nodes = [module.replace(".", "/") + ".py::" + name for module, name in ids]
+sys.exit(subprocess.call([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                          "-p", "no:randomly", "-o", "junit_family=xunit1",
+                          "--junitxml=report.xml", *nodes]))
+"""
 TASKS = "/api/v1/projects/proj-test/tasks"
 #: Fails once `broken.txt` exists: the file a broken task adds.
 SUITE = (
@@ -47,10 +60,14 @@ SUITE = (
     "def test_ok():\n    assert True\n\n\n"
     "def test_no_marker():\n    assert not os.path.exists('broken.txt'), 'broken'\n"
 )
-NO_MARKER = "test_suite.py::test_no_marker"
+#: The failing test as its report names it (`classname::name`), and as the conftest's ledger does.
+NO_MARKER = "test_suite::test_no_marker"
+NO_MARKER_NODE = "test_suite.py::test_no_marker"
 #: Main is red here: `test_red` fails on main and on every task's tree.
 RED = "def test_red():\n    assert 1 == 2, 'main is red'\n"
-RED_ID = "test_red.py::test_red"
+RED_ID = "test_red::test_red"
+RED_TOO = "def test_red_too():\n    assert 1 == 3, 'main is red here too'\n"
+RED_TOO_ID = "test_red_too::test_red_too"
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +82,8 @@ def _repo(root: Path, ledger: Path, extra: Optional[Dict[str, str]] = None) -> N
     make_repo(root)
     files = {
         "test_suite.py": SUITE,
+        "rerun.py": RERUN,
+        ".gitignore": "report.xml\n",
         "conftest.py": (
             "def pytest_collection_modifyitems(session, config, items):\n"
             f"    with open(r'{ledger}', 'a', encoding='utf-8') as out:\n"
@@ -78,12 +97,10 @@ def _repo(root: Path, ledger: Path, extra: Optional[Dict[str, str]] = None) -> N
     git(root, "commit", "-q", "-m", "the suite")
 
 
-async def _project(auto_override: Optional[bool] = None) -> None:
+async def _project() -> None:
     async with async_session_factory() as session:
         project = await session.get(Project, "proj-test")
         project.checks = [PYTEST]
-        if auto_override is not None:
-            project.checks_auto_override = auto_override
         session.add(
             AIJob(
                 id="job-narrow",
@@ -241,7 +258,7 @@ async def test_a_broken_task_among_four_is_the_only_one_sent_back(
     runs = _runs(ledger)
     whole = [run for run in runs if len(run) >= 2]
     assert len(whole) == 2, runs
-    assert all(run == [NO_MARKER] for run in runs if len(run) < 2), runs
+    assert all(run == [NO_MARKER_NODE] for run in runs if len(run) < 2), runs
     narrowing = first.narrowing
     assert 1 <= len(narrowing) <= 2, narrowing
     assert all(step["tests"] == [NO_MARKER] for step in narrowing), narrowing
@@ -322,30 +339,45 @@ async def test_a_sent_back_prerequisite_holds_its_dependent(
     assert tips[1] not in commits_on(tmp_path, "main")
 
 
-async def _fix_tasks() -> List[str]:
+async def _listed(test: str) -> str:
+    """*test* on the known-failing list as failing on main, with a pending fix task: its entry."""
+    key = test.split("::")[-1].replace("_", "")[-10:]
     async with async_session_factory() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(EventLog.data).where(EventLog.event_type == "checks_fix_task_filed")
-                )
+        session.add(
+            Task(
+                id=f"task-fix-{key}",
+                project_id="proj-test",
+                title=f"Fix {test}",
+                description="",
+                status="pending",
+                priority="high",
             )
-            .scalars()
-            .all()
         )
-    return [row["task_id"] for row in rows]
+        session.add(
+            KnownFailingTest(
+                id=f"kf-{key}",
+                project_id="proj-test",
+                check_name="pytest",
+                test=test,
+                kind="fails on main",
+                fix_task_id=f"task-fix-{key}",
+            )
+        )
+        await session.commit()
+    return f"kf-{key}"
 
 
-@pytest.mark.parametrize("override", [True, False])
-async def test_a_failure_main_shares_follows_m(
-    app, auth_headers, tmp_path, tmp_path_factory, override
+async def test_a_batch_whose_only_failures_are_listed_lands_naming_them(
+    app, auth_headers, tmp_path, tmp_path_factory
 ):
-    """main-shares-the-failure: a batch of three whose only failure fails on main too is never
-    narrowed. With M's automatic override on all three land with it recorded on the batch and each
-    integration, and one fix task is filed; off, the batch waits, and one reason lands all three."""
+    """`failures-already-known-are-on-a-list-not-re-argued`, ac-no-hold (its first batch) and
+    ac-landing-record: main fails two tests, both on the known-failing list. A batch of three whose
+    only failures are those lands whole -- not narrowed, not held, no override -- and each task's
+    landing, read from its route, names the two entries it went past."""
     ledger = tmp_path_factory.mktemp("ledger") / "runs.txt"
-    _repo(tmp_path, ledger, {"test_red.py": RED})
-    await _project(auto_override=override)
+    _repo(tmp_path, ledger, {"test_red.py": RED, "test_red_too.py": RED_TOO})
+    await _project()
+    entries = {await _listed(RED_ID), await _listed(RED_TOO_ID)}
     ids, tips = await _tasks(
         tmp_path,
         [({"one.py": "x = 1\n"}, None), ({"two.py": "x = 2\n"}, None), ({"three.py": "x\n"}, None)],
@@ -356,34 +388,42 @@ async def test_a_failure_main_shares_follows_m(
     await landing_queue.drain()
 
     [batch] = await _batches()
-    assert batch.narrowing == [], "a failure main shares is not narrowed"
-    if override:
-        assert batch.state == "landed" and batch.override_by == "hub"
-        assert RED_ID in (batch.override_reason or "")
-        for task_id, tip in zip(ids, tips, strict=True):
-            [row] = await _merged(task_id)
-            assert row.commit_sha == tip and row.batch_id == batch.id
-            assert row.override_reason == batch.override_reason
-        assert len(await _fix_tasks()) == 1, "one fix task per failing check, not per task"
-        return
-
-    assert batch.state == "held"
-    for task_id in ids:
-        assert await _merged(task_id) == []
-        assert (await _landing(task_id)).state == "held"
-    read = await app.get(f"{TASKS}/{ids[1]}/checks", headers=auth_headers)
-    assert read.json()["landing"]["state"] == "held"
-    assert await _fix_tasks() == []
-
-    landed = await app.post(
-        f"{TASKS}/{ids[1]}/landing/land",
-        json={"reason": "main is red on test_red; fixing it separately"},
-        headers=auth_headers,
-    )
-    assert landed.status_code == 200, landed.text
+    assert batch.narrowing == [], "a listed failure is not narrowed"
+    assert batch.state == "landed" and batch.override_by is None, (batch.state, batch.error)
     for task_id, tip in zip(ids, tips, strict=True):
         [row] = await _merged(task_id)
-        assert row.commit_sha == tip
-        assert row.override_reason == "main is red on test_red; fixing it separately"
-    [batch] = await _batches()
-    assert batch.state == "landed" and batch.override_by == "operator"
+        assert row.commit_sha == tip and row.batch_id == batch.id
+        read = await app.get(f"{TASKS}/{task_id}/checks", headers=auth_headers)
+        landing = read.json()["landing"]
+        assert landing["state"] == "landed", landing
+        assert {e["id"] for e in landing["went_past"]} == entries, landing["went_past"]
+        assert {e["test"] for e in landing["went_past"]} == {RED_ID, RED_TOO_ID}
+
+
+async def test_a_test_the_culprit_adds_does_not_fail_the_prefix_before_it(
+    app, auth_headers, tmp_path, tmp_path_factory
+):
+    """Found by the d1106 drive: the first task adds `marker.txt`, the second adds `test_new`,
+    which fails while the marker exists. Narrowing re-ran `test_new` on the first task's prefix,
+    where it is in no file: pytest ran nothing and exited 4, and that was counted as the prefix
+    failing it, so the first task went back and the second landed. A prefix whose re-run runs
+    none of the ids does not fail them: the second task is the one sent back."""
+    ledger = tmp_path_factory.mktemp("ledger") / "runs.txt"
+    _repo(tmp_path, ledger)
+    await _project()
+    new_test = "import os\n\n\ndef test_new():\n    assert not os.path.exists('marker.txt')\n"
+    ids, tips = await _tasks(
+        tmp_path, [({"marker.txt": "here\n"}, None), ({"test_new.py": new_test}, None)]
+    )
+    for task_id in ids:
+        await _approve(app, auth_headers, task_id)
+
+    await landing_queue.drain()
+
+    batch = (await _batches())[0]
+    assert [step["prefix"] for step in batch.narrowing] == [1]
+    assert batch.narrowing[0]["failed"] is False, batch.narrowing
+    assert await _status(ids[1]) == "revision_needed"
+    assert await _status(ids[0]) == "approved"
+    assert (await _landing(ids[1])).state == "sent_back"
+    assert tips[1] not in commits_on(tmp_path, "main")

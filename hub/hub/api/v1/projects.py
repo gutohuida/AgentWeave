@@ -101,8 +101,55 @@ class ProjectCheck(BaseModel):
     # When the check runs (`checks-know-their-phase-and-give-way-to-the-user`, FR-1): in a task's
     # run before review, in a landing batch's run, or both. A check saved before this reads both.
     phase: Literal["review", "landing", "both"] = "both"
+    # The JUnit XML report the check writes, relative to the directory it runs in, and a command
+    # that re-runs named tests, its `{tests}` replaced by their ids
+    # (`checks-report-which-tests-failed-in-any-language`, FR-1). A check without a report is
+    # judged as a whole; one saved before these existed has neither.
+    report_path: Optional[str] = Field(default=None, max_length=255)
+    rerun_command: Optional[str] = Field(default=None, max_length=2000)
+    # The command a task's pre-review run uses instead of `command` when the Hub knows the files
+    # the task changed, its `{changed_files}` replaced by the path of a file listing them
+    # (`a-check-can-run-only-the-tests-for-what-a-task-changed`, FR-1, FR-7). Never used at
+    # landing, on main, or to confirm a failure (FR-3).
+    change_command: Optional[str] = Field(default=None, max_length=2000)
 
     model_config = {"extra": "forbid"}
+
+    @field_validator("report_path")
+    @classmethod
+    def relative_report(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        path = value.strip().replace("\\", "/")
+        if path.startswith("/") or ":" in path or ".." in path.split("/"):
+            raise ValueError(
+                f"report_path is relative to the directory the check runs in: {value!r}"
+            )
+        return path
+
+    @field_validator("rerun_command")
+    @classmethod
+    def names_the_tests(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        if project_checks.TESTS_PLACEHOLDER not in value:
+            raise ValueError(
+                f"rerun_command must contain {project_checks.TESTS_PLACEHOLDER}, where the Hub "
+                f"puts the ids of the tests to re-run"
+            )
+        return value.strip()
+
+    @field_validator("change_command")
+    @classmethod
+    def names_the_changed_files(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        if project_checks.CHANGED_FILES_PLACEHOLDER not in value:
+            raise ValueError(
+                f"change_command must contain {project_checks.CHANGED_FILES_PLACEHOLDER}, where "
+                f"the Hub puts the path of a file listing the files the task changed"
+            )
+        return value.strip()
 
     @model_validator(mode="after")
     def fast_is_bounded(self) -> "ProjectCheck":
@@ -188,15 +235,22 @@ class ProjectSettings(BaseModel):
     # Run on main plus a task's would-merge commit when the task completes; approval reads the
     # result. Null means no checks, and approval is unchanged.
     checks: Optional[List[ProjectCheck]] = Field(default=None, max_length=20)
-    # Whether the Hub lands an approval over failures that are provably not the task's (the same
-    # test ids fail on main too, or passed when rerun on their own), recording its own override,
-    # and files their fix task (`a-red-main-does-not-hold-the-night`, FR-5). On by default; off is
-    # the behaviour before that change: such an approval waits for the operator's reason.
-    checks_auto_override: bool = True
+    # 'The Hub may override checks' is gone: the known-failing list replaced what it governed
+    # (`failures-already-known-are-on-a-list-not-re-argued`, FR-15, migration 0167), and with
+    # `extra="forbid"` a request that still sends it is refused.
     # Whether every process a check run starts runs below normal scheduling priority, beneath the
     # operator's own work (`checks-know-their-phase-and-give-way-to-the-user`, FR-5). Off by
     # default, for new and existing projects alike (FR-6).
     checks_give_way: bool = False
+
+    # --- PR landing (`a-build-lands-as-one-pull-request`) ---
+    # Whether a build may land as one GitHub pull request. Off until the operator turns it on, for
+    # new and existing projects (FR-1): pushing publishes the work. Turning it on is refused without
+    # a GitHub remote and a logged-in GitHub CLI (FR-2).
+    pr_landing: bool = False
+    # With PR landing on, whether the build branch carries one commit holding the whole build
+    # instead of one commit per task as built (FR-7).
+    pr_single_commit: bool = False
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one.
@@ -800,6 +854,30 @@ async def update_project_settings(
                     f"This project has no branch named '{merged.main_branch}'. "
                     "Approval merges into it, so it has to exist first."
                 ),
+            )
+
+    # PR landing pushes to GitHub through the user's CLI login: turning it on is refused where that
+    # cannot work, naming what is missing (`a-build-lands-as-one-pull-request`, FR-2).
+    if merged.pr_landing and not project.pr_landing:
+        from ... import blocking, project_workspace, pull_requests
+
+        try:
+            workspace = await project_workspace.resolve_project_workspace(
+                session, resolved_project_id
+            )
+        except project_workspace.ProjectWorkspaceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Project workspace is unavailable, so its GitHub remote cannot be checked: {exc}",
+            ) from exc
+        problem = await blocking.run(pull_requests.readiness_problem, workspace.root)
+        if problem is not None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": problem.code,
+                    "message": f"PR landing cannot be turned on: {problem.message}",
+                },
             )
 
     settings_now = merged.model_dump()

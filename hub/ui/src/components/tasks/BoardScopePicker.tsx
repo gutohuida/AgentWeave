@@ -18,19 +18,22 @@ interface Option {
   scope: BoardScope
 }
 
-/** The board's scope control: a button naming the scope that opens a list of All, No spec and the
+/** The board's scope control: a button naming the scope that opens a list of All, Building, No spec and the
  *  specs that hold tasks, narrowed by what is typed. */
 export function BoardScopePicker({
   scope,
   scopeLabel,
   specs,
   noSpecCount,
+  buildingCount,
   onChoose,
 }: {
   scope: BoardScope
   scopeLabel: string
   specs: ScopeSpec[]
   noSpecCount: number
+  /** How many specs have a build running now. */
+  buildingCount: number
   onChoose: (scope: BoardScope) => void
 }) {
   const [open, setOpen] = React.useState(false)
@@ -52,6 +55,7 @@ export function BoardScopePicker({
   }
   const options: Option[] = [
     { key: 'all', label: 'All', count: null, scope: { kind: 'all' } },
+    { key: 'building', label: 'Building', count: buildingCount, scope: { kind: 'building' } },
     { key: 'none', label: 'No spec', count: noSpecCount, scope: { kind: 'none' } },
     ...specs.map((spec) => ({
       key: spec.id,

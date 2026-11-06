@@ -28,6 +28,8 @@ export interface SpecSurfaceProps {
   notices?: HeaderNotice[]
   onAction: (action: SpecAction) => void
   onOpenDocument: (path: string) => void
+  /** The Tasks board, narrowed to this document (F1129). */
+  onOpenBoard?: () => void
   onCopyLink: (anchor: string | null) => void
   onCopyPath: () => void
   onArchive?: () => void
@@ -187,6 +189,7 @@ export function SpecWorkspace(props: SpecWorkspaceProps) {
                 onJump={nav.jump}
                 onCopyLink={props.onCopyLink}
                 onOpenDocument={props.onOpenDocument}
+                onOpenBoard={props.onOpenBoard}
                 builds={
                   <>
                     {props.buildActions ? <div className="aw-sp-build-actions">{props.buildActions}</div> : null}
@@ -327,6 +330,7 @@ export function SpecSidePanel(props: SpecSurfaceProps & { onClose?: () => void; 
               onJump={jump}
               onCopyLink={props.onCopyLink}
               onOpenDocument={props.onOpenDocument}
+              onOpenBoard={props.onOpenBoard}
               builds={
                 <>
                   {props.buildActions ? <div className="aw-sp-build-actions">{props.buildActions}</div> : null}

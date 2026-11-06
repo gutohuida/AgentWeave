@@ -5,7 +5,7 @@ builds the commit approval would produce -- main's tip with each merge target ap
 `git merge-tree` and `commit-tree`, touching no checkout (design D1) -- checks it out in a scratch
 worktree under `.agentweave/checks/<task_id>` (D2), runs each check there with the Hub's own
 configuration removed from the environment (D8), stopping at the first failure that is the task's own
-(a failure main shares does not stop it), and records a `TaskCheckRun` row (D3).
+(a failure on the known-failing list does not stop it), and records a `TaskCheckRun` row (D3).
 
 Runs are started in the background, never inside a request (D5): when a task is completed outside a
 turn, when a turn bound to a completed task ends (its work is only committed then), and when the
@@ -27,8 +27,10 @@ reused for the same merged *tree* and the same check (`check_digest`), whatever 
 a prerequisite merged into the task branch, or a main move that leaves the merged tree as it was,
 re-runs nothing. A different tree is always checked again. A failure is never reused.
 
-A failure is confirmed before it is charged to the task: the failed tests (pytest node ids parsed
-from the output) or else the whole check are run once more on the same tree. Only a reproduced
+A failure is confirmed before it is charged to the task: the failed tests (the ids the check's
+JUnit XML report names, re-run through the check's own re-run command) or else the whole check are
+run once more on the same tree. The Hub reads no test runner's console output for results and
+rewrites no check's command (`checks-report-which-tests-failed-in-any-language`, FR-7). Only a reproduced
 failure stands; one that passes the second time passes, and the result records the flake.
 
 Only a result that judged the work counts against the task (`checks-know-their-phase-and-give-way-
@@ -53,7 +55,7 @@ import statistics
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -61,7 +63,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import flaky_tests, readable_ids, traces
+from . import flaky_tests, known_failing, readable_ids, traces
 from .db.engine import async_session_factory
 from .db.models import Project, Run, Task, TaskCheckRun, TaskTransition
 from .subprocess_windows import no_console_kwargs
@@ -97,8 +99,6 @@ UNJUDGED_STALL = "checks_unjudged"
 WATCH_SECONDS = 30.0
 #: How many of a project's latest decided runs are searched for a passing result on the same tree.
 REUSE_LOOKBACK = 200
-#: A failing check's failed tests are re-run by node id only up to this many; more re-runs the check.
-MAX_RERUN_TESTS = 50
 #: The longest timeout a check marked fast may have (`checks-run-before-anyone-reviews`, FR-1): an
 #: agent's completion waits for the fast checks, so none of them may run for longer than that wait.
 FAST_CHECK_MAX_SECONDS = 120
@@ -139,7 +139,8 @@ def configured_checks(
     completion waits for the fast ones, and they are the start of the task's one check run (D2). A
     check saved before `fast` existed is not fast.
 
-    Each check carries the project's `give_way` (FR-5): `run_one` starts it below normal priority.
+    Each check not marked fast carries the project's `give_way` (FR-5): `run_one` starts it below
+    normal priority.
 
     *phase* `review` keeps the checks a task's pre-review run executes, `landing` those a landing
     batch's run executes (FR-2, FR-3); `None` keeps every check. Every pre-review reader -- the run,
@@ -158,9 +159,18 @@ def configured_checks(
                     "paths": [str(p) for p in check.get("paths") or [] if str(p).strip()],
                     "fast": bool(check.get("fast")),
                     "phase": (check.get("phase") if check.get("phase") in PHASES else PHASE_BOTH),
+                    # The report and re-run command (FR-1); `None` for a check without them.
+                    "report_path": str(check.get("report_path") or "").strip() or None,
+                    "rerun_command": str(check.get("rerun_command") or "").strip() or None,
+                    # The command for a change (`a-check-can-run-only-the-tests-for-what-a-task-
+                    # changed`, FR-1); `None` for a check without one.
+                    "change_command": str(check.get("change_command") or "").strip() or None,
                     # Not part of `check_digest`: priority changes how fast a check runs, not
                     # what it finds, so a pass at either priority stays reusable.
-                    "give_way": bool(getattr(project, "checks_give_way", False)),
+                    # A fast check never gives way: the completion waits on it
+                    # (`quick-checks-run-at-normal-priority`, FR-1).
+                    "give_way": bool(getattr(project, "checks_give_way", False))
+                    and not check.get("fast"),
                 }
             )
     if phase is not None:
@@ -566,6 +576,7 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
             "duration_seconds": 0.0,
             "output_tail": "",
         }
+    clear_report(check, cwd)
     spawn = _spawn_arguments(check)
     creationflags = spawn.pop("creationflags", 0) | no_console_kwargs().get("creationflags", 0)
     proc = subprocess.Popen(
@@ -621,33 +632,300 @@ def _run_one(check: Dict[str, Any], cwd: Path, owner: Optional[str] = None) -> D
         "duration_seconds": round(time.monotonic() - started, 1),
         "output_tail": text[-OUTPUT_TAIL_CHARS:],
     }
-    if not timed_out and proc.returncode not in (0, None):
-        # Read from the whole output, not the stored tail: the summary may be longer than it.
-        node_ids = failed_test_ids(text)
-        if node_ids:
-            result["failed_tests"] = node_ids
-        excerpt = failure_excerpt(text)
-        if excerpt:
-            result["failure_excerpt"] = excerpt
-    if timed_out:
-        named = named_failures(text)
-        if named:
-            result["named_failures"] = named
+    # The report names the failing tests; the console is for people (FR-2, FR-7).
+    _judge_by_report(check, cwd, result, timed_out)
     return result
 
 
-_FAILURES_HEADER_RE = re.compile(r"^=+ (?:FAILURES|ERRORS) =+\s*$", re.MULTILINE)
+# --- the check's report (`checks-report-which-tests-failed-in-any-language`) --------------------
+
+#: Where a re-run command takes the ids of the tests to re-run (FR-1, FR-6).
+TESTS_PLACEHOLDER = "{tests}"
+#: Past this a re-run command with its ids substituted is not run: Windows' command interpreter
+#: refuses a command line over 8,191 characters, so the check is re-run as a whole (FR-6).
+MAX_RERUN_COMMAND_CHARS = 8000
+#: A report larger than this is not read (it is unreadable): the check's own file, but a task's
+#: work can write it.
+MAX_REPORT_BYTES = 64 * 1024 * 1024
+#: Why a failing check names no test (FR-4, FR-5), recorded in its result as `whole_check`.
+NO_REPORT_CONFIGURED = "no report configured"
+REPORT_MISSING = "report missing"
+REPORT_UNREADABLE = "report unreadable"
+REPORT_NAMES_NO_FAILURE = "report names no failing test"
+#: A report that was there and parsed, as a result's `report`.
+REPORT_READ = "read"
 
 
-def failure_excerpt(output: str) -> str:
-    """The start of pytest's FAILURES (or ERRORS) section, where the tracebacks are, or `""`.
+@dataclass
+class TestReport:
+    """What a JUnit XML report says: each testcase's id (`classname::name`, FR-2) and whether it
+    failed (`True`), passed (`False`) or was skipped (`None`), and the file a testcase names where it
+    names one. An id recorded twice (the same classname and name in two files) failed if either
+    did."""
 
-    The stored tail of a long suite holds only the summary, so a failure's traceback was lost:
-    two gate runs on 2026-10-25 kept `FAILED <node id>` and nothing that said why."""
-    found = _FAILURES_HEADER_RE.search(output)
-    if found is None or len(output) - found.start() <= OUTPUT_TAIL_CHARS:
-        return ""  # none, or already inside the tail
-    return output[found.start() : found.start() + OUTPUT_TAIL_CHARS]
+    __test__ = False  # not a pytest test class, whatever its name
+
+    outcomes: Dict[str, Optional[bool]]
+    files: Dict[str, str]
+    #: What the report says about each failing testcase: its failure (or error) message and text.
+    messages: Dict[str, str] = field(default_factory=dict)
+
+    @property
+    def failing(self) -> List[str]:
+        return [test for test, failed_ in self.outcomes.items() if failed_]
+
+
+def report_file(check: Dict[str, Any], cwd: Path) -> Optional[Path]:
+    """The file *check*'s report is written to when it runs in *cwd*, or `None` for a check without
+    one or whose path would leave *cwd* (the settings route refuses those; read defensively)."""
+    relative = check.get("report_path")
+    if not relative:
+        return None
+    base = Path(cwd).resolve()
+    path = (base / str(relative)).resolve()
+    if path == base or base not in path.parents:
+        return None
+    return path
+
+
+def clear_report(check: Dict[str, Any], cwd: Path) -> None:
+    """Remove whatever is at *check*'s report path before it runs (FR-4), so only a report the run
+    itself writes is read: a re-run in the full run's directory would otherwise read the full
+    run's report as its own."""
+    path = report_file(check, cwd)
+    if path is None:
+        return
+    try:
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("could not remove check %s's old report %s", check.get("name"), path)
+
+
+def _relative_file(value: str, cwd: Path) -> str:
+    """A testcase's `file` as a path relative to *cwd* where it lies inside it (Node writes it
+    absolute), with forward slashes; else as written."""
+    written = value.strip()
+    candidate = Path(written)
+    if candidate.is_absolute():
+        try:
+            return candidate.resolve().relative_to(Path(cwd).resolve()).as_posix()
+        except (OSError, ValueError):
+            pass
+    text = written.replace("\\", "/")
+    return text[2:] if text.startswith("./") else text
+
+
+def parse_report(text: str, cwd: Path) -> Optional[TestReport]:
+    """The testcases of a JUnit XML report's *text*, or `None` where it is not one: empty, not
+    XML, declaring a DTD or entities (never expanded: a task's work can write the file), or with a
+    root other than `testsuites` or `testsuite`."""
+    import xml.etree.ElementTree as ElementTree
+
+    if not text.strip() or "<!DOCTYPE" in text or "<!ENTITY" in text:
+        return None
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError:
+        return None
+    if root.tag not in ("testsuites", "testsuite"):
+        return None
+    outcomes: Dict[str, Optional[bool]] = {}
+    files: Dict[str, str] = {}
+    messages: Dict[str, str] = {}
+    for case in root.iter("testcase"):
+        test = f"{case.get('classname') or ''}::{case.get('name') or ''}"
+        failed_ = case.find("failure") is not None or case.find("error") is not None
+        skipped_ = not failed_ and case.find("skipped") is not None
+        if failed_ or test not in outcomes:
+            outcomes[test] = None if skipped_ else failed_
+        elif outcomes[test] is None and not skipped_:
+            outcomes[test] = False
+        if case.get("file") and (failed_ or test not in files):
+            files[test] = _relative_file(str(case.get("file")), cwd)
+        element = case.find("failure")
+        if element is None:
+            element = case.find("error")
+        if element is not None and test not in messages:
+            said = [str(element.get("message") or "").strip(), (element.text or "").strip()]
+            messages[test] = "\n".join(part for part in said if part)
+    return TestReport(outcomes=outcomes, files=files, messages=messages)
+
+
+def read_report(check: Dict[str, Any], cwd: Path) -> Tuple[Optional[TestReport], str]:
+    """*check*'s report after it ran in *cwd*, and how it read: `read`, or why there is none to
+    judge by (`no report configured`, `report missing`, `report unreadable`; FR-4)."""
+    if not check.get("report_path"):
+        return None, NO_REPORT_CONFIGURED
+    path = report_file(check, cwd)
+    if path is None or not path.is_file():
+        return None, REPORT_MISSING
+    try:
+        if path.stat().st_size > MAX_REPORT_BYTES:
+            return None, REPORT_UNREADABLE
+        raw = path.read_bytes()
+    except OSError:
+        return None, REPORT_UNREADABLE
+    report = parse_report(_decode_output(raw), cwd)
+    return (report, REPORT_READ) if report is not None else (None, REPORT_UNREADABLE)
+
+
+def _judge_by_report(
+    check: Dict[str, Any], cwd: Path, result: Dict[str, Any], timed_out: bool
+) -> None:
+    """Record in *result* what *check*'s report names (FR-2, FR-5). The exit code has already
+    decided pass or fail; the report only names which tests failed, and a failure it cannot name is
+    the whole check's, with the reason (FR-4). A re-run of named tests (`rerun_tests`) also records
+    which of them its report shows passing, so that a pass proves they ran."""
+    report, how = read_report(check, cwd)
+    result["report"] = how
+    asked = list(check.get("rerun_tests") or [])
+    if asked and report is not None:
+        result["passed_tests"] = [test for test in asked if report.outcomes.get(test) is False]
+        # Which of them ran at all: one in no file of the tree runs nothing, and says nothing.
+        result["ran_tests"] = [test for test in asked if test in report.outcomes]
+    watched = list(check.get("watch_tests") or [])
+    if watched and report is not None:
+        # The listed tests this run ran and passed: a run that did not run one says nothing of it
+        # (`failures-already-known-are-on-a-list-not-re-argued`, FR-4; `known_failing.watching`).
+        result["watched_passed"] = [test for test in watched if report.outcomes.get(test) is False]
+    if timed_out:
+        if report is not None and report.failing:
+            result["named_failures"] = report.failing
+        return
+    if not failed(result):
+        return  # a report naming failures does not fail a check that exited 0 (FR-5)
+    if report is None or not report.failing:
+        result["whole_check"] = how if report is None else REPORT_NAMES_NO_FAILURE
+        return
+    failing = report.failing
+    result["failed_tests"] = failing
+    # Always set for a report's ids, empty when the report gives no file (pytest's xunit2): an id
+    # whose file is unknown counts as touched (`touched_tests`), never as a file guessed from it.
+    result["test_files"] = {test: report.files[test] for test in failing if test in report.files}
+    excerpt = failure_excerpt(report, failing)
+    if excerpt:
+        result["failure_excerpt"] = excerpt
+
+
+def _shell_argument(test: str) -> Optional[str]:
+    """*test* quoted as one argument for the shell a check runs in, or `None` where it cannot be
+    passed through that shell as itself."""
+    from .pty_runner import IS_WINDOWS
+
+    if not test or any(char in test for char in "\r\n\x00"):
+        return None
+    if IS_WINDOWS:
+        # cmd.exe expands `%` even inside quotes, and a quote or a trailing backslash would end
+        # the argument early when the program splits its command line.
+        if '"' in test or "%" in test or test.endswith("\\"):
+            return None
+        return f'"{test}"'
+    return shlex.quote(test)
+
+
+def rerun_command(check: Dict[str, Any], tests: Sequence[str]) -> Optional[str]:
+    """*check*'s re-run command with `{tests}` replaced by *tests*, each one argument (FR-6), or
+    `None` where it has none, an id cannot be passed through the shell, or the command would be
+    longer than `MAX_RERUN_COMMAND_CHARS`: the check is then re-run as a whole."""
+    template = str(check.get("rerun_command") or "")
+    if TESTS_PLACEHOLDER not in template or not tests:
+        return None
+    quoted = [_shell_argument(test) for test in tests]
+    if any(argument is None for argument in quoted):
+        return None
+    command = template.replace(TESTS_PLACEHOLDER, " ".join(str(q) for q in quoted))
+    return command if len(command) <= MAX_RERUN_COMMAND_CHARS else None
+
+
+def rerun_check(check: Dict[str, Any], tests: Sequence[str]) -> Optional[Dict[str, Any]]:
+    """The check that re-runs exactly *tests* -- confirming a failure, asking main, narrowing a
+    landing batch -- or `None` to re-run *check* as a whole.
+
+    Only through the check's re-run command (FR-6), its report read by the same rules; a check
+    without one is re-run as a whole. The check's own command is never rewritten (FR-7)."""
+    command = rerun_command(check, tests)
+    if command is None:
+        return None
+    return {**check, "command": command, "rerun_tests": list(tests)}
+
+
+# --- the command for a change (`a-check-can-run-only-the-tests-for-what-a-task-changed`) ---------
+
+#: Where a check's command for a change takes the path of the file listing the changed files (FR-1).
+CHANGED_FILES_PLACEHOLDER = "{changed_files}"
+#: Why a check with a command for a change ran its full command before review (FR-2).
+CHANGE_UNKNOWN = "the files the task changed could not be read, so the check ran in full"
+
+
+def for_change(
+    checks: Sequence[Dict[str, Any]], changed: Optional[Sequence[str]]
+) -> List[Dict[str, Any]]:
+    """*checks* as a task's pre-review run executes them: each one with a command for a change
+    carries `changed_files`, the files the task changed, each once (FR-1) -- or, where those are not
+    known, `full_because` and its own command (FR-2). Its `command` is left as it is: only
+    `sized_command` puts the command for a change in place, so a confirmation, which reads
+    `command` and the re-run command, runs as a check without one (FR-3)."""
+    sized = []
+    for check in checks:
+        if check.get("change_command"):
+            if changed is None:
+                check = {**check, "full_because": CHANGE_UNKNOWN}
+            else:
+                check = {**check, "changed_files": list(dict.fromkeys(changed))}
+        sized.append(check)
+    return sized
+
+
+def changed_files_list(root: Path, task_id: str) -> Path:
+    """The file a task's run lists its changed files in: beside the run's checkout, not inside
+    it, so the tree the check reads is exactly the merged work."""
+    return root / CHECKS_DIR / f"{task_id}.changed-files.txt"
+
+
+def sized_command(check: Dict[str, Any], listing: Path) -> Optional[Dict[str, Any]]:
+    """*check* running its command for a change on the files *listing* names, written here; `None`
+    for a check not sized to the change, or a list path the shell cannot be handed (it runs in
+    full)."""
+    if check.get("changed_files") is None:
+        return None
+    argument = _shell_argument(str(listing))
+    if argument is None:
+        return None
+    listing.parent.mkdir(parents=True, exist_ok=True)
+    listing.write_text(
+        "".join(f"{path}\n" for path in check["changed_files"]), encoding="utf-8", newline="\n"
+    )
+    command = str(check["change_command"]).replace(CHANGED_FILES_PLACEHOLDER, argument)
+    return {**check, "command": command}
+
+
+def sizing(check: Dict[str, Any], ran: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """What a pre-review result records about its size (FR-2, FR-4): sized to the change and with
+    how many files, where *ran* (`sized_command`'s check) ran; in full, and why, where a check with a
+    command for a change did not; nothing for a check without one."""
+    if not check.get("change_command"):
+        return {}
+    if ran is not None:
+        return {"sized_to_change": True, "changed_file_count": len(check["changed_files"])}
+    return {
+        "sized_to_change": False,
+        "full_because": check.get("full_because")
+        or "the list of changed files could not be passed to the command, so the check ran in full",
+    }
+
+
+def failure_excerpt(report: TestReport, failing: Sequence[str]) -> str:
+    """What the report says about each of the *failing* tests -- its id, then its failure message and
+    text -- up to `OUTPUT_TAIL_CHARS`, or `""` where it says nothing.
+
+    The stored tail of a long suite holds only its end, so a failure's traceback was lost: two gate
+    runs on 2026-10-25 kept the failing id and nothing that said why. The report keeps it for every
+    runner, so no console output is searched for it (FR-7)."""
+    parts = [f"{test}\n{report.messages[test]}" for test in failing if report.messages.get(test)]
+    return "\n\n".join(parts)[:OUTPUT_TAIL_CHARS]
 
 
 # --- reuse and confirmation ----------------------------------------------------------------------
@@ -657,10 +935,18 @@ def check_digest(check: Dict[str, Any]) -> str:
     """What makes two runs of a check the same check: everything the operator configured that can
     change its result. Not `fast`, which changes when it runs (D1), so marking a check fast keeps
     its passes reusable."""
-    payload = json.dumps(
-        {key: check.get(key) for key in ("name", "command", "timeout_seconds", "paths")},
-        sort_keys=True,
-    )
+    identity = {key: check.get(key) for key in ("name", "command", "timeout_seconds", "paths")}
+    # Only where set, so a check without a report keeps the digest (and the passes) it had.
+    identity.update({key: check[key] for key in ("report_path", "rerun_command") if check.get(key)})
+    if check.get("changed_files") is not None:
+        # A run of the command for a change is another check: a pass of it is reused only for the
+        # same list of changed files (FR-6), and never as a pass of the full command -- which is
+        # what a landing batch looks it up as. The full command's digest leaves the command for a
+        # change out, so its passes stay reusable as before.
+        identity.update(
+            change_command=check["change_command"], changed_files=list(check["changed_files"])
+        )
+    payload = json.dumps(identity, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -804,93 +1090,6 @@ async def covering_results(
     return prepared[0], [result for result in prepared[3] if result is not None]
 
 
-#: A pytest short-summary line: `FAILED <node id>[@<xdist group>][ - <message>]`.
-_SUMMARY_LINE_RE = re.compile(r"^(?:FAILED|ERROR) (.+?)(?: - .*)?$", re.MULTILINE)
-_XDIST_GROUP_RE = re.compile(r"@[^\[\]@:]*$")
-_SAFE_NODE_ID_RE = re.compile(r"^[\w./\\:\-\[\]@ ,=+]+$")
-_COUNT_RE = re.compile(r"\b(\d+) (passed|failed|errors?|skipped|deselected|xfailed|xpassed)\b")
-#: pytest's final line: its counts, then ` in <seconds>s`.
-_FINAL_LINE_RE = re.compile(r"\bin \d+(?:\.\d+)?s\b")
-#: pytest options whose value is the next word; kept with it when a command is narrowed to node ids.
-_VALUE_OPTIONS = frozenset(
-    {
-        "-n",
-        "--numprocesses",
-        "--maxprocesses",
-        "--dist",
-        "--tx",
-        "-p",
-        "-c",
-        "-k",
-        "-m",
-        "-o",
-        "--override-ini",
-        "--rootdir",
-        "--confcutdir",
-        "--basetemp",
-        "--tb",
-        "-W",
-        "--pythonwarnings",
-        "--timeout",
-        "--timeout-method",
-        "--maxfail",
-        "--durations",
-        "-r",
-        "--import-mode",
-        "--capture",
-        "--color",
-        "--log-level",
-        "--log-cli-level",
-        "--junitxml",
-        "--junit-xml",
-        "--cov",
-        "--cov-report",
-        "--ignore",
-        "--ignore-glob",
-        "--deselect",
-        "--max-worker-restart",
-        "--asyncio-mode",
-    }
-)
-#: Options that would choose a different set of tests than the node ids given.
-_SELECTION_OPTIONS = frozenset(
-    {"--lf", "--last-failed", "--ff", "--failed-first", "--sw", "--stepwise", "--stepwise-skip"}
-)
-_PYTEST_RE = re.compile(r"(?:^|(?<=\s))(?:\S*[\\/])?(?:py\.test|pytest)(?:\.exe)?(?=\s|$)")
-
-
-def summary_counts(output: str) -> Optional[Dict[str, int]]:
-    """The counts on pytest's final line (`2 failed, 8903 passed, ... in 645.88s`), or `None` where
-    the output ends without one."""
-    for line in reversed(output.strip().splitlines()[-20:]):
-        found = _COUNT_RE.findall(line)
-        if found and _FINAL_LINE_RE.search(line):
-            counts: Dict[str, int] = {}
-            for number, kind in found:
-                kind = "error" if kind.startswith("error") else kind
-                counts[kind] = counts.get(kind, 0) + int(number)
-            return counts
-    return None
-
-
-#: A test pytest reported failed or erroring as it went: the short summary's `FAILED x::t`, xdist's
-#: `[gw0] [ 5%] FAILED x::t`, or verbose `x::t FAILED`.
-_NAMED_FAILURE_RE = re.compile(
-    r"(?:\b(?:FAILED|ERROR) (\S+::\S+))|(?:(\S+::\S+) (?:FAILED|ERROR)\b)", re.MULTILINE
-)
-
-
-def named_failures(output: str) -> List[str]:
-    """Every test *output* names as failed or erroring, whether or not pytest got as far as its
-    final count: what a check that ran out of time had already found (FR-10)."""
-    ids: List[str] = []
-    for match in _NAMED_FAILURE_RE.finditer(output):
-        node = _XDIST_GROUP_RE.sub("", (match.group(1) or match.group(2)).strip())
-        if node and node not in ids:
-            ids.append(node)
-    return ids
-
-
 def unjudged_timeout(result: Dict[str, Any]) -> bool:
     """A check that ran out of time without naming a failing test: it says nothing about the work,
     so it is not the task's failure (FR-10). One that named a failure before its time ran out still
@@ -898,135 +1097,51 @@ def unjudged_timeout(result: Dict[str, Any]) -> bool:
     return bool(result.get("timed_out")) and not result.get("named_failures")
 
 
-def failed_test_ids(output: str) -> List[str]:
-    """The node ids pytest's short summary names as failed or erroring, or `[]` unless every failure
-    the final count reports is named (a truncated summary is not a list of the failures)."""
-    ids: List[str] = []
-    for match in _SUMMARY_LINE_RE.finditer(output):
-        node = _XDIST_GROUP_RE.sub("", match.group(1).strip())
-        if node and node not in ids:
-            ids.append(node)
-    counts = summary_counts(output)
-    if not ids or counts is None:
-        return []
-    if counts.get("failed", 0) + counts.get("error", 0) != len(ids) or len(ids) > MAX_RERUN_TESTS:
-        return []
-    if not all(_SAFE_NODE_ID_RE.match(node) for node in ids):
-        return []
-    return ids
-
-
-#: pytest-xdist's options: the worker count, which a narrowed run sets to 0 (serial), and the
-#: distribution options, which mean nothing without workers and are dropped (`rerun-on-its-own`).
-_WORKER_OPTIONS = frozenset({"-n", "--numprocesses"})
-_DISTRIBUTION_OPTIONS = frozenset({"--dist", "--maxprocesses", "--tx"})
-_SHORT_WORKERS_RE = re.compile(r"^-n(?!-)\S+$")
-
-
-def narrowed_command(command: str, node_ids: Sequence[str]) -> Optional[str]:
-    """*command* run on *node_ids* alone and serially, or `None` if it is not a plain pytest
-    invocation that can be narrowed safely: its options are kept, the paths it names are replaced by
-    the node ids, and an xdist worker count is set to 0 with the distribution options dropped
-    (`a-red-main-does-not-hold-the-night`, FR-2). A command without `-n` is already serial and gains
-    nothing: `-n 0` needs xdist installed.
-
-    The night of 2026-10-26/27 a timing test passed one narrowed rerun under `-n auto` and failed the
-    next while another suite ran; serial removes the load the rerun made for itself. The same
-    command is what main is asked with, so the two trees are compared like for like."""
-    found = _PYTEST_RE.search(command)
-    if found is None or not node_ids:
-        return None
-    prefix, rest = command[: found.end()], command[found.end() :]
-    if any(char in rest for char in "&|;<>^%!`$()"):
-        return None  # a pipeline or a second command after pytest: not narrowed
-    try:
-        words = shlex.split(rest, posix=False)
-    except ValueError:
-        return None
-    kept: List[str] = []
-    take_value = False
-    drop_value = False
-    serial = False
-    for word in words:
-        if take_value:
-            kept.append(word)
-            take_value = False
-        elif drop_value:
-            drop_value = False
-        elif word.startswith("-"):
-            option = word.split("=", 1)[0]
-            if option in _SELECTION_OPTIONS:
-                continue
-            if option in _WORKER_OPTIONS or _SHORT_WORKERS_RE.match(word):
-                serial = True
-                drop_value = option in _WORKER_OPTIONS and "=" not in word
-                continue
-            if option in _DISTRIBUTION_OPTIONS:
-                drop_value = "=" not in word
-                continue
-            kept.append(word)
-            take_value = word in _VALUE_OPTIONS
-        # anything else is a path or node id the original run selected; the node ids replace it
-    if take_value or drop_value:
-        return None
-    if serial:
-        kept[:0] = ["-n", "0"]
-    quoted = " ".join(f'"{node}"' for node in node_ids)
-    return " ".join(part for part in (prefix, *kept, "--", quoted) if part)
-
-
 def proves_the_tests_pass(result: Dict[str, Any], node_ids: Sequence[str]) -> bool:
-    """Whether a narrowed re-run passed and really ran the tests it named: exit 0, nothing failed,
-    and at least one passed test per node id (a node id that selects nothing would be no proof)."""
-    counts = summary_counts(str(result.get("output_tail") or ""))
-    return (
-        not failed(result)
-        and counts is not None
-        and not counts.get("failed")
-        and not counts.get("error")
-        and counts.get("passed", 0) >= len(node_ids)
-    )
+    """Whether a re-run of named tests passed and really ran them: exit 0 and its report shows
+    every id passing (FR-6). An id that selects nothing, or a re-run with no report, is no proof."""
+    passed = set(result.get("passed_tests") or [])
+    return not failed(result) and bool(node_ids) and all(test in passed for test in node_ids)
 
 
 def reproduces_a_test_failure(result: Dict[str, Any]) -> bool:
-    """Whether a narrowed re-run failed *a test* (pytest's exit 1 with a failure counted), not on
-    its own invocation: a usage error (exit 4) or nothing collected (exit 5) proves nothing."""
-    counts = summary_counts(str(result.get("output_tail") or ""))
-    return (
-        result.get("exit_code") == 1
-        and counts is not None
-        and bool(counts.get("failed") or counts.get("error"))
-    )
+    """Whether a re-run of named tests failed *a test*: it failed and its report names a failing
+    test. A failure it names no test for (a usage error, nothing collected, no report) proves
+    nothing (FR-5, FR-6)."""
+    return failed(result) and not result.get("timed_out") and bool(result.get("failed_tests"))
 
 
-def _node_key(node_id: str) -> str:
-    """A node id as compared across runs and trees: pytest prints the separators of the platform."""
-    return node_id.strip().replace("\\", "/")
+def _path_key(path: str) -> str:
+    """A repository path as compared with the paths git reports: forward slashes."""
+    return path.strip().replace("\\", "/")
 
 
-def test_file(node_id: str) -> str:
-    """The repository-relative file a pytest node id names (its path part)."""
-    return _node_key(node_id).split("::", 1)[0]
-
-
-def touched_tests(node_ids: Sequence[str], changed: Optional[Sequence[str]]) -> List[str]:
-    """The node ids whose file is among *changed*, the paths the task's merged work changes against
+def touched_tests(
+    node_ids: Sequence[str],
+    changed: Optional[Sequence[str]],
+    files: Optional[Dict[str, str]] = None,
+) -> List[str]:
+    """The test ids whose file is among *changed*, the paths the task's merged work changes against
     the run's main commit (FR-4): a test the task touched is the task's to make pass. Unknown changes
-    count every id as touched -- an override is never automatic on a guess."""
+    count every id as touched -- an override is never automatic on a guess. An id takes its file
+    from the report (*files*, `checks-report-which-tests-failed-in-any-language` FR-2); one whose
+    report gives no file is unknown, so touched: an id is never read as a path."""
     if changed is None:
         return list(node_ids)
-    paths = {_node_key(path) for path in changed}
-    return [node for node in node_ids if test_file(node) in paths]
+    paths = {_path_key(path) for path in changed}
+    if not paths:
+        return []  # the work changes no file: no failing test can be one it touched
+    files = files or {}
+    return [node for node in node_ids if node not in files or _path_key(files[node]) in paths]
 
 
 def _still_failing(again: Dict[str, Any], node_ids: Sequence[str]) -> List[str]:
-    """Which of *node_ids* a narrowed rerun that reproduced a failure failed again: the ones its
-    summary names, where it names failures among them; else all of them (not known which)."""
-    named = {_node_key(node) for node in again.get("failed_tests") or []}
-    keys = {_node_key(node) for node in node_ids}
-    if not named or not named <= keys:
+    """Which of *node_ids* a re-run that reproduced a failure failed again: the ones its report
+    names, where it names failures among them; else all of them (not known which)."""
+    named = set(again.get("failed_tests") or [])
+    if not named or not named <= set(node_ids):
         return list(node_ids)
-    return [node for node in node_ids if _node_key(node) in named]
+    return [node for node in node_ids if node in named]
 
 
 def confirm_failure(
@@ -1039,24 +1154,24 @@ def confirm_failure(
     """Run a failed check's failure once more on the same tree, and record what happened in
     *result* (blocking; the caller runs it in a thread).
 
-    The failed tests alone, serially, where pytest named every one and the command can be narrowed
-    to them (`a-red-main-does-not-hold-the-night`, FR-2), else the whole check. Reproduced: *result*
-    keeps its failure and gains `confirmed`, and `compared_tests` names the ids main is asked about
-    (`_MainBaseline`): those that failed again, and any in a file the task changed. A named id that
-    passed the rerun is recorded in `flaky_tests`. Passed: *result* passes, and `flaky` keeps the
-    first attempt -- a flake is recorded, never swallowed -- unless a flaky test is in a file the
-    task's work changes (*changed*, FR-4): a task that adds or edits a flaky test introduced it, so
-    its failure stands and is compared with main like a reproduced one.
+    The failed tests alone, through the check's re-run command, where its report named them and the
+    command with them substituted is short enough (FR-6), else the whole check. Reproduced: *result*
+    keeps its failure and gains `confirmed`, and `compared_tests` names the ids the known-failing
+    list judges (`known_failing.judge`): those that failed again, and any in a file the task
+    changed. A named id that passed the rerun is recorded in `flaky_tests`. Passed: *result* passes,
+    and `flaky` keeps the first attempt -- a flake is recorded, never swallowed -- unless a flaky
+    test is in a file the task's work changes (*changed*, FR-4): a task that adds or edits a flaky
+    test introduced it, so its failure stands and is judged like a reproduced one.
     """
     node_ids = list(result.get("failed_tests") or [])
-    narrowed = narrowed_command(check["command"], node_ids) if node_ids else None
+    narrowed = rerun_check(check, node_ids)
     how, again = "check", None
     if narrowed is not None:
-        again = run_one({**check, "command": narrowed}, cwd, owner)
+        again = run_one(narrowed, cwd, owner)
         if proves_the_tests_pass(again, node_ids) or reproduces_a_test_failure(again):
             how = "tests"
         else:
-            again = None  # the narrowed command proved nothing either way: run the check
+            again = None  # the re-run proved nothing either way: run the check
     if again is None:
         again = run_one(check, cwd, owner)
     attempt = {
@@ -1066,8 +1181,11 @@ def confirm_failure(
         "timed_out": again["timed_out"],
         "duration_seconds": again["duration_seconds"],
     }
+    for key in ("report", "whole_check"):
+        if key in again:
+            attempt[key] = again[key]  # what the re-run's own report said (FR-4)
     if how == "tests":
-        touched = touched_tests(node_ids, changed)
+        touched = touched_tests(node_ids, changed, result.get("test_files"))
         result["touched_tests"] = touched
         stays = _still_failing(again, node_ids) if failed(again) else []
         flaked = [node for node in node_ids if node not in stays and node not in touched]
@@ -1114,15 +1232,15 @@ def failed(result: Dict[str, Any]) -> bool:
 
 
 def preexisting(result: Dict[str, Any]) -> bool:
-    """A failure main shares (F605): every test the task's tree failed (after its rerun) fails on
-    the main tip the run was cut from too, compared by pytest node id where pytest named them
-    (`a-red-main-does-not-hold-the-night`, FR-1), else the same check failed there. A run recorded
-    before this field existed reads as not pre-existing, i.e. as before."""
+    """A failure that is not the work's: every test it failed (after its rerun) is on the project's
+    known-failing list, or, naming no test, its whole check is (`known_failing.judge`,
+    `failures-already-known-are-on-a-list-not-re-argued` FR-7). A run recorded before this field
+    existed reads as not pre-existing, i.e. as the work's."""
     return failed(result) and bool(result.get("preexisting"))
 
 
 def own_failure(results: Optional[Sequence[Dict[str, Any]]]) -> bool:
-    """Whether a run's results hold a failure that is the task's (not one main shares)."""
+    """Whether a run's results hold a failure that is the task's (not one on the list)."""
     return any(failed(result) and not preexisting(result) for result in results or [])
 
 
@@ -1142,134 +1260,9 @@ def send_back_class(results: Optional[Sequence[Dict[str, Any]]]) -> str:
     return SEND_BACK_BROKEN_CHECK
 
 
-#: The two kinds of failure that are not the task's (`a-red-main-does-not-hold-the-night`).
+#: The two kinds of entry on the known-failing list (`known_failing`).
 FAILS_ON_MAIN = "fails on main"
 FLAKY = "flaky"
-
-
-def not_the_tasks(
-    results: Optional[Sequence[Dict[str, Any]]], *, excluded: Sequence[str] = ()
-) -> Optional[List[Dict[str, str]]]:
-    """Every failure and flake in a run's *results*, as `{"check", "test", "kind"}`, where each one
-    is provably not the task's -- the same node id fails on main too, or passed when rerun on its
-    own -- else `None` (`a-red-main-does-not-hold-the-night`, FR-1, FR-4). `[]` for a run with
-    neither: nothing to override.
-
-    `None` for any failure that is the task's or that cannot be told apart: an id that passes on
-    main, a failing or flaky test in a file the task changed, an id in *excluded* (the ids a
-    Hub-filed fix task was filed for), and a failure compared check-level -- a non-pytest check, a
-    timeout, a truncated summary, more than `MAX_RERUN_TESTS`, a command that cannot be narrowed,
-    no main answer. Those keep the answer they had before. A whole-check flake (no test named)
-    passes as before and is not listed: there is no test to name."""
-    found: List[Dict[str, str]] = []
-    for result in results or []:
-        if not isinstance(result, dict) or result.get("skipped"):
-            continue
-        check = str(result.get("name") or "check")
-        if failed(result):
-            on_main = result.get("on_main") if isinstance(result.get("on_main"), dict) else {}
-            shared = list(result.get("shared_tests") or [])
-            if (
-                not preexisting(result)
-                or on_main.get("how") != "tests"
-                or result.get("own_tests")
-                or result.get("touched_tests")
-                or not shared
-            ):
-                return None
-            found += [{"check": check, "test": t, "kind": FAILS_ON_MAIN} for t in shared]
-            found += [
-                {"check": check, "test": t, "kind": FLAKY} for t in result.get("flaky_tests") or []
-            ]
-        elif isinstance(result.get("flaky"), dict) and result["flaky"].get("how") == "tests":
-            if result.get("touched_tests"):
-                return None  # cannot pass with one; read defensively
-            tests = result.get("flaky_tests") or result["flaky"].get("tests") or []
-            found += [{"check": check, "test": t, "kind": FLAKY} for t in tests]
-    keys = {_node_key(node) for node in excluded}
-    if any(_node_key(entry["test"]) in keys for entry in found):
-        return None
-    return found
-
-
-def _record_main_result(result: Dict[str, Any], on_main: Dict[str, Any]) -> None:
-    """Main's answer for the whole check: check-level, so it is never an automatic override."""
-    result["on_main"] = {
-        "exit_code": on_main["exit_code"],
-        "timed_out": on_main["timed_out"],
-        "how": "check",
-    }
-    result["preexisting"] = failed(on_main)
-
-
-def _record_main_tests(
-    result: Dict[str, Any], on_main: Dict[str, Any], node_ids: Sequence[str]
-) -> bool:
-    """Main's answer for exactly *node_ids*, run with the serial narrowed command (FR-1): each id
-    that fails there is shared, each that passes is the task's own. Exit codes and counts are never
-    compared. `False` where the run named no answer per id (it ran nothing, or failed without naming
-    every failure): the caller asks the whole check instead, as before this change."""
-    if proves_the_tests_pass(on_main, node_ids):
-        failing: List[str] = []
-    elif reproduces_a_test_failure(on_main) and on_main.get("failed_tests"):
-        failing = list(on_main["failed_tests"])
-    else:
-        return False
-    keys = {_node_key(node) for node in failing}
-    shared = [node for node in node_ids if _node_key(node) in keys]
-    own = [node for node in node_ids if _node_key(node) not in keys]
-    result["on_main"] = {
-        "exit_code": on_main["exit_code"],
-        "timed_out": on_main["timed_out"],
-        "how": "tests",
-        "tests": list(node_ids),
-        "failed_tests": failing,
-    }
-    result["shared_tests"], result["own_tests"] = shared, own
-    result["preexisting"] = bool(shared) and not own
-    return True
-
-
-class _MainBaseline:
-    """The main tip the run was cut from, checked out on the first failure and kept for the rest.
-
-    A failing check is run there at once (F605, D1): its answer decides whether the run goes on.
-    Where the task's tree named its failed tests and they stood their serial rerun
-    (`compared_tests`), main runs the same serial command narrowed to exactly those ids (FR-1);
-    otherwise the whole check. Best-effort: a baseline that cannot be taken leaves the result as it
-    was, charged to the task, and `unavailable` (no main answer is never an automatic override).
-    """
-
-    def __init__(self, root: Path, task_id: str, main_sha: str) -> None:
-        self.root, self.main_sha, self.task_id = root, main_sha, task_id
-        self.name = f"{task_id}.main"
-        self.path: Optional[Path] = None
-        self.unavailable = False
-
-    async def record(self, check: Dict[str, Any], result: Dict[str, Any]) -> None:
-        if self.unavailable:
-            return
-        try:
-            if self.path is None:
-                self.path = await asyncio.to_thread(_checkout, self.root, self.name, self.main_sha)
-            node_ids = list(result.get("compared_tests") or [])
-            narrowed = narrowed_command(check["command"], node_ids) if node_ids else None
-            if narrowed is not None:
-                on_main = await asyncio.to_thread(
-                    run_one, {**check, "command": narrowed}, self.path, self.task_id
-                )
-                if _record_main_tests(result, on_main, node_ids):
-                    return
-            _record_main_result(
-                result, await asyncio.to_thread(run_one, check, self.path, self.task_id)
-            )
-        except Exception:  # noqa: BLE001 -- the task's own result stands without main's
-            self.unavailable = True
-            logger.warning("could not run check %s on main", check["name"], exc_info=True)
-
-    async def close(self) -> None:
-        if self.path is not None:
-            await asyncio.to_thread(_remove_checkout, self.root, self.path)
 
 
 # --- records -------------------------------------------------------------------------------------
@@ -1475,12 +1468,12 @@ async def _after_decided(run_id: str) -> None:
     any other verdict asks for its flow's firing, which offers the review it was waiting for (D6,
     FR-8) within `flow_advance`'s debounce rather than at the next tick. Never raises.
 
-    First, failures that are not the task's -- main's, or flakes -- get their fix task filed now,
-    while the flow's agents are idle (`a-red-main-does-not-hold-the-night`, D5); approval's own
-    transaction stays free of task creation. A run with a failure of the task's own files none."""
+    First, the run is read into the known-failing list: a flake it found is listed, with its owner
+    fix task filed now, while the flow's agents are idle (`failures-already-known-are-on-a-list-not-
+    re-argued`, FR-2, FR-5); approval's own transaction stays free of task creation."""
     from . import flow_advance
 
-    await flaky_tests.file_fix_task(run_id)
+    await known_failing.record_run(run_id)
     try:
         if await return_failed_work(run_id):
             return  # the return asked for the flow's firing itself (a hand-off move)
@@ -1533,10 +1526,6 @@ _semaphores: Dict[int, asyncio.Semaphore] = {}
 _fast_waiters: Dict[str, asyncio.Event] = {}
 #: By run id, when a run began waiting for a check slot (the semaphore), while it waits (F1076).
 _waiting_for_slot: Dict[str, datetime] = {}
-#: By run id, how long a run waited for its slot once it has one: its age less this is how long its
-#: checks have run. A row's `started_at` is when it was queued, and a run that waited 33 min behind
-#: another read as a 70-minute run, which the mender called hung.
-_slot_waited: Dict[str, float] = {}
 #: Recorded in `_superseded` in place of a main tip: the task's work changed under the run (a new
 #: completion), not main.
 _NEW_WORK = "new-work"
@@ -1547,6 +1536,23 @@ def _semaphore() -> asyncio.Semaphore:
     if loop_id not in _semaphores:
         _semaphores[loop_id] = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
     return _semaphores[loop_id]
+
+
+async def _took_slot(run_id: str) -> None:
+    """Record on *run_id*'s row that it got a check slot now (`slot_at`), where it is still running.
+
+    A row's `started_at` is when it was queued, and a run that waited 33 min behind another read as
+    a 70-minute run, which the mender called hung (F1076). Held in memory, the wait was lost at a
+    restart; on the row it survives one, and the build's tally splits waiting from running by it
+    (`the-build-card-shows-where-check-time-went` FR-1). Called at every place a run takes
+    `_semaphore()` -- a task's run here, a landing batch's in `landing_queue` -- and only once it
+    holds the slot, so a run ended or superseded while waiting records none."""
+    async with async_session_factory() as session:
+        run = await session.get(TaskCheckRun, run_id)
+        if run is None or run.state != "running":
+            return
+        run.slot_at = datetime.now(timezone.utc)
+        await session.commit()
 
 
 def is_running(task_id: str) -> bool:
@@ -1683,7 +1689,8 @@ async def _prepare(
         tree = await asyncio.to_thread(tree_of, root, merged)
         changed = await asyncio.to_thread(changed_paths, root, tip, merged)
         passes = await passes_on_tree(session, project_id, tree) if tree else {}
-        return merged, tree, changed, planned_results(checks, changed, tree, passes)
+        planned = planned_results(for_change(checks, changed), changed, tree, passes)
+        return merged, tree, changed, planned
     except Exception:  # noqa: BLE001 -- not reusing is always safe: the checks run
         logger.debug("could not prepare a check run", exc_info=True)
         return None
@@ -1731,7 +1738,6 @@ async def _execute(
         merged: str,
         tree: Optional[str],
         changed: Optional[List[str]],
-        baseline: _MainBaseline,
     ) -> Optional[str]:
         """Run *group* in order: `None` to go on, `"stop"` where the task's own failure decided
         the run, `"superseded"` where the task's work changed under it, `"timeout"` where a check
@@ -1741,26 +1747,46 @@ async def _execute(
             if await superseded():
                 return "superseded"
             result = already or skipped(check, changed)
+            if already is not None and not already.get("skipped"):
+                # A reused pass says what it is a pass of: its digest matched this sizing.
+                result.update(sizing(check, check if "changed_files" in check else None))
             if result is None:
                 if path is None:
                     path = await asyncio.to_thread(_checkout, root, task_id, merged)
-                result = await asyncio.to_thread(run_one, check, path, task_id)
+                ran = await asyncio.to_thread(
+                    sized_command, check, changed_files_list(root, task_id)
+                )
+                if ran is None and check.get("changed_files") is not None:
+                    # Not sized after all: it runs, and is reused, as the full command.
+                    check = {k: v for k, v in check.items() if k != "changed_files"}
+                result = await asyncio.to_thread(run_one, ran or check, path, task_id)
+                result.update(sizing(check, ran))
                 if unjudged_timeout(result) and task_id not in _superseded:
-                    # Not confirmed, and main not asked: running out of time again, or on main,
-                    # would say no more about the work. The run is retried instead (FR-9).
+                    # Not confirmed: running out of time again would say no more about the work.
+                    # The run is retried instead (FR-9).
                     result.update(tree=tree, check_digest=check_digest(check))
                     results.append(result)
                     timed_out = check
                     return "timeout"
                 if failed(result) and task_id not in _superseded:
-                    # Confirmed on the same tree before main is asked (a flake that passes the
-                    # second time needs no baseline); only a reproduced failure stands.
+                    # Confirmed on the same tree first: only a reproduced failure stands.
                     await asyncio.to_thread(confirm_failure, check, path, result, task_id, changed)
                     if result.get("flaky"):
                         # Raised to the operator, not only to the reviewer (`flaky_tests`).
                         await flaky_tests.record_flake(run_id, result)
                 if failed(result) and task_id not in _superseded:
-                    await baseline.record(check, result)
+                    # Whose it is, the known-failing list decides: nothing runs on main for it but
+                    # the twice rule's one test (`failures-already-known-are-on-a-list-not-re-
+                    # argued`, FR-7, FR-13).
+                    await known_failing.judge(
+                        project_id=project_id,
+                        task_id=task_id,
+                        run_id=run_id,
+                        root=root,
+                        main_sha=main_sha,
+                        check=check,
+                        result=result,
+                    )
                 if await superseded():
                     return "superseded"  # its tree was ended for new work: not a result
                 result.update(tree=tree, check_digest=check_digest(check))
@@ -1768,11 +1794,14 @@ async def _execute(
             await _finish(run_id, merged_sha=merged, results=list(results))
             if failed(result) and not preexisting(result):
                 # The task's own failure already decides the run; the checks after it would only
-                # make its author wait for them (operator, 2026-10-24). A failure main shares does
-                # not stop it: it is not the task's, and what follows may still be.
+                # make its author wait for them (operator, 2026-10-24). A listed failure does not
+                # stop it: it is not the task's, and what follows may still be.
                 return "stop"
         return None
 
+    project_id = await _project_of(run_id)
+    # Each check is told the tests on the known-failing list, so its report says which it passed.
+    checks = await known_failing.watching(project_id, checks)
     try:
         if await superseded():
             return
@@ -1794,11 +1823,12 @@ async def _execute(
             tree = await asyncio.to_thread(tree_of, root, merged)
             changed = await asyncio.to_thread(changed_paths, root, main_sha, merged)
             planned = [None] * len(checks)
+        # Each check with a command for a change is sized to it here, before review only (FR-3).
+        checks = for_change(checks, changed)
         pairs = list(zip(checks, planned, strict=True))
         split = sum(1 for check in checks if check.get("fast"))
-        baseline = _MainBaseline(root, task_id, main_sha)
         try:
-            outcome = await run_group(pairs[:split], merged, tree, changed, baseline)
+            outcome = await run_group(pairs[:split], merged, tree, changed)
             if outcome is None:
                 # Every fast check passed: the completion waiting on them goes on now, and the rest
                 # run after it. A fast failure instead ends the run first (the `finally` below
@@ -1807,15 +1837,19 @@ async def _execute(
             if outcome is None and pairs[split:]:
                 _waiting_for_slot[run_id] = datetime.now(timezone.utc)
                 async with _semaphore():
-                    queued = _waiting_for_slot.pop(run_id)
-                    _slot_waited[run_id] = (datetime.now(timezone.utc) - queued).total_seconds()
-                    outcome = await run_group(pairs[split:], merged, tree, changed, baseline)
+                    _waiting_for_slot.pop(run_id, None)
+                    if await superseded():
+                        # Its work changed while it waited: it ends here without running, so it
+                        # took no slot (FR-1).
+                        outcome = "superseded"
+                    else:
+                        await _took_slot(run_id)
+                        outcome = await run_group(pairs[split:], merged, tree, changed)
             if outcome == "superseded":
                 return
         finally:
             if path is not None:
                 await asyncio.to_thread(_remove_checkout, root, path)
-            await baseline.close()
         if await superseded():
             return
         if outcome == "timeout" and timed_out is not None:
@@ -1845,7 +1879,12 @@ async def _execute(
     finally:
         _fast_decided(run_id)
         _waiting_for_slot.pop(run_id, None)
-        _slot_waited.pop(run_id, None)
+
+
+async def _project_of(run_id: str) -> str:
+    async with async_session_factory() as session:
+        run = await session.get(TaskCheckRun, run_id)
+        return run.project_id if run is not None else ""
 
 
 def _fast_decided(run_id: str) -> None:
@@ -2432,6 +2471,10 @@ def failure_report(
             if result.get("timed_out")
             else f"exited {result.get('exit_code')}"
         )
+        # The tests its report named (FR-2), whatever the runner printed.
+        named = list(result.get("failed_tests") or result.get("named_failures") or [])
+        if named:
+            how += f"; failing tests: {', '.join(named)}"
         output = str(result.get("failure_excerpt") or result.get("output_tail") or "").strip()
         lines.append(f"\n{result.get('name')} {how}:\n{output[-OUTPUT_TAIL_CHARS:]}")
     return "\n".join(lines)
@@ -2561,8 +2604,9 @@ async def review_wait(session: AsyncSession, task: Task) -> Optional[ReviewWait]
             f"{run_id}); queued is not hung, and its review is offered once they pass",
         )
     if seen.state == "running" and run is not None and run.started_at is not None:
-        age = (datetime.now(timezone.utc) - _aware(run.started_at)).total_seconds()
-        ran = age - _slot_waited.get(run.id, 0.0)
+        # From when it got its slot: `started_at` is when it was queued (F1076).
+        since = _aware(run.slot_at) if run.slot_at is not None else _aware(run.started_at)
+        ran = (datetime.now(timezone.utc) - since).total_seconds()
         return ReviewWait(
             "running",
             run_id,

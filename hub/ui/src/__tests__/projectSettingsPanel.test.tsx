@@ -45,8 +45,7 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both' }> | null
-  checks_auto_override: boolean
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null; change_command?: string | null }> | null
   checks_give_way?: boolean
 } {
   return {
@@ -67,7 +66,6 @@ function makeSettings(): {
     checkpoint_auto_continue: false,
     main_branch: null,
     checks: null,
-    checks_auto_override: true,
   }
 }
 
@@ -335,6 +333,93 @@ describe('Project settings → General, applied on change', () => {
     expect(screen.getByTestId('project-check-phase-0')).toHaveTextContent('at landing only')
   })
 
+  // checks-report-which-tests-failed-in-any-language FR-8 settings-examples.
+  it('shows the report path and re-run command fields with five examples, the id form and the whole-check note', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'unit', command: 'npx vitest run', timeout_seconds: 900, report_path: 'report.xml', rerun_command: 'node rerun-vitest.mjs {tests}' }],
+    }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-report-0')).toHaveTextContent('report report.xml, re-runs by test')
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Report path')).toHaveValue('report.xml')
+    expect(within(dialog).getByLabelText('Re-run command')).toHaveValue('node rerun-vitest.mjs {tests}')
+    const examples = within(dialog).getAllByTestId('check-report-example').map((li) => li.textContent ?? '')
+    expect(examples).toHaveLength(5)
+    for (const [i, runner] of ['pytest', 'Vitest or Jest', 'Node’s test runner', 'Go (gotestsum)', 'cargo-nextest'].entries()) {
+      expect(examples[i].startsWith(`${runner}:`)).toBe(true)
+      expect(examples[i]).toContain('{tests}')
+    }
+    expect(within(dialog).getByTestId('check-report-id-form')).toHaveTextContent(/classname and name joined by ::/)
+    expect(within(dialog).getByTestId('check-report-id-form')).toHaveTextContent(/as separate arguments/)
+    expect(within(dialog).getByTestId('check-report-whole-note')).toHaveTextContent(/without a report is judged as a whole/)
+    expect(within(dialog).getByTestId('check-report-whole-note')).toHaveTextContent(/nothing is re-run or narrowed test by test/)
+  })
+
+  it('saves a report path and re-run command, and sends neither when they are empty', async () => {
+    const user = userEvent.setup()
+    const view = render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: /Add check/ }))
+    let dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name'), 'unit')
+    await user.type(within(dialog).getByLabelText('Command'), 'pytest --junitxml=report.xml')
+    await user.type(within(dialog).getByLabelText('Report path'), ' report.xml ')
+    // userEvent reads `{` as a key descriptor; `{{` types one brace.
+    await user.type(within(dialog).getByLabelText('Re-run command'), 'python rerun_pytest.py {{tests}')
+    await user.click(within(dialog).getByRole('button', { name: 'Add check' }))
+    expect(lastPatch()).toEqual({
+      checks: [{ name: 'unit', command: 'pytest --junitxml=report.xml', timeout_seconds: 900, report_path: 'report.xml', rerun_command: 'python rerun_pytest.py {tests}' }],
+    })
+    settings = { ...makeSettings(), checks: lastPatch().checks as typeof settings.checks }
+    view.unmount()
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    dialog = await screen.findByRole('dialog')
+    await user.clear(within(dialog).getByLabelText('Report path'))
+    await user.clear(within(dialog).getByLabelText('Re-run command'))
+    await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch()).toEqual({ checks: [{ name: 'unit', command: 'pytest --junitxml=report.xml', timeout_seconds: 900 }] })
+  })
+
+  // FR-1 placeholder-required: said in the dialog before the save.
+  it('refuses a re-run command without {tests} before the save', async () => {
+    const user = userEvent.setup()
+    settings = { ...makeSettings(), checks: [{ name: 'unit', command: 'npm test', timeout_seconds: 900 }] }
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Re-run command'), 'npm test --')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('{tests}')
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
+    await user.type(within(dialog).getByLabelText('Re-run command'), ' {{tests}')
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeEnabled()
+  })
+
+  // CCROT FR-7 st-ac1: the command for a change needs {changed_files}; one with it is saved and read back.
+  it('refuses a command for a change without {changed_files}, and saves one with it', async () => {
+    const user = userEvent.setup()
+    settings = { ...makeSettings(), checks: [{ name: 'unit', command: 'npm test', timeout_seconds: 900 }] }
+    const view = render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    let dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Command for a change'), 'npm test --')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('{changed_files}')
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
+    await user.type(within(dialog).getByLabelText('Command for a change'), ' {{changed_files}')
+    await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch()).toEqual({
+      checks: [{ name: 'unit', command: 'npm test', timeout_seconds: 900, change_command: 'npm test -- {changed_files}' }],
+    })
+    settings = { ...makeSettings(), checks: lastPatch().checks as typeof settings.checks }
+    view.unmount()
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Command for a change')).toHaveValue('npm test -- {changed_files}')
+  })
+
   // FR-4 ac-fast-refused: said in the dialog before the save, and the Hub's own refusal is shown.
   it('refuses a fast check that is landing-only, before and after the save', async () => {
     const user = userEvent.setup()
@@ -351,7 +436,7 @@ describe('Project settings → General, applied on change', () => {
     expect(update).not.toHaveBeenCalled()
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     // A save that reaches the Hub anyway (another client) is refused there, and the refusal is shown.
-    await user.click(screen.getByRole('switch', { name: "Land over failures that are not the task's" }))
+    await user.click(screen.getByRole('switch', { name: 'Checks give way to me' }))
     answer({
       // The shape the settings route answers: pydantic's errors, the model validator's sentence.
       error: new ApiError(422, JSON.stringify({
@@ -365,14 +450,17 @@ describe('Project settings → General, applied on change', () => {
     expect(await screen.findByTestId('settings-save-refusal')).toHaveTextContent(/cannot be landing-only/)
   })
 
-  it('offers the switch for landing over failures that are not the task’s, on by default', async () => {
+  it('has no “Hub may override checks” switch, and saving another setting sends nothing of it', async () => {
+    // `failures-already-known-are-on-a-list-not-re-argued` FR-15, ac-setting-gone: the route
+    // refuses the field, so a save that still sent it would fail.
     const user = userEvent.setup()
     render(<GeneralSection />)
-    const toggle = screen.getByRole('switch', { name: "Land over failures that are not the task's" })
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText(/also fails on main, or passed when rerun on its own/)).toBeInTheDocument()
-    await user.click(toggle)
-    expect(lastPatch()).toEqual({ checks_auto_override: false })
+    expect(screen.queryByRole('switch', { name: "Land over failures that are not the task's" })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('project-checks-auto-override')).not.toBeInTheDocument()
+    expect(screen.queryByText(/also fails on main, or passed when rerun on its own/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: 'Checks give way to me' }))
+    expect(lastPatch()).toEqual({ checks_give_way: true })
+    expect(lastPatch()).not.toHaveProperty('checks_auto_override')
   })
 
   it('shows how long each check usually takes beside its time limit, or that none has passed yet', () => {
@@ -410,6 +498,11 @@ describe('Project settings → General, applied on change', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'false')
     await user.click(toggle)
     expect(lastPatch()).toEqual({ checks_give_way: true })
+  })
+
+  it('says checks marked fast keep normal priority when checks give way', () => {
+    render(<GeneralSection />)
+    expect(screen.getByText(/Checks marked fast keep normal priority/)).toBeInTheDocument()
   })
 
   it('shows the paths of a saved check and keeps them through an edit', async () => {

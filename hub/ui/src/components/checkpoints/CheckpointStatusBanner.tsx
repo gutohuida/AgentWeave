@@ -1,4 +1,5 @@
 import { useConfigStore } from '@/store/configStore'
+import { checkpointsDestination, goTo } from '@/lib/navigation'
 import { useCheckpointOperationStore } from '@/store/checkpointOperationStore'
 
 export function CheckpointStatusBanner() {
@@ -19,6 +20,20 @@ export function CheckpointStatusBanner() {
       style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' }}
     >
       <span>{operation.message}</span>
+      {operation.checkpointId && projectId ? (
+        <button
+          type="button"
+          data-slot="checkpoint-status-open"
+          data-testid="checkpoint-status-open"
+          className="aw-link"
+          onClick={() => {
+            goTo(checkpointsDestination(projectId, { checkpoint: operation.checkpointId }))
+            dismiss(key)
+          }}
+        >
+          View checkpoint
+        </button>
+      ) : null}
       {operation.status !== 'writing' && (
         <button
           type="button"

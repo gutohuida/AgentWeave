@@ -18,6 +18,7 @@ was before any of this existed.
 """
 
 import subprocess
+import time
 
 import pytest
 
@@ -39,9 +40,21 @@ AGENT_BRANCH = "agentweave/builder"
 
 
 def git(root, *args):
-    return subprocess.run(
-        ["git", *args], cwd=str(root), capture_output=True, text=True, check=False
-    )
+    """Run git in *root*, waiting out a lock the Hub's own background git holds on the index.
+
+    Hub tasks read this repository while a test builds it (reachability, status), and git takes
+    `index.lock` for a moment even to read. A mutating command that loses that race fails without
+    a word, leaving a sha that is not the commit the test meant: so it is retried until the lock
+    clears, and a lock that never clears fails the test where it happened.
+    """
+    for _ in range(100):
+        result = subprocess.run(
+            ["git", *args], cwd=str(root), capture_output=True, text=True, check=False
+        )
+        if result.returncode == 0 or "index.lock" not in result.stderr:
+            return result
+        time.sleep(0.1)
+    raise AssertionError(f"git {' '.join(args)} never got the index lock: {result.stderr}")
 
 
 def make_repo(root, main="main"):

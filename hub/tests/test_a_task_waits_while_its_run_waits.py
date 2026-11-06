@@ -497,14 +497,20 @@ async def test_the_ask_records_the_deadline_of_the_wait_it_starts(app):
 
     before = datetime.now(timezone.utc)
     asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    after = datetime.now(timezone.utc)
     question = await question_row(asked.json()["id"])
 
     assert question.wait_expires_at is not None
     recorded = question.wait_expires_at
     if recorded.tzinfo is None:
         recorded = recorded.replace(tzinfo=timezone.utc)
-    # 90s from the agent's own column, not the 240s default.
-    assert timedelta(seconds=85) <= recorded - before <= timedelta(seconds=95)
+    # 90s from the agent's own column, not the 240s default: stamped somewhere inside the request,
+    # so between `before` and `after` plus 90s however long a busy machine made the request take.
+    # The second of slack is for a stored timestamp's rounding, not for the machine.
+    slack = timedelta(seconds=1)
+    assert (
+        before + timedelta(seconds=90) - slack <= recorded <= after + timedelta(seconds=90) + slack
+    )
     assert question.wait_ended_at is None
 
 

@@ -20,7 +20,6 @@ export type NeedKind =
   | 'review'
   | 'permission'
   | 'stall'
-  | 'flaky'
   | 'blocked'
   | 'main'
   | 'offer'
@@ -91,7 +90,6 @@ const NEED_ICON: Record<NeedKind, { icon: string; tone: 'amber' | 'red' | 'blue'
   review: { icon: 'fact_check', tone: 'blue' },
   permission: { icon: 'lock', tone: 'amber' },
   stall: { icon: 'build', tone: 'red' },
-  flaky: { icon: 'bug_report', tone: 'amber' },
   blocked: { icon: 'hourglass_top', tone: 'amber' },
   main: { icon: 'call_split', tone: 'amber' },
   offer: { icon: 'edit_note', tone: 'blue' },
@@ -111,6 +109,7 @@ export function OverviewView({
   heldByBudget,
   onOpenTasks,
   notice,
+  knownFailing,
   loading,
   onAddAgent,
   now,
@@ -142,6 +141,8 @@ export function OverviewView({
   onOpenTasks?: () => void
   /** A project-wide condition worth one line above everything (a paused budget). */
   notice?: React.ReactNode
+  /** The project's known-failing list (`KnownFailingList`), below what is running. */
+  knownFailing?: React.ReactNode
   loading?: boolean
   /** Opens the Add-agent dialog (F808: agents are added in the app, not with a CLI command). */
   onAddAgent?: () => void
@@ -314,6 +315,8 @@ export function OverviewView({
           </ul>
         )}
       </section>
+
+      {knownFailing}
 
       <div className="aw-ov-columns">
         <section className="aw-ov-section" aria-labelledby="ov-finished">

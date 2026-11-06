@@ -357,12 +357,17 @@ def split(findings: List[Finding]) -> Tuple[List[Finding], List[Finding]]:
     return refusals, [f for f in findings if f.code not in REFUSAL_CODES]
 
 
-def approval_gaps(payload: SpecPayload) -> List[Finding]:
-    """The gaps reported at approval only, never in an agent's save result or a Check.
+#: The codes `approval_gaps` can return. An author is told them in the save result's `warnings`
+#: and `ready_to_approve` is false while one is present (F1124): Approve lists them.
+APPROVAL_GAP_CODES = frozenset({"criterion_without_check", "no_acceptance_drive"})
 
-    A criterion nobody is named to check, and a change whose first task is not its acceptance
-    drive (FR-2). Kept out of `check` because the save result is unchanged by this change; the
-    acceptance step's own `spec_journey.missing` already asks the author for the check fields.
+
+def approval_gaps(payload: SpecPayload) -> List[Finding]:
+    """The gaps approval lists beyond `check`: a criterion nobody is named to check, and a change
+    whose first task is not its acceptance drive (FR-2).
+
+    Kept out of `check` so a Check does not list them; a save's `warnings` carry them too (F1124),
+    since an author told "ready" and then stopped at Approve costs the operator a round trip.
     """
     gaps: List[Finding] = []
     for index, criterion in enumerate(payload.acceptance_criteria):

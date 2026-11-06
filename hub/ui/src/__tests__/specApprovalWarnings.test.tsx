@@ -87,6 +87,11 @@ function refuseWithGaps() {
   })
 }
 
+// vitest stubs css imports to '', and the UI has no node typings: read the file the way node does.
+// @ts-expect-error no node typings in the UI project
+const { readFileSync } = (await import('node:fs')) as { readFileSync: (p: string, enc: string) => string }
+const specHeaderCss = readFileSync('src/styles/spec-header.css', 'utf8')
+
 beforeEach(() => {
   vi.clearAllMocks()
   setPhase.mockReset()
@@ -241,5 +246,26 @@ describe('SpecPhaseBar approval warnings', () => {
     documents = [doc({ phase: 'approved', approval_warnings_overridden: [] })]
     renderBar()
     expect(screen.queryByTestId('approval-overridden')).not.toBeInTheDocument()
+  })
+
+  it('F1128: Approve anyway comes after the warning text and list, in a stacked block', async () => {
+    refuseWithGaps()
+    renderBar()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+    const block = await screen.findByTestId('approval-warnings')
+    const button = within(block).getByTestId('spec-approve-anyway')
+    const list = block.querySelector('ul') as HTMLElement
+    // Fails before the fix: the button sat between the text and the list, in a wrapping row.
+    expect(list.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(block).toHaveAttribute('data-stack', 'true')
+  })
+
+  it('F1128: the stacked block lays out as a column and scrolls its list', () => {
+    // jsdom has no layout: the rule that keeps the button below the text is asserted in the sheet.
+    const rule = specHeaderCss.match(/\.aw-spec-message\[data-stack="true"\]\s*\{([^}]*)\}/)?.[1] ?? ''
+    expect(rule).toContain('flex-direction: column')
+    expect(rule).toContain('flex-wrap: nowrap')
+    expect(specHeaderCss).toMatch(/\[data-stack="true"\]\s*>\s*ul\s*\{[^}]*overflow-y:\s*auto/)
   })
 })

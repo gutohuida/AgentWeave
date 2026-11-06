@@ -17,7 +17,7 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from hub import builds, project_checks
+from hub import project_checks
 from hub.agent_auth import hash_run_token
 from hub.api.v1.tasks import update_task_for_actor
 from hub.db.engine import async_session_factory
@@ -291,9 +291,6 @@ async def test_checks_hold_at_fast_for_the_builder_and_the_flow(app, tmp_path):
     async with async_session_factory() as db:
         assert (await db.get(Task, task_id)).status != "approved"
     assert work not in commits_on(tmp_path, "main")
-    assert builds.allows_automatic_override("fast") is True
-    assert builds.allows_automatic_override("reviewed") is True
-    assert builds.allows_automatic_override("gated") is False
 
 
 # ---------------------------------------------------------------------------------------------
@@ -451,16 +448,17 @@ async def test_gated_refuses_until_every_requirement_has_accepted_evidence(app, 
 
 
 # ---------------------------------------------------------------------------------------------
-# checks-hold-at-every-level: slice M's automatic override, per level
+# the known-failing list at every level (`failures-already-known-are-on-a-list-not-re-argued`, FR-7)
 # ---------------------------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("level", ["fast", "reviewed", "gated"])
-async def test_the_hubs_override_lands_at_fast_and_reviewed_never_at_gated(app, tmp_path, level):
-    """A task whose only failure is shared with a red main (slice M's drive), in a build at *level*,
-    approved by a reviewer through the agent route: Fast and Reviewed land it over the failure as
-    the Hub's override; Gated holds it for the operator ("fail on main too"), nothing merged."""
+async def test_a_listed_failure_lands_at_every_level_gated_included(app, tmp_path, level):
+    """A task whose only failure is a test on the known-failing list (main fails it), in a build at
+    *level*, approved by a reviewer through the agent route, lands past it at every level: an
+    entry with an owner task is the reason an override used to supply, so a Gated build need not
+    stop for it (FR-7). Before the list, Gated held it for the operator ("fail on main too")."""
     from . import test_a_red_main_does_not_hold_the_night as red
 
     red._repo(tmp_path)
@@ -469,13 +467,12 @@ async def test_the_hubs_override_lands_at_fast_and_reviewed_never_at_gated(app, 
     build_id = await _build_row(level, loop_id=red.LOOP)
     await _in_build(red.TASK, build_id, level)
     await red._configure()
+    _, fix = await red._listed()
     await red._checked(red.TASK)
 
     from hub import landing_queue
 
     approved = await red._reviewer_approves(app, red.TASK)
-    # Approval waits on nothing (`approved-work-merges-in-batches` D7); the batch applies the
-    # level's rule to the failure main shares.
     assert approved.status_code == 200, approved.text
     try:
         await landing_queue.drain()
@@ -483,13 +480,7 @@ async def test_the_hubs_override_lands_at_fast_and_reviewed_never_at_gated(app, 
         landing_queue.cancel_timers()
     landing = await red._landing(app, red.TASK)
 
-    if level == "gated":
-        assert landing["state"] == "held", landing
-        assert "fail on main too" in landing["reason"]
-        assert work not in commits_on(tmp_path, "main")
-        assert (await red._approval(red.TASK)).override_by is None
-    else:
-        assert landing["state"] == "landed", landing
-        assert work in commits_on(tmp_path, "main")
-        assert (await red._approval(red.TASK)).override_by == "hub"
-        assert landing["batch"]["override_by"] == "hub"
+    assert landing["state"] == "landed", landing
+    assert work in commits_on(tmp_path, "main")
+    assert [e["fix_task_id"] for e in landing["went_past"]] == [fix]
+    assert landing["batch"]["override_by"] is None
