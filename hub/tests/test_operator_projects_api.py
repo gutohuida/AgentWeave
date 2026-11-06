@@ -375,6 +375,10 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         "main_branch": None,
         "checks": None,
         "checks_give_way": False,
+        # Off until the operator turns it on: pushing publishes the work
+        # (`a-build-lands-as-one-pull-request`, FR-1).
+        "pr_landing": False,
+        "pr_single_commit": False,
     }
     queue_settings = await app.get(
         "/api/v1/projects/proj-test/queue/settings", headers=auth_headers
