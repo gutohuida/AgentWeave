@@ -247,6 +247,12 @@ async def observe(project_id: str, tip: str, root: Path) -> Optional[Dict[str, A
         }
         await _announce(session, project_id, payload)
         await session.commit()
+    # A commit the Hub did not land was never tested as merged: main's tree is checked once now,
+    # and what fails there goes on the known-failing list (`failures-already-known-are-on-a-list-
+    # not-re-argued`, FR-3).
+    from . import known_failing
+
+    known_failing.schedule_main_run(project_id, tip)
     return view(notice)
 
 

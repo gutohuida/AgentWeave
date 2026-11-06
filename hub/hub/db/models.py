@@ -3525,3 +3525,80 @@ class LandingBatch(Base):
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (Index("ix_landing_batches_project", "project_id", "created_at"),)
+
+
+class KnownFailingTest(Base):
+    """One entry on a project's known-failing list (`failures-already-known-are-on-a-list-not-re-
+    argued`, FR-1, migration 0165).
+
+    `check_name` is the check's name; `test` the test's id from that check's report, or `""` for the
+    whole check (a check that names no failing test). `kind` is `fails on main` or `flaky`
+    (`project_checks.FAILS_ON_MAIN`, `FLAKY`). `added_by_run` is the run that added it: a
+    `TaskCheckRun` id, or a `MainCheckRun` id for a run on main's tree. `fix_task_id` is its owner
+    fix task. `passes` counts the consecutive runs that ran the test and passed it, and
+    `counted_runs` names them, so a run read twice counts once (FR-4). An entry that
+    comes off the list is deleted; its fix task keeps a note naming the main commit (FR-14).
+    """
+
+    __tablename__ = "known_failing_tests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    check_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    test: Mapped[str] = mapped_column(String(1024), nullable=False, default="")
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    first_seen: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    added_by_run: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Not a ForeignKey, for the SQLite column-drop reason `Task.spec_document_id` gives.
+    fix_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    passes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    # The runs `passes` counted since it last started again: at most `FLAKY_PASSES_TO_CLEAR`.
+    counted_runs: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+
+    __table_args__ = (
+        Index("uq_known_failing_tests_test", "project_id", "check_name", "test", unique=True),
+    )
+
+
+class UnlistedTestFailure(Base):
+    """The last task whose confirmation re-run failed a test that is not on the list (FR-13,
+    migration 0165): when a *different* task fails it next, with no pass of it in between, the Hub
+    runs that test alone on main's tree once. Deleted when the test passes in a run or is listed."""
+
+    __tablename__ = "unlisted_test_failures"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    check_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    test: Mapped[str] = mapped_column(String(1024), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("uq_unlisted_test_failures_test", "project_id", "check_name", "test", unique=True),
+    )
+
+
+class MainCheckRun(Base):
+    """A run of checks on main's tree that no task asked for (FR-3, FR-13, migration 0165).
+
+    `reason` `outside_commit`: the full run made once on a main commit the Hub did not land.
+    `single_test`: one test re-run alone after it failed for two tasks in a row (`tests` names it).
+    `results` as `TaskCheckRun.results`; `state` `running`, `passed`, `failed` or `error`."""
+
+    __tablename__ = "main_check_runs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    main_sha: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    tests: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="running")
+    results: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (Index("ix_main_check_runs_project", "project_id", "main_sha", "reason"),)
