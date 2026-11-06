@@ -58,8 +58,9 @@ FINISHED = "finished"
 #: The integration record's reason for a task of a build that lands nowhere (`landing`).
 LANDS_NOWHERE = "the build lands nowhere, so its approved work is not merged into any branch"
 
-#: The integration record's reason for a task of a pull request build until pushing it to the PR
-#: exists (task `push`): never merged into main, which is what landing as a PR exists to avoid.
+#: The integration record's reason where a pull request build's landing reaches the merge path
+#: anyway: never merged into main, which is what landing as a PR exists to avoid. Its approved work
+#: is pushed to the PR (`pull_requests.land`); the landing queue routes it there first.
 LANDS_ON_A_PULL_REQUEST = (
     "the build lands as a pull request, so its approved work is not merged into main by the Hub"
 )

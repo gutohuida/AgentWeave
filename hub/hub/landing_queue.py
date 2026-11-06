@@ -343,8 +343,20 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
                     ).scalars()
                 )
                 nowhere = await _landing_nowhere(session, queued)
+                on_a_pr = await _landing_on_a_pull_request(session, queued)
             if not queued:
                 return True
+            pr_landing = next((landing for landing in queued if landing.id in on_a_pr), None)
+            if pr_landing is not None:
+                # A pull request build's task is pushed to its PR, never merged into main
+                # (`a-build-lands-as-one-pull-request`): checked alone on the build branch.
+                from . import pull_requests
+
+                pushed = await pull_requests.land(pr_landing.id, checks)
+                if not pushed:
+                    _arm_timer(project_id, BATCH_GATHER_SECONDS)
+                    return False
+                continue
             carried = await _carried(project_id, queued) if checks else {}
             alone = (
                 queued[0]
@@ -445,24 +457,40 @@ def _carrier(root: Path, sha: str, tip: str) -> str:
     return next((line for line in (listed.stdout or "").split() if line), sha)
 
 
-async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding]) -> Set[str]:
-    """The tasks among *landings* whose build lands nowhere (slice D), or as a pull request until
-    pushing to it exists (`a-build-lands-as-one-pull-request`, task `push`): recorded, never
-    merged into main."""
-    from .builds import LANDING_NOWHERE, LANDING_PULL_REQUEST
+async def _tasks_of_builds_landing(
+    session: AsyncSession, landings: Sequence[TaskLanding], landing: str
+) -> Set[str]:
     from .db.models import Build
 
-    ids = [landing.task_id for landing in landings]
+    ids = [row.task_id for row in landings]
     if not ids:
         return set()
     rows = (
         await session.execute(
             select(Task.id)
             .join(Build, Build.id == Task.build_id)
-            .where(Task.id.in_(ids), Build.landing.in_((LANDING_NOWHERE, LANDING_PULL_REQUEST)))
+            .where(Task.id.in_(ids), Build.landing == landing)
         )
     ).all()
     return {row[0] for row in rows}
+
+
+async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding]) -> Set[str]:
+    """The tasks among *landings* whose build lands nowhere (slice D): recorded, never merged."""
+    from .builds import LANDING_NOWHERE
+
+    return await _tasks_of_builds_landing(session, landings, LANDING_NOWHERE)
+
+
+async def _landing_on_a_pull_request(
+    session: AsyncSession, landings: Sequence[TaskLanding]
+) -> Set[str]:
+    """The landings among *landings* of a build landing as a pull request: approval and evidence
+    landings are pushed to the PR (`pull_requests.land`); a mend's resolution merges as before."""
+    from .builds import LANDING_PULL_REQUEST
+
+    tasks = await _tasks_of_builds_landing(session, landings, LANDING_PULL_REQUEST)
+    return {row.id for row in landings if row.task_id in tasks and row.kind != "resolution"}
 
 
 async def _release_holds(project_id: str) -> None:
