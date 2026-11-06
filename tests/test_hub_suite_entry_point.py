@@ -238,7 +238,79 @@ def test_the_settings_to_paste_use_the_entry_point_and_write_reports():
     # Every entry has only the fields the Hub's `ProjectCheck` takes, within its bounds.
     fields = {"name", "command", "timeout_seconds", "paths", "fast", "phase"}
     for check in checks.values():
-        assert fields <= set(check) <= fields | {"report_path", "rerun_command"}, check["name"]
+        assert (
+            fields <= set(check) <= fields | {"report_path", "rerun_command", "change_command"}
+        ), check["name"]
         assert 10 <= check["timeout_seconds"] <= 3600, check["name"]
         assert check["phase"] in ("review", "landing", "both"), check["name"]
         assert not check["fast"] or check["timeout_seconds"] <= 120, check["name"]
+
+
+# --- spec `a-check-can-run-only-the-tests-for-what-a-task-changed`, FR-8 -----------------------
+
+
+def _tree(tmp_path):
+    tests = tmp_path / "hub" / "tests"
+    tests.mkdir(parents=True)
+    (tests / "conftest.py").write_text("", encoding="utf-8")
+    (tests / "test_queue.py").write_text("from hub import landing_queue\n", encoding="utf-8")
+    (tests / "test_other.py").write_text("import json\n", encoding="utf-8")
+    (tests / "test_landing_queue_extra.py").write_text("# landing_queue\n", encoding="utf-8")
+    return tmp_path
+
+
+def _main(tmp_path, monkeypatch, paths, *extra):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AW_HUB_SUITE_LOCK_DIR", str(tmp_path / "lock"))
+    listing = tmp_path / "list.txt"
+    listing.write_text("".join(f"{p}\n" for p in paths), encoding="utf-8")
+    seen = []
+    code = hub_suite.main(
+        ["--report", "r.xml", "--changed-files", str(listing), *extra],
+        run_pytest=lambda args: seen.append(args) or 0,
+        read_idle=lambda: 1.0,
+        logical_cpus=4,
+    )
+    return code, seen
+
+
+def test_a_changed_module_runs_the_test_files_that_name_it(tmp_path, monkeypatch):
+    _tree(tmp_path)
+    code, seen = _main(tmp_path, monkeypatch, ["hub/hub/landing_queue.py"])
+    assert code == 0 and len(seen) == 1
+    ran = [a for a in seen[0] if a.endswith(".py")]
+    assert ran == ["hub/tests/test_landing_queue_extra.py", "hub/tests/test_queue.py"]
+    assert any(a.startswith("--junitxml=") for a in seen[0])
+
+
+def test_a_changed_test_file_runs_itself_and_a_deleted_one_is_skipped(tmp_path, monkeypatch):
+    _tree(tmp_path)
+    _, seen = _main(tmp_path, monkeypatch, ["hub/tests/test_other.py", "hub/tests/test_gone.py"])
+    assert [a for a in seen[0] if a.endswith(".py")] == ["hub/tests/test_other.py"]
+
+
+def test_a_change_no_test_relates_to_runs_nothing_passes_and_says_so(tmp_path, monkeypatch, capsys):
+    _tree(tmp_path)
+    code, seen = _main(tmp_path, monkeypatch, ["hub/ui/src/App.tsx"])
+    assert code == 0 and seen == []
+    assert "no Hub test relates" in capsys.readouterr().out
+    assert (tmp_path / "r.xml").is_file()
+
+
+@pytest.mark.parametrize("path", ["hub/tests/conftest.py", "hub/pyproject.toml"])
+def test_a_conftest_or_packaging_change_runs_the_full_suite(tmp_path, monkeypatch, path):
+    _tree(tmp_path)
+    _, seen = _main(tmp_path, monkeypatch, [path])
+    assert "hub/tests" in seen[0] and not any(a.endswith(".py") for a in seen[0])
+
+
+def test_the_repository_settings_size_hub_tests_to_the_change():
+    import json
+
+    checks = {
+        c["name"]: c
+        for c in json.loads((REPO_ROOT / "scripts/checks/check_settings.json").read_text("utf-8"))
+    }
+    assert checks["sweep"]["timeout_seconds"] == 3600
+    assert checks["hub-tests"]["phase"] == "both"
+    assert "{changed_files}" in checks["hub-tests"]["change_command"]
