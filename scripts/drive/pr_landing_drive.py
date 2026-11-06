@@ -52,6 +52,7 @@ landing `pull_request` (POST /project/documents/build), build read GET /project/
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -411,19 +412,45 @@ def drive(state):
           f"{run(root, 'git', 'rev-parse', f'origin/{main_name}')}")
 
 
+def is_banned(argv):
+    """FR-12: is this `gh` call a merge, approval, base change or protection change? Banned by
+    operation, not substring: opening, editing, drafting, readying and reading a PR are allowed."""
+    a = [str(x).lower() for x in argv]
+    flat = " ".join(a)
+    if a[:2] == ["pr", "merge"] or "protection" in flat or "rulesets" in flat:
+        return True
+    if a[:2] == ["pr", "review"]:
+        return any(x in ("--approve", "-a") for x in a)
+    if a[:2] == ["pr", "edit"]:
+        return any(x in ("--base", "-b") or x.startswith("--base=") for x in a)
+    if a[:1] == ["api"]:
+        method = "get"
+        for i, x in enumerate(a):
+            if x in ("-x", "--method") and i + 1 < len(a):
+                method = a[i + 1]
+            elif x.startswith("--method="):
+                method = x.split("=", 1)[1]
+            elif x.startswith("-x") and len(x) > 2:
+                method = x[2:]
+        path = next((x for x in a[1:] if "/" in x and not x.startswith("-")), "")
+        if re.search(r"/merge(?!\w)", path):
+            return True
+        if re.search(r"/reviews(/|$)", path) and method != "get" and "approve" in flat:
+            return True
+        if method in ("patch", "put") and re.search(r"(^|\s)(-f|--field|--raw-field)\s+base=", flat):
+            return True
+        if method in ("patch", "put") and re.search(r"\"base\"\s*:", flat):
+            return True
+    return False
+
+
 def audit_calls():
     calls = [json.loads(line)["argv"] for line in calls_log.read_text(encoding="utf-8").splitlines()
              ] if calls_log.exists() else []
     print(f"\nthe Hub's gh calls ({len(calls)}), from the shim, minus the drive's own:")
     for argv in calls:
         print("  gh " + " ".join(argv))
-    flat = [" ".join(a).lower() for a in calls]
-    mutating = ("-x put", "-x delete", "-x patch", "-x post", "--method put", "--method delete",
-                "--method patch", "--method post", "--method=put", "--method=delete",
-                "--method=patch", "--method=post")
-    banned = [c for c in flat if c.startswith(("pr merge", "pr review")) or "--base" in c
-              or "protection" in c
-              or (c.startswith("api") and any(m in c for m in (*mutating, "merge")))]
+    banned = [" ".join(a) for a in calls if is_banned(a)]
     check("nm-ac1: none of the Hub's gh calls is a merge, approval, base change or "
           "branch-protection change", bool(calls) and not banned,
           f"{len(calls)} calls; offending {banned}" if calls else "no gh call recorded at all")
