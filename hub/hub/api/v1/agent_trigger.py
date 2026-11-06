@@ -1552,6 +1552,11 @@ async def _trigger_agent_directly(
             if not takes_task and worktrees.is_writing_agent(config) and project_is_repo
             else None
         )
+        # A task worktree about to be created asks GitHub, in the background, about the
+        # project's open PRs (`a-build-lands-as-one-pull-request`, FR-9): the turn never waits.
+        creating = takes_task and not await blocking.run(
+            lambda: worktrees.task_worktree_path(repo_root, turn_workspace.task_id).exists()
+        )
         try:
             with traces.work(
                 "worktree_create",
@@ -1594,6 +1599,10 @@ async def _trigger_agent_directly(
             ) from exc
         workspace = resolved.path
         workspace_notes = resolved.notes
+        if creating:
+            from ... import pull_requests
+
+            pull_requests.notice(project_id, "a task worktree was created")
         effective_work_dir = str(workspace)
         isolated_workspace = workspace if workspace != repo_root else None
         # Task 6.5. Same argument as `effective_work_dir` above: computed here, from the same

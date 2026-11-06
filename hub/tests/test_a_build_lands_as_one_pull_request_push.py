@@ -13,6 +13,7 @@ FR-3 checked-before-push (chk-ac1), FR-4 draft-at-first (draft-ac1), FR-5 ready-
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -78,10 +79,16 @@ class FakeGitHub:
                 "headRefName": value("--head"),
                 "title": value("--title"),
                 "body": body(),
+                "state": "OPEN",
+                "mergeCommit": None,
             }
             url = f"https://github.com/example/example/pull/{number}"
             return subprocess.CompletedProcess(args, 0, url + "\n", "")
         pr = self.prs[int(args[2])]
+        if args[:2] == ["pr", "view"]:
+            fields = {"state", "isDraft", "mergeCommit"}
+            answer = {key: value for key, value in pr.items() if key in fields}
+            return subprocess.CompletedProcess(args, 0, json.dumps(answer), "")
         if args[:2] == ["pr", "edit"]:
             pr["title"], pr["body"] = value("--title"), body()
         elif args[:2] == ["pr", "ready"]:
@@ -333,7 +340,14 @@ async def test_draft_pr_at_the_first_task_then_ready_draft_ready(
     assert fake.calls
     for call in fake.calls:
         pull_requests.check_gh_call(call)
-        assert tuple(call[:2]) in {("pr", "create"), ("pr", "edit"), ("pr", "ready")}
+        assert tuple(call[:2]) in {
+            ("pr", "create"),
+            ("pr", "edit"),
+            ("pr", "ready"),
+            ("pr", "view"),
+        }
+    # GitHub was asked before each push to the open PR (FR-9): the second and the third.
+    assert sum(call[:2] == ["pr", "view"] for call in fake.calls) == 2
 
 
 # --- chk-ac1 -------------------------------------------------------------------------------------

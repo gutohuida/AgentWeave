@@ -618,6 +618,14 @@ async def lifespan(app: FastAPI):
         await landing_queue.reconcile_at_startup()
     except Exception:  # noqa: BLE001 -- the queue is durable; the next landing looks again
         logger.warning("could not reconcile the landing queue", exc_info=True)
+    # A build's PR may have been merged or closed on GitHub while the Hub was down: asked now, in
+    # the background, so startup never waits on GitHub (`a-build-lands-as-one-pull-request`, FR-9).
+    from . import pull_requests
+
+    try:
+        await pull_requests.notice_at_startup()
+    except Exception:  # noqa: BLE001 -- the next action asks again
+        logger.warning("could not ask GitHub about open pull requests", exc_info=True)
     await init_scheduler()
     # After the scheduler, which holds the wakes; after both reconciliations, whose rows it reads
     # past (`a-spent-allowance-holds-the-queue`, D5).
