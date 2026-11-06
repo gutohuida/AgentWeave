@@ -88,6 +88,31 @@ export async function cutOver(
   )
 }
 
+export interface StartedFromCheckpoint {
+  checkpoint_id: string
+  conversation_id: string
+  agent: string
+  title: string | null
+  queue_entry_id: string
+  started: boolean
+  waiting_reason?: string | null
+}
+
+/** Start a new conversation of `agent` whose first input is this checkpoint (and the optional
+ *  message). The original conversation and the checkpoint's carry-over are left as they were. */
+export async function startFromCheckpoint(
+  projectId: string,
+  checkpointId: string,
+  agent: string,
+  message?: string,
+): Promise<StartedFromCheckpoint> {
+  const note = message?.trim()
+  return postJson<StartedFromCheckpoint>(
+    `/api/v1/projects/${projectId}/checkpoints/${checkpointId}/start`,
+    note ? { agent, message: note } : { agent },
+  )
+}
+
 export interface ContinueResult {
   agent: string
   conversation_id: string
@@ -181,6 +206,14 @@ export interface ProjectCheckpoint extends Checkpoint {
   covered_runs?: CoveredRun[] | null
   /** The checkpoint this checkpoint's conversation was carried over from, when it was. */
   carried_from?: { checkpoint_id: string; conversation_id: string; title?: string | null } | null
+  /** Conversations the operator started from this checkpoint, oldest first; not the carry-over. */
+  started_conversations?: Array<{
+    conversation_id: string
+    agent: string
+    title?: string | null
+    lifecycle?: string
+    created_at?: string | null
+  }> | null
 }
 
 export interface ProjectCheckpointFilters {
@@ -196,6 +229,8 @@ export interface ProjectCheckpointList {
   lineage: {
     conversation_id: string
     started_from: { checkpoint_id: string; conversation_id: string; title?: string | null } | null
+    /** The checkpoint the operator started this conversation from, if they did. */
+    started_from_checkpoint?: { checkpoint_id: string; conversation_id: string | null; title?: string | null } | null
     carried_into: { checkpoint_id: string; conversation_id: string } | null
   } | null
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { StatePill } from '@/components/common/StatePill'
 import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
@@ -48,6 +49,10 @@ export interface CheckpointsPageProps {
   rawAnswer?: string | null
   onShowRaw?: (checkpointId: string) => void
   onOpenConversation?: (agent: string | null, conversationId: string) => void
+  /** Start a conversation of `agent` from the opened checkpoint; the container opens the result. */
+  onStart?: (checkpointId: string, agent: string, message: string) => Promise<void>
+  /** The project's open agents, which a start may choose from (the filter's `agents` also holds archived ones). */
+  startAgents?: string[]
   loading?: boolean
   error?: boolean
   now?: Date
@@ -117,6 +122,82 @@ function Section({ title, children, testId }: { title: string; children: React.R
   )
 }
 
+function StartPanel({
+  checkpoint,
+  agents,
+  onStart,
+}: {
+  checkpoint: ProjectCheckpoint
+  agents: string[]
+  onStart: (checkpointId: string, agent: string, message: string) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [chosen, setAgent] = useState(checkpoint.agent)
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
+  // The checkpoint's own agent first (when it is open), then the rest.
+  const choices = [...agents.filter((name) => name === checkpoint.agent), ...agents.filter((name) => name !== checkpoint.agent)]
+  const agent = choices.includes(chosen) ? chosen : (choices[0] ?? chosen)
+  const confirm = async () => {
+    setBusy(true)
+    setFailure(null)
+    try {
+      await onStart(checkpoint.id, agent, message)
+      setOpen(false)
+      setMessage('')
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'The conversation could not be started.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (!open) {
+    return (
+      <button
+        type="button"
+        data-slot="checkpoint-start"
+        className="aw-link"
+        data-testid="checkpoint-start-open"
+        onClick={() => setOpen(true)}
+      >
+        Start a conversation
+      </button>
+    )
+  }
+  return (
+    <div className="aw-ckpts-start" data-testid="checkpoint-start-form">
+      <select
+        aria-label="Agent"
+        data-testid="checkpoint-start-agent"
+        value={agent}
+        onChange={(event) => setAgent(event.target.value)}
+      >
+        {choices.map((name) => (
+          <option key={name} value={name}>
+            {name}
+          </option>
+        ))}
+      </select>
+      <textarea
+        data-testid="checkpoint-start-message"
+        aria-label="Message (optional)"
+        placeholder="A message to follow the checkpoint (optional)"
+        value={message}
+        onChange={(event) => setMessage(event.target.value)}
+        rows={3}
+      />
+      {failure ? <p className="aw-callout tone-red" data-testid="checkpoint-start-error">{failure}</p> : null}
+      <button type="button" data-slot="checkpoint-start-confirm" data-testid="checkpoint-start-confirm" disabled={busy} onClick={confirm}>
+        Start
+      </button>
+      <button type="button" className="aw-link" disabled={busy} onClick={() => setOpen(false)}>
+        Cancel
+      </button>
+    </div>
+  )
+}
+
 function CheckpointDetail({
   checkpoint,
   props,
@@ -132,6 +213,7 @@ function CheckpointDetail({
   const reason = checkpoint.title_reason?.trim() || null
   const generationError = checkpoint.generation_error?.trim() || null
   const carriedFrom = checkpoint.carried_from
+  const started = checkpoint.started_conversations ?? []
   const carriedInto = checkpoint.carried_into ?? (
     checkpoint.cut_over_to_conversation_id ? { conversation_id: checkpoint.cut_over_to_conversation_id } : null
   )
@@ -163,7 +245,11 @@ function CheckpointDetail({
         <span>{conversationLabel(checkpoint.conversation_id)}</span>
       </p>
 
-      {carriedFrom || carriedInto ? (
+      {props.onStart && checkpoint.status === 'ready' ? (
+        <StartPanel key={checkpoint.id} checkpoint={checkpoint} agents={props.startAgents ?? props.agents} onStart={props.onStart} />
+      ) : null}
+
+      {carriedFrom || carriedInto || started.length ? (
         <div className="aw-ckpts-lineage" data-testid="checkpoint-detail-lineage">
           {carriedFrom ? (
             <p>
@@ -192,6 +278,26 @@ function CheckpointDetail({
               </button>
               .
             </p>
+          ) : null}
+          {started.length ? (
+            <div data-testid="checkpoint-detail-started">
+              <p>Conversations started from this checkpoint:</p>
+              <ul className="aw-ckpts-list">
+                {started.map((item) => (
+                  <li key={item.conversation_id} data-testid={`checkpoint-started-${item.conversation_id}`}>
+                    <button
+                      type="button"
+                      data-slot="conversation-link"
+                      className="aw-link aw-link-inline"
+                      onClick={() => onOpenConversation?.(item.agent, item.conversation_id)}
+                    >
+                      {item.title?.trim() || 'New conversation'}
+                    </button>{' '}
+                    · {item.agent} · {when(item.created_at, now)}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
         </div>
       ) : null}
