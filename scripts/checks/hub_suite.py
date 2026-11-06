@@ -35,6 +35,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -259,17 +260,103 @@ def _run_pytest(args: list[str]) -> int:
     return int(pytest.main(args))
 
 
+# --- the tests for a change --------------------------------------------------------------------
+
+#: Changes that can alter any test, so they run the full suite.
+FULL_SUITE_FILES = {"pyproject.toml", "hub/pyproject.toml", "constraints-dev.txt"}
+NO_TESTS_MESSAGE = "no Hub test relates to the change; running no tests"
+
+
+def extract_changed_files(argv: list[str]) -> tuple[Optional[str], list[str]]:
+    """(the `--changed-files` path or `None`, argv without the option)."""
+    args = list(argv)
+    for i, arg in enumerate(args):
+        if arg == "--changed-files":
+            if i + 1 >= len(args):
+                raise junit_rerun.UsageError("--changed-files needs a path")
+            path = args[i + 1]
+            return path, args[:i] + args[i + 2 :]
+        if arg.startswith("--changed-files="):
+            return arg.split("=", 1)[1], args[:i] + args[i + 1 :]
+    return None, args
+
+
+def related_tests(changed: list[str], root: Path) -> Optional[list[str]]:
+    """The Hub test files to run for *changed* paths, or `None` for the full suite.
+
+    The changed Hub test files that still exist, plus every Hub test file that names a changed
+    `hub/hub` module by its module name. A conftest or a packaging file runs everything.
+    """
+    paths = [p.strip().replace("\\", "/") for p in changed if p.strip()]
+    if any(
+        p in FULL_SUITE_FILES or (p.startswith("hub/tests/") and p.endswith("/conftest.py"))
+        for p in paths
+    ):
+        return None
+    tests_dir = root / "hub" / "tests"
+    selected: set[str] = set()
+    modules: set[str] = set()
+    for path in paths:
+        if path.startswith("hub/tests/") and path.endswith(".py"):
+            if (root / path).is_file() and Path(path).name.startswith("test_"):
+                selected.add(path)
+        elif path.startswith("hub/hub/") and path.endswith(".py"):
+            parts = Path(path[len("hub/hub/") :]).with_suffix("").parts
+            name = parts[-2] if parts[-1] == "__init__" and len(parts) > 1 else parts[-1]
+            if name != "__init__":
+                modules.add(name)
+    if modules and tests_dir.is_dir():
+        pattern = re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, modules))) + r")\b")
+        for test in sorted(tests_dir.rglob("test_*.py")):
+            try:
+                text = test.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if pattern.search(text):
+                selected.add(test.relative_to(root).as_posix())
+    return sorted(selected)
+
+
+def _write_empty_report(report: str) -> None:
+    path = Path(report)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" '
+        'errors="0" failures="0" skipped="0" tests="0" time="0"/></testsuites>',
+        encoding="utf-8",
+    )
+
+
 def main(
     argv: list[str],
     *,
     run_pytest: Optional[Callable[[list[str]], int]] = None,
     **run_options,
 ) -> int:
-    """Run the suite, or with `--rerun` only the named tests; `--report` writes the report."""
+    """Run the suite, or with `--rerun` only the named tests; `--report` writes the report.
+
+    `--changed-files PATH` (one path per line) runs only the tests related to those files."""
     try:
+        changed_path, argv = extract_changed_files(argv)
         report, rerun_ids, args = junit_rerun.parse_options(argv)
         if rerun_ids is not None:
             pytest_args = junit_rerun.rerun_args(rerun_ids, report, Path.cwd())
+        if changed_path is not None and rerun_ids is None:
+            try:
+                listing = Path(changed_path).read_text(encoding="utf-8").splitlines()
+            except OSError as exc:
+                raise junit_rerun.UsageError(f"cannot read --changed-files {changed_path}: {exc}")
+            related = related_tests(listing, Path.cwd())
+            if related is None:
+                say("the change touches a conftest or packaging file; running the full suite")
+            elif not related:
+                say(NO_TESTS_MESSAGE)
+                if report:
+                    _write_empty_report(report)
+                return 0
+            else:
+                say(f"running {len(related)} Hub test file(s) related to the change")
+                args = [*related, *(args or DEFAULT_ARGS[1:])]
     except junit_rerun.UsageError as exc:
         say(str(exc))
         return 4  # pytest's usage error
