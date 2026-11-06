@@ -20,8 +20,8 @@ Steps, in order:
   seed     main gets an outside commit (not landed by the Hub) adding `test_listed`, which fails.
            The Hub's one full run on that commit lists it as failing on main (FR-3).
            PASS needs the entry on the list, with a fix task.
-  owner    FR-5/FR-6: the fix task is assigned (to the loop's agent `builder`), is on no loop, flow
-           or build, and has no run after a minute of the assignee being idle.
+  owner    FR-5/FR-6: the fix task (the entry was found on main) is unassigned, is on no loop, flow
+           or build, and has no run after a minute with a loop firing in the project.
   land     two tasks: CLEAN adds a passing test, NEW adds `test_new`, which fails. Both complete
            and are approved together. PASS needs: CLEAN lands past the listed test; NEW is sent
            back (its own failure); no check run used a checkout of main; no landing was ever held.
@@ -381,15 +381,30 @@ def drive(hub: "Hub", keep: list) -> None:
     main_tip = git(root, "rev-parse", "master")
     seen_before = len(runs_logged(log))
 
-    # owner: assigned, not on a loop, not started
+    # owner: the entry was found by a run on main, so its fix task is unassigned (FR-5), is on no
+    # loop, flow or build, and no run starts on it while a loop fires in the project (FR-6)
     fix = entry_task(entry)
     check("owner: the entry names a fix task", bool(fix), f"entry {entry}")
     if fix:
-        time.sleep(60)
+        hub.call(
+            "POST",
+            f"/projects/{project.id}/jobs",
+            {
+                "name": "d1106 firing",
+                "agent": "builder",
+                "message": "work",
+                "cron": "* * * * *",
+                "enabled": True,
+                "purpose": "d1106 drive: a loop that fires during the minute",
+                "stop_at": "2099-01-01T00:00:00Z",
+            },
+        )
+        time.sleep(75)
         task = hub.call("GET", f"/projects/{project.id}/tasks/{fix}")
+        story = hub.call("GET", f"/projects/{project.id}/tasks/{fix}/story")
         check(
-            "owner: the fix task is assigned to the loop's developer",
-            task.get("assignee") == "builder",
+            "owner: a fix task for a main-found entry is unassigned",
+            not task.get("assignee"),
             f"assignee {task.get('assignee')}",
         )
         check(
@@ -398,10 +413,12 @@ def drive(hub: "Hub", keep: list) -> None:
             f"loop {task.get('loop_id')} build {task.get('build_id')}",
         )
         check(
-            "owner: it is not started",
+            "owner: it is not started and no run exists for it",
             task.get("status") in ("pending", "assigned")
-            and task.get("assignee_status") != "running",
-            f"status {task.get('status')} / {task.get('assignee_status')}",
+            and task.get("assignee_status") != "running"
+            and (story.get("summary") or {}).get("runs") == 0,
+            f"status {task.get('status')} / {task.get('assignee_status')}, "
+            f"runs {(story.get('summary') or {}).get('runs')}",
         )
 
     # land: the clean task goes past the listed test; the one adding a failure goes back
@@ -431,6 +448,12 @@ def drive(hub: "Hub", keep: list) -> None:
         "land: the task that adds a failure was sent back",
         views[bad].get("state") == "sent_back",
         json.dumps({k: views[bad].get(k) for k in ("state", "reason")}),
+    )
+    bad_task = hub.call("GET", f"/projects/{project.id}/tasks/{bad}")
+    check(
+        "land: the task that adds a failure is back with its author",
+        bad_task.get("status") == "revision_needed",
+        f"status {bad_task.get('status')}",
     )
     check("land: no landing was held", not held)
     after = runs_logged(log)[seen_before:]
