@@ -21,7 +21,7 @@ from .test_task_integration import commit_on_branch, git, make_repo, set_main_br
 PY = f'"{sys.executable}"'
 PASS = {"name": "ok", "command": f'{PY} -c "print(1)"', "timeout_seconds": 60}
 #: Fails where the task's work is (`_task_with_work` adds `feature.py`) and passes on main: the task
-#: broke it. F605 re-runs a failing check on main, so a check failing everywhere is MAIN_FAIL.
+#: broke it.
 FAIL = {
     "name": "tests",
     "command": (
@@ -30,7 +30,8 @@ FAIL = {
     ),
     "timeout_seconds": 60,
 }
-#: Fails on main and on the task alike (F605: pre-existing).
+#: Fails on main and on the task alike: not the task's once its whole check is on the known-failing
+#: list (`listed_whole_check`).
 MAIN_FAIL = {
     "name": "suite",
     "command": f"{PY} -c \"import sys; print('main is broken'); sys.exit(1)\"",
@@ -199,6 +200,36 @@ async def _task_with_work(tmp_path, status="completed"):
     return task.id, work
 
 
+async def listed_whole_check(name: str, kind: str = "fails on main") -> str:
+    """The whole check *name* on the project's known-failing list (a check that writes no report),
+    owned by a pending fix task (`failures-already-known-are-on-a-list-not-re-argued`, FR-7)."""
+    from hub.db.models import KnownFailingTest, Task
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id=f"task-fix-{name}"[:32],
+                project_id="proj-test",
+                title=f"Fix the whole check {name}",
+                description="",
+                status="pending",
+                priority="high",
+            )
+        )
+        session.add(
+            KnownFailingTest(
+                id=f"kf-whole-{name}"[:32],
+                project_id="proj-test",
+                check_name=name,
+                test="",
+                kind=kind,
+                fix_task_id=f"task-fix-{name}"[:32],
+            )
+        )
+        await session.commit()
+    return f"kf-whole-{name}"[:32]
+
+
 async def _runs(task_id):
     async with async_session_factory() as session:
         return list(
@@ -215,8 +246,9 @@ async def _runs(task_id):
 @pytest.mark.asyncio
 async def test_the_tasks_own_failure_stops_the_run(app, tmp_path):
     """Operator, 2026-10-24: a lint failure found in seconds waited twenty minutes for the Hub
-    suite after it before anyone heard of it. The checks after the task's own failure are not run;
-    the failing one was run on main at once, which is how the run knew it was the task's."""
+    suite after it before anyone heard of it. The checks after the task's own failure are not run.
+    Its check is not on the known-failing list, so the failure is the task's: nothing ran on main to
+    decide it (`failures-already-known-are-on-a-list-not-re-argued`, FR-7)."""
     task_id, _ = await _task_with_work(tmp_path)
     await _project([FAIL, PASS])
 
@@ -226,14 +258,15 @@ async def test_the_tasks_own_failure_stops_the_run(app, tmp_path):
     [run] = await _runs(task_id)
     assert run.state == "failed"
     assert [r["name"] for r in run.results] == ["tests"], "nothing runs after the task's failure"
-    assert run.results[0]["on_main"]["exit_code"] == 0 and not run.results[0]["preexisting"]
-    assert not (tmp_path / ".agentweave" / "checks" / f"{task_id}.main").exists()
+    assert not run.results[0]["preexisting"] and "on_main" not in run.results[0]
+    assert run.results[0]["listed"] == []
 
 
 @pytest.mark.asyncio
-async def test_a_failure_main_shares_does_not_stop_the_run(app, tmp_path):
+async def test_a_listed_failure_does_not_stop_the_run(app, tmp_path):
     task_id, _ = await _task_with_work(tmp_path)
     await _project([MAIN_FAIL, PASS])
+    entry = await listed_whole_check("suite")
 
     assert await project_checks.request_run("proj-test", task_id)
     await project_checks.drain()
@@ -242,7 +275,7 @@ async def test_a_failure_main_shares_does_not_stop_the_run(app, tmp_path):
     assert run.state == "failed"
     assert [r["name"] for r in run.results] == ["suite", "ok"]
     assert run.results[0]["preexisting"]
-    assert not (tmp_path / ".agentweave" / "checks" / f"{task_id}.main").exists()
+    assert [e["id"] for e in run.results[0]["listed"]] == [entry]
 
 
 @pytest.mark.asyncio

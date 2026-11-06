@@ -75,6 +75,11 @@ TASK_REFERENCES: List[Reference] = [
     ("messages", "task_id", CLEAR),
     ("questions", "blocked_task_id", CLEAR),
     ("stalls", "task_id", CLEAR),
+    # The known-failing list: an entry outlives its fix task (its owner is cleared); a task's
+    # sighting of an unlisted failure goes with it (`failures-already-known-are-on-a-list-not-re-
+    # argued`, FR-5, FR-13).
+    ("known_failing_tests", "fix_task_id", CLEAR),
+    ("unlisted_test_failures", "task_id", DELETE),
 ]
 
 EVIDENCE_REFERENCES: List[Reference] = [

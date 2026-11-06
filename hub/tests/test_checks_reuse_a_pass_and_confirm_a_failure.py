@@ -29,7 +29,7 @@ from hub.worktrees import task_branch_name
 from .test_checks_read_the_report import PYTEST_RERUN
 from .test_checks_refresh_when_main_moves import _move_main
 from .test_project_checks_gate import _approve
-from .test_project_checks_run import PY, _project, _runs, _task_with_work
+from .test_project_checks_run import PY, _project, _runs, _task_with_work, listed_whole_check
 from .test_task_integration import commits_on, git
 
 
@@ -175,6 +175,8 @@ async def test_a_failure_is_never_reused(app, auth_headers, tmp_path, tmp_path_f
     task_id, _ = await _task_with_work(repo)
     _move_main(repo, "prerequisite.txt")
     await _project([_counting("suite", counter, fail_first=99)])
+    # The whole check is on the known-failing list, so its failure is not the task's.
+    await listed_whole_check("suite")
     await project_checks.request_run("proj-test", task_id)
     await project_checks.drain()
     [run] = await _runs(task_id)
@@ -241,7 +243,7 @@ async def test_a_reproduced_failure_still_refuses_and_says_it_was_confirmed(
     assert run.state == "failed"
     [result] = run.results
     assert result["confirmed"]["how"] == "check" and result["confirmed"]["exit_code"] == 3
-    assert result["on_main"]["exit_code"] == 0 and not result["preexisting"]
+    assert not result["preexisting"] and result["listed"] == []
     refused = await _approve(app, auth_headers, task_id)
     assert refused.status_code == 409, refused.text
     assert work not in commits_on(repo, "main")
@@ -302,55 +304,6 @@ async def test_a_flaky_pytest_failure_re_runs_only_the_failed_test(app, tmp_path
     ran = counter.read_text(encoding="utf-8").split()
     assert ran.count("ok") == 1, "only the failed test ran again"
     assert ran.count("flaky") == 2
-
-
-async def test_main_is_asked_with_the_same_rerun_command_and_the_failed_ids(
-    app, tmp_path, tmp_path_factory, monkeypatch
-):
-    """same-failure-by-test-id: main runs exactly the ids that failed, through the check's re-run
-    command, and its failures by id are stored; a check that names no ids runs whole on main."""
-    repo = tmp_path
-    task_id, _ = await _task_with_work(repo)
-    (repo / "test_red.py").write_text(
-        "def test_red():\n    assert False\n\ndef test_green():\n    pass\n", encoding="utf-8"
-    )
-    (repo / "rerun.py").write_text(PYTEST_RERUN, encoding="utf-8")
-    (repo / ".gitignore").write_text("report.xml\n", encoding="utf-8")
-    git(repo, "add", "test_red.py", "rerun.py", ".gitignore")
-    git(repo, "commit", "-q", "-m", "a red test on main")
-    pytest_check = _pytest_check(tmp_path_factory.mktemp("log") / "ran.log")
-    unnamed = {
-        "name": "script",
-        "command": f"{PY} -c \"import sys; print('main is broken'); sys.exit(1)\"",
-        "timeout_seconds": 60,
-    }
-    await _project([pytest_check, unnamed])
-    ran: list = []
-    real = project_checks.run_one
-
-    def recording(check, cwd, owner=None):
-        ran.append((Path(cwd).name, check["command"]))
-        return real(check, cwd, owner)
-
-    monkeypatch.setattr(project_checks, "run_one", recording)
-    await project_checks.request_run("proj-test", task_id)
-    await project_checks.drain()
-
-    rerun = project_checks.rerun_command(pytest_check, ["test_red::test_red"])
-    on_main = [c for where, c in ran if where.endswith(".main")]
-    assert on_main == [rerun, unnamed["command"]], ran
-    [run] = await _runs(task_id)
-    named, whole = run.results
-    assert named["on_main"]["how"] == "tests"
-    assert named["on_main"]["failed_tests"] == ["test_red::test_red"]
-    assert named["shared_tests"] == ["test_red::test_red"] and named["preexisting"]
-    assert whole["on_main"]["how"] == "check" and whole["preexisting"]
-    assert (
-        project_checks.not_the_tasks(run.results) is None
-    ), "an unnamed failure is never automatic"
-    assert project_checks.not_the_tasks([named]) == [
-        {"check": "pytest", "test": "test_red::test_red", "kind": "fails on main"}
-    ]
 
 
 def test_a_rerun_that_ran_nothing_proves_nothing():

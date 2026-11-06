@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from hub import landing_queue, project_checks
 from hub.db.engine import async_session_factory
-from hub.db.models import LandingBatch, Project, Task, TaskCheckRun, TaskLanding
+from hub.db.models import LandingBatch, Project, Task, TaskCheckRun, TaskLanding, TaskTransition
 
 from .test_task_integration import git, make_repo, set_main_branch
 
@@ -141,7 +141,10 @@ async def test_a_timeout_naming_no_failure_blames_nobody(app, tmp_path, monkeypa
     assert run.state == "error" and run.ended_by == project_checks.ENDED_BY_TIMEOUT
 
 
-async def test_a_second_unjudged_timeout_is_the_operators(app, tmp_path, monkeypatch, forbid_blame):
+async def test_a_second_unjudged_timeout_is_narrowed_never_held(app, tmp_path, monkeypatch):
+    """`failures-already-known-are-on-a-list-not-re-argued`, FR-9: a check that timed out twice in a
+    row naming no failing test is narrowed like a failure -- here to the batch's one task, which
+    goes back to its author with the reason 'timed out' -- and nothing is held for the operator."""
     landings = await _rows(1)
     await _run_and_decide(tmp_path, monkeypatch, "lbat-f11310002", landings, _result())
     async with async_session_factory() as session:
@@ -152,12 +155,28 @@ async def test_a_second_unjudged_timeout_is_the_operators(app, tmp_path, monkeyp
         tmp_path, monkeypatch, "lbat-f11310003", landings
     )
 
-    assert decided is True
+    assert outcome.unjudged and decided is True
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, "lbat-f11310003")
         row = await session.get(TaskLanding, landings[0].id)
-    assert batch.state == "held" and "twice in a row" in batch.error
-    assert row.state == "held" and "twice in a row" in row.reason
+        task = await session.get(Task, landings[0].task_id)
+        moved = (
+            (
+                await session.execute(
+                    select(TaskTransition).where(
+                        TaskTransition.task_id == task.id,
+                        TaskTransition.to_status == "revision_needed",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert batch.state == "failed" and batch.state != "held"
+    assert row.state == "sent_back" and row.reason.startswith("Timed out"), row.reason
+    assert task.status == "revision_needed"
+    [back] = moved
+    assert (back.reason or "").startswith("timed out"), back.reason
 
 
 async def _run_and_decide_again(tmp_path: Path, monkeypatch, batch_id: str, landings):
@@ -193,11 +212,6 @@ async def test_a_timeout_that_named_a_failure_still_narrows(app, tmp_path, monke
 
     monkeypatch.setattr(landing_queue, "_narrow", narrow)
     monkeypatch.setattr(project_checks, "confirm_failure", lambda *a, **k: None)
-
-    async def no_baseline(self, *a, **k):
-        return None
-
-    monkeypatch.setattr(project_checks._MainBaseline, "record", no_baseline)
     named = _result(named_failures=["test_x.py::test_y"])
     outcome, _ = await _run_and_decide(tmp_path, monkeypatch, "lbat-f11310004", landings, named)
     assert not outcome.unjudged and narrowed == [True]

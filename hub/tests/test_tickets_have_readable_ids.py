@@ -17,7 +17,7 @@ from sqlalchemy import select, update
 
 from hub import (
     checkpoint_generation,
-    flaky_tests,
+    known_failing,
     landing_queue,
     readable_ids,
     review_turn,
@@ -34,6 +34,7 @@ from hub.db.models import (
     Base,
     Checkpoint,
     InboundQueueEntry,
+    KnownFailingTest,
     Project,
     Run,
     SpecDocument,
@@ -1045,9 +1046,10 @@ async def test_ac_shown_a_firings_held_reasons_name_the_readable_id(
 
 def test_ac_shown_a_fix_task_says_whose_work_found_it_by_the_readable_id():
     run = SimpleNamespace(id="run-1", main_sha="abc", results=[])
-    entry = {"check": "tests", "test": "test_x", "kind": "flaky"}
-    _, description = flaky_tests.fix_task_text_for([entry], run=run, found_by="BPS-3")
-    assert "on task BPS-3's work" in description
+    entry = KnownFailingTest(check_name="tests", test="test_x", kind="flaky")
+    found_by = SimpleNamespace(display_id="BPS-3")
+    _, description = known_failing.fix_task_text(entry, run=run, found_by=found_by)
+    assert "task BPS-3's check run" in description
 
 
 def test_ac_shown_a_conflict_report_names_tasks_as_it_is_handed_them():

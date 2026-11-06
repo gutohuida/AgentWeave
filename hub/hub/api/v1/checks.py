@@ -3,6 +3,10 @@
 `GET /checks/flaky` lists them; `POST /checks/flaky/handled` is the operator dealing with the list —
 handing it to a new task (`create_task`) or dismissing it — so it stays quiet until a test flakes
 again.
+
+`GET /checks/known-failing` is the project's known-failing list (`hub/hub/known_failing.py`,
+`failures-already-known-are-on-a-list-not-re-argued` FR-1): each entry's check, test or whole
+check, kind, first and last seen, the run that added it and its fix task.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import flaky_tests
+from ... import flaky_tests, known_failing
 from ...auth import get_project
 from ...db.engine import get_session
 from ...schemas.tasks import TaskCreate
@@ -39,6 +43,15 @@ async def list_flaky_tests(
 ):
     project_id, _ = project
     return await flaky_tests.report(session, project_id)
+
+
+@checks_router.get("/known-failing")
+async def list_known_failing(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    project_id, _ = project
+    return await known_failing.view(session, project_id)
 
 
 @checks_router.post("/flaky/handled")

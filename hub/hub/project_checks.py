@@ -5,7 +5,7 @@ builds the commit approval would produce -- main's tip with each merge target ap
 `git merge-tree` and `commit-tree`, touching no checkout (design D1) -- checks it out in a scratch
 worktree under `.agentweave/checks/<task_id>` (D2), runs each check there with the Hub's own
 configuration removed from the environment (D8), stopping at the first failure that is the task's own
-(a failure main shares does not stop it), and records a `TaskCheckRun` row (D3).
+(a failure on the known-failing list does not stop it), and records a `TaskCheckRun` row (D3).
 
 Runs are started in the background, never inside a request (D5): when a task is completed outside a
 turn, when a turn bound to a completed task ends (its work is only committed then), and when the
@@ -63,7 +63,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import flaky_tests, readable_ids, traces
+from . import flaky_tests, known_failing, readable_ids, traces
 from .db.engine import async_session_factory
 from .db.models import Project, Run, Task, TaskCheckRun, TaskTransition
 from .subprocess_windows import no_console_kwargs
@@ -781,6 +781,13 @@ def _judge_by_report(
     asked = list(check.get("rerun_tests") or [])
     if asked and report is not None:
         result["passed_tests"] = [test for test in asked if report.outcomes.get(test) is False]
+        # Which of them ran at all: one in no file of the tree runs nothing, and says nothing.
+        result["ran_tests"] = [test for test in asked if test in report.outcomes]
+    watched = list(check.get("watch_tests") or [])
+    if watched and report is not None:
+        # The listed tests this run ran and passed: a run that did not run one says nothing of it
+        # (`failures-already-known-are-on-a-list-not-re-argued`, FR-4; `known_failing.watching`).
+        result["watched_passed"] = [test for test in watched if report.outcomes.get(test) is False]
     if timed_out:
         if report is not None and report.failing:
             result["named_failures"] = report.failing
@@ -1073,12 +1080,12 @@ def confirm_failure(
 
     The failed tests alone, through the check's re-run command, where its report named them and the
     command with them substituted is short enough (FR-6), else the whole check. Reproduced: *result*
-    keeps its failure and gains `confirmed`, and `compared_tests` names the ids main is asked about
-    (`_MainBaseline`): those that failed again, and any in a file the task changed. A named id that
-    passed the rerun is recorded in `flaky_tests`. Passed: *result* passes, and `flaky` keeps the
-    first attempt -- a flake is recorded, never swallowed -- unless a flaky test is in a file the
-    task's work changes (*changed*, FR-4): a task that adds or edits a flaky test introduced it, so
-    its failure stands and is compared with main like a reproduced one.
+    keeps its failure and gains `confirmed`, and `compared_tests` names the ids the known-failing
+    list judges (`known_failing.judge`): those that failed again, and any in a file the task
+    changed. A named id that passed the rerun is recorded in `flaky_tests`. Passed: *result* passes,
+    and `flaky` keeps the first attempt -- a flake is recorded, never swallowed -- unless a flaky
+    test is in a file the task's work changes (*changed*, FR-4): a task that adds or edits a flaky
+    test introduced it, so its failure stands and is judged like a reproduced one.
     """
     node_ids = list(result.get("failed_tests") or [])
     narrowed = rerun_check(check, node_ids)
@@ -1149,15 +1156,15 @@ def failed(result: Dict[str, Any]) -> bool:
 
 
 def preexisting(result: Dict[str, Any]) -> bool:
-    """A failure main shares (F605): every test the task's tree failed (after its rerun) fails on
-    the main tip the run was cut from too, compared by test id where the check's report named
-    them (`a-red-main-does-not-hold-the-night`, FR-1), else the same check failed there. A run recorded
-    before this field existed reads as not pre-existing, i.e. as before."""
+    """A failure that is not the work's: every test it failed (after its rerun) is on the project's
+    known-failing list, or, naming no test, its whole check is (`known_failing.judge`,
+    `failures-already-known-are-on-a-list-not-re-argued` FR-7). A run recorded before this field
+    existed reads as not pre-existing, i.e. as the work's."""
     return failed(result) and bool(result.get("preexisting"))
 
 
 def own_failure(results: Optional[Sequence[Dict[str, Any]]]) -> bool:
-    """Whether a run's results hold a failure that is the task's (not one main shares)."""
+    """Whether a run's results hold a failure that is the task's (not one on the list)."""
     return any(failed(result) and not preexisting(result) for result in results or [])
 
 
@@ -1177,131 +1184,9 @@ def send_back_class(results: Optional[Sequence[Dict[str, Any]]]) -> str:
     return SEND_BACK_BROKEN_CHECK
 
 
-#: The two kinds of failure that are not the task's (`a-red-main-does-not-hold-the-night`).
+#: The two kinds of entry on the known-failing list (`known_failing`).
 FAILS_ON_MAIN = "fails on main"
 FLAKY = "flaky"
-
-
-def not_the_tasks(
-    results: Optional[Sequence[Dict[str, Any]]], *, excluded: Sequence[str] = ()
-) -> Optional[List[Dict[str, str]]]:
-    """Every failure and flake in a run's *results*, as `{"check", "test", "kind"}`, where each one
-    is provably not the task's -- the same test id fails on main too, or passed when rerun on its
-    own -- else `None` (`a-red-main-does-not-hold-the-night`, FR-1, FR-4). `[]` for a run with
-    neither: nothing to override.
-
-    `None` for any failure that is the task's or that cannot be told apart: an id that passes on
-    main, a failing or flaky test in a file the task changed, an id in *excluded* (the ids a
-    Hub-filed fix task was filed for), and a failure compared check-level -- a check without a
-    report or a re-run command, a timeout, a report naming no failing test, a re-run command too
-    long with the ids substituted, no main answer. Those keep the answer they had before. A whole-check flake (no test named)
-    passes as before and is not listed: there is no test to name."""
-    found: List[Dict[str, str]] = []
-    for result in results or []:
-        if not isinstance(result, dict) or result.get("skipped"):
-            continue
-        check = str(result.get("name") or "check")
-        if failed(result):
-            on_main = result.get("on_main") if isinstance(result.get("on_main"), dict) else {}
-            shared = list(result.get("shared_tests") or [])
-            if (
-                not preexisting(result)
-                or on_main.get("how") != "tests"
-                or result.get("own_tests")
-                or result.get("touched_tests")
-                or not shared
-            ):
-                return None
-            found += [{"check": check, "test": t, "kind": FAILS_ON_MAIN} for t in shared]
-            found += [
-                {"check": check, "test": t, "kind": FLAKY} for t in result.get("flaky_tests") or []
-            ]
-        elif isinstance(result.get("flaky"), dict) and result["flaky"].get("how") == "tests":
-            if result.get("touched_tests"):
-                return None  # cannot pass with one; read defensively
-            tests = result.get("flaky_tests") or result["flaky"].get("tests") or []
-            found += [{"check": check, "test": t, "kind": FLAKY} for t in tests]
-    keys = {node.strip() for node in excluded}
-    if any(entry["test"].strip() in keys for entry in found):
-        return None
-    return found
-
-
-def _record_main_result(result: Dict[str, Any], on_main: Dict[str, Any]) -> None:
-    """Main's answer for the whole check: check-level, so it is never an automatic override."""
-    result["on_main"] = {
-        "exit_code": on_main["exit_code"],
-        "timed_out": on_main["timed_out"],
-        "how": "check",
-    }
-    result["preexisting"] = failed(on_main)
-
-
-def _record_main_tests(
-    result: Dict[str, Any], on_main: Dict[str, Any], node_ids: Sequence[str]
-) -> bool:
-    """Main's answer for exactly *node_ids*, run with the check's re-run command (FR-1): each id
-    that fails there is shared, each that passes is the task's own. Exit codes and counts are never
-    compared. `False` where the run named no answer per id (it ran nothing, or failed without naming
-    every failure): the caller asks the whole check instead, as before this change."""
-    if proves_the_tests_pass(on_main, node_ids):
-        failing: List[str] = []
-    elif reproduces_a_test_failure(on_main) and on_main.get("failed_tests"):
-        failing = list(on_main["failed_tests"])
-    else:
-        return False
-    keys = set(failing)
-    shared = [node for node in node_ids if node in keys]
-    own = [node for node in node_ids if node not in keys]
-    result["on_main"] = {
-        "exit_code": on_main["exit_code"],
-        "timed_out": on_main["timed_out"],
-        "how": "tests",
-        "tests": list(node_ids),
-        "failed_tests": failing,
-    }
-    result["shared_tests"], result["own_tests"] = shared, own
-    result["preexisting"] = bool(shared) and not own
-    return True
-
-
-class _MainBaseline:
-    """The main tip the run was cut from, checked out on the first failure and kept for the rest.
-
-    A failing check is run there at once (F605, D1): its answer decides whether the run goes on.
-    Where the task's tree named its failed tests and they stood their re-run (`compared_tests`),
-    main runs the same re-run command with exactly those ids (FR-1); otherwise the whole check. Best-effort: a baseline that cannot be taken leaves the result as it
-    was, charged to the task, and `unavailable` (no main answer is never an automatic override).
-    """
-
-    def __init__(self, root: Path, task_id: str, main_sha: str) -> None:
-        self.root, self.main_sha, self.task_id = root, main_sha, task_id
-        self.name = f"{task_id}.main"
-        self.path: Optional[Path] = None
-        self.unavailable = False
-
-    async def record(self, check: Dict[str, Any], result: Dict[str, Any]) -> None:
-        if self.unavailable:
-            return
-        try:
-            if self.path is None:
-                self.path = await asyncio.to_thread(_checkout, self.root, self.name, self.main_sha)
-            node_ids = list(result.get("compared_tests") or [])
-            narrowed = rerun_check(check, node_ids)
-            if narrowed is not None:
-                on_main = await asyncio.to_thread(run_one, narrowed, self.path, self.task_id)
-                if _record_main_tests(result, on_main, node_ids):
-                    return
-            _record_main_result(
-                result, await asyncio.to_thread(run_one, check, self.path, self.task_id)
-            )
-        except Exception:  # noqa: BLE001 -- the task's own result stands without main's
-            self.unavailable = True
-            logger.warning("could not run check %s on main", check["name"], exc_info=True)
-
-    async def close(self) -> None:
-        if self.path is not None:
-            await asyncio.to_thread(_remove_checkout, self.root, self.path)
 
 
 # --- records -------------------------------------------------------------------------------------
@@ -1507,12 +1392,12 @@ async def _after_decided(run_id: str) -> None:
     any other verdict asks for its flow's firing, which offers the review it was waiting for (D6,
     FR-8) within `flow_advance`'s debounce rather than at the next tick. Never raises.
 
-    First, failures that are not the task's -- main's, or flakes -- get their fix task filed now,
-    while the flow's agents are idle (`a-red-main-does-not-hold-the-night`, D5); approval's own
-    transaction stays free of task creation. A run with a failure of the task's own files none."""
+    First, the run is read into the known-failing list: a flake it found is listed, with its owner
+    fix task filed now, while the flow's agents are idle (`failures-already-known-are-on-a-list-not-
+    re-argued`, FR-2, FR-5); approval's own transaction stays free of task creation."""
     from . import flow_advance
 
-    await flaky_tests.file_fix_task(run_id)
+    await known_failing.record_run(run_id)
     try:
         if await return_failed_work(run_id):
             return  # the return asked for the flow's firing itself (a hand-off move)
@@ -1776,7 +1661,6 @@ async def _execute(
         merged: str,
         tree: Optional[str],
         changed: Optional[List[str]],
-        baseline: _MainBaseline,
     ) -> Optional[str]:
         """Run *group* in order: `None` to go on, `"stop"` where the task's own failure decided
         the run, `"superseded"` where the task's work changed under it, `"timeout"` where a check
@@ -1791,21 +1675,31 @@ async def _execute(
                     path = await asyncio.to_thread(_checkout, root, task_id, merged)
                 result = await asyncio.to_thread(run_one, check, path, task_id)
                 if unjudged_timeout(result) and task_id not in _superseded:
-                    # Not confirmed, and main not asked: running out of time again, or on main,
-                    # would say no more about the work. The run is retried instead (FR-9).
+                    # Not confirmed: running out of time again would say no more about the work.
+                    # The run is retried instead (FR-9).
                     result.update(tree=tree, check_digest=check_digest(check))
                     results.append(result)
                     timed_out = check
                     return "timeout"
                 if failed(result) and task_id not in _superseded:
-                    # Confirmed on the same tree before main is asked (a flake that passes the
-                    # second time needs no baseline); only a reproduced failure stands.
+                    # Confirmed on the same tree first: only a reproduced failure stands.
                     await asyncio.to_thread(confirm_failure, check, path, result, task_id, changed)
                     if result.get("flaky"):
                         # Raised to the operator, not only to the reviewer (`flaky_tests`).
                         await flaky_tests.record_flake(run_id, result)
                 if failed(result) and task_id not in _superseded:
-                    await baseline.record(check, result)
+                    # Whose it is, the known-failing list decides: nothing runs on main for it but
+                    # the twice rule's one test (`failures-already-known-are-on-a-list-not-re-
+                    # argued`, FR-7, FR-13).
+                    await known_failing.judge(
+                        project_id=project_id,
+                        task_id=task_id,
+                        run_id=run_id,
+                        root=root,
+                        main_sha=main_sha,
+                        check=check,
+                        result=result,
+                    )
                 if await superseded():
                     return "superseded"  # its tree was ended for new work: not a result
                 result.update(tree=tree, check_digest=check_digest(check))
@@ -1813,11 +1707,14 @@ async def _execute(
             await _finish(run_id, merged_sha=merged, results=list(results))
             if failed(result) and not preexisting(result):
                 # The task's own failure already decides the run; the checks after it would only
-                # make its author wait for them (operator, 2026-10-24). A failure main shares does
-                # not stop it: it is not the task's, and what follows may still be.
+                # make its author wait for them (operator, 2026-10-24). A listed failure does not
+                # stop it: it is not the task's, and what follows may still be.
                 return "stop"
         return None
 
+    project_id = await _project_of(run_id)
+    # Each check is told the tests on the known-failing list, so its report says which it passed.
+    checks = await known_failing.watching(project_id, checks)
     try:
         if await superseded():
             return
@@ -1841,9 +1738,8 @@ async def _execute(
             planned = [None] * len(checks)
         pairs = list(zip(checks, planned, strict=True))
         split = sum(1 for check in checks if check.get("fast"))
-        baseline = _MainBaseline(root, task_id, main_sha)
         try:
-            outcome = await run_group(pairs[:split], merged, tree, changed, baseline)
+            outcome = await run_group(pairs[:split], merged, tree, changed)
             if outcome is None:
                 # Every fast check passed: the completion waiting on them goes on now, and the rest
                 # run after it. A fast failure instead ends the run first (the `finally` below
@@ -1859,13 +1755,12 @@ async def _execute(
                         outcome = "superseded"
                     else:
                         await _took_slot(run_id)
-                        outcome = await run_group(pairs[split:], merged, tree, changed, baseline)
+                        outcome = await run_group(pairs[split:], merged, tree, changed)
             if outcome == "superseded":
                 return
         finally:
             if path is not None:
                 await asyncio.to_thread(_remove_checkout, root, path)
-            await baseline.close()
         if await superseded():
             return
         if outcome == "timeout" and timed_out is not None:
@@ -1895,6 +1790,12 @@ async def _execute(
     finally:
         _fast_decided(run_id)
         _waiting_for_slot.pop(run_id, None)
+
+
+async def _project_of(run_id: str) -> str:
+    async with async_session_factory() as session:
+        run = await session.get(TaskCheckRun, run_id)
+        return run.project_id if run is not None else ""
 
 
 def _fast_decided(run_id: str) -> None:
