@@ -1294,6 +1294,10 @@ async def apply_transition(
         from . import landing_queue
 
         await landing_queue.withdraw(session, task)
+        # A pull request build's PR goes back to draft until every task is pushed again (FR-5).
+        from . import pull_requests
+
+        pull_requests.sent_back_after_commit(session, task)
 
     # A task completed outside a turn has its work committed already, so its checks can start now
     # (approval-runs-the-projects-checks D4). One completed by a run is checked at that run's end,

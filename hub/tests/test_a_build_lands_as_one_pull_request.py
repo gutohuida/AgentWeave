@@ -6,7 +6,7 @@ FR-2 (needs-github): turning it on, and starting such a build, are refused namin
 remote, the GitHub CLI and its login is missing. The CLI is the real `shutil.which` lookup over a
 PATH holding only git and, where a test wants one, a stub `gh` that answers `auth status`.
 FR-7 (squash-setting): the single-commit choice is a stored project setting (its push behaviour is
-task `push`'s).
+task `push`'s, in `test_a_build_lands_as_one_pull_request_push.py`).
 """
 
 from __future__ import annotations
@@ -20,21 +20,18 @@ import pytest
 
 from hub import pull_requests
 from hub.db.engine import async_session_factory
-from hub.db.models import Build, Project, TaskIntegration
+from hub.db.models import Build, Project
 
 from .test_a_build_has_a_driver_a_level_and_its_people import (
     _approved,
     _build,
     _document,
-    _evidence_naming,
-    _move,
     _read,
     _roster_rows,
     _rows,
-    _tasks_by_key,
     author_headers,  # noqa: F401 -- a fixture
 )
-from .test_task_integration import commit_on_branch, git, make_repo, set_main_branch
+from .test_task_integration import git, make_repo, set_main_branch
 
 SETTINGS = "/api/v1/projects/proj-test/settings"
 GITHUB_URL = "https://github.com/example/example.git"
@@ -197,38 +194,6 @@ async def test_a_pull_request_build_is_refused_when_github_stopped_being_ready(
     assert refused.status_code == 422, refused.text
     assert refused.json()["detail"]["code"] == pull_requests.GITHUB_CLI_NOT_LOGGED_IN
     assert await _rows(Build) == []
-
-
-@pytest.mark.asyncio
-async def test_a_pull_request_builds_approved_task_is_never_merged_into_main(
-    app, auth_headers, author_headers, bind_project_workspace, tmp_path, monkeypatch  # noqa: F811
-):
-    """Until pushing to the PR exists (task `push`), a PR build's approved work is recorded and
-    skipped: landing as a PR exists so that the Hub does not merge into main itself."""
-    from hub import worktrees
-
-    repo = await _repo(tmp_path, bind_project_workspace)
-    await _set_pr_landing(True)
-    _only_git_on_path(monkeypatch, tmp_path, gh_exit=0)
-    await _roster_rows("dev", "qa")
-    await _approved(app, auth_headers, author_headers, _document())
-    built = await _build(app, auth_headers, driver="hand", level="reviewed", landing="pull_request")
-    assert built.status_code == 200, built.text
-    t1 = (await _tasks_by_key())["t1"]
-    tip = commit_on_branch(repo, worktrees.task_branch_name(t1.id), "alpha.py", "a = 1\n")
-    git(repo, "checkout", "-q", "main")
-    main_before = git(repo, "rev-parse", "main").stdout.strip()
-    await _evidence_naming(t1.id, tip)
-
-    await _move(t1.id, "in_progress", "dev", run_id="run-dev-pr")
-    await _move(t1.id, "completed", "dev", run_id="run-dev-pr")
-    await _move(t1.id, "under_review", "qa", run_id="run-qa-pr")
-    await _move(t1.id, "approved", "qa", run_id="run-qa-pr")
-
-    assert git(repo, "rev-parse", "main").stdout.strip() == main_before
-    (record,) = await _rows(TaskIntegration, TaskIntegration.task_id == t1.id)
-    assert record.outcome == "skipped"
-    assert "pull request" in (record.reason or "")
 
 
 # --- the readiness check's pieces ----------------------------------------------------------------
