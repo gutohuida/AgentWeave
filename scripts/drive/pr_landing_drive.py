@@ -71,7 +71,10 @@ DB = pathlib.Path(os.environ.get("AW_DRIVE_DB") or PROFILE / "agentweave.db")
 KEY = (PROFILE / "bootstrap-key.txt").read_text(encoding="utf-8").strip()
 STAMP = time.strftime("%H%M%S")
 TMP = pathlib.Path(tempfile.gettempdir()) / "drive-pr-landing" / STAMP
-HAIKU = "claude-haiku-4-5-20251001"
+# The agents are bound to a model that does not exist: Build starts the flow at once, and a real
+# turn would race the drive's hand-made commit in the same worktree. A turn on this model fails
+# before it touches anything, so the operator's hand (Build.work) is the only builder.
+HAIKU = "drive-no-such-model"
 BUILDER, CHECKER = "Builder", "Checker"
 README = "testbed/README.md"
 results = []
@@ -135,7 +138,7 @@ def poll(fn, secs=30.0, every=1.0):
 def build_shim(shim, real):
     """A real gh.exe (CreateProcess finds only .exe, and cmd.exe's %* garbles quotes and
     newlines in a PR body) that logs each call to gh-calls.jsonl and then runs the real gh."""
-    csc = pathlib.Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / "Framework64"         / "v4.0.30319" / "csc.exe"
+    csc = pathlib.Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / "Framework64" / "v4.0.30319" / "csc.exe"
     if not csc.exists():
         sys.exit(f"{csc} is missing; the drive builds its gh shim with it")
     out = subprocess.run([str(csc), "/nologo", f"/out:{shim / 'gh.exe'}",
@@ -167,14 +170,8 @@ def start_hub():
         cwd=str(REPO / "hub"), env=env, stdout=log, stderr=subprocess.STDOUT,
         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     # Exactly how the Hub will call it: a bare name, resolved against the caller's own PATH.
-    outer = os.environ["PATH"]
-    os.environ.update(env)
-    try:
-        probe = subprocess.run(["gh", "--version"], capture_output=True, text=True)
-    finally:
-        os.environ["PATH"] = outer
-        for key in ("GH_SHIM_LOG", "GH_SHIM_REAL"):
-            os.environ.pop(key, None)
+    # (the child's env is passed to the probe alone; the drive's own environment is not touched)
+    probe = subprocess.run(["gh", "--version"], capture_output=True, text=True, env=env)
     if probe.returncode or not calls_log.exists() or "--version" not in calls_log.read_text(
             encoding="utf-8"):
         proc.kill()
@@ -271,7 +268,16 @@ class Build:
             run(wt, "git", "add", README)
             run(wt, "git", "-c", "user.email=d@example.invalid", "-c", "user.name=drive",
                 "commit", "-q", "-m", f"drive: {key}")
+        head = run(wt, "git", "rev-parse", "HEAD")
         api("PATCH", f"{self.ctx['base']}/tasks/{task['id']}", {"status": "completed"})
+        # Operator-recorded evidence is accepted on arrival; in a flow accepted evidence at the
+        # task's commit is what approval pushes (and what the PR description names).
+        code, out = api("POST", f"{self.ctx['base']}/project/spec/evidence",
+                        {"identifier": self.ids[key], "document": self.doc, "task_id": task["id"],
+                         "kind": "manual_observation", "commit": head, "covers": "full",
+                         "summary": f"drive: {key} appended its line to {README}"})
+        check(f"{self.label}: {key} evidence recorded and accepted at {head[:8]}",
+              code == 201 and (out.get("review_state") == "accepted"), f"{code} {str(out)[:300]}")
 
     def set_status(self, key, status, **extra):
         return api("PATCH", f"{self.ctx['base']}/tasks/{self.tasks[key]['id']}",
@@ -327,7 +333,7 @@ def drive(state):
     one.set_status("t2", "revision_needed", reason_class="defect", notes="drive: sent back")
     poll(lambda: one.gh_pr("isDraft")["isDraft"], 120, 3)
     states.append(one.gh_pr("isDraft")["isDraft"])
-    one.work("t2")
+    one.work("t2", f"drive-{STAMP}-a-t2-again")
     one.approve("t2")
     poll(lambda: not one.gh_pr("isDraft")["isDraft"], 600, 5)
     states.append(one.gh_pr("isDraft")["isDraft"])
