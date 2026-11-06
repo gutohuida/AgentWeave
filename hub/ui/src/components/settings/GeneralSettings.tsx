@@ -51,6 +51,9 @@ const FAST_NOT_LANDING_ONLY =
 /** Where the Hub puts the ids of the tests to re-run (`project_checks.TESTS_PLACEHOLDER`). */
 const TESTS_PLACEHOLDER = '{tests}'
 
+/** Where the Hub puts the path of the file listing what a task changed (`project_checks.CHANGED_FILES_PLACEHOLDER`). */
+const CHANGED_FILES_PLACEHOLDER = '{changed_files}'
+
 /** A working report path and re-run command per runner (`checks-report-which-tests-failed-in-any-language`,
  *  FR-8). Each re-run goes through a small script in the project that turns the ids back into its
  *  runner's selectors: the Hub keeps no knowledge of any runner. */
@@ -96,6 +99,11 @@ const REPORT_EXAMPLES: ReadonlyArray<{ runner: string; command: string; report: 
 function rerunCommandError(value: string): string | undefined {
   if (!value.trim() || value.includes(TESTS_PLACEHOLDER)) return undefined
   return `A re-run command needs ${TESTS_PLACEHOLDER}, where the Hub puts the ids of the tests to re-run.`
+}
+
+function changeCommandError(value: string): string | undefined {
+  if (!value.trim() || value.includes(CHANGED_FILES_PLACEHOLDER)) return undefined
+  return `A command for a change needs ${CHANGED_FILES_PLACEHOLDER}, where the Hub puts the path of the file listing the files the task changed.`
 }
 
 /** Seconds as an operator reads a check's duration: `42s`, `4m 12s`. */
@@ -354,6 +362,11 @@ export function GeneralSettings({
                       </span>
                     ) : null}
                     {check.fast ? <span data-testid={`project-check-fast-${i}`}>fast · </span> : null}
+                    {check.change_command ? (
+                      <span data-testid={`project-check-change-${i}`} title={`Before review, runs ${check.change_command}`}>
+                        sized to the change ·{' '}
+                      </span>
+                    ) : null}
                     {check.report_path ? (
                       <span data-testid={`project-check-report-${i}`} title={check.rerun_command ? `Re-runs failing tests with ${check.rerun_command}` : 'Re-runs failing tests by running the whole check'}>
                         report {check.report_path}
@@ -644,13 +657,15 @@ function CheckDialog({
   const [phase, setPhase] = React.useState<CheckPhase>(initial?.phase ?? 'both')
   const [reportPath, setReportPath] = React.useState(initial?.report_path ?? '')
   const [rerun, setRerun] = React.useState(initial?.rerun_command ?? '')
+  const [changeCommand, setChangeCommand] = React.useState(initial?.change_command ?? '')
   const rerunError = rerunCommandError(rerun)
+  const changeError = changeCommandError(changeCommand)
   const phaseError = fast && phase === 'landing' ? FAST_NOT_LANDING_ONLY : undefined
   // A completion waits for the fast checks, so none may run longer than that wait (FR-1); the Hub
   // refuses it too, and this says so before the save.
   const timeoutError = wholeNumber(10, fast ? FAST_CHECK_MAX_SECONDS : 3600, 'seconds')(timeout)
   const patterns = [...new Set(paths.split(/[\n,]/).map((p) => p.trim()).filter(Boolean))]
-  const ready = name.trim() && command.trim() && !timeoutError && !phaseError && !rerunError
+  const ready = name.trim() && command.trim() && !timeoutError && !phaseError && !rerunError && !changeError
   return (
     <Dialog
       open={open}
@@ -665,6 +680,7 @@ function CheckDialog({
           setPhase(initial?.phase ?? 'both')
           setReportPath(initial?.report_path ?? '')
           setRerun(initial?.rerun_command ?? '')
+          setChangeCommand(initial?.change_command ?? '')
         }
       }}
     >
@@ -693,6 +709,7 @@ function CheckDialog({
                   // Neither is sent when empty: a check without a report reads as having neither.
                   ...(reportPath.trim() ? { report_path: reportPath.trim() } : {}),
                   ...(rerun.trim() ? { rerun_command: rerun.trim() } : {}),
+                  ...(changeCommand.trim() ? { change_command: changeCommand.trim() } : {}),
                 })
                 setOpen(false)
               }}
@@ -751,6 +768,14 @@ function CheckDialog({
             hint={`Optional. Runs only the named tests, writing the same report: ${TESTS_PLACEHOLDER} is replaced by their ids, each a separate argument.`}
           >
             <Input id="c-rerun" className="font-mono" value={rerun} placeholder="python rerun_pytest.py {tests}" aria-invalid={Boolean(rerunError)} onChange={(e) => setRerun(e.target.value)} />
+          </Field>
+          <Field
+            label="Command for a change"
+            htmlFor="c-change"
+            error={changeError}
+            hint={`Optional. Runs in a task's check before review, in place of the command, where the files the task changed are known: ${CHANGED_FILES_PLACEHOLDER} is replaced by the path of a file listing them, one per line. Landings and the main branch still run the whole command.`}
+          >
+            <Input id="c-change" className="font-mono" value={changeCommand} placeholder="python run_related_tests.py {changed_files}" aria-invalid={Boolean(changeError)} onChange={(e) => setChangeCommand(e.target.value)} />
           </Field>
           <div className="aw-field-note flex flex-col gap-1" data-tone="hint" data-testid="check-report-explained">
             <p data-testid="check-report-id-form">
