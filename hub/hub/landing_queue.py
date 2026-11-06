@@ -446,8 +446,10 @@ def _carrier(root: Path, sha: str, tip: str) -> str:
 
 
 async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding]) -> Set[str]:
-    """The tasks among *landings* whose build lands nowhere (slice D): recorded, never merged."""
-    from .builds import LANDING_NOWHERE
+    """The tasks among *landings* whose build lands nowhere (slice D), or as a pull request until
+    pushing to it exists (`a-build-lands-as-one-pull-request`, task `push`): recorded, never
+    merged into main."""
+    from .builds import LANDING_NOWHERE, LANDING_PULL_REQUEST
     from .db.models import Build
 
     ids = [landing.task_id for landing in landings]
@@ -457,7 +459,7 @@ async def _landing_nowhere(session: AsyncSession, landings: Sequence[TaskLanding
         await session.execute(
             select(Task.id)
             .join(Build, Build.id == Task.build_id)
-            .where(Task.id.in_(ids), Build.landing == LANDING_NOWHERE)
+            .where(Task.id.in_(ids), Build.landing.in_((LANDING_NOWHERE, LANDING_PULL_REQUEST)))
         )
     ).all()
     return {row[0] for row in rows}
@@ -609,7 +611,12 @@ async def land_by_merge(
     with no transaction open; the records are written once it returns. *carried_by* names the main
     commit that already holds the work (F1126c), recorded as what landed it."""
     from . import project_workspace
-    from .builds import LANDING_NOWHERE, LANDS_NOWHERE
+    from .builds import (
+        LANDING_NOWHERE,
+        LANDING_PULL_REQUEST,
+        LANDS_NOWHERE,
+        LANDS_ON_A_PULL_REQUEST,
+    )
     from .db.models import Build
 
     if not await _claim([landing_id], LANDING, None):
@@ -631,6 +638,8 @@ async def land_by_merge(
         build = await session.get(Build, task.build_id) if task.build_id else None
         if build is not None and build.landing == LANDING_NOWHERE and not resolution:
             results = [ti.IntegrationResult(outcome=ti.SKIPPED, reason=LANDS_NOWHERE)]
+        elif build is not None and build.landing == LANDING_PULL_REQUEST and not resolution:
+            results = [ti.IntegrationResult(outcome=ti.SKIPPED, reason=LANDS_ON_A_PULL_REQUEST)]
         elif not project.main_branch:
             results = [ti.IntegrationResult(outcome=ti.SKIPPED, reason=ti.NO_MAIN_BRANCH)]
         else:

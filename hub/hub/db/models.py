@@ -119,6 +119,16 @@ class Project(Base):
     # restart neither loses a move made while the Hub was down nor raises one twice; null until the
     # first look, which records the tip and raises nothing.
     main_tip_seen: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Whether a build may land as a GitHub pull request (`a-build-lands-as-one-pull-request`,
+    # FR-1, migration 0168). Off until the operator turns it on: pushing publishes the work.
+    pr_landing: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # With PR landing on, whether the build branch on GitHub carries one commit holding the whole
+    # build instead of one commit per task as built (FR-7).
+    pr_single_commit: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     # --- Evidence retention (UNUSED) ---
     # Nothing reads or writes this column. It held a retention policy that no cleaner ever applied;
@@ -3412,6 +3422,17 @@ class Build(Base):
     # "dismissed_at", "cleared_at"}`. The last is the Overview's warning until dismissed or ended.
     reopenings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     loop_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # A build landing as a pull request (`a-build-lands-as-one-pull-request`, migration 0168): its
+    # PR on GitHub once one is opened, the state the Hub last read (`draft`, `ready`, `merged`,
+    # `closed`), when it last asked GitHub, the commit it last pushed to the build branch (a
+    # single-commit push replaces only that, FR-7) and GitHub's error from a failed push or ask.
+    # All null on a build landing on main or nowhere.
+    pr_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    pr_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    pr_state: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    pr_last_asked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    pr_pushed_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    pr_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # The lead's build conversation, where its briefs are queued (driver `lead`).
     lead_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     stop_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -226,6 +226,15 @@ class ProjectSettings(BaseModel):
     # default, for new and existing projects alike (FR-6).
     checks_give_way: bool = False
 
+    # --- PR landing (`a-build-lands-as-one-pull-request`) ---
+    # Whether a build may land as one GitHub pull request. Off until the operator turns it on, for
+    # new and existing projects (FR-1): pushing publishes the work. Turning it on is refused without
+    # a GitHub remote and a logged-in GitHub CLI (FR-2).
+    pr_landing: bool = False
+    # With PR landing on, whether the build branch carries one commit holding the whole build
+    # instead of one commit per task as built (FR-7).
+    pr_single_commit: bool = False
+
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one.
     # Null is the runner's built-in posture; an agent's own default wins over it either way.
@@ -828,6 +837,30 @@ async def update_project_settings(
                     f"This project has no branch named '{merged.main_branch}'. "
                     "Approval merges into it, so it has to exist first."
                 ),
+            )
+
+    # PR landing pushes to GitHub through the user's CLI login: turning it on is refused where that
+    # cannot work, naming what is missing (`a-build-lands-as-one-pull-request`, FR-2).
+    if merged.pr_landing and not project.pr_landing:
+        from ... import blocking, project_workspace, pull_requests
+
+        try:
+            workspace = await project_workspace.resolve_project_workspace(
+                session, resolved_project_id
+            )
+        except project_workspace.ProjectWorkspaceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Project workspace is unavailable, so its GitHub remote cannot be checked: {exc}",
+            ) from exc
+        problem = await blocking.run(pull_requests.readiness_problem, workspace.root)
+        if problem is not None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": problem.code,
+                    "message": f"PR landing cannot be turned on: {problem.message}",
+                },
             )
 
     settings_now = merged.model_dump()

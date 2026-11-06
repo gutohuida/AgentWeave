@@ -36,6 +36,7 @@ from ... import (
     deletion,
     loop_history,
     project_workspace,
+    pull_requests,
     readable_ids,
     requirement_coverage,
     requirement_evidence,
@@ -565,7 +566,9 @@ class _BuildChoices(RequestModel):
     budget_cap_usd: Optional[float] = Field(default=None, gt=0, le=100_000)
     window_start: Optional[datetime] = None
     window_end: Optional[datetime] = None
-    landing: Optional[Literal["main", "nowhere"]] = None
+    # 'pull_request' only in a project whose PR landing setting is on (`a-build-lands-as-one-pull-
+    # request`, FR-1), with a GitHub remote and a logged-in GitHub CLI (FR-2).
+    landing: Optional[Literal["main", "nowhere", "pull_request"]] = None
     # Each task's builder as the operator left it in the dialog, by task key; "" clears it.
     task_builders: Optional[Dict[str, Annotated[str, StringConstraints(max_length=32)]]] = None
     # The default builder and checker (`one-checker`): left out, the document's.
@@ -3519,7 +3522,8 @@ async def _build_settings(
 ) -> builds.Settings:
     """The build the operator chose, each setting left out taken from the recommended build
     (slice D, FR-1). Refused (422) before anything moves: a lead driver naming no lead, a person
-    who is not an open agent of the project, or a window that ends before it starts or has ended.
+    who is not an open agent of the project, a window that ends before it starts or has ended, or
+    a pull request landing the project cannot use (`_refuse_pull_request_landing`).
     """
     delivery = _delivery_of(payload)
 
@@ -3559,6 +3563,8 @@ async def _build_settings(
         raise _unprocessable(
             "window_closed", f"the build's window ended at {end.isoformat()}; choose a later end"
         )
+    if landing == builds.LANDING_PULL_REQUEST:
+        await _refuse_pull_request_landing(session, project_id)
     return builds.Settings(
         driver=driver,
         level=level,
@@ -3582,6 +3588,31 @@ async def _build_settings(
         ),
         task_checkers=dict(body.task_checkers or {}),
     )
+
+
+async def _refuse_pull_request_landing(session: AsyncSession, project_id: str) -> None:
+    """A build landing as a pull request is refused (422) in a project whose PR landing setting is
+    off (`a-build-lands-as-one-pull-request`, FR-1), and where the project directory has no GitHub
+    remote or the GitHub CLI is missing or logged out (FR-2), naming which."""
+    project = await session.get(Project, project_id)
+    if project is None or not project.pr_landing:
+        raise _unprocessable(
+            "pr_landing_off",
+            f"PR landing ({pull_requests.SETTING}) is off in this project's settings, so a build "
+            "cannot land as a pull request; turn it on there, or land on main or nowhere",
+        )
+    try:
+        root = (await project_workspace.resolve_project_workspace(session, project_id)).root
+    except project_workspace.ProjectWorkspaceError as exc:
+        raise _unprocessable(
+            "workspace_unavailable",
+            f"the project directory is unavailable, so its GitHub remote cannot be checked: {exc}",
+        ) from exc
+    problem = await blocking.run(pull_requests.readiness_problem, root)
+    if problem is not None:
+        raise _unprocessable(
+            problem.code, f"a build cannot land as a pull request: {problem.message}"
+        )
 
 
 async def _refuse_a_second_build(session: AsyncSession, document) -> None:
