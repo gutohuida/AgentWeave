@@ -221,6 +221,11 @@ export interface TaskCheckResult {
   skipped?: boolean
   /** Why it was skipped, naming its paths. */
   reason?: string
+  /** True when the command for a change ran, with the files the task changed; false when a check
+   *  with one ran in full, `full_because` saying why. Absent for a check without one. */
+  sized_to_change?: boolean
+  changed_file_count?: number
+  full_because?: string
 }
 
 /** One run of the project's checks on the work this task's approval would merge. */

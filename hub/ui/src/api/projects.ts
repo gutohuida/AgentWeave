@@ -156,6 +156,10 @@ export interface ProjectCheck {
   /** Re-runs named tests: `{tests}` is replaced by their ids, `classname::name`, one argument each.
    *  The Hub refuses one without `{tests}`. */
   rerun_command?: string | null
+  /** What runs in a task's pre-review run in place of `command`, where the files the task changed
+   *  are known: `{changed_files}` is replaced by the path of a file listing them. The Hub refuses
+   *  one without `{changed_files}`. Landings and main runs keep running `command`. */
+  change_command?: string | null
 }
 
 export type CheckPhase = 'review' | 'landing' | 'both'

@@ -32,6 +32,12 @@ const AT_LANDING = 'runs at landing'
 const failedResult = (result: TaskCheckResult) =>
   !result.skipped && (result.timed_out || result.exit_code !== 0)
 
+/** Whether a result ran the command for a change, and on how many files (FR-4). */
+const sizedNote = (result: TaskCheckResult) =>
+  result.sized_to_change
+    ? ` · sized to the change (${result.changed_file_count ?? 0} ${result.changed_file_count === 1 ? 'file' : 'files'})`
+    : ''
+
 /**
  * The latest run of the project's checks on the work this task's approval would merge
  * (`approval-runs-the-projects-checks`). Approval is refused until they pass, so this is where the
@@ -62,6 +68,7 @@ function EarlierRun({ run }: { run: TaskCheckRun }) {
             {result.name} · {result.skipped ? SKIPPED : result.timed_out ? 'timed out' : `exit ${result.exit_code}`}
             {!result.skipped && result.duration_seconds != null ? ` · ${result.duration_seconds}s` : ''}
             {result.preexisting ? ` · ${ON_MAIN_TOO}` : ''}
+            {sizedNote(result)}
           </span>
         ))}
       </span>
@@ -86,6 +93,7 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
   const state: TaskCheckRun['state'] | null = data.running ? 'running' : (latest?.state ?? null)
   const failing = (latest?.results ?? []).filter(failedResult)
   const skipped = (latest?.results ?? []).filter((result) => result.skipped)
+  const sized = (latest?.results ?? []).filter((result) => result.sized_to_change)
   const atLanding = data.at_landing ?? []
   // Every check is landing-only: nothing runs before review, so nothing is waited for here.
   const idleLabel = data.before_review === false ? 'Checks run at landing' : 'Checks have not run'
@@ -117,6 +125,16 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
           {skipped.map((result) => (
             <li key={result.name} title={result.reason}>
               {result.name} · {SKIPPED}
+            </li>
+          ))}
+        </ul>
+      )}
+      {/* A check that ran the command for a change says so, with how many files it was given (FR-4). */}
+      {sized.length > 0 && (
+        <ul data-testid={`task-checks-sized-${taskId}`} className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+          {sized.map((result) => (
+            <li key={result.name} title="Landings and the main branch still run the whole command.">
+              {result.name}{sizedNote(result)}
             </li>
           ))}
         </ul>
