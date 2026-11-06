@@ -20,11 +20,15 @@ the operator's own work, and two full Hub suites at once crashed after ~45 minut
    Hub tests that scan the whole repository or the UI source rather than importing what they
    guard (`scripts/checks/sweep_tests.txt`), so no choice of tests "for what you changed" reaches
    them — and they are where most failures caught before review come from.
-3. **Not the full Hub suite.** Leave it to the Hub's `hub-tests` check: it runs on every task
-   before review and again on every landing, so your own full run only competes with it for CPU.
+3. **Not the full Hub suite.** Leave it to the Hub's `hub-tests` check: before review it runs only
+   the related tests (the changed Hub test files plus every Hub test file naming a changed
+   `hub/hub` module; `hub_suite.py --changed-files`, the full suite when `hub/tests/conftest.py`
+   or a packaging file changed), and at landing it runs the full suite. Your own full run only
+   competes with it for CPU.
 
 A reviewer checks the builder's claim the same way: run the changed files' tests and the sweep set,
-and read `hub-tests`' result on the task's check run for the rest.
+and read `hub-tests`' result on the task's check run for the rest -- **the pre-review result
+covers only the related tests**, so a green there is not the full suite; the landing run is.
 
 ## If you do run the full Hub suite
 
