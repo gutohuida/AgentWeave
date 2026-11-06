@@ -107,6 +107,11 @@ class ProjectCheck(BaseModel):
     # judged as a whole; one saved before these existed has neither.
     report_path: Optional[str] = Field(default=None, max_length=255)
     rerun_command: Optional[str] = Field(default=None, max_length=2000)
+    # The command a task's pre-review run uses instead of `command` when the Hub knows the files
+    # the task changed, its `{changed_files}` replaced by the path of a file listing them
+    # (`a-check-can-run-only-the-tests-for-what-a-task-changed`, FR-1, FR-7). Never used at
+    # landing, on main, or to confirm a failure (FR-3).
+    change_command: Optional[str] = Field(default=None, max_length=2000)
 
     model_config = {"extra": "forbid"}
 
@@ -131,6 +136,18 @@ class ProjectCheck(BaseModel):
             raise ValueError(
                 f"rerun_command must contain {project_checks.TESTS_PLACEHOLDER}, where the Hub "
                 f"puts the ids of the tests to re-run"
+            )
+        return value.strip()
+
+    @field_validator("change_command")
+    @classmethod
+    def names_the_changed_files(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            return None
+        if project_checks.CHANGED_FILES_PLACEHOLDER not in value:
+            raise ValueError(
+                f"change_command must contain {project_checks.CHANGED_FILES_PLACEHOLDER}, where "
+                f"the Hub puts the path of a file listing the files the task changed"
             )
         return value.strip()
 
