@@ -1,0 +1,75 @@
+/* A trace of a whole conversation (spec a-trace-of-a-whole-conversation). */
+
+.aw-ctrace { display: flex; flex-direction: column; height: 100%; min-height: 0; font-size: 12px; }
+.aw-ctrace-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; padding: 10px 14px 6px; }
+.aw-ctrace-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.aw-ctrace-title strong { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-ctrace-title span { color: var(--text-3); }
+.aw-ctrace-continued { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-2); background: none; border: 0; padding: 0; cursor: pointer; }
+.aw-ctrace-continued:hover { color: var(--text); text-decoration: underline; }
+
+.aw-ctrace-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 14px 10px; }
+.aw-ctrace-label { color: var(--text-3); font-size: 11.5px; }
+.aw-ctrace-controls .aw-link { margin-left: 6px; font-size: 11.5px; }
+
+.aw-ctrace-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0 14px 10px; }
+.aw-ctrace-stats > div { display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.aw-ctrace-stats > div > span { font-size: 10.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.aw-ctrace-stats strong { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+.aw-ctrace-stats small { font-size: 11px; color: var(--text-3); }
+.aw-ctrace-stats > div[data-bad='true'] strong { color: var(--red); }
+.aw-ctrace-secondary { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 16px; margin: 0; font-size: 11.5px; color: var(--text-3); }
+
+.aw-ctrace-empty { padding: 24px 14px; color: var(--text-3); }
+
+.aw-ctrace-body { display: flex; flex-direction: column; flex: 1; min-height: 0; border-top: 1px solid var(--border); }
+.aw-ctrace-timeline { flex: 3; min-height: 140px; overflow: auto; padding: 6px 0; }
+.aw-ctrace-detail { flex: 2; min-height: 160px; overflow: auto; padding: 10px 14px; border-top: 1px solid var(--border); }
+.aw-ctrace-detail-of { margin: 0 0 6px; font-size: 11px; color: var(--text-3); }
+
+.aw-ctrace-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 32%) 1fr 64px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 14px;
+  border-radius: var(--radius-sm);
+}
+.aw-ctrace-row[data-kind='run'] { padding-top: 4px; padding-bottom: 4px; border-top: 1px solid var(--border); }
+.aw-ctrace-row[data-kind='run']:first-of-type, .aw-ctrace-axis + .aw-ctrace-row { border-top: 0; }
+.aw-ctrace-row:hover { background: var(--row-hover); }
+.aw-ctrace-row[data-selected='true'] { background: var(--row-selected); }
+.aw-ctrace-axis { position: sticky; top: -6px; z-index: 1; background: var(--surface, var(--bg)); padding-bottom: 4px; font-size: 10.5px; color: var(--text-3); }
+.aw-ctrace-axis:hover { background: var(--surface, var(--bg)); }
+
+.aw-ctrace-name { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.aw-ctrace-fold { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--text-2); cursor: pointer; }
+.aw-ctrace-fold:hover { background: var(--surface-2); color: var(--text); }
+.aw-ctrace-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; margin-left: 5px; }
+.aw-ctrace-select { display: flex; align-items: baseline; gap: 6px; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.aw-ctrace-select strong { font-weight: 600; white-space: nowrap; }
+.aw-ctrace-select small { font-size: 10.5px; color: var(--text-3); white-space: nowrap; }
+.aw-ctrace-select .aw-ctrace-hint { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; }
+.aw-ctrace-span-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.aw-ctrace-track { position: relative; height: 14px; border-radius: 2px; background: var(--surface-2); cursor: pointer; }
+.aw-ctrace-axis .aw-ctrace-track { height: 30px; background: none; cursor: default; }
+.aw-ctrace-bar { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+.aw-ctrace-row[data-kind='run'] .aw-ctrace-track { height: 16px; }
+
+/* A folded gap: hatched across every row, its length written once in the axis. */
+.aw-ctrace-break {
+  position: absolute; top: -3px; bottom: -3px;
+  background: repeating-linear-gradient(135deg, transparent 0 3px, var(--border) 3px 4px);
+  border-inline: 1px solid var(--border);
+}
+.aw-ctrace-break-label { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; color: var(--text-2); font-style: normal; }
+.aw-ctrace-tick { position: absolute; bottom: 0; padding-left: 3px; white-space: nowrap; border-left: 1px solid var(--border); }
+
+.aw-ctrace-dur { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.aw-ctrace-dur[data-bad='true'] { color: var(--red); }
+
+/* An unfolded turn's spans are drawn on the turn's own scale: a quieter, framed track says so. */
+.aw-ctrace-track[data-zoomed='true'] { background: color-mix(in srgb, var(--purple) 7%, var(--surface-2)); box-shadow: inset 2px 0 0 color-mix(in srgb, var(--purple) 45%, transparent); }
+.aw-ctrace-tick[data-quiet='true'] { height: 6px; }
+.aw-ctrace-zoom-note { font-size: 10.5px; color: var(--text-3); padding: 0 14px 2px calc(32% + 22px); }
