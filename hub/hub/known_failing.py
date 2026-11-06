@@ -13,6 +13,11 @@ commit the Hub did not land (`main_watch.observe` calls `schedule_main_run`), an
 alone on main after it failed, confirmed, for two different tasks in a row with no pass of it in
 between (`judge_unlisted`, FR-13). Those last two are `MainCheckRun` rows.
 
+**What the gates ask of it** (FR-7): `judge` marks a task's or a batch's failed, confirmed result
+against the list -- a listed failure is not the work's, an unlisted one is -- and neither gate runs
+anything on a checkout of main to decide it, apart from the twice rule's one test. The entries a
+result went past stay on it (`listed`), which is what a landing names (FR-10, `went_past`).
+
 **What removes one.** Only a run that ran the test counts (FR-4): every run is told which tests
 are listed (`watching`), and the check's report says whether each one passed (`watched_passed`).
 A failing-on-main entry is removed when its test passes in a run on main's tree; a flaky entry when
@@ -24,8 +29,7 @@ commit (FR-14).
 created `pending` (never `assigned`, which `assigned_task_start` would start), on no loop, flow or
 build, assigned to the developer of the build or loop the finding task belongs to, else that
 task's builder, else its assignee; an entry found by a run on main has an unassigned fix task. The
-filing is also written as `flaky_tests.FIX_TASK_EVENT`, so the readers of that record until the
-gates task lands -- the automatic override's exclusion and its reason -- see it.
+filing is also written as `flaky_tests.FIX_TASK_EVENT`.
 
 Every entry point here is called after a run has ended, from its own session, and never raises:
 the run's own record already holds what it found.
@@ -402,7 +406,10 @@ async def _file_fix_task(
     if entry.kind == FLAKY:
         # The Overview's flaky-test list, until the list replaces it there (task `ui`), stops
         # asking for a flake that now has its fix task, as the filing it replaces did.
-        started = _aware(getattr(run, "started_at", None)) or _now()
+        # Through the entry's own sighting, which is after its run started.
+        started = max(
+            _aware(getattr(run, "started_at", None)) or _now(), _aware(entry.last_seen) or _now()
+        )
         await flaky_tests.mark_handled(
             session, entry.project_id, through=started.isoformat(), task_id=created.id, count=1
         )
@@ -717,24 +724,22 @@ async def judge_unlisted(
     main_sha: str,
     check: Dict[str, Any],
     result: Dict[str, Any],
-) -> bool:
+) -> None:
     """A task's confirmed failure, read against the list's twice rule (FR-13). Each failing test
     not on the list is noted as this task's; one another task's run failed last, with no pass of it
     since, is re-run alone on main's tree (*main_sha*) once. Failing there, it is listed as failing
-    on main and *result* records main's answer the way the main baseline does (`shared_tests`,
-    `preexisting`), so it is not held against this task; passing, both failures stand as the tasks'
-    own.
-
-    `True` where main's answer was recorded on *result* for every test it compares, so the caller
-    asks main nothing more; `False` otherwise (the caller goes on as before). Never raises."""
+    on main, so `judge` then finds it on the list and does not hold it against this task; passing,
+    both failures stand as the tasks' own. Never raises."""
     from . import project_checks
 
     try:
         seen = observe(result)
         if not seen.failing:
-            return False
+            return
         name = check["name"]
         twice: List[str] = []
+        #: The runs of the other tasks that failed these tests last.
+        earlier: Set[str] = set()
         async with _lock(), async_session_factory() as session:
             listed = {
                 test
@@ -765,6 +770,7 @@ async def judge_unlisted(
                 )
                 if sighting is not None and sighting.task_id != task_id:
                     twice.append(test)
+                    earlier.add(sighting.run_id)
                 if sighting is None:
                     sighting = UnlistedTestFailure(
                         id=f"utf-{short_id()}",
@@ -778,13 +784,13 @@ async def judge_unlisted(
                 sighting.task_id, sighting.run_id, sighting.at = task_id, run_id, _now()
             await session.commit()
         if not twice:
-            return False
+            return
         narrowed = project_checks.rerun_check(check, twice)
         if narrowed is None:
-            return False  # it cannot be run alone: the check's own rules decide, as before
+            return  # it cannot be run alone: the failures stand as the task's
         main_run = await _start_main_run(project_id, main_sha, SINGLE_TEST, twice)
         if main_run is None:
-            return False
+            return
         owner = f"{task_id}.single"
         path: Optional[Path] = None
         try:
@@ -805,10 +811,152 @@ async def judge_unlisted(
             main_run, [recorded], "failed" if project_checks.failed(on_main) else "passed"
         )
         await record_run(main_run, on_main=main_sha)
-        compared = list(result.get("compared_tests") or seen.failing)
-        if set(compared) != set(twice):
-            return False  # other ids still need main's answer: the caller asks it, as before
-        return project_checks._record_main_tests(result, on_main, compared)
+        await _judge_again(project_id, sorted(earlier))
     except Exception:  # noqa: BLE001 -- the task's own result stands without it
         logger.warning("could not apply the twice rule to %s's check run", task_id, exc_info=True)
-        return False
+
+
+async def _judge_again(project_id: str, run_ids: Sequence[str]) -> None:
+    """The other task's run the twice rule compared with, judged again now that the list holds what
+    main fails: its record then says the failure is not that task's, so a re-check or a later
+    approval does not hold it against it (FR-13). Where the failure already sent that task back
+    (it was the task's when its run ended, FR-7), the task is left where it is and gains a note
+    that the failure is now on the list, so its author can complete it again unchanged."""
+    from .project_checks import own_failure
+
+    if not run_ids:
+        return
+    async with async_session_factory() as session:
+        listed: Dict[str, List[Dict[str, Any]]] = {}
+        for row in await entries(session, project_id):
+            listed.setdefault(row.check_name, []).append(snapshot(row))
+        for run_id in run_ids:
+            run = await session.get(TaskCheckRun, run_id)
+            if run is None:
+                continue
+            results = [dict(r) if isinstance(r, dict) else r for r in run.results or []]
+            for result in results:
+                if isinstance(result, dict):
+                    judge_result(result, listed.get(str(result.get("name") or ""), []))
+            run.results = results
+            task = await session.get(Task, run.task_id)
+            if task is not None and task.status == "revision_needed" and not own_failure(results):
+                _note_on(
+                    task,
+                    f"The failure check run {run.id} sent this task back for is now on the "
+                    "project's known-failing list as failing on main, so it is not this task's: "
+                    "completing it again does not hold it against the work.",
+                )
+        await session.commit()
+
+
+# --- the gates' question: is this failure the work's? (FR-7) -------------------------------------
+
+
+def snapshot(entry: KnownFailingTest) -> Dict[str, Any]:
+    """An entry as a result records it: what it was when a gate went past it, kept after the entry
+    itself comes off the list (FR-10)."""
+    return {
+        "id": entry.id,
+        "check": entry.check_name,
+        "test": entry.test or None,
+        "kind": entry.kind,
+        "fix_task_id": entry.fix_task_id,
+    }
+
+
+async def listed_for(project_id: str, check: str) -> List[Dict[str, Any]]:
+    """The entries on *project_id*'s list for *check*, as `snapshot`s. `[]` where the list cannot be
+    read: then nothing is excused, and a failure stands as the work's, the safe side."""
+    try:
+        async with async_session_factory() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(KnownFailingTest).where(
+                            KnownFailingTest.project_id == project_id,
+                            KnownFailingTest.check_name == check,
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [snapshot(row) for row in rows]
+    except Exception:  # noqa: BLE001
+        logger.warning("could not read the known-failing list of %s", project_id, exc_info=True)
+        return []
+
+
+def judge_result(result: Dict[str, Any], listed: Sequence[Dict[str, Any]]) -> None:
+    """Mark a failed check *result* against *listed*, its check's entries (FR-7). Runs nothing.
+
+    Where the result names its failing tests (those that stood their confirmation re-run, and any
+    in a file the work changes: `compared_tests`; else the report's `failed_tests`), each one on the
+    list is not the work's and each one off it is. Where it names none -- a check that writes no
+    report, or a report naming no failure -- an entry for the whole check decides it.
+
+    Records `listed` (the entries it went past, as `snapshot`s), `shared_tests` (the listed ids),
+    `own_tests` (the rest) and `preexisting`: true where every failure is on the list, which is what
+    `project_checks.preexisting` and every gate reading it ask."""
+    from .project_checks import failed
+
+    if not failed(result):
+        return
+    named = [str(t) for t in result.get("compared_tests") or result.get("failed_tests") or [] if t]
+    by_test = {str(e["test"]): e for e in listed if e.get("test")}
+    if named:
+        hit = [by_test[t] for t in named if t in by_test]
+        own = [t for t in named if t not in by_test]
+        result["listed"] = hit
+        result["shared_tests"] = [str(e["test"]) for e in hit]
+        result["own_tests"] = own
+        result["preexisting"] = bool(hit) and not own
+        return
+    whole = next((e for e in listed if not e.get("test")), None)
+    result["listed"] = [whole] if whole is not None else []
+    result["preexisting"] = whole is not None
+
+
+async def judge(
+    *,
+    project_id: str,
+    task_id: Optional[str],
+    run_id: str,
+    root: Path,
+    main_sha: str,
+    check: Dict[str, Any],
+    result: Dict[str, Any],
+) -> None:
+    """Whether a failed, confirmed check *result* is the work's, decided against the list (FR-7):
+    for the completion gate (a task's run, *task_id*) and the landing gate (a batch's, `None`). A
+    task's run first applies the twice rule (`judge_unlisted`, FR-13) -- the one run on main's tree
+    either gate may make -- so a test it lists is then found on the list. Never raises."""
+    if task_id is not None:
+        await judge_unlisted(
+            project_id=project_id,
+            task_id=task_id,
+            run_id=run_id,
+            root=root,
+            main_sha=main_sha,
+            check=check,
+            result=result,
+        )
+    try:
+        judge_result(result, await listed_for(project_id, str(check["name"])))
+    except Exception:  # noqa: BLE001 -- unjudged: the failure stands as the work's
+        logger.warning("could not judge %s against the known-failing list", run_id, exc_info=True)
+
+
+def went_past(results: Optional[Sequence[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """The entries a run's *results* went past: each listed failure, once (FR-10)."""
+    from .project_checks import failed
+
+    seen: Dict[Tuple[Any, Any], Dict[str, Any]] = {}
+    for result in results or []:
+        if not isinstance(result, dict) or not failed(result):
+            continue
+        for entry in result.get("listed") or []:
+            if isinstance(entry, dict):
+                seen.setdefault((entry.get("check"), entry.get("test")), entry)
+    return list(seen.values())

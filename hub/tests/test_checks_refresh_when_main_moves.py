@@ -16,7 +16,15 @@ from hub.db.models import Task, TaskTransition
 from hub.worktrees import task_branch_name
 
 from .test_project_checks_gate import _approve
-from .test_project_checks_run import MAIN_FAIL, PASS, PY, _project, _runs, _task_with_work
+from .test_project_checks_run import (
+    MAIN_FAIL,
+    PASS,
+    PY,
+    _project,
+    _runs,
+    _task_with_work,
+    listed_whole_check,
+)
 from .test_task_integration import commit_on_branch, commits_on, git
 
 pytestmark = pytest.mark.asyncio
@@ -129,10 +137,11 @@ async def test_a_commit_made_with_git_directly_is_refreshed_by_the_watcher(
     app, tmp_path, monkeypatch
 ):
     """ac-outside-merge: the watcher the Hub starts, run as it runs, with a short interval. The
-    task's result is a failure main shares, which a new tip asks again (a pass would count on any
-    tip and not be re-run: `approved-work-merges-in-batches`, FR-9)."""
+    task's result is a failure on the known-failing list, which a new tip asks again (a pass would
+    count on any tip and not be re-run: `approved-work-merges-in-batches`, FR-9)."""
     task_id, _ = await _task_with_work(tmp_path)
     await _project([MAIN_FAIL])
+    await listed_whole_check("suite")
     await _checked(task_id)
     assert project_checks.WATCH_SECONDS <= 60, "the 120s promise needs two looks inside it"
     monkeypatch.setattr(project_checks, "WATCH_SECONDS", 0.2)
@@ -290,8 +299,10 @@ async def test_two_moves_start_no_second_run(app, tmp_path):
 
 
 async def test_a_failure_shared_with_an_old_main_is_checked_again(app, tmp_path):
-    """ac-old-tip-failure-rerun (FR-4): T1's main fails the check too (not the task's own) and T2
-    fixes it; once the run on T1 has ended, a run on T2 starts with no approval asked."""
+    """ac-old-tip-failure-rerun (FR-4): T1's main fails the check too -- listed, so not the task's
+    own -- and T2 fixes it; once the run on T1 has ended, a run on T2 starts with no approval
+    asked."""
+    await listed_whole_check("gate")
     task_id, first, held, cut = await _executing(tmp_path, fail_unless="fixed.txt")
     try:
         fixed = _move_main(tmp_path, "fixed.txt")
@@ -302,7 +313,7 @@ async def test_a_failure_shared_with_an_old_main_is_checked_again(app, tmp_path)
 
     runs = await _runs(task_id)
     assert [(r.id, r.state, r.main_sha) for r in runs[:1]] == [(first, "failed", cut)]
-    assert not project_checks.own_failure(runs[0].results), "the failure is main's"
+    assert not project_checks.own_failure(runs[0].results), "the failure is listed"
     assert [(r.state, r.main_sha) for r in runs[1:]] == [("passed", fixed)]
     async with async_session_factory() as session:
         assert (await session.get(Task, task_id)).status == "completed", "nobody approved it"

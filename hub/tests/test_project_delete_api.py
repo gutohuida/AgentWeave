@@ -145,6 +145,7 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "agent_job_deletions",
     "builds",
     "main_notices",
+    # The known-failing list (`failures-already-known-are-on-a-list-not-re-argued`).
     "known_failing_tests",
     "unlisted_test_failures",
     "main_check_runs",
@@ -511,34 +512,6 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(
-        KnownFailingTest(
-            id=f"kft-{tag}",
-            project_id=project_id,
-            check_name="hub-tests",
-            test=f"tests::t_{tag}",
-            kind="flaky",
-            fix_task_id=f"task-{tag}",
-        )
-    )
-    session.add(
-        UnlistedTestFailure(
-            id=f"utf-{tag}",
-            project_id=project_id,
-            check_name="hub-tests",
-            test=f"tests::u_{tag}",
-            task_id=f"task-{tag}",
-            run_id=f"checkrun-{tag}",
-        )
-    )
-    session.add(
-        MainCheckRun(
-            id=f"mcr-{tag}",
-            project_id=project_id,
-            main_sha="0" * 40,
-            reason="outside_commit",
-        )
-    )
-    session.add(
         TaskLanding(
             id=f"landing-{tag}",
             project_id=project_id,
@@ -547,6 +520,38 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
         )
     )
     session.add(LandingBatch(id=f"batch-{tag}", project_id=project_id, base_sha="0" * 40))
+    session.add(
+        KnownFailingTest(
+            id=f"kf-{tag}",
+            project_id=project_id,
+            check_name="pytest",
+            test="t::x",
+            kind="fails on main",
+            fix_task_id=f"task-{tag}",
+        )
+    )
+    session.add(
+        UnlistedTestFailure(
+            id=f"utf-{tag}",
+            project_id=project_id,
+            check_name="pytest",
+            test="t::y",
+            task_id=f"task-{tag}",
+            run_id=f"checkrun-{tag}",
+        )
+    )
+    session.add(
+        MainCheckRun(
+            id=f"mchk-{tag}",
+            project_id=project_id,
+            main_sha="0" * 40,
+            reason="outside_commit",
+            tests=[],
+            state="passed",
+            results=[],
+            error="",
+        )
+    )
     session.add(
         TaskTransition(
             id=f"transition-{tag}",

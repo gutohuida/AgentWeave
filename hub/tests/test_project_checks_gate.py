@@ -17,7 +17,15 @@ from hub.requirement_gate import (
 from hub.schemas.tasks import TaskUpdate
 from hub.task_transitions import Actor
 
-from .test_project_checks_run import FAIL, MAIN_FAIL, PASS, _project, _runs, _task_with_work
+from .test_project_checks_run import (
+    FAIL,
+    MAIN_FAIL,
+    PASS,
+    _project,
+    _runs,
+    _task_with_work,
+    listed_whole_check,
+)
 from .test_task_integration import commit_on_branch, commits_on, git
 
 TASKS = "/api/v1/projects/proj-test/tasks"
@@ -321,57 +329,52 @@ async def test_a_land_refused_for_a_conflict_does_not_restart_the_checks(
 
 
 @pytest.mark.asyncio
-async def test_a_check_failing_on_main_too_is_recorded_as_preexisting(app, tmp_path):
+async def test_a_check_on_the_known_failing_list_is_recorded_as_not_the_tasks(app, tmp_path):
+    """`failures-already-known-are-on-a-list-not-re-argued`, FR-7: a check that writes no report and
+    whose whole check is on the list fails without it being the task's; one off the list is the
+    task's. Nothing is re-run on main to tell them apart."""
     task_id, _ = await _task_with_work(tmp_path)
-    # MAIN_FAIL before FAIL: a failure main shares does not stop the run, the task's own does.
+    entry = await listed_whole_check("suite")
+    # MAIN_FAIL before FAIL: a listed failure does not stop the run, the task's own does.
     await _checked(task_id, [PASS, MAIN_FAIL, FAIL])
 
     [run] = await _runs(task_id)
     by_name = {r["name"]: r for r in run.results}
-    assert "on_main" not in by_name["ok"], "a passing check is not re-run on main"
-    assert by_name["tests"]["on_main"]["exit_code"] == 0 and not by_name["tests"]["preexisting"]
-    assert by_name["suite"]["on_main"]["exit_code"] == 1 and by_name["suite"]["preexisting"]
+    assert all("on_main" not in r for r in run.results), "nothing ran on main"
+    assert not by_name["tests"]["preexisting"] and by_name["tests"]["listed"] == []
+    assert by_name["suite"]["preexisting"]
+    assert [e["id"] for e in by_name["suite"]["listed"]] == [entry]
 
 
 @pytest.mark.asyncio
-async def test_only_preexisting_failures_hold_the_landing_for_the_operator(
-    app, auth_headers, tmp_path
-):
-    """On the sweep main's defect failed every task's checks; the gate told the reviewer to send
-    each task back and nothing was addressed to the operator. Under `approved-work-merges-in-
-    batches` approval answers at once; the batch whose failures main shares (check-level, so the Hub
-    cannot override them) waits for the operator, who lands it with one reason."""
+async def test_a_whole_check_on_the_list_lands_and_off_it_goes_back(app, auth_headers, tmp_path):
+    """ac-whole-check: a check that writes no report fails for a task. With an entry for the whole
+    check on the list the failure is not the task's: Land lands it at once -- no batch is held --
+    and the landing names the entry. Without one it is the task's, and Land refuses it."""
     task_id, work = await _task_with_work(tmp_path)
     await _checked(task_id, [MAIN_FAIL])
+    refused = await app.post(f"{TASKS}/{task_id}/land", headers=auth_headers)
+    assert refused.status_code == 409, refused.text
+    assert work not in commits_on(tmp_path, "main")
 
+    entry = await listed_whole_check("suite")
+    await project_checks.request_run("proj-test", task_id, force=True)
+    await project_checks.drain()
     landed = await app.post(f"{TASKS}/{task_id}/land", headers=auth_headers)
     assert landed.status_code == 200, landed.text
     await landing_queue.drain()
 
     read = await app.get(f"{TASKS}/{task_id}/checks", headers=auth_headers)
     landing = read.json()["landing"]
-    assert landing["state"] == "held", landing
-    assert "fail on main too" in landing["reason"]
-    assert work not in commits_on(tmp_path, "main")
-    async with async_session_factory() as session:
-        task = await session.get(Task, task_id)
-        assert task.status == "approved", "nobody sends it back for main's failure"
-
-    released = await app.post(
-        f"{TASKS}/{task_id}/landing/land",
-        json={"reason": "main carries the defect"},
-        headers=auth_headers,
-    )
-    assert released.status_code == 200, released.text
+    assert landing["state"] == "landed", landing
+    assert [e["id"] for e in landing["went_past"]] == [entry]
     assert work in commits_on(tmp_path, "main")
-    assert released.json()["landing"]["state"] == "landed"
 
 
 @pytest.mark.asyncio
-async def test_a_new_failure_beside_a_preexisting_one_stays_the_authors(
-    app, auth_headers, tmp_path
-):
+async def test_a_new_failure_beside_a_listed_one_stays_the_authors(app, auth_headers, tmp_path):
     task_id, _ = await _task_with_work(tmp_path)
+    await listed_whole_check("suite")
     await _checked(task_id, [MAIN_FAIL, FAIL])
 
     refused = await _approve(app, auth_headers, task_id)
@@ -379,7 +382,7 @@ async def test_a_new_failure_beside_a_preexisting_one_stays_the_authors(
     detail = refused.json()["detail"]
     assert detail["checks"][0]["state"] == "failed"
     assert OPERATOR_ON_FAILING_CHECKS in detail["message"]
-    assert "`suite` exited 1 (and fails on main too)" in detail["message"]
+    assert "`suite` exited 1 (on the known-failing list, so not this task's)" in detail["message"]
     assert "`tests` exited 3:" in detail["message"]
 
 

@@ -1,8 +1,10 @@
 """What a build's checks caught, as its spec shows it (F1110): each failure, whether the build's
 work caused it or the checks only found it, and how it was fixed.
 
-Computed per read from the build's check runs and the Hub's fix-task events; nothing is stored, and
-nothing here adds a requirement or holds the document from reading done.
+Computed per read from the build's check runs and the project's known-failing list
+(`known_failing`, `failures-already-known-are-on-a-list-not-re-argued`): a failure the list held is
+`caught`, and its fix task is the list entry's owner. Nothing is stored, and nothing here adds a
+requirement or holds the document from reading done.
 """
 
 from __future__ import annotations
@@ -12,8 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import flaky_tests, project_checks
-from .db.models import Build, Task, TaskCheckRun
+from . import project_checks
+from .db.models import Build, KnownFailingTest, Task, TaskCheckRun
 
 INTRODUCED = "introduced"
 CAUGHT = "caught"
@@ -32,15 +34,27 @@ def _entries(result: Any) -> List[Dict[str, Any]]:
     found: List[Dict[str, Any]] = []
     for test in result.get("own_tests") or []:
         found.append({"test": test, "kind": "fails on this work", "origin": INTRODUCED})
-    for test in result.get("shared_tests") or []:
-        found.append({"test": test, "kind": project_checks.FAILS_ON_MAIN, "origin": CAUGHT})
+    for entry in result.get("listed") or []:
+        if isinstance(entry, dict) and entry.get("test"):
+            found.append(
+                {
+                    "test": entry["test"],
+                    "kind": entry.get("kind") or project_checks.FAILS_ON_MAIN,
+                    "origin": CAUGHT,
+                    "fix_task_id": entry.get("fix_task_id"),
+                }
+            )
     flaky = result.get("flaky") if isinstance(result.get("flaky"), dict) else {}
     for test in result.get("flaky_tests") or flaky.get("tests") or []:
         found.append({"test": test, "kind": project_checks.FLAKY, "origin": CAUGHT})
     if not found and project_checks.failed(result):
-        # A failure named by no test: a timeout, a check without a report. Main's answer decides.
+        # A failure named by no test: a timeout, a check without a report. An entry for the whole
+        # check on the list makes it caught.
         origin = CAUGHT if project_checks.preexisting(result) else INTRODUCED
         entry = {"test": None, "kind": "check failed", "origin": origin}
+        whole = [e for e in result.get("listed") or [] if isinstance(e, dict) and not e.get("test")]
+        if whole:
+            entry["fix_task_id"] = whole[0].get("fix_task_id")
         if result.get("whole_check"):
             # Why it names no test (`checks-report-which-tests-failed-in-any-language`, FR-4).
             entry["whole_check"] = str(result["whole_check"])
@@ -83,9 +97,23 @@ async def caught_during(session: AsyncSession, build: Build) -> List[Dict[str, A
                 }
     if not rows:
         return []
-    filed = await flaky_tests.fix_tasks_by_test(session, build.project_id, open_only=False)
+    # The owner fix task of each entry now on the list; an entry since removed keeps the one the
+    # run recorded when it went past it.
+    owners = {
+        (check, test or None): fix_task_id
+        for check, test, fix_task_id in (
+            await session.execute(
+                select(
+                    KnownFailingTest.check_name,
+                    KnownFailingTest.test,
+                    KnownFailingTest.fix_task_id,
+                ).where(KnownFailingTest.project_id == build.project_id)
+            )
+        ).all()
+    }
     for row in rows.values():
-        fix_id = filed.get(flaky_tests.normalised_test(row["test"])) if row["test"] else None
+        fix_id = owners.get((row["check"], row["test"])) or row.pop("fix_task_id", None)
+        row.pop("fix_task_id", None)
         fix = await session.get(Task, fix_id) if fix_id else None
         row["fix_task"] = (
             {

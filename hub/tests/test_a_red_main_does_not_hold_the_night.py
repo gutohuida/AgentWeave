@@ -1,14 +1,16 @@
-"""A red main or a flake does not hold the night (`a-red-main-does-not-hold-the-night`, slice M).
+"""A red main or a flake does not hold the night (`a-red-main-does-not-hold-the-night`, slice M),
+as the known-failing list now decides it (`failures-already-known-are-on-a-list-not-re-argued`).
 
 Night of 2026-10-26/27 on the operator's Hub: QA approved slice B's T1, and the Hub refused the
 approval for 2 h 55 min because one test failed on its merged work and the same *check* failed on
-main. Nobody but the operator could land it, and the operator was asleep; three dependent tasks
-waited with it. Whether main failed the same *test* was never recorded.
+main. Slice M answered by re-running each failure on main and landing over a shared one; the list
+replaced that (FR-7, FR-12): a failure on the list is not the work's, one off it is, and nothing is
+re-run on main to tell them apart.
 
-This is the slice's acceptance drive. Real git repositories, a real pytest check run by the Hub on
-the merged commit and on main, and the real agent route (`PATCH /agent-actions/tasks/{id}` with a
-reviewer's run credential). The check writes a JUnit report and re-runs its failing tests through
-the project's own wrapper (`checks-report-which-tests-failed-in-any-language`, FR-2, FR-6).
+Real git repositories, a real pytest check run by the Hub on the merged commit, and the real agent
+route (`PATCH /agent-actions/tasks/{id}` with a reviewer's run credential). The check writes a JUnit
+report and re-runs its failing tests through the project's own wrapper
+(`checks-report-which-tests-failed-in-any-language`, FR-2, FR-6).
 """
 
 from __future__ import annotations
@@ -22,7 +24,17 @@ from sqlalchemy import select
 from hub import landing_queue, project_checks
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, EventLog, Loop, Project, Run, SpecDocument, Task, TaskTransition
+from hub.db.models import (
+    AIJob,
+    EventLog,
+    KnownFailingTest,
+    Loop,
+    Project,
+    Run,
+    SpecDocument,
+    Task,
+    TaskTransition,
+)
 from hub.requirement_gate import approval_held_for_operator
 from hub.worktrees import task_branch_name
 
@@ -181,12 +193,10 @@ async def _task(
     return work
 
 
-async def _configure(checks=(PYTEST,), auto_override=None) -> None:
+async def _configure(checks=(PYTEST,)) -> None:
     async with async_session_factory() as session:
         project = await session.get(Project, "proj-test")
         project.checks = list(checks)
-        if auto_override is not None:
-            project.checks_auto_override = auto_override
         await session.commit()
     await set_main_branch("main")
 
@@ -247,7 +257,7 @@ async def _latest_run(task_id: str):
 
 
 async def _fix_tasks() -> list:
-    """The tasks the Hub filed for failures that were not the task's (event rows name them)."""
+    """The fix tasks the Hub filed (event rows name them)."""
     async with async_session_factory() as session:
         rows = (
             (
@@ -262,66 +272,115 @@ async def _fix_tasks() -> list:
         return [await session.get(Task, task_id) for task_id in ids]
 
 
+async def _listed(test=TEST_A, kind="fails on main", *, check="pytest") -> tuple:
+    """*test* on the project's known-failing list, owned by a pending fix task: `(entry, fix)`."""
+    key = "".join(c for c in f"{check}{test}" if c.isalnum())[-12:]
+    fix, entry = f"task-fix-{key}", f"kf-{key}"
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id=fix,
+                project_id="proj-test",
+                title=f"Fix {test or check}",
+                description="",
+                status="pending",
+                priority="high",
+            )
+        )
+        session.add(
+            KnownFailingTest(
+                id=entry,
+                project_id="proj-test",
+                check_name=check,
+                test=test,
+                kind=kind,
+                fix_task_id=fix,
+            )
+        )
+        await session.commit()
+    return entry, fix
+
+
+def _main_checkouts(monkeypatch) -> list:
+    """Every checkout a check makes, as `(owner, commit)`: none on main's tip is what FR-7 asks."""
+    made: list = []
+    original = project_checks._checkout
+
+    def recording(root, owner, sha):
+        made.append((owner, sha))
+        return original(root, owner, sha)
+
+    monkeypatch.setattr(project_checks, "_checkout", recording)
+    return made
+
+
+def _on_main(made: list, tips) -> list:
+    """The checkouts in *made* of any of *tips*, main's tips while the checks ran. A landing batch
+    checks out its merged commit, which main then moves to: that is the work's tree, not main's."""
+    return [(owner, sha) for owner, sha in made if sha in set(tips) or owner.endswith(".main")]
+
+
 # --- the drive ------------------------------------------------------------------------------------
 
 
-async def test_a_reviewers_approval_lands_over_a_red_main(app, tmp_path):
-    """drive-lands-over-red-main. On master bbf3f10 this is 409 'fail on main too', work not on
-    main: the whole check failing on main held the approval for the operator."""
+async def test_a_reviewers_approval_lands_over_a_listed_red_main(app, tmp_path, monkeypatch):
+    """drive-lands-over-red-main, through the list: main fails test_a, which is listed; the task's
+    run fails it too, is not sent back, approval lands it past the entry, the approval and the
+    landing name it, and no check ran on a checkout of main."""
     _repo(tmp_path)
     await _loop()
     work = await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
     await _configure()
-    await _checked(TASK)
+    base = git(tmp_path, "rev-parse", "main").stdout.strip()
+    entry, fix = await _listed()
+    made = _main_checkouts(monkeypatch)
+    await project_checks.request_run("proj-test", TASK)
+    await project_checks.drain()
 
     run = await _latest_run(TASK)
-    main_sha = run.main_sha
+    [result] = run.results
+    assert result["shared_tests"] == [TEST_A] and not result.get("own_tests"), result
+    assert result["preexisting"] and [e["id"] for e in result["listed"]] == [entry], result
+    async with async_session_factory() as session:
+        assert (await session.get(Task, TASK)).status == "completed", "not sent back"
     approved = await _reviewer_approves(app, TASK)
 
     assert approved.status_code == 200, approved.text
     await landing_queue.drain()
     assert work in commits_on(tmp_path, "main")
     landing = await _landing(app, TASK)
-    assert landing["state"] == "landed" and landing["batch"]["override_by"] == "hub", landing
+    assert landing["state"] == "landed" and landing["batch"]["override_by"] is None, landing
+    assert [(e["test"], e["fix_task_id"]) for e in landing["went_past"]] == [(TEST_A, fix)]
     transition = await _approval(TASK)
     assert transition.actor_kind == "run" and transition.actor_agent == REVIEWER
     assert transition.override_by == "hub"
     reason = transition.override_reason or ""
-    assert TEST_A in reason and run.id in reason and main_sha[:12] in reason, reason
-    [result] = run.results
-    assert result["on_main"]["failed_tests"] == [TEST_A]
-    assert result["shared_tests"] == [TEST_A] and not result.get("own_tests")
+    assert TEST_A in reason and run.id in reason and fix in reason, reason
+    assert _on_main(made, [base]) == [], made
 
 
-async def test_no_operator_hold_for_failures_not_its_own(app, tmp_path):
-    """no-operator-hold: the mender is not woken for it; with the setting off the hold is as
-    today."""
+async def test_no_operator_hold_for_failures_on_the_list(app, tmp_path):
+    """no-operator-hold: approval of work whose only failure is listed is held for nobody."""
     _repo(tmp_path)
     await _loop()
     await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
     await _configure()
+    await _listed()
     await _checked(TASK)
 
     async with async_session_factory() as session:
         task = await session.get(Task, TASK)
         assert await approval_held_for_operator(session, task, candidate=REVIEWER) is None
-        (await session.get(Project, "proj-test")).checks_auto_override = False
-        await session.commit()
-    async with async_session_factory() as session:
-        task = await session.get(Task, TASK)
-        hold = await approval_held_for_operator(session, task, candidate=REVIEWER)
-    # `approved-work-merges-in-batches` D7: approval no longer waits on main's failure; with the
-    # setting off it is the landing batch that waits for the operator.
-    assert hold is None
 
 
-async def test_different_ids_are_the_tasks(app, tmp_path):
-    """different-ids-are-the-tasks: main fails test_a, the task's work fails test_b (and passes
-    test_a). On master the run is recorded preexisting and held for the operator."""
+async def test_an_unlisted_failure_is_the_tasks(app, tmp_path):
+    """Main fails test_a, which is listed, and the task's work fails test_b (and passes test_a):
+    test_b is not on the list, so it is the task's."""
     _repo(tmp_path)
     await _loop()
     work = await _task(tmp_path, TASK, {"ledger.py": "A = 2\nB = 3\n"})
     await _configure()
+    await _listed()
     await _checked(TASK)
 
     run = await _latest_run(TASK)
@@ -331,14 +390,13 @@ async def test_different_ids_are_the_tasks(app, tmp_path):
     refused = await _reviewer_approves(app, TASK)
     assert refused.status_code == 409, refused.text
     message = refused.json()["detail"]["message"]
-    assert "revision_needed" in message and "fail on main too" not in message, message
+    assert "revision_needed" in message and "known-failing" not in message, message
     assert work not in commits_on(tmp_path, "main")
-    assert await _fix_tasks() == []
 
 
 async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
     """flake-recorded-on-approval: a run that passed only because its failed test passed when rerun
-    on its own lands with the Hub's override naming the test."""
+    on its own lands, the approval naming the test and the fix task the list filed for it."""
     counter = tmp_path_factory.mktemp("flake") / "count.txt"
     _repo(
         tmp_path,
@@ -351,11 +409,12 @@ async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
 
     run = await _latest_run(TASK)
     assert run.state == "passed", run.results
-    # a-fix-task-is-filed: a flake gets its fix task too, which marks the flaky list handled.
+    # The flake is listed with its fix task, which marks the flaky list handled.
     from hub import flaky_tests
 
     [fix] = await _fix_tasks()
     assert "test_timing::test_flaky" in fix.title and "flaky" in fix.description
+    assert fix.loop_id is None and fix.status == "pending"
     async with async_session_factory() as session:
         listed = await flaky_tests.report(session, "proj-test")
     assert listed["flaky"] == [] and listed["handled"]["task_id"] == fix.id, listed
@@ -369,195 +428,42 @@ async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
     assert fix.id in reason
 
 
-async def test_a_touched_test_is_the_tasks(app, tmp_path, tmp_path_factory):
-    """touched-test-is-the-tasks: a test in a file the task changed is never landed over
-    automatically -- failing on main too, or flaky."""
-    _repo(tmp_path)
+async def test_a_touched_flake_is_the_tasks(app, tmp_path, tmp_path_factory):
+    """touched-test-is-the-tasks: a flaky test in a file the task changed fails the run -- the task
+    introduced it -- and is not listed as flaky."""
+    _repo(tmp_path, {"ledger.py": "A = 2\nB = 2\n"})
     await _loop()
-    edited = TESTS + "\n# the task touched this file\n"
-    work = await _task(tmp_path, TASK, {"test_ledger.py": edited})
-    await _configure()
-    await _checked(TASK)
-
-    [result] = (await _latest_run(TASK)).results
-    assert result["touched_tests"] == [TEST_A] and result["preexisting"], result
-    # Approval waits on nothing (`approved-work-merges-in-batches` D7); the batch is never landed
-    # over a test the task touched: it waits for the operator.
-    approved = await _reviewer_approves(app, TASK)
-    assert approved.status_code == 200, approved.text
-    assert (await _approval(TASK)).override_reason is None
-    await landing_queue.drain()
-    landing = await _landing(app, TASK)
-    assert landing["state"] == "held" and "fail on main too" in landing["reason"], landing
-    assert work not in commits_on(tmp_path, "main")
-    assert await _fix_tasks() == []
-
-    # A flaky test in a file the task changed fails the run: the task introduced it.
     counter = tmp_path_factory.mktemp("flake") / "count.txt"
     await _task(tmp_path, TASK2, {"test_timing.py": _flaky_test(counter)})
+    await _configure()
     await _checked(TASK2)
     run = await _latest_run(TASK2)
     assert run.state == "failed", run.results
     [result] = run.results
     assert result["touched_tests"] == ["test_timing::test_flaky"]
-    # The touched flake is the task's and files nothing. test_a, unlisted, has now failed for two
-    # tasks in a row: re-run alone on main, it fails there, so it is listed as failing on main
-    # with an unassigned fix task (`failures-already-known-are-on-a-list-not-re-argued`, FR-13).
-    [fix] = await _fix_tasks()
-    assert TEST_A in fix.title and fix.assignee is None, fix.title
-
-
-async def test_a_fix_task_cannot_land_itself(app, tmp_path):
-    """fix-task-cannot-land-itself: the Hub's fix task for test_a, completed with work that leaves
-    test_a failing, is not landed over test_a."""
-    _repo(tmp_path)
-    await _loop()
-    await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
-    await _configure()
-    await _checked(TASK)
-    [fix] = await _fix_tasks()
-
-    async with async_session_factory() as session:
-        (await session.get(Task, fix.id)).status = "completed"
-        await session.commit()
-    commit_on_branch(tmp_path, task_branch_name(fix.id), "notes.txt", "looked at it\n")
-    git(tmp_path, "checkout", "-q", "main")
-    await _checked(fix.id)
-
-    approved = await _reviewer_approves(app, fix.id)
-    assert approved.status_code == 200, approved.text
-    await landing_queue.drain()
-    landing = await _landing(app, fix.id)
-    assert landing["state"] == "held", landing
-    async with async_session_factory() as session:
-        moved = (
-            (await session.execute(select(TaskTransition).where(TaskTransition.task_id == fix.id)))
-            .scalars()
-            .all()
-        )
-    assert all(t.override_reason is None for t in moved)
-    assert len(await _fix_tasks()) == 1, "the fix task's own run files nothing more"
-
-
-async def test_the_setting_off_restores_today(app, auth_headers, tmp_path):
-    """setting-off-restores-today: held for the operator, no fix task, and the operator's landing
-    records their reason as theirs."""
-    _repo(tmp_path)
-    await _loop()
-    work = await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
-    await _configure(auto_override=False)
-    await _checked(TASK)
-
-    approved = await _reviewer_approves(app, TASK)
-    assert approved.status_code == 200, approved.text
-    await landing_queue.drain()
-    landing = await _landing(app, TASK)
-    assert landing["state"] == "held", landing
-    assert work not in commits_on(tmp_path, "main")
+    assert result["own_tests"] == ["test_timing::test_flaky"] and not result["preexisting"]
     assert await _fix_tasks() == []
 
-    landed = await app.post(
-        f"{TASKS}/{TASK}/landing/land",
-        json={"reason": "main carries the defect"},
-        headers=auth_headers,
-    )
-    assert landed.status_code == 200, landed.text
-    assert work in commits_on(tmp_path, "main")
-    batch = landed.json()["landing"]["batch"]
-    assert batch["override_by"] == "operator"
-    assert batch["override_reason"] == "main carries the defect"
 
-
-async def test_one_fix_task_for_two_runs_failing_the_same_test_on_main(app, tmp_path):
-    """one-fix-task-per-failure: deduplicated by test id, named by both approvals."""
-    _repo(tmp_path)
-    await _loop()
-    await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
-    await _task(tmp_path, TASK2, {"other.py": "y = 2\n"})
-    await _configure()
-    await _checked(TASK)
-    first = await _latest_run(TASK)
-    await _checked(TASK2)
-
-    [fix] = await _fix_tasks()
-    text = f"{fix.title}\n{fix.description}"
-    assert TEST_A in text and "pytest" in text and "fails on main" in text, text
-    assert first.main_sha[:12] in text and first.id in text, text
-    assert fix.status == "pending" and fix.assignee is None and fix.loop_id is None
-    for task_id in (TASK, TASK2):
-        # The first landing moves main, so the second task's checks run again on the new tip.
-        await _checked(task_id)
-        approved = await _reviewer_approves(app, task_id)
-        assert approved.status_code == 200, approved.text
-        assert fix.id in ((await _approval(task_id)).override_reason or "")
-    assert [t.id for t in await _fix_tasks()] == [fix.id]
-
-
-async def test_the_fix_task_heads_the_flows_queue(app, tmp_path):
-    """fix-task-first-in-queue: found by a task of a live flow, the fix task is filed in that flow
-    as critical, and the next firing staffs it ahead of the older pending tasks."""
-    from hub.api.v1.jobs import _batch_loop_summaries
-    from hub.scheduler import decide_firing
-
-    _repo(tmp_path)
-    await _loop(live=True)
-    async with async_session_factory() as session:
-        for suffix in ("1", "2"):
-            session.add(
-                Task(
-                    id=f"task-older-pending{suffix}",
-                    loop_id=LOOP,
-                    project_id="proj-test",
-                    title=f"Older {suffix}",
-                    description="",
-                    status="pending",
-                    priority="medium",
-                )
-            )
-        await session.commit()
-    await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
-    await _configure()
-    await _checked(TASK)
-    async with async_session_factory() as session:
-        # The held task is in review; the flow's one free agent is what the firing staffs.
-        task = await session.get(Task, TASK)
-        task.status, task.assignee = "under_review", REVIEWER
-        await session.commit()
-
-    [fix] = await _fix_tasks()
-    assert fix.loop_id == LOOP and fix.priority == "critical" and fix.status == "pending"
-    async with async_session_factory() as session:
-        loop = await session.get(Loop, LOOP)
-        decision = await decide_firing(session, loop, default_agent="builder")
-        current = (await _batch_loop_summaries(session, [f"job-{LOOP}"]))[f"job-{LOOP}"]
-    assert [(s.task.id, s.agent) for s in decision.selections] == [(fix.id, "builder")]
-    # The board's current pending item is the same task (the review in flight is listed too).
-    pending = [t["id"] for t in current.current_tasks if t["status"] == "pending"]
-    assert pending == [fix.id], current.current_tasks
-
-
-async def test_a_fix_task_filed_into_a_production_flow_is_reviewed_and_lands(app, tmp_path):
-    """A flow on the operator's Hub declares nothing (`work_needs_evidence` NULL), so its document
-    makes evidence govern -- and a fix task the Hub files has no requirement, so it could record no
-    evidence, had no review target and nothing to merge (review of slice M, 2026-10-27). A
-    Hub-filed fix task is governed by its review alone, merging its branch tip, and says so on the
-    task. Driven from filed to landed on main."""
+async def test_a_fix_task_the_list_filed_is_reviewed_and_lands(app, tmp_path, tmp_path_factory):
+    """A fix task the list files has no requirement, so it could record no evidence: it is governed
+    by its review alone, merging its branch tip, and says so on the task (review of slice M,
+    2026-10-27). Driven from filed to landed on main; it is on no loop (FR-6)."""
     from hub import task_integration
 
-    _repo(tmp_path)
+    counter = tmp_path_factory.mktemp("flake") / "count.txt"
+    _repo(
+        tmp_path,
+        {"test_ledger.py": "def test_ok():\n    pass\n", "test_timing.py": _flaky_test(counter)},
+    )
     await _loop(live=True, needs_evidence=None)
-    held = await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
+    await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
     await _configure()
-    # The held task's own evidence is not this test's subject: its check runs on its branch tip.
-    async with async_session_factory() as session:
-        (await session.get(Task, TASK)).status = "under_review"
-        await session.commit()
-    await project_checks.request_run("proj-test", TASK, targets=[held])
-    await project_checks.drain()
+    await _checked(TASK)
 
     [fix] = await _fix_tasks()
-    assert fix.loop_id == LOOP
-    fixed = commit_on_branch(tmp_path, task_branch_name(fix.id), "ledger.py", "A = 2\nB = 2\n")
+    assert fix.loop_id is None
+    fixed = commit_on_branch(tmp_path, task_branch_name(fix.id), "notes.txt", "made it wait\n")
     git(tmp_path, "checkout", "-q", "main")
     async with async_session_factory() as session:
         task = await session.get(Task, fix.id)
@@ -566,7 +472,6 @@ async def test_a_fix_task_filed_into_a_production_flow_is_reviewed_and_lands(app
         target = await task_integration.review_target(session, task)
         assert target.resolved and target.commit_sha == fixed, target
     await _checked(fix.id)
-    assert (await _latest_run(fix.id)).state == "passed"
 
     approved = await _reviewer_approves(app, fix.id)
     assert approved.status_code == 200, approved.text
@@ -575,7 +480,9 @@ async def test_a_fix_task_filed_into_a_production_flow_is_reviewed_and_lands(app
     assert getattr(fix, "merges_branch_tip", None) is True, "recorded on the task"
 
 
-async def test_a_fix_task_and_its_dedup_record_are_one_commit(app, tmp_path, monkeypatch):
+async def test_a_fix_task_and_its_dedup_record_are_one_commit(
+    app, tmp_path, tmp_path_factory, monkeypatch
+):
     """Review of slice M: the fix task was committed and its dedup event written in a second
     commit, so a failure between them left a fix task the dedup could not see (and a second one
     filed at the next run). A failure after the task's commit now leaves both or neither."""
@@ -585,7 +492,11 @@ async def test_a_fix_task_and_its_dedup_record_are_one_commit(app, tmp_path, mon
         raise RuntimeError("the Hub stopped here")
 
     monkeypatch.setattr(tasks_route, "link", broken_link)
-    _repo(tmp_path)
+    counter = tmp_path_factory.mktemp("flake") / "count.txt"
+    _repo(
+        tmp_path,
+        {"test_ledger.py": "def test_ok():\n    pass\n", "test_timing.py": _flaky_test(counter)},
+    )
     await _loop()
     await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
     await _configure()
@@ -593,11 +504,7 @@ async def test_a_fix_task_and_its_dedup_record_are_one_commit(app, tmp_path, mon
 
     async with async_session_factory() as session:
         filed = (
-            (
-                await session.execute(
-                    select(Task).where(Task.id.notin_([TASK]), Task.priority == "critical")
-                )
-            )
+            (await session.execute(select(Task).where(Task.title.like("Fix flaky test%"))))
             .scalars()
             .all()
         )
@@ -606,15 +513,16 @@ async def test_a_fix_task_and_its_dedup_record_are_one_commit(app, tmp_path, mon
 
 
 async def test_the_reviewers_briefing_says_the_failure_is_not_the_tasks(app, tmp_path):
-    """briefing-says-not-the-tasks."""
+    """briefing-says-not-the-tasks: a listed failure is named, with its fix task, and the reviewer
+    is not told to send the task back for it."""
     from hub.review_turn import _checks_sentence
 
     _repo(tmp_path)
     await _loop()
     await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
     await _configure()
+    _, fix = await _listed()
     await _checked(TASK)
-    [fix] = await _fix_tasks()
 
     async with async_session_factory() as session:
         task = await session.get(Task, TASK)
@@ -622,7 +530,6 @@ async def test_the_reviewers_briefing_says_the_failure_is_not_the_tasks(app, tmp
         await session.commit()
         sentence = await _checks_sentence(session, task)
     assert sentence, sentence
-    assert "not this task's work" in sentence, sentence
-    assert "override the Hub records" in sentence, sentence
-    assert fix.id in sentence and TEST_A in sentence, sentence
+    assert "not this task's work" in sentence and "known-failing list" in sentence, sentence
+    assert fix in sentence and TEST_A in sentence, sentence
     assert "end with `revision_needed`" not in sentence, sentence

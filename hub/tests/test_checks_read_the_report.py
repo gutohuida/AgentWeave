@@ -3,7 +3,7 @@ its own re-run command (`checks-report-which-tests-failed-in-any-language`, FR-1
 
 The seams: the settings route (FR-1), `parse_report` over reports recorded from pytest (xunit1 and
 xunit2), Node's runner and Vitest (FR-2, FR-3), `run_one` running real commands that write (or do
-not write) a report (FR-4, FR-5), `confirm_failure` and `_MainBaseline` re-running through the
+not write) a report (FR-4, FR-5), `confirm_failure` and batch narrowing re-running through the
 re-run command (FR-4, FR-6), and a landing batch's narrowing over real git (FR-6). Every command is
 a small Python script, so what ran, and with which arguments, is logged, not inferred.
 """
@@ -446,34 +446,6 @@ def test_touched_tests_on_a_recorded_xunit2_report_counts_every_failure(tmp_path
 
 
 @pytest.mark.asyncio
-async def test_main_is_asked_through_the_rerun_command(tmp_path, tmp_path_factory):
-    """Comparing with main runs the re-run command with the compared ids on main's tree."""
-    log = tmp_path_factory.mktemp("log") / "ran.log"
-    make_repo(tmp_path)
-    (tmp_path / "rerun.py").write_text(RERUN, encoding="utf-8")
-    git(tmp_path, "add", "rerun.py")
-    git(tmp_path, "commit", "-q", "-m", "the re-run wrapper")
-    main_sha = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
-    check = _check(
-        "exit 1", report_path="report.xml", rerun_command=f'{PY} rerun.py "{log}" pass {{tests}}'
-    )
-    result = {
-        "name": "tests",
-        "exit_code": 1,
-        "timed_out": False,
-        "failed_tests": [SPACED],
-        "compared_tests": [SPACED],
-    }
-    baseline = project_checks._MainBaseline(tmp_path, "task-a7a4report", main_sha)
-    try:
-        await baseline.record(check, result)
-    finally:
-        await baseline.close()
-    assert [c["args"] for c in _calls(log)] == [[SPACED]]
-    assert result["on_main"]["how"] == "tests"
-    assert result["own_tests"] == [SPACED] and not result["preexisting"]
-
-
 def test_an_id_the_shell_cannot_carry_re_runs_the_whole_check():
     check = _check("x", report_path="r.xml", rerun_command="run {tests}")
     assert project_checks.rerun_command(check, ["a::b\nc"]) is None

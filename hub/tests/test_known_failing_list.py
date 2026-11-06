@@ -374,7 +374,14 @@ async def test_ac_twice_with_main_failing_it_is_listed_and_neither_task_goes_bac
     assert (entry.test, entry.kind, entry.added_by_run) == (TEST_A, "fails on main", single.id)
     [result] = (await _latest_run(TASK2)).results
     assert result["shared_tests"] == [TEST_A] and result["preexisting"], result
-    assert (await _status(TASK), await _status(TASK2)) == ("completed", "completed")
+    assert await _status(TASK2) == "completed"
+    # TASK's run ended before main was asked: its unlisted failure was its own then, and went back
+    # (FR-7). Once listed it is not held against TASK: its run is judged again and the task says so.
+    [first] = (await _latest_run(TASK)).results
+    assert first["shared_tests"] == [TEST_A] and first["preexisting"], first
+    assert await _status(TASK) == "revision_needed"
+    notes = (await _get(Task, TASK)).notes
+    assert "known-failing list" in str(notes), notes
 
 
 async def test_ac_twice_with_main_passing_both_tasks_go_back(app, tmp_path):
