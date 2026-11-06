@@ -547,6 +547,13 @@ class Conversation(Base):
     # meant. A successor is created NULL, so dismissing is final for a conversation and not for
     # a line of work.
     checkpoint_warning: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # The checkpoint the operator started this conversation from (`checkpoint_start.py`), or NULL.
+    # Not the carry-over: a successor is found by `Checkpoint.cut_over_to_conversation_id`, and a
+    # checkpoint is carried over once but may start any number of conversations. Not a ForeignKey,
+    # for the reason `Checkpoint.cut_over_to_conversation_id` gives (migration `0165`).
+    started_from_checkpoint_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False

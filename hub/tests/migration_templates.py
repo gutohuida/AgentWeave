@@ -107,7 +107,15 @@ def _cached(real, directory: Path, direction: str):  # noqa: ANN001, ANN202
         if _settle(target):
             building = directory / f"{key}.{os.getpid()}.building"
             shutil.copyfile(target, building)
-            os.replace(building, template)
+            try:
+                os.replace(building, template)
+            except PermissionError:
+                # Windows refuses to replace a file another worker has open, which happens when
+                # that worker landed the same template first and is copying it out. Its copy is
+                # this one's identical twin, so it counts as landed; anything else is a real fault.
+                building.unlink(missing_ok=True)
+                if not template.exists():
+                    raise
         return None
 
     return move
