@@ -89,6 +89,7 @@ export function CheckpointsScreen({
     ['the checkpoints', list.error, () => list.refetch()],
     ['the checkpoint being opened', whole.error, () => whole.refetch()],
     ['the agents', agents.error, () => agents.refetch()],
+    ['the agents a conversation can start with', openAgents.error, () => openAgents.refetch()],
     ['the open conversations', open.error, () => open.refetch()],
     ['the archived conversations', archived.error, () => archived.refetch()],
     ['the agent notes it carried', notes.error, () => notes.refetch()],
