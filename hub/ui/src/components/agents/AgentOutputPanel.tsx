@@ -1321,6 +1321,26 @@ export function AgentOutputPanel({
         onArchive={conversationTarget ? handleArchive : undefined}
       />
 
+      {currentConversation?.started_from_checkpoint_id && projectId ? (
+        <p className="aw-ckpts-none px-4 py-1" data-testid="conversation-started-from">
+          Started from a checkpoint.{' '}
+          <button
+            type="button"
+            data-slot="started-from-link"
+            className="aw-link aw-link-inline"
+            onClick={() =>
+              goTo(
+                checkpointsDestination(projectId, {
+                  checkpoint: currentConversation.started_from_checkpoint_id,
+                }),
+              )
+            }
+          >
+            Open the checkpoint
+          </button>
+        </p>
+      ) : null}
+
       {/* Output body. The return-to-newest control used to float over its lower edge — which put
           an interactive element on top of whatever entry happened to be scrolled under it, and
           landed on the run's completion line often enough to be reported. It is a row of its own

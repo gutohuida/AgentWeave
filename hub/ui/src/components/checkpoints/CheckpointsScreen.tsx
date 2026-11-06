@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAgents } from '@/api/agents'
 import { conversationLabel as labelOf, useProjectConversations, type AgentConversation } from '@/api/agentChat'
-import { useCheckpointNotes, useProjectCheckpoints } from '@/api/checkpoints'
+import { startFromCheckpoint, useCheckpointNotes, useProjectCheckpoints } from '@/api/checkpoints'
 import { useConfigStore } from '@/store/configStore'
 import { checkpointsDestination, type ProjectTabDestination } from '@/lib/navigation'
 import { QueryErrorNotice, type QueryFailure } from '@/components/common/QueryErrorNotice'
@@ -22,6 +23,7 @@ export function CheckpointsScreen({
   onOpenConversation: (agent: string, conversationId: string) => void
 }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
+  const queryClient = useQueryClient()
   const filters: CheckpointFilters = {
     agent: destination.checkpointAgent ?? '',
     trigger: destination.checkpointTrigger ?? '',
@@ -111,6 +113,13 @@ export function CheckpointsScreen({
       onOpenConversation={(agent, conversationId) => {
         const owner = agent ?? byId.get(conversationId)?.agent ?? opened?.agent
         if (owner) onOpenConversation(owner, conversationId)
+      }}
+      onStart={async (checkpointId, agent, message) => {
+        if (!projectId) return
+        const started = await startFromCheckpoint(projectId, checkpointId, agent, message)
+        await queryClient.invalidateQueries({ queryKey: ['project', projectId, 'checkpoints'] })
+        await queryClient.invalidateQueries({ queryKey: ['project', projectId, 'conversations'] })
+        onOpenConversation(started.agent, started.conversation_id)
       }}
       loading={list.isLoading}
       error={list.isError}
