@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...checkpoint_cutover import CutoverRefusedError, cut_over, handover_of
 from ...checkpoint_generation import generate_checkpoint, render_checkpoint
+from ...checkpoint_start import StartRefusedError, start_from_checkpoint, started_from
 from ...checkpoints import get_checkpoint_by_id
 from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
@@ -30,6 +31,7 @@ from ...db.models import (
     WorkerInvocation,
 )
 from ...runner_provider import one_shot_model
+from ...schemas.common import RequestModel
 from ...sse import sse_manager
 
 router = APIRouter(tags=["checkpoints"])
@@ -70,6 +72,9 @@ class CheckpointSummary(BaseModel):
     # checkpoint was carried into -- both ways (FR-10).
     carried_from: Optional[dict] = None
     carried_into: Optional[dict] = None
+    # The conversations the operator started from this checkpoint, oldest first, each with its
+    # agent and when -- not the one it was carried into, which is `carried_into` (FR-7).
+    started_conversations: List[dict] = []
 
     @classmethod
     def of(
@@ -80,8 +85,10 @@ class CheckpointSummary(BaseModel):
         include_raw: bool = False,
         covered_runs: Optional[List[dict]] = None,
         carried_from: Optional[dict] = None,
+        started_conversations: Optional[List[dict]] = None,
     ) -> "CheckpointSummary":
         return cls(
+            started_conversations=started_conversations or [],
             title=row.title,
             summary=row.summary,
             title_made_by=row.title_made_by,
@@ -196,6 +203,19 @@ async def _carried_from(session: AsyncSession, conversation_ids: set) -> dict:
     }
 
 
+async def _started_from_checkpoint(session: AsyncSession, conversation) -> Optional[dict]:
+    checkpoint_id = conversation.started_from_checkpoint_id
+    if not checkpoint_id:
+        return None
+    source = await get_checkpoint_by_id(session, checkpoint_id)
+    return {
+        "checkpoint_id": checkpoint_id,
+        "conversation_id": source.conversation_id if source else None,
+        "agent": source.agent if source else None,
+        "title": source.title if source else None,
+    }
+
+
 async def _summaries(
     session: AsyncSession, rows: List[Checkpoint], *, include_raw: bool = False
 ) -> List[CheckpointSummary]:
@@ -214,6 +234,7 @@ async def _summaries(
         errors = {invocation.id: invocation.error for invocation in invocations}
     covered = await _covered_runs(session, rows)
     carried = await _carried_from(session, {row.conversation_id for row in rows})
+    started = await started_from(session, [row.id for row in rows])
     return [
         CheckpointSummary.of(
             row,
@@ -221,6 +242,7 @@ async def _summaries(
             include_raw=include_raw,
             covered_runs=covered.get(row.id),
             carried_from=carried.get(row.conversation_id),
+            started_conversations=started.get(row.id),
         )
         for row in rows
     ]
@@ -246,13 +268,15 @@ async def list_project_checkpoints(
     query = select(Checkpoint).where(Checkpoint.project_id == project_id)
     lineage = None
     if conversation_id is not None:
-        await _conversation_or_404(session, project_id, conversation_id)
+        named = await _conversation_or_404(session, project_id, conversation_id)
         query = query.where(Checkpoint.conversation_id == conversation_id)
         carried_from = (await _carried_from(session, {conversation_id})).get(conversation_id)
         carried_into = await handover_of(session, conversation_id)
         lineage = {
             "conversation_id": conversation_id,
             "started_from": carried_from,
+            # The checkpoint the operator started this conversation from, if they did (FR-7).
+            "started_from_checkpoint": await _started_from_checkpoint(session, named),
             "carried_into": (
                 {"checkpoint_id": carried_into[0], "conversation_id": carried_into[1]}
                 if carried_into
@@ -653,4 +677,75 @@ async def cutover_to_successor(
         "agent": successor.agent,
     }
     await sse_manager.broadcast(project_id, "conversation_cut_over", payload)
+    return payload
+
+
+class StartFromCheckpointRequest(RequestModel):
+    agent: str
+    message: Optional[str] = None
+
+
+@router.post("/checkpoints/{checkpoint_id}/start", status_code=status.HTTP_201_CREATED)
+async def start_conversation_from_checkpoint(
+    checkpoint_id: str,
+    body: StartFromCheckpointRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Start a new conversation of `agent` whose first input is this checkpoint, and its turn.
+
+    Any written checkpoint, any number of times, for any open agent of the project; the
+    conversation the checkpoint came from, and its carry-over, are left as they were
+    (`start-a-conversation-from-any-checkpoint-with-any-agent`). The turn is scheduled now,
+    whatever `checkpoint_auto_continue` says: the operator's confirm is the Continue (FR-5).
+
+    `started` says whether the turn began in the new conversation; when the agent is busy the
+    input stays queued and `waiting_reason` says why, as `continue` answers.
+    """
+    project_id, _ = project
+    checkpoint = await get_checkpoint_by_id(session, checkpoint_id)
+    if checkpoint is None or checkpoint.project_id != project_id:
+        raise HTTPException(
+            status_code=404, detail=f"Checkpoint '{checkpoint_id}' not found in this project"
+        )
+    try:
+        conversation, entry_id = await start_from_checkpoint(
+            session, checkpoint, agent=body.agent, message=body.message
+        )
+    except StartRefusedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    conversation_id, agent = conversation.id, conversation.agent
+    await sse_manager.broadcast(
+        project_id,
+        "conversation_updated",
+        {
+            "project_id": project_id,
+            "agent": agent,
+            "conversation_id": conversation_id,
+            "lifecycle": conversation.lifecycle,
+            "title": conversation.title,
+        },
+    )
+
+    from ...turn_scheduler import schedule_agent
+
+    result = await schedule_agent(project_id, agent)
+    started_conversation_id = (
+        result.response.conversation_id if result.response is not None else None
+    )
+    started = started_conversation_id == conversation_id
+    waiting_reason = result.waiting_reason
+    if started_conversation_id is not None and not started:
+        waiting_reason = "this conversation's input is waiting behind other input"
+    payload = {
+        "checkpoint_id": checkpoint_id,
+        "conversation_id": conversation_id,
+        "agent": agent,
+        "title": conversation.title,
+        "queue_entry_id": entry_id,
+        "started": started,
+        "waiting_reason": waiting_reason,
+    }
+    await sse_manager.broadcast(project_id, "conversation_started_from_checkpoint", payload)
     return payload

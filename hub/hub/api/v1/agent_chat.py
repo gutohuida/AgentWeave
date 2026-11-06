@@ -148,6 +148,8 @@ class ConversationResponse(BaseModel):
     # Where this conversation stands with its checkpoint threshold: null, "due" or "dismissed".
     # The conversation surface reads it to decide whether to warn.
     checkpoint_warning: Optional[str] = None
+    # The checkpoint the operator started this conversation from, or null (`checkpoint_start.py`).
+    started_from_checkpoint_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     archived_at: Optional[datetime] = None
