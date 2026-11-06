@@ -163,32 +163,23 @@ async def test_a_fast_check_is_at_most_two_minutes_and_fast_defaults_off(app, au
 
 
 @pytest.mark.asyncio
-async def test_the_automatic_override_is_on_by_default_and_only_the_operator_turns_it_off(
-    app, auth_headers
-):
-    """setting-defaults-and-saves (`a-red-main-does-not-hold-the-night`, FR-5)."""
-    assert (await app.get(URL, headers=auth_headers)).json()["checks_auto_override"] is True
+async def test_the_hub_may_override_checks_setting_is_gone(app, auth_headers):
+    """ac-setting-gone (`failures-already-known-are-on-a-list-not-re-argued`, FR-15): the
+    project's settings carry no checks_auto_override, a save of another setting succeeds, and a
+    request that sends it is refused, storing nothing."""
+    assert "checks_auto_override" not in (await app.get(URL, headers=auth_headers)).json()
 
-    async with async_session_factory() as session:
-        session.add(
-            Run(
-                id="run-checks-override",
-                project_id="proj-test",
-                agent="builder",
-                status="running",
-                turn_depth=0,
-                capability_token_hash=hash_run_token("aw_run_override-secret"),
-            )
-        )
-        await session.commit()
-    agent = {"Authorization": "Bearer aw_run_override-secret"}
-    refused = await app.put(URL, json={"checks_auto_override": False}, headers=agent)
-    assert refused.status_code in (401, 403), refused.text
-    assert (await app.get(URL, headers=auth_headers)).json()["checks_auto_override"] is True
-
-    saved = await app.put(URL, json={"checks_auto_override": False}, headers=auth_headers)
+    saved = await app.put(URL, json={"checks_give_way": True}, headers=auth_headers)
     assert saved.status_code == 200, saved.text
-    assert saved.json()["checks_auto_override"] is False
-    assert (await app.get(URL, headers=auth_headers)).json()["checks_auto_override"] is False
+    assert saved.json()["checks_give_way"] is True
+    assert "checks_auto_override" not in saved.json()
+
+    refused = await app.put(
+        URL, json={"checks_give_way": False, "checks_auto_override": False}, headers=auth_headers
+    )
+    assert refused.status_code == 422, refused.text
+    assert "checks_auto_override" in refused.text
+    after = (await app.get(URL, headers=auth_headers)).json()
+    assert after["checks_give_way"] is True and "checks_auto_override" not in after
     async with async_session_factory() as session:
-        assert (await session.get(Project, "proj-test")).checks_auto_override is False
+        assert not hasattr(await session.get(Project, "proj-test"), "checks_auto_override")

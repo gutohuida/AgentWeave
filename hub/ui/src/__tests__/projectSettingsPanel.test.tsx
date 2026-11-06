@@ -46,7 +46,6 @@ function makeSettings(): {
   checkpoint_auto_continue: boolean
   main_branch: string | null
   checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null }> | null
-  checks_auto_override: boolean
   checks_give_way?: boolean
 } {
   return {
@@ -67,7 +66,6 @@ function makeSettings(): {
     checkpoint_auto_continue: false,
     main_branch: null,
     checks: null,
-    checks_auto_override: true,
   }
 }
 
@@ -415,7 +413,7 @@ describe('Project settings → General, applied on change', () => {
     expect(update).not.toHaveBeenCalled()
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     // A save that reaches the Hub anyway (another client) is refused there, and the refusal is shown.
-    await user.click(screen.getByRole('switch', { name: "Land over failures that are not the task's" }))
+    await user.click(screen.getByRole('switch', { name: 'Checks give way to me' }))
     answer({
       // The shape the settings route answers: pydantic's errors, the model validator's sentence.
       error: new ApiError(422, JSON.stringify({
@@ -429,14 +427,17 @@ describe('Project settings → General, applied on change', () => {
     expect(await screen.findByTestId('settings-save-refusal')).toHaveTextContent(/cannot be landing-only/)
   })
 
-  it('offers the switch for landing over failures that are not the task’s, on by default', async () => {
+  it('has no “Hub may override checks” switch, and saving another setting sends nothing of it', async () => {
+    // `failures-already-known-are-on-a-list-not-re-argued` FR-15, ac-setting-gone: the route
+    // refuses the field, so a save that still sent it would fail.
     const user = userEvent.setup()
     render(<GeneralSection />)
-    const toggle = screen.getByRole('switch', { name: "Land over failures that are not the task's" })
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText(/also fails on main, or passed when rerun on its own/)).toBeInTheDocument()
-    await user.click(toggle)
-    expect(lastPatch()).toEqual({ checks_auto_override: false })
+    expect(screen.queryByRole('switch', { name: "Land over failures that are not the task's" })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('project-checks-auto-override')).not.toBeInTheDocument()
+    expect(screen.queryByText(/also fails on main, or passed when rerun on its own/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: 'Checks give way to me' }))
+    expect(lastPatch()).toEqual({ checks_give_way: true })
+    expect(lastPatch()).not.toHaveProperty('checks_auto_override')
   })
 
   it('shows how long each check usually takes beside its time limit, or that none has passed yet', () => {

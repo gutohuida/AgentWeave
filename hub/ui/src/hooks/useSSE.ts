@@ -40,6 +40,8 @@ const SSE_EVENT_TYPES = [
   // A built slice's next slice offered, taken or declined (`slice_drafting`).
   'next_slice_offered',
   'next_slice_answered',
+  // The known-failing list changed (`known_failing`); a flake the gate just recorded.
+  'known_failing_changed',
   'checks_flaky',
   'agent_heartbeat',
   'agent_created',
@@ -571,8 +573,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'next_slice_answered':
           inv({ queryKey: ['project', pid, 'nextSliceOffers'] })
           break
+        case 'known_failing_changed':
         case 'checks_flaky':
-          inv({ queryKey: ['project', pid, 'checks', 'flaky'] })
+          inv({ queryKey: ['project', pid, 'checks', 'known-failing'] })
           break
         case 'question_asked':
         case 'question_answered':

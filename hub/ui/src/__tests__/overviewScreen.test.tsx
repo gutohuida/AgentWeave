@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { Question } from '@/api/questions'
 import type { Stall } from '@/api/stalls'
+import type { KnownFailingEntry } from '@/api/knownFailing'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
@@ -100,13 +101,11 @@ vi.mock('@/api/ledger', () => ({
 vi.mock('@/api/queue', () => ({ useQueueStatuses: () => queueStatuses }))
 const endStallMutate = vi.fn()
 vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
-let flakyReport: Record<string, unknown> | null = null
-let flakyError: Error | null = null
-const flakyRefetch = vi.fn()
-const handleFlakyMutate = vi.fn()
-vi.mock('@/api/flakyTests', () => ({
-  useFlakyTests: () => ({ data: flakyReport, error: flakyError, refetch: flakyRefetch }),
-  useHandleFlakyTests: () => ({ mutate: handleFlakyMutate }),
+let knownFailing: KnownFailingEntry[] | null = null
+let knownFailingError: Error | null = null
+const knownFailingRefetch = vi.fn()
+vi.mock('@/api/knownFailing', () => ({
+  useKnownFailing: () => ({ data: knownFailing, error: knownFailingError, refetch: knownFailingRefetch }),
 }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
@@ -135,36 +134,85 @@ beforeEach(() => {
   accountingData = { budget: { exhausted: false } }
   queueStatuses = []
   openStalls = []
-  flakyReport = null
-  flakyError = null
-  flakyRefetch.mockClear()
-  handleFlakyMutate.mockClear()
+  knownFailing = null
+  knownFailingError = null
+  knownFailingRefetch.mockClear()
   answerMutate.mockClear()
 })
 
 describe('the wired Overview', () => {
-  it('raises the flaky tests the checks found and hands them to a fix task', () => {
-    flakyReport = {
-      window_days: 30,
-      handled: null,
-      flaky: [
-        { check: 'hub-tests', test: 'tests/test_a.py::test_x', occurrences: 3, first_seen: '2026-10-20T08:00:00Z', last_seen: '2026-10-20T09:00:00Z', task_ids: ['task-1'], run_ids: [] },
-        { check: 'lint', test: null, occurrences: 1, first_seen: '2026-10-20T07:00:00Z', last_seen: '2026-10-20T07:00:00Z', task_ids: ['task-2'], run_ids: [] },
-      ],
-    }
-    render(<OverviewScreen onNavigate={vi.fn()} />)
-    const row = screen.getByText('2 flaky tests in the approval checks').closest('li') as HTMLElement
-    expect(row).toHaveTextContent('tests/test_a.py::test_x (3×), the lint check (1×).')
-    fireEvent.click(within(row).getByRole('button', { name: 'Create a fix task' }))
-    expect(handleFlakyMutate.mock.calls[0][0]).toBe(true)
-    fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' }))
-    expect(handleFlakyMutate.mock.calls[1][0]).toBe(false)
+  it('shows the known-failing list, each entry with check, test, kind, first and last seen, and a link to its fix task', () => {
+    // `failures-already-known-are-on-a-list-not-re-argued` FR-11, ac-shown. In the route's order:
+    // most recently seen first.
+    knownFailing = [
+      {
+        id: 'kf-main', check: 'hub-tests', test: 'tests/test_a.py::test_red', whole_check: false, kind: 'fails on main',
+        first_seen: '2026-10-20T06:00:00Z', last_seen: '2026-10-20T09:30:00Z', added_by_run: 'chk-main01', passes: 0,
+        fix_task: { id: 'task-fix-red', display_id: 'FIX-2', title: 'Fix tests/test_a.py::test_red', status: 'pending', assignee: null },
+      },
+      {
+        id: 'kf-flaky', check: 'lint', test: 'tests/test_b.py::test_lag', whole_check: false, kind: 'flaky',
+        first_seen: '2026-10-19T10:00:00Z', last_seen: '2026-10-20T08:00:00Z', added_by_run: 'chk-task01', passes: 3,
+        fix_task: { id: 'task-fix-lag', display_id: 'FIX-1', title: 'Fix tests/test_b.py::test_lag', status: 'pending', assignee: 'DeveloperOpus' },
+      },
+    ]
+    const onNavigate = vi.fn()
+    render(<OverviewScreen onNavigate={onNavigate} />)
+    const list = screen.getByTestId('known-failing-list')
+    expect(within(list).getByRole('heading', { name: /Known failing tests/ })).toHaveTextContent('2')
+    const rows = within(list).getAllByRole('listitem')
+    expect(rows.map((r) => r.getAttribute('data-testid'))).toEqual(['known-failing-kf-main', 'known-failing-kf-flaky'])
+
+    const main = within(rows[0])
+    expect(main.getByText('tests/test_a.py::test_red')).toBeInTheDocument()
+    expect(rows[0].querySelector('[data-slot="kf-check"]')).toHaveTextContent('hub-tests')
+    expect(rows[0].querySelector('[data-slot="kf-kind"]')).toHaveTextContent('fails on main')
+    const [mainFirst, mainLast] = Array.from(rows[0].querySelectorAll('time'))
+    expect(mainFirst).toHaveAttribute('dateTime', '2026-10-20T06:00:00Z')
+    expect(mainFirst).toHaveTextContent(/^first seen .+ ago$/)
+    expect(mainLast).toHaveAttribute('dateTime', '2026-10-20T09:30:00Z')
+    expect(mainLast).toHaveTextContent(/^last seen .+ ago$/)
+
+    const flaky = within(rows[1])
+    expect(flaky.getByText('tests/test_b.py::test_lag')).toBeInTheDocument()
+    expect(rows[1].querySelector('[data-slot="kf-check"]')).toHaveTextContent('lint')
+    expect(rows[1].querySelector('[data-slot="kf-kind"]')).toHaveTextContent('flaky')
+    const [flakyFirst, flakyLast] = Array.from(rows[1].querySelectorAll('time'))
+    expect(flakyFirst).toHaveAttribute('dateTime', '2026-10-19T10:00:00Z')
+    expect(flakyLast).toHaveAttribute('dateTime', '2026-10-20T08:00:00Z')
+
+    // The fix-task link opens that task on the Tasks page.
+    fireEvent.click(flaky.getByRole('button', { name: /FIX-1/ }))
+    expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-fix-lag')
+    expect(onNavigate).toHaveBeenLastCalledWith('tasks')
+    fireEvent.click(main.getByRole('button', { name: /FIX-2/ }))
+    expect(useTaskFilterStore.getState().pendingOpenTaskId).toBe('task-fix-red')
+
+    // Nothing here is a thing that needs the operator: the old flaky row and its actions are gone.
+    expect(screen.queryByText(/flaky tests? in the approval checks/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create a fix task' })).not.toBeInTheDocument()
   })
 
-  it('shows no flaky row when none are open', () => {
-    flakyReport = { window_days: 30, handled: null, flaky: [] }
+  it('names a whole-check entry by its check, and says when the list is empty', () => {
+    knownFailing = [
+      {
+        id: 'kf-whole', check: 'typecheck', test: null, whole_check: true, kind: 'fails on main',
+        first_seen: '2026-10-20T06:00:00Z', last_seen: '2026-10-20T06:00:00Z', added_by_run: null, passes: 0, fix_task: null,
+      },
+    ]
+    const { rerender } = render(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.getByText('The whole typecheck check')).toBeInTheDocument()
+    expect(screen.getByText('No fix task')).toBeInTheDocument()
+
+    knownFailing = []
+    rerender(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.getByTestId('known-failing-list')).toHaveTextContent('No test is known to fail on main or to flake.')
+  })
+
+  it('shows no list on a Hub older than it', () => {
+    knownFailing = null
     render(<OverviewScreen onNavigate={vi.fn()} />)
-    expect(screen.queryByText(/flaky test/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('known-failing-list')).toBeNull()
   })
 
   it('lists an open question and answers it inline with the chosen option', () => {
@@ -321,13 +369,13 @@ describe('a query the Hub did not answer', () => {
   })
 
   it('offers Retry, which asks the failed read again, and the line goes once it answers', () => {
-    flakyError = new Error('500')
+    knownFailingError = new Error('500')
     const { rerender } = render(<OverviewScreen onNavigate={vi.fn()} />)
-    expect(screen.getByTestId('query-error-notice')).toHaveTextContent('Couldn’t read the flaky tests from the Hub')
+    expect(screen.getByTestId('query-error-notice')).toHaveTextContent('Couldn’t read the known-failing list from the Hub')
     fireEvent.click(within(screen.getByTestId('query-error-notice')).getByRole('button', { name: 'Retry' }))
-    expect(flakyRefetch).toHaveBeenCalledTimes(1)
+    expect(knownFailingRefetch).toHaveBeenCalledTimes(1)
 
-    flakyError = null
+    knownFailingError = null
     rerender(<OverviewScreen onNavigate={vi.fn()} />)
     expect(screen.queryByTestId('query-error-notice')).toBeNull()
   })
