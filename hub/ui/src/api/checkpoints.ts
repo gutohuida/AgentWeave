@@ -229,6 +229,8 @@ export interface ProjectCheckpointList {
   lineage: {
     conversation_id: string
     started_from: { checkpoint_id: string; conversation_id: string; title?: string | null } | null
+    /** The checkpoint the operator started this conversation from, if they did. */
+    started_from_checkpoint?: { checkpoint_id: string; conversation_id: string | null; title?: string | null } | null
     carried_into: { checkpoint_id: string; conversation_id: string } | null
   } | null
 }

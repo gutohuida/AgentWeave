@@ -49,10 +49,10 @@ describe('starting a conversation from a checkpoint', () => {
   it('offers the checkpoint agent first, then starts the chosen agent with the message', async () => {
     const user = userEvent.setup()
     const props = page(checkpoint())
-    await user.click(screen.getByTestId('checkpoint-start'))
-    expect(screen.getByTestId('checkpoint-start-agent')).toHaveTextContent('Builder')
-    await user.click(screen.getByTestId('checkpoint-start-agent'))
-    await user.click(within(await screen.findByRole('menu')).getByRole('menuitemradio', { name: 'QA' }))
+    await user.click(screen.getByTestId('checkpoint-start-open'))
+    const picker = screen.getByTestId('checkpoint-start-agent')
+    expect(within(picker).getAllByRole('option').map((o) => o.textContent)).toEqual(['Builder', 'QA'])
+    await user.selectOptions(picker, 'QA')
     await user.type(screen.getByTestId('checkpoint-start-message'), 'Take it from here')
     await user.click(screen.getByTestId('checkpoint-start-confirm'))
     await waitFor(() => expect(props.onStart).toHaveBeenCalledWith('ckpt-1', 'QA', 'Take it from here'))
@@ -61,14 +61,22 @@ describe('starting a conversation from a checkpoint', () => {
   it('keeps the form open and says why when the start is refused', async () => {
     const user = userEvent.setup()
     page(checkpoint(), { onStart: vi.fn().mockRejectedValue(new Error('Agent is archived')) })
-    await user.click(screen.getByTestId('checkpoint-start'))
+    await user.click(screen.getByTestId('checkpoint-start-open'))
     await user.click(screen.getByTestId('checkpoint-start-confirm'))
     expect(await screen.findByTestId('checkpoint-start-error')).toHaveTextContent('Agent is archived')
   })
 
   it('does not offer a start on a checkpoint nothing was written for', () => {
     page(checkpoint({ status: 'unwritten' }))
-    expect(screen.queryByTestId('checkpoint-start')).toBeNull()
+    expect(screen.queryByTestId('checkpoint-start-open')).toBeNull()
+  })
+
+  it('offers only the open agents, and the checkpoint agent first only when it is open', async () => {
+    const user = userEvent.setup()
+    page(checkpoint({ agent: 'Gone' }), { startAgents: ['Builder', 'QA'] })
+    await user.click(screen.getByTestId('checkpoint-start-open'))
+    const options = within(screen.getByTestId('checkpoint-start-agent')).getAllByRole('option')
+    expect(options.map((o) => o.textContent)).toEqual(['Builder', 'QA'])
   })
 
   it('lists the carry-over and every started conversation with agent and time', async () => {
@@ -82,6 +90,7 @@ describe('starting a conversation from a checkpoint', () => {
         ],
       }),
     )
+    expect(screen.getByTestId('checkpoint-detail-started')).toBeInTheDocument()
     const lineage = screen.getByTestId('checkpoint-detail-lineage')
     expect(lineage).toHaveTextContent('Carried over into')
     const first = within(screen.getByTestId('checkpoint-started-conv-s1'))

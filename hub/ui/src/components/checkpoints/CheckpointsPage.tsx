@@ -51,6 +51,8 @@ export interface CheckpointsPageProps {
   onOpenConversation?: (agent: string | null, conversationId: string) => void
   /** Start a conversation of `agent` from the opened checkpoint; the container opens the result. */
   onStart?: (checkpointId: string, agent: string, message: string) => Promise<void>
+  /** The project's open agents, which a start may choose from (the filter's `agents` also holds archived ones). */
+  startAgents?: string[]
   loading?: boolean
   error?: boolean
   now?: Date
@@ -130,12 +132,13 @@ function StartPanel({
   onStart: (checkpointId: string, agent: string, message: string) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
-  const [agent, setAgent] = useState(checkpoint.agent)
+  const [chosen, setAgent] = useState(checkpoint.agent)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
-  // The checkpoint's own agent first, then the rest.
-  const choices = [checkpoint.agent, ...agents.filter((name) => name !== checkpoint.agent)]
+  // The checkpoint's own agent first (when it is open), then the rest.
+  const choices = [...agents.filter((name) => name === checkpoint.agent), ...agents.filter((name) => name !== checkpoint.agent)]
+  const agent = choices.includes(chosen) ? chosen : (choices[0] ?? chosen)
   const confirm = async () => {
     setBusy(true)
     setFailure(null)
@@ -155,7 +158,7 @@ function StartPanel({
         type="button"
         data-slot="checkpoint-start"
         className="aw-link"
-        data-testid="checkpoint-start"
+        data-testid="checkpoint-start-open"
         onClick={() => setOpen(true)}
       >
         Start a conversation
@@ -164,13 +167,18 @@ function StartPanel({
   }
   return (
     <div className="aw-ckpts-start" data-testid="checkpoint-start-form">
-      <MenuSelect
-        label="Agent"
-        testId="checkpoint-start-agent"
+      <select
+        aria-label="Agent"
+        data-testid="checkpoint-start-agent"
         value={agent}
-        onChange={setAgent}
-        options={choices.map((name) => ({ value: name, label: name }))}
-      />
+        onChange={(event) => setAgent(event.target.value)}
+      >
+        {choices.map((name) => (
+          <option key={name} value={name}>
+            {name}
+          </option>
+        ))}
+      </select>
       <textarea
         data-testid="checkpoint-start-message"
         aria-label="Message (optional)"
@@ -238,7 +246,7 @@ function CheckpointDetail({
       </p>
 
       {props.onStart && checkpoint.status === 'ready' ? (
-        <StartPanel key={checkpoint.id} checkpoint={checkpoint} agents={props.agents} onStart={props.onStart} />
+        <StartPanel key={checkpoint.id} checkpoint={checkpoint} agents={props.startAgents ?? props.agents} onStart={props.onStart} />
       ) : null}
 
       {carriedFrom || carriedInto || started.length ? (
@@ -272,7 +280,7 @@ function CheckpointDetail({
             </p>
           ) : null}
           {started.length ? (
-            <div data-testid="checkpoint-started">
+            <div data-testid="checkpoint-detail-started">
               <p>Conversations started from this checkpoint:</p>
               <ul className="aw-ckpts-list">
                 {started.map((item) => (

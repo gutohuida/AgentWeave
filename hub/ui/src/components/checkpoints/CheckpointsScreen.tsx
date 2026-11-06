@@ -39,6 +39,7 @@ export function CheckpointsScreen({
   const opened = inList ?? whole.data?.checkpoints.find((checkpoint) => checkpoint.id === selectedId) ?? null
 
   const agents = useAgents('all')
+  const openAgents = useAgents('open')
   const open = useProjectConversations(projectId, 'open')
   const archived = useProjectConversations(projectId, 'archived')
   const conversations = useMemo<AgentConversation[]>(
@@ -55,6 +56,7 @@ export function CheckpointsScreen({
     for (const checkpoint of checkpoints) names.add(checkpoint.agent)
     return [...names].sort()
   }, [agents.data, checkpoints])
+  const startAgents = useMemo(() => (openAgents.data ?? []).map((agent) => agent.name).sort(), [openAgents.data])
   const conversationOptions = conversations
     .filter((c) => !filters.agent || c.agent === filters.agent)
     .map((c) => ({ id: c.id, label: labelOf(c) }))
@@ -102,6 +104,7 @@ export function CheckpointsScreen({
       filters={filters}
       onFilters={(next) => go(next)}
       agents={agentNames}
+      startAgents={startAgents}
       conversations={conversationOptions}
       conversationLabel={conversationLabel}
       selectedId={selectedId}

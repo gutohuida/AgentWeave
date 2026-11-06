@@ -743,7 +743,9 @@ export function AgentOutputPanel({
     { conversationId: currentConversationId ?? undefined },
     { enabled: Boolean(currentConversationId) },
   )
-  const startedFrom = conversationLineage?.lineage?.started_from ?? null
+  // Carried over by a cut-over, or started by the operator from a checkpoint (FR-7): one banner.
+  const startedFrom =
+    conversationLineage?.lineage?.started_from ?? conversationLineage?.lineage?.started_from_checkpoint ?? null
   const carriedInto = conversationLineage?.lineage?.carried_into ?? null
   const openCheckpoint = (checkpointId: string) => {
     if (projectId) goTo(checkpointsDestination(projectId, { checkpoint: checkpointId }))
@@ -1320,26 +1322,6 @@ export function AgentOutputPanel({
         onBackToProject={onBackToProject}
         onArchive={conversationTarget ? handleArchive : undefined}
       />
-
-      {currentConversation?.started_from_checkpoint_id && projectId ? (
-        <p className="aw-ckpts-none px-4 py-1" data-testid="conversation-started-from">
-          Started from a checkpoint.{' '}
-          <button
-            type="button"
-            data-slot="started-from-link"
-            className="aw-link aw-link-inline"
-            onClick={() =>
-              goTo(
-                checkpointsDestination(projectId, {
-                  checkpoint: currentConversation.started_from_checkpoint_id,
-                }),
-              )
-            }
-          >
-            Open the checkpoint
-          </button>
-        </p>
-      ) : null}
 
       {/* Output body. The return-to-newest control used to float over its lower edge — which put
           an interactive element on top of whatever entry happened to be scrolled under it, and
