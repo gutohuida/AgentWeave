@@ -169,9 +169,10 @@ def start_hub():
         ["py", "-3.11", "-m", "uvicorn", "hub.main:app", "--port", str(PORT), "--host", "127.0.0.1"],
         cwd=str(REPO / "hub"), env=env, stdout=log, stderr=subprocess.STDOUT,
         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
-    # Exactly how the Hub will call it: a bare name, resolved against the caller's own PATH.
-    # (the child's env is passed to the probe alone; the drive's own environment is not touched)
-    probe = subprocess.run(["gh", "--version"], capture_output=True, text=True, env=env)
+    # Windows resolves a bare exe name on the parent's PATH, not on the env handed to the child, so
+    # the probe names the file the Hub's PATH finds first: the shim.
+    probe = subprocess.run([shutil.which("gh", path=env["PATH"]) or "gh", "--version"],
+                           capture_output=True, text=True, env=env)
     if probe.returncode or not calls_log.exists() or "--version" not in calls_log.read_text(
             encoding="utf-8"):
         proc.kill()
@@ -347,6 +348,12 @@ def drive(state):
                                 (evidence or {}).get("evidence", [])) if e.get("review_state") == "accepted"]
     reqs = list(one.ids.values()) or ["FR-1", "FR-2"]
     missing = [x for x in [one.doc, *reqs, *ev_ids, "t1", "t2"] if x not in body]
+    # each task's line must carry a state word, not just the key
+    state_words = ("pending", "assigned", "in_progress", "completed", "under_review", "approved",
+                   "revision_needed", "pushed", "landed", "passed")
+    missing += [f"state of {k}" for k in ("t1", "t2")
+                if not any(k in ln and any(w in ln.lower() for w in state_words)
+                           for ln in body.splitlines())]
     check("desc-ac1: title is the spec's; body names spec path, requirement ids, accepted evidence "
           "ids and each task with its state", pr.get("title") == one.title and not missing
           and bool(ev_ids), f"title {pr.get('title')!r}; missing from body {missing}; "
@@ -411,10 +418,12 @@ def audit_calls():
     for argv in calls:
         print("  gh " + " ".join(argv))
     flat = [" ".join(a).lower() for a in calls]
+    mutating = ("-x put", "-x delete", "-x patch", "-x post", "--method put", "--method delete",
+                "--method patch", "--method post", "--method=put", "--method=delete",
+                "--method=patch", "--method=post")
     banned = [c for c in flat if c.startswith(("pr merge", "pr review")) or "--base" in c
               or "protection" in c
-              or (c.startswith("api") and any(m in c for m in ("-x put", "-x delete", "-x patch",
-                                                                "--method", "merge")))]
+              or (c.startswith("api") and any(m in c for m in (*mutating, "merge")))]
     check("nm-ac1: none of the Hub's gh calls is a merge, approval, base change or "
           "branch-protection change", bool(calls) and not banned,
           f"{len(calls)} calls; offending {banned}" if calls else "no gh call recorded at all")
