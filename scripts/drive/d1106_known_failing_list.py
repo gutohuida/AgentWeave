@@ -22,8 +22,9 @@ Steps, in order:
            PASS needs the entry on the list, with a fix task.
   owner    FR-5/FR-6: the fix task (the entry was found on main) is unassigned, is on no loop, flow
            or build, and has no run after a minute with a loop firing in the project.
-  land     two tasks: CLEAN adds a passing test, NEW adds `test_new`, which fails. Both complete
-           and are approved together. PASS needs: CLEAN lands past the listed test; NEW is sent
+  land     two tasks: CLEAN adds marker.txt, NEW adds `test_new`, which fails only while marker.txt
+           exists, so each passes its own completion run and the batch's run fails it. Both are
+           approved together. PASS needs: CLEAN lands past the listed test; NEW is sent
            back (its own failure); no check run used a checkout of main; no landing was ever held.
   removed  FR-4: an outside commit fixes `test_listed`; the Hub's run on that commit passes it;
            the entry comes off the list while its fix task stays open.
@@ -64,11 +65,11 @@ LIST_ROUTE = "/projects/{pid}/known-failing"
 LISTED_ID = "test_listed::test_listed"
 NEW_ID = "test_new::test_new"
 
-RUNCHECK = r"""import json, os, subprocess, sys
+RUNCHECK = r"""import json, os, subprocess, sys, time
 log, args = sys.argv[1], sys.argv[2:]
 head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
 with open(log, "a", encoding="utf-8") as f:
-    f.write(json.dumps({"head": head, "cwd": os.getcwd(), "args": args}) + "\n")
+    f.write(json.dumps({"head": head, "cwd": os.getcwd(), "args": args, "t": time.time()}) + "\n")
 targets = []
 if args[:1] == ["--rerun"]:
     for t in args[1:]:
@@ -80,6 +81,12 @@ sys.exit(run.returncode)
 """
 PASSING = "def test_ok():\n    assert 1 + 1 == 2\n"
 FAILING = "def test_{n}():\n    assert 1 + 1 == 3\n"
+# The new failure only exists once the two tasks are merged: CLEAN adds marker.txt, NEW adds a test
+# that fails while marker.txt exists. Each task's own completion run passes; the batch's run fails.
+CONFLICT = (
+    "import pathlib\n\n\ndef test_new():\n"
+    "    assert not (pathlib.Path(__file__).parent / 'marker.txt').exists()\n"
+)
 FIXED = "def test_listed():\n    assert 1 + 1 == 2\n"
 
 failures: list[str] = []
@@ -400,6 +407,9 @@ def drive(hub: "Hub", keep: list) -> None:
             },
         )
         time.sleep(75)
+        for job in hub.call("GET", f"/projects/{project.id}/jobs"):
+            if job.get("name") == "d1106 firing":  # done with it: it must not fire later
+                hub.request("POST", f"/projects/{project.id}/jobs/{job['id']}/archive")
         task = hub.call("GET", f"/projects/{project.id}/tasks/{fix}")
         story = hub.call("GET", f"/projects/{project.id}/tasks/{fix}/story")
         check(
@@ -422,16 +432,23 @@ def drive(hub: "Hub", keep: list) -> None:
         )
 
     # land: the clean task goes past the listed test; the one adding a failure goes back
-    clean = project.task_with_work("Clean work", {"notes.txt": "nothing breaks\n"})
-    bad = project.task_with_work("Adds a failing test", {"test_new.py": FAILING.format(n="new")})
+    clean = project.task_with_work("Clean work", {"marker.txt": "present\n"})
+    bad = project.task_with_work("Adds a test that fails beside it", {"test_new.py": CONFLICT})
     for t in (clean, bad):
-        project.wait_run(t, minutes=5)
+        run = project.wait_run(t, minutes=5)
+        check(
+            f"land: {t}'s own completion run passes (the failure needs the merge)",
+            run.get("state") == "passed",
+            f"state {run.get('state')}",
+        )
+    tips: dict[str, float] = {main_tip: 0.0}  # every main tip seen, when first seen
     for t in (clean, bad):
         approve(project, t)
     held = False
 
     def settled() -> bool:
         nonlocal held
+        tips.setdefault(git(root, "rev-parse", "master"), time.time())
         states = [landing_of(project, t).get("state") for t in (clean, bad)]
         held = held or "held" in states
         return held or all(s in ("landed", "sent_back", "not_landed") for s in states)
@@ -457,11 +474,11 @@ def drive(hub: "Hub", keep: list) -> None:
     )
     check("land: no landing was held", not held)
     after = runs_logged(log)[seen_before:]
-    on_main = [r for r in after if r["head"] == main_tip]
+    on_main = [r for r in after if r["head"] in tips and tips[r["head"]] < r["t"]]
     check(
         "land: no check run used a checkout of main",
         not on_main,
-        f"{len(on_main)} of {len(after)} runs at main's pre-landing tip {main_tip[:8]}",
+        f"{len(on_main)} of {len(after)} runs on a main tip seen before the run ({len(tips)} tips)",
     )
 
     # removed: the test passes again on main
