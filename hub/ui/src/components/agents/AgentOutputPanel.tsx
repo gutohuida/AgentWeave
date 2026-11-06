@@ -743,7 +743,9 @@ export function AgentOutputPanel({
     { conversationId: currentConversationId ?? undefined },
     { enabled: Boolean(currentConversationId) },
   )
-  const startedFrom = conversationLineage?.lineage?.started_from ?? null
+  // Carried over by a cut-over, or started by the operator from a checkpoint (FR-7): one banner.
+  const startedFrom =
+    conversationLineage?.lineage?.started_from ?? conversationLineage?.lineage?.started_from_checkpoint ?? null
   const carriedInto = conversationLineage?.lineage?.carried_into ?? null
   const openCheckpoint = (checkpointId: string) => {
     if (projectId) goTo(checkpointsDestination(projectId, { checkpoint: checkpointId }))
