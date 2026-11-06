@@ -436,10 +436,15 @@ def drive(hub: "Hub", keep: list) -> None:
     bad = project.task_with_work("Adds a test that fails beside it", {"test_new.py": CONFLICT})
     for t in (clean, bad):
         run = project.wait_run(t, minutes=5)
+        # main carries the listed failure, so the run's state is "failed"; what matters is that
+        # nothing but the listed test fails (the new failure needs the merge) and the task stays.
+        failing = [i for r in run.get("results") or [] for i in test_ids(r)]
+        strays = [i for i in failing if i != LISTED_ID and not i.endswith("test_listed")]
+        t_status = hub.call("GET", f"/projects/{project.id}/tasks/{t}").get("status")
         check(
-            f"land: {t}'s own completion run passes (the failure needs the merge)",
-            run.get("state") == "passed",
-            f"state {run.get('state')}",
+            f"land: {t}'s own completion run fails nothing but the listed test",
+            not strays and t_status != "revision_needed",
+            f"failing {failing}, task status {t_status}",
         )
     tips: dict[str, float] = {main_tip: 0.0}  # every main tip seen, when first seen
     for t in (clean, bad):
