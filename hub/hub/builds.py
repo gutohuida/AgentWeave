@@ -72,16 +72,6 @@ def rigor_for_level(level: Optional[str]) -> Optional[str]:
     return _RIGOR.get(level or "")
 
 
-def allows_automatic_override(level: Optional[str]) -> bool:
-    """Whether slice M's automatic check override may land work at *level* (design D5).
-
-    True at Fast and Reviewed (still subject to M's project setting), never at Gated: the operator
-    picks Gated to judge every landing, so a Hub judgement that a failure is not the task's does
-    not land it there. A task outside any build (None) is not held back by a level.
-    """
-    return level != GATED
-
-
 def usd(micros: Optional[int]) -> Optional[float]:
     return None if micros is None else round(micros / MICROS, 6)
 

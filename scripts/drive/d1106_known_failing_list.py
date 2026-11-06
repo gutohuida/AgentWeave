@@ -29,10 +29,10 @@ Steps, in order:
   removed  FR-4: an outside commit fixes `test_listed`; the Hub's run on that commit passes it;
            the entry comes off the list while its fix task stays open.
 
-The list's route is read as `GET /projects/<id>/known-failing` (an object with `entries`, or a
-list), each entry carrying `test_id` (or `test`), `kind` and `fix_task_id` (or `owner_task_id`);
-LIST_ROUTE and the field names in `entry_*` below are the one place to change if the build names
-them differently.
+The list's route is read as `GET /projects/<id>/checks/known-failing` (an object with `entries`,
+or a list), each entry carrying `test_id` (or `test`), `kind` and `fix_task` (an object with its
+`id`; or `fix_task_id`, `owner_task_id`); LIST_ROUTE and the field names in `entry_*` below are the
+one place to change if the build names them differently.
 
     py -3.11 scripts/drive/d1106_known_failing_list.py
     py -3.11 scripts/drive/d1106_known_failing_list.py --keep   # leave the scratch
@@ -61,7 +61,9 @@ TRIAL_KEY = pathlib.Path.home() / ".agentweave" / "hub" / "profiles" / "trial" /
 SCRATCH = pathlib.Path.home() / "Documents" / f"aw-d1106-list-{time.strftime('%H%M%S')}"
 HAIKU = "claude-haiku-4-5-20251001"  # the loop's agent never takes a turn; a runner is required
 GIT_ID = ["-c", "user.name=d1106", "-c", "user.email=d1106@drive"]
-LIST_ROUTE = "/projects/{pid}/known-failing"
+LIST_ROUTE = "/projects/{pid}/checks/known-failing"
+#: How often the Hub looks at main (`project_checks.WATCH_SECONDS`).
+WATCH_SECONDS = 30
 LISTED_ID = "test_listed::test_listed"
 NEW_ID = "test_new::test_new"
 
@@ -282,6 +284,9 @@ def entry_test(entry: dict) -> str:
 
 
 def entry_task(entry: dict) -> str:
+    fix = entry.get("fix_task")
+    if isinstance(fix, dict) and fix.get("id"):
+        return fix["id"]
     return entry.get("fix_task_id") or entry.get("owner_task_id") or ""
 
 
@@ -323,11 +328,14 @@ def runs_logged(log: pathlib.Path) -> list[dict]:
 
 
 def approve(project: "Project", task: str) -> None:
-    code, res = project.hub.request(
-        "PATCH", f"/projects/{project.id}/tasks/{task}", {"status": "approved"}
-    )
-    if code >= 300:
-        note(f"approving {task} -> {code}: {json.dumps(res)[:300]}")
+    """The operator's approval: into review first (`completed` has no edge to `approved`)."""
+    for status in ("under_review", "approved"):
+        code, res = project.hub.request(
+            "PATCH", f"/projects/{project.id}/tasks/{task}", {"status": status}
+        )
+        if code >= 300:
+            note(f"moving {task} to {status} -> {code}: {json.dumps(res)[:300]}")
+            return
 
 
 def landing_of(project: "Project", task: str) -> dict:
@@ -365,6 +373,10 @@ def drive(hub: "Hub", keep: list) -> None:
     )
     if code >= 300:
         raise RuntimeError(f"saving the check -> {code}: {res}")
+
+    # The Hub's first look at main only records its tip (`main_watch.observe`), so a commit made
+    # before that look is the tip it records, not a move: wait for the look, every WATCH_SECONDS.
+    time.sleep(WATCH_SECONDS + 10)
 
     # seed: an outside commit puts a failing test on main
     commit_to_main(root, {"test_listed.py": FAILING.format(n="listed")}, "add a failing test")

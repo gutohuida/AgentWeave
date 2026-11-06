@@ -1157,13 +1157,14 @@ async def apply_transition(
         overridden = reason if refusal.checks_overridden else None
         if overridden is not None:
             override_by = OVERRIDE_BY_OPERATOR
-        elif refusal.automatic_override is not None:
-            # Failures that are not the task's -- main's, or flakes -- land with the Hub's override
-            # (`a-red-main-does-not-hold-the-night`, D3). Who overrode is a column of its own: the
-            # actor stays the approver, and there is no third actor kind.
-            from .requirement_gate import override_reason_for
+        elif refusal.went_past is not None:
+            # Failures that are not the task's -- on the known-failing list, or flakes -- are
+            # recorded with the approval as the Hub's (`failures-already-known-are-on-a-list-not-re-
+            # argued`, FR-7). Who recorded it is a column of its own: the actor stays the approver,
+            # and there is no third actor kind.
+            from .requirement_gate import went_past_reason
 
-            overridden = override_reason_for(refusal.automatic_override)
+            overridden = went_past_reason(refusal.went_past)
             override_by = OVERRIDE_BY_HUB
         # `contract` never refuses, so its unmet and rejected requirements have nowhere to surface
         # unless this call carries them out. Not persisted — a transient attribute on the returned
