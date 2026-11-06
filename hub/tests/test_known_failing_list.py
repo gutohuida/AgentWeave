@@ -214,9 +214,9 @@ def test_ac_seeded_the_migration_lists_the_open_fix_tasks_tests(tmp_path):
     _run(_create_all_at(db_url))
     with sqlite3.connect(db_file) as conn:
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
-        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0165')")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0166')")
         conn.commit()
-    _downgrade_to(db_url, "0164")
+    _downgrade_to(db_url, "0165")
     with sqlite3.connect(db_file) as conn:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "known_failing_tests" not in tables
@@ -259,7 +259,7 @@ def test_ac_seeded_the_migration_lists_the_open_fix_tasks_tests(tmp_path):
         conn.commit()
         before = {t: _rows(conn, t) for t in ("projects", "tasks", "event_logs")}
 
-    _upgrade_to(db_url, "0165")
+    _upgrade_to(db_url, "0166")
     with sqlite3.connect(db_file) as conn:
         rows = conn.execute(
             "SELECT project_id, check_name, test, kind, fix_task_id, added_by_run, first_seen "
@@ -273,7 +273,7 @@ def test_ac_seeded_the_migration_lists_the_open_fix_tasks_tests(tmp_path):
         ]  # fmt: skip
         assert {t: _rows(conn, t) for t in ("projects", "tasks", "event_logs")} == before
 
-    _downgrade_to(db_url, "0164")
+    _downgrade_to(db_url, "0165")
     with sqlite3.connect(db_file) as conn:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert not {"known_failing_tests", "unlisted_test_failures", "main_check_runs"} & tables

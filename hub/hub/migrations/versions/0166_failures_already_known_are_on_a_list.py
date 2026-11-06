@@ -1,8 +1,8 @@
 """failures already known are on a list -- known_failing_tests, unlisted_test_failures,
 main_check_runs
 
-Revision ID: 0165
-Revises: 0164
+Revision ID: 0166
+Revises: 0165
 Create Date: 2026-11-06 03:00:00.000000
 
 `failures-already-known-are-on-a-list-not-re-argued` (Tier 2), task `list`. Each project keeps one
@@ -36,8 +36,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0165"
-down_revision = "0164"
+revision = "0166"
+down_revision = "0165"
 branch_labels = None
 depends_on = None
 
