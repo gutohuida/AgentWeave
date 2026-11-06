@@ -40,11 +40,14 @@ HUMAN STEP -- guide
   Delete the two remote branches afterwards if you want them gone (`gh pr list --state all`).
   Set AW_DRIVE_NO_HUMAN=1 to stop after the automated steps, leaving the PR unmerged.
 
-Routes the drive assumes for what the build adds (the build's tasks create them; adjust here if
-they land under other names): project setting `pr_landing` (PUT /projects/{id}/settings), build
-landing `pull_request` (POST /project/documents/build), build read GET /project/builds/{id}
-(`pull_request: {url, number, state, last_asked_at, error}`, tasks each with `pull_request` and
-`landed`), and POST /project/builds/{id}/check-now.
+Routes the build shipped, which the drive calls: project setting `pr_landing` (PUT
+/projects/{id}/settings); build landing `pull_request` (POST /project/documents/build); the build
+read is the document read (GET /project/spec?path=..., `builds[]`, each with `pull_request: {url,
+number, state, last_asked_at, error}`); the PR check POST /project/builds/{id}/pull-request/check,
+`wait=true` for 'check now' and `wait=false` for the operator opening the build (it asks in the
+background and answers at once); a task's landing is its latest landing, GET /tasks/{id}/checks
+`landing` (`state` landed / not_landed, `landed_sha`); where main stands against GitHub's, GET
+/projects/{id}/main/github. A task carries its build's PR through its `build_id`.
 
     py -3.11 scripts/drive/pr_landing_drive.py
 """
@@ -72,10 +75,12 @@ DB = pathlib.Path(os.environ.get("AW_DRIVE_DB") or PROFILE / "agentweave.db")
 KEY = (PROFILE / "bootstrap-key.txt").read_text(encoding="utf-8").strip()
 STAMP = time.strftime("%H%M%S")
 TMP = pathlib.Path(tempfile.gettempdir()) / "drive-pr-landing" / STAMP
-# The agents are bound to a model that does not exist: Build starts the flow at once, and a real
-# turn would race the drive's hand-made commit in the same worktree. A turn on this model fails
-# before it touches anything, so the operator's hand (Build.work) is the only builder.
-HAIKU = "drive-no-such-model"
+# A real turn would race the drive's hand-made commit in the same worktree, so the Hub's PATH
+# carries a stub `claude` in place of the real one (`start_hub`): it answers `--version`, so agents
+# can be created, and fails every turn before it touches anything, so the operator's hand
+# (Build.work) is the only builder. The runner names a model the catalog declares, because the
+# runner route refuses any other.
+HAIKU = "haiku"
 BUILDER, CHECKER = "Builder", "Checker"
 README = "testbed/README.md"
 results = []
@@ -162,7 +167,14 @@ def start_hub():
     build_shim(shim, real)
     env = {k: v for k, v in os.environ.items() if k != "HUB_URL" and not k.startswith("AW_")}
     env["GH_SHIM_LOG"], env["GH_SHIM_REAL"] = str(calls_log), real
-    env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
+    stub = TMP / "stub-claude"
+    stub.mkdir()
+    (stub / "claude.cmd").write_text(
+        '@echo off\nif "%~1"=="--version" (echo 0.0.0 drive stub& exit /b 0)\n'
+        "echo the drive's stub claude runs no turn 1>&2\nexit /b 1\n", encoding="utf-8")
+    keep = [d for d in env.get("PATH", "").split(os.pathsep)
+            if d and not shutil.which("claude", path=d)]
+    env["PATH"] = os.pathsep.join([str(shim), str(stub), *keep])
     env["DATABASE_URL"] = f"sqlite+aiosqlite:///{DB.as_posix()}"
     env["AW_BOOTSTRAP_API_KEY"] = KEY
     log = open(TMP / "hub.log", "w", encoding="utf-8")  # noqa: SIM115 -- the child's stdout
@@ -206,7 +218,9 @@ def payload(title):
         "tasks": [task("t1", "one", f"drive-{STAMP}-one"),
                   task("t2", "two", f"drive-{STAMP}-two")],
         "delivery": {"mode": "flow", "agent": BUILDER, "builders": [BUILDER], "level": "reviewed",
-                     "landing": "pull_request", "stop_when_queue_empties": True,
+                     # The Build request names landing 'pull_request'; a document's delivery
+                     # recommends only 'main' or 'nowhere'.
+                     "stop_when_queue_empties": True,
                      "cron": "0 0 1 1 *", "reasons": {"mode": "Two tasks.", "agent": "Default."}},
     }
 
@@ -225,6 +239,9 @@ class Build:
         code, out = api("PUT", f"{base}/project/documents/{self.doc}/content",
                         {"document": payload(self.title)})
         check(f"{label}: document saves", code == 200, f"{code} {str(out)[:400]}", fatal=True)
+        # The identifiers the Hub minted, by requirement key: t1 serves `one`, t2 serves `two`.
+        minted = (out or {}).get("identifiers") or {}
+        self.ids = {"t1": minted.get("one"), "t2": minted.get("two")}
         _, read = api("GET", f"{base}/project/spec?path={quoted}")
         version = read.get("content_version") if isinstance(read, dict) else None
         code, out = api("POST", f"{base}/project/documents/phase?path={quoted}&to=approved",
@@ -238,9 +255,6 @@ class Build:
         self.build_id = ((out.get("build_outcome") or {}).get("build") or {}).get("id")
         _, tasks = api("GET", f"{base}/tasks?limit=200")
         rows = tasks["tasks"] if isinstance(tasks, dict) else tasks
-        _, spec = api("GET", f"{base}/project/spec?path={quoted}")
-        reqs = (spec or {}).get("requirements") or []
-        self.ids = dict(zip(("t1", "t2"), (r["identifier"] for r in reqs)))  # authored order
         self.revisions = 0
         self.tasks = {t["spec_task_key"]: t for t in rows
                       if t.get("spec_document_id") and t.get("build_id") == self.build_id}
@@ -248,7 +262,25 @@ class Build:
               str(sorted(self.tasks)), fatal=True)
 
     def view(self):
-        return api("GET", f"{self.ctx['base']}/project/builds/{self.build_id}")[1]
+        """The build as the document read carries it (there is no single-build read)."""
+        quoted = urllib.parse.quote(self.doc)
+        _, read = api("GET", f"{self.ctx['base']}/project/spec?path={quoted}")
+        rows = (read or {}).get("builds") or [] if isinstance(read, dict) else []
+        return next((b for b in rows if b.get("id") == self.build_id), {})
+
+    def check_now(self, wait=True):
+        """'Check now' (wait) or the operator opening the build (no wait)."""
+        return api("POST", f"{self.ctx['base']}/project/builds/{self.build_id}/pull-request/check"
+                           f"?wait={'true' if wait else 'false'}", {}, timeout=300)
+
+    def landings(self):
+        """Each task's latest landing: (key, state, landed_sha)."""
+        out = []
+        for key, task in sorted(self.tasks.items()):
+            _, checks = api("GET", f"{self.ctx['base']}/tasks/{task['id']}/checks")
+            landing = (checks or {}).get("landing") or {} if isinstance(checks, dict) else {}
+            out.append((key, landing.get("state"), landing.get("landed_sha")))
+        return out
 
     def pr(self):
         return (self.view() or {}).get("pull_request") or {}
@@ -264,7 +296,17 @@ class Build:
         task = self.tasks[key]
         wt = pathlib.Path(self.ctx["root"]) / ".agentweave" / "tasks" / task["id"]
         line = line or f"drive-{STAMP}-{self.label}-{key}"
-        text = (wt / README).read_text(encoding="utf-8")
+        if not (wt / README).exists():
+            # The Hub provisions a task's worktree when a turn starts on it: trigger the builder
+            # on the task (its stub `claude` fails the turn at once) and wait for the checkout.
+            code, out = api("POST", f"{self.ctx['base']}/agent/trigger",
+                            {"agent": BUILDER, "task_id": task["id"],
+                             "message": "drive: provision this task's worktree"})
+            check(f"{self.label}: {key} worktree provisioned by a turn",
+                  poll(lambda: (wt / README).exists(), 120, 2), f"{code} {str(out)[:300]}",
+                  fatal=True)
+            time.sleep(10)  # let the failed turn finish before the hand-made commit
+        text =(wt / README).read_text(encoding="utf-8")
         if line not in text:
             (wt / README).write_text(text.rstrip("\n") + f"\n{line}\n", encoding="utf-8")
             run(wt, "git", "add", README)
@@ -286,8 +328,22 @@ class Build:
                    {"status": status, **extra})
 
     def approve(self, key):
+        # A reviewed build approves completed work only after review: take it into review first
+        # (the Hub may already have, which answers 409 here and is fine).
+        self.set_status(key, "under_review")
+
+        def still_running(out):
+            detail = out.get("detail") if isinstance(out, dict) else None
+            return isinstance(detail, dict) and bool(detail.get("unfinished"))
+
+        # Completing the task starts a turn on it (which the stub `claude` fails); the gate refuses
+        # approval until that turn has ended, so ask again while it is the only thing in the way.
+        end = time.time() + 180
         code, out = self.set_status(key, "approved")
-        check(f"{self.label}: {key} approved", code == 200, f"{code} {str(out)[:300]}")
+        while code == 409 and still_running(out) and time.time() < end:
+            time.sleep(5)
+            code, out = self.set_status(key, "approved")
+        check(f"{self.label}: {key} approved", code == 200, f"{code} {str(out)[:600]}", fatal=True)
         # Pushing happens after the landing-phase checks, so give it time.
         poll(lambda: self.pr().get("url") or self.pr().get("error"), 600, 5)
 
@@ -362,7 +418,9 @@ def drive(state):
     # sh-ac1
     view = one.view() or {}
     card = view.get("pull_request") or {}
-    task_card = ((api("GET", f"{base}/tasks/{one.tasks['t1']['id']}")[1]) or {}).get("pull_request") or {}
+    # A task shows its build's PR: the task names its build, and the build read carries the PR.
+    task_row = api("GET", f"{base}/tasks/{one.tasks['t1']['id']}")[1] or {}
+    task_card = card if task_row.get("build_id") == one.build_id else {}
     check("sh-ac1: the build card and a task show the link, state and last-asked time",
           all(c.get("url") and c.get("state") in ("draft", "ready") and c.get("last_asked_at")
               for c in (card, task_card)), f"build {card}; task {task_card}")
@@ -376,15 +434,22 @@ def drive(state):
     check("mc-ac1: build 2 has a PR", bool(url2), str(two.pr()), fatal=True)
     branch2 = two.gh_pr("headRefName")["headRefName"]
     run(root, "gh", "pr", "close", url2)
-    api("POST", f"{base}/project/builds/{two.build_id}/check-now")
-    view = two.view() or {}
-    landed = [(t.get("key"), t.get("landed")) for t in (view.get("tasks") or [])]
+    # The operator opens the build: the Hub asks in the background and answers at once.
+    code, out = two.check_now(wait=False)
+    check("mc-ac1: opening the build reaches the Hub's PR check", code == 200,
+          f"{code} {str(out)[:300]}")
+    # Only the task that was pushed was carried by the PR; t2 was never worked.
+    pushed = {"t1"}
+    poll(lambda: all(s == "not_landed" for k, s, _ in two.landings() if k in pushed), 120, 3)
+    landings = two.landings()
     remote = run(root, "git", "ls-remote", "--heads", "origin", branch2)
-    local = run(root, "git", "branch", "--list", branch2) or run(root, "git", "branch", "-a", "--list", f"*{branch2}")
+    local = run(root, "git", "branch", "--list", branch2)
     check("mc-ac1: build 2's tasks read not landed; the branch is on GitHub and locally",
-          view.get("pull_request", {}).get("state") == "closed"
-          and all(not v for _, v in landed) and bool(landed) and bool(remote) and bool(local),
-          f"state {view.get('pull_request')}; tasks {landed}; remote {bool(remote)} local {bool(local)}")
+          (two.view().get("pull_request") or {}).get("state") == "closed"
+          and all(s == "not_landed" for k, s, _ in landings if k in pushed)
+          and bool(remote) and bool(local),
+          f"state {two.view().get('pull_request')}; landings {landings}; remote {bool(remote)} "
+          f"local {bool(local)}")
 
     # The human step.
     url1 = one.pr().get("url")
@@ -394,22 +459,21 @@ def drive(state):
         print("AW_DRIVE_NO_HUMAN set: stopping before the merge checks")
         return
     input()
-    api("POST", f"{base}/project/builds/{one.build_id}/check-now")
-    view = one.view() or {}
-    tasks = view.get("tasks") or []
-    merge = run(root, "gh", "pr", "view", url1, "--json", "mergeCommit,state")
-    merge = json.loads(merge)
+    code, out = one.check_now(wait=True)
+    check("mc-ac2: 'check now' answers", code == 200, f"{code} {str(out)[:300]}")
+    landings = one.landings()
+    merge = json.loads(run(root, "gh", "pr", "view", url1, "--json", "mergeCommit,state"))
     sha = (merge.get("mergeCommit") or {}).get("oid", "")
     check("mc-ac2: build 1's tasks read landed, naming GitHub's merge commit",
-          merge["state"] == "MERGED" and bool(tasks)
-          and all(t.get("landed") and sha and sha in json.dumps(t.get("landed")) for t in tasks),
-          f"merge {sha}; tasks {[(t.get('key'), t.get('landed')) for t in tasks]}")
-    run(root, "git", "fetch", "-q", "origin", main_name)
-    ok = poll(lambda: run(root, "git", "rev-parse", main_name) == run(root, "git", "rev-parse",
-                                                                      f"origin/{main_name}"), 30)
-    check("lm-ac1: the local main equals GitHub's main", bool(ok),
-          f"local {run(root, 'git', 'rev-parse', main_name)} remote "
-          f"{run(root, 'git', 'rev-parse', f'origin/{main_name}')}")
+          merge["state"] == "MERGED" and bool(sha) and bool(landings)
+          and all(s == "landed" and sha_ == sha for _, s, sha_ in landings),
+          f"merge {sha}; landings {landings}")
+    # The drive does not fetch: the Hub must have brought the project's main to GitHub's.
+    github = run(root, "git", "ls-remote", "origin", f"refs/heads/{main_name}").split()[:1]
+    local = run(root, "git", "rev-parse", main_name)
+    _, against = api("GET", f"{base}/main/github")
+    check("lm-ac1: the local main equals GitHub's main", github == [local],
+          f"local {local} github {github}; main/github {against}")
 
 
 def is_banned(argv):
