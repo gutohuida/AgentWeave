@@ -10,8 +10,8 @@ each task's work to the task's own branch (`agentweave/task/<id>`) itself, as a 
 moves the task to completed.
 
 The testbed: modules a and b, test_a and test_b, and one pytest check with
-  command              `python select.py runs.jsonl`  the whole suite, report.xml
-  command for a change `python select.py runs.jsonl {changed_files}`  only the test files that name
+  command              `python select_tests.py runs.jsonl`  the whole suite, report.xml
+  command for a change `python select_tests.py runs.jsonl {changed_files}`  only the test files that name
                        a changed module (the project's own choice, FR-1)
   re-run command       `python rerun.py rerun.jsonl {tests}`
 Every wrapper appends what it ran to a log outside the project: which command, the list file's
@@ -69,7 +69,7 @@ TEST_A = (
 )
 TEST_B = "from b import triple\n\n\ndef test_triple():\n    assert triple(2) == 6\n"
 
-#: `select.py <log> [<list file>]`: runs pytest on every test file (or, given a list, on the test
+#: `select_tests.py <log> [<list file>]`: runs pytest on every test file (or, given a list, on the test
 #: files that name a changed module), writes report.xml, and appends {mode, list, tests} to the log.
 SELECT = r"""import json, pathlib, re, subprocess, sys
 import xml.etree.ElementTree as ET
@@ -286,7 +286,7 @@ def drive(hub: Hub, keep: bool) -> None:
     root.mkdir()
     logs.mkdir()
     files = {"a.py": MODULE_A, "b.py": MODULE_B, "test_a.py": TEST_A, "test_b.py": TEST_B,
-             "select.py": SELECT, "rerun.py": RERUN,
+             "select_tests.py": SELECT, "rerun.py": RERUN,
              ".gitignore": "report.xml\n__pycache__/\n.pytest_cache/\n"}
     for rel, text in files.items():
         (root / rel).write_text(text, encoding="utf-8", newline="\n")
@@ -298,8 +298,8 @@ def drive(hub: Hub, keep: bool) -> None:
     runs_log, rerun_log = runs_path.as_posix(), rerun_path.as_posix()
     pytest_check = {
         "name": CHECK_NAME,
-        "command": f'"{py}" select.py {runs_log}',
-        CHANGE_FIELD: f'"{py}" select.py {runs_log} {{changed_files}}',
+        "command": f'"{py}" select_tests.py {runs_log}',
+        CHANGE_FIELD: f'"{py}" select_tests.py {runs_log} {{changed_files}}',
         "timeout_seconds": 300,
         "report_path": "report.xml",
         "rerun_command": f'"{py}" rerun.py {rerun_log} {{tests}}',
@@ -308,7 +308,7 @@ def drive(hub: Hub, keep: bool) -> None:
     project = None
     try:
         project = Project(hub, root)
-        bad = dict(pytest_check, **{CHANGE_FIELD: f'"{py}" select.py {runs_log}'})
+        bad = dict(pytest_check, **{CHANGE_FIELD: f'"{py}" select_tests.py {runs_log}'})
         code, res = project.apply_checks([bad])
         check("settings: a command for a change without {changed_files} is refused",
               400 <= code < 500 and "changed_files" in json.dumps(res), f"HTTP {code} {json.dumps(res)[:200]}")
