@@ -354,7 +354,7 @@ async def _single_runs() -> list:
         )
 
 
-async def test_ac_twice_with_main_failing_it_is_listed_and_neither_task_goes_back(app, tmp_path):
+async def _twice_with_main_failing(tmp_path) -> None:
     _repo(tmp_path)  # main is red on test_a
     await _loop()
     await _task(tmp_path, TASK, {"a.py": "x = 1\n"})
@@ -368,6 +368,10 @@ async def test_ac_twice_with_main_failing_it_is_listed_and_neither_task_goes_bac
     await project_checks.request_run("proj-test", TASK2)
     await project_checks.drain()
 
+
+async def test_ac_twice_with_main_failing_it_is_listed_and_b_does_not_go_back(app, tmp_path):
+    await _twice_with_main_failing(tmp_path)
+
     [single] = await _single_runs()
     assert (single.tests, single.state) == ([TEST_A], "failed")
     [entry] = await _entries()
@@ -375,13 +379,25 @@ async def test_ac_twice_with_main_failing_it_is_listed_and_neither_task_goes_bac
     [result] = (await _latest_run(TASK2)).results
     assert result["shared_tests"] == [TEST_A] and result["preexisting"], result
     assert await _status(TASK2) == "completed"
-    # TASK's run ended before main was asked: its unlisted failure was its own then, and went back
-    # (FR-7). Once listed it is not held against TASK: its run is judged again and the task says so.
+    # A's run is judged again once the test is listed: its record says the failure is not A's.
     [first] = (await _latest_run(TASK)).results
     assert first["shared_tests"] == [TEST_A] and first["preexisting"], first
-    assert await _status(TASK) == "revision_needed"
     notes = (await _get(Task, TASK)).notes
     assert "known-failing list" in str(notes), notes
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "ac-twice reported as cannot-satisfy (FAKAL-2): A's run ended before main was asked, so its "
+        "unlisted failure sent it back (FR-7). Undoing that needs a revision_needed -> completed "
+        "move and a way to un-hold the evidence the send-back held, neither of which the "
+        "transition machine or the evidence record has. The operator decides."
+    ),
+)
+async def test_ac_twice_with_main_failing_neither_task_goes_back(app, tmp_path):
+    await _twice_with_main_failing(tmp_path)
+    assert (await _status(TASK), await _status(TASK2)) == ("completed", "completed")
 
 
 async def test_ac_twice_with_main_passing_both_tasks_go_back(app, tmp_path):
