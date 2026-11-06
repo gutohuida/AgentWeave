@@ -4,9 +4,13 @@ The change's `drive` task (spdoc-79cf34c56bbe), written before the build of the 
 master because the landing 'pull request' does not exist (the Build route accepts only `main` and
 `nowhere`; hub/hub/api/v1/spec.py). It drives a Hub it starts itself on AW_DRIVE_PORT (default
 8010, the trial profile's database; never :8000) against a clone of THIS repository's GitHub
-remote, with the user's own `gh` login. The Hub is started with a `gh` shim first on its PATH that
+remote, with the user's own `gh` login. The Hub is started with a `gh.exe` shim (scripts/drive/gh_shim.cs,
+compiled with the .NET csc; checked to log a bare `gh` call) first on its PATH that
 appends every call to `gh-calls.jsonl` and then runs the real `gh`, so the call list is the Hub's
 own and nothing else's.
+
+The operator records and (automatically) accepts evidence for each task's requirement at its
+commit before approving it: in a flow, accepted evidence decides what approval pushes.
 
 Two builds, each of two tasks that change only `testbed/README.md` (one appended line each), on
 the project with PR landing turned on and the Build request naming landing `pull_request`:
@@ -128,6 +132,19 @@ def poll(fn, secs=30.0, every=1.0):
     return None
 
 
+def build_shim(shim, real):
+    """A real gh.exe (CreateProcess finds only .exe, and cmd.exe's %* garbles quotes and
+    newlines in a PR body) that logs each call to gh-calls.jsonl and then runs the real gh."""
+    csc = pathlib.Path(os.environ.get("WINDIR", r"C:\Windows")) / "Microsoft.NET" / "Framework64"         / "v4.0.30319" / "csc.exe"
+    if not csc.exists():
+        sys.exit(f"{csc} is missing; the drive builds its gh shim with it")
+    out = subprocess.run([str(csc), "/nologo", f"/out:{shim / 'gh.exe'}",
+                          str(pathlib.Path(__file__).with_name("gh_shim.cs"))],
+                         capture_output=True, text=True)
+    if out.returncode:
+        sys.exit(f"building the gh shim failed: {out.stdout} {out.stderr}")
+
+
 def start_hub():
     if api("GET", "/projects")[0] == 200:
         sys.exit(f"a Hub already answers on :{PORT}; the drive needs its own, started with the "
@@ -138,14 +155,9 @@ def start_hub():
         sys.exit("the GitHub CLI (gh) is not installed or not on PATH")
     shim = TMP / "shim"
     shim.mkdir()
-    (shim / "gh.cmd").write_text(
-        f'@echo off\r\n"{sys.executable}" "{shim / "gh_shim.py"}" %*\r\n', encoding="utf-8")
-    (shim / "gh_shim.py").write_text(
-        "import json, subprocess, sys, time\n"
-        f"open({str(calls_log)!r}, 'a', encoding='utf-8').write(json.dumps("
-        "{'t': time.time(), 'argv': sys.argv[1:]}) + '\\n')\n"
-        f"sys.exit(subprocess.run([{real!r}] + sys.argv[1:]).returncode)\n", encoding="utf-8")
+    build_shim(shim, real)
     env = {k: v for k, v in os.environ.items() if k != "HUB_URL" and not k.startswith("AW_")}
+    env["GH_SHIM_LOG"], env["GH_SHIM_REAL"] = str(calls_log), real
     env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
     env["DATABASE_URL"] = f"sqlite+aiosqlite:///{DB.as_posix()}"
     env["AW_BOOTSTRAP_API_KEY"] = KEY
@@ -154,6 +166,21 @@ def start_hub():
         ["py", "-3.11", "-m", "uvicorn", "hub.main:app", "--port", str(PORT), "--host", "127.0.0.1"],
         cwd=str(REPO / "hub"), env=env, stdout=log, stderr=subprocess.STDOUT,
         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    # Exactly how the Hub will call it: a bare name, resolved against the caller's own PATH.
+    outer = os.environ["PATH"]
+    os.environ.update(env)
+    try:
+        probe = subprocess.run(["gh", "--version"], capture_output=True, text=True)
+    finally:
+        os.environ["PATH"] = outer
+        for key in ("GH_SHIM_LOG", "GH_SHIM_REAL"):
+            os.environ.pop(key, None)
+    if probe.returncode or not calls_log.exists() or "--version" not in calls_log.read_text(
+            encoding="utf-8"):
+        proc.kill()
+        sys.exit("the gh shim does not log a plain subprocess.run(['gh', ...]); the drive cannot "
+                 "audit the Hub's calls")
+    calls_log.unlink()
     if not poll(lambda: api("GET", "/projects")[0] == 200, 120, 2):
         proc.kill()
         sys.exit(f"the Hub did not come up; see {TMP / 'hub.log'}")
@@ -212,6 +239,10 @@ class Build:
         self.build_id = ((out.get("build_outcome") or {}).get("build") or {}).get("id")
         _, tasks = api("GET", f"{base}/tasks?limit=200")
         rows = tasks["tasks"] if isinstance(tasks, dict) else tasks
+        _, spec = api("GET", f"{base}/project/spec?path={quoted}")
+        reqs = (spec or {}).get("requirements") or []
+        self.ids = dict(zip(("t1", "t2"), (r["identifier"] for r in reqs)))  # authored order
+        self.revisions = 0
         self.tasks = {t["spec_task_key"]: t for t in rows
                       if t.get("spec_document_id") and t.get("build_id") == self.build_id}
         check(f"{label}: build {self.build_id} carries t1 and t2", set(self.tasks) == {"t1", "t2"},
@@ -305,11 +336,10 @@ def drive(state):
     # desc-ac1
     pr = one.gh_pr("title", "body")
     body = pr.get("body", "")
-    _, evidence = api("GET", f"{base}/evidence?document={urllib.parse.quote(one.doc)}")
+    _, evidence = api("GET", f"{base}/project/spec/evidence?document={urllib.parse.quote(one.doc)}")
     ev_ids = [e["id"] for e in (evidence if isinstance(evidence, list) else
                                 (evidence or {}).get("evidence", [])) if e.get("review_state") == "accepted"]
-    reqs = [r["identifier"] for r in (api("GET", f"{base}/project/spec?path={urllib.parse.quote(one.doc)}")[1]
-                                      or {}).get("requirements", [])] or ["FR-1", "FR-2"]
+    reqs = list(one.ids.values()) or ["FR-1", "FR-2"]
     missing = [x for x in [one.doc, *reqs, *ev_ids, "t1", "t2"] if x not in body]
     check("desc-ac1: title is the spec's; body names spec path, requirement ids, accepted evidence "
           "ids and each task with its state", pr.get("title") == one.title and not missing
