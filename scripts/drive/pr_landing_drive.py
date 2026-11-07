@@ -306,12 +306,32 @@ class Build:
                   poll(lambda: (wt / README).exists(), 120, 2), f"{code} {str(out)[:300]}",
                   fatal=True)
             time.sleep(10)  # let the failed turn finish before the hand-made commit
-        text =(wt / README).read_text(encoding="utf-8")
+        text = (wt / README).read_text(encoding="utf-8")
         if line not in text:
-            (wt / README).write_text(text.rstrip("\n") + f"\n{line}\n", encoding="utf-8")
-            run(wt, "git", "add", README)
-            run(wt, "git", "-c", "user.email=d@example.invalid", "-c", "user.name=drive",
-                "commit", "-q", "-m", f"drive: {key}")
+            # t1 appends at the end and t2 inserts after the title, so the two tasks of one build
+            # change lines far apart and both merge onto the build branch without a conflict.
+            if key == "t2":
+                title, _, rest = text.partition("\n")
+                text = f"{title}\n\n{line}\n{rest}"
+            else:
+                text = text.rstrip("\n") + f"\n{line}\n"
+            (wt / README).write_text(text, encoding="utf-8")
+
+            def commit():
+                # The Hub may be running git in the same worktree (a turn it started on the task);
+                # its index.lock refuses ours until it ends, so try again.
+                try:
+                    run(wt, "git", "add", README)
+                    run(wt, "git", "-c", "user.email=d@example.invalid", "-c", "user.name=drive",
+                        "commit", "-q", "-m", f"drive: {key}")
+                    return True
+                except RuntimeError as exc:
+                    if "index.lock" not in str(exc):
+                        raise
+                    return False
+
+            check(f"{self.label}: {key} committed in its worktree", poll(commit, 120, 3),
+                  fatal=True)
         head = run(wt, "git", "rev-parse", "HEAD")
         api("PATCH", f"{self.ctx['base']}/tasks/{task['id']}", {"status": "completed"})
         # Operator-recorded evidence is accepted on arrival; in a flow accepted evidence at the
