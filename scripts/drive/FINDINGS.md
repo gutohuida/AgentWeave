@@ -41414,7 +41414,7 @@ Between 2026-11-06 and 2026-11-07, four send-backs carried no source change at a
 
 ## F1141 (B) -- evidence held at an old commit is only discovered in review, never at completion
 
-**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): `requirement_evidence.completion_warnings`; the completion answer carries `completion_warnings`. Test: test_completion_names_stale_evidence.py.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved; landed on master in `9b4854d`): `requirement_evidence.completion_warnings`; the completion answer carries `completion_warnings`. Test: test_completion_names_stale_evidence.py.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Evidence & review
 **Ready:** yes
@@ -41424,7 +41424,7 @@ After a send-back the builder fixed the code and re-recorded evidence only for t
 
 ## F1142 (C) -- `record_evidence` without `task_id` is refused as ambiguous inside a run that is working one task
 
-**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): `record_evidence` resolves an ambiguous FR-n through the calling run's task. Test: test_agent_evidence_plane.py.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved; landed on master in `9b4854d`): `record_evidence` resolves an ambiguous FR-n through the calling run's task. Test: test_agent_evidence_plane.py.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Evidence & review
 **Ready:** yes
@@ -41434,7 +41434,7 @@ After a send-back the builder fixed the code and re-recorded evidence only for t
 
 ## F1143 (C) -- `submit_checkpoint_notes` refuses a whole call for one entry 37 characters over, and agents guess its arguments
 
-**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): an over-long entry is split at a space, not refused; both briefings name intent/suspicions/warnings. Tests in test_checkpoint_notes.py.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved; landed on master in `9b4854d`): an over-long entry is split at a space, not refused; both briefings name intent/suspicions/warnings. Tests in test_checkpoint_notes.py.
 **Source:** found by reading the build retrospectives and run transcripts (Architect)
 **Theme:** Checkpoints
 **Ready:** yes
@@ -41444,7 +41444,7 @@ Run transcripts from 2026-11-06 and 07 show two failure modes. (1) A 422 for one
 
 ## F1144 (C) -- one build gets two retrospectives when its last task is approved twice
 
-**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): `build_retrospective._reviewed_automatically`: re-approving the same last task fires nothing. Test in test_build_retrospective.py.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved; landed on master in `9b4854d`): `build_retrospective._reviewed_automatically`: re-approving the same last task fires nothing. Test in test_build_retrospective.py.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Manager jobs
 **Ready:** yes
@@ -41454,7 +41454,7 @@ Run transcripts from 2026-11-06 and 07 show two failure modes. (1) A 422 for one
 
 ## F1145 (C) -- failed runs record no cost, so a retrospective under-reports what a task cost
 
-**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): cause: the killed run never reached its result line, and the resumed run's cost was nulled by settle_claude_session_totals. Per-message usage is now summed unpriced, and the settle skips failed runs with no totals. Tests in test_a_claude_turn_records_its_own_cost.py.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved; landed on master in `9b4854d`): cause: the killed run never reached its result line, and the resumed run's cost was nulled by settle_claude_session_totals. Per-message usage is now summed unpriced, and the settle skips failed runs with no totals. Tests in test_a_claude_turn_records_its_own_cost.py.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Cost & usage
 **Ready:** yes, check first
@@ -41464,7 +41464,7 @@ The retrospective for `a-build-lands-as-one-pull-request` reports that BLAOP-6's
 
 ## F1146 (B) -- the PR's CI read misses check runs past the first 100, and never sees a re-run that fails after a pass
 
-**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): every page of check runs is read, and a passed head is re-read while its PR is open. pr_ci_drive.py with the setting on: 65 passed, 0 failed; evidence for FR-2 and FR-5 to FR-8 accepted by QA (FR-5 partial). Drafts #11, #12 and #13 were on gutohuida/AgentWeave, closed with branches kept.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved; landed on master in `9b4854d`): every page of check runs is read, and a passed head is re-read while its PR is open. pr_ci_drive.py with the setting on: 65 passed, 0 failed; evidence for FR-2 and FR-5 to FR-8 accepted by QA (FR-5 partial). Drafts #11, #12 and #13 were on gutohuida/AgentWeave, closed with branches kept.
 **Source:** found by reading the build retrospectives (Architect), confirmed in code
 **Theme:** Pull requests
 **Ready:** yes
@@ -41484,7 +41484,7 @@ FR-6 of `a-trace-of-a-whole-conversation` asks the totals to show tool errors. N
 
 ## F1148 (B) -- the spec journey's steps let a document leave its contract unnamed, and chain every task behind the drive
 
-**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): STEP_DUTIES now name the contract, reachable givens, an owned last drive run and narrower chaining. The drive-first rule is kept, per the Architect's correction.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved; landed on master in `9b4854d`): STEP_DUTIES now name the contract, reachable givens, an owned last drive run and narrower chaining. The drive-first rule is kept, per the Architect's correction.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Spec flow
 **Ready:** yes, with the wording in the task that fixes it
