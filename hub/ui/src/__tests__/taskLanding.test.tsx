@@ -64,6 +64,13 @@ describe("the drawer shows approved work's landing beside Land", () => {
     expect(container).toBeEmptyDOMElement()
   })
 
+  it("names a PR build's pushed landing, with the commit it pushed and a colour", () => {
+    // As `landing_queue.view` returns a push (`pull_requests.PUSHED`): landed_sha is the pushed commit.
+    const line = show(landing('pushed', { landed_sha: 'd'.repeat(40) }))
+    expect(line).toHaveTextContent("Pushed to the build's pull request at dddddddd")
+    expect(line).toHaveStyle({ color: 'var(--green)' })
+  })
+
   it('shows a queued landing with its place in the queue', () => {
     expect(show(landing('queued', { position: 3 }))).toHaveTextContent('Queued to land · #3 in the queue')
   })
