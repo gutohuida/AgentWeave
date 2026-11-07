@@ -3613,6 +3613,18 @@ async def _refuse_pull_request_landing(session: AsyncSession, project_id: str) -
         raise _unprocessable(
             problem.code, f"a build cannot land as a pull request: {problem.message}"
         )
+    # With 'the PR's CI is the full check' on, a PR build with nothing to wait for -- no check
+    # GitHub marks required on main, and none listed -- is refused (`the-pr-s-ci-is-the-full-check`,
+    # FR-3): its tasks would be pushed unchecked by anything.
+    if project.pr_ci_full_check:
+        waiting = await blocking.run(
+            pull_requests.wait_problem, root, project.main_branch, project.pr_ci_check_names or []
+        )
+        if waiting is not None:
+            raise _unprocessable(
+                pull_requests.NOTHING_TO_WAIT_FOR,
+                f"a build cannot land as a pull request: {waiting}",
+            )
 
 
 async def _refuse_a_second_build(session: AsyncSession, document) -> None:

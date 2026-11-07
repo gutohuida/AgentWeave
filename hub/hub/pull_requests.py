@@ -21,12 +21,18 @@ readied once every task of the build is pushed and returned to draft when one is
 **What it may ask of GitHub** (FR-12): `git push` of the build branch, and through the CLI only the
 commands in `GH_ALLOWED` -- `gh` is called through `gh` alone, which refuses anything else, so the
 Hub cannot merge a PR, approve it, change its base or touch branch protection.
+
+**The PR's CI is the full check** (`the-pr-s-ci-is-the-full-check`, task `settings`): the checks
+that count for a PR are those GitHub marks required on its base branch, else the project's list of
+check names (FR-3, `counted_checks`). The required ones are read with two plain `gh api` GETs, the
+branch and the rules that apply to it, and `gh` allows no other `gh api` call (`required_checks`).
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import re
@@ -37,6 +43,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from urllib.parse import quote
 
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -158,6 +165,11 @@ def readiness_problem(root: Path) -> Optional[Problem]:
 #: `gh` refuses them before anything runs.
 GH_ALLOWED = frozenset({("pr", "create"), ("pr", "edit"), ("pr", "ready"), ("pr", "view")})
 
+#: The only `gh api` calls the Hub makes: a GET, with no other argument, of a branch or of the rules
+#: that apply to it, to learn its required status checks (`required_checks`). Anything naming
+#: branch protection itself is refused, even as a read.
+_API_READ = re.compile(r"^repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(?:rules/)?branches/[^\s?#]+$")
+
 #: How long one push, fetch or GitHub CLI call of a landing may take.
 NETWORK_TIMEOUT_SECONDS = 180
 
@@ -179,6 +191,11 @@ class RefusedGitHubCallError(ValueError):
 def check_gh_call(args: Sequence[str]) -> None:
     """Refuse any `gh` call the Hub must never make (FR-12). Raises `RefusedGitHubCallError`."""
     words = tuple(args[:2])
+    if words[:1] == ("api",) and len(args) == 2:
+        path = str(args[1])
+        if _API_READ.match(path) and "protection" not in path.lower().split("/"):
+            return
+        raise RefusedGitHubCallError(f"the Hub never runs `gh api {path}`")
     if words not in GH_ALLOWED:
         raise RefusedGitHubCallError(f"the Hub never runs `gh {' '.join(args[:2])}`")
     rest = list(args[2:])
@@ -220,6 +237,153 @@ def gh(root: Path, *args: str) -> subprocess.CompletedProcess:
 def _gh_error(result: subprocess.CompletedProcess) -> str:
     said = ((result.stderr or "") + (result.stdout or "")).strip()[:2000]
     return said or f"gh exited {result.returncode}"
+
+
+# --- the checks that count (`the-pr-s-ci-is-the-full-check`, FR-3) -------------------------------
+
+#: The project setting 'the PR's CI is the full check', as the settings route names it.
+CI_SETTING = "pr_ci_full_check"
+#: The project's own list of the check names that count when GitHub marks none required.
+CI_CHECK_NAMES = "pr_ci_check_names"
+
+#: Refused: the setting, or a PR build with it on, where nothing would be waited for (FR-3).
+NOTHING_TO_WAIT_FOR = "nothing_to_wait_for"
+
+#: A counted check's state, and CI's as a whole on a commit (`judge`).
+CHECK_PENDING = "pending"
+CHECK_PASSED = "passed"
+CHECK_FAILED = "failed"
+
+# `gh pr checks --json bucket` (and `judge`'s input): which buckets are a pass, and which a failure.
+# A skipped check is GitHub's own pass for a required check; a cancelled one did not pass.
+_PASSING_BUCKETS = frozenset({"pass", "skipping"})
+_FAILING_BUCKETS = frozenset({"fail", "cancel"})
+
+_REPO_IN_URL = re.compile(r"github\.com[:/]([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$")
+
+
+@dataclass(frozen=True)
+class RequiredChecks:
+    """The status checks GitHub marks required on a branch, and why they could not be read, if
+    they could not (`error`; `names` is then whatever the readable half answered)."""
+
+    names: List[str]
+    error: Optional[str] = None
+
+
+def github_repo(root: Path) -> Optional[str]:
+    """`owner/repo` of the project directory's GitHub remote, or None."""
+    name = github_remote(root)
+    if name is None:
+        return None
+    try:
+        url = _git(root, "remote", "get-url", name)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    found = _REPO_IN_URL.search((url.stdout or "").strip())
+    return f"{found.group(1)}/{found.group(2)}" if found else None
+
+
+def _json_of(result: subprocess.CompletedProcess) -> Any:
+    return json.loads(result.stdout or "null")
+
+
+def required_checks(root: Path, branch: str) -> RequiredChecks:
+    """The status checks GitHub marks required on *branch*: branch protection's, as the branch
+    reads them, and those of every ruleset that applies to it. Two `gh api` GETs; runs the CLI, so
+    it is called off the event loop."""
+    repo = github_repo(root)
+    if repo is None:
+        return RequiredChecks([], "the project directory has no GitHub remote")
+    quoted = quote(branch, safe="/")
+    names: List[str] = []
+    errors: List[str] = []
+
+    branch_read = gh(root, "api", f"repos/{repo}/branches/{quoted}")
+    if branch_read.returncode == 0:
+        try:
+            guarded = (_json_of(branch_read) or {}).get("protection") or {}
+            status = guarded.get("required_status_checks") or {} if guarded.get("enabled") else {}
+            names.extend(str(c) for c in status.get("contexts") or [])
+            names.extend(
+                str(c.get("context")) for c in status.get("checks") or [] if c.get("context")
+            )
+        except (ValueError, AttributeError) as exc:
+            errors.append(f"the branch {branch} could not be read: {exc}")
+    else:
+        errors.append(f"the branch {branch} could not be read: {_gh_error(branch_read)}")
+
+    rules_read = gh(root, "api", f"repos/{repo}/rules/branches/{quoted}")
+    if rules_read.returncode == 0:
+        try:
+            for rule in _json_of(rules_read) or []:
+                if rule.get("type") != "required_status_checks":
+                    continue
+                for c in (rule.get("parameters") or {}).get("required_status_checks") or []:
+                    if c.get("context"):
+                        names.append(str(c["context"]))
+        except (ValueError, AttributeError) as exc:
+            errors.append(f"the rules of {branch} could not be read: {exc}")
+    else:
+        errors.append(f"the rules of {branch} could not be read: {_gh_error(rules_read)}")
+
+    return RequiredChecks(list(dict.fromkeys(names)), "; ".join(errors) or None)
+
+
+def counted_checks(required: RequiredChecks, listed: Sequence[str]) -> List[str]:
+    """The checks that count for a PR (FR-3): the required ones, else the project's list -- which is
+    also what counts when the required ones could not be read at all."""
+    if required.names:
+        return list(required.names)
+    return [name for name in dict.fromkeys(listed) if name]
+
+
+def nothing_to_wait_for(
+    required: RequiredChecks, listed: Sequence[str], branch: str
+) -> Optional[str]:
+    """Why nothing would be waited for -- GitHub marks no check required on *branch* and the
+    project lists none -- naming both; None when some check counts (FR-3)."""
+    if counted_checks(required, listed):
+        return None
+    github = (
+        f"the Hub could not read which checks GitHub requires on {branch} ({required.error})"
+        if required.error and not required.names
+        else f"GitHub marks no status check required on {branch}"
+    )
+    return (
+        f"{github}, and the project lists no check names ({CI_CHECK_NAMES}), so there would be no "
+        "CI result to wait for: mark a check required on GitHub, or list the names of the checks "
+        "that count"
+    )
+
+
+def wait_problem(root: Path, branch: Optional[str], listed: Sequence[str]) -> Optional[str]:
+    """Why a project with the CI setting on would have nothing to wait for (`nothing_to_wait_for`),
+    or None. A non-empty list is enough without asking GitHub; otherwise GitHub's required checks on
+    *branch* are read, so this runs the CLI and is called off the event loop."""
+    if counted_checks(RequiredChecks([]), listed):
+        return None
+    if not branch:
+        return nothing_to_wait_for(
+            RequiredChecks([], "the project has no main branch set"), listed, "main"
+        )
+    return nothing_to_wait_for(required_checks(root, branch), listed, branch)
+
+
+def judge(counted: Sequence[str], results: Sequence[Dict[str, Any]]) -> str:
+    """CI's state on a commit from the counted checks alone (FR-3): failed when any counted check
+    failed, passed when every one passed, pending otherwise (one still running, or not reported).
+    *results* are GitHub's checks on the commit, each `{name, bucket}`; a check not counted decides
+    nothing, whatever its result."""
+    buckets: Dict[str, str] = {}
+    for result in results:
+        buckets.setdefault(str(result.get("name")), str(result.get("bucket") or "pending").lower())
+    states = [buckets.get(name, "pending") for name in counted]
+    if any(state in _FAILING_BUCKETS for state in states):
+        return CHECK_FAILED
+    if states and all(state in _PASSING_BUCKETS for state in states):
+        return CHECK_PASSED
+    return CHECK_PENDING
 
 
 # --- git -----------------------------------------------------------------------------------------
