@@ -318,15 +318,18 @@ async def test_a_task_worktree_asks_once_in_the_background_and_idle_time_asks_no
     assert (await _build_row("build-open-pr")).pr_last_asked_at is not None
 
     # An hour with no action: nothing is scheduled to ask, so nothing does. No task of the module
-    # is left waiting, and the module arms no timer of any kind.
+    # is left waiting, and the module arms no timer of any kind but one: the CI watch of
+    # `the-pr-s-ci-is-the-full-check` (FR-5), only while CI on a head is pending with its setting on.
     leftover = [
         job
         for job in asyncio.all_tasks()
         if "pull_requests" in repr(job.get_coro()) and not job.done()
     ]
-    assert leftover == [] and not pull_requests._asking
+    assert leftover == [] and not pull_requests._asking and not pull_requests._watching
     source = Path(pull_requests.__file__).read_text(encoding="utf-8")
-    for timer in ("asyncio.sleep", "call_later", "call_at", "threading.Timer", "time.sleep"):
+    assert source.count("asyncio.sleep") == 1  # `_sleep`, which only `_watch` awaits
+    assert source.count("await _sleep(") == 1
+    for timer in ("call_later", "call_at", "threading.Timer", "time.sleep"):
         assert timer not in source, timer
     await asyncio.sleep(0.2)
     assert len(slow.calls) == 1

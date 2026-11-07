@@ -25,7 +25,15 @@ Hub cannot merge a PR, approve it, change its base or touch branch protection.
 **The PR's CI is the full check** (`the-pr-s-ci-is-the-full-check`, task `settings`): the checks
 that count for a PR are those GitHub marks required on its base branch, else the project's list of
 check names (FR-3, `counted_checks`). The required ones are read with two plain `gh api` GETs, the
-branch and the rules that apply to it, and `gh` allows no other `gh api` call (`required_checks`).
+branch and the rules that apply to it, and `gh` allows no other `gh api` call (`required_checks`)
+but two GETs of one commit's check runs and status (`commit_checks`).
+
+Task `read-ci`: with the setting on, each push records CI pending on the commit it pushed
+(`ci_pushed`); only the PR's head decides (FR-4), and a result on a commit a later push replaced
+is marked superseded. While the head's counted checks are pending the Hub asks at the project's
+interval up to its cutoff (`watch_ci`, FR-5), besides slice 1's actions (`ask`). A failing counted
+check is compared with the same check on main's latest commit (`read_ci`, FR-11): when every
+failing one fails there too nothing is sent back, else the latest task pushed is.
 """
 
 from __future__ import annotations
@@ -40,7 +48,7 @@ import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
@@ -169,6 +177,11 @@ GH_ALLOWED = frozenset({("pr", "create"), ("pr", "edit"), ("pr", "ready"), ("pr"
 #: that apply to it, to learn its required status checks (`required_checks`). Anything naming
 #: branch protection itself is refused, even as a read.
 _API_READ = re.compile(r"^repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(?:rules/)?branches/[^\s?#]+$")
+#: ... and a GET of the check runs or the combined status of one commit (a SHA, or a branch for its
+#: latest commit), to read CI's result there (`commit_checks`).
+_COMMIT_READ = re.compile(
+    r"^repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commits/[^\s?#]+/(?:check-runs|status)\?per_page=100$"
+)
 
 #: How long one push, fetch or GitHub CLI call of a landing may take.
 NETWORK_TIMEOUT_SECONDS = 180
@@ -193,7 +206,8 @@ def check_gh_call(args: Sequence[str]) -> None:
     words = tuple(args[:2])
     if words[:1] == ("api",) and len(args) == 2:
         path = str(args[1])
-        if _API_READ.match(path) and "protection" not in path.lower().split("/"):
+        readable = _API_READ.match(path) or _COMMIT_READ.match(path)
+        if readable and "protection" not in path.lower().split("/"):
             return
         raise RefusedGitHubCallError(f"the Hub never runs `gh api {path}`")
     if words not in GH_ALLOWED:
@@ -384,6 +398,179 @@ def judge(counted: Sequence[str], results: Sequence[Dict[str, Any]]) -> str:
     if states and all(state in _PASSING_BUCKETS for state in states):
         return CHECK_PASSED
     return CHECK_PENDING
+
+
+# --- CI's result on a commit (FR-4, FR-11) -------------------------------------------------------
+
+#: CI's state on the build beyond `judge`'s three: every failing counted check also fails on main's
+#: latest commit (FR-11), a later push replaced the commit it was read on (FR-4), and the cutoff
+#: passed with a counted check still unconcluded (FR-5).
+CI_FAILING_ON_MAIN = "failing_on_main"
+CI_SUPERSEDED = "superseded"
+CI_NOT_FINISHED = "not_finished"
+
+#: A failing counted check's result on main's latest commit (FR-11): failed there too, passed
+#: there, or no concluded result (pending, never run there, or unreadable).
+ON_MAIN_FAILED = "failed"
+ON_MAIN_PASSED = "passed"
+ON_MAIN_NONE = "none"
+
+# A check run's conclusion, and a commit status's state, as `judge`'s buckets.
+_RUN_BUCKETS = {
+    "success": "pass",
+    "neutral": "pass",
+    "skipped": "skipping",
+    "failure": "fail",
+    "timed_out": "fail",
+    "action_required": "fail",
+    "startup_failure": "fail",
+    "cancelled": "cancel",
+}
+_STATUS_BUCKETS = {"success": "pass", "failure": "fail", "error": "fail"}
+
+
+def _bucket_state(bucket: str) -> str:
+    if bucket in _FAILING_BUCKETS:
+        return CHECK_FAILED
+    if bucket in _PASSING_BUCKETS:
+        return CHECK_PASSED
+    return CHECK_PENDING
+
+
+@dataclass
+class CommitChecks:
+    """GitHub's checks on one commit, each `{name, bucket, url}`; *error* where either read failed,
+    and then *results* decide nothing."""
+
+    results: List[Dict[str, Any]] = field(default_factory=list)
+    error: Optional[str] = None
+
+
+def commit_checks(root: Path, repo: str, ref: str) -> CommitChecks:
+    """The check runs and commit statuses on *ref* (a SHA, or a branch for its latest commit): two
+    `gh api` GETs. A check run more than once is read at its latest run. Blocking."""
+    quoted = quote(ref, safe="")
+    out = CommitChecks()
+    latest: Dict[str, Dict[str, Any]] = {}
+    runs = gh(root, "api", f"repos/{repo}/commits/{quoted}/check-runs?per_page=100")
+    if runs.returncode == 0:
+        try:
+            for run in (_json_of(runs) or {}).get("check_runs") or []:
+                name = str(run.get("name") or "")
+                if not name:
+                    continue
+                if name in latest and int(latest[name].get("id") or 0) > int(run.get("id") or 0):
+                    continue
+                latest[name] = run
+        except (ValueError, AttributeError, TypeError) as exc:
+            out.error = f"the check runs on {ref} could not be read: {exc}"
+    else:
+        out.error = f"the check runs on {ref} could not be read: {_gh_error(runs)}"
+    for name, run in latest.items():
+        done = str(run.get("status") or "").lower() == "completed"
+        bucket = _RUN_BUCKETS.get(str(run.get("conclusion") or "").lower(), "pending")
+        out.results.append(
+            {"name": name, "bucket": bucket if done else "pending", "url": run.get("html_url")}
+        )
+    status = gh(root, "api", f"repos/{repo}/commits/{quoted}/status?per_page=100")
+    if status.returncode == 0:
+        try:
+            for each in (_json_of(status) or {}).get("statuses") or []:
+                name = str(each.get("context") or "")
+                if name and name not in latest:
+                    bucket = _STATUS_BUCKETS.get(str(each.get("state") or "").lower(), "pending")
+                    out.results.append(
+                        {"name": name, "bucket": bucket, "url": each.get("target_url")}
+                    )
+        except (ValueError, AttributeError, TypeError) as exc:
+            out.error = out.error or f"the commit status of {ref} could not be read: {exc}"
+    else:
+        out.error = (
+            out.error or f"the commit status of {ref} could not be read: {_gh_error(status)}"
+        )
+    return out
+
+
+def _on_main(bucket: str, error: Optional[str]) -> str:
+    if error:
+        return ON_MAIN_NONE
+    if bucket in _FAILING_BUCKETS:
+        return ON_MAIN_FAILED
+    if bucket in _PASSING_BUCKETS:
+        return ON_MAIN_PASSED
+    return ON_MAIN_NONE
+
+
+def read_ci(root: Path, main_branch: str, sha: str, listed: Sequence[str]) -> Dict[str, Any]:
+    """CI's result on the PR's head *sha* from the counted checks alone (FR-3), each failing one
+    compared with the same check on GitHub's latest commit of *main_branch* (FR-11). Answers
+    `{state, head_sha, checks: [{name, state, url, main_result?}], main_error, error}`; `state` is None
+    where GitHub could not be read, which decides nothing. Blocking."""
+    out: Dict[str, Any] = {"state": None, "head_sha": sha, "checks": [], "error": None}
+    repo = github_repo(root)
+    if repo is None:
+        out["error"] = "the project directory has no GitHub remote"
+        return out
+    required = required_checks(root, main_branch)
+    counted = counted_checks(required, listed)
+    if not counted:
+        out["error"] = nothing_to_wait_for(required, listed, main_branch)
+        return out
+    head = commit_checks(root, repo, sha)
+    if head.error:
+        out["error"] = head.error
+        return out
+    by_name: Dict[str, Dict[str, Any]] = {}
+    for result in head.results:
+        by_name.setdefault(result["name"], result)
+    for name in counted:
+        result = by_name.get(name) or {}
+        state = _bucket_state(str(result.get("bucket") or "pending"))
+        out["checks"].append({"name": name, "state": state, "url": result.get("url")})
+    state = judge(counted, head.results)
+    failing = [check for check in out["checks"] if check["state"] == CHECK_FAILED]
+    if failing:
+        main = commit_checks(root, repo, main_branch)
+        on_main: Dict[str, Dict[str, Any]] = {}
+        for result in main.results:
+            on_main.setdefault(result["name"], result)
+        for check in failing:
+            bucket = str((on_main.get(check["name"]) or {}).get("bucket") or "")
+            check["main_result"] = _on_main(bucket, main.error)
+        out["main_error"] = main.error
+        if all(check["main_result"] == ON_MAIN_FAILED for check in failing):
+            state = CI_FAILING_ON_MAIN
+    out["state"] = state
+    return out
+
+
+def ci_report(display_id: str, read: Dict[str, Any], main_branch: str) -> str:
+    """The send-back of the latest task pushed when CI failed on the head (FR-7, FR-11): each
+    failing counted check that does not also fail on main, its link, and what main said of it."""
+    sha = str(read.get("head_sha") or "")[:12]
+    lines = [
+        f"CI failed on the build's pull request at {sha}, the commit task {display_id}'s push "
+        "made:",
+        "",
+    ]
+    for check in read.get("checks") or []:
+        if check.get("state") != CHECK_FAILED or check.get("main_result") == ON_MAIN_FAILED:
+            continue
+        if check.get("main_result") == ON_MAIN_PASSED:
+            said = f"it passed on the latest commit of {main_branch}"
+        elif read.get("main_error"):
+            said = f"main had no result for it: {read['main_error']}"
+        else:
+            said = f"main had no result for it on the latest commit of {main_branch}"
+        lines.append(f"- `{check['name']}` failed: {check.get('url') or 'no link'} ({said})")
+    also = [c["name"] for c in read.get("checks") or [] if c.get("main_result") == ON_MAIN_FAILED]
+    if also:
+        lines += ["", f"Failing on {main_branch} too, so not this task's: {', '.join(also)}."]
+    lines += [
+        "",
+        "Fix it on the task's branch and complete the task again; its next push runs CI again.",
+    ]
+    return "\n".join(lines)
 
 
 # --- git -----------------------------------------------------------------------------------------
@@ -784,6 +971,10 @@ async def refresh(build_id: str, *, opening: bool = False) -> None:
             return
         title, body = await describe(session, build)
         ready = await every_task_pushed(session, build.id)
+        if project is not None and project.pr_ci_full_check:
+            ci = build.pr_ci or {}
+            ready = ready and ci.get("state") == CHECK_PASSED
+            ready = ready and ci.get("head_sha") == build.pr_pushed_sha
         number, state = build.pr_number, build.pr_state
         main_branch = (project.main_branch if project is not None else None) or "main"
         await session.commit()
@@ -882,6 +1073,7 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
             why = f"the project directory is unavailable: {exc}"
         main_branch = project.main_branch
         single = bool(project.pr_single_commit)
+        ci_on = bool(project.pr_ci_full_check)
         expected = build.pr_pushed_sha
         display, task_id = task.display_id, task.id
         build_id, project_id = build.id, project.id
@@ -1024,9 +1216,13 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
         batch = await session.get(LandingBatch, batch_id)
         batch.state, batch.ended_at = PUSHED, _now()
         await lq._close_batch_run(session, batch)
+        if ci_on:
+            await ci_pushed(session, build, row)
         await session.commit()
         await lq._announce(session, [landing_id])
     await refresh(build_id, opening=True)
+    if ci_on:
+        watch_ci(project_id, build_id)
     return True
 
 
@@ -1071,8 +1267,8 @@ _asking: Dict[Tuple[int, str], "asyncio.Task[Any]"] = {}
 def notice(project_id: str, why: str) -> None:
     """Something is about to start in *project_id*, or the operator is looking (FR-9): ask GitHub
     about its builds' open PRs in the background. Never waits and never raises -- a slow GitHub
-    must not delay a turn starting -- and joins an ask already in flight. Nothing is scheduled:
-    there is no timer, only these actions."""
+    must not delay a turn starting -- and joins an ask already in flight. Nothing else is
+    scheduled: the one timer is `watch_ci`'s, while CI on a head is pending."""
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
@@ -1180,6 +1376,9 @@ async def ask(project_id: str, build_id: Optional[str] = None) -> List[Dict[str,
         answer = await blocking.run(read_pr, root, number)
         await _apply(each, answer)
         found.append({"build_id": each, **answer})
+        if answer["state"] in (DRAFT, READY):
+            # CI on the head, where the setting is on and it has not concluded (FR-5).
+            await check_ci(each)
     if any(answer["state"] == MERGED for answer in found):
         await bring_main_forward(project_id)
     return found
@@ -1274,9 +1473,17 @@ async def notice_at_startup() -> int:
     from .db.engine import async_session_factory
 
     async with async_session_factory() as session:
-        projects = sorted({build.project_id for build in await open_pr_builds(session)})
+        builds = await open_pr_builds(session)
+        projects = sorted({build.project_id for build in builds})
+        pending = [
+            (build.project_id, build.id)
+            for build in builds
+            if (build.pr_ci or {}).get("state") == CHECK_PENDING
+        ]
     for project_id in projects:
         notice(project_id, "the Hub started")
+    for project_id, build_id in pending:
+        watch_ci(project_id, build_id)  # the interval asks a restart interrupted (FR-5)
     return len(projects)
 
 
@@ -1446,3 +1653,281 @@ async def _broadcast_main(project_id: str, state: MainState) -> None:
         await sse_manager.broadcast(project_id, "main_behind_github", state.view())
     except Exception:  # noqa: BLE001
         logger.debug("main broadcast failed", exc_info=True)
+
+
+# --- CI on the PR's head: recorded, asked for while pending, acted on (FR-4, FR-5, FR-11) --------
+
+#: CI states that need no more asking: every counted check on the head concluded.
+_CI_CONCLUDED = frozenset({CHECK_PASSED, CHECK_FAILED, CI_FAILING_ON_MAIN})
+
+#: The CI watches running, one per build: each asks GitHub at the project's interval while the
+#: head's counted checks are pending (`watch_ci`). A push while one runs is folded into it.
+_watching: Dict[Tuple[int, str], "asyncio.Task[Any]"] = {}
+_rewatch: set = set()
+
+
+async def _sleep(seconds: float) -> None:
+    """The wait between asks (a seam: tests run the clock themselves)."""
+    await asyncio.sleep(seconds)
+
+
+def _aware(moment: Optional[datetime]) -> Optional[datetime]:
+    if moment is not None and moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment
+
+
+async def _build_landings(session: AsyncSession, build_id: str) -> List[Any]:
+    """Each task of the build's latest landing, where it has one."""
+    from .db.models import Task
+    from .landing_queue import latest_landing
+
+    out = []
+    for task in (await session.execute(select(Task).where(Task.build_id == build_id))).scalars():
+        landing = await latest_landing(session, task.id)
+        if landing is not None:
+            out.append(landing)
+    return out
+
+
+async def ci_pushed(session: AsyncSession, build: Any, landing: Any) -> None:
+    """*landing* was just pushed as the head of *build*'s PR in a project with the CI setting on:
+    CI is pending on that commit, the cutoff counts from now, and an earlier head's result that
+    had not concluded is superseded: it can no longer decide anything (FR-4, FR-5). The caller
+    commits, then starts the watch (`watch_ci`)."""
+    now = _now()
+    pending = {
+        "state": CHECK_PENDING,
+        "head_sha": landing.landed_sha,
+        "checks": [],
+        "last_asked_at": None,
+        "error": None,
+    }
+    for other in await _build_landings(session, build.id):
+        if other.id == landing.id or not other.ci:
+            continue
+        if other.ci.get("state") not in _CI_CONCLUDED | {CI_SUPERSEDED}:
+            other.ci = {**other.ci, "state": CI_SUPERSEDED}
+    build.pr_ci, build.pr_ci_pushed_at = pending, now
+    landing.ci = dict(pending)
+
+
+async def check_ci(build_id: str) -> Optional[str]:
+    """Read CI on the build's PR head now where it has not concluded there, and act on it
+    (`_apply_ci`). Answers CI's state on the build afterwards; None for a build with nothing to
+    read (not a PR build, the setting off, nothing pushed, the PR merged or closed)."""
+    from . import blocking, project_workspace
+    from .builds import LANDING_PULL_REQUEST
+    from .db.engine import async_session_factory
+    from .db.models import Build, Project
+
+    async with async_session_factory() as session:
+        build = await session.get(Build, build_id)
+        project = await session.get(Project, build.project_id) if build is not None else None
+        if (
+            build is None
+            or project is None
+            or build.landing != LANDING_PULL_REQUEST
+            or not project.pr_ci_full_check
+            or not build.pr_pushed_sha
+            or build.pr_state in (MERGED, CLOSED)
+        ):
+            return None
+        state = (build.pr_ci or {}).get("state")
+        if state in _CI_CONCLUDED:
+            return state
+        try:
+            root = (await project_workspace.resolve_project_workspace(session, project.id)).root
+        except Exception:  # noqa: BLE001 -- nowhere to ask from; the next ask tries again
+            return state
+        sha = build.pr_pushed_sha
+        main_branch = project.main_branch or "main"
+        listed = list(project.pr_ci_check_names or [])
+        await session.commit()
+    read = await blocking.run(read_ci, root, main_branch, sha, listed)
+    return await _apply_ci(build_id, read)
+
+
+async def _apply_ci(build_id: str, read: Dict[str, Any]) -> Optional[str]:
+    """Record *read* (`read_ci`) on the build and its pushed tasks, and act on it. A read of a
+    commit a later push replaced only marks that push's result superseded (FR-4). A failure on the
+    head that does not also fail on main sends back the latest task pushed, naming each failing
+    check, its link and what main said (FR-7, FR-11); a pass, or a failure main shares, rewrites
+    the PR, which stays a draft unless every task is pushed and CI passed."""
+    from . import landing_queue
+    from .db.engine import async_session_factory
+    from .db.models import Build, Project, Task
+    from .task_transitions import SEND_BACK_DEFECT
+
+    send_back: Optional[Tuple[str, str, str]] = None
+    async with async_session_factory() as session:
+        build = await session.get(Build, build_id)
+        project = await session.get(Project, build.project_id) if build is not None else None
+        if build is None or project is None:
+            return None
+        now = _now().isoformat()
+        sha = read.get("head_sha")
+        landings = await _build_landings(session, build_id)
+        own = [landing for landing in landings if landing.landed_sha == sha]
+        previous = (build.pr_ci or {}).get("state")
+        if sha != build.pr_pushed_sha:
+            for landing in own:
+                landing.ci = {**read, "state": CI_SUPERSEDED, "last_asked_at": now}
+            await session.commit()
+            return CI_SUPERSEDED
+        build.pr_last_asked_at = _now()
+        if read.get("state") is None:
+            build.pr_ci = {**(build.pr_ci or {}), "last_asked_at": now, "error": read.get("error")}
+            project_id = build.project_id
+            await session.commit()
+            await _broadcast_build(project_id, build_id, build.state)
+            return previous
+        state = read["state"]
+        if state == CHECK_PENDING and previous == CI_NOT_FINISHED:
+            state = CI_NOT_FINISHED  # past the cutoff: still not finished, asked on actions only
+        view = {**read, "state": state, "last_asked_at": now, "error": None}
+        build.pr_ci = view
+        for landing in own:
+            landing.ci = dict(view)
+        if state == CHECK_PASSED:
+            # Every task pushed in that head reads as checked by CI, naming the commit (FR-6).
+            for landing in landings:
+                if landing.state == PUSHED and (landing.ci or {}).get("state") != CHECK_PASSED:
+                    landing.ci = dict(view)
+        if state == CHECK_FAILED:
+            head = next((landing for landing in own if landing.state == PUSHED), None)
+            task = await session.get(Task, head.task_id) if head is not None else None
+            if head is not None and task is not None:
+                report = ci_report(task.display_id, read, project.main_branch or "main")
+                send_back = (head.id, head.batch_id or "", report)
+        project_id, build_state = build.project_id, build.state
+        await session.commit()
+    if send_back is not None:
+        landing_id, batch_id, report = send_back
+        await landing_queue._send_back(
+            landing_id,
+            batch_id,
+            report,
+            SEND_BACK_DEFECT,
+            "CI failed on the build's pull request at the commit its push made.",
+        )
+    elif state != previous and state in _CI_CONCLUDED:
+        landing_queue._start(
+            project_id,
+            _refresh_locked(project_id, build_id),
+            f"rewrite the pull request of {build_id} after CI",
+        )
+    await _broadcast_build(project_id, build_id, build_state)
+    return state
+
+
+async def _ci_plan(build_id: str) -> Optional[Tuple[float, datetime, datetime]]:
+    """`(interval seconds, cutoff time, push time)` while CI on the build's PR head is pending and
+    the PR is open in a project with the setting on; None when there is nothing to ask for."""
+    from .builds import LANDING_PULL_REQUEST
+    from .db.engine import async_session_factory
+    from .db.models import Build, Project
+
+    async with async_session_factory() as session:
+        build = await session.get(Build, build_id)
+        project = await session.get(Project, build.project_id) if build is not None else None
+        pushed_at = _aware(build.pr_ci_pushed_at) if build is not None else None
+        if (
+            build is None
+            or project is None
+            or build.landing != LANDING_PULL_REQUEST
+            or not project.pr_ci_full_check
+            or build.pr_state in (MERGED, CLOSED)
+            or (build.pr_ci or {}).get("state") != CHECK_PENDING
+            or pushed_at is None
+        ):
+            return None
+        interval = 60.0 * max(1, int(project.pr_ci_interval_minutes or 2))
+        cutoff = timedelta(minutes=max(1, int(project.pr_ci_cutoff_minutes or 60)))
+        return interval, pushed_at + cutoff, pushed_at
+
+
+async def _not_finished(build_id: str, pushed_at: datetime) -> None:
+    """The cutoff passed since the push at *pushed_at* with a counted check still unconcluded: the
+    build shows CI has not finished, and only slice 1's actions ask again (FR-5)."""
+    from .db.engine import async_session_factory
+    from .db.models import Build
+
+    async with async_session_factory() as session:
+        build = await session.get(Build, build_id)
+        if build is None or _aware(build.pr_ci_pushed_at) != pushed_at:
+            return
+        ci = build.pr_ci or {}
+        if ci.get("state") != CHECK_PENDING:
+            return
+        build.pr_ci = {**ci, "state": CI_NOT_FINISHED}
+        for landing in await _build_landings(session, build_id):
+            if landing.landed_sha == ci.get("head_sha"):
+                landing.ci = {**(landing.ci or {}), "state": CI_NOT_FINISHED}
+        project_id, build_state = build.project_id, build.state
+        await session.commit()
+    await _broadcast_build(project_id, build_id, build_state)
+
+
+def watch_ci(project_id: str, build_id: str) -> None:
+    """Ask GitHub about the build's PR at the project's interval while CI on its head is pending
+    (FR-5), in the background. Never waits and never raises; one watch per build, which a later
+    push joins rather than starting a second."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    key = (id(loop), build_id)
+    running = _watching.get(key)
+    if running is not None and not running.done():
+        _rewatch.add(key)
+        return
+    try:
+        job = loop.create_task(_watch_logged(project_id, build_id, key))
+    except Exception:  # noqa: BLE001
+        logger.warning("could not watch CI of %s", build_id, exc_info=True)
+        return
+    _watching[key] = job
+
+    def _done(finished: "asyncio.Task[Any]") -> None:
+        if _watching.get(key) is finished:
+            del _watching[key]
+
+    job.add_done_callback(_done)
+
+
+async def _watch_logged(project_id: str, build_id: str, key: Tuple[int, str]) -> None:
+    try:
+        await _watch(project_id, build_id, key)
+    except Exception:  # noqa: BLE001 -- the next push or action asks again
+        logger.warning("watching CI of %s failed", build_id, exc_info=True)
+
+
+async def _watch(project_id: str, build_id: str, key: Tuple[int, str]) -> None:
+    """Each interval, ask GitHub as slice 1's actions do (`ask`, which reads CI while it is
+    pending); stop once CI on the head concluded, the PR is merged or closed, or the cutoff passed
+    since the push (then the build shows CI has not finished)."""
+    while True:
+        plan = await _ci_plan(build_id)
+        if plan is None:
+            if key in _rewatch:  # a push while this was deciding to stop
+                _rewatch.discard(key)
+                continue
+            return
+        _rewatch.discard(key)
+        interval, deadline, pushed_at = plan
+        await _sleep(max(0.0, min(interval, (deadline - _now()).total_seconds())))
+        if await _ci_plan(build_id) is None:
+            continue
+        found = await ask(project_id, build_id)
+        if not any(answer["build_id"] == build_id for answer in found):
+            await check_ci(build_id)  # no PR open to ask about: CI on the pushed head still counts
+        if _now() >= deadline:
+            await _not_finished(build_id, pushed_at)
+
+
+async def settle_ci() -> None:
+    """Wait for the CI watches running (tests)."""
+    pending = [job for job in _watching.values() if not job.done()]
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)

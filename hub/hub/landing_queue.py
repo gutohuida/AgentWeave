@@ -2103,6 +2103,8 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
         "reason": landing.reason,
         "waits_on": landing.waits_on,
         "landed_sha": landing.landed_sha,
+        # A PR build's push with the CI setting on: CI's result on the commit it pushed.
+        "ci": landing.ci,
         "override_reason": landing.override_reason,
         # The known-failing entries its batch's checks went past (FR-10): what main still fails, or
         # what flaked, that did not hold this work.
