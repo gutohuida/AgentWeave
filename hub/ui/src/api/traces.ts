@@ -240,10 +240,7 @@ export function useTrace(traceId: string | null, offset = 0) {
   })
 }
 
-/**
- * The trace of one run, or `null` when the run has none — a run from before tracing existed, or
- * one whose trace was cleared. A 404 here is an answer, not a failure.
- */
+/** One run's trace by run id; a 404 means the run has none, which is an answer, not a failure. */
 async function fetchRunTrace(projectId: string, runId: string, offset: number): Promise<TraceDetail | null> {
   try {
     return await getJson<TraceDetail>(
@@ -255,6 +252,10 @@ async function fetchRunTrace(projectId: string, runId: string, offset: number): 
   }
 }
 
+/**
+ * The trace of one run, or `null` when the run has none — a run from before tracing existed, or
+ * one whose trace was cleared. A 404 here is an answer, not a failure.
+ */
 export function useRunTrace(runId: string | null, offset = 0) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<TraceDetail | null>({
