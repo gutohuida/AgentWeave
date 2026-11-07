@@ -601,6 +601,11 @@ async def get_project_detail(
     project = await _operator_project_row(project_identity[0], session)
     await _refresh_project_observation(session, project)
     await session.commit()
+    # The operator opening the project asks GitHub about its builds' open PRs, in the background
+    # (`a-build-lands-as-one-pull-request`, FR-9).
+    from ... import pull_requests
+
+    pull_requests.notice(project.id, "the operator opened the project")
     return await _project_summary(session, project)
 
 
@@ -963,6 +968,51 @@ async def mark_main_notice_seen(
     await session.commit()
     await sse_manager.broadcast(project_id, "main_notice_seen", {"id": notice.id})
     return main_watch.view(notice)
+
+
+_NO_GITHUB_MAIN = (
+    "this project has no GitHub main to compare with: PR landing is off, no main branch is set, "
+    "or the project directory has no GitHub remote"
+)
+
+
+@router.get("/{project_id}/main/github")
+async def main_against_github(
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Whether the project's local main is behind GitHub's as last fetched, and whether Update can
+    bring it forward now or why not (`a-build-lands-as-one-pull-request`, FR-11). Fetches nothing.
+    `{"main": null}` where PR landing does not apply."""
+    from ... import pull_requests
+
+    project_id = project_identity[0]
+    await _operator_project_row(project_id, session)
+    await session.commit()
+    state = await pull_requests.main_behind(project_id)
+    return {"main": state.view() if state is not None else None}
+
+
+@router.post("/{project_id}/main/update")
+async def update_main_from_github(
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Update: fetch GitHub's main and fast-forward the local main to it, only when that is a
+    fast-forward and main is not checked out with uncommitted changes (FR-11). Answers where main
+    now stands; `reason` says why it was not moved. 409 `no_github_main` where it does not apply."""
+    from ... import pull_requests
+
+    project_id = project_identity[0]
+    await _operator_project_row(project_id, session)
+    await session.commit()
+    state = await pull_requests.bring_main_forward(project_id)
+    if state is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "no_github_main", "message": _NO_GITHUB_MAIN},
+        )
+    return {"main": state.view()}
 
 
 async def _settle_the_scheduled_work_question(session: AsyncSession, project_id: str) -> None:

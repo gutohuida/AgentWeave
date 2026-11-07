@@ -3849,7 +3849,9 @@ def _hand_flow_entry(payload: Optional[Dict[str, Any]], delivery_agent: Optional
 async def _finish_build(session: AsyncSession, project_id: str, started: _Started) -> None:
     """After the commit: the flow's first firing is at its next cron tick, nothing fires now
     (operator). A registration failure is logged, and the committed flow fires from the next
-    restart. A lead's first brief is queued with the build, and its turn starts now."""
+    restart. A lead's first brief is queued with the build, and its turn starts now. A build
+    starting asks GitHub, in the background, about the project's open PRs (FR-9)."""
+    pull_requests.notice(project_id, "a build started")
     if started.job is not None:
         await _hand_job_to_scheduler(session, started.job.id, started.job)
     if started.lead:
@@ -4339,6 +4341,41 @@ async def stop_build(
         if scheduler is not None:
             await scheduler.remove_job(job.id)
     return view
+
+
+@router.post("/builds/{build_id}/pull-request/check")
+async def check_build_pull_request(
+    build_id: str,
+    wait: bool = Query(True),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Ask GitHub for the build's PR state (`a-build-lands-as-one-pull-request`, FR-9): 'check now'
+    waits for the answer and acts on it (FR-10, FR-11); `wait=false` is the build being opened,
+    and asks in the background. Answers the PR as the build reads it and where the project's main
+    stands against GitHub's. 409 `not_a_pull_request_build` for a build landing elsewhere."""
+    project_id, _ = project
+    build = await _project_build(session, project_id, build_id)
+    if build.landing != builds.LANDING_PULL_REQUEST:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "not_a_pull_request_build",
+                "message": f"build {build.id} lands on {build.landing}, not as a pull request",
+            },
+        )
+    await session.commit()
+    if wait:
+        await pull_requests.ask(project_id, build_id)
+    else:
+        pull_requests.notice(project_id, "the operator opened the build")
+    build = await _project_build(session, project_id, build_id)
+    await session.refresh(build)
+    main = await pull_requests.main_behind(project_id)
+    return {
+        "pull_request": builds.pull_request_view(build),
+        "main": main.view() if main is not None else None,
+    }
 
 
 @router.get("/reopening-warnings")
