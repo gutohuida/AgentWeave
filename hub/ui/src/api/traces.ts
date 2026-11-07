@@ -45,6 +45,8 @@ export interface TraceSummary {
   /** Recorded cost; null with `cost_state` `unpriced` (finished, unmeasured) or `running`. */
   cost_usd?: number | null
   cost_state?: 'measured' | 'unpriced' | 'running'
+  /** Tool calls in the run that ended in error. */
+  tool_errors?: number
   /** Failed, stopped (cancelled or interrupted) or ended in error. */
   is_error?: boolean
 }
@@ -188,6 +190,8 @@ export interface TraceTotals {
   tokens: { input: number; output: number; cache_read: number; cache_write: number } | null
   model_calls: number
   tool_calls: number
+  /** Tool calls that ended in error (a tool span with status `error`). */
+  tool_errors: number
   /** Time spent waiting for a permission or an answer. */
   wait_seconds: number
 }

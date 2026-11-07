@@ -188,6 +188,28 @@ async def test_secondary_numbers_match_what_was_recorded(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_a_conversations_totals_and_rows_count_its_failed_tool_calls(app, auth_headers):
+    """conversation-totals (FR-6): a run with two failing tool calls and one successful one
+    reports 2 tool errors, in the totals (and its group) and on the run's list row."""
+    await _run("run-te-1", "tessa", micros=1_000, conv="conv-te", tools=3, failed_tools=2)
+    await _run("run-te-2", "tessa", micros=1_000, conv="conv-te", tools=1)
+
+    t = (await _totals(app, auth_headers, conversation_id="conv-te"))["totals"]
+    assert t["tool_calls"] == 4
+    assert t["tool_errors"] == 2
+    assert t["errors"] == 0  # a failed tool call inside a completed run is not a failed turn
+    answer = await _totals(app, auth_headers, conversation_id="conv-te", group_by="conversation")
+    assert _groups(answer)["conv-te"]["totals"]["tool_errors"] == 2
+    res = await app.get(
+        f"/api/v1/projects/{PROJECT}/traces",
+        params={"conversation_id": "conv-te"},
+        headers=auth_headers,
+    )
+    rows = {r["run_id"]: r for r in res.json()["traces"]}
+    assert rows["run-te-1"]["tool_errors"] == 2 and rows["run-te-2"]["tool_errors"] == 0
+
+
+@pytest.mark.asyncio
 async def test_unpriced_runs_are_left_out_and_counted_and_running_ones_are_neither(
     app, auth_headers
 ):

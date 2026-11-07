@@ -84,7 +84,7 @@ export function runFromSummary(t: TraceSummary): ConversationRun {
     output_tokens: null,
     model_calls: 0,
     tool_calls: 0,
-    tool_errors: 0,
+    tool_errors: t.tool_errors ?? 0,
     wait_seconds: 0,
     span_count: t.span_count,
   }
@@ -295,6 +295,7 @@ export function withRouteTotals(rows: ConversationTotals, route: TraceTotals | n
     failedRuns: route.errors,
     modelCalls: route.model_calls,
     toolCalls: route.tool_calls,
+    toolErrors: route.tool_errors ?? rows.toolErrors,
     waitSeconds: route.wait_seconds,
   }
 }

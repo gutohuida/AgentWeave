@@ -213,6 +213,7 @@ export function ConversationTrace({
         data-failed={stats.failedRuns}
         data-model-calls={stats.modelCalls ?? ''}
         data-tool-calls={stats.toolCalls ?? ''}
+        data-tool-errors={stats.toolErrors}
       >
         <div>
           <span>Turns</span>

@@ -198,6 +198,7 @@ function totalsFor(rows: TraceSummary[]) {
       tokens: null,
       model_calls: rows.length * 2,
       tool_calls: rows.length,
+      tool_errors: rows.reduce((s, r) => s + (r.tool_errors ?? 0), 0),
       wait_seconds: 0,
     },
     group_by: null,
@@ -308,6 +309,18 @@ describe('ConversationTraceDrawer', () => {
     const asked = paths().filter((u) => u.pathname.endsWith('/traces/totals'))
     expect(asked[0]!.searchParams.get('conversation_id')).toBe('conv-1')
     expect(asked[0]!.searchParams.has('since')).toBe(false)
+  })
+
+  it('shows the tool errors next to the failed turns, from the Hub’s totals', async () => {
+    hub.runs['conv-1'] = newestFirst([
+      row('a', T0, 1 * MIN, { cost_usd: 0.5, tool_errors: 2 }),
+      row('b', T0 + 20 * MIN, 2 * MIN, { cost_usd: 0.5, run_status: 'failed', status: 'error', is_error: true }),
+    ])
+    open()
+    const totals = await screen.findByTestId('conversation-totals')
+    await waitFor(() => expect(totals).toHaveAttribute('data-model-calls', '4'))
+    expect(totals).toHaveAttribute('data-tool-errors', '2')
+    expect(totals).toHaveTextContent('1 failed turn · 2 tool errors')
   })
 
   it('unfolds a 10-minute turn to its spans on the turn’s own scale, and shows the selected call’s attributes', async () => {
