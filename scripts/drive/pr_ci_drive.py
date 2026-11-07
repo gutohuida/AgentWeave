@@ -51,6 +51,7 @@ drive, for the Hub tasks to implement):
     AW_DRIVE_ONLY=on|off runs one half (`off` is slice 1's behaviour and passes on master)
 """
 
+import calendar
 import json
 import os
 import pathlib
@@ -207,7 +208,16 @@ class Build(prl.Build):
 
         check(f"{self.label}: {key} committed ({note})", poll(commit, 120, 3), fatal=True)
         head = run(wt, "git", "rev-parse", "HEAD")
-        self.set_status(key, "completed")
+        # Out of `revision_needed` only `in_progress` is open to an agent (task_transitions.py), so
+        # a sent-back task is taken up again before it is completed.
+        if self.task(key).get("status") == "revision_needed":
+            code, out = self.set_status(key, "in_progress")
+            check(f"{self.label}: {key} taken up again after its send-back", code == 200,
+                  f"{code} {str(out)[:300]}", fatal=True)
+        code, out = self.set_status(key, "completed")
+        check(f"{self.label}: {key} completed", code == 200
+              or self.task(key).get("status") == "completed", f"{code} {str(out)[:300]}",
+              fatal=True)
         code, out = api("POST", f"{self.project.base}/project/spec/evidence",
                         {"identifier": self.ids[key], "document": self.doc, "task_id": task["id"],
                          "kind": "manual_observation", "commit": head, "covers": "full",
@@ -276,7 +286,7 @@ def wait_github(root, sha):
 
 
 def lag_seconds(completed_at):
-    stamp = time.mktime(time.strptime(completed_at, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
+    stamp = calendar.timegm(time.strptime(completed_at, "%Y-%m-%dT%H:%M:%SZ"))
     return time.time() - stamp
 
 
@@ -352,9 +362,11 @@ def drive_on(state):
     build.change("t2", remove_marker, "removes the FAIL marker")
     head3 = build.approve_and_push("t2")
     draft_while_pending = build.is_draft()
+    pending = github_check(root, head3)
     conclusion, completed_at, _ = wait_github(root, head3)
-    check("ac-ready: the fix's CI pending -> the PR stays a draft", draft_while_pending is True,
-          f"isDraft {draft_while_pending}")
+    check("ac-ready: the fix's CI pending -> the PR stays a draft",
+          draft_while_pending is True and (pending is None or pending[0] != "completed"),
+          f"github {pending}; isDraft {draft_while_pending}")
     check("ac-ready: GitHub's ci-check passed on the fix", conclusion == "success", conclusion,
           fatal=True)
     ready = poll(lambda: build.is_draft() is False, INTERVAL_MIN * 60 + 90, 5)
