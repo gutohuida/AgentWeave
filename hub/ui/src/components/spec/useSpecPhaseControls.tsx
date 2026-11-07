@@ -186,7 +186,7 @@ export function useSpecPhaseControls(
   // `SpecApprovalReport` already hold — one cache entry, not a second fetch.
   const { data: specDoc, isError: specDocError, refetch: reloadSpec } = useSpec(path)
   const { data: openAgentsData, isError: agentsError } = useAgents()
-  const { data: projectSettings } = useProjectSettings(useConfigStore().selectedProjectId)
+  const { data: projectSettings, isError: settingsError } = useProjectSettings(useConfigStore().selectedProjectId)
   const setJourney = useSetSpecJourney()
   const [journeyRefusal, setJourneyRefusal] = useState<string | null>(null)
   const check = useCheckSpecDocument()
@@ -900,7 +900,7 @@ export function useSpecPhaseControls(
           tasks={declaredTasks}
           agents={buildAgents}
           now={buildOpenedAt}
-          pullRequestLanding={Boolean(projectSettings?.pr_landing)}
+          pullRequestLanding={!settingsError && Boolean(projectSettings?.pr_landing)}
           isPending={build.isPending || approveAndBuild.isPending}
           error={buildRefusal}
           onConfirm={(shown) => {

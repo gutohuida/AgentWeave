@@ -74,10 +74,17 @@ export function PullRequestLine({
  * GitHub's after a merge. Update fast-forwards once that is safe, and says why when it is not.
  */
 export function MainBehindNotice() {
-  const { data: main } = useMainAgainstGitHub()
+  const { data: main, isError: mainError } = useMainAgainstGitHub()
   const update = useUpdateMainFromGitHub()
   const answer = update.data
   const shown = answer ?? main
+  if (mainError && !answer) {
+    return (
+      <div className="aw-spec-message" role="status" data-testid="main-behind-github-unknown">
+        Could not compare main with GitHub.
+      </div>
+    )
+  }
   if (!shown || !shown.behind) return null
   const reason = answer?.reason ?? (shown.can_update ? null : shown.reason)
   return (
