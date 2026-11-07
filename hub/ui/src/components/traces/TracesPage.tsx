@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/common/Badge'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import { TraceDrawerPanel } from '@/components/traces/TraceDrawer'
+import { ConversationTraceDrawer } from '@/components/traces/ConversationTraceDrawer'
 import { formatDuration } from '@/components/traces/traceModel'
 import {
   EMPTY_FILTER,
@@ -321,6 +322,7 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
   // Set when the operator lets go of the runs a count asked for (its `since` is not a filter field).
   const [released, setReleased] = React.useState(false)
   const [opened, setOpened] = React.useState<TraceSummary | null>(null)
+  const [conversationOpen, setConversationOpen] = React.useState(false)
   const [grouping, setGrouping] = React.useState<TraceGrouping | 'none'>('none')
   const { data: agents = [], error: agentsError } = useAgents()
 
@@ -341,6 +343,8 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
   const overall = totalsQuery.data?.totals
   const traces = data?.traces ?? []
   const internal = INTERNAL_KINDS.find((k) => k.value === filter.kind)
+  // Narrowed to one conversation that has runs: its turns can be opened as one trace.
+  const conversationRun = filter.conversation && !internal ? traces.find((t) => t.conversation_id === filter.conversation) : undefined
 
   return (
     <div className="aw-traces" data-testid="traces-view">
@@ -444,6 +448,15 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
         </p>
       ) : null}
 
+      {conversationRun ? (
+        <p className="aw-traces-internal-note" data-testid="traces-conversation-note">
+          Showing one conversation’s runs.{' '}
+          <button type="button" className="aw-link" data-testid="traces-open-conversation-trace" onClick={() => setConversationOpen(true)}>
+            Open as one trace
+          </button>
+        </p>
+      ) : null}
+
       {internal ? (
         <p className="aw-traces-internal-note" data-testid="traces-internal-note">
           Showing the Hub’s own {internal.label.toLowerCase()}, not agents’ runs.{' '}
@@ -516,6 +529,15 @@ export function TracesPage({ request = null }: { request?: TracesRequest | null 
         </>
       )}
 
+      {conversationRun ? (
+        <ConversationTraceDrawer
+          conversationId={filter.conversation}
+          title={conversationRun.conversation_title?.trim() || 'New conversation'}
+          agent={conversationRun.agent ?? ''}
+          open={conversationOpen}
+          onOpenChange={setConversationOpen}
+        />
+      ) : null}
       <TraceDrawerPanel
         open={opened !== null}
         onOpenChange={(open) => {

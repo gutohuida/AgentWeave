@@ -49,6 +49,8 @@ export interface ConversationBarProps {
   onFoldAll: () => void
   onOpenCheckpoints?: () => void
   onOpenTrace?: () => void
+  /** Every run of this conversation on one timeline (a-trace-of-a-whole-conversation). */
+  onOpenConversationTrace?: () => void
   onOpenAgentSettings?: () => void
   onTogglePanel?: () => void
   panelOpen?: boolean
@@ -78,6 +80,7 @@ export function ConversationBar({
   onFoldAll,
   onOpenCheckpoints,
   onOpenTrace,
+  onOpenConversationTrace,
   onOpenAgentSettings,
   onTogglePanel,
   panelOpen = false,
@@ -198,6 +201,7 @@ export function ConversationBar({
                 {checkpointCount > 0 ? `Checkpoints (${checkpointCount})` : 'Checkpoints'}
               </MenuItem>
             ) : null}
+            {onOpenConversationTrace ? <MenuItem icon="monitoring" data-testid="conversation-trace-open" onSelect={onOpenConversationTrace}>Trace of this conversation</MenuItem> : null}
             {onOpenTrace ? <MenuItem icon="monitoring" onSelect={onOpenTrace}>Trace of the latest run</MenuItem> : null}
             <MenuItem icon={diagnosticsHidden ? 'visibility' : 'visibility_off'} onSelect={onToggleDiagnostics}>
               {diagnosticsHidden ? 'Show diagnostics' : 'Hide diagnostics'}

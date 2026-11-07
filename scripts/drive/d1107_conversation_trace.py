@@ -135,6 +135,7 @@ def totals_agree(page, pid, conversation, since=None, until=None, label=""):
     query = urllib.parse.urlencode(params)  # '+00:00' must be encoded or the Hub reads a space
     code, want = api("GET", f"/projects/{pid}/traces/totals?{query}")
     check(f"{label}/traces/totals answers", code == 200, f"{code} {str(want)[:200]}")
+    want = want["totals"]
     t = page.get_by_test_id("conversation-totals")
     got = {k: t.get_attribute(f"data-{k}") for k in
            ("turns", "working-seconds", "cost-usd-micros", "unpriced", "failed", "model-calls", "tool-calls")}
@@ -251,9 +252,10 @@ def browser(pid, conv_a, conv_b):
         code, trace = api("GET", f"/projects/{pid}/traces/by-run/{runs[1]['run_id']}")
         check("4 the by-run route has the turn's spans", code == 200, f"{code}")
         recorded = len(trace.get("spans", []))
-        check("4 as many spans are listed as were recorded", spans.count() == recorded, f"{spans.count()} vs {recorded}")
-        first_left = float(spans.first.get_attribute("data-left"))
-        check("4 the root span begins at the left of the turn's own track", first_left < 0.05, str(first_left))
+        # the root span is the turn's own row; the others are listed under it
+        check("4 as many spans are listed as were recorded below the root", spans.count() == recorded - 1, f"{spans.count()} vs {recorded - 1}")
+        lefts_in = [float(sp.get_attribute("data-left")) for sp in spans.all()]
+        check("4 the spans are placed within the turn's own track", all(0 <= x <= 1 for x in lefts_in) and lefts_in == sorted(lefts_in), str(lefts_in))
         spans.nth(min(1, spans.count() - 1)).click()
         check("4 selecting a span shows its detail below", poll(lambda: page.get_by_test_id("conversation-detail").count() == 1, 10))
 

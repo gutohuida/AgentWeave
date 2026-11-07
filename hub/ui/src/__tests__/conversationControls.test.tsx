@@ -117,6 +117,11 @@ vi.mock('@/components/traces/TraceDrawer', () => ({
     open ? <div data-testid="latest-trace-drawer" data-run={runId} /> : null,
 }))
 
+vi.mock('@/components/traces/ConversationTraceDrawer', () => ({
+  ConversationTraceDrawer: ({ open, conversationId }: { open: boolean; conversationId: string }) =>
+    open ? <div data-testid="conversation-trace-drawer" data-conversation-id={conversationId} /> : null,
+}))
+
 const fetchMock = vi.fn()
 ;(globalThis as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch = fetchMock
 
@@ -864,6 +869,26 @@ describe('the conversation’s own trace of its latest run (FR-11)', () => {
     for (const run of ['run-1', 'run-2', 'run-3']) {
       expect(screen.getByTestId(`turn-trace-${run}`)).toHaveAttribute('data-run', run)
     }
+    chatRuns = {}
+  })
+
+  it('offers “Trace of this conversation” only once the conversation has a run, and opens that conversation', async () => {
+    recordedEntries = []
+    chatRuns = {}
+    const { unmount } = render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    await screen.findByRole('menuitem', { name: 'Fold all turns' })
+    expect(screen.queryByRole('menuitem', { name: 'Trace of this conversation' })).toBeNull()
+    unmount()
+
+    recordedEntries = [{ id: 'o1', kind: 'agent_output', content: 'reply', timestamp: '2026-08-02T10:00:00Z', delivery_state: 'delivered', run_id: 'run-1' } as TimelineEntry]
+    chatRuns = { 'run-1': { status: 'completed', started_at: '2026-08-02T10:00:00Z', ended_at: '2026-08-02T10:01:00Z' } }
+    render(<AgentOutputPanel agent={idleAgent} conversationId="conv-old" />)
+    await waitFor(() => expect(screen.getByTestId('session-continuity')).toHaveTextContent('A conversation'))
+    await userEvent.setup().click(screen.getByTestId('conversation-more'))
+    await userEvent.setup().click(await screen.findByRole('menuitem', { name: 'Trace of this conversation' }))
+    expect(screen.getByTestId('conversation-trace-drawer')).toHaveAttribute('data-conversation-id', 'conv-old')
     chatRuns = {}
   })
 

@@ -145,3 +145,18 @@ files missing, a carried-over pair and a checkpoint covering no run.
 ```
 http://localhost:5199/mock.html#tab/checkpoints
 ```
+
+## A trace of a whole conversation (mock, 2026-11-06)
+
+Spec `spec/changes/a-trace-of-a-whole-conversation`. The components are
+`src/components/traces/ConversationTrace.tsx` and its pure model `conversationTraceModel.ts` (turn
+numbering, the range and start-time narrowing, the shared axis with gaps over 20 minutes folded,
+an unfolded turn's spans on its own scale, totals); `src/styles/conversation-trace.css` styles them.
+The conversation bar gains `onOpenConversationTrace` ("Trace of this conversation"). The fixtures are
+three of this repository's conversations, recorded read-only from the operator's Hub by
+`py -3.11 mock/record_conversation_trace.py <db> <conv-id> ...` (ignored, like every fixture).
+
+```
+http://localhost:5199/mock.html#conversation-trace/conv-c6c83418230a   # 24 turns, carried over from conv-18c9f0a31db7
+http://localhost:5199/mock.html#conversation-trace/conv-b7158addff32   # QA, 17 turns over two days
+```
