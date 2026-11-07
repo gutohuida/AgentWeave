@@ -66,6 +66,7 @@ const SSE_EVENT_TYPES = [
   'loop_edit_applied',
   'task_checks_finished',
   'task_landing_changed',
+  'main_behind_github',
   'run_started',
   'run_completed',
   'run_failed',
@@ -595,6 +596,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['project', pid, 'tasks'] })
           inv(agentListFilter(pid))
           inv({ queryKey: ['projects'] })
+          break
+        case 'main_behind_github':
+          inv({ queryKey: ['project', pid, 'mainAgainstGitHub'] })
           break
         case 'task_checks_finished':
         case 'task_landing_changed': {

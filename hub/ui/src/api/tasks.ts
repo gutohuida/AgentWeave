@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, fetchWithAuth, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { neutraliseFileMentions } from '@/lib/fileMentions'
+import type { BuildPullRequest } from './pullRequests'
 import type { EvidencePiece } from './spec'
 
 /**
@@ -84,6 +85,8 @@ export interface Task {
   build_id?: string | null
   level?: 'fast' | 'reviewed' | 'gated' | null
   builder?: string | null
+  /** The PR its build lands as, where it does (`a-build-lands-as-one-pull-request`). */
+  pull_request?: BuildPullRequest | null
   /** Who checks it, where its build names a checker: the task's own, else the build's default
    *  (`hand-only-places-on-the-board`). Derived by the Hub per request; null outside a build. */
   checker?: string | null

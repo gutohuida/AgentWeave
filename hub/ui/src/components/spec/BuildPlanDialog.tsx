@@ -69,6 +69,7 @@ export function BuildPlanDialog({
   tasks,
   agents,
   now,
+  pullRequestLanding = false,
   isPending = false,
   error = null,
   onConfirm,
@@ -83,6 +84,8 @@ export function BuildPlanDialog({
   /** The project's open agents. */
   agents: BuildPlanAgent[]
   now: Date
+  /** Whether the project has PR landing on: 'A pull request' is offered only then (FR-1). */
+  pullRequestLanding?: boolean
   isPending?: boolean
   error?: string | null
   onConfirm: (choices: BuildChoices) => void
@@ -105,12 +108,12 @@ export function BuildPlanDialog({
       lead: isOpen(recommended?.lead) ? recommended!.lead! : '',
       cap: recommended?.budget_cap_usd != null ? String(recommended.budget_cap_usd) : '',
       window: 'none' as WindowChoice,
-      landing: recommended?.landing ?? 'main',
+      landing: recommended?.landing === 'pull_request' && !pullRequestLanding ? 'main' : (recommended?.landing ?? 'main'),
       taskBuilders: Object.fromEntries(tasks.map((t) => [t.key, isOpen(recBuilder(t.key)) ? recBuilder(t.key) : ''])),
       taskCheckers: Object.fromEntries(tasks.map((t) => [t.key, isOpen(recChecker(t.key)) ? recChecker(t.key) : ''])),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [recommended, tasks, agents],
+    [recommended, tasks, agents, pullRequestLanding],
   )
   const [plan, setPlan] = React.useState(initial)
   React.useEffect(() => {
@@ -262,11 +265,16 @@ export function BuildPlanDialog({
                   onChange={(landing) => set({ landing })}
                   options={[
                     { value: 'main', label: 'The main branch' },
+                    ...(pullRequestLanding ? [{ value: 'pull_request' as const, label: 'A pull request' }] : []),
                     { value: 'nowhere', label: 'Nowhere' },
                   ]}
                 />
                 <p className="aw-bp-note">
-                  {plan.landing === 'main' ? 'Approved work merges once its checks pass.' : 'Work is approved and recorded; nothing merges.'}
+                  {plan.landing === 'main'
+                    ? 'Approved work merges once its checks pass.'
+                    : plan.landing === 'pull_request'
+                      ? 'Approved work is pushed to one GitHub pull request; you merge it on GitHub.'
+                      : 'Work is approved and recorded; nothing merges.'}
                 </p>
               </Setting>
               <div className="aw-bp-pair">
