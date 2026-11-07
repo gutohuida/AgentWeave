@@ -3450,6 +3450,13 @@ class Build(Base):
     pr_last_asked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     pr_pushed_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     pr_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The PR's CI as the Hub last read it on the head commit (`the-pr-s-ci-is-the-full-check`,
+    # migration 0170): `{state, head_sha, checks, main_sha, last_asked_at, error}`, `state` one of
+    # `pending`, `passed`, `failed`, `failing_on_main`, `not_finished`; and when the head it reads
+    # was pushed, which the cutoff on asking is counted from (FR-5). Null until a push with the
+    # project's CI setting on.
+    pr_ci: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    pr_ci_pushed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     # The lead's build conversation, where its briefs are queued (driver `lead`).
     lead_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     stop_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -3510,6 +3517,9 @@ class TaskLanding(Base):
     waits_on: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     landed_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # A PR build's push with the CI setting on: CI's result on the commit it pushed, as
+    # `Build.pr_ci` reads it, or `superseded` once a later push replaced that head (migration 0170).
+    ci: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
