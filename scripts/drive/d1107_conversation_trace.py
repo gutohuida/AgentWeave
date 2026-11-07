@@ -54,6 +54,7 @@ import pathlib
 import re
 import sys
 import tempfile
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
@@ -124,7 +125,12 @@ def num(page, testid, attr):
 
 
 def totals_agree(page, pid, conversation, since=None, until=None, label=""):
-    query = f"conversation_id={conversation}" + (f"&since={since}" if since else "") + (f"&until={until}" if until else "")
+    params = {"conversation_id": conversation}
+    if since:
+        params["since"] = since
+    if until:
+        params["until"] = until
+    query = urllib.parse.urlencode(params)  # '+00:00' must be encoded or the Hub reads a space
     code, want = api("GET", f"/projects/{pid}/traces/totals?{query}")
     check(f"{label}/traces/totals answers", code == 200, f"{code} {str(want)[:200]}")
     t = page.get_by_test_id("conversation-totals")
@@ -212,8 +218,14 @@ def browser(pid, conv_a, conv_b):
         check("2 one folded break separates turn 1 from turn 2", breaks.count() == 1, f"{breaks.count()} breaks")
         label = breaks.first.get_attribute("data-label") or ""
         check("2 it is labelled with the length of the gap", re.fullmatch(r"(8|9)h \d{1,2}m later", label) is not None, label)
+        b1, b2, brk = turns.nth(0).bounding_box(), turns.nth(1).bounding_box(), breaks.first.bounding_box()
+        check("2 the break sits between turn 1 and turn 2",
+              bool(b1 and b2 and brk) and brk["x"] >= b1["x"] and brk["x"] + brk["width"] <= b2["x"] + b2["width"]
+              and brk["x"] + brk["width"] / 2 > b1["x"] + b1["width"] / 2
+              and brk["x"] + brk["width"] / 2 < b2["x"] + b2["width"] / 2,
+              f"{b1} {brk} {b2}")
         width = float(turns.first.get_attribute("data-width"))
-        check("2 the first turn's bar is wider than a sliver of the axis", width > 0.01, f"{width}")
+        check("2 the first turn's bar is wider than 10% of the axis", width > 0.10, f"{width}")
 
         # 3. totals
         totals_agree(page, pid, conv_a, label="3 ")
@@ -244,7 +256,7 @@ def browser(pid, conv_a, conv_b):
         narrowed = runs[1:]
         since = narrowed[0]["start_time"]
         last_start = dt.datetime.fromisoformat(narrowed[-1]["start_time"]) + dt.timedelta(seconds=1)
-        totals_agree(page, pid, conv_a, since=since, until=last_start.isoformat(), label="5 ")
+        totals_agree(page, pid, conv_a, since=since, until=last_start.isoformat(), label="5 ")  # encoded in totals_agree
         check("5 a narrowed view offers every turn again", page.get_by_test_id("conversation-trace-show-all").count() == 1)
         page.get_by_test_id("conversation-trace-show-all").click()
         check("5 showing every turn draws four again", poll(lambda: turns.count() == 4, 10))
