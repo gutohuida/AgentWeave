@@ -472,6 +472,80 @@ export function GeneralSettings({
             />
           }
         />
+        <SettingsRow
+          label="The PR's CI is the full check"
+          description="A pull request build pushes approved work without running the landing checks here; the checks that count on GitHub decide whether the PR is ready or the latest task goes back. It needs pull request landing on, and turns off with it. It also needs required checks on GitHub or a list of check names below."
+          changed={(settings.pr_ci_full_check ?? false) !== PROJECT_DEFAULTS.pr_ci_full_check}
+          onReset={() => onChange({ pr_ci_full_check: false }, 'Landing checks run here again')}
+          control={
+            <Switch
+              aria-label="The PR's CI is the full check"
+              data-testid="project-pr-ci-full-check"
+              checked={settings.pr_ci_full_check ?? false}
+              onCheckedChange={(v) =>
+                onChange({ pr_ci_full_check: v }, v ? 'The PR’s CI is the full check' : 'Landing checks run here again')
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label="CI check names"
+          htmlFor="s-pr-ci-names"
+          description="Comma-separated. Used only where GitHub marks no check required on the base branch."
+          changed={(settings.pr_ci_check_names ?? []).length > 0}
+          onReset={() => onChange({ pr_ci_check_names: [] }, 'CI check names cleared')}
+          control={
+            <CommittedInput
+              id="s-pr-ci-names"
+              ariaLabel="CI check names"
+              value={(settings.pr_ci_check_names ?? []).join(', ')}
+              onCommit={(v) =>
+                onChange(
+                  { pr_ci_check_names: v.split(',').map((n) => n.trim()).filter(Boolean) },
+                  'CI check names saved',
+                )
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label="CI asked every"
+          htmlFor="s-pr-ci-interval"
+          description="While a counted check is pending, the Hub asks GitHub this often. Whole minutes, 1 to 60."
+          changed={(settings.pr_ci_interval_minutes ?? 2) !== PROJECT_DEFAULTS.pr_ci_interval_minutes}
+          onReset={() => onChange({ pr_ci_interval_minutes: PROJECT_DEFAULTS.pr_ci_interval_minutes }, 'CI interval reset to 2 minutes')}
+          control={
+            <CommittedInput
+              id="s-pr-ci-interval"
+              ariaLabel="CI interval"
+              numeric
+              width={72}
+              suffix="min"
+              value={String(settings.pr_ci_interval_minutes ?? 2)}
+              validate={(d) => (/^\d+$/.test(d.trim()) ? null : 'A whole number of minutes.')}
+              onCommit={(v) => onChange({ pr_ci_interval_minutes: Number(v) }, `CI asked every ${v} minutes`)}
+            />
+          }
+        />
+        <SettingsRow
+          label="CI asking stops after"
+          htmlFor="s-pr-ci-cutoff"
+          description="After a push, asking on the interval stops this long with a counted check still unconcluded, and the build shows that CI has not finished. Whole minutes, 5 to 1440, and not shorter than the interval."
+          changed={(settings.pr_ci_cutoff_minutes ?? 60) !== PROJECT_DEFAULTS.pr_ci_cutoff_minutes}
+          onReset={() => onChange({ pr_ci_cutoff_minutes: PROJECT_DEFAULTS.pr_ci_cutoff_minutes }, 'CI cutoff reset to 60 minutes')}
+          control={
+            <CommittedInput
+              id="s-pr-ci-cutoff"
+              ariaLabel="CI cutoff"
+              numeric
+              width={72}
+              suffix="min"
+              value={String(settings.pr_ci_cutoff_minutes ?? 60)}
+              validate={(d) => (/^\d+$/.test(d.trim()) ? null : 'A whole number of minutes.')}
+              onCommit={(v) => onChange({ pr_ci_cutoff_minutes: Number(v) }, `CI asking stops after ${v} minutes`)}
+            />
+          }
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Checkpointing" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">

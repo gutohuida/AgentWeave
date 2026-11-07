@@ -114,6 +114,15 @@ export interface ProjectSettings {
   pr_landing?: boolean
   /** With PR landing on, one commit holding the whole build rather than one per task. */
   pr_single_commit?: boolean
+  /** The PR's own CI is the full check: a PR build pushes without landing-phase checks locally
+   *  (`the-pr-s-ci-is-the-full-check`). Refused while PR landing is off; turned off with it. */
+  pr_ci_full_check?: boolean
+  /** The checks that count where GitHub marks none required. */
+  pr_ci_check_names?: string[]
+  /** Whole minutes between asks while CI is pending, 1 to 60; 2 by default. */
+  pr_ci_interval_minutes?: number
+  /** Whole minutes after a push when interval asking stops, 5 to 1440; 60 by default. */
+  pr_ci_cutoff_minutes?: number
   /** The posture every agent's run gets when neither its conversation nor the agent states one
    *  (reach-1019). Null is the runner's built-in posture; an agent's own default wins either way. */
   default_permission_mode?: string | null

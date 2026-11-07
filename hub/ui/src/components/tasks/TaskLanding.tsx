@@ -7,6 +7,7 @@ import {
   type TaskLanding as Landing,
   type TaskLandingEntry as LandingEntry,
 } from '@/api/tasks'
+import { CiState } from '@/components/spec/PullRequestLine'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -142,6 +143,7 @@ export function TaskLanding({ taskId }: { taskId: string }) {
         <p style={{ color: 'var(--text-2)' }}>{landing.reason}</p>
       )}
       {landing.state === 'held' && !landing.waits_on && <HeldOnMain taskId={taskId} />}
+      <CiState ci={landing.ci} testId={`task-ci-${taskId}`} />
       {(landing.state === 'sent_back' || landing.state === 'not_landed') && landing.reason && (
         <pre
           aria-label="Why it did not land"

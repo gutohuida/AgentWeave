@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, fetchWithAuth, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { neutraliseFileMentions } from '@/lib/fileMentions'
-import type { BuildPullRequest } from './pullRequests'
+import type { BuildPullRequest, CiRead } from './pullRequests'
 import type { EvidencePiece } from './spec'
 
 /**
@@ -285,6 +285,8 @@ export interface TaskLanding {
   waits_on: string | null
   /** The commit main was moved to when it landed, or the commit pushed to the PR when pushed. */
   landed_sha: string | null
+  /** A PR build's push with the CI setting on: CI's result on the commit it pushed. */
+  ci?: CiRead | null
   override_reason: string | null
   /** The known-failing entries its batch's checks went past, once landed (`known_failing.
    *  went_past`, FR-10): each as it stood then, kept after the entry itself comes off the list.
