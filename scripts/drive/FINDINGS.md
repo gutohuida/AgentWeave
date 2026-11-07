@@ -41498,3 +41498,13 @@ All four builds of 2026-11-06 and 07 repeat the same lessons about the document,
 - **The tasks step says "the other tasks depend on it" about the drive.** Every task then waits on it, and waiting to start was the largest time bucket in every build (2.6 h, 6.7 h, 1.0 h and 3.5 h, against 0.7 h, 2.1 h, 0.5 h and 0.9 h of building).
 
 **Expected:** an author following only the duties writes the contract into the approach, puts each criterion with its behaviour, checks that each starting state is reachable, adds an owned last task that runs the drive, and chains tasks only where they share a path or need what another builds.
+
+## F1149 (B) -- "Hand to a reviewer" on a task outside a build changes the assignee but starts no review
+
+**Status:** open 2026-11-07. Seen once; worked around by a review message.
+**Source:** found by using the product (operator, Architect)
+**Theme:** Tasks & review
+**Ready:** yes
+**Tier:** 0
+
+At about 22:12 on 2026-11-07 the operator used the task drawer's "Hand to a reviewer..." on AW-54. AW-54 is a standalone task the Architect created, with no build and no checker. It moved to under_review with QA as assignee, but no inbound queue entry was created for QA and no run started. QA's newest entry was still from 12:17. Review turns are queued only by builds (`builds.py:1402`), the flow scheduler (`scheduler.py:5555`) and the mender (`api/v1/mender.py:368`); the operator's PATCH to under_review queues none. The drawer's picker reads as though it starts a review. A `send_message(message_type="review", task_id=...)` from the Architect started QA's run at 22:14. **Expected:** handing a completed task to a reviewer from the drawer queues that reviewer's review turn, whether or not the task belongs to a build. **Test:** a standalone completed task handed to a reviewer through the operator's PATCH creates one inbound entry with `review_task_id` for that agent.
