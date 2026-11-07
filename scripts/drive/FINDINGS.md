@@ -41474,7 +41474,7 @@ The retrospective for `a-build-lands-as-one-pull-request` reports that BLAOP-6's
 
 ## F1147 (C) -- the conversation trace was approved with FR-6's tool errors not shown
 
-**Status:** open 2026-11-07. The operator decided to build it (2026-11-07): task TWC-4 (task-b8a22f7bb7e3) reopens the trace build.
+**Status:** fixed 2026-11-07 in `4a05c67` (TWC-4, DeveloperSonnet2; QA2 approved): `tool_errors` on /traces/totals and the list rows, shown in the conversation totals. Hub and UI tests fail without it. Not driven in a live Hub.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Traces
 **Ready:** yes
