@@ -37,6 +37,7 @@ function totals(partial: Partial<TraceTotals>): TraceTotals {
     tokens: null,
     model_calls: 0,
     tool_calls: 0,
+    tool_errors: 0,
     wait_seconds: 0,
     ...partial,
   }
