@@ -45,7 +45,7 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null }> | null
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null; change_command?: string | null }> | null
   checks_give_way?: boolean
 } {
   return {
@@ -395,6 +395,29 @@ describe('Project settings → General, applied on change', () => {
     expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
     await user.type(within(dialog).getByLabelText('Re-run command'), ' {{tests}')
     expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeEnabled()
+  })
+
+  // CCROT FR-7 st-ac1: the command for a change needs {changed_files}; one with it is saved and read back.
+  it('refuses a command for a change without {changed_files}, and saves one with it', async () => {
+    const user = userEvent.setup()
+    settings = { ...makeSettings(), checks: [{ name: 'unit', command: 'npm test', timeout_seconds: 900 }] }
+    const view = render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    let dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Command for a change'), 'npm test --')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('{changed_files}')
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
+    await user.type(within(dialog).getByLabelText('Command for a change'), ' {{changed_files}')
+    await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch()).toEqual({
+      checks: [{ name: 'unit', command: 'npm test', timeout_seconds: 900, change_command: 'npm test -- {changed_files}' }],
+    })
+    settings = { ...makeSettings(), checks: lastPatch().checks as typeof settings.checks }
+    view.unmount()
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Command for a change')).toHaveValue('npm test -- {changed_files}')
   })
 
   // FR-4 ac-fast-refused: said in the dialog before the save, and the Hub's own refusal is shown.

@@ -224,3 +224,19 @@ describe('a landing-only check reads as running at landing', () => {
     expect(screen.queryByText('Checks have not run')).toBeNull()
   })
 })
+
+describe('a check sized to the change says so, with its file count (CCROT FR-4)', () => {
+  const sized = { name: 'hub-tests', exit_code: 0, timed_out: false, duration_seconds: 3, output_tail: '', sized_to_change: true, changed_file_count: 1 }
+
+  it('shows the latest run as sized to the change, 1 file', () => {
+    checks = { configured: true, running: false, runs: [run('passed', { results: [sized] })] }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByTestId('task-checks-sized-task-1')).toHaveTextContent('hub-tests · sized to the change (1 file)')
+  })
+
+  it('says nothing of sizing for a check that ran in full', () => {
+    checks = { configured: true, running: false, runs: [run('passed', { results: [{ ...sized, sized_to_change: false }] })] }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.queryByTestId('task-checks-sized-task-1')).toBeNull()
+  })
+})
