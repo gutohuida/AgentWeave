@@ -1945,6 +1945,7 @@ def _summary(root: TraceSpan, span_count: int) -> Dict[str, Any]:
         "model": attributes.get("gen_ai.request.model"),
         "worker_kind": attributes.get("aw.worker.kind"),
         "run_status": attributes.get("aw.run.status"),
+        "initiator": attributes.get("aw.run.initiator"),
         "status": root.status,
         "status_message": root.status_message,
         "start_time": root.start_time.isoformat(),
