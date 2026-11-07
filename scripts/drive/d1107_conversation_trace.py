@@ -26,8 +26,10 @@ Contract the build must honour (test ids; durations in seconds, money in micro-d
   conversation menu item          role=menuitem name 'Trace of this conversation' (under conversation-more)
   Traces view                     `traces-open-conversation-trace` shown while narrowed to one conversation
   `conversation-trace`            the view (data-conversation-id)
-  `conversation-turn`             one per turn, in start order (data-run-id, data-number, data-left and
-                                  data-width: the bar as 0..1 fractions of the axis)
+  `conversation-turn`             one per turn, in start order (data-run-id, data-number); wraps the turn's
+                                  row, its scale note and its span rows
+  `conversation-turn-bar`         inside a turn: its bar on the shared axis (data-left and data-width, as
+                                  0..1 fractions of the axis)
   `conversation-turn-from-you`    inside a turn the operator started
   `conversation-turn-toggle`      inside a turn: unfolds / folds it
   `conversation-turn-scale-note`  inside an unfolded turn: the line saying spans use the turn's own scale
@@ -165,6 +167,12 @@ def empty_conversation(pid, conversation):
         poll(lambda: page.get_by_role("menuitem").count() >= 1, 10)
         check("1 a conversation with no run offers no trace of itself",
               page.get_by_role("menuitem", name="Trace of this conversation").count() == 0, "menu offers it")
+        page.goto(f"{base.HUB}/?project={pid}&tab=activity", wait_until="domcontentloaded")
+        page.get_by_role("radio", name="Traces").click()
+        page.get_by_test_id("traces-filter-conversation").fill(conversation)
+        page.wait_for_timeout(2000)  # let the narrowed list settle; there is nothing to wait for
+        check("1 the Traces view narrowed to it offers no 'open as one trace'",
+              page.get_by_test_id("traces-open-conversation-trace").count() == 0, "button shown")
         chromium.close()
 
 
@@ -210,7 +218,7 @@ def browser(pid, conv_a, conv_b):
         ids = [r["run_id"] for r in runs]
         shown = [t.get_attribute("data-run-id") for t in turns.all()]
         check("2 turn 1 is the earliest run and the last turn the newest", shown == ids, f"{shown} vs {ids}")
-        lefts = [float(t.get_attribute("data-left")) for t in turns.all()]
+        lefts = [float(t.get_by_test_id("conversation-turn-bar").get_attribute("data-left")) for t in turns.all()]
         check("2 each bar starts after the previous turn's start", all(a < b for a, b in zip(lefts, lefts[1:])), str(lefts))
         check("2 turns the operator started read 'from you'",
               page.get_by_test_id("conversation-turn-from-you").count() == 4)
@@ -218,13 +226,15 @@ def browser(pid, conv_a, conv_b):
         check("2 one folded break separates turn 1 from turn 2", breaks.count() == 1, f"{breaks.count()} breaks")
         label = breaks.first.get_attribute("data-label") or ""
         check("2 it is labelled with the length of the gap", re.fullmatch(r"(8|9)h \d{1,2}m later", label) is not None, label)
-        b1, b2, brk = turns.nth(0).bounding_box(), turns.nth(1).bounding_box(), breaks.first.bounding_box()
+        bar1 = turns.nth(0).get_by_test_id("conversation-turn-bar").bounding_box()
+        bar2 = turns.nth(1).get_by_test_id("conversation-turn-bar").bounding_box()
+        brk = breaks.first.bounding_box()
         check("2 the break sits between turn 1 and turn 2",
-              bool(b1 and b2 and brk) and brk["x"] >= b1["x"] and brk["x"] + brk["width"] <= b2["x"] + b2["width"]
-              and brk["x"] + brk["width"] / 2 > b1["x"] + b1["width"] / 2
-              and brk["x"] + brk["width"] / 2 < b2["x"] + b2["width"] / 2,
-              f"{b1} {brk} {b2}")
-        width = float(turns.first.get_attribute("data-width"))
+              bool(bar1 and bar2 and brk)
+              and brk["x"] + brk["width"] / 2 > bar1["x"] + bar1["width"] / 2
+              and brk["x"] + brk["width"] / 2 < bar2["x"] + bar2["width"] / 2,
+              f"{bar1} {brk} {bar2}")
+        width = float(turns.first.get_by_test_id("conversation-turn-bar").get_attribute("data-width"))
         check("2 the first turn's bar is wider than 10% of the axis", width > 0.10, f"{width}")
 
         # 3. totals
