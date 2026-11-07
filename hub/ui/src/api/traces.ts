@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, deleteJson, fetchWithAuth, getJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
@@ -244,22 +244,65 @@ export function useTrace(traceId: string | null, offset = 0) {
  * The trace of one run, or `null` when the run has none — a run from before tracing existed, or
  * one whose trace was cleared. A 404 here is an answer, not a failure.
  */
+async function fetchRunTrace(projectId: string, runId: string, offset: number): Promise<TraceDetail | null> {
+  try {
+    return await getJson<TraceDetail>(
+      `/api/v1/projects/${projectId}/traces/by-run/${runId}${query({ offset, limit: TRACE_PAGE_SIZE })}`,
+    )
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null
+    throw error
+  }
+}
+
 export function useRunTrace(runId: string | null, offset = 0) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<TraceDetail | null>({
     queryKey: ['project', projectId, 'traces', 'by-run', runId, offset],
-    queryFn: async () => {
-      try {
-        return await getJson<TraceDetail>(
-          `/api/v1/projects/${projectId}/traces/by-run/${runId}${query({ offset, limit: TRACE_PAGE_SIZE })}`,
-        )
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 404) return null
-        throw error
-      }
-    },
+    queryFn: () => fetchRunTrace(projectId as string, runId as string, offset),
     enabled: isConfigured && !!projectId && !!runId,
     refetchInterval: (q) => liveInterval(q.state.data),
+  })
+}
+
+/** The traces of several runs, one request each and only for the ids named (the first page of
+ *  each). The conversation trace names a run when its turn is first unfolded. */
+export function useRunTraces(runIds: string[]) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQueries({
+    queries: runIds.map((runId) => ({
+      queryKey: ['project', projectId, 'traces', 'by-run', runId, 0],
+      queryFn: () => fetchRunTrace(projectId as string, runId, 0),
+      enabled: isConfigured && !!projectId,
+      refetchInterval: (q: { state: { data: TraceDetail | null | undefined } }) => liveInterval(q.state.data),
+    })),
+  })
+}
+
+/** The most runs a conversation's trace reads; the list route pages 200 at a time. */
+export const CONVERSATION_RUNS_MAX = 2000
+
+/** Every run of one conversation, newest first as the list route returns them, read page by page
+ *  past the route's 200-row page. */
+export function useConversationRuns(conversationId: string | null) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<TraceSummary[]>({
+    queryKey: ['project', projectId, 'traces', 'conversation-runs', conversationId],
+    queryFn: async () => {
+      const runs: TraceSummary[] = []
+      let before: string | undefined
+      while (runs.length < CONVERSATION_RUNS_MAX) {
+        const page = await getJson<TraceList>(
+          `/api/v1/projects/${projectId}/traces${query({ conversation_id: conversationId, operation: 'invoke_agent', limit: 200, before })}`,
+        )
+        runs.push(...page.traces)
+        if (!page.next_before || page.traces.length === 0) break
+        before = page.next_before
+      }
+      return runs
+    },
+    enabled: isConfigured && !!projectId && !!conversationId,
+    refetchInterval: (q) => (q.state.data?.some((r) => !r.ended) ? LIVE_REFETCH_MS : false),
   })
 }
 

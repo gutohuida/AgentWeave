@@ -14,6 +14,10 @@ import { ActivityScreen } from '@/components/activity/ActivityScreen'
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'alpha' }, { name: 'beta' }] }),
 }))
+vi.mock('@/components/traces/ConversationTraceDrawer', () => ({
+  ConversationTraceDrawer: ({ open, conversationId }: { open: boolean; conversationId: string }) =>
+    open ? <div data-testid="conversation-trace-drawer" data-conversation-id={conversationId} /> : null,
+}))
 vi.mock('@/components/activity/ProjectLedger', () => ({ ProjectLedger: () => <div data-testid="ledger-stub" /> }))
 vi.mock('@/components/logs/LogsView', () => ({ LogsView: () => <div data-testid="logs-stub" /> }))
 
@@ -202,5 +206,25 @@ describe('TracesPage', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Only runs of T-7' }))
     await waitFor(() => expect(listedUrls().slice(-1)[0]!.searchParams.get('task_id')).toBe('task-1'))
     expect(screen.queryByTestId('trace-detail')).toBeNull()
+  })
+
+  it('offers to open a conversation as one trace only while narrowed to a conversation that has runs', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      const u = new URL(url)
+      const conv = u.searchParams.get('conversation_id')
+      const traces = conv === 'conv-1' ? RUNS.filter((r) => r.conversation_id === 'conv-1') : conv ? [] : RUNS
+      return { ok: true, status: 200, json: async () => ({ traces, next_before: null, totals: null }) }
+    })
+    render(<TracesPage />, { wrapper })
+    await screen.findAllByTestId('trace-row')
+    expect(screen.queryByTestId('traces-open-conversation-trace')).toBeNull()
+
+    fireEvent.change(screen.getByTestId('traces-filter-conversation'), { target: { value: 'conv-none' } })
+    await screen.findByText('No traces match.')
+    expect(screen.queryByTestId('traces-open-conversation-trace')).toBeNull()
+
+    fireEvent.change(screen.getByTestId('traces-filter-conversation'), { target: { value: 'conv-1' } })
+    fireEvent.click(await screen.findByTestId('traces-open-conversation-trace'))
+    expect(screen.getByTestId('conversation-trace-drawer')).toHaveAttribute('data-conversation-id', 'conv-1')
   })
 })

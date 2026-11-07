@@ -26,6 +26,7 @@ function parseHash(): MockRoute {
   if (kind === 'gallery') return { kind: 'gallery' }
   if (kind === 'thread') return { kind: 'thread' }
   if (kind === 'traces') return { kind: 'traces' }
+  if (kind === 'conversation-trace') return { kind: 'conversation-trace', conversationId: a || null }
   return { kind: 'tab', tab: 'overview' }
 }
 
@@ -47,6 +48,8 @@ function toHash(route: MockRoute): string {
       return 'thread'
     case 'traces':
       return 'traces'
+    case 'conversation-trace':
+      return `conversation-trace/${route.conversationId ?? ''}`
   }
 }
 

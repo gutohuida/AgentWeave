@@ -37,6 +37,10 @@ const EXEMPT = new Set([
   // Local-midnight bounds built from the year/month/day the operator picked in the traces filter
   // and `now` minus a fixed span — never a Hub timestamp string.
   'components/traces/tracesModel.ts',
+  // The conversation trace builds dates from epoch milliseconds it already parsed with `hubDate`
+  // (axis instants and since/until bounds) — never from a Hub timestamp string.
+  'components/traces/ConversationTrace.tsx',
+  'components/traces/conversationTraceModel.ts',
   // The helper itself.
   'lib/hubTime.ts',
 ])
