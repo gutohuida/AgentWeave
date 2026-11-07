@@ -104,6 +104,60 @@ describe('the pull request line', () => {
   })
 })
 
+describe('CI on the build card (the-pr-s-ci-is-the-full-check, FR-9)', () => {
+  const pr = {
+    number: 7,
+    url: 'https://github.com/o/r/pull/7',
+    state: 'draft' as const,
+    last_asked_at: '2026-11-07T00:00:00Z',
+    error: null,
+    ci: {
+      state: 'pending' as const,
+      head_sha: 'abcdef1234567',
+      last_asked_at: '2026-11-07T00:01:00Z',
+      error: null,
+      checks: [
+        { name: 'unit', state: 'pending' as const, url: 'https://github.com/o/r/runs/1' },
+        { name: 'lint', state: 'pending' as const, url: 'https://github.com/o/r/runs/2' },
+      ],
+    },
+  }
+
+  it('lists each counted check as pending with its link, and the last ask', () => {
+    wrap(<PullRequestLine buildId="build-1" pullRequest={pr} />)
+    expect(screen.getByTestId('build-ci-state').textContent).toBe('pending')
+    const items = screen.getAllByTestId('build-ci-check')
+    expect(items.map((li) => li.textContent)).toEqual(['unit · pending', 'lint · pending'])
+    expect(items[0].querySelector('a')?.getAttribute('href')).toBe('https://github.com/o/r/runs/1')
+    expect(screen.getByTestId('build-ci-asked').textContent).toMatch(/asked GitHub/)
+  })
+
+  it("shows a failed ask with GitHub's error and a check failing on main too", () => {
+    wrap(
+      <PullRequestLine
+        buildId="build-1"
+        pullRequest={{
+          ...pr,
+          ci: {
+            ...pr.ci,
+            state: 'failing_on_main',
+            error: 'HTTP 502',
+            checks: [{ name: 'unit', state: 'failed', url: null, main_result: 'failed' }],
+          },
+        }}
+      />,
+    )
+    expect(screen.getByTestId('build-ci-state').textContent).toBe('failing on main too')
+    expect(screen.getByTestId('build-ci-check').textContent).toContain('also failing on main')
+    expect(screen.getByTestId('build-ci-error').textContent).toContain('HTTP 502')
+  })
+
+  it('shows nothing where CI was never read', () => {
+    wrap(<PullRequestLine buildId="build-1" pullRequest={{ ...pr, ci: null }} />)
+    expect(screen.queryByTestId('build-ci')).toBeNull()
+  })
+})
+
 describe('main behind GitHub', () => {
   it('is silent while main is not behind', async () => {
     main = { branch: 'master', behind: false, can_update: false, reason: null }
