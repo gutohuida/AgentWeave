@@ -51,6 +51,7 @@ import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/quest
 import { handoffLabel, handoffReason, type HandoffState } from '@/lib/checkpointControl'
 import { ConversationBar } from '@/components/conversation/ConversationBar'
 import { TraceDrawerPanel } from '@/components/traces/TraceDrawer'
+import { ConversationTraceDrawer } from '@/components/traces/ConversationTraceDrawer'
 import { ConversationComposerDock } from '@/components/conversation/ConversationComposerDock'
 import { useDiagnosticsHidden } from '@/lib/diagnosticsPreference'
 import { hubDate } from '@/lib/hubTime'
@@ -491,6 +492,7 @@ export function AgentOutputPanel({
       .filter((run) => !Number.isNaN(run.at))
       .sort((a, b) => b.at - a.at)[0]?.id ?? null
   const [latestTraceOpen, setLatestTraceOpen] = useState(false)
+  const [conversationTraceOpen, setConversationTraceOpen] = useState(false)
 
   /** When the turn running now began, from its run row (the newest one with no end), so the bar's
    *  "working · 2m 14s" reads the same after a reload as it did when the turn started. */
@@ -1283,6 +1285,15 @@ export function AgentOutputPanel({
         onOpenChange={setLatestTraceOpen}
         runId={latestRunId ?? undefined}
       />
+      {currentConversationId && latestRunId ? (
+        <ConversationTraceDrawer
+          conversationId={currentConversationId}
+          title={currentConversation ? conversationLabel(currentConversation) : 'This conversation'}
+          agent={agent.name}
+          open={conversationTraceOpen}
+          onOpenChange={setConversationTraceOpen}
+        />
+      ) : null}
       <ConversationBar
         barRef={headerRef}
         agent={agent}
@@ -1315,6 +1326,7 @@ export function AgentOutputPanel({
             ? () => goTo(checkpointsDestination(projectId, { conversation: currentConversationId }))
             : undefined
         }
+        onOpenConversationTrace={currentConversationId && latestRunId ? () => setConversationTraceOpen(true) : undefined}
         onOpenTrace={latestRunId ? () => setLatestTraceOpen(true) : undefined}
         onOpenAgentSettings={onOpenAgentSettings}
         onTogglePanel={onTogglePanel}

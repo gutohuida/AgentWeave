@@ -12,6 +12,8 @@ export type MockRoute =
   | { kind: 'thread' }
   /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }
+  /** A whole conversation's trace (spec a-trace-of-a-whole-conversation). */
+  | { kind: 'conversation-trace'; conversationId: string | null }
 
 /** Project settings, one place under one name. Replaces Environment / Configuration / Settings. */
 export type SettingsSection = 'general' | 'agents-defaults' | 'manager' | 'runners' | 'charters' | 'instructions' | 'budgets' | 'worktrees' | 'diagnostics'
