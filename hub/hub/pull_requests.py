@@ -736,6 +736,20 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
     if remote is None:
         await _not_pushed(landing_id, build_id, "the project directory has no GitHub remote")
         return True
+    # Before each push GitHub is asked whether the PR is still open (FR-9): the branch of a PR
+    # merged or closed there takes no more work.
+    await ask(project_id, build_id)
+    async with async_session_factory() as session:
+        build = await session.get(Build, build_id)
+        ended = build.pr_state if build is not None and build.pr_state in (MERGED, CLOSED) else None
+        await session.commit()
+    if ended is not None:
+        await _not_pushed(
+            landing_id,
+            build_id,
+            f"the build's pull request was {ended} on GitHub, so nothing more is pushed to it",
+        )
+        return True
     async with async_session_factory() as session:
         session.add(
             LandingBatch(
@@ -879,3 +893,392 @@ async def _not_pushed(landing_id: str, build_id: str, reason: str) -> None:
             build.pr_error = reason[:4000]
         await session.commit()
         await landing_queue._announce(session, [landing_id])
+
+
+# --- noticing a merged or closed PR (FR-9, FR-10) ------------------------------------------------
+
+MERGED = "merged"
+CLOSED = "closed"
+
+#: The asks in flight, one per project: an action while one runs joins it rather than asking again.
+_asking: Dict[Tuple[int, str], "asyncio.Task[Any]"] = {}
+
+
+def notice(project_id: str, why: str) -> None:
+    """Something is about to start in *project_id*, or the operator is looking (FR-9): ask GitHub
+    about its builds' open PRs in the background. Never waits and never raises -- a slow GitHub
+    must not delay a turn starting -- and joins an ask already in flight. Nothing is scheduled:
+    there is no timer, only these actions."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    key = (id(loop), project_id)
+    running = _asking.get(key)
+    if running is not None and not running.done():
+        return
+    try:
+        job = loop.create_task(_ask_logged(project_id, why))
+    except Exception:  # noqa: BLE001
+        logger.warning("could not ask GitHub about %s's pull requests", project_id, exc_info=True)
+        return
+    _asking[key] = job
+
+    def _done(finished: "asyncio.Task[Any]") -> None:
+        if _asking.get(key) is finished:
+            del _asking[key]
+
+    job.add_done_callback(_done)
+
+
+async def _ask_logged(project_id: str, why: str) -> None:
+    try:
+        await ask(project_id)
+    except Exception:  # noqa: BLE001 -- the next action asks again
+        logger.warning("asking GitHub about %s (%s) failed", project_id, why, exc_info=True)
+
+
+async def settle_asks() -> None:
+    """Wait for the asks in flight (tests)."""
+    pending = [job for job in _asking.values() if not job.done()]
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+
+
+async def open_pr_builds(session: AsyncSession, project_id: Optional[str] = None) -> List[Any]:
+    """The builds whose PR is open on GitHub as far as the Hub last knew (draft or ready)."""
+    from .builds import LANDING_PULL_REQUEST
+    from .db.models import Build
+
+    query = select(Build).where(
+        Build.landing == LANDING_PULL_REQUEST,
+        Build.pr_number.is_not(None),
+        Build.pr_state.in_((DRAFT, READY)),
+    )
+    if project_id is not None:
+        query = query.where(Build.project_id == project_id)
+    return list((await session.execute(query)).scalars())
+
+
+def read_pr(root: Path, number: int) -> Dict[str, Any]:
+    """GitHub's word on PR *number*: `{state, merge_commit, error}`, *state* one of `draft`,
+    `ready`, `merged`, `closed`, or None with *error* where it could not be read. Blocking."""
+    import json
+
+    def failed(error: str) -> Dict[str, Any]:
+        return {"state": None, "merge_commit": None, "error": error}
+
+    answered = gh(root, "pr", "view", str(number), "--json", "state,isDraft,mergeCommit")
+    if answered.returncode != 0:
+        return failed(f"could not read the pull request: {_gh_error(answered)}")
+    try:
+        data = json.loads(answered.stdout or "{}")
+    except ValueError:
+        return failed(f"GitHub's answer was not JSON: {(answered.stdout or '')[:300]}")
+    state = str(data.get("state") or "").upper()
+    if state == "MERGED":
+        merge_commit = (data.get("mergeCommit") or {}).get("oid") or None
+        return {"state": MERGED, "merge_commit": merge_commit, "error": None}
+    if state == "CLOSED":
+        return {"state": CLOSED, "merge_commit": None, "error": None}
+    if state == "OPEN":
+        open_state = DRAFT if data.get("isDraft") else READY
+        return {"state": open_state, "merge_commit": None, "error": None}
+    return failed(f"GitHub answered the pull request's state as {state!r}")
+
+
+async def ask(project_id: str, build_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Ask GitHub now for the state of *project_id*'s open PRs (only *build_id*'s, where given),
+    and act on each answer (FR-10); then, where one was found merged, bring the local main forward
+    when that is safe (FR-11). Answers what each build was found to be."""
+    from . import blocking, project_workspace
+    from .db.engine import async_session_factory
+
+    async with async_session_factory() as session:
+        builds = [
+            build
+            for build in await open_pr_builds(session, project_id)
+            if build_id is None or build.id == build_id
+        ]
+        if not builds:
+            return []
+        try:
+            root = (await project_workspace.resolve_project_workspace(session, project_id)).root
+        except Exception as exc:  # noqa: BLE001 -- nowhere to ask from; the build says why
+            for build in builds:
+                build.pr_error = f"the project directory is unavailable: {exc}"[:4000]
+            await session.commit()
+            return []
+        asked = [(build.id, int(build.pr_number)) for build in builds]
+        await session.commit()
+    found: List[Dict[str, Any]] = []
+    for each, number in asked:
+        answer = await blocking.run(read_pr, root, number)
+        await _apply(each, answer)
+        found.append({"build_id": each, **answer})
+    if any(answer["state"] == MERGED for answer in found):
+        await bring_main_forward(project_id)
+    return found
+
+
+async def _apply(build_id: str, answer: Dict[str, Any]) -> None:
+    """Record GitHub's answer on the build. A merged PR lands each task the build branch carried,
+    naming the merge commit; a closed one records them not landed. The build branch is kept, here
+    and on GitHub: nothing here deletes a branch (FR-10)."""
+    from . import landing_queue, task_integration
+    from .db.engine import async_session_factory
+    from .db.models import Build, Project, Task
+    from .task_transition_service import _redrain_after_commit
+
+    ti = task_integration
+    state = answer.get("state")
+    async with async_session_factory() as session:
+        build = await session.get(Build, build_id)
+        if build is None:
+            return
+        build.pr_last_asked_at = _now()
+        if state is None:
+            build.pr_error = (answer.get("error") or "")[:4000] or None
+            await session.commit()
+            await _broadcast_build(build.project_id, build.id, build.state)
+            return
+        build.pr_error = None
+        build.pr_state = state
+        changed: List[str] = []
+        if state in (MERGED, CLOSED):
+            project = await session.get(Project, build.project_id)
+            main_branch = (project.main_branch if project is not None else None) or ""
+            merge_commit = answer.get("merge_commit")
+            tasks = (await session.execute(select(Task).where(Task.build_id == build.id))).scalars()
+            for task in list(tasks):
+                landing = await landing_queue.latest_landing(session, task.id)
+                if landing is None or landing.state != PUSHED:
+                    continue
+                if state == MERGED:
+                    # One merged integration record per target, carrying GitHub's merge commit: how
+                    # coverage reads the work as on main, and how the main watch knows the move
+                    # that brings it here was this merge and not somebody else's.
+                    for entry in landing.targets or []:
+                        landing_queue._record(
+                            session,
+                            task,
+                            ti.IntegrationResult(
+                                outcome=ti.MERGED,
+                                commit_sha=entry.get("commit_sha"),
+                                source_branch=entry.get("branch"),
+                                target_branch=main_branch,
+                                merged_sha=merge_commit,
+                            ),
+                            landing,
+                        )
+                    landing.state, landing.landed_sha = landing_queue.LANDED, merge_commit
+                    landing.reason = f"merged on GitHub in pull request #{build.pr_number}" + (
+                        f" as {merge_commit[:12]}" if merge_commit else ""
+                    )
+                else:
+                    landing.state = landing_queue.NOT_LANDED
+                    landing.reason = (
+                        f"pull request #{build.pr_number} was closed on GitHub without merging; "
+                        f"the build branch {build_branch_name(build.id)} is kept"
+                    )
+                landing.ended_at = _now()
+                changed.append(landing.id)
+            if state == MERGED and changed:
+                from . import main_watch
+
+                if merge_commit:
+                    main_watch.note_own_merge(merge_commit)
+                _redrain_after_commit(session, build.project_id)
+        project_id, build_state = build.project_id, build.state
+        await session.commit()
+        if changed:
+            await landing_queue._announce(session, changed)
+    await _broadcast_build(project_id, build_id, build_state)
+
+
+async def _broadcast_build(project_id: str, build_id: str, state: str) -> None:
+    from .sse import sse_manager
+
+    try:
+        await sse_manager.broadcast(project_id, "build_updated", {"id": build_id, "state": state})
+    except Exception:  # noqa: BLE001
+        logger.debug("build broadcast failed", exc_info=True)
+
+
+async def notice_at_startup() -> int:
+    """The Hub started (FR-9): ask, in the background, about every project with an open PR."""
+    from .db.engine import async_session_factory
+
+    async with async_session_factory() as session:
+        projects = sorted({build.project_id for build in await open_pr_builds(session)})
+    for project_id in projects:
+        notice(project_id, "the Hub started")
+    return len(projects)
+
+
+# --- the local main after a merge (FR-11) --------------------------------------------------------
+
+
+@dataclass
+class MainState:
+    """The project's local main against GitHub's, as last fetched."""
+
+    branch: str = ""
+    local: Optional[str] = None
+    github: Optional[str] = None
+    #: GitHub's main holds commits the local main does not.
+    behind: bool = False
+    #: Moved forward by this call.
+    updated: bool = False
+    #: Why it cannot be brought forward now, where it is behind; empty where it can.
+    reason: str = ""
+
+    def view(self) -> Dict[str, Any]:
+        return {
+            "branch": self.branch,
+            "local": self.local,
+            "github": self.github,
+            "behind": self.behind,
+            "updated": self.updated,
+            "can_update": self.behind and not self.reason,
+            "reason": self.reason or None,
+        }
+
+
+def _checked_out_at(root: Path, branch: str) -> Optional[Path]:
+    """The worktree that has *branch* checked out, or None."""
+    listed = _git(root, "worktree", "list", "--porcelain")
+    path: Optional[str] = None
+    for line in (listed.stdout or "").splitlines():
+        if line.startswith("worktree "):
+            path = line[len("worktree ") :].strip()
+        elif line.strip() == f"branch refs/heads/{branch}" and path:
+            return Path(path)
+    return None
+
+
+def main_state(
+    root: Path,
+    remote: str,
+    main_branch: str,
+    hub_written: Sequence[str] = (),
+    *,
+    fetch: bool = False,
+    move: bool = False,
+) -> MainState:
+    """Where the local main stands against GitHub's: fetched first where *fetch*, and moved to it
+    where *move* and that is safe -- a fast-forward, onto a main that is not checked out with
+    uncommitted changes. Never touches a checkout holding changes. Blocking."""
+    from .task_integration import has_uncommitted_changes
+
+    out = MainState(branch=main_branch)
+    local_ref, tracking = f"refs/heads/{main_branch}", f"refs/remotes/{remote}/{main_branch}"
+    if fetch:
+        fetched = _net(root, "fetch", "-q", remote, f"+{local_ref}:{tracking}")
+        if fetched.returncode != 0:
+            said = (fetched.stderr or fetched.stdout or "").strip()[:1500] or "git fetch failed"
+            out.reason = f"could not fetch {main_branch} from {remote}: {said}"
+    out.local, out.github = _sha(root, local_ref), _sha(root, tracking)
+    if out.github is None or out.local == out.github:
+        return out
+    if out.local is not None and _contains(root, out.github, out.local):
+        return out  # ahead of GitHub, not behind
+    out.behind = True
+    if out.reason:
+        return out
+    if out.local is None:
+        out.reason = f"there is no local {main_branch} to bring forward"
+        return out
+    if not _contains(root, out.local, out.github):
+        out.reason = (
+            f"the local {main_branch} has commits GitHub's {main_branch} does not, so it cannot "
+            f"be fast-forwarded: merge {remote}/{main_branch} into it yourself"
+        )
+        return out
+    checkout = _checked_out_at(root, main_branch)
+    if checkout is not None:
+        same = checkout.resolve() == root.resolve()
+        if has_uncommitted_changes(checkout, hub_written if same else ()):
+            out.reason = (
+                f"{main_branch} is checked out at {checkout} with uncommitted changes: commit or "
+                "stash them, then Update. The Hub never touches a checkout holding your changes"
+            )
+            return out
+    if not move:
+        return out
+    if checkout is None:
+        moved = _git(root, "update-ref", local_ref, out.github, out.local)
+    else:
+        moved = _git(checkout, "merge", "--ff-only", "-q", out.github)
+    if moved.returncode != 0:
+        said = ((moved.stderr or "") + (moved.stdout or "")).strip()[:1500] or "it refused"
+        out.reason = f"git could not fast-forward {main_branch}: {said}"
+        return out
+    out.local, out.behind, out.updated = out.github, False, True
+    return out
+
+
+async def _main_inputs(project_id: str) -> Optional[Tuple[Path, str, str, List[str]]]:
+    """`(root, GitHub remote, main branch, Hub-written files)`, or None where there is no GitHub
+    main to compare with here (PR landing off, no main branch, no directory, no GitHub remote)."""
+    from . import blocking, landing_queue, project_workspace
+    from .db.engine import async_session_factory
+    from .db.models import Project
+
+    async with async_session_factory() as session:
+        project = await session.get(Project, project_id)
+        if project is None or not project.pr_landing or not project.main_branch:
+            return None
+        main_branch = project.main_branch
+        try:
+            root = (await project_workspace.resolve_project_workspace(session, project_id)).root
+        except Exception:  # noqa: BLE001
+            return None
+        written = sorted(await landing_queue._hub_written(session, project_id))
+        await session.commit()
+    remote = await blocking.run(github_remote, root)
+    if remote is None:
+        return None
+    return root, remote, main_branch, written
+
+
+async def bring_main_forward(project_id: str) -> Optional[MainState]:
+    """Fetch GitHub's main and fast-forward the local main to it when that is safe (FR-11): after a
+    PR is found merged, and the Update button. Where it is not safe the answer says why, and the
+    project shows that main is behind GitHub. None where PR landing does not apply."""
+    from . import blocking, landing_queue
+
+    inputs = await _main_inputs(project_id)
+    if inputs is None:
+        return None
+    root, remote, main_branch, written = inputs
+    # Serialized with worktree creation and merges, which also move branches in this repository.
+    state = await blocking.run_serialized(
+        lambda: main_state(root, remote, main_branch, written, fetch=True, move=True)
+    )
+    if state.updated:
+        await landing_queue._refresh_reachability(project_id, root)
+    if state.updated or state.behind:
+        await _broadcast_main(project_id, state)
+    return state
+
+
+async def main_behind(project_id: str) -> Optional[MainState]:
+    """Whether the local main is behind GitHub's as last fetched, and whether Update could bring it
+    forward now; neither fetches nor moves anything. None where PR landing does not apply."""
+    from . import blocking
+
+    inputs = await _main_inputs(project_id)
+    if inputs is None:
+        return None
+    root, remote, main_branch, written = inputs
+    return await blocking.run(lambda: main_state(root, remote, main_branch, written))
+
+
+async def _broadcast_main(project_id: str, state: MainState) -> None:
+    from .sse import sse_manager
+
+    try:
+        await sse_manager.broadcast(project_id, "main_behind_github", state.view())
+    except Exception:  # noqa: BLE001
+        logger.debug("main broadcast failed", exc_info=True)
