@@ -30,6 +30,7 @@ from ...db.models import (
     Agent,
     AgentHeartbeat,
     AIJob,
+    Build,
     EvidenceReview,
     Loop,
     Project,
@@ -283,6 +284,21 @@ async def _attach_requirements(
         for response in responses:
             response.builder_by_default = marks.get(response.id, {}).get("builder", False)
             response.checker_by_default = marks.get(response.id, {}).get("checker", False)
+        build_rows = (
+            (
+                await session.execute(
+                    select(Build).where(
+                        Build.id.in_({task.build_id for task in build_tasks if task.build_id})
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        pull_requests_by_build = {row.id: builds.pull_request_view(row) for row in build_rows}
+        for response in responses:
+            if response.build_id:
+                response.pull_request = pull_requests_by_build.get(response.build_id)
     return responses
 
 
@@ -535,7 +551,7 @@ async def _attach_queue_state(
     """What the board says of work the queue is holding: an approved task still landing, and an
     open task of a finished build's flow whose cap or window keeps it from being handed out."""
     from ... import builds, landing_queue
-    from ...db.models import Build, TaskLanding
+    from ...db.models import TaskLanding
 
     approved = {r.id for r in responses if r.status == "approved"}
     if approved:

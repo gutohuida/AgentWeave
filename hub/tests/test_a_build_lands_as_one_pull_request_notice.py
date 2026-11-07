@@ -385,3 +385,21 @@ async def test_the_hub_starting_and_a_failed_ask_are_recorded_on_the_build(
     assert build.pr_state == "ready" and "GitHub is down" in build.pr_error
     assert build.pr_last_asked_at is not None
     assert (await _build_row("build-done")).pr_last_asked_at is None
+
+
+# --- sh-ac1: the task shows its build's PR -------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_task_read_carries_its_builds_pr_link_state_and_last_asked_time(
+    app, auth_headers, author_headers, bind_project_workspace, tmp_path, monkeypatch  # noqa: F811
+):
+    _repo, _bare, _fake, build_id, tasks = await _pushed_build(
+        app, auth_headers, author_headers, bind_project_workspace, tmp_path, monkeypatch
+    )
+    await _check_now(app, auth_headers, build_id)
+    read = await app.get(f"{PROJECT}/tasks/{tasks['t1'].id}", headers=auth_headers)
+    assert read.status_code == 200, read.text
+    shown = read.json()["pull_request"]
+    assert shown["state"] == "ready" and shown["number"] == 1 and shown["url"]
+    assert shown["last_asked_at"] and shown["error"] is None

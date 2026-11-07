@@ -110,6 +110,10 @@ export interface ProjectSettings {
    *  work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-user`). Off by
    *  default; absent from a Hub older than that change. */
   checks_give_way?: boolean
+  /** Whether a build may land as one GitHub pull request; off until turned on. */
+  pr_landing?: boolean
+  /** With PR landing on, one commit holding the whole build rather than one per task. */
+  pr_single_commit?: boolean
   /** The posture every agent's run gets when neither its conversation nor the agent states one
    *  (reach-1019). Null is the runner's built-in posture; an agent's own default wins either way. */
   default_permission_mode?: string | null

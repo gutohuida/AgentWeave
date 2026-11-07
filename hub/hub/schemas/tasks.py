@@ -2,7 +2,7 @@
 
 import re
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
@@ -452,6 +452,9 @@ class TaskResponse(BaseModel):
     # Whether the builder / checker came from the build's defaults rather than the task's own
     # (`added-task-people`); the board marks each 'by default'.
     builder_by_default: bool = False
+    # The PR its build lands as, where it does (`a-build-lands-as-one-pull-request`, FR-13): link,
+    # state, when GitHub was last asked, GitHub's last error. Derived per request, never stored.
+    pull_request: Optional[Dict[str, Any]] = None
     checker_by_default: bool = False
     # The most recent attempt to integrate this task's approved work, or null where none has ever
     # been made (every non-`approved` task, and one whose approval predates this field existing on

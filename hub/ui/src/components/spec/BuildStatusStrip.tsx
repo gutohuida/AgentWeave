@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { readableApiError } from '@/api/client'
 import { useStopBuild, useUpdateBuild, type SpecBuild } from '@/api/spec'
 import { formatDateTime } from '@/lib/format'
+import { useCheckBuildPullRequest } from '@/api/pullRequests'
+import { MainBehindNotice, PullRequestLine } from '@/components/spec/PullRequestLine'
 
 const DRIVER_LABEL: Record<SpecBuild['driver'], string> = {
   flow: 'the flow',
@@ -29,6 +31,12 @@ export function BuildStatusStrip({ build }: { build: SpecBuild }) {
   const capValue = Number(cap)
   const capValid = cap.trim() !== '' && Number.isFinite(capValue) && capValue > 0
   const busy = stop.isPending || update.isPending
+  const askGitHub = useCheckBuildPullRequest().mutate
+  const pullRequestBuild = build.landing === 'pull_request' && build.state !== 'finished'
+  // The operator opening the build asks GitHub in the background; the answer arrives with the next read (FR-9).
+  useEffect(() => {
+    if (pullRequestBuild) askGitHub({ buildId: build.id, wait: false })
+  }, [pullRequestBuild, build.id, askGitHub])
 
   const spend =
     build.budget_cap_usd != null
@@ -73,6 +81,7 @@ export function BuildStatusStrip({ build }: { build: SpecBuild }) {
   }
 
   return (
+    <>
     <div className="aw-spec-message" data-testid="spec-build-status" data-state={build.state}>
       <span className="aw-spec-message-text">
         Build {build.state} · driven by {DRIVER_LABEL[build.driver]} · {build.level} · spent{' '}
@@ -81,6 +90,7 @@ export function BuildStatusStrip({ build }: { build: SpecBuild }) {
         {window}
         {people ? ` · ${people}` : ''}
         {build.landing === 'nowhere' ? ' · lands nowhere' : ''}
+        {build.landing === 'pull_request' ? ' · lands as a pull request' : ''}
         {build.state === 'stopped' && build.stop_reason ? ` · stopped: ${build.stop_reason}` : ''}
       </span>
       {build.state !== 'finished' ? (
@@ -125,5 +135,12 @@ export function BuildStatusStrip({ build }: { build: SpecBuild }) {
         </span>
       ) : null}
     </div>
+    {build.landing === 'pull_request' ? (
+      <div className="aw-spec-message">
+        <PullRequestLine pullRequest={build.pull_request} buildId={build.id} />
+      </div>
+    ) : null}
+    <MainBehindNotice />
+    </>
   )
 }

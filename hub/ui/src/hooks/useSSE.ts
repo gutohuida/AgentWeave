@@ -66,6 +66,7 @@ const SSE_EVENT_TYPES = [
   'loop_edit_applied',
   'task_checks_finished',
   'task_landing_changed',
+  'main_behind_github',
   'run_started',
   'run_completed',
   'run_failed',
@@ -597,6 +598,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv({ queryKey: ['projects'] })
           break
         case 'task_checks_finished':
+        case 'main_behind_github':
+          inv({ queryKey: ['project', pid, 'mainAgainstGitHub'] })
+          break
         case 'task_landing_changed': {
           // The drawer's Land wait clears on this, without a reload, and the board's cards follow;
           // a landing's state beside Land follows its batch the same way.
