@@ -597,10 +597,10 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           inv(agentListFilter(pid))
           inv({ queryKey: ['projects'] })
           break
-        case 'task_checks_finished':
         case 'main_behind_github':
           inv({ queryKey: ['project', pid, 'mainAgainstGitHub'] })
           break
+        case 'task_checks_finished':
         case 'task_landing_changed': {
           // The drawer's Land wait clears on this, without a reload, and the board's cards follow;
           // a landing's state beside Land follows its batch the same way.

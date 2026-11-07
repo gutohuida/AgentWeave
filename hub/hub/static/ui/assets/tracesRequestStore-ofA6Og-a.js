@@ -1,1 +1,0 @@
-import{a6 as a,cE as s,cd as o}from"./index-DwWZCZc6.js";let c=0;const n=o(e=>({request:null,ask:t=>e({request:{...t,nonce:++c}}),clear:()=>e({request:null})}));function u(e,t){n.getState().ask(t),a(s(e,"activity"))}export{u as o,n as u};
