@@ -391,6 +391,8 @@ def _acceptance_drive_findings(payload: SpecPayload) -> List[Finding]:
 
     Structural: the first local task depends on nothing, and every other local task depends on it
     directly or transitively. Imported entries are another document's work and are not counted.
+    A last task that runs the drive against the built feature (F1148) waits on every other task,
+    so it waits on the first through them and is allowed; a build task that skips the drive is not.
     """
     local = [t for t in payload.tasks if t.from_ is None]
     if len(local) < 2:

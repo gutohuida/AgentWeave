@@ -477,7 +477,9 @@ def update_task(
     work, merged onto the main branch; your uncommitted changes are committed to the task branch
     first. This can take up to two minutes. When a fast check fails, the completion is refused with
     their output: fix what it reports and complete the task again. The project's other checks run
-    after, and a review starts only once they pass.
+    after, and a review starts only once they pass. The answer's `completion_warnings` names each
+    requirement whose evidence from this task is only held or rejected, or names an older commit:
+    record it again before the review finds it.
 
     Args:
         task_id: The task's ID.
@@ -833,7 +835,8 @@ def submit_checkpoint_notes(
 
     Keep it brief; a few hundred words in total is right. The Hub refuses more than: intent,
     1500 characters; suspicions and warnings, each a list of at most 8 strings of at most 400
-    characters. Pass the two lists as lists, even for one entry. These notes are one input among
+    characters (a longer entry is split at a space, not refused, while the list's whole text
+    fits). Pass the two lists as lists, even for one entry. These notes are one input among
     several, not the checkpoint — the checkpoint is produced whether or not you call this.
     """
     return _hub_request(

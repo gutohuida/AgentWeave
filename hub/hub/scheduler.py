@@ -4021,9 +4021,9 @@ def _briefing_completion_lines(task: Task, *, is_flow: bool) -> list[str]:
     )
     if is_flow:
         sentence += (
-            " Record what whoever checks this work will need before you move it (see "
-            "`submit_checkpoint_notes`) -- those notes are delivered only when the task reaches "
-            "`completed`."
+            " Record what whoever checks this work will need before you move it, with "
+            "`submit_checkpoint_notes(intent, suspicions, warnings)` -- those notes are delivered "
+            "only when the task reaches `completed`."
         )
     return [sentence, ""]
 

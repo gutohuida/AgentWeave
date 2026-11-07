@@ -142,7 +142,24 @@ def test_acceptance_asks_how_and_who_per_must_and_tasks_starts_with_the_failing_
         assert "every MUST requirement" in text
         assert "how_to_check" in text and "checked_by" in text
         assert "acceptance drive" in text
-    assert "Task 1 writes the acceptance drive and records it failing" in spec_journey.duty("tasks")
+    tasks = spec_journey.duty("tasks")
+    assert "**Task 1 writes the acceptance drive** against the contract the approach names" in tasks
+    assert "**and records it failing** on today's code; the other tasks depend on it" in tasks
+
+
+# F1148: the duties name the contract, a reachable `given`, an owned last drive run, and chain
+# tasks only where they must.
+def test_duties_name_the_contract_reachable_givens_and_a_last_drive_run():
+    assert "**Name the contract** that the tasks and the drive share" in spec_journey.duty(
+        "approach"
+    )
+    for step in ("acceptance", "requirements-and-acceptance"):
+        assert "each criterion's `given` can actually be reached" in spec_journey.duty(step)
+    tasks = spec_journey.duty("tasks")
+    assert "**A last task runs the acceptance drive against the built feature**" in tasks
+    assert "chain other tasks to each other only where they share a path or one needs" in tasks
+    assert "Put each acceptance criterion in the task that builds the behaviour it needs" in tasks
+    assert "chain any two tasks that share a path" not in tasks
 
 
 # move-recorded (FR-5)
