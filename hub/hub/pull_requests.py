@@ -11,7 +11,9 @@ is logged in. It is found at the start, not at the first approved task after hou
 of merging it into main. GitHub's main is fetched and merged into the build branch when it moved
 (FR-8: a conflict sends the task back as a merge conflict); the task's work is merged on with
 plumbing (`landing_queue.build_chain`); the project's landing-phase checks run on that tree as a
-batch of one, judged against the known-failing list (FR-3); only a pass is pushed. The push always
+batch of one, judged against the known-failing list (FR-3); only a pass is pushed. With the PR's
+CI as the full check (`the-pr-s-ci-is-the-full-check`, FR-2) no landing-phase check runs here:
+the task is pushed and CI on the PR's head decides instead. The push always
 carries a lease on the commit the Hub last pushed, so a branch someone else pushed to is never
 replaced (FR-7). With the single-commit setting the pushed commit is one commit on GitHub's main
 holding the whole build's tree. The first push opens a draft PR against the project's main branch
@@ -1151,7 +1153,9 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
         batch = await session.get(LandingBatch, batch_id)
         batch.base_sha, batch.merged_sha, batch.prefixes = base, merged, [merged]
         await session.commit()
-    if checks and not unchecked:
+    # With the PR's CI as the full check the landing-phase checks are CI's to run, on GitHub, so
+    # none runs here; the pre-review checks ran as before (`the-pr-s-ci-is-the-full-check`, FR-2).
+    if checks and not unchecked and not ci_on:
         outcome = await lq.run_batch_checks(
             root, project_id, batch_id, base, merged, checks, [landing]
         )
@@ -1790,9 +1794,10 @@ async def _apply_ci(build_id: str, read: Dict[str, Any]) -> Optional[str]:
         for landing in own:
             landing.ci = dict(view)
         if state == CHECK_PASSED:
-            # Every task pushed in that head reads as checked by CI, naming the commit (FR-6).
+            # Every task pushed in that head reads as checked by CI, naming the commit (FR-6): a
+            # task that passed on an earlier head of its own now names this one, which holds it.
             for landing in landings:
-                if landing.state == PUSHED and (landing.ci or {}).get("state") != CHECK_PASSED:
+                if landing.state == PUSHED:
                     landing.ci = dict(view)
         if state == CHECK_FAILED:
             head = next((landing for landing in own if landing.state == PUSHED), None)
