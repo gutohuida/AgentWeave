@@ -41414,7 +41414,7 @@ Between 2026-11-06 and 2026-11-07, four send-backs carried no source change at a
 
 ## F1141 (B) -- evidence held at an old commit is only discovered in review, never at completion
 
-**Status:** open 2026-11-07. Three evidence-only send-backs in two builds (CCROT-1, TWC-1, TWC-3).
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): `requirement_evidence.completion_warnings`; the completion answer carries `completion_warnings`. Test: test_completion_names_stale_evidence.py.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Evidence & review
 **Ready:** yes
@@ -41424,7 +41424,7 @@ After a send-back the builder fixed the code and re-recorded evidence only for t
 
 ## F1142 (C) -- `record_evidence` without `task_id` is refused as ambiguous inside a run that is working one task
 
-**Status:** open 2026-11-07. Failed calls in four runs across three builds.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): `record_evidence` resolves an ambiguous FR-n through the calling run's task. Test: test_agent_evidence_plane.py.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Evidence & review
 **Ready:** yes
@@ -41434,7 +41434,7 @@ After a send-back the builder fixed the code and re-recorded evidence only for t
 
 ## F1143 (C) -- `submit_checkpoint_notes` refuses a whole call for one entry 37 characters over, and agents guess its arguments
 
-**Status:** open 2026-11-07. Related to F364, which made the refusal precise.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): an over-long entry is split at a space, not refused; both briefings name intent/suspicions/warnings. Tests in test_checkpoint_notes.py.
 **Source:** found by reading the build retrospectives and run transcripts (Architect)
 **Theme:** Checkpoints
 **Ready:** yes
@@ -41444,7 +41444,7 @@ Run transcripts from 2026-11-06 and 07 show two failure modes. (1) A 422 for one
 
 ## F1144 (C) -- one build gets two retrospectives when its last task is approved twice
 
-**Status:** open 2026-11-07.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): `build_retrospective._reviewed_automatically`: re-approving the same last task fires nothing. Test in test_build_retrospective.py.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Manager jobs
 **Ready:** yes
@@ -41454,7 +41454,7 @@ Run transcripts from 2026-11-06 and 07 show two failure modes. (1) A 422 for one
 
 ## F1145 (C) -- failed runs record no cost, so a retrospective under-reports what a task cost
 
-**Status:** open 2026-11-07.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): cause: the killed run never reached its result line, and the resumed run's cost was nulled by settle_claude_session_totals. Per-message usage is now summed unpriced, and the settle skips failed runs with no totals. Tests in test_a_claude_turn_records_its_own_cost.py.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Cost & usage
 **Ready:** yes, check first
@@ -41464,7 +41464,7 @@ The retrospective for `a-build-lands-as-one-pull-request` reports that BLAOP-6's
 
 ## F1146 (B) -- the PR's CI read misses check runs past the first 100, and never sees a re-run that fails after a pass
 
-**Status:** open 2026-11-07. Both confirmed in master's code; neither reproduced against GitHub.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): every page of check runs is read, and a passed head is re-read while its PR is open. pr_ci_drive.py with the setting on: 65 passed, 0 failed; evidence for FR-2 and FR-5 to FR-8 accepted by QA (FR-5 partial). Drafts #11, #12 and #13 were on gutohuida/AgentWeave, closed with branches kept.
 **Source:** found by reading the build retrospectives (Architect), confirmed in code
 **Theme:** Pull requests
 **Ready:** yes
@@ -41484,7 +41484,7 @@ FR-6 of `a-trace-of-a-whole-conversation` asks the totals to show tool errors. N
 
 ## F1148 (B) -- the spec journey's steps let a document leave its contract unnamed, and chain every task behind the drive
 
-**Status:** open 2026-11-07.
+**Status:** fixed 2026-11-07 in `40fd84f` (AW-54, DeveloperOpus, Tier 0; QA approved, landing pending): STEP_DUTIES now name the contract, reachable givens, an owned last drive run and narrower chaining. The drive-first rule is kept, per the Architect's correction.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Spec flow
 **Ready:** yes, with the wording in the task that fixes it
@@ -41508,3 +41508,23 @@ All four builds of 2026-11-06 and 07 repeat the same lessons about the document,
 **Tier:** 0
 
 At about 22:12 on 2026-11-07 the operator used the task drawer's "Hand to a reviewer..." on AW-54. AW-54 is a standalone task the Architect created, with no build and no checker. It moved to under_review with QA as assignee, but no inbound queue entry was created for QA and no run started. QA's newest entry was still from 12:17. Review turns are queued only by builds (`builds.py:1402`), the flow scheduler (`scheduler.py:5555`) and the mender (`api/v1/mender.py:368`); the operator's PATCH to under_review queues none. The drawer's picker reads as though it starts a review. A `send_message(message_type="review", task_id=...)` from the Architect started QA's run at 22:14. **Expected:** handing a completed task to a reviewer from the drawer queues that reviewer's review turn, whether or not the task belongs to a build. **Test:** a standalone completed task handed to a reviewer through the operator's PATCH creates one inbound entry with `review_task_id` for that agent.
+
+## F1150 (B) -- a message tied to a task makes the recipient's turn take over that task's checkout and status
+
+**Status:** open 2026-11-07. Seen twice in one evening.
+**Source:** found by using the product (Architect)
+**Theme:** Messaging & tasks
+**Ready:** yes
+**Tier:** 0
+
+On 2026-11-07, QA sent the Architect two messages carrying `task_id=task-d2ee5a28d86f` (AW-54, held by DeveloperOpus). Each time, the Architect's turn ran inside the task's checkout (`.agentweave/tasks/task-d2ee5a28d86f`, on `agentweave/task/task-d2ee5a28d86f`), and the task moved `revision_needed -> in_progress` with `actor_agent=Architect` (transitions at 22:23:11 and 22:25:13). QA's evidence-only send-back at 22:25:02 queued no turn for DeveloperOpus. The Architect's later message to DeveloperOpus queued with `waiting_reason` "Architect is already running a turn on task task-d2ee5a28d86f; a task's checkout takes one writing turn at a time", and was delivered only when the Architect's turn ended. The recipient was neither the task's assignee nor its reviewer, so any edit it made would have landed on the holder's branch. **Expected:** a message to an agent that neither holds nor reviews the task is delivered in that agent's own workspace. It changes neither the task's status nor its checkout lock, and a send-back always queues a turn for the task's holder.
+
+## F1151 (C) -- approval was refused for evidence recorded against a document the task was not linked to
+
+**Status:** open 2026-11-07.
+**Source:** reported by QA while approving AW-54
+**Theme:** Evidence & review
+**Ready:** yes, check first
+**Tier:** 0
+
+AW-54 recorded evidence against FR-2 and FR-5 to FR-8 of `the-pr-s-ci-is-the-full-check`, which QA accepted. QA's first approve was then refused because the task was not linked to those requirements. QA linked them by hand and the approve went through. **Expected:** recording evidence for a requirement from a task's run links the task to it, or the refusal names the missing link and how to add it. **Check first:** the refusal's exact text in QA's run.
