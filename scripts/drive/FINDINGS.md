@@ -41401,3 +41401,100 @@ The Architect's conversation was carried over from checkpoint ckpt-6785fdba929e.
 **Tier:** 0
 
 On 2026-11-06 the first save of `spec/changes/a-trace-of-a-whole-conversation` (no requirements, four open questions all `resolved: false`) answered `blocking: []` and `ready_to_approve: true`, with `no_requirements` and four `unresolved_question` entries in `warnings`. F1124's fix makes `ready_to_approve` false for the approval gaps (`criterion_without_check`, `no_acceptance_drive`) but not for these two, so an author reading the flag is told a document that asserts nothing is ready. **Expected:** `ready_to_approve` is false while a document has no requirements or an unresolved question.
+
+## F1140 (B) -- a generated file that every branch rebuilds sends finished work back as merge-needed
+
+**Status:** open 2026-11-07. Seen four times in two builds.
+**Source:** found by reading the build retrospectives (Architect)
+**Theme:** Landing & merges
+**Ready:** needs a decision: a project setting naming generated paths and the command that regenerates them (product), or a repo-only rebuild step (this repository's settings)
+**Tier:** 1
+
+Between 2026-11-06 and 2026-11-07, four send-backs carried no source change at all. BLAOP-4 conflicted on `hub/hub/static/ui/ui-build-stamp.json`. PSCFC-5 and PSCFC-6 conflicted on the committed bundle assets, PSCFC-6 after it had already been approved. TWC-3 was sent back because the stamp was stale. Each one cost a builder run, a check run and a review run. Parallel branches each rebuild the same generated file, and the landing treats the clash like any other conflict. **Expected:** when the only conflicting paths are generated ones, the landing regenerates them on the merged tree and lands without sending the work back. A conflict in any source file still sends the work back.
+
+## F1141 (B) -- evidence held at an old commit is only discovered in review, never at completion
+
+**Status:** open 2026-11-07. Three evidence-only send-backs in two builds (CCROT-1, TWC-1, TWC-3).
+**Source:** found by reading the build retrospectives (Architect)
+**Theme:** Evidence & review
+**Ready:** yes
+**Tier:** 0
+
+After a send-back the builder fixed the code and re-recorded evidence only for the requirements named in `failing_pieces`. The other pieces stayed held from the old commit, and the Hub refused approval, so the reviewer sent the task back again for bookkeeping. Each round cost a builder run and an Opus review run. **Expected:** moving a task to `completed` while any of its requirements has evidence only at an older commit, or only held or rejected evidence, warns in the answer and names every such requirement. It is not refused (approvals are scarce: warn, do not gate).
+
+## F1142 (C) -- `record_evidence` without `task_id` is refused as ambiguous inside a run that is working one task
+
+**Status:** open 2026-11-07. Failed calls in four runs across three builds.
+**Source:** found by reading the build retrospectives (Architect)
+**Theme:** Evidence & review
+**Ready:** yes
+**Tier:** 0
+
+`hub/hub/api/v1/agent_actions.py:1832` already resolves an ambiguous `FR-n` through the task's document when `task_id` is given (F513). Agents usually leave `task_id` out, and then get `FR-n is declared by more than one document` and retry. **Expected:** when neither `document` nor `task_id` is given and the run is working one task that has a spec document, the identifier resolves through that document.
+
+## F1143 (C) -- `submit_checkpoint_notes` refuses a whole call for one entry 37 characters over, and agents guess its arguments
+
+**Status:** open 2026-11-07. Related to F364, which made the refusal precise.
+**Source:** found by reading the build retrospectives and run transcripts (Architect)
+**Theme:** Checkpoints
+**Ready:** yes
+**Tier:** 0
+
+Run transcripts from 2026-11-06 and 07 show two failure modes. (1) A 422 for one list entry slightly over 400 characters (`run-f24314235dc7`: 437; `run-b38c1082b870`: 442). The notes were then abandoned or moved into task notes, and two runs left no checkpoint notes at all. (2) A call with `notes=` instead of `intent=` (`run-38cfcc411f0c`), refused by argument validation. **Expected:** an overlong entry is split or kept, never a reason to lose the notes, and the briefing that asks for notes names the three arguments.
+
+## F1144 (C) -- one build gets two retrospectives when its last task is approved twice
+
+**Status:** open 2026-11-07.
+**Source:** found by reading the build retrospectives (Architect)
+**Theme:** Manager jobs
+**Ready:** yes
+**Tier:** 0
+
+`spec/changes/the-pr-s-ci-is-the-full-check` has two written retrospectives: `evt-be2f1c20bcce` at 12:07 and `evt-6f20148c1b17` at 12:19. The landing batch sent PSCFC-6 back after approval (merge-needed), and its re-approval fired `fire_after_commit` a second time. The second report is $1.58 for nearly the same content. **Expected:** the automatic trigger fires once per build. A later re-approval does not fire again unless the build's work changed in behaviour. Review this build still always runs.
+
+## F1145 (C) -- failed runs record no cost, so a retrospective under-reports what a task cost
+
+**Status:** open 2026-11-07.
+**Source:** found by reading the build retrospectives (Architect)
+**Theme:** Cost & usage
+**Ready:** yes, check first
+**Tier:** 0
+
+The retrospective for `a-build-lands-as-one-pull-request` reports that BLAOP-6's failed run (about 33 minutes) has no cost or tokens. Its completed run has tokens but no cost. So the task's figure covers essentially only its review. **Expected:** every run that consumed tokens carries them, priced or marked unpriced. **Check first:** whether the failed run's usage was never captured, or was captured and never priced.
+
+## F1146 (B) -- the PR's CI read misses check runs past the first 100, and never sees a re-run that fails after a pass
+
+**Status:** open 2026-11-07. Both confirmed in master's code; neither reproduced against GitHub.
+**Source:** found by reading the build retrospectives (Architect), confirmed in code
+**Theme:** Pull requests
+**Ready:** yes
+**Tier:** 0
+
+(1) `hub/hub/pull_requests.py:457` reads `check-runs?per_page=100` once, so a counted check beyond the first page reads as pending until the cutoff. (2) Once CI has concluded as passed on a head, the watch stops. A check re-run on the same head that then fails is never read. Separately, the build's full acceptance drive (`pr_ci_drive.py` with the setting on) was never run, because each reviewer deferred it to a step no task owned. FR-2 and FR-5 to FR-8 of `the-pr-s-ci-is-the-full-check` therefore hold only partial evidence. **Expected:** every page is read. A head stays watched while its PR is open, until it lands. The drive is run once against the scratch repository and its result recorded.
+
+## F1147 (C) -- the conversation trace was approved with FR-6's tool errors not shown
+
+**Status:** open 2026-11-07. Needs the operator's decision.
+**Source:** found by reading the build retrospectives (Architect)
+**Theme:** Traces
+**Ready:** no: build it or drop it from the criterion
+**Tier:** 0 either way
+
+FR-6 of `a-trace-of-a-whole-conversation` asks the totals to show tool errors. Neither `/traces/totals` nor the list rows carry them, so the view shows failed turns only, and the work was approved anyway. **Expected:** either the route carries tool errors and the view shows them, or the document's criterion is amended to drop them, saying why.
+
+## F1148 (B) -- the spec journey's steps let a document leave its contract unnamed, and chain every task behind the drive
+
+**Status:** open 2026-11-07.
+**Source:** found by reading the build retrospectives (Architect)
+**Theme:** Spec flow
+**Ready:** yes, with the wording in the task that fixes it
+**Tier:** 0
+
+All four builds of 2026-11-06 and 07 repeat the same lessons about the document, not the code, and the step duties in `hub/hub/spec_journey.py` (`STEP_DUTIES`) say none of them:
+- **Field names and shapes were left unnamed** (3 of 4 builds). The drive author invented them, and later tasks followed the drive's docstring.
+- **Criteria sat in a task other than the one that builds their behaviour.** PSCFC-3 built PSCFC-4's FR-7 and FR-8 early.
+- **One criterion's starting state was unreachable** under the document's own rules: "a ready PR fails CI".
+- **No task owned running the drive against the built feature**, so requirements stayed partial.
+- **The tasks step says "the other tasks depend on it" about the drive.** Every task then waits on it, and waiting to start was the largest time bucket in every build (2.6 h, 6.7 h, 1.0 h and 3.5 h, against 0.7 h, 2.1 h, 0.5 h and 0.9 h of building).
+
+**Expected:** an author following only the duties writes the contract into the approach, puts each criterion with its behaviour, checks that each starting state is reachable, adds an owned last task that runs the drive, and chains tasks only where they share a path or need what another builds.
