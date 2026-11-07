@@ -41474,10 +41474,10 @@ The retrospective for `a-build-lands-as-one-pull-request` reports that BLAOP-6's
 
 ## F1147 (C) -- the conversation trace was approved with FR-6's tool errors not shown
 
-**Status:** open 2026-11-07. Needs the operator's decision.
+**Status:** open 2026-11-07. The operator decided to build it (2026-11-07): task TWC-4 (task-b8a22f7bb7e3) reopens the trace build.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Traces
-**Ready:** no: build it or drop it from the criterion
+**Ready:** yes
 **Tier:** 0 either way
 
 FR-6 of `a-trace-of-a-whole-conversation` asks the totals to show tool errors. Neither `/traces/totals` nor the list rows carry them, so the view shows failed turns only, and the work was approved anyway. **Expected:** either the route carries tool errors and the view shows them, or the document's criterion is amended to drop them, saying why.
