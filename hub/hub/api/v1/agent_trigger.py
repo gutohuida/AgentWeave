@@ -3486,6 +3486,8 @@ async def _execute_run(
         session_id = known_session_id
         binding_conflict: Optional[str] = None
         accounting_sample: Optional[AccountingSample] = None
+        # F1145: each model message's own usage, by message id, for a turn with no final report.
+        message_accounting: Dict[str, AccountingSample] = {}
         runner_version: Optional[str] = None
         # F697: the turn's last context reading, which estimates a stopped turn's interrupted call.
         last_context_tokens: Optional[int] = None
@@ -3637,6 +3639,9 @@ async def _execute_run(
                     if accounting_sample is None
                     else accounting_sample.merged(parsed.accounting)
                 )
+            if parsed.message_accounting is not None:
+                message_id, own = parsed.message_accounting
+                message_accounting[message_id] = own
 
         # F567: how the workspace was set up comes before anything the runner says.
         await _record_events(setup_events)
@@ -3667,6 +3672,20 @@ async def _execute_run(
                     post_run_accounting
                     if accounting_sample is None
                     else accounting_sample.merged(post_run_accounting)
+                )
+
+        # F1145: a turn killed before its runner's final report (BLAOP-6's 33-minute failed run)
+        # recorded no tokens although every message it sent reported its own. Its messages' usage
+        # stands in, unpriced; a final report, when one came, always wins.
+        if message_accounting and (
+            accounting_sample is None or accounting_sample.total_tokens is None
+        ):
+            from_messages = AccountingSample.summed(list(message_accounting.values()))
+            if from_messages is not None:
+                accounting_sample = (
+                    from_messages
+                    if accounting_sample is None
+                    else accounting_sample.merged(from_messages)
                 )
 
         snapshot_sha: Optional[str] = None

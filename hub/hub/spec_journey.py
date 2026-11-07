@@ -502,7 +502,9 @@ _ACCEPTANCE = (
     "that shows it) and `checked_by`: `agent` when an agent can check it unaided, `operator` when "
     "only the operator can. Write them as `acceptance_criteria` with `submit_spec_document`.\n"
     "- Name the **acceptance drive**: the one end-to-end check that fails while the behaviour cannot "
-    "fire for real, and passes only when it can. Record it as a criterion."
+    "fire for real, and passes only when it can. Record it as a criterion.\n"
+    "- Check that each criterion's `given` can actually be reached under this document's own "
+    "requirements."
 )
 
 STEP_DUTIES: Dict[str, str] = {
@@ -550,7 +552,11 @@ STEP_DUTIES: Dict[str, str] = {
     APPROACH: (
         f"{marker(APPROACH)} **Approach: decide how it will be built.** Write short decision records "
         "into `design`: each decision, the alternative rejected, and why. Name any hazard (a "
-        "migration, live data, security) and its rollback. Do not implement anything."
+        "migration, live data, security) and its rollback. Do not implement anything.\n"
+        "- **Name the contract** that the tasks and the drive share: each new setting field, route "
+        "and response field with its exact name and shape, and any status path a drive walks. Name "
+        "any existing guard or test the change relaxes. A name a builder has to guess is a gap in "
+        "this step."
     ),
     TASKS: (
         f"{marker(TASKS)} **Tasks: split the work.** Write `tasks` with `submit_spec_document`.\n"
@@ -558,12 +564,17 @@ STEP_DUTIES: Dict[str, str] = {
         "can see working on its own, not one task per layer (model, route, UI) or per file. Every "
         "task costs a turn, a review and a check run, so split only where the pieces can be shown "
         "working apart.\n"
-        "- **Task 1 writes the acceptance drive and records it failing** on today's code; the other "
-        "tasks depend on it. A fix's one task carries its own failing check.\n"
+        "- **Task 1 writes the acceptance drive** against the contract the approach names, **and "
+        "records it failing** on today's code; the other tasks depend on it. A fix's one task "
+        "carries its own failing check.\n"
+        "- **A last task runs the acceptance drive against the built feature** and records its "
+        "result as evidence. It depends on every task that builds behaviour, so no review defers "
+        "that run to a step nobody owns.\n"
         "- A test and its fix are one task, so every task leaves the project's checks green.\n"
         "- For each task list in `files` the paths it will edit, and in `depends_on` the tasks it "
-        "waits on; chain any two tasks that share a path. Link each task to the requirements it "
-        "serves.\n"
+        "waits on; chain other tasks to each other only where they share a path or one needs what "
+        "another builds; every chain makes a task wait. Put each acceptance criterion in the task "
+        "that builds the behaviour it needs. Link each task to the requirements it serves.\n"
         "- **Name people on every task.** Give each task its own `builder` and `checker`, chosen "
         "from the open agents, with `builder_reason` and `checker_reason`: one sentence each. A "
         "reason states the pick in terms of that agent's model (its cost and performance) and the "

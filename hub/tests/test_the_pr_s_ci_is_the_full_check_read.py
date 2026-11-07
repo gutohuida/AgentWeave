@@ -194,6 +194,40 @@ def test_a_rerun_check_is_read_at_its_latest_run_and_a_status_counts_too(monkeyp
     assert pull_requests.read_ci(Path("."), "main", "abc", [])["state"] == "passed"
 
 
+def test_every_page_of_check_runs_is_read(monkeypatch):
+    """F1146: one `per_page=100` read left a counted check past the first 100 runs pending until
+    the cutoff. Every page is read, each an allowed GET, until the `total_count` is reached."""
+    runs = [_run(f"job-{n}", "success", run_id=n + 10) for n in range(150)] + [
+        _run(CHECK, "failure", run_id=5)
+    ]
+    calls = []
+
+    def answer(root, args):
+        pull_requests.check_gh_call(args)
+        calls.append(args[1])
+        path = args[1]
+        if "/branches/" in path:
+            return CIGitHub._json([] if "/rules/" in path else {"protection": {}})
+        page = int(path.split("&page=")[1]) if "&page=" in path else 1
+        if "/check-runs" in path:
+            rows = runs[(page - 1) * 100 : page * 100]
+            return CIGitHub._json({"total_count": len(runs), "check_runs": rows})
+        return CIGitHub._json({"total_count": 0, "statuses": []})
+
+    monkeypatch.setattr(pull_requests, "_run_gh", answer)
+    monkeypatch.setattr(pull_requests, "github_repo", lambda root: "example/example")
+
+    read = pull_requests.read_ci(Path("."), "main", "abc", [CHECK])
+
+    assert [c["name"] for c in read["checks"]] == [CHECK]
+    assert read["checks"][0]["state"] == pull_requests.CHECK_FAILED
+    head_reads = [c for c in calls if "/commits/abc/check-runs" in c]
+    assert head_reads == [
+        "repos/example/example/commits/abc/check-runs?per_page=100",
+        "repos/example/example/commits/abc/check-runs?per_page=100&page=2",
+    ]
+
+
 def test_with_neither_the_read_names_both_and_decides_nothing(monkeypatch):
     """The refusals of turning the setting on and starting a PR build are the `settings` task's
     tests (test_the_pr_s_ci_is_the_full_check_settings.py); a read with nothing counted, which a
@@ -208,11 +242,14 @@ def test_with_neither_the_read_names_both_and_decides_nothing(monkeypatch):
 def test_the_commit_reads_are_allowed_and_nothing_else_is():
     pull_requests.check_gh_call(["api", "repos/o/r/commits/abc123/check-runs?per_page=100"])
     pull_requests.check_gh_call(["api", "repos/o/r/commits/main/status?per_page=100"])
+    pull_requests.check_gh_call(["api", "repos/o/r/commits/abc/check-runs?per_page=100&page=2"])
     for refused in (
         ["api", "repos/o/r/commits/abc/check-runs"],
         ["api", "repos/o/r/commits/abc/check-runs?per_page=100", "-X", "POST"],
         ["api", "repos/o/r/check-runs/1/rerequest?per_page=100"],
         ["api", "repos/o/r/commits/abc/comments?per_page=100"],
+        ["api", "repos/o/r/commits/abc/check-runs?per_page=100&page=0"],
+        ["api", "repos/o/r/commits/abc/check-runs?per_page=100&page=2&filter=all"],
     ):
         with pytest.raises(pull_requests.RefusedGitHubCallError):
             pull_requests.check_gh_call(refused)
@@ -321,6 +358,38 @@ async def test_a_check_with_no_result_on_main_sends_the_latest_task_pushed_back(
         build = await _build_row(build_id)
         assert build.pr_ci["checks"][0]["main_result"] == pull_requests.ON_MAIN_NONE
         assert github.prs[1]["isDraft"] is True
+    finally:
+        await _stop_watches()
+
+
+@pytest.mark.asyncio
+async def test_a_rerun_that_fails_after_a_pass_on_the_same_head_is_seen(
+    app, auth_headers, author_headers, bind_project_workspace, tmp_path, monkeypatch  # noqa: F811
+):
+    """F1146: once CI had passed on a head nothing read it again, so a check re-run on the same
+    head that then failed was never seen. A passed head is read again on each ask while its PR is
+    open; the failure then sends back the latest task pushed, and is not read again after."""
+    monkeypatch.setattr(pull_requests, "_sleep", _never)
+    repo, github, build_id, tasks = await _ci_build(
+        app, auth_headers, author_headers, bind_project_workspace, tmp_path, monkeypatch
+    )
+    try:
+        await _push(repo, tasks["t1"], "a", 0)
+        head = await _push(repo, tasks["t2"], "b", 1)
+        github.runs[head] = [_run(CHECK, "success", run_id=1)]
+        assert await pull_requests.check_ci(build_id) == pull_requests.CHECK_PASSED
+        await _settle(watches=False)
+
+        github.runs[head] = [_run(CHECK, "success", run_id=1), _run(CHECK, "failure", run_id=2)]
+        github.runs["main"] = [_run(CHECK, "success")]
+        assert await pull_requests.check_ci(build_id) == pull_requests.CHECK_FAILED
+        await _settle(watches=False)
+
+        assert await _status(tasks["t2"].id) == "revision_needed"
+        assert await _status(tasks["t1"].id) == "approved"
+        reads = len(github.run_reads(head))
+        assert await pull_requests.check_ci(build_id) == pull_requests.CHECK_FAILED
+        assert len(github.run_reads(head)) == reads
     finally:
         await _stop_watches()
 

@@ -527,3 +527,42 @@ async def test_a_task_from_one_document_disambiguates_a_bare_identifier(app, aut
     # Without the task the identifier is still ambiguous, and still refused rather than guessed.
     bare = await app.post(EVIDENCE, json={"identifier": "FR-1", "summary": "x"}, headers=builder)
     assert bare.status_code == 422, bare.text
+
+
+@pytest.mark.asyncio
+async def test_a_run_working_a_task_disambiguates_a_bare_identifier_without_naming_it(
+    app, auth_headers, builder
+):
+    """F1142: agents usually leave `task_id` out. When the calling run is working a task from one
+    document, a bare ambiguous `FR-1` resolves through that document instead of being refused."""
+    from hub.db.models import RequirementEvidence, SpecDocument, SpecRequirement, Task
+
+    await _document(app, auth_headers, builder)
+    await _second_document(app, auth_headers, builder)
+    async with async_session_factory() as session:
+        second = (
+            await session.execute(select(SpecDocument).where(SpecDocument.path == SECOND_PATH))
+        ).scalar_one()
+        session.add(
+            Task(
+                id="task-f1142",
+                project_id="proj-test",
+                title="Remind",
+                status="in_progress",
+                assignee="builder",
+                spec_document_id=second.id,
+            )
+        )
+        run = await session.get(Run, "run-ev-builder")
+        run.task_id = "task-f1142"
+        await session.commit()
+        second_id = second.id
+
+    response = await app.post(
+        EVIDENCE, json={"identifier": "FR-1", "summary": "reminder sent"}, headers=builder
+    )
+    assert response.status_code == 201, response.text
+    async with async_session_factory() as session:
+        evidence = await session.get(RequirementEvidence, response.json()["id"])
+        requirement = await session.get(SpecRequirement, evidence.requirement_id)
+    assert requirement.document_id == second_id

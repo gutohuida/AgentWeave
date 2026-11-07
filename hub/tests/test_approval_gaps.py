@@ -131,6 +131,28 @@ def test_a_task_waiting_on_the_drive_through_another_task_still_counts():
     ]
 
 
+# F1148: the tasks duty adds a last task that runs the drive against the built feature and waits on
+# every task that builds behaviour. It waits on the drive through them, so drive-first holds.
+def test_a_last_task_running_the_drive_after_every_other_task_is_allowed():
+    run_last = _payload(
+        tasks=[
+            _task("drive"),
+            _task("build", ["drive"]),
+            _task("page", ["drive"]),
+            _task("run-drive", ["build", "page"]),
+        ]
+    )
+    run_last_direct = _payload(
+        tasks=[_task("drive"), _task("build", ["drive"]), _task("run-drive", ["drive", "build"])]
+    )
+    builds_skip_drive = _payload(
+        tasks=[_task("drive"), _task("build"), _task("run-drive", ["drive", "build"])]
+    )
+    assert [f.code for f in approval_gaps(run_last)] == []
+    assert [f.code for f in approval_gaps(run_last_direct)] == []
+    assert [f.code for f in approval_gaps(builds_skip_drive)] == ["no_acceptance_drive"]
+
+
 # refusals-stay (FR-3, D2)
 def test_what_makes_approval_wrong_is_a_refusal_and_completeness_is_a_gap():
     payload = _payload(

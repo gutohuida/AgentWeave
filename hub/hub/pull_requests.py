@@ -180,10 +180,13 @@ GH_ALLOWED = frozenset({("pr", "create"), ("pr", "edit"), ("pr", "ready"), ("pr"
 #: branch protection itself is refused, even as a read.
 _API_READ = re.compile(r"^repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/(?:rules/)?branches/[^\s?#]+$")
 #: ... and a GET of the check runs or the combined status of one commit (a SHA, or a branch for its
-#: latest commit), to read CI's result there (`commit_checks`).
+#: latest commit), to read CI's result there (`commit_checks`), one page of 100 at a time (F1146).
 _COMMIT_READ = re.compile(
-    r"^repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commits/[^\s?#]+/(?:check-runs|status)\?per_page=100$"
+    r"^repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/commits/[^\s?#]+/(?:check-runs|status)"
+    r"\?per_page=100(?:&page=[1-9][0-9]?)?$"
 )
+#: The most pages `commit_checks` reads of either list: 2,000 entries, past any real CI.
+COMMIT_READ_MAX_PAGES = 20
 
 #: How long one push, fetch or GitHub CLI call of a landing may take.
 NETWORK_TIMEOUT_SECONDS = 180
@@ -454,10 +457,10 @@ def commit_checks(root: Path, repo: str, ref: str) -> CommitChecks:
     quoted = quote(ref, safe="")
     out = CommitChecks()
     latest: Dict[str, Dict[str, Any]] = {}
-    runs = gh(root, "api", f"repos/{repo}/commits/{quoted}/check-runs?per_page=100")
-    if runs.returncode == 0:
+    runs, error = _every_page(root, f"repos/{repo}/commits/{quoted}/check-runs", "check_runs")
+    if error is None:
         try:
-            for run in (_json_of(runs) or {}).get("check_runs") or []:
+            for run in runs:
                 name = str(run.get("name") or "")
                 if not name:
                     continue
@@ -467,17 +470,17 @@ def commit_checks(root: Path, repo: str, ref: str) -> CommitChecks:
         except (ValueError, AttributeError, TypeError) as exc:
             out.error = f"the check runs on {ref} could not be read: {exc}"
     else:
-        out.error = f"the check runs on {ref} could not be read: {_gh_error(runs)}"
+        out.error = f"the check runs on {ref} could not be read: {error}"
     for name, run in latest.items():
         done = str(run.get("status") or "").lower() == "completed"
         bucket = _RUN_BUCKETS.get(str(run.get("conclusion") or "").lower(), "pending")
         out.results.append(
             {"name": name, "bucket": bucket if done else "pending", "url": run.get("html_url")}
         )
-    status = gh(root, "api", f"repos/{repo}/commits/{quoted}/status?per_page=100")
-    if status.returncode == 0:
+    statuses, error = _every_page(root, f"repos/{repo}/commits/{quoted}/status", "statuses")
+    if error is None:
         try:
-            for each in (_json_of(status) or {}).get("statuses") or []:
+            for each in statuses:
                 name = str(each.get("context") or "")
                 if name and name not in latest:
                     bucket = _STATUS_BUCKETS.get(str(each.get("state") or "").lower(), "pending")
@@ -487,10 +490,30 @@ def commit_checks(root: Path, repo: str, ref: str) -> CommitChecks:
         except (ValueError, AttributeError, TypeError) as exc:
             out.error = out.error or f"the commit status of {ref} could not be read: {exc}"
     else:
-        out.error = (
-            out.error or f"the commit status of {ref} could not be read: {_gh_error(status)}"
-        )
+        out.error = out.error or f"the commit status of {ref} could not be read: {error}"
     return out
+
+
+def _every_page(root: Path, path: str, key: str) -> Tuple[List[Any], Optional[str]]:
+    """Every entry of *key* in the paged GET of *path*, 100 a page (F1146: one page read alone
+    left a counted check past the first 100 pending until the cutoff), or the error that stopped
+    it. A page short of 100, or the `total_count` reached, is the last."""
+    entries: List[Any] = []
+    for page in range(1, COMMIT_READ_MAX_PAGES + 1):
+        suffix = "?per_page=100" if page == 1 else f"?per_page=100&page={page}"
+        answer = gh(root, "api", path + suffix)
+        if answer.returncode != 0:
+            return entries, _gh_error(answer)
+        try:
+            body = _json_of(answer) or {}
+            rows = list(body.get(key) or [])
+            total = body.get("total_count")
+        except (ValueError, AttributeError, TypeError) as exc:
+            return entries, str(exc)
+        entries.extend(rows)
+        if len(rows) < 100 or (isinstance(total, int) and len(entries) >= total):
+            break
+    return entries, None
 
 
 def _on_main(bucket: str, error: Optional[str]) -> str:
@@ -1738,7 +1761,10 @@ async def check_ci(build_id: str) -> Optional[str]:
         ):
             return None
         state = (build.pr_ci or {}).get("state")
-        if state in _CI_CONCLUDED:
+        # A passed head is read again on every ask while its PR is open (F1146): a check re-run
+        # on the same head that fails after the pass is still the head's result. Not on the
+        # interval, which stops at a conclusion (FR-5), and not a failure, already sent back.
+        if state in _CI_CONCLUDED and state != CHECK_PASSED:
             return state
         try:
             root = (await project_workspace.resolve_project_workspace(session, project.id)).root

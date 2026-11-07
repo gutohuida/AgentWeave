@@ -1285,7 +1285,8 @@ def _operations() -> List[_Operation]:
                 '(`{"document": <roadmap path>, "slice": <key>}`) names the roadmap slice a '
                 "change document specifies; it can be approved once that roadmap is. Each "
                 "entry in `tasks` lists the repo-relative paths it will edit in `files`, and "
-                "names sibling task keys in `depends_on`: chain any two tasks that share a path."
+                "names sibling task keys in `depends_on`: chain two tasks only where they share "
+                "a path or one needs what another builds."
             ),
             http_note=(
                 "This is the one operation whose request is not flat: everything after `path` — "

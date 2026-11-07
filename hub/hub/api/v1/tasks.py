@@ -2302,6 +2302,12 @@ async def update_task_for_actor(
         approval_report=approval_report,
         withdrawn_reviews=withdrawn_reviews,
     )
+    if body.status == "completed" and rendered.status == "completed":
+        # F1141: evidence that would only be found in review -- held, rejected, or naming an older
+        # commit than the work handed over -- is named now, while its author can still act. Warns.
+        from ...requirement_evidence import completion_warnings
+
+        rendered.completion_warnings = await completion_warnings(session, task, actor.run_id)
     if completion_checks is not None:
         # A run that decided a failure of the task's own while this completion committed -- past
         # the budget (D5), or a slow check failing between the fast prefix and this commit -- found

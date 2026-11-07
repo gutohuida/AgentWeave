@@ -512,18 +512,33 @@ class AgentCheckpointNotes(RequestModel):
     @field_validator("suspicions", "warnings")
     @classmethod
     def cap_entries(cls, value: List[str], info: ValidationInfo) -> List[str]:
-        # Names the entry and how far over it is (F364): "each entry must be at most 400
-        # characters" sent an agent round two to five times per note, and one wrote a script to
-        # count characters before it could get a note through.
-        for index, entry in enumerate(value):
-            if len(entry) > NOTE_ENTRY_MAX_CHARS:
-                raise ValueError(
-                    f"{info.field_name}[{index}] is {len(entry)} characters, "
-                    f"{len(entry) - NOTE_ENTRY_MAX_CHARS} over the {NOTE_ENTRY_MAX_CHARS} each "
-                    f"entry may have; shorten that entry or split it in two (at most "
-                    f"{NOTE_LIST_MAX_ENTRIES} entries)"
-                )
-        return value
+        # F1143: an entry a little over the cap is split, never a reason to lose the notes (one
+        # 437-character entry cost two runs their notes entirely). The list is still bounded: its
+        # whole text may not exceed what its entries could hold (F364 names the overshoot).
+        budget = NOTE_LIST_MAX_ENTRIES * NOTE_ENTRY_MAX_CHARS
+        total = sum(len(entry) for entry in value)
+        if total > budget:
+            raise ValueError(
+                f"{info.field_name} is {total} characters in all, {total - budget} over the "
+                f"{budget} its {NOTE_LIST_MAX_ENTRIES} entries of {NOTE_ENTRY_MAX_CHARS} may hold; "
+                "shorten it"
+            )
+        return [piece for entry in value for piece in _split_note_entry(entry)]
+
+
+def _split_note_entry(entry: str) -> List[str]:
+    """`entry` as pieces of at most `NOTE_ENTRY_MAX_CHARS`, broken at a space where there is one."""
+    pieces: List[str] = []
+    rest = entry
+    while len(rest) > NOTE_ENTRY_MAX_CHARS:
+        cut = rest.rfind(" ", 0, NOTE_ENTRY_MAX_CHARS + 1)
+        if cut <= 0:
+            cut = NOTE_ENTRY_MAX_CHARS
+        pieces.append(rest[:cut].rstrip())
+        rest = rest[cut:].lstrip()
+    if rest or not pieces:
+        pieces.append(rest)
+    return pieces
 
 
 @router.post("/checkpoint-notes", status_code=status.HTTP_201_CREATED)
@@ -1868,8 +1883,15 @@ async def record_evidence(
     """
     from ... import project_workspace, requirement_evidence, spec_lifecycle
 
+    # F1142: an agent usually leaves `task_id` out, so an ambiguous identifier falls back to the
+    # task the calling run is working. Only for resolving; the evidence records what was named.
+    resolve_through = body.task_id
+    if not resolve_through and not body.document and actor.run_id:
+        run_row = await session.get(Run, actor.run_id)
+        if run_row is not None and run_row.project_id == actor.project_id:
+            resolve_through = run_row.task_id
     requirement = await _resolve_requirement(
-        session, actor.project_id, body.identifier, body.document or "", body.task_id
+        session, actor.project_id, body.identifier, body.document or "", resolve_through
     )
     # The configured main line, as the operator route passes it (review LOW: this route must too).
     project_row = await session.get(Project, actor.project_id)
