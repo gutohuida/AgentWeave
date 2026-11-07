@@ -379,6 +379,12 @@ async def test_project_settings_update_is_validated_and_atomic(app, auth_headers
         # (`a-build-lands-as-one-pull-request`, FR-1).
         "pr_landing": False,
         "pr_single_commit": False,
+        # Off, with no names, asking every 2 minutes for at most 60
+        # (`the-pr-s-ci-is-the-full-check`, FR-1, FR-10).
+        "pr_ci_full_check": False,
+        "pr_ci_check_names": [],
+        "pr_ci_interval_minutes": 2,
+        "pr_ci_cutoff_minutes": 60,
     }
     queue_settings = await app.get(
         "/api/v1/projects/proj-test/queue/settings", headers=auth_headers

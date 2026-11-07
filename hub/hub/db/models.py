@@ -129,6 +129,23 @@ class Project(Base):
     pr_single_commit: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # 'The PR's CI is the full check' (`the-pr-s-ci-is-the-full-check`, FR-1, migration 0169): a PR
+    # build's approved tasks are pushed without the local landing-phase checks, and the PR's CI
+    # decides. Off until the operator turns it on; only with `pr_landing` on.
+    pr_ci_full_check: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # The check names that count when GitHub marks none required on the PR's base (FR-3).
+    pr_ci_check_names: Mapped[Any] = mapped_column(
+        JSON, default=list, server_default="[]", nullable=False
+    )
+    # Minutes between asks while a counted check is pending, and after which asking stops (FR-10).
+    pr_ci_interval_minutes: Mapped[int] = mapped_column(
+        Integer, default=2, server_default="2", nullable=False
+    )
+    pr_ci_cutoff_minutes: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60", nullable=False
+    )
 
     # --- Evidence retention (UNUSED) ---
     # Nothing reads or writes this column. It held a retention policy that no cleaner ever applied;
