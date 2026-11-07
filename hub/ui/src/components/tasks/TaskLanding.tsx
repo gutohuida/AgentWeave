@@ -100,6 +100,10 @@ function landingSentence(landing: Landing): string {
         : 'Held for you: its batch fails only as main does'
     case 'landed':
       return landing.landed_sha ? `Landed on main at ${short(landing.landed_sha)}` : 'Landed on main'
+    case 'pushed':
+      return landing.landed_sha
+        ? `Pushed to the build's pull request at ${short(landing.landed_sha)}`
+        : "Pushed to the build's pull request"
     case 'sent_back':
       return 'Sent back by its landing batch'
     case 'not_landed':
@@ -113,6 +117,7 @@ const COLOR: Record<Landing['state'], string> = {
   landing: 'var(--text-2)',
   held: 'var(--amber, var(--text-2))',
   landed: 'var(--green)',
+  pushed: 'var(--green)',
   sent_back: 'var(--red)',
   not_landed: 'var(--red)',
 }

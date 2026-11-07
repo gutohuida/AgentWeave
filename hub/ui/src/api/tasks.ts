@@ -275,13 +275,15 @@ export interface TaskLandingEntry {
 /** The task's latest landing: approved work on its way to the main branch. */
 export interface TaskLanding {
   id: string
-  state: 'queued' | 'checking' | 'landing' | 'held' | 'landed' | 'not_landed' | 'sent_back'
+  /** `pushed`: a pull request build's task, pushed to the build branch rather than merged into
+   *  main (`pull_requests.PUSHED`); `landed_sha` is then the commit it pushed. */
+  state: 'queued' | 'checking' | 'landing' | 'held' | 'landed' | 'pushed' | 'not_landed' | 'sent_back'
   kind: 'approval' | 'retry' | 'resolution' | 'evidence'
   /** Why it was sent back, held or not landed; empty otherwise. */
   reason: string
   /** The prerequisite task it waits on, where it is held for one. */
   waits_on: string | null
-  /** The commit main was moved to when it landed. */
+  /** The commit main was moved to when it landed, or the commit pushed to the PR when pushed. */
   landed_sha: string | null
   override_reason: string | null
   /** The known-failing entries its batch's checks went past, once landed (`known_failing.
