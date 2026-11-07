@@ -177,6 +177,7 @@ async def test_turned_on_where_github_is_ready_and_a_pull_request_build_starts(
         "state": None,
         "last_asked_at": None,
         "error": None,
+        "ci": None,  # `the-pr-s-ci-is-the-full-check`: null until a push with its setting on
     }
 
 
