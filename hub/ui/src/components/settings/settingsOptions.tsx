@@ -16,6 +16,8 @@ export const PROJECT_DEFAULTS: Pick<
   | 'checkpoint_mode'
   | 'checkpoint_auto_continue'
   | 'checks_give_way'
+  | 'pr_landing'
+  | 'pr_single_commit'
 > = {
   hop_budget: 6,
   turn_delivery_cap: 10,
@@ -24,6 +26,8 @@ export const PROJECT_DEFAULTS: Pick<
   checkpoint_mode: 'offered',
   checkpoint_auto_continue: false,
   checks_give_way: false,
+  pr_landing: false,
+  pr_single_commit: false,
 }
 
 /** What each posture lets an agent do, in a sentence: the menu's second line. */

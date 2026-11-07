@@ -52,6 +52,7 @@ vi.mock('@/api/projects', () => ({
   fetchProjectSummaries: vi.fn(async () => [{ id: 'proj-test' }]),
   useOpenProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
   useCreateProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
+  useProjectSettings: () => ({ data: undefined, isError: false, error: null }),
   useUpdateProjectSettings: () => ({ mutate: vi.fn(), error: null, isPending: false }),
   useRelocateProject: () => ({ mutate: vi.fn(), error: null, isPending: false }),
 }))

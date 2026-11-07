@@ -28,6 +28,7 @@ import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
 import { LandingRemedies, LandWait } from '@/components/tasks/LandingRefusal'
 import { TaskLanding } from '@/components/tasks/TaskLanding'
+import { PullRequestLine } from '@/components/spec/PullRequestLine'
 import { gateBodyOf, overrideOffered, type GateBody } from '@/components/tasks/gateRefusal'
 import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { TaskStory } from '@/components/tasks/TaskStory'
@@ -698,6 +699,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               {/* Approved work's way to main: queued, checking in its batch, held, landed or sent
                   back (`approved-work-merges-in-batches`). */}
               {task.status === 'approved' && <TaskLanding taskId={task.id} />}
+              {/* The PR its build lands as: link, state, last-asked time, GitHub's error. */}
+              {task.pull_request && <PullRequestLine pullRequest={task.pull_request} />}
               {/* F532: the operator's way to take a task off the board for good, rather than
                   rejecting it and leaving it counted. Refused by the Hub while a run is on it. */}
               <button

@@ -2,6 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { ApiError, deleteJson, getJson, patchJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
+import type { BuildPullRequest } from './pullRequests'
 import type { KeptWork } from '@/store/specDeletionStore'
 
 export interface SpecEntry {
@@ -156,7 +157,7 @@ export interface SpecBuildOutcome {
 
 export type BuildDriver = 'flow' | 'lead' | 'hand'
 export type BuildLevel = 'fast' | 'reviewed' | 'gated'
-export type BuildLanding = 'main' | 'nowhere'
+export type BuildLanding = 'main' | 'nowhere' | 'pull_request'
 
 /** A failure one of a build's check runs found, and what became of it (F1110). */
 export interface BuildCaught {
@@ -192,6 +193,8 @@ export interface SpecBuild {
   window_start: string | null
   window_end: string | null
   landing: BuildLanding
+  /** The PR the build lands as (`a-build-lands-as-one-pull-request`); null for another landing. */
+  pull_request?: BuildPullRequest | null
   loop_id: string | null
   stop_reason: string | null
   created_at: string | null

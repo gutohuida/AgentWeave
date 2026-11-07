@@ -439,6 +439,39 @@ export function GeneralSettings({
             />
           }
         />
+        <SettingsRow
+          label="Land builds as pull requests"
+          description="A build may put its approved work on one GitHub pull request instead of merging into the main branch. Pushing publishes the work, so this is off until you turn it on. It needs a GitHub remote and a logged-in GitHub CLI."
+          changed={(settings.pr_landing ?? false) !== PROJECT_DEFAULTS.pr_landing}
+          onReset={() => onChange({ pr_landing: false }, 'Builds no longer land as pull requests')}
+          control={
+            <Switch
+              aria-label="Land builds as pull requests"
+              data-testid="project-pr-landing"
+              checked={settings.pr_landing ?? false}
+              onCheckedChange={(v) =>
+                onChange({ pr_landing: v }, v ? 'Builds may land as pull requests' : 'Builds no longer land as pull requests')
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label="One commit per build"
+          description="With pull request landing on, the build branch carries a single commit holding the whole build instead of one commit per task. A push replaces it only if nobody else has pushed to the branch."
+          changed={(settings.pr_single_commit ?? false) !== PROJECT_DEFAULTS.pr_single_commit}
+          onReset={() => onChange({ pr_single_commit: false }, 'One commit per task again')}
+          control={
+            <Switch
+              aria-label="One commit per build"
+              data-testid="project-pr-single-commit"
+              checked={settings.pr_single_commit ?? false}
+              disabled={!settings.pr_landing}
+              onCheckedChange={(v) =>
+                onChange({ pr_single_commit: v }, v ? 'The build branch carries one commit' : 'One commit per task')
+              }
+            />
+          }
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Checkpointing" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">

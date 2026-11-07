@@ -15,6 +15,8 @@ import { CloseAlreadyBuilt } from '@/components/spec/CloseAlreadyBuilt'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
+import { useProjectSettings } from '@/api/projects'
+import { useConfigStore } from '@/store/configStore'
 import { Button } from '@/components/ui/button'
 import { MenuItem, MenuSeparator } from '@/components/ui/menu'
 import { Segmented } from '@/components/ui/segmented'
@@ -184,6 +186,7 @@ export function useSpecPhaseControls(
   // `SpecApprovalReport` already hold — one cache entry, not a second fetch.
   const { data: specDoc, isError: specDocError, refetch: reloadSpec } = useSpec(path)
   const { data: openAgentsData, isError: agentsError } = useAgents()
+  const { data: projectSettings, isError: settingsError } = useProjectSettings(useConfigStore().selectedProjectId)
   const setJourney = useSetSpecJourney()
   const [journeyRefusal, setJourneyRefusal] = useState<string | null>(null)
   const check = useCheckSpecDocument()
@@ -897,6 +900,7 @@ export function useSpecPhaseControls(
           tasks={declaredTasks}
           agents={buildAgents}
           now={buildOpenedAt}
+          pullRequestLanding={!settingsError && Boolean(projectSettings?.pr_landing)}
           isPending={build.isPending || approveAndBuild.isPending}
           error={buildRefusal}
           onConfirm={(shown) => {
