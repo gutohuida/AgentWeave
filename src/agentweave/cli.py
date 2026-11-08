@@ -2063,6 +2063,17 @@ def _app_window_listening(marker: Path) -> Path:
     return marker.with_suffix(".listening")
 
 
+def _app_window_listens(port: int) -> bool:
+    """Does a live app window's process read the operator stream for `port`? A marker left by a
+    process that has gone (a crash, a kill) says nothing: trusting it left no listener at all."""
+    return any(
+        _app_window_listening(marker).exists()
+        and (pid := _marker_pid(marker)) is not None
+        and desktop_window.pid_alive(pid)
+        for marker in _app_window_markers(port)
+    )
+
+
 def _app_window_unregister(marker: Optional[Path]) -> bool:
     """Remove a closing window's marker; answer whether `agentweave stop` had removed it first."""
     if marker is None:
@@ -2079,12 +2090,20 @@ def _app_window_unregister(marker: Optional[Path]) -> bool:
 # `notifier` explains the two listeners. Every app window's process listens from the moment its
 # window shows the app (`_app_window_register`). A close that leaves a launcher-started Hub running
 # starts the watcher (`--watch-notices <port>`, under `pythonw`, one per port) and keeps listening
-# until the watcher says it is; the watcher ends when the Hub ends or a reopened window says it is
-# listening.
+# until the watcher says it is and its own notices are shown; the watcher ends when the Hub ends or
+# a reopened window says it is listening. A marker counts only while its process lives (WNWCO-7: a
+# dead window's leftovers kept every watcher from starting, or ended it at once).
 
 #: How long a close waits for the watcher to say it is listening: pythonw's start, the imports and
-#: the stream's connection, on a busy machine.
-_NOTICE_WATCHER_READY_SECONDS = 20
+#: the stream's connection, on a busy machine. The closing process keeps listening all that time,
+#: so this is a ceiling, not a gap: it ends sooner when the Hub does.
+_NOTICE_WATCHER_READY_SECONDS = 120
+#: How often a close starts the watcher again when the one it started ended without listening (it
+#: lost its port to a watcher that was itself ending).
+_NOTICE_WATCHER_STARTS = 3
+#: Once the watcher listens, how long the closing process goes on reading: a notice the Hub sent
+#: just before the watcher connected may still be on its way to this process's stream.
+_NOTICE_HAND_OVER_SETTLE_SECONDS = 1.0
 #: Between a listener's attempts to (re)connect to the operator stream.
 _NOTICE_RETRY_SECONDS = 1.0
 #: A stream with nothing on it this long has gone: the Hub pings it every 15 s.
@@ -2274,7 +2293,7 @@ def _release_notice_watcher(port: int) -> None:
 
 def _notice_watcher_should_end(port: int, hub_absent_since: Optional[float], now: float) -> bool:
     """A window's listener has taken over, or the Hub has not answered for the grace period."""
-    if any(_app_window_listening(m).exists() for m in _app_window_markers(port)):
+    if _app_window_listens(port):
         return True
     return hub_absent_since is not None and now - hub_absent_since >= (
         _NOTICE_WATCHER_HUB_GRACE_SECONDS
@@ -2315,12 +2334,11 @@ def _run_notice_watcher(port: int) -> int:
                 absent_since = now
             if _notice_watcher_should_end(port, absent_since, now):
                 ended.set()
+                # No longer the port's watcher from here: a close in the next seconds must start a
+                # new one, not take this ending one's word that it is listening.
+                _release_notice_watcher(port)
                 # A notice this watcher has claimed and not yet shown would be lost with it.
-                deadline = now + _NOTICE_SHOW_DRAIN_SECONDS
-                while _time.monotonic() < deadline and any(
-                    t.name == "aw-notice" and t.is_alive() for t in threading.enumerate()
-                ):
-                    _time.sleep(0.1)
+                _drain_notice_deliveries(_NOTICE_SHOW_DRAIN_SECONDS)
                 return 0
             _time.sleep(_NOTICE_WATCHER_POLL_SECONDS)
     finally:
@@ -2328,30 +2346,62 @@ def _run_notice_watcher(port: int) -> int:
         _release_notice_watcher(port)
 
 
+def _drain_notice_deliveries(timeout: float) -> None:
+    """Wait, at most `timeout`, for this process's notices still being shown (`notifier.listen`'s
+    `aw-notice` threads): each has claimed its notice, so ending under it shows it nowhere."""
+    import threading
+    import time as _time
+
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline and any(
+        t.name == "aw-notice" and t.is_alive() for t in threading.enumerate()
+    ):
+        _time.sleep(0.1)
+
+
 def _start_notice_watcher(port: int) -> bool:
-    """Start the watcher for `port` unless one is listening, and wait until it is."""
+    """Start the watcher for `port` unless one is listening, and wait until it is.
+
+    The caller's own listener goes on reading meanwhile, so the wait is no gap. A watcher that ends
+    without listening (it found the port held by one that was ending) is started again; the wait
+    gives up once the Hub has stopped answering.
+    """
     import subprocess as _sp
     import time as _time
 
     if _notice_watcher_ready(port):
         return True
-    try:
-        _sp.Popen(
-            notifier.launcher_argv("--watch-notices", str(port)),
-            # No console, its own group: pythonw has no window to show, and this launcher's exit
-            # (it is closing) must not take the watcher with it.
-            creationflags=0x08000000 | 0x00000200,  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
-            close_fds=True,
-            stdin=_sp.DEVNULL,
-            stdout=_sp.DEVNULL,
-            stderr=_sp.DEVNULL,
-        )
-    except Exception:
-        return False
     deadline = _time.monotonic() + _NOTICE_WATCHER_READY_SECONDS
+    starts = 0
+    proc: Any = None
+    absent_since: Optional[float] = None
     while _time.monotonic() < deadline:
         if _notice_watcher_ready(port):
             return True
+        if proc is None or proc.poll() is not None:
+            if starts >= _NOTICE_WATCHER_STARTS:
+                return False
+            starts += 1
+            try:
+                proc = _sp.Popen(
+                    notifier.launcher_argv("--watch-notices", str(port)),
+                    # No console, its own group: pythonw has no window to show, and this
+                    # launcher's exit (it is closing) must not take the watcher with it.
+                    creationflags=0x08000000 | 0x00000200,  # NO_WINDOW | NEW_PROCESS_GROUP
+                    close_fds=True,
+                    stdin=_sp.DEVNULL,
+                    stdout=_sp.DEVNULL,
+                    stderr=_sp.DEVNULL,
+                )
+            except Exception:
+                return False
+        now = _time.monotonic()
+        if _hub_port_accepts(port):
+            absent_since = None
+        elif absent_since is None:
+            absent_since = now
+        elif now - absent_since >= _NOTICE_WATCHER_HUB_GRACE_SECONDS:
+            return False  # the Hub has gone: nothing left to hear
         _time.sleep(0.2)
     return False
 
@@ -2359,15 +2409,28 @@ def _start_notice_watcher(port: int) -> bool:
 def _hand_over_to_watcher(closer: "_AppWindowCloser", stopped: bool) -> bool:
     """After a window closes: start the watcher if the close left a Hub this launcher started
     running (FR-2). Not when the close stops the Hub, or `agentweave stop` closed the window, or
-    another window on the port is still listening. Answers whether a watcher is listening."""
+    another window on the port is still listening. Answers whether a watcher is listening.
+
+    Returns only once this process's own listener has nothing left to show (WNWCO-7): until the
+    watcher listens it is the one reading, and a notice it has claimed is shown by nobody else, so
+    the launcher's exit must not cut either short.
+    """
     if not notifier.supported() or closer.stop_after or stopped:
         return False
     port = closer.port
-    if any(_app_window_listening(m).exists() for m in _app_window_markers(port)):
-        return False
-    if _hub_pid_running(port, closer.profile) is None:
-        return False  # not a Hub this launcher started: Docker, or one already gone
-    return _start_notice_watcher(port)
+    try:
+        if _app_window_listens(port):
+            return False
+        if _hub_pid_running(port, closer.profile) is None:
+            return False  # not a Hub this launcher started: Docker, or one already gone
+        listening = _start_notice_watcher(port)
+        if listening:
+            import time as _time
+
+            _time.sleep(_NOTICE_HAND_OVER_SETTLE_SECONDS)
+        return listening
+    finally:
+        _drain_notice_deliveries(_NOTICE_SHOW_DRAIN_SECONDS)
 
 
 def _app_windows_close(port: int) -> int:
