@@ -41528,3 +41528,33 @@ On 2026-11-07, QA sent the Architect two messages carrying `task_id=task-d2ee5a2
 **Tier:** 0
 
 AW-54 recorded evidence against FR-2 and FR-5 to FR-8 of `the-pr-s-ci-is-the-full-check`, which QA accepted. QA's first approve was then refused because the task was not linked to those requirements. QA linked them by hand and the approve went through. **Expected:** recording evidence for a requirement from a task's run links the task to it, or the refusal names the missing link and how to add it. **Check first:** the refusal's exact text in QA's run.
+
+## F1152 (B) -- under load, git started on the Hub's blocking threads stalls the event loop for up to ~0.9 s
+
+**Status:** open
+**Source:** found while fixing flaky tests (DeveloperOpus, AW-18, branch `agentweave/DeveloperOpus` `c25f467`)
+**Theme:** Performance
+**Ready:** yes
+**Tier:** 1 (belongs with `turn-starts-approvals-and-evidence-never-freeze-the-hub`)
+
+`test_approvals_and_evidence_never_freeze_the_hub.py::test_approving_releases_and_merges_without_stalling_the_loop` fails about 3 in 500 runs with CPU and disk load beside 16 workers. In 9 of 10 captured stalls an `aw-blocking_N` thread was blocked in the kernel (0 ms CPU) for 120-930 ms while the loop could not run. The three with stacks were in `subprocess.Popen.__init__` at the `io.open` of the pipe's read end (subprocess.py:1016/1021), called from `worktrees._is_mid_merge` and `git_facts.fact`. Which call holds the GIL is not established (not `msvcrt.open_osfhandle`). The test is right to fail. **Expected:** spawning git never stalls the loop, e.g. by spawning through asyncio's proactor subprocess (overlapped pipes) instead of `subprocess` on a thread. **Check first:** reproduce with the stall-capture diagnostics now in `hub/tests/_loop_lag.py`.
+
+## F1153 (C) -- the approval-hold diagnostic's 5 s git cap holds work as "could not ask git" whenever the machine is busy
+
+**Status:** open
+**Source:** found while fixing flaky tests (DeveloperOpus, AW-41)
+**Theme:** Checks and landing
+**Ready:** needs the operator's call on the value
+**Tier:** 0
+
+`DIAGNOSTIC_GIT_TIMEOUT_SECONDS = 5` bounds the git the approval-hold diagnostic runs. AW-41 failed with `TimeoutExpired ... 5 seconds` under load, so the operator would see a spurious hold that says git could not be asked, typically during a check run. The suite now raises it to 50 by fixture; the product still uses 5. **Expected:** the product value tolerates a busy machine (or the diagnostic retries), and the suite's override is removed so the test exercises the real value.
+
+## F1154 (C) -- a 3 s check timeout in a known-failing-list test also bounds its passing path
+
+**Status:** open
+**Source:** found while fixing flaky tests (DeveloperOpus, AW-42)
+**Theme:** Test health
+**Ready:** yes
+**Tier:** 0
+
+In `hub/tests/test_gates_consult_the_known_failing_list.py`, the `SLOW` check's `timeout_seconds = 3` is meant to make a check time out. But the same bound applies to the passing path, which has to start Python, so under load the pass can time out too. Raising it to 10 s made the test 6x slower (144 s) and was reverted. **Expected:** the timing-out check is made to time out by something it waits on (an event or a sleep far past the bound), and the passing path is not under the same short bound.
