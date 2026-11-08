@@ -113,27 +113,31 @@ const WINDOWS_KINDS: Array<{ kind: NotifyKind; label: string; description: strin
  *  restart; separate from the in-app switches above (change
  *  `windows-notifications-for-what-calls-the-operator`, FR-10). */
 export function WindowsNotificationSettings() {
-  const query = useWindowsNotifyKinds()
+  const { data, error } = useWindowsNotifyKinds()
   const save = useSetWindowsNotifyKinds()
-  const kinds: WindowsNotifyKinds = { ...WINDOWS_DEFAULTS, ...query.data }
+  const kinds: WindowsNotifyKinds = { ...WINDOWS_DEFAULTS, ...data }
   const change = (next: WindowsNotifyKinds) => save.mutate(next)
   return (
     <SettingsGroup
       title="Windows notifications"
-      description="Which calls reach you as a Windows notification, even with this window closed. Separate from the in-app switches."
+      description={
+        error
+          ? `Could not load the Windows choices: ${error instanceof Error ? error.message : 'the Hub did not answer'}.`
+          : 'Which calls reach you as a Windows notification, even with this window closed. Separate from the in-app switches.'
+      }
     >
       {WINDOWS_KINDS.map(({ kind, label, description }) => (
         <SettingsRow
           key={kind}
           label={label}
           description={description}
-          inactive={!query.data}
+          inactive={!data}
           changed={kinds[kind] !== WINDOWS_DEFAULTS[kind]}
           onReset={() => change({ ...kinds, [kind]: WINDOWS_DEFAULTS[kind] })}
           control={
             <Switch
               checked={kinds[kind]}
-              disabled={!query.data || save.isPending}
+              disabled={!data || save.isPending}
               onCheckedChange={(on) => change({ ...kinds, [kind]: on })}
               aria-label={`Windows ${label.toLowerCase()}`}
               data-testid={`windows-notify-${kind}`}
