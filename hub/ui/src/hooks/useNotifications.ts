@@ -52,9 +52,12 @@ export function useNotifications(
   const isViewingRef = useRef(isViewing)
   isViewingRef.current = isViewing
   // Which kinds reach Windows: the Hub's choice, separate from the in-app switches (FR-10).
-  const { data: windowsKinds } = useWindowsNotifyKinds()
+  const { data: windowsKinds, isError: windowsKindsUnread } = useWindowsNotifyKinds()
   const windowsKindsRef = useRef<WindowsNotifyKinds>(DEFAULT_WINDOWS_KINDS)
-  windowsKindsRef.current = windowsKinds ?? DEFAULT_WINDOWS_KINDS
+  // A read that failed keeps the Hub's last answer, or its defaults when there is none: a choice
+  // the page cannot read must not silence a call for the operator, nor show an error (FR-8).
+  windowsKindsRef.current =
+    windowsKindsUnread && !windowsKinds ? DEFAULT_WINDOWS_KINDS : (windowsKinds ?? DEFAULT_WINDOWS_KINDS)
 
   const notifier = useMemo(
     () =>
