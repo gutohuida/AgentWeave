@@ -1936,7 +1936,7 @@ def _rebuild_result(regenerated: List[Dict[str, Any]]) -> Dict[str, Any]:
         "timed_out": False,
         "duration_seconds": seconds,
         "output_tail": "Rebuilt " + ", ".join(paths),
-        "regenerated": regenerated,
+        "regenerated": {"paths": paths, "seconds": seconds, "rebuilds": regenerated},
     }
 
 

@@ -1275,13 +1275,22 @@ async def record_regenerated(
         await session.commit()
 
 
-def regenerated_of(landing: TaskLanding) -> List[Dict[str, Any]]:
-    """What a landing's targets record as rebuilt (`record_regenerated`)."""
-    return [
+def regenerated_of(landing: TaskLanding) -> Optional[Dict[str, Any]]:
+    """What a landing's targets record as rebuilt (`record_regenerated`), in the design's shape:
+    `{"paths": [...], "seconds": <float>}` with each target's own rebuild under `rebuilds`, or
+    `None` where nothing was rebuilt."""
+    rebuilds = [
         dict(target["regenerated"])
         for target in landing.targets or []
         if isinstance(target, dict) and target.get("regenerated")
     ]
+    if not rebuilds:
+        return None
+    return {
+        "paths": sorted({path for entry in rebuilds for path in entry.get("paths") or []}),
+        "seconds": round(sum(float(entry.get("seconds") or 0.0) for entry in rebuilds), 1),
+        "rebuilds": rebuilds,
+    }
 
 
 def _dependents_of(
