@@ -100,3 +100,6 @@ def _no_windows_notification_is_shown(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr("agentweave.cli._register_windows_notifications", lambda: None)
     monkeypatch.setattr("agentweave.notifier._run_powershell", lambda script, timeout: False)
+    # Nor a window's listener on the operator stream, nor the watcher a close starts.
+    monkeypatch.setattr("agentweave.cli._listen_for_notices_in_window", lambda port, marker: None)
+    monkeypatch.setattr("agentweave.cli._start_notice_watcher", lambda port: False)
