@@ -1,23 +1,28 @@
-/** Which Hub events call the operator, and what each says.
+/** The notice the Hub publishes for an event that calls the operator.
  *
- *  Change `agentweave-calls-you-with-its-own-sound`. The kinds are the brand's notification sounds
- *  (brand/sound/README.md): `ask` when an agent needs the operator, `fail` when work stalled or
- *  failed, `done` when a loop drained its queue, `reply` when an agent finished a turn the operator
- *  started in a conversation (operator, 2026-10-23). Everything else on the stream stays silent. The
- *  payload shapes are the ones the Hub broadcasts; `project_id` is stamped by hub/hub/sse.py. */
+ *  Change `windows-notifications-for-what-calls-the-operator`: which Hub events call the operator,
+ *  and what each says, is decided once, in hub/hub/operator_notices.py, and published as an
+ *  `operator_notice` event beside the event itself. The page draws its toast from that notice, so
+ *  the in-app toast and a Windows notification cannot drift apart. The kinds are the brand's
+ *  notification sounds (brand/sound/README.md): `ask` when an agent needs the operator, `fail` when
+ *  work stalled or failed, `done` when something finished, `reply` when an agent finished a turn the
+ *  operator started in a conversation. `project_id` is stamped by hub/hub/sse.py. */
 export type NotifyKind = 'ask' | 'fail' | 'done' | 'reply'
 
 export interface Notice {
+  /** Stable per event; what the page and the Windows notifier de-duplicate by. */
+  id?: string
   kind: NotifyKind
   projectId: string
   text: string
-  /** A reply's conversation, so its toast opens it and the app can tell it is already in view. */
+  /** The conversation the notice belongs to, so its toast opens it. */
   conversationId?: string
   agent?: string
 }
 
-/** loop_ending.QUEUE_DRAINED_REASON: the one stop that is finished work, not a failure. */
-const QUEUE_DRAINED_REASON = 'loop queue is empty'
+export const NOTICE_EVENT = 'operator_notice'
+
+const KINDS: readonly string[] = ['ask', 'fail', 'done', 'reply']
 
 type Payload = Record<string, unknown>
 
@@ -26,80 +31,17 @@ function str(d: Payload, key: string): string {
   return typeof v === 'string' ? v : ''
 }
 
-function textFor(type: string, d: Payload): { kind: NotifyKind; text: string; conversationId?: string; agent?: string } | null {
-  switch (type) {
-    case 'run_completed': {
-      // Only a turn the operator started: `initiator` is the run's own ("operator" when the
-      // operator's message controlled the turn, "autonomous" for a flow's, a job's or a peer's).
-      // Every other completed run is everyday traffic.
-      const conversationId = str(d, 'conversation_id')
-      if (str(d, 'initiator') !== 'operator' || !conversationId) return null
-      const agent = str(d, 'agent') || 'An agent'
-      return { kind: 'reply', text: `${agent} replied`, conversationId, agent }
-    }
-    case 'question_asked':
-      return { kind: 'ask', text: `${str(d, 'from_agent') || 'An agent'} asked you a question` }
-    case 'permission_requested': {
-      const tool = str(d, 'tool_name')
-      return { kind: 'ask', text: `${str(d, 'agent') || 'An agent'} wants permission${tool ? ` for ${tool}` : ''}` }
-    }
-    case 'task_checks_finished': {
-      // The checks a landing waited on have decided: the operator can press Land, or must act.
-      const task = str(d, 'task_title') || str(d, 'task_id') || 'A task'
-      return str(d, 'state') === 'passed'
-        ? { kind: 'done', text: `Checks passed for ${task}: it can be landed` }
-        : { kind: 'fail', text: `Checks did not pass for ${task}` }
-    }
-    case 'task_landing_changed': {
-      // A batch landed the work, sent it back, or waits for the operator
-      // (`approved-work-merges-in-batches`); the queue's other moves are everyday traffic.
-      const task = str(d, 'task_title') || str(d, 'task_id') || 'A task'
-      const state = str(d, 'state')
-      if (state === 'landed') return { kind: 'done', text: `${task} landed on main` }
-      if (state === 'sent_back') return { kind: 'fail', text: `${task} was sent back by its landing batch` }
-      if (state === 'held') return { kind: 'ask', text: `${task}'s landing is held` }
-      return null
-    }
-    case 'stall_recorded':
-      return { kind: 'fail', text: str(d, 'reason') ? `Work stalled: ${str(d, 'reason')}` : 'Work stalled' }
-    case 'run_failed':
-      return { kind: 'fail', text: `${str(d, 'agent') || 'An agent'}'s run failed` }
-    case 'queue_chain_suspended':
-      return { kind: 'fail', text: `A message chain to ${str(d, 'agent') || 'an agent'} was suspended` }
-    case 'main_moved': {
-      // `hub/hub/main_watch.py`: a move of main the Hub's own integration did not make.
-      const branch = str(d, 'branch') || 'main'
-      return {
-        kind: 'fail',
-        text: d.moved_rewrite === true ? `The history of ${branch} was rewritten outside the Hub` : `${branch} moved outside the Hub`,
-      }
-    }
-    case 'next_slice_offered': {
-      // `hub/hub/slice_drafting.py`: a slice is built and its next slice's drafting is offered.
-      const next = (d.next_slice as Payload | undefined) ?? {}
-      const title = str(next, 'title') || str(next, 'key') || 'the next slice'
-      return { kind: 'done', text: `A slice is built: draft ${title}?` }
-    }
-    case 'loop_stopped': {
-      const reason = str(d, 'reason')
-      if (reason === QUEUE_DRAINED_REASON) return { kind: 'done', text: 'A loop finished its queue' }
-      return { kind: 'fail', text: reason ? `A loop stopped: ${reason}` : 'A loop stopped' }
-    }
-    default:
-      return null
-  }
-}
-
-export function classify(type: string, data: unknown): Notice | null {
-  if (!data || typeof data !== 'object') return null
+/** The notice an `operator_notice` event carries, or null for any other event. */
+export function noticeFrom(type: string, data: unknown): Notice | null {
+  if (type !== NOTICE_EVENT || !data || typeof data !== 'object') return null
   const d = data as Payload
+  const kind = str(d, 'kind')
   const projectId = str(d, 'project_id')
-  if (!projectId) return null
-  const found = textFor(type, d)
-  if (!found) return null
-  const text = found.text.length > 140 ? `${found.text.slice(0, 139)}…` : found.text
-  const notice: Notice = { kind: found.kind, projectId, text }
-  if (found.conversationId) notice.conversationId = found.conversationId
-  if (found.agent) notice.agent = found.agent
+  const text = str(d, 'text')
+  if (!KINDS.includes(kind) || !projectId || !text) return null
+  const notice: Notice = { kind: kind as NotifyKind, projectId, text }
+  if (str(d, 'id')) notice.id = str(d, 'id')
+  if (str(d, 'conversation_id')) notice.conversationId = str(d, 'conversation_id')
+  if (str(d, 'agent')) notice.agent = str(d, 'agent')
   return notice
 }
