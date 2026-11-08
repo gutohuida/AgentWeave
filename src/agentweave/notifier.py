@@ -32,7 +32,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 from xml.sax.saxutils import escape, quoteattr
 
@@ -257,6 +257,15 @@ public static class AwStartMenuLink {
     try { store.SetValue(ref key, ref pv); store.Commit(); ((IPersistFile)link).Save(lnk, true); }
     finally { Marshal.FreeCoTaskMem(pv.p); }
   }
+  public static string Read(string lnk) {
+    var link = (IAwShellLinkW)new AwShellLink();
+    ((IPersistFile)link).Load(lnk, 0);
+    var path = new StringBuilder(1024); var args = new StringBuilder(4096); var icon = new StringBuilder(1024); int idx;
+    link.GetPath(path, path.Capacity, IntPtr.Zero, 0);
+    link.GetArguments(args, args.Capacity);
+    link.GetIconLocation(icon, icon.Capacity, out idx);
+    return path + "\n" + args + "\n" + icon;
+  }
 }
 """
 
@@ -273,8 +282,12 @@ def _powershell() -> str:
 
 
 def _run_powershell(script: str, timeout: float) -> bool:
+    return _powershell_result(script, timeout).returncode == 0
+
+
+def _powershell_result(script: str, timeout: float) -> "subprocess.CompletedProcess[bytes]":
     encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
-    result = subprocess.run(
+    return subprocess.run(
         [
             _powershell(),
             "-NoProfile",
@@ -288,7 +301,6 @@ def _run_powershell(script: str, timeout: float) -> bool:
         timeout=timeout,
         creationflags=_CREATE_NO_WINDOW,
     )
-    return result.returncode == 0
 
 
 def start_menu_shortcut() -> Optional[Path]:
@@ -299,19 +311,56 @@ def start_menu_shortcut() -> Optional[Path]:
     return Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / SHORTCUT_NAME
 
 
-def ensure_shortcut(target: str, arguments: str, icon: Optional[str]) -> bool:
-    """Create the Start-menu shortcut that gives notifications AgentWeave's name and icon, once.
+def _read_shortcut(lnk: Path) -> Optional[Tuple[str, str, str]]:
+    """The (target, arguments, icon path) the shortcut holds now; None if it cannot be read."""
+    try:
+        script = "; ".join(
+            [
+                "$ErrorActionPreference = 'Stop'",
+                f"Add-Type -TypeDefinition {_ps_quote(_SHORTCUT_CSHARP)}",
+                f"[Console]::Out.Write([AwStartMenuLink]::Read({_ps_quote(str(lnk))}))",
+            ]
+        )
+        result = _powershell_result(script, _SHORTCUT_TIMEOUT_SECONDS)
+        if result.returncode != 0:
+            return None
+        parts = result.stdout.decode("utf-8", "replace").split("\n")
+        if len(parts) != 3:
+            return None
+        return parts[0], parts[1], parts[2]
+    except Exception:
+        return None
 
-    Idempotent: a shortcut already there is left as it is, as the desktop one is. Never raises.
+
+def _same_path(a: str, b: str) -> bool:
+    return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
+
+
+def _shortcut_current(lnk: Path, target: str, arguments: str, icon: Optional[str]) -> bool:
+    held = _read_shortcut(lnk)
+    if held is None:
+        return False
+    return (
+        _same_path(held[0], target)
+        and held[1] == arguments
+        and (_same_path(held[2], icon) if icon else not held[2])
+    )
+
+
+def ensure_shortcut(target: str, arguments: str, icon: Optional[str]) -> bool:
+    """Make the Start-menu shortcut that gives notifications AgentWeave's name and icon.
+
+    Idempotent: a shortcut whose target, arguments and icon are this install's is left alone; one
+    from another install (a released checkout, a moved venv) is rewritten. Never raises.
     """
     if not supported():
         return False
     lnk = start_menu_shortcut()
     if lnk is None:
         return False
-    if lnk.exists():
-        return True
     try:
+        if lnk.exists() and _shortcut_current(lnk, target, arguments, icon):
+            return True
         lnk.parent.mkdir(parents=True, exist_ok=True)
         script = "; ".join(
             [
