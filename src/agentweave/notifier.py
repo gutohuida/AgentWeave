@@ -489,3 +489,130 @@ def show(notice: Any, port: int, hub_dir: Path) -> bool:
         return shown
     except Exception:
         return False
+
+
+# --- listening for notices (task background-watcher: FR-2, FR-3, FR-10) ------------------------
+#
+# Two listeners read the operator stream and show what calls the operator: one in every app window's
+# process, from the moment the window shows the app, and the launcher's watcher (`pythonw`, one per
+# port) while no window is open. The window's own listener keeps reading after its window has gone,
+# until the watcher it starts says it is listening; the watcher ends once a window's listener says
+# the same. So some listener is always reading across a close or a reopen, and the ledger in `show`
+# makes an overlap show each notice once.
+
+NOTICE_EVENT = "operator_notice"
+#: The Hub's defaults (FR-10), for when its choices cannot be read.
+DEFAULT_WINDOWS_KINDS: Dict[str, bool] = {"ask": True, "fail": True, "done": False, "reply": False}
+#: How long a notice waits for the app window to leave the front before it is let go. A window in
+#: front shows its own in-app toast (FR-3); one closing as the notice arrives does not, so the notice
+#: is shown as soon as no window of the port is in front, within this time (FR-3, and FR-2's 5 s).
+HAND_OVER_SECONDS = 3.0
+_HAND_OVER_POLL_SECONDS = 0.25
+
+
+def sse_events(lines: Any) -> Any:
+    """`(event, data)` for each event in a Server-Sent Events byte stream, `data` parsed as JSON
+    where it is JSON. Comments (the Hub's pings) are skipped; a frame without data is skipped."""
+    event = "message"
+    data: List[str] = []
+    for raw in lines:
+        line = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else str(raw)
+        line = line.rstrip("\r\n")
+        if not line:
+            if data:
+                text = "\n".join(data)
+                try:
+                    value: Any = json.loads(text)
+                except ValueError:
+                    value = text
+                yield event, value
+            event, data = "message", []
+            continue
+        if line.startswith(":"):
+            continue
+        name, _, value_text = line.partition(":")
+        value_text = value_text[1:] if value_text.startswith(" ") else value_text
+        if name == "event":
+            event = value_text
+        elif name == "data":
+            data.append(value_text)
+
+
+def wanted(notice: Any, kinds: Dict[str, bool]) -> bool:
+    """Is `notice` of a kind the operator switched on for Windows?"""
+    return isinstance(notice, dict) and kinds.get(str(notice.get("kind"))) is True
+
+
+def deliver(
+    notice: Dict[str, Any],
+    port: int,
+    hub_dir: Path,
+    in_front: Any,
+    hold: float = HAND_OVER_SECONDS,
+    poll: float = _HAND_OVER_POLL_SECONDS,
+) -> bool:
+    """Show `notice` once no app window of the port is in front, waiting at most `hold` seconds.
+
+    A notice that arrives with no window in front is shown at once; one that arrives while a window
+    stays in front for all of `hold` is the window's own in-app toast, and nothing is shown. Never
+    raises.
+    """
+    try:
+        deadline = time.monotonic() + hold
+        while True:
+            if not in_front():
+                return show(notice, port, hub_dir)
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(poll)
+    except Exception:
+        return False
+
+
+def listen(
+    lines: Any,
+    port: int,
+    hub_dir: Path,
+    kinds: Any,
+    in_front: Any,
+    on_ready: Any = None,
+) -> None:
+    """Read one connection of the operator stream and show each wanted notice (FR-2, FR-10).
+
+    `kinds()` answers the Hub's current choices and is asked for each notice, so a change applies
+    without a restart. Each notice is delivered on its own thread, so one waiting on the window
+    never holds up the next. `on_ready()` runs once the Hub has said the stream is connected.
+    Returns when the connection ends; raises what reading it raises.
+    """
+    import threading
+
+    for event, data in sse_events(lines):
+        if event == "connected":
+            if on_ready is not None:
+                with contextlib.suppress(Exception):
+                    on_ready()
+            continue
+        if event != NOTICE_EVENT:
+            continue
+        try:
+            choices = kinds()
+        except Exception:
+            choices = dict(DEFAULT_WINDOWS_KINDS)
+        if not wanted(data, choices):
+            continue
+        threading.Thread(
+            target=deliver,
+            args=(data, port, hub_dir, in_front),
+            name="aw-notice",
+            daemon=True,
+        ).start()
+
+
+def launcher_argv(*arguments: str) -> List[str]:
+    """The launcher with `arguments`, under the windowless interpreter, importable from wherever
+    this process found it (as the link's handler is)."""
+    boot = (
+        f"import sys;sys.path[:0]={_import_roots()!r};"
+        "from agentweave.cli import main;sys.exit(main())"
+    )
+    return [_python_for_handler(), "-c", boot, *arguments]
