@@ -52,7 +52,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 
 from sqlalchemy import event, select
@@ -60,6 +60,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from . import traces
+
+if TYPE_CHECKING:
+    from . import generated_files
 
 logger = logging.getLogger(__name__)
 
@@ -670,13 +673,26 @@ class Prepared:
     conflict: List[str] = field(default_factory=list)
     with_main: bool = False
     error: str = ""
+    #: Each target whose generated files were rebuilt to merge onto *base* (`generated_files`).
+    regenerated: List[Dict[str, Any]] = field(default_factory=list)
+    #: The rebuild that failed, where *conflict* is in generated files only.
+    rebuild_failure: Optional["generated_files.Failure"] = None
 
 
 def prepare(
-    root: Path, remote: str, main_branch: str, branch: str, task_id: str, shas: Sequence[str]
+    root: Path,
+    remote: str,
+    main_branch: str,
+    branch: str,
+    task_id: str,
+    shas: Sequence[str],
+    generated: Optional["generated_files.Settings"] = None,
 ) -> Prepared:
     """Fetch GitHub's main, merge it into the build branch where it moved (FR-8), and merge the
-    task's targets on with plumbing: no checkout and no branch moves. Blocking."""
+    task's targets on with plumbing: no checkout and no branch moves. Blocking.
+
+    *generated*: the project's generated-files setting, with which the task's work that conflicts
+    only in those paths is merged with them rebuilt (`landing_queue.build_chain`)."""
     from .landing_queue import build_chain
 
     tracking = f"refs/remotes/{remote}/{main_branch}"
@@ -708,13 +724,23 @@ def prepare(
         if commit.returncode != 0:
             return Prepared(error=f"git commit-tree failed: {(commit.stderr or '').strip()[:300]}")
         base = commit.stdout.strip()
-    chain = build_chain(root, base, [(task_id, list(shas))])
+    chain = build_chain(root, base, [(task_id, list(shas))], generated)
     if chain.error:
         return Prepared(remote_main=remote_main, base=base, error=chain.error)
     if chain.conflicts:
-        return Prepared(remote_main=remote_main, base=base, conflict=list(chain.conflicts[0][1]))
+        return Prepared(
+            remote_main=remote_main,
+            base=base,
+            conflict=list(chain.conflicts[0][1]),
+            rebuild_failure=chain.rebuild_failures.get(task_id),
+        )
     merged = chain.prefixes[-1] if chain.prefixes else base
-    return Prepared(remote_main=remote_main, base=base, merged=merged)
+    return Prepared(
+        remote_main=remote_main,
+        base=base,
+        merged=merged,
+        regenerated=list(chain.regenerated.get(task_id, [])),
+    )
 
 
 @dataclass
@@ -1075,7 +1101,7 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
     GitHub's main merged in (FR-8), checked as a batch of one (FR-3), pushed (FR-4, FR-7), and the
     PR opened, described, readied or drafted (FR-4..FR-6). `False` where the Hub could not produce
     a result and the landing waits in the queue for another try."""
-    from . import blocking, landing_queue, project_checks, project_workspace
+    from . import blocking, generated_files, landing_queue, project_checks, project_workspace
     from .db.engine import async_session_factory
     from .db.models import Build, LandingBatch, Project, Task, TaskLanding
     from .task_transitions import SEND_BACK_DEFECT, SEND_BACK_MERGE_NEEDED
@@ -1098,6 +1124,7 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
             why = f"the project directory is unavailable: {exc}"
         main_branch = project.main_branch
         single = bool(project.pr_single_commit)
+        generated = generated_files.settings_of(project)
         ci_on = bool(project.pr_ci_full_check)
         expected = build.pr_pushed_sha
         display, task_id = task.display_id, task.id
@@ -1153,7 +1180,9 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
         return True
     branch = build_branch_name(build_id)
     repo = root
-    prepared = await blocking.run(lambda: prepare(repo, remote, main_branch, branch, task_id, shas))
+    prepared = await blocking.run(
+        lambda: prepare(repo, remote, main_branch, branch, task_id, shas, generated)
+    )
     if prepared.error:
         await lq._requeue([landing_id])
         await lq._end_batch(batch_id, "failed", error=prepared.error)
@@ -1161,16 +1190,30 @@ async def land(landing_id: str, checks: List[Dict[str, Any]]) -> bool:
         return False
     if prepared.conflict:
         against = f"GitHub's {main_branch}" if prepared.with_main else "the build branch"
+        failure = prepared.rebuild_failure
         await lq._end_batch(batch_id, "failed", error="a merge conflict before the push")
         await lq._send_back(
             landing_id,
             batch_id,
-            _conflict_report(display, prepared.conflict, prepared.with_main, main_branch),
+            (
+                generated_files.failure_report(
+                    failure, display, "before its push to the build's pull request"
+                )
+                if failure is not None
+                else _conflict_report(display, prepared.conflict, prepared.with_main, main_branch)
+            ),
             SEND_BACK_MERGE_NEEDED,
-            f"Its work conflicts with {against} before its push to the build's pull request: "
-            "merge it again.",
+            (
+                "Rebuilding its generated files failed before its push to the build's pull "
+                f"request: {failure.reason}."
+                if failure is not None
+                else f"Its work conflicts with {against} before its push to the build's pull "
+                "request: merge it again."
+            ),
         )
         return True
+    if prepared.regenerated:
+        await lq.record_regenerated([(landing_id, prepared.regenerated)], batch_id=batch_id)
     base, merged = prepared.base or "", prepared.merged or ""
     async with async_session_factory() as session:
         batch = await session.get(LandingBatch, batch_id)

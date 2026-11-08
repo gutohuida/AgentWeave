@@ -284,10 +284,20 @@ def build_merged_commit(
 
 
 def merge_for_checks(
-    root: Path, main_sha: str, target_shas: Sequence[str]
+    root: Path,
+    main_sha: str,
+    target_shas: Sequence[str],
+    generated: Optional[Any] = None,
+    regenerated: Optional[List[Dict[str, Any]]] = None,
 ) -> Tuple[Optional[str], str, bool]:
     """`build_merged_commit`, and whether a `None` was a merge conflict (FR-7) rather than git
-    failing otherwise; *why* names the conflicting files."""
+    failing otherwise; *why* names the conflicting files.
+
+    *generated*, the project's `generated_files.Settings`: a target that conflicts only in those
+    paths is merged with them rebuilt, and the rebuild appended to *regenerated*; a rebuild that
+    fails is a conflict whose *why* is its report."""
+    from . import generated_files
+
     base = main_sha
     for target in target_shas:
         ancestor = _git(root, "merge-base", "--is-ancestor", target, base)
@@ -302,10 +312,30 @@ def merge_for_checks(
                 if not line.strip():
                     break
                 paths.append(line.strip())
-            paths = paths[:10]
             if merged.returncode != 1 or not lines:
                 # 1 is a conflict; anything else (a bad object, git itself failing) is a fault.
                 return None, f"git merge-tree failed: {merged.stderr.strip()[:300]}", False
+            if generated_files.rebuildable(generated, paths):
+                outcome = generated_files.rebuild(
+                    root,
+                    base,
+                    target,
+                    generated,
+                    f"agentweave checks: {target[:12]} onto {base[:12]}",
+                    paths,
+                )
+                if isinstance(outcome, generated_files.Failure):
+                    return (
+                        None,
+                        f"{target[:12]} conflicts onto {base[:12]} only in generated files, and "
+                        f"rebuilding them failed: {outcome.report}",
+                        True,
+                    )
+                if regenerated is not None:
+                    regenerated.append(outcome.record(target=target))
+                base = outcome.commit
+                continue
+            paths = paths[:10]
             return (
                 None,
                 (
@@ -1808,8 +1838,14 @@ async def _execute(
         if prepared is not None:
             merged, tree, changed, planned = prepared
         else:
+            regenerated: List[Dict[str, Any]] = []
             built, why, conflict = await asyncio.to_thread(
-                merge_for_checks, root, main_sha, targets
+                merge_for_checks,
+                root,
+                main_sha,
+                targets,
+                await _generated_of(project_id),
+                regenerated,
             )
             if built is None:
                 await _finish(
@@ -1823,6 +1859,12 @@ async def _execute(
             tree = await asyncio.to_thread(tree_of, root, merged)
             changed = await asyncio.to_thread(changed_paths, root, main_sha, merged)
             planned = [None] * len(checks)
+            if regenerated:
+                # The run's record says what was rebuilt (FR-8): a result of its own, which passed,
+                # ahead of the checks that run on the rebuilt tree.
+                results.append(_rebuild_result(regenerated))
+                await _finish(run_id, merged_sha=merged, results=list(results))
+                await _record_rebuilds(project_id, task_id, run_id, regenerated)
         # Each check with a command for a change is sized to it here, before review only (FR-3).
         checks = for_change(checks, changed)
         pairs = list(zip(checks, planned, strict=True))
@@ -1879,6 +1921,46 @@ async def _execute(
     finally:
         _fast_decided(run_id)
         _waiting_for_slot.pop(run_id, None)
+
+
+#: The name of the result a check run records its generated-files rebuild under (FR-8).
+REBUILD_RESULT = "generated files rebuilt"
+
+
+def _rebuild_result(regenerated: List[Dict[str, Any]]) -> Dict[str, Any]:
+    paths = sorted({path for entry in regenerated for path in entry.get("paths") or []})
+    seconds = round(sum(float(entry.get("seconds") or 0.0) for entry in regenerated), 1)
+    return {
+        "name": REBUILD_RESULT,
+        "exit_code": 0,
+        "timed_out": False,
+        "duration_seconds": seconds,
+        "output_tail": "Rebuilt " + ", ".join(paths),
+        "regenerated": regenerated,
+    }
+
+
+async def _generated_of(project_id: str) -> Any:
+    from . import generated_files
+
+    async with async_session_factory() as session:
+        return generated_files.settings_of(await session.get(Project, project_id))
+
+
+async def _record_rebuilds(
+    project_id: str, task_id: str, run_id: str, regenerated: List[Dict[str, Any]]
+) -> None:
+    from . import generated_files
+
+    async with async_session_factory() as session:
+        for entry in regenerated:
+            await generated_files.record_event(
+                session,
+                project_id,
+                task_id,
+                {**entry, "where": "check_run", "check_run_id": run_id},
+            )
+        await session.commit()
 
 
 async def _project_of(run_id: str) -> str:
