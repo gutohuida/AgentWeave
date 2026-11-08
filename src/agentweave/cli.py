@@ -1917,12 +1917,22 @@ def _open_app_with_splash(
     _make_window_ours(window, port, closer)
 
     loaded = threading.Event()
+    # The window has gone. Set under `shown_lock`, which the app's showing also holds, so a window
+    # closed on the splash never has a marker (or a listener) registered for it afterwards.
+    gone = threading.Event()
+    shown_lock = threading.Lock()
 
     def _on_loaded(*_args: Any) -> None:
         loaded.set()
 
+    def _on_closed(*_args: Any) -> None:
+        with shown_lock:
+            gone.set()
+
     with contextlib.suppress(AttributeError, TypeError):
         window.events.loaded += _on_loaded
+    with contextlib.suppress(AttributeError, TypeError):
+        window.events.closed += _on_closed
 
     state: Dict[str, Any] = {"code": 0, "started": False, "url": None, "marker": None}
     work_done = threading.Event()
@@ -1944,6 +1954,8 @@ def _open_app_with_splash(
             url, failure = None, str(exc)
         if not url:
             state["code"] = 1
+            if gone.is_set():
+                return
             text = failure or "AgentWeave could not start."
             with contextlib.suppress(Exception):
                 window.evaluate_js(f"awSplashFail({_json.dumps(text)})")
@@ -1952,20 +1964,25 @@ def _open_app_with_splash(
                 window.destroy()
             return
         state["url"] = url
+        if gone.is_set():  # closed on the splash: nothing to show, nothing to ask the page
+            return
         minimum = _SPLASH_MIN_WARM if warm else _SPLASH_MIN_COLD
         remaining = minimum - (_time.monotonic() - shown_at)
         if remaining > 0:
             _time.sleep(remaining)
         # Leave when the thread is next fully drawn: the page answers how long that is, fade included.
         delay = 0.0
-        with contextlib.suppress(Exception):
-            delay = float(window.evaluate_js("awSplashLeave()") or 0) / 1000
+        if not gone.is_set():
+            with contextlib.suppress(Exception):
+                delay = float(window.evaluate_js("awSplashLeave()") or 0) / 1000
         _time.sleep(max(0.0, min(delay, 3.0)))
-        if closer.decided:  # closed on the splash: no app to show
-            return
-        state["marker"] = _app_window_register(url, window)
-        closer.marker = state["marker"]
-        window.load_url(url)
+        with shown_lock:
+            if closer.decided or gone.is_set():  # closed on the splash: no app to show
+                return
+            state["marker"] = _app_window_register(url, window)
+            closer.marker = state["marker"]
+        with contextlib.suppress(Exception):
+            window.load_url(url)
 
     try:
         _allow_sound_before_a_click()
@@ -1977,12 +1994,15 @@ def _open_app_with_splash(
         if state["url"]:
             _open_app_window(state["url"])
     finally:
-        if closer.stop_after and state["started"]:
-            # Closed on the splash: let the start-up finish first, so the stop finds the Hub it
-            # spawned (its PID file) rather than racing it.
+        with shown_lock:
+            gone.set()
+        if state["started"]:
+            # Closed on the splash: let the start-up finish first, so a stop finds the Hub it
+            # spawned (its PID file) rather than racing it, and a close that keeps it running
+            # hands it to the watcher once it is up (FR-2).
             work_done.wait(timeout=_SPLASH_STOP_WAIT_SECONDS)
         stopped = _app_window_unregister(state["marker"])
-    if state["code"] == 0 and state["marker"] is not None:
+    if state["code"] == 0 and (state["marker"] is not None or state["url"]):
         _hand_over_to_watcher(closer, stopped)
     closer.after_closed()
     return int(state["code"])

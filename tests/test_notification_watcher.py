@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+import types
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -487,6 +488,100 @@ def test_the_native_window_hands_over_once_it_has_closed(hub_dir, monkeypatch):
     assert cli._open_app_window_native("http://127.0.0.1:8187/") is True
     assert seen == [(8187, False)]
     assert list(hub_dir.glob("window-8187-*")) == []
+
+
+class _Hook:
+    def __init__(self):
+        self.handlers = []
+
+    def __iadd__(self, handler):
+        self.handlers.append(handler)
+        return self
+
+    def fire(self):
+        for handler in self.handlers:
+            handler()
+
+
+class _SplashWindow:
+    def __init__(self, log):
+        self.log = log
+        self.events = types.SimpleNamespace(loaded=_Hook(), closed=_Hook())
+
+    def evaluate_js(self, script):
+        self.log.append(("evaluate_js", script))
+        return None
+
+    def load_url(self, url):
+        self.log.append(("load_url", url))
+
+    def destroy(self):
+        self.log.append(("destroy", None))
+
+
+class _ClosedOnTheSplash:
+    """pywebview as a window closed on the splash: `start` returns once the window has gone,
+    while `func` (the start-up) is still running on its own thread, as pywebview's does."""
+
+    def __init__(self):
+        self.log = []
+        self.window = _SplashWindow(self.log)
+
+    def create_window(self, *args, **kwargs):
+        return self.window
+
+    def start(self, func=None, **kwargs):
+        threading.Thread(target=func, daemon=True).start()
+        time.sleep(0.05)
+        self.window.events.loaded.fire()
+        self.window.events.closed.fire()  # the operator closes it before the Hub is up
+
+
+@pytest.fixture
+def splash_closed(hub_dir, monkeypatch):
+    fake = _ClosedOnTheSplash()
+    monkeypatch.setitem(sys.modules, "webview", fake)
+    for name in ("_set_windows_app_user_model_id", "_allow_sound_before_a_click"):
+        monkeypatch.setattr(cli, name, lambda: None)
+    monkeypatch.setattr(cli, "_app_window_storage", lambda: {})
+    monkeypatch.setattr(cli, "_play_opening_sound", lambda short: None)
+    monkeypatch.setattr(cli, "_enable_default_context_menus", lambda window: None)
+    monkeypatch.setattr(cli, "_make_window_ours", lambda window, port, closer: None)
+    listened = []
+    monkeypatch.setattr(
+        cli, "_listen_for_notices_in_window", lambda port, marker: listened.append(port)
+    )
+    fake.listened = listened
+    fake.handed = []
+    monkeypatch.setattr(
+        cli,
+        "_hand_over_to_watcher",
+        lambda closer, stopped: fake.handed.append((closer.port, stopped, time.monotonic())),
+    )
+    return fake
+
+
+def test_a_close_on_the_splash_hands_over_once_the_hub_is_up(splash_closed, hub_dir):
+    finished = []
+
+    def start():
+        time.sleep(0.5)  # a cold start, still spawning the Hub when the window closes
+        finished.append(time.monotonic())
+        return "http://127.0.0.1:8188/", None
+
+    assert cli._open_app_with_splash(start, warm=False, port=8188, profile="scratch") == 0
+    assert [(port, stopped) for port, stopped, _ in splash_closed.handed] == [(8188, False)]
+    assert splash_closed.handed[0][2] >= finished[0], "the hand-over waits for the start-up"
+    # Nothing is registered or listened for, and nothing is shown, in a window that has gone.
+    assert list(hub_dir.glob("window-8188-*")) == []
+    assert splash_closed.listened == []
+    assert not any(entry[0] == "load_url" for entry in splash_closed.log)
+    assert not any(entry[0] == "evaluate_js" for entry in splash_closed.log)
+
+
+def test_a_close_on_the_splash_of_a_failed_start_hands_over_nothing(splash_closed):
+    assert cli._open_app_with_splash(lambda: (None, "no Hub"), warm=False, port=8188) == 1
+    assert splash_closed.handed == []
 
 
 # --- the real watcher process (FR-2: pythonw, no console) --------------------------------------
