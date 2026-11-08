@@ -373,6 +373,30 @@ def test_the_watcher_ends_when_the_hub_ends(on_windows, hub, hub_dir, monkeypatc
     assert not ready.exists()
 
 
+def test_an_ending_watcher_gives_up_the_port_before_it_finishes_showing(
+    on_windows, hub, hub_dir, recorder, monkeypatch
+):
+    """WNWCO-7: an ending watcher still draining a notice said it was listening for up to 20 s, so
+    a close in that span started no watcher and took its word -- and then nothing listened."""
+    claim, ready = cli._notice_watcher_files(hub.port)
+    thread, _ = _run_watcher_in_thread(hub.port)
+    assert _eventually(ready.exists)
+    # A window in front holds the notice (`notifier.deliver`): it is still being shown below.
+    monkeypatch.setattr(cli, "_app_window_in_front", lambda port: True)
+    hub.push("operator_notice", _notice("ntc-held-1", "ask"))
+    assert _eventually(
+        lambda: any(t.name == "aw-notice" and t.is_alive() for t in threading.enumerate())
+    )
+    marker = hub_dir / f"window-{hub.port}-{os.getpid()}-1.open"
+    marker.write_text("u", encoding="utf-8")
+    cli._app_window_listening(marker).write_text(str(os.getpid()), encoding="utf-8")
+    assert _eventually(lambda: not ready.exists() and not claim.exists(), timeout=1.5)
+    assert thread.is_alive(), "the watcher is still finishing what it is showing"
+    assert not cli._notice_watcher_ready(hub.port)
+    thread.join(timeout=10)
+    assert not thread.is_alive()
+
+
 def test_one_watcher_per_port(on_windows, hub_dir):
     holder = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
@@ -420,11 +444,77 @@ def test_a_close_that_stops_the_hub_starts_no_watcher(hand_over):
 
 
 def test_no_watcher_while_another_window_listens(hand_over, hub_dir):
-    marker = hub_dir / "window-8185-55-1.open"
+    marker = hub_dir / f"window-8185-{os.getpid()}-1.open"
     marker.write_text("u", encoding="utf-8")
-    cli._app_window_listening(marker).write_text("55", encoding="utf-8")
+    cli._app_window_listening(marker).write_text(str(os.getpid()), encoding="utf-8")
     assert cli._hand_over_to_watcher(cli._AppWindowCloser(8185), stopped=False) is False
     assert hand_over == []
+
+
+def _dead_pid():
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    proc.wait()
+    return proc.pid
+
+
+def test_a_dead_windows_leftovers_are_not_a_listener(hand_over, hub_dir):
+    """WNWCO-7: a window whose process was killed leaves its marker and `.listening` behind; they
+    kept every later close from starting the watcher, so nothing listened."""
+    pid = _dead_pid()
+    marker = hub_dir / f"window-8185-{pid}-1.open"
+    marker.write_text("u", encoding="utf-8")
+    cli._app_window_listening(marker).write_text(str(pid), encoding="utf-8")
+    assert cli._hand_over_to_watcher(cli._AppWindowCloser(8185), stopped=False) is True
+    assert hand_over == [8185]
+    assert not cli._notice_watcher_should_end(8185, None, time.monotonic())
+
+
+def test_a_close_waits_for_the_notices_its_own_listener_is_showing(hand_over, monkeypatch):
+    """WNWCO-7: until the watcher listens, the closing process is the one reading; a notice it has
+    claimed is shown by nobody else, so its exit must wait for the showing to finish."""
+    monkeypatch.setattr(cli, "_NOTICE_HAND_OVER_SETTLE_SECONDS", 0.0)
+    showing = threading.Thread(target=time.sleep, args=(1.0,), name="aw-notice", daemon=True)
+    showing.start()
+    assert cli._hand_over_to_watcher(cli._AppWindowCloser(8185), stopped=False) is True
+    assert not showing.is_alive()
+
+
+class _Started:
+    """`subprocess.Popen` for `_start_notice_watcher`: each start runs `then(n)` and answers a
+    process that has ended (`ended`) or still runs."""
+
+    def __init__(self, then, ended):
+        self.calls = 0
+        self.then, self.ended = then, ended
+
+    def __call__(self, *args, **kwargs):
+        self.calls += 1
+        self.then(self.calls)
+        code = 0 if self.ended(self.calls) else None
+        return types.SimpleNamespace(poll=lambda: code)
+
+
+def test_a_watcher_that_ended_without_listening_is_started_again(on_windows, hub_dir, monkeypatch):
+    _, ready = cli._notice_watcher_files(8189)
+
+    def then(n):
+        if n == 2:  # the second start finds the port free and listens
+            ready.write_text(str(os.getpid()), encoding="utf-8")
+
+    started = _Started(then, ended=lambda n: n == 1)  # the first lost the port and ended
+    monkeypatch.setattr(subprocess, "Popen", started)
+    monkeypatch.setattr(cli, "_hub_port_accepts", lambda port, timeout=0.3: True)
+    assert _REAL_START_NOTICE_WATCHER(8189) is True
+    assert started.calls == 2
+
+
+def test_the_wait_for_the_watcher_ends_once_the_hub_has(on_windows, hub_dir, monkeypatch):
+    monkeypatch.setattr(subprocess, "Popen", _Started(lambda n: None, ended=lambda n: False))
+    monkeypatch.setattr(cli, "_hub_port_accepts", lambda port, timeout=0.3: False)
+    monkeypatch.setattr(cli, "_NOTICE_WATCHER_HUB_GRACE_SECONDS", 0.3)
+    began = time.monotonic()
+    assert _REAL_START_NOTICE_WATCHER(8189) is False
+    assert time.monotonic() - began < 5.0
 
 
 def test_no_watcher_for_a_hub_this_launcher_did_not_start(hand_over, monkeypatch):
@@ -623,4 +713,42 @@ def test_a_started_watcher_is_its_own_windowless_process(hub, tmp_path, recorder
         assert not claim.exists() and not ready.exists()
     finally:
         if cli.desktop_window.pid_alive(pid):
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the watcher runs only on Windows")
+def test_a_notice_published_2_s_after_the_close_is_shown(hub, tmp_path, recorder, monkeypatch):
+    """WNWCO-7, FR-2: once a close has handed over and the window's process has gone, a notice the
+    Hub publishes 2 s later is shown within 5 s, once -- here past the leftovers of a window that
+    was killed earlier on the same port, which left nothing listening before."""
+    home = tmp_path / "home"
+    folder = home / ".agentweave" / "hub"
+    folder.mkdir(parents=True)
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(cli, "HUB_DIR", folder)
+    monkeypatch.setattr(notifier, "supported", lambda: True)
+    monkeypatch.setattr(cli, "_start_notice_watcher", _REAL_START_NOTICE_WATCHER)
+    monkeypatch.setattr(cli, "_hub_pid_running", lambda port, profile: 777)
+
+    dead = _dead_pid()
+    leftover = folder / f"window-{hub.port}-{dead}-1.open"
+    leftover.write_text("u", encoding="utf-8")
+    cli._app_window_listening(leftover).write_text(str(dead), encoding="utf-8")
+
+    closer = cli._AppWindowCloser(hub.port, "scratch")
+    _, ready = cli._notice_watcher_files(hub.port)
+    try:
+        cli._hand_over_to_watcher(closer, stopped=False)
+        closed = time.monotonic()
+        time.sleep(max(0.0, 2.0 - (time.monotonic() - closed)))
+        hub.push("operator_notice", _notice("ntc-gap-2s", "ask"))
+        pushed = time.monotonic()
+        assert _eventually(lambda: _ids(recorder) == ["ntc-gap-2s"], timeout=5.0)
+        assert time.monotonic() - pushed < 5.0  # FR-2: within 5 seconds
+        time.sleep(0.5)
+        assert _ids(recorder) == ["ntc-gap-2s"]  # FR-3: once
+    finally:
+        pid = cli._file_pid(ready)
+        if pid and cli.desktop_window.pid_alive(pid):
             subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
