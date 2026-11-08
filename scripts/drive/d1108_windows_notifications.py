@@ -118,7 +118,7 @@ class Shell:
 
 class Stream:
     def __init__(self, app: d.App):
-        self.app, self.events, self.stop = app, [], False
+        self.app, self.events, self.log, self.stop = app, [], [], False
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self):
@@ -141,12 +141,18 @@ class Stream:
                                 data = json.loads(line[5:].strip())
                             except ValueError:
                                 continue
+                            if isinstance(data, dict):
+                                data["_seen"] = time.monotonic()  # arrival time, for the 5 s limits
                             self.events.append((name, data))
+                            self.log.append((name, data))  # never cleared: the final c-notice count
             except Exception:
                 time.sleep(1.0)
 
     def of(self, name: str) -> list[dict]:
         return [dat for n, dat in list(self.events) if n == name]
+
+    def logged(self, name: str) -> list[dict]:
+        return [dat for n, dat in list(self.log) if n == name]
 
 
 # --- the app, the page and the shell link ------------------------------------------------------
@@ -199,6 +205,27 @@ def bring_front(hwnd: int) -> bool:
     user32.keybd_event(0x12, 0, 2, 0)
     user32.SetForegroundWindow(hwnd)
     return bool(wait_for(lambda: foreground(hwnd), 5, 0.1))
+
+
+def page_text(hwnd: int) -> str:
+    """Every accessible name in the window's page, by UI Automation (what the in-app toast draws)."""
+    script = rf"""
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$root = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]{hwnd})
+$all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+  [System.Windows.Automation.Condition]::TrueCondition)
+foreach ($e in $all) {{ $e.Current.Name }}
+"""
+    try:
+        return subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            creationflags=0x08000000,
+        ).stdout
+    except Exception:
+        return ""
 
 
 def open_link(link: str) -> None:
@@ -274,29 +301,7 @@ def settings_get(app: WinApp):
     return app.api("GET", NOTIFY_SETTINGS_PATH)
 
 
-def settings_put(app: WinApp, body: dict):
-    return app.api("PUT", NOTIFY_SETTINGS_PATH, body)
-
-
 # --- the steps ---------------------------------------------------------------------------------
-
-# One recorded sequence for c-notice: (event type, payload, expected kind or None for silent),
-# the page's classify.ts as of 2026-11-08 (read before it changes). project_id is stamped here.
-SEQUENCE = [
-    ("question_asked", {"id": "q-x1", "from_agent": "seqbot", "blocking": True}, "ask"),
-    ("question_asked", {"id": "q-x2", "from_agent": "seqbot", "blocking": False}, "ask"),
-    ("permission_requested", {"agent": "seqbot", "tool_name": "Bash"}, "ask"),
-    ("run_failed", {"agent": "seqbot"}, "fail"),
-    ("loop_stopped", {"reason": "loop queue is empty"}, "done"),
-    (
-        "run_completed",
-        {"agent": "seqbot", "initiator": "operator", "conversation_id": "conv-x"},
-        "reply",
-    ),
-    ("run_started", {"agent": "seqbot"}, None),
-    ("run_completed", {"agent": "seqbot", "initiator": "autonomous"}, None),
-    ("task_updated", {"task_id": "t-x"}, None),
-]
 
 
 def step_event(app, stream, project):
@@ -332,42 +337,74 @@ def step_event(app, stream, project):
     return run
 
 
+# The recorded sequence of every kind of event (blocking and non-blocking question, permission
+# request, failed run, finished loop, agent reply, and the silent ones) is replayed through the Hub
+# by hub/tests/test_operator_notices.py -- that is where c-notice's exact-sequence check lives.
+# This drive checks the same contract on what it can cause live.
+NON_SILENT = {
+    "question_asked",
+    "permission_requested",
+    "run_failed",
+    "loop_stopped",
+    "run_completed",
+}
+CONTRACT = {"id", "kind", "project_id", "agent", "conversation_id", "title", "text", "source_event"}
+
+
 def step_notice(app, stream, project):
-    """c-notice: one operator_notice per non-silent event, of the page's kind, none for silent."""
-    # The recorded SEQUENCE is replayed through the Hub by the build's own test (hub-notices); this
-    # step reads the real stream, where the Haiku question above must have made one ask notice.
+    """c-notice (early): the Haiku question made exactly one ask notice, with the whole contract."""
     notices = stream.of("operator_notice")
     check(
         "c-notice: the operator stream carries operator_notice events",
         bool(notices),
         f"{len(notices)} notices; events seen: {sorted({n for n, _ in stream.events})}",
     )
-    asks = [n for n in notices if n.get("kind") == "ask"]
+    asks = [n for n in notices if n.get("kind") == "ask" and n.get("agent") == "haikubot"]
     check(
         "c-notice: the Haiku question made exactly one ask notice with a stable id",
-        len(asks) == 1 and asks[0].get("id"),
+        len(asks) == 1 and bool(asks[0].get("id")),
         f"{asks}",
     )
     for n in notices:
-        have = {
-            "id",
-            "kind",
-            "project_id",
-            "agent",
-            "conversation_id",
-            "title",
-            "text",
-            "source_event",
-        }
         check(
-            f"c-notice: notice {n.get('id')} has the whole contract", have <= set(n), f"{sorted(n)}"
+            f"c-notice: notice {n.get('id')} has the whole contract",
+            CONTRACT <= set(n),
+            f"{sorted(n)}",
         )
-    kinds = [kind for _, _, kind in SEQUENCE if kind]
+
+
+def step_notice_final(stream):
+    """c-notice (late): over every event the drive caused so far, one notice per non-silent one."""
+    events = [(n, d_) for n, d_ in list(stream.log) if n != "operator_notice"]
+    notices = stream.logged("operator_notice")
+    silent = [n for n in notices if n.get("source_event") not in NON_SILENT]
+    check("c-notice: no notice for run_started or any other silent event", not silent, f"{silent}")
     check(
-        "c-notice: the recorded sequence maps to one notice per non-silent event",
-        False,
-        f"expected kinds {kinds}; the Hub has no way to replay it until it publishes notices",
+        "c-notice: notice ids are unique (one notice per event)",
+        bool(notices) and len({n.get("id") for n in notices}) == len(notices),
+        f"{len(notices)} notices",
     )
+    for source, want in (
+        ("question_asked", [d_ for n, d_ in events if n == "question_asked"]),
+        ("run_failed", [d_ for n, d_ in events if n == "run_failed"]),
+        (
+            "run_completed",
+            [
+                d_
+                for n, d_ in events
+                if n == "run_completed" and d_.get("initiator") != "autonomous"
+            ],
+        ),
+    ):
+        if not want:
+            note(f"c-notice: no {source} event was caused by this drive; nothing to count")
+            continue
+        got = [n for n in notices if n.get("source_event") == source]
+        check(
+            f"c-notice: one notice per non-silent {source} event",
+            len(got) == len(want),
+            f"{len(got)} notices for {len(want)} events",
+        )
 
 
 def step_behind(app, stream, shell, hwnd, project):
@@ -416,7 +453,9 @@ def step_identity(toast, xml_extra=""):
         "$lnk = Get-ChildItem -Recurse -Filter 'AgentWeave*.lnk' "
         "([Environment]::GetFolderPath('Programs')) | Select-Object -First 1; "
         "if ($lnk) { $s=(New-Object -ComObject WScript.Shell).CreateShortcut($lnk.FullName); "
-        "$s.IconLocation; $lnk.BaseName }"
+        "$lnk.BaseName; $s.IconLocation; "
+        "(Get-StartApps | Where-Object { $_.Name -eq $lnk.BaseName } | "
+        "ForEach-Object { $_.AppID }) -join ';' }"
     )
     out = subprocess.run(
         ["powershell", "-NoProfile", "-Command", ps],
@@ -424,11 +463,18 @@ def step_identity(toast, xml_extra=""):
         text=True,
         timeout=60,
         creationflags=0x08000000,
-    ).stdout.split()
-    icon = (out[0] if out else "").split(",")[0]
+    ).stdout.splitlines()  # by line: an icon path may hold spaces (Program Files)
+    out = [line.strip() for line in out if line.strip()]
+    icon = (out[1] if len(out) > 1 else "").rsplit(",", 1)[0]
+    ids = (out[2] if len(out) > 2 else "").split(";")
     packaged = ROOT / "src" / "agentweave" / "assets" / "icon.ico"
     check(
-        "c-identity: the Start-menu shortcut carrying AgentWeave.Hub shows the packaged icon",
+        "c-identity: the Start-menu shortcut's AppUserModelID is AgentWeave.Hub",
+        AUMID in ids,
+        f"{out}",
+    )
+    check(
+        "c-identity: that shortcut shows the packaged icon",
         bool(icon) and pathlib.Path(icon).name == packaged.name,
         f"{out}",
     )
@@ -475,29 +521,48 @@ def step_closed(app, stream, shell, hwnd, project, watch):
     before = set(watch.ours)
     shell.mark()
     stream.events.clear()
-    trigger(
+
+    def claude_children() -> set[int]:
+        rows = d.processes()
+        hub = set(d.hub_pids(app.port, rows))
+        return {
+            r["ProcessId"]
+            for r in rows
+            if r["ParentProcessId"] in hub and "claude" in (r.get("CommandLine") or "").lower()
+        }
+
+    existing = claude_children()  # haikubot's and behindbot's blocked turns: not to be touched
+    run = trigger(
         app,
         project,
         "failbot",
         "Run this shell command and wait for it: powershell -NoProfile -Command Start-Sleep -Seconds 120",
     )
-    # Made to fail: the agent's CLI process is killed under it, which the Hub records as run_failed.
-    if wait_for(lambda: app.db("select 1 from runs where status='running'"), 90, 1.0):
-        time.sleep(8.0)
-        rows = d.processes()
-        hub = set(d.hub_pids(app.port, rows))
-        for pid in d.descendants(rows, hub) - hub:
-            row = next(r for r in rows if r["ProcessId"] == pid)
-            if "claude" in (row.get("CommandLine") or "").lower() and row["ParentProcessId"] in hub:
-                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
-    failed = wait_for(lambda: [e for e in stream.of("run_failed")], 120, 1.0)
+    check("c-closed: failbot's turn started", bool(run))
+    # Made to fail: only this run's CLI process (the one that appears after the trigger) is killed
+    # under it, which the Hub records as run_failed.
+    if run and wait_for(lambda: d.run_status(app, run) == "running", 90, 1.0):
+        mine = wait_for(lambda: claude_children() - existing, 60, 1.0) or set()
+        time.sleep(8.0)  # let the turn get into its tool call
+        for pid in mine | (claude_children() - existing):
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+    failed = wait_for(
+        lambda: [
+            e
+            for e in stream.of("run_failed")
+            if e.get("run_id") == run or e.get("agent") == "failbot"
+        ],
+        120,
+        0.25,
+    )
     check("c-closed: the run made to fail failed", bool(failed))
-    t0 = time.monotonic()
-    got = shell.wait_new("failbot", LIMIT)
+    seen = failed[0]["_seen"] if failed else time.monotonic()
+    got = shell.wait_new("failbot", max(0.5, LIMIT - (time.monotonic() - seen)))
+    took = time.monotonic() - seen
     check(
         f"c-closed: a notification within {LIMIT:.0f} s of the failure",
-        len(got) >= 1,
-        f"{len(got)} under {AUMID}, {time.monotonic() - t0:.1f} s",
+        len(got) >= 1 and took <= LIMIT + 0.5,
+        f"{len(got)} under {AUMID}, {took:.1f} s after run_failed",
     )
     check(
         "c-closed: no conhost or powershell window was shown",
@@ -510,7 +575,7 @@ def step_click(app, stream, shell, project):
     """c-click: the activation link, opened through the shell, opens the conversation."""
     shell.mark()
     stream.events.clear()
-    trigger(
+    run = trigger(
         app,
         project,
         "clickbot",
@@ -548,6 +613,11 @@ def step_click(app, stream, shell, project):
         d.hub_pids(app.port) == hub,
         f"{hub} -> {d.hub_pids(app.port)}",
     )
+    check(
+        "c-click: the running turn is unchanged (same run, still running)",
+        bool(run) and d.run_status(app, run) == "running",
+        d.run_status(app, run) if run else "no run",
+    )
     if h:
         user32.ShowWindow(h, SW_MINIMIZE)
         time.sleep(1.0)
@@ -564,6 +634,11 @@ def step_click(app, stream, shell, project):
             "c-click: and it navigates there (no second window)",
             len(app.windows()) == 1,
             page_url(),
+        )
+        check(
+            "c-click: and the running turn is still the same one",
+            d.run_status(app, run) == "running",
+            d.run_status(app, run),
         )
     return h
 
@@ -597,6 +672,16 @@ def step_quiet(app, stream, shell, project, hwnd_getter):
         len(notices) == 1,
         f"{len(notices)}",
     )
+    seen_in_page = wait_for(lambda: "quietone" in page_text(h), LIMIT, 1.0)
+    check(
+        "c-quiet: the in-app toast still shows in the page (read through UI Automation)",
+        bool(seen_in_page),
+    )
+    note(
+        "c-quiet: the sound and the taskbar flash are NOT observed -- Windows exposes no read of "
+        "either; they are covered by the page's own tests, and the toast above is the proof the "
+        "page's notifier still ran"
+    )
     check(
         "c-quiet: no Windows notification, no error window",
         not shell.new("quietone") and len(app.windows()) == 1,
@@ -623,8 +708,30 @@ def step_kinds(app, stream, shell):
         code == 200 and body == want,
         f"{code} {body}",
     )
-    code, _ = settings_put(app, {"ask": False, "fail": True, "done": False, "reply": True})
-    check("c-kinds: 'reply' on and 'question' off is accepted", code == 200, str(code))
+    # Through the page, as the operator does: App settings, then the Windows switches.
+    p0 = app.launch()
+    h0 = app.wait_window(p0, 90)
+    app.wait_healthy()
+    time.sleep(4.0)
+    check(
+        "c-kinds: App settings opens in the page",
+        h0 is not None and d.choose_in_page(h0, "App settings"),
+    )
+    check(
+        "c-kinds: the page offers a Windows switch for 'reply'",
+        h0 is not None and d.choose_in_page(h0, "Windows reply"),
+    )
+    check(
+        "c-kinds: the page offers a Windows switch for 'question'",
+        h0 is not None and d.choose_in_page(h0, "Windows question"),
+    )
+    time.sleep(1.0)
+    code, body = settings_get(app)
+    check(
+        "c-kinds: the page's switches reached the Hub ('reply' on, 'question' off)",
+        code == 200 and body == {"ask": False, "fail": True, "done": False, "reply": True},
+        f"{code} {body}",
+    )
     app.cleanup()
     p = app.launch()
     app.wait_window(p, 90)
@@ -710,6 +817,7 @@ def main() -> int:
         for label, fn in (
             ("c-closed", lambda: step_closed(app, stream, shell, state["hwnd"], project, watch)),
             ("c-click", lambda: step_click(app, stream, shell, project)),
+            ("c-notice (all events)", lambda: step_notice_final(stream)),
             (
                 "c-quiet",
                 lambda: step_quiet(
