@@ -9,7 +9,7 @@ from hub.db.models import Project
 
 
 def test_defaults_and_cleaning():
-    value = GeneratedFiles(paths=[" gen.txt ", "gen.txt", "dist\**"], command=" py gen.py ")
+    value = GeneratedFiles(paths=[" gen.txt ", "gen.txt", r"dist\**"], command=" py gen.py ")
     assert value.paths == ["gen.txt", "dist/**"]
     assert value.command == "py gen.py"
     assert value.timeout_seconds == 600
