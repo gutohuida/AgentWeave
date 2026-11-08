@@ -277,6 +277,34 @@ class TestPtySessionSpawn:
         assert "AttachConsole to helper 4321 failed" in caplog.text
         helper.stdin.close.assert_called_once()  # and the helper is still told to exit
 
+    def test_a_helper_slow_to_get_its_console_is_waited_for(self, monkeypatch, caplog):
+        """AW-61: on a loaded machine the helper's console took longer than twenty fixed retries
+        allowed, and the Hub went without one. It is attached to once it is there, however many
+        attempts that takes, while the helper lives and inside the deadline."""
+        import ctypes
+        import logging
+
+        import hub.subprocess_windows as sw
+
+        monkeypatch.setattr(sw, "IS_WINDOWS", True)
+        monkeypatch.setattr(sw, "has_console", lambda: False)
+        monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+        helper = MagicMock()
+        helper.pid = 4321
+        helper.poll.return_value = None  # still running
+        monkeypatch.setattr(sw.subprocess, "Popen", lambda *a, **k: helper)
+        attach = MagicMock(side_effect=[0] * 30 + [1])
+        monkeypatch.setattr(
+            ctypes, "WinDLL", lambda *a, **k: MagicMock(AttachConsole=attach), raising=False
+        )
+        monkeypatch.setattr(ctypes, "get_last_error", lambda: 31, raising=False)
+        monkeypatch.setattr(sw.time, "sleep", lambda _s: None)
+        with caplog.at_level(logging.WARNING, logger="hub.subprocess_windows"):
+            sw.ensure_windowless_console()
+        assert attach.call_count == 31
+        assert "failed" not in caplog.text
+        helper.stdin.close.assert_called_once()
+
     @pytest.mark.skipif(not IS_WINDOWS, reason="pywinpty socket polling is Windows-only")
     def test_delayed_output_is_not_mistaken_for_eof(self):
         session = PtySession.spawn(

@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 _console_lock = threading.Lock()
 
+#: How long `ensure_windowless_console` waits to attach to its helper's console.
+ATTACH_DEADLINE_SECONDS = 10.0
+
 
 def no_console_kwargs() -> Dict[str, Any]:
     """Extra kwargs that suppress a console window flash on Windows.
@@ -112,12 +115,17 @@ def ensure_windowless_console() -> None:
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         last_error = 0
         try:
-            # The helper's console exists once `CreateProcess` returns, so the first attempt
-            # normally succeeds; the retries only absorb a scheduler hiccup.
-            for _ in range(20):
+            # The helper's console normally exists once `CreateProcess` returns, so the first
+            # attempt succeeds. On a loaded machine it can take longer than the half-second twenty
+            # fixed retries once allowed (AW-61), so this waits for it, while the helper lives,
+            # up to a deadline only a machine that cannot start a process reaches.
+            deadline = time.monotonic() + ATTACH_DEADLINE_SECONDS
+            while True:
                 if kernel32.AttachConsole(helper.pid):
                     return
                 last_error = ctypes.get_last_error()
+                if helper.poll() is not None or time.monotonic() >= deadline:
+                    break
                 time.sleep(0.025)
             logger.warning(
                 "No windowless console for ConPTY spawns: AttachConsole to helper %s failed "
