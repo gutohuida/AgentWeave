@@ -30,6 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sse_starlette.event import JSONServerSentEvent, ServerSentEvent
 
+from .operator_notices import NOTICE_EVENT, notice_for
+
 logger = logging.getLogger(__name__)
 
 _PENDING_KEY = "aw_pending_broadcasts"
@@ -125,6 +127,16 @@ class SSEManager:
                     q.put_nowait(operator_event)
                 except asyncio.QueueFull:
                     q.dropped += 1
+
+        # The one seam every event passes: an event that calls the operator publishes its notice
+        # here, once, after the event itself (`operator_notices`, D1). Never raises into a writer.
+        try:
+            notice = notice_for(project_id, event_type, data)
+        except Exception:
+            logger.exception("operator notice for %s failed", event_type)
+            notice = None
+        if notice is not None:
+            self.publish(project_id, NOTICE_EVENT, notice)
 
 
 def defer_broadcast(session: AsyncSession, project_id: str, event_type: str, data: Any) -> None:

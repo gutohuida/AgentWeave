@@ -371,18 +371,17 @@ async def ask_question_for_actor(
     session.add(question)
     await session.commit()
     await session.refresh(question)
-    await sse_manager.broadcast(
-        project_id,
-        "question_asked",
-        {"id": q_id, "from_agent": from_agent, "blocking": body.blocking},
-    )
-    await persist_event(
-        session,
-        project_id,
-        "question_asked",
-        {"id": q_id, "from_agent": from_agent, "blocking": body.blocking},
-        agent=from_agent,
-    )
+    # Built once, so the broadcast and the persisted row cannot disagree. `conversation_id` lets a
+    # question's notice open its conversation (`windows-notifications-for-what-calls-the-operator`
+    # FR-7); null when the asking run had none.
+    payload = {
+        "id": q_id,
+        "from_agent": from_agent,
+        "blocking": body.blocking,
+        "conversation_id": question.conversation_id,
+    }
+    await sse_manager.broadcast(project_id, "question_asked", payload)
+    await persist_event(session, project_id, "question_asked", dict(payload), agent=from_agent)
     return question
 
 
