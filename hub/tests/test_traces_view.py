@@ -14,7 +14,18 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, Run, Task, TraceSpan, TurnUsage
 
 PROJECT = "proj-test"
-NOW = datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _a_midday_in_the_past() -> datetime:
+    """Today's noon UTC if it has passed, else yesterday's. A run defaults to five minutes before
+    this, and the day grouping expects it on this one's day: taken as the moment of import, a module
+    imported in the five minutes after midnight UTC put those runs on the day before (AW-58)."""
+    now = datetime.now(timezone.utc)
+    noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
+    return noon if noon <= now else noon - timedelta(days=1)
+
+
+NOW = _a_midday_in_the_past()
 
 
 async def _run(
