@@ -496,9 +496,10 @@ def show(notice: Any, port: int, hub_dir: Path) -> bool:
 # Two listeners read the operator stream and show what calls the operator: one in every app window's
 # process, from the moment the window shows the app, and the launcher's watcher (`pythonw`, one per
 # port) while no window is open. The window's own listener keeps reading after its window has gone,
-# until the watcher it starts says it is listening; the watcher ends once a window's listener says
-# the same. So some listener is always reading across a close or a reopen, and the ledger in `show`
-# makes an overlap show each notice once.
+# until the watcher it starts says it is listening, and until every notice it has claimed is shown;
+# the watcher ends once a live window's listener says the same, giving up its word that it listens
+# before it finishes what it is showing. So some listener is always reading across a close or a
+# reopen, and the ledger in `show` makes an overlap show each notice once.
 
 NOTICE_EVENT = "operator_notice"
 #: The Hub's defaults (FR-10), for when its choices cannot be read.
