@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '@/api/client'
 import type { Task, TaskChecks } from '@/api/tasks'
-import { classify } from '@/lib/notify/classify'
 import { overrideOffered, waitsOnChecks, gateBodyOf } from '@/components/tasks/gateRefusal'
 import { TaskCardHost } from './testUtils/TaskCardHost'
 
@@ -270,25 +269,3 @@ describe('the refusal body helpers', () => {
     expect(gateBodyOf(new Error('x'))).toBeNull()
   })
 })
-
-describe('the operator is notified when the checks finish', () => {
-  it('names the task and says whether it can be landed', () => {
-    const passed = classify('task_checks_finished', {
-      project_id: 'p',
-      task_id: 'task-1',
-      task_title: 'The spec-page mock',
-      state: 'passed',
-    })
-    expect(passed).toMatchObject({ kind: 'done' })
-    expect(passed?.text).toContain('The spec-page mock')
-    const failed = classify('task_checks_finished', {
-      project_id: 'p',
-      task_id: 'task-1',
-      task_title: 'The spec-page mock',
-      state: 'failed',
-    })
-    expect(failed).toMatchObject({ kind: 'fail' })
-    expect(failed?.text).toContain('The spec-page mock')
-  })
-})
-

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ProjectSummary } from '@/api/projects'
-import { classify } from '@/lib/notify/classify'
+import { noticeFrom } from '@/lib/notify/classify'
 import { createNotifier, type NotifierToast } from '@/lib/notify/notifier'
 import { loadNotifyPrefs } from '@/lib/notify/prefs'
 import { playSound, unlockSoundOnFirstGesture } from '@/lib/sound/player'
@@ -70,7 +70,7 @@ export function useNotifications(
   )
 
   useSSE((event) => {
-    const notice = classify(event.type, event.data)
+    const notice = noticeFrom(event.type, event.data)
     if (notice) notifier.notify(notice)
   })
 

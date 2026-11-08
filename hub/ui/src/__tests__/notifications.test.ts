@@ -1,68 +1,39 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 // @ts-expect-error Vitest runs in Node; the browser bundle never includes this contract test.
 import { readFileSync } from 'node:fs'
-import { classify } from '@/lib/notify/classify'
+import { noticeFrom } from '@/lib/notify/classify'
 import { createNotifier, BURST_MS, GATHER_MS, type NotifierDeps } from '@/lib/notify/notifier'
 import { DEFAULT_NOTIFY_PREFS, loadNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@/lib/notify/prefs'
 
-// Change `agentweave-calls-you-with-its-own-sound` (trial spdoc-3e64f37b5229). Every payload below is
-// the shape the Hub broadcasts, with the `project_id` hub/hub/sse.py stamps into the operator stream.
+// Changes `agentweave-calls-you-with-its-own-sound` and `windows-notifications-for-what-calls-the-operator`.
+// Which events call the operator is decided by the Hub (hub/tests/test_operator_notices.py); the page
+// draws its toasts from the `operator_notice` events it publishes, shaped as below.
 const P1 = 'proj-one'
 const P2 = 'proj-two'
-const QUESTION = { id: 'q-1', from_agent: 'Developer', blocking: false, project_id: P1 } // questions.py
-const PERMISSION = { id: 'pr-1', agent: 'Developer', tool_name: 'Bash', run_id: 'run-1', project_id: P1 } // agent_trigger.py
-const STALL = {
-  // stalls.view()
-  id: 'stall-1', key: 'k', cause: 'task_stuck', reason: 'The task has not moved for 2 hours', task_id: 'task-1',
-  loop_id: null, first_seen_at: '2026-10-23T10:00:00', last_seen_at: '2026-10-23T10:00:00', seen_count: 1,
-  conversation_id: null, mender_turns: 0, outcome: null, outcome_detail: '', ended_at: null, project_id: P2,
+let seq = 0
+function wire(kind: string, project_id: string, text: string, extra: Record<string, unknown> = {}) {
+  return { id: `ntc-${++seq}`, kind, project_id, agent: null, conversation_id: null, title: 'T', text, source_event: 'x', ...extra }
 }
-const RUN_FAILED = { agent: 'Tester', run_id: 'run-2', error: 'Run failed (exit 1)', project_id: P2 } // agent_trigger.py
-const LOOP_STOPPED = { job_id: 'job-1', loop_id: 'loop-1', reason: 'budget reached', project_id: P1 } // scheduler.py
-const LOOP_DRAINED = { job_id: 'job-1', loop_id: 'loop-1', reason: 'loop queue is empty', project_id: P1 }
-const CHAIN = { entry_id: 'qe-1', agent: 'Reviewer', hop_depth: 9, hop_budget: 8, project_id: P1 } // messages.py
-// agent_trigger._broadcast_run_lifecycle: `initiator` is the run's own (turn_scheduler: "operator"
-// when an operator's message controls the turn, "autonomous" for a flow's, a job's or a peer's).
-const REPLIED = {
-  agent: 'Architect', run_id: 'run-3', conversation_id: 'conv-1', session_id: 's', exit_code: 0,
-  initiator: 'operator', project_id: P1,
-}
-const AUTONOMOUS_DONE = { ...REPLIED, run_id: 'run-4', initiator: 'autonomous' }
+const notice = (data: ReturnType<typeof wire>) => noticeFrom('operator_notice', data)!
+const QUESTION = () => notice(wire('ask', P1, 'Developer asked you a question', { agent: 'Developer', conversation_id: 'conv-q' }))
+const PERMISSION = () => notice(wire('ask', P1, 'Developer wants permission for Bash', { agent: 'Developer' }))
+const STALL = () => notice(wire('fail', P2, 'Work stalled: The task has not moved for 2 hours'))
+const LOOP_DRAINED = () => notice(wire('done', P1, 'A loop finished its queue'))
+const REPLIED = (conversation_id = 'conv-1') => notice(wire('reply', P1, 'Architect replied', { agent: 'Architect', conversation_id }))
 
-describe('classify: which Hub events call the operator', () => {
-  it('asks for a question and a permission', () => {
-    expect(classify('question_asked', QUESTION)).toMatchObject({ kind: 'ask', projectId: P1 })
-    expect(classify('question_asked', QUESTION)?.text).toContain('Developer')
-    expect(classify('permission_requested', PERMISSION)).toMatchObject({ kind: 'ask', projectId: P1 })
-    expect(classify('permission_requested', PERMISSION)?.text).toContain('Bash')
-  })
-
-  it('fails for a stall, a failed run, a suspended chain and a loop stopped short', () => {
-    expect(classify('stall_recorded', STALL)).toMatchObject({ kind: 'fail', projectId: P2 })
-    expect(classify('run_failed', RUN_FAILED)).toMatchObject({ kind: 'fail', projectId: P2 })
-    expect(classify('run_failed', RUN_FAILED)?.text).toContain('Tester')
-    expect(classify('queue_chain_suspended', CHAIN)).toMatchObject({ kind: 'fail' })
-    expect(classify('loop_stopped', LOOP_STOPPED)).toMatchObject({ kind: 'fail' })
-  })
-
-  it('is done when a loop drained its queue', () => {
-    expect(classify('loop_stopped', LOOP_DRAINED)).toMatchObject({ kind: 'done' })
-  })
-
-  it('is a reply when a run the operator started in a conversation completes', () => {
-    expect(classify('run_completed', REPLIED)).toMatchObject({
-      kind: 'reply', projectId: P1, conversationId: 'conv-1', agent: 'Architect',
+describe('noticeFrom: the page reads the Hub notice', () => {
+  it('reads an operator_notice into a notice', () => {
+    expect(noticeFrom('operator_notice', wire('reply', P1, 'Architect replied', { agent: 'Architect', conversation_id: 'conv-1' }))).toMatchObject({
+      kind: 'reply', projectId: P1, text: 'Architect replied', agent: 'Architect', conversationId: 'conv-1',
     })
-    expect(classify('run_completed', REPLIED)?.text).toContain('Architect')
   })
 
-  it('ignores everyday traffic and events with no project', () => {
-    expect(classify('run_completed', { agent: 'Developer', run_id: 'r', project_id: P1 })).toBeNull()
-    expect(classify('run_completed', AUTONOMOUS_DONE)).toBeNull()
-    expect(classify('run_completed', { ...REPLIED, conversation_id: null })).toBeNull()
-    expect(classify('task_updated', { id: 't', status: 'completed', project_id: P1 })).toBeNull()
-    expect(classify('question_answered', { id: 'q-1', project_id: P1 })).toBeNull()
-    expect(classify('question_asked', { id: 'q-1', from_agent: 'Developer', blocking: false })).toBeNull()
+  it('ignores every other event, and a notice with no project, kind or text', () => {
+    expect(noticeFrom('question_asked', { id: 'q-1', from_agent: 'Developer', project_id: P1 })).toBeNull()
+    expect(noticeFrom('run_failed', { agent: 'Tester', project_id: P1 })).toBeNull()
+    expect(noticeFrom('operator_notice', { ...wire('ask', P1, 'x'), project_id: '' })).toBeNull()
+    expect(noticeFrom('operator_notice', wire('other', P1, 'x'))).toBeNull()
+    expect(noticeFrom('operator_notice', wire('ask', P1, ''))).toBeNull()
   })
 })
 
@@ -100,7 +71,7 @@ describe('the notifier: front, behind, bursts', () => {
 
   it('in front: one toast naming the project and a quiet sound; behind: the normal level, a count, cleared on focus', () => {
     const h = harness()
-    h.notifier.notify(classify('question_asked', QUESTION)!)
+    h.notifier.notify(QUESTION())
     vi.advanceTimersByTime(GATHER_MS)
     expect(h.toasts.size).toBe(1)
     const [first] = [...h.toasts.values()]
@@ -112,8 +83,8 @@ describe('the notifier: front, behind, bursts', () => {
 
     vi.advanceTimersByTime(BURST_MS)
     h.setFocused(false)
-    h.notifier.notify(classify('question_asked', { ...QUESTION, id: 'q-2' })!)
-    h.notifier.notify(classify('permission_requested', PERMISSION)!)
+    h.notifier.notify(QUESTION())
+    h.notifier.notify(PERMISSION())
     vi.advanceTimersByTime(GATHER_MS)
     expect(h.played).toHaveLength(2)
     expect(h.played[1].gain).toBeGreaterThan(quiet)
@@ -128,16 +99,16 @@ describe('the notifier: front, behind, bursts', () => {
 
   it('a burst across two projects is one sound, the more urgent kind, and one toast naming both', () => {
     const h = harness()
-    h.notifier.notify(classify('question_asked', QUESTION)!)
+    h.notifier.notify(QUESTION())
     vi.advanceTimersByTime(1000)
-    h.notifier.notify(classify('stall_recorded', STALL)!)
+    h.notifier.notify(STALL())
     vi.advanceTimersByTime(BURST_MS)
     expect(h.played.map((p) => p.kind)).toEqual(['fail'])
     expect(h.toasts.size).toBe(1)
     const [grouped] = [...h.toasts.values()]
     expect(`${grouped.title} ${grouped.description ?? ''}`).toMatch(/2 projects|AgentWeave.*Docs site|Docs site.*AgentWeave/)
 
-    h.notifier.notify(classify('question_asked', { ...QUESTION, id: 'q-3' })!)
+    h.notifier.notify(QUESTION())
     vi.advanceTimersByTime(GATHER_MS)
     expect(h.played).toHaveLength(2)
     expect(h.toasts.size).toBe(2)
@@ -145,18 +116,18 @@ describe('the notifier: front, behind, bursts', () => {
 
   it('done is silent by default; a kind turned on notifies; sound off keeps the toast and drops the sound', () => {
     const h = harness()
-    h.notifier.notify(classify('loop_stopped', LOOP_DRAINED)!)
+    h.notifier.notify(LOOP_DRAINED())
     vi.advanceTimersByTime(GATHER_MS)
     expect(h.played).toHaveLength(0)
     expect(h.toasts.size).toBe(0)
 
     const on = harness({}, { ...DEFAULT_NOTIFY_PREFS, kinds: { ...DEFAULT_NOTIFY_PREFS.kinds, done: true } })
-    on.notifier.notify(classify('loop_stopped', LOOP_DRAINED)!)
+    on.notifier.notify(LOOP_DRAINED())
     vi.advanceTimersByTime(GATHER_MS)
     expect(on.played.map((p) => p.kind)).toEqual(['done'])
 
     const muted = harness({}, { ...DEFAULT_NOTIFY_PREFS, sound: false })
-    muted.notifier.notify(classify('question_asked', QUESTION)!)
+    muted.notifier.notify(QUESTION())
     vi.advanceTimersByTime(GATHER_MS)
     expect(muted.played).toHaveLength(0)
     expect(muted.toasts.size).toBe(1)
@@ -171,7 +142,7 @@ describe('a reply', () => {
 
   it('sounds the bright pair and opens its conversation; an ask in the same burst wins the sound', () => {
     const h = harness()
-    h.notifier.notify(classify('run_completed', REPLIED)!)
+    h.notifier.notify(REPLIED())
     vi.advanceTimersByTime(GATHER_MS)
     expect(h.played.map((p) => p.kind)).toEqual(['reply'])
     const [toast] = [...h.toasts.values()] as Array<{ title: string; conversation?: unknown }>
@@ -179,33 +150,42 @@ describe('a reply', () => {
     expect(toast.conversation).toEqual({ agent: 'Architect', conversationId: 'conv-1' })
 
     vi.advanceTimersByTime(BURST_MS)
-    h.notifier.notify(classify('run_completed', { ...REPLIED, run_id: 'run-5' })!)
-    h.notifier.notify(classify('question_asked', QUESTION)!)
+    h.notifier.notify(REPLIED())
+    h.notifier.notify(QUESTION())
     vi.advanceTimersByTime(GATHER_MS)
     expect(h.played.map((p) => p.kind)).toEqual(['reply', 'ask'])
   })
 
   it('is silent while the operator is in front, looking at that conversation; behind, it calls', async () => {
     const h = harness({ viewing: (n) => n.conversationId === 'conv-1' })
-    h.notifier.notify(classify('run_completed', REPLIED)!)
+    h.notifier.notify(REPLIED())
     await vi.advanceTimersByTimeAsync(GATHER_MS)
     expect(h.played).toHaveLength(0)
     expect(h.toasts.size).toBe(0)
 
-    h.notifier.notify(classify('run_completed', { ...REPLIED, conversation_id: 'conv-2' })!)
+    h.notifier.notify(REPLIED('conv-2'))
     await vi.advanceTimersByTimeAsync(BURST_MS)
     expect(h.played.map((p) => p.kind)).toEqual(['reply'])
 
     h.setFocused(false)
-    h.notifier.notify(classify('run_completed', { ...REPLIED, run_id: 'run-6' })!)
+    h.notifier.notify(REPLIED())
     await vi.advanceTimersByTimeAsync(GATHER_MS)
     expect(h.played).toHaveLength(2)
     expect(document.title).toBe('(1) AgentWeave')
   })
 
+  it('a question opens its conversation, and is not silenced by watching it', async () => {
+    const h = harness({ viewing: () => true })
+    h.notifier.notify(QUESTION())
+    await vi.advanceTimersByTimeAsync(GATHER_MS)
+    expect(h.played.map((p) => p.kind)).toEqual(['ask'])
+    const [toast] = [...h.toasts.values()] as Array<{ conversation?: unknown }>
+    expect(toast.conversation).toEqual({ agent: 'Developer', conversationId: 'conv-q' })
+  })
+
   it('can be turned off', () => {
     const h = harness({}, { ...DEFAULT_NOTIFY_PREFS, kinds: { ...DEFAULT_NOTIFY_PREFS.kinds, reply: false } })
-    h.notifier.notify(classify('run_completed', REPLIED)!)
+    h.notifier.notify(REPLIED())
     vi.advanceTimersByTime(GATHER_MS)
     expect(h.played).toHaveLength(0)
     expect(h.toasts.size).toBe(0)
@@ -223,7 +203,7 @@ describe('the native window answers whether it is in front', () => {
   // asynchronously.
   it('an asynchronous "not in front" still counts the call and sounds at the normal level', async () => {
     const h = harness({ focused: () => Promise.resolve(false) })
-    h.notifier.notify(classify('question_asked', QUESTION)!)
+    h.notifier.notify(QUESTION())
     await vi.advanceTimersByTimeAsync(GATHER_MS)
     expect(h.counts[h.counts.length - 1]).toBe(1)
     expect(document.title).toBe('(1) AgentWeave')
@@ -256,20 +236,5 @@ describe('one synth', () => {
     const brand = readFileSync('../../brand/sound/agentweave-sound.js', 'utf8')
     expect(ui.length).toBeGreaterThan(1000)
     expect(ui).toBe(brand)
-  })
-})
-
-describe('a main move and a next-slice offer call the operator', () => {
-  it('names the branch, and a rewrite as one; offers the next slice by its title', () => {
-    expect(classify('main_moved', { project_id: 'proj-a', branch: 'master', moved_rewrite: false })).toMatchObject({
-      kind: 'fail',
-      text: 'master moved outside the Hub',
-    })
-    expect(classify('main_moved', { project_id: 'proj-a', branch: 'master', moved_rewrite: true })?.text).toBe(
-      'The history of master was rewritten outside the Hub',
-    )
-    expect(
-      classify('next_slice_offered', { project_id: 'proj-a', next_slice: { key: 's2', title: 'Slice two' } }),
-    ).toMatchObject({ kind: 'done', text: 'A slice is built: draft Slice two?' })
   })
 })
