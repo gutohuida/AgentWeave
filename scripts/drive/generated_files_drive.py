@@ -395,6 +395,8 @@ def drive(state):
               f"notes {str(row.get('notes'))[:600]}")
         if outcome == "landed":
             regenerated = land.get("regenerated")
+            if isinstance(regenerated, list):  # the Hub keeps one entry per landing; take the last
+                regenerated = regenerated[-1] if regenerated else None
             if key == "tb":
                 check("tb: its landing record names the rebuilt gen.txt and a duration",
                       isinstance(regenerated, dict) and "gen.txt" in (regenerated.get("paths") or [])
