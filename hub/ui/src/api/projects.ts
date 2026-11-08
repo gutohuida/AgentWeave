@@ -110,6 +110,10 @@ export interface ProjectSettings {
    *  work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-user`). Off by
    *  default; absent from a Hub older than that change. */
   checks_give_way?: boolean
+  /** The files a command rebuilds from other files, which landing rebuilds instead of sending a
+   *  conflict back (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`).
+   *  Null means none. Only the operator sets this; absent from a Hub older than that change. */
+  generated_files?: GeneratedFiles | null
   /** Whether a build may land as one GitHub pull request; off until turned on. */
   pr_landing?: boolean
   /** With PR landing on, one commit holding the whole build rather than one per task. */
@@ -150,6 +154,14 @@ export interface ProjectSettingsSaved extends ProjectSettings {
 }
 
 /** One of a project's checks (`approval-runs-the-projects-checks`). */
+/** The generated files setting: globs over repository-relative paths, the command that rebuilds
+ *  them, and its timeout (1 to 3600 seconds, 600 by default). */
+export interface GeneratedFiles {
+  paths: string[]
+  command: string
+  timeout_seconds: number
+}
+
 export interface ProjectCheck {
   name: string
   command: string

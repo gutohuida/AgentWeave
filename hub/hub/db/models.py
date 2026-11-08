@@ -158,6 +158,10 @@ class Project(Base):
     # `{"name", "command", "timeout_seconds"}` the Hub runs on the work a task's approval would
     # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
     checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # The generated files (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`,
+    # FR-1): `{paths, command, timeout_seconds}`, the globs of files a command rebuilds from other
+    # files. Set only by the operator. Null means none, and every conflict sends the task back.
+    generated_files: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     # Whether every process a check run starts runs below normal scheduling priority, so the
     # operator's own work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-
     # user`, FR-5, migration 0161). Off for new and existing projects (FR-6).
