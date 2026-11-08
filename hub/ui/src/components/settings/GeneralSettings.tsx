@@ -6,7 +6,7 @@ import { Input, Textarea } from '@/components/ui/input'
 import { MenuSelect, type SelectOption } from '@/components/ui/menu'
 import { Field, SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settings'
 import { Switch } from '@/components/ui/switch'
-import type { CheckPhase, CheckUsualDuration, CheckUsualDurations, ProjectCheck, ProjectSettings } from '@/api/projects'
+import type { CheckPhase, GeneratedFiles, CheckUsualDuration, CheckUsualDurations, ProjectCheck, ProjectSettings } from '@/api/projects'
 import type { ControlValue } from '@/api/modelCatalog'
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { CommittedInput } from './CommittedInput'
@@ -440,6 +440,13 @@ export function GeneralSettings({
           }
         />
         <SettingsRow
+          label="Generated files"
+          description="Files a command rebuilds from other files (a lockfile, a bundle). When work lands and only these files conflict, the Hub rebuilds them instead of sending the task back. Paths are comma-separated globs; the timeout is 1 to 3600 seconds. Leave the paths empty and save to turn it off."
+          changed={Boolean(settings.generated_files)}
+          onReset={() => onChange({ generated_files: null }, 'Generated files cleared')}
+          control={<GeneratedFilesEditor value={settings.generated_files ?? null} onSave={(v) => onChange({ generated_files: v }, v ? 'Generated files saved' : 'Generated files cleared')} />}
+        />
+        <SettingsRow
           label="Land builds as pull requests"
           description="A build may put its approved work on one GitHub pull request instead of merging into the main branch. Pushing publishes the work, so this is off until you turn it on. It needs a GitHub remote and a logged-in GitHub CLI."
           changed={(settings.pr_landing ?? false) !== PROJECT_DEFAULTS.pr_landing}
@@ -739,6 +746,54 @@ export function GeneralSettings({
         </Button>
       </section>
     </SettingsPage>
+  )
+}
+
+function GeneratedFilesEditor({
+  value,
+  onSave,
+}: {
+  value: GeneratedFiles | null
+  onSave: (value: GeneratedFiles | null) => void
+}) {
+  const stored = {
+    paths: (value?.paths ?? []).join(', '),
+    command: value?.command ?? '',
+    timeout: String(value?.timeout_seconds ?? 600),
+  }
+  const [paths, setPaths] = React.useState(stored.paths)
+  const [command, setCommand] = React.useState(stored.command)
+  const [timeout, setTimeoutValue] = React.useState(stored.timeout)
+  React.useEffect(() => {
+    setPaths(stored.paths)
+    setCommand(stored.command)
+    setTimeoutValue(stored.timeout)
+  }, [stored.paths, stored.command, stored.timeout])
+  const list = paths.split(',').map((p) => p.trim()).filter(Boolean)
+  const seconds = Number(timeout)
+  const error = !list.length
+    ? null
+    : !command.trim()
+      ? 'A rebuild command is needed.'
+      : !/^\d+$/.test(timeout.trim()) || seconds < 1 || seconds > 3600
+        ? 'The timeout is a whole number from 1 to 3600.'
+        : null
+  const dirty = paths !== stored.paths || command !== stored.command || timeout !== stored.timeout
+  return (
+    <div className="flex flex-col gap-2" data-testid="generated-files-editor">
+      <Input aria-label="Generated file paths" className="font-mono" value={paths} placeholder="package-lock.json, dist/**" onChange={(e) => setPaths(e.target.value)} />
+      <Input aria-label="Generated files command" className="font-mono" value={command} placeholder="npm install --package-lock-only" aria-invalid={Boolean(error && !command.trim())} onChange={(e) => setCommand(e.target.value)} />
+      <Input aria-label="Generated files timeout" inputMode="numeric" className="tabular" style={{ width: 96 }} value={timeout} onChange={(e) => setTimeoutValue(e.target.value)} />
+      {error ? <span role="alert" className="text-xs">{error}</span> : null}
+      <Button
+        size="xs"
+        className="self-start"
+        disabled={!dirty || Boolean(error)}
+        onClick={() => onSave(list.length ? { paths: list, command: command.trim(), timeout_seconds: seconds } : null)}
+      >
+        Save
+      </Button>
+    </div>
   )
 }
 
