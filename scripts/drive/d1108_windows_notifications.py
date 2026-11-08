@@ -23,7 +23,7 @@ Assumptions about the CONTRACT's open details (named once so the build can move 
 
 Steps, each named after its criterion: c-event, c-notice, c-behind, c-identity, c-in-front,
 c-closed, c-click, c-quiet, c-kinds. Real Haiku turns: the ask_user turn (c-behind, c-event) and
-the run made to fail (a runner with a model that does not exist).
+the run made to fail (its claude process is killed while it runs).
 
   py -3.11 scripts/drive/d1108_windows_notifications.py [--port 8180]
 """
@@ -701,6 +701,8 @@ def step_quiet(app, stream, shell, project, hwnd_getter):
 
 def step_kinds(app, stream, shell):
     """c-kinds: defaults, a changed choice, a restart, and the choice applied with the window closed."""
+    # c-quiet left a failing shell command in place; c-kinds must see real toasts.
+    app.toast_command = None
     code, body = settings_get(app)
     want = {"ask": True, "fail": True, "done": False, "reply": False}
     check(
