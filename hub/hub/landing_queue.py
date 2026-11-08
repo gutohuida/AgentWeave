@@ -44,7 +44,7 @@ from sqlalchemy import event, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from . import blocking, project_checks, task_integration
+from . import blocking, generated_files, project_checks, task_integration
 from .db.engine import async_session_factory
 from .db.models import LandingBatch, Project, Task, TaskCheckRun, TaskLanding
 from .task_transitions import SEND_BACK_MERGE_NEEDED
@@ -87,7 +87,12 @@ def _target_dicts(targets: Optional[Iterable[Any]]) -> Optional[List[Dict[str, A
 def targets_of(landing: TaskLanding) -> Optional[List[task_integration.Target]]:
     if landing.targets is None:
         return None
-    return [task_integration.Target(**entry) for entry in landing.targets]
+    # Only the target's own fields: an entry also records what was rebuilt for it (`regenerated`).
+    names = {f.name for f in dataclasses.fields(task_integration.Target)}
+    return [
+        task_integration.Target(**{k: v for k, v in entry.items() if k in names})
+        for entry in landing.targets
+    ]
 
 
 def target_shas(landing: TaskLanding) -> List[str]:
@@ -330,6 +335,9 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
                 if project is None:
                     return True
                 checks = project_checks.configured_checks(project, project_checks.PHASE_LANDING)
+                # A project that declares generated files lands in batches even with no checks:
+                # the batch is where a conflict only in them is rebuilt (`generated_files`).
+                batched = bool(checks) or generated_files.settings_of(project) is not None
                 queued = list(
                     (
                         await session.execute(
@@ -357,10 +365,10 @@ async def _process(project_id: str, *, ignore_window: bool = False) -> bool:
                     _arm_timer(project_id, BATCH_GATHER_SECONDS)
                     return False
                 continue
-            carried = await _carried(project_id, queued) if checks else {}
+            carried = await _carried(project_id, queued) if batched else {}
             alone = (
                 queued[0]
-                if not checks
+                if not batched
                 else next(
                     (
                         landing
@@ -917,6 +925,10 @@ class Chain:
     conflicts: List[Tuple[str, List[str], List[str]]] = field(default_factory=list)
     #: Per task, its targets already in the base (recorded as already integrated).
     already: Dict[str, List[str]] = field(default_factory=dict)
+    #: Per task, each target whose generated files were rebuilt (`generated_files`), as recorded.
+    regenerated: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
+    #: Per task taken out, the rebuild that failed: its report replaces the conflict report.
+    rebuild_failures: Dict[str, "generated_files.Failure"] = field(default_factory=dict)
     error: str = ""
 
     @property
@@ -924,9 +936,18 @@ class Chain:
         return self.conflicts[0] if self.conflicts else None
 
 
-def build_chain(root: Path, base: str, work: Sequence[Tuple[str, Sequence[str]]]) -> Chain:
+def build_chain(
+    root: Path,
+    base: str,
+    work: Sequence[Tuple[str, Sequence[str]]],
+    generated: Optional["generated_files.Settings"] = None,
+) -> Chain:
     """Merge each task's targets onto *base* in order with plumbing only (`merge-tree`,
-    `commit-tree`; no checkout or branch moves). Blocking; the caller runs it off the loop."""
+    `commit-tree`; no checkout or branch moves). Blocking; the caller runs it off the loop.
+
+    *generated*, the project's generated-files setting: a target that conflicts only in those paths
+    is merged with them rebuilt (`generated_files.rebuild`, in a scratch worktree) instead of being
+    taken out; a rebuild that fails takes the task out with its report."""
     git = project_checks._git
     chain = Chain()
     tip = base
@@ -947,6 +968,16 @@ def build_chain(root: Path, base: str, work: Sequence[Tuple[str, Sequence[str]]]
                         break
                     paths.append(line.strip())
                 failed = paths or ["(unknown path)"]
+                if merged.returncode == 1 and generated_files.rebuildable(generated, failed):
+                    assert generated is not None
+                    outcome = generated_files.rebuild(
+                        root, tip, sha, generated, f"Integrate approved work {sha[:12]}", failed
+                    )
+                    if isinstance(outcome, generated_files.Rebuilt):
+                        chain.regenerated.setdefault(task_id, []).append(outcome.record(target=sha))
+                        tip, failed = outcome.commit, None
+                        continue
+                    chain.rebuild_failures[task_id] = outcome
                 break
             commit = git(
                 root,
@@ -965,6 +996,7 @@ def build_chain(root: Path, base: str, work: Sequence[Tuple[str, Sequence[str]]]
             tip = commit.stdout.strip()
         if failed is not None:
             tip = start
+            chain.regenerated.pop(task_id, None)
             earlier = [other for other, paths in touched if paths & set(failed)]
             chain.conflicts.append((task_id, failed, earlier))
             continue
@@ -1047,6 +1079,7 @@ async def _run_one_batch(
             root = None
         await session.commit()
         main_branch = project.main_branch if project is not None else None
+        generated = generated_files.settings_of(project)
         sent_back = []
         for landing in (
             await session.execute(
@@ -1108,7 +1141,11 @@ async def _run_one_batch(
         return True
 
     chain = await blocking.run(
-        build_chain, root, tip, [(landing.task_id, target_shas(landing)) for landing in chosen]
+        build_chain,
+        root,
+        tip,
+        [(landing.task_id, target_shas(landing)) for landing in chosen],
+        generated,
     )
     by_task = {landing.task_id: landing for landing in chosen}
     if chain.error:
@@ -1124,18 +1161,35 @@ async def _run_one_batch(
             ).all()
         )
     for task_id, paths, earlier in chain.conflicts:
+        failure = chain.rebuild_failures.get(task_id)
         await _send_back(
             by_task[task_id].id,
             batch_id,
-            _conflict_report(
-                named.get(task_id) or task_id,
-                paths,
-                [named.get(other) or other for other in earlier],
-                batch_id,
+            (
+                generated_files.failure_report(
+                    failure, named.get(task_id) or task_id, f"landing batch {batch_id}"
+                )
+                if failure is not None
+                else _conflict_report(
+                    named.get(task_id) or task_id,
+                    paths,
+                    [named.get(other) or other for other in earlier],
+                    batch_id,
+                )
             ),
             SEND_BACK_MERGE_NEEDED,
-            f"Its work conflicts with the main branch in landing batch {batch_id}: merge it again.",
+            (
+                f"Rebuilding its generated files failed in landing batch {batch_id}: "
+                f"{failure.reason}."
+                if failure is not None
+                else f"Its work conflicts with the main branch in landing batch {batch_id}: "
+                "merge it again."
+            ),
         )
+    await record_regenerated(
+        [(by_task[t].id, entries) for t, entries in chain.regenerated.items() if t in by_task],
+        batch_id=batch_id,
+    )
     # A task built on one taken out does not land without it.
     removed = {task_id for task_id, _, _ in chain.conflicts}
     kept_tasks: List[str] = []
@@ -1169,8 +1223,10 @@ async def _run_one_batch(
         await session.commit()
 
     landings = [by_task[t] for t in kept_tasks]
-    outcome = await run_batch_checks(
-        root, project_id, batch_id, tip, kept_prefixes[-1], checks, landings
+    outcome = (
+        await run_batch_checks(root, project_id, batch_id, tip, kept_prefixes[-1], checks, landings)
+        if checks
+        else BatchChecks(state="passed")  # batched only for its generated files: nothing to run
     )
     return await _decide(
         root,
@@ -1185,6 +1241,56 @@ async def _run_one_batch(
         outcome,
         chain,
     )
+
+
+async def record_regenerated(
+    rebuilt: Sequence[Tuple[str, List[Dict[str, Any]]]], *, batch_id: str
+) -> None:
+    """Record on each landing (its target's `regenerated`) and in its task's history the generated
+    files a batch rebuilt for it, and how long the command took (FR-8)."""
+    if not rebuilt:
+        return
+    async with async_session_factory() as session:
+        for landing_id, entries in rebuilt:
+            landing = await session.get(TaskLanding, landing_id)
+            if landing is None:
+                continue
+            by_target = {entry["target"]: entry for entry in entries}
+            targets = []
+            for target in landing.targets or []:
+                entry = by_target.get(target.get("commit_sha"))
+                targets.append(
+                    {**target, "regenerated": {**entry, "batch_id": batch_id}}
+                    if entry is not None
+                    else target
+                )
+            landing.targets = targets
+            for entry in entries:
+                await generated_files.record_event(
+                    session,
+                    landing.project_id,
+                    landing.task_id,
+                    {**entry, "where": "landing", "landing_id": landing.id, "batch_id": batch_id},
+                )
+        await session.commit()
+
+
+def regenerated_of(landing: TaskLanding) -> Optional[Dict[str, Any]]:
+    """What a landing's targets record as rebuilt (`record_regenerated`), in the design's shape:
+    `{"paths": [...], "seconds": <float>}` with each target's own rebuild under `rebuilds`, or
+    `None` where nothing was rebuilt."""
+    rebuilds = [
+        dict(target["regenerated"])
+        for target in landing.targets or []
+        if isinstance(target, dict) and target.get("regenerated")
+    ]
+    if not rebuilds:
+        return None
+    return {
+        "paths": sorted({path for entry in rebuilds for path in entry.get("paths") or []}),
+        "seconds": round(sum(float(entry.get("seconds") or 0.0) for entry in rebuilds), 1),
+        "rebuilds": rebuilds,
+    }
 
 
 def _dependents_of(
@@ -2106,6 +2212,9 @@ async def view(session: AsyncSession, task_id: str) -> Optional[Dict[str, Any]]:
         # A PR build's push with the CI setting on: CI's result on the commit it pushed.
         "ci": landing.ci,
         "override_reason": landing.override_reason,
+        # The generated files rebuilt when its work was merged, and how long the command took
+        # (`generated_files`, FR-8); empty where nothing was rebuilt.
+        "regenerated": regenerated_of(landing),
         # The known-failing entries its batch's checks went past (FR-10): what main still fails, or
         # what flaked, that did not hold this work.
         "went_past": [],

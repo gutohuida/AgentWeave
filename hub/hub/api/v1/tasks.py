@@ -1384,7 +1384,13 @@ async def task_integration_preview(
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    from ... import project_checks, project_workspace, requirement_gate, task_integration
+    from ... import (
+        generated_files,
+        project_checks,
+        project_workspace,
+        requirement_gate,
+        task_integration,
+    )
 
     project_row = await session.get(Project, project_id)
     main_branch = project_row.main_branch if project_row else None
@@ -1425,6 +1431,9 @@ async def task_integration_preview(
                 already_merged = [t for t in targets if t.commit_sha not in pending]
                 targets = [t for t in targets if t.commit_sha in pending]
             conflicts = []
+            # The gate's own exception: a conflict only in declared generated files is rebuilt
+            # where the work lands, so approval is not refused for it (`generated_files`).
+            generated = generated_files.settings_of(project_row)
             for target in targets:
                 paths = await asyncio.to_thread(
                     task_integration.would_conflict,
@@ -1432,7 +1441,7 @@ async def task_integration_preview(
                     target.commit_sha,
                     situation.main_branch,
                 )
-                if paths:
+                if paths and not generated_files.rebuildable(generated, paths):
                     conflicts.append(
                         {
                             "commit_sha": target.commit_sha,
@@ -2768,7 +2777,14 @@ async def task_transitions(
         )
         for job_id, name, spec_document_id in found.all():
             jobs[job_id] = (name, "flow" if spec_document_id else "loop")
-    return {"transitions": [_transition_view(row, jobs) for row in rows]}
+    from ... import generated_files
+
+    return {
+        "transitions": [_transition_view(row, jobs) for row in rows],
+        # The generated files the Hub rebuilt to merge this task's work, where, and how long the
+        # command took (`generated_files`, FR-8): no move, so not a transition.
+        "rebuilds": await generated_files.history(session, task_id),
+    }
 
 
 @router.get("/transitions/allowed")
