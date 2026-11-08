@@ -199,6 +199,43 @@ class ProjectCheck(BaseModel):
         return cleaned
 
 
+class GeneratedFiles(BaseModel):
+    """The files a command rebuilds from other files, and that command
+    (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`, FR-1). The
+    operator's, and only the operator's."""
+
+    paths: List[str] = Field(min_length=1, max_length=50)
+    command: str = Field(min_length=1, max_length=2000)
+    timeout_seconds: int = Field(default=600, ge=1, le=3600)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("command")
+    @classmethod
+    def command_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value.strip()
+
+    @field_validator("paths")
+    @classmethod
+    def clean_paths(cls, value: List[str]) -> List[str]:
+        cleaned: List[str] = []
+        for pattern in value:
+            pattern = pattern.strip().replace("\\", "/")
+            if not pattern:
+                continue
+            if len(pattern) > 255:
+                raise ValueError("a path pattern is at most 255 characters")
+            if pattern.startswith("/") or ".." in pattern.split("/"):
+                raise ValueError(f"paths are relative to the repository root: {pattern!r}")
+            if pattern not in cleaned:
+                cleaned.append(pattern)
+        if not cleaned:
+            raise ValueError("name at least one generated path")
+        return cleaned
+
+
 #: The interval between asks while CI is pending, and the cutoff after which asking on the interval
 #: stops, in whole minutes (`the-pr-s-ci-is-the-full-check`, FR-10).
 CI_INTERVAL_MINUTES = (1, 60)
@@ -279,6 +316,9 @@ class ProjectSettings(BaseModel):
     # operator's own work (`checks-know-their-phase-and-give-way-to-the-user`, FR-5). Off by
     # default, for new and existing projects alike (FR-6).
     checks_give_way: bool = False
+    # The files a command rebuilds, which landing rebuilds instead of sending a conflict back. Null
+    # is none, and every conflict sends the task back as before (FR-1, FR-2). Operator only.
+    generated_files: Optional[GeneratedFiles] = None
 
     # --- PR landing (`a-build-lands-as-one-pull-request`) ---
     # Whether a build may land as one GitHub pull request. Off until the operator turns it on, for
