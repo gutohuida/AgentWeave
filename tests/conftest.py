@@ -88,3 +88,15 @@ def _no_app_window_is_open(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr("agentweave.desktop_window.find_app_window", lambda pid: None)
     monkeypatch.setattr("agentweave.desktop_window.pid_alive", lambda pid: True)
+
+
+@pytest.fixture(autouse=True)
+def _no_windows_notification_is_shown(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the suite out of the operator's Windows: no toast, no Start-menu shortcut, no link.
+
+    Opening an app window registers the `agentweave:` link (HKCU) and the Start-menu shortcut
+    notifications are shown under, and the notifier shows toasts through PowerShell. A test of
+    either patches over this.
+    """
+    monkeypatch.setattr("agentweave.cli._register_windows_notifications", lambda: None)
+    monkeypatch.setattr("agentweave.notifier._run_powershell", lambda script, timeout: False)

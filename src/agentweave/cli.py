@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import __version__, desktop_window
+from . import __version__, desktop_window, notifier
 from .utils import load_dotenv, now_iso, print_error, print_info, print_success, print_warning
 
 logger = logging.getLogger(__name__)
@@ -1218,6 +1218,21 @@ def _make_window_ours(window: Any, port: int, closer: Optional["_AppWindowCloser
         window.events.before_show += _before_show
     with contextlib.suppress(AttributeError, TypeError):
         window.events.closing += _closing
+    _register_windows_notifications()
+
+
+def _register_windows_notifications() -> None:
+    """Register the `agentweave:` link and the Start-menu shortcut notifications are shown under
+    (D4, D5), behind the window: the shortcut's first creation compiles a helper for seconds."""
+    if not notifier.supported():
+        return
+    import threading
+
+    def _register() -> None:
+        target, arguments = _resolve_shortcut_target()
+        notifier.register(target, arguments, _app_icon_path())
+
+    threading.Thread(target=_register, name="aw-notify-register", daemon=True).start()
 
 
 def _app_close_setting_file(port: int) -> Path:
@@ -1380,12 +1395,13 @@ def _marker_pid(marker: Path) -> Optional[int]:
         return None
 
 
-def _focus_open_app_window(port: int) -> bool:
+def _focus_open_app_window(port: int, target: Optional[Dict[str, Any]] = None) -> bool:
     """If an app window is open on the Hub at `port`, restore it and bring it to the front (D2).
 
     Returns whether one is open: the caller then opens no second window. A marker whose process
     has gone is stale (a window that crashed never removed it) and is cleared; one whose process
     lives but shows no app window is passed over, so the launch opens a window of its own.
+    `target` is a notification's open target: the window is told to go there as it comes forward.
     """
     for marker in _app_window_markers(port):
         pid = _marker_pid(marker)
@@ -1397,9 +1413,92 @@ def _focus_open_app_window(port: int) -> bool:
                 with contextlib.suppress(OSError):
                     marker.unlink()
             continue
+        if target is not None:
+            _app_window_send_open(marker, target)
         desktop_window.focus_window(hwnd, owner_pid=pid)
         return True
     return False
+
+
+def _app_window_open_request(marker: Path) -> Path:
+    """Beside a window's marker: where another process asks that window to go somewhere."""
+    return marker.with_suffix(".goto")
+
+
+def _app_window_send_open(marker: Path, target: Dict[str, Any]) -> bool:
+    """Ask the window behind `marker` to open `target`; its watcher passes it to the page."""
+    request = _app_window_open_request(marker)
+    try:
+        partial = request.with_suffix(".goto-part")
+        partial.write_text(json.dumps(target), encoding="utf-8")
+        os.replace(partial, request)
+        return True
+    except OSError:
+        return False
+
+
+def _app_window_take_open(marker: Path) -> Optional[Dict[str, Any]]:
+    """The open target another process left for this window, consumed; None when there is none."""
+    request = _app_window_open_request(marker)
+    try:
+        target = json.loads(request.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    finally:
+        with contextlib.suppress(OSError):
+            request.unlink()
+    return target if isinstance(target, dict) else None
+
+
+def _app_open_script(target: Dict[str, Any]) -> str:
+    """The page's `aw-app-open` event: go to this project, and its conversation when it has one."""
+    detail = {
+        "project_id": target.get("project_id"),
+        "agent": target.get("agent"),
+        "conversation_id": target.get("conversation_id"),
+    }
+    return (
+        "window.dispatchEvent(new CustomEvent('aw-app-open', "
+        f"{{ detail: {json.dumps(detail)} }}))"
+    )
+
+
+def _open_from_link(link: str) -> int:
+    """A notification's click (D5): Windows runs the launcher with its `agentweave:` link.
+
+    A window already open on that Hub is restored, brought to the front and sent to the notice's
+    conversation; with none open, one opens there on the running Hub, which is not restarted, so
+    the work it is running carries on (FR-6). A link that names no running Hub starts AgentWeave
+    as a launch does.
+    """
+    target = notifier.parse_open_link(link)
+    if target is None:
+        print_error(f"Not an AgentWeave link: {link}")
+        return 1
+    port = int(target["port"])
+    profile = _hub_profile_serving_port(port) or "default"
+    if not _hub_native_answer_healthy(port):
+        return _hub_native_start(port=port, detach=True, app=True, cwd=None, profile=profile)
+    if _focus_open_app_window(port, target):
+        return 0
+    url = notifier.app_url(port, target)
+    code = _open_app_with_splash(lambda: (url, None), warm=True, port=port, profile=profile)
+    if code is not None:
+        return code
+    if not _open_app_window_native(url, profile=profile):
+        _open_app_window(url)
+    return 0
+
+
+def _hub_native_answer_healthy(port: int) -> bool:
+    """Whether a Hub answers healthy on `port` now (asking only a port someone holds)."""
+    if not _hub_port_accepts(port):
+        return False
+    try:
+        with urllib.request.urlopen(_hub_health_url(port), timeout=2) as resp:
+            return bool(resp.status == 200)
+    except Exception:
+        return False
 
 
 def _enable_default_context_menus(window: Any) -> None:
@@ -1618,6 +1717,20 @@ class _AppWindowApi:
         import threading
 
         threading.Thread(target=_watch, name="app-window-front", daemon=True).start()
+
+    def notify(self, notice: Any) -> bool:
+        """Show one of the Hub's `operator_notice`s as a Windows notification (FR-1).
+
+        The page passes a notice of a kind the operator switched on for Windows; this refuses it
+        while the window is in front (FR-3), where the in-app toast covers it. Answers whether it
+        was shown, and never raises (FR-8).
+        """
+        try:
+            if self._closer is None or _foreground_is_ours():
+                return False
+            return notifier.show(notice, self._closer.port, HUB_DIR)
+        except Exception:
+            return False
 
     def sound(self, enabled: Any) -> bool:
         path = _app_sound_setting()
@@ -1910,6 +2023,13 @@ def _app_window_register(url: str, window: Any) -> Optional[Path]:
 
         while marker.exists():
             _time.sleep(_APP_WINDOW_POLL_SECONDS)
+            # A notification's click, from the launcher Windows ran for it: tell the page (D5).
+            target = _app_window_take_open(marker)
+            if target is not None:
+                with contextlib.suppress(Exception):
+                    window.evaluate_js(_app_open_script(target))
+        with contextlib.suppress(OSError):
+            _app_window_open_request(marker).unlink()
         with contextlib.suppress(Exception):
             window.destroy()
 
@@ -2589,6 +2709,15 @@ For more help: https://github.com/gutohuida/AgentWeave
         ),
     )
 
+    parser.add_argument(
+        "--open",
+        type=str,
+        default=None,
+        dest="open_link",
+        metavar="LINK",
+        help=argparse.SUPPRESS,  # the `agentweave:` link a notification's click hands the launcher
+    )
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     doctor_parser = subparsers.add_parser("doctor", help="Check environment readiness")
@@ -2734,6 +2863,8 @@ def main(args: Optional[List[str]] = None) -> int:
 
     try:
         if not parsed_args.command:
+            if getattr(parsed_args, "open_link", None):
+                return _open_from_link(parsed_args.open_link)
             # Bare invocation is the app's primary entry point: launch it, in app mode.
             parsed_args.app = True
             return cmd_hub_start(parsed_args)
