@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useSetWindowsNotifyKinds, useWindowsNotifyKinds, type WindowsNotifyKinds } from '@/api/notifySettings'
 import { Button } from '@/components/ui/button'
 import { SettingsGroup, SettingsRow } from '@/components/ui/settings'
 import { Switch } from '@/components/ui/switch'
@@ -91,6 +92,55 @@ export function NotificationSettings() {
               onCheckedChange={(on) => change({ ...prefs, kinds: { ...prefs.kinds, [kind]: on } })}
               aria-label={label}
               data-testid={`notify-kind-${kind}`}
+            />
+          }
+        />
+      ))}
+    </SettingsGroup>
+  )
+}
+
+const WINDOWS_DEFAULTS: WindowsNotifyKinds = { ask: true, fail: true, done: false, reply: false }
+
+const WINDOWS_KINDS: Array<{ kind: NotifyKind; label: string; description: string }> = [
+  { kind: 'ask', label: 'Question', description: 'An agent asked you something, or needs a permission decided.' },
+  { kind: 'fail', label: 'Failure', description: 'Work stalled or failed.' },
+  { kind: 'done', label: 'Done', description: 'Something finished, such as a loop that emptied its queue.' },
+  { kind: 'reply', label: 'Reply', description: 'An agent replied to a turn you started in a conversation.' },
+]
+
+/** Which kinds reach Windows, held by the Hub so they apply with no window open and survive a
+ *  restart; separate from the in-app switches above (change
+ *  `windows-notifications-for-what-calls-the-operator`, FR-10). */
+export function WindowsNotificationSettings() {
+  const { data, error } = useWindowsNotifyKinds()
+  const save = useSetWindowsNotifyKinds()
+  const kinds: WindowsNotifyKinds = { ...WINDOWS_DEFAULTS, ...data }
+  const change = (next: WindowsNotifyKinds) => save.mutate(next)
+  return (
+    <SettingsGroup
+      title="Windows notifications"
+      description={
+        error
+          ? `Could not load the Windows choices: ${error instanceof Error ? error.message : 'the Hub did not answer'}.`
+          : 'Which calls reach you as a Windows notification, even with this window closed. Separate from the in-app switches.'
+      }
+    >
+      {WINDOWS_KINDS.map(({ kind, label, description }) => (
+        <SettingsRow
+          key={kind}
+          label={label}
+          description={description}
+          inactive={!data}
+          changed={kinds[kind] !== WINDOWS_DEFAULTS[kind]}
+          onReset={() => change({ ...kinds, [kind]: WINDOWS_DEFAULTS[kind] })}
+          control={
+            <Switch
+              checked={kinds[kind]}
+              disabled={!data || save.isPending}
+              onCheckedChange={(on) => change({ ...kinds, [kind]: on })}
+              aria-label={`Windows ${label.toLowerCase()}`}
+              data-testid={`windows-notify-${kind}`}
             />
           }
         />

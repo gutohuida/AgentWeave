@@ -7,7 +7,7 @@ import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settin
 import { applyColorMode } from '@/lib/colorMode'
 import type { AppSettingsSection } from '@/lib/navigation'
 import { useConfigStore, type ModeId } from '@/store/configStore'
-import { NotificationSettings } from './NotificationSettings'
+import { NotificationSettings, WindowsNotificationSettings } from './NotificationSettings'
 import { SettingsNavLayout } from './SettingsNavLayout'
 
 const SECTIONS: ReadonlyArray<{ id: AppSettingsSection; label: string; icon: string }> = [
@@ -42,7 +42,12 @@ export function AppSettingsScreen({
   let body: React.ReactNode
   switch (section) {
     case 'notifications':
-      body = <NotificationSettings />
+      body = (
+        <>
+          <NotificationSettings />
+          <WindowsNotificationSettings />
+        </>
+      )
       break
     case 'appearance':
       body = <AppearanceSettings />

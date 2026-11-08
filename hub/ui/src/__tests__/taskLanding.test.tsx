@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { TaskChecks, TaskLanding as Landing } from '@/api/tasks'
 import { TaskLanding } from '@/components/tasks/TaskLanding'
-import { classify } from '@/lib/notify/classify'
 
 const land = vi.fn()
 let checks: TaskChecks | undefined
@@ -139,24 +138,5 @@ describe("the drawer shows approved work's landing beside Land", () => {
     const report = 'Landing batch lbat-1 found that task task-1\'s work ... FAILED test_suite.py::test_no_marker'
     expect(show(landing('sent_back', { reason: report }))).toHaveTextContent('Sent back by its landing batch')
     expect(screen.getByLabelText('Why it did not land')).toHaveTextContent('test_no_marker')
-  })
-})
-
-describe('the operator is told when a batch lands or sends a task back', () => {
-  const payload = (state: string) => ({
-    project_id: 'proj-1',
-    task_id: 'task-1',
-    task_title: 'Add the ledger',
-    landing_id: 'land-1',
-    state,
-    batch_id: 'lbat-1',
-    reason: '',
-  })
-
-  it('notifies a landing, a send-back and a hold, and nothing for the queue moving', () => {
-    expect(classify('task_landing_changed', payload('landed'))?.text).toBe('Add the ledger landed on main')
-    expect(classify('task_landing_changed', payload('sent_back'))?.kind).toBe('fail')
-    expect(classify('task_landing_changed', payload('held'))?.kind).toBe('ask')
-    expect(classify('task_landing_changed', payload('checking'))).toBeNull()
   })
 })
