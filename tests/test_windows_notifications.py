@@ -395,3 +395,54 @@ def test_the_open_window_passes_a_click_to_its_page(tmp_path, monkeypatch):
         "conversation_id": "conv-def456",
     }
     assert not cli._app_window_open_request(marker).exists()
+
+
+# --- the Start-menu shortcut follows this install (WNWCO-9, FR-5) ------------------------------
+
+
+@pytest.fixture
+def shortcut(tmp_path, monkeypatch, on_windows):
+    lnk = tmp_path / "AgentWeave.lnk"
+    lnk.write_text("existing")
+    monkeypatch.setattr(notifier, "start_menu_shortcut", lambda: lnk)
+    writes = []
+    monkeypatch.setattr(
+        notifier, "_run_powershell", lambda script, timeout: writes.append(script) or True
+    )
+    return lnk, writes
+
+
+def test_a_shortcut_from_another_install_is_rewritten(shortcut, monkeypatch):
+    lnk, writes = shortcut
+    monkeypatch.setattr(
+        notifier, "_read_shortcut", lambda p: ("t.exe", "a", r"C:\gone\checkout\icon.ico")
+    )
+    assert notifier.ensure_shortcut("t.exe", "a", r"C:\here\icon.ico") is True
+    assert len(writes) == 1 and r"C:\here\icon.ico" in writes[0]
+
+
+def test_a_shortcut_with_a_stale_target_is_rewritten(shortcut, monkeypatch):
+    lnk, writes = shortcut
+    monkeypatch.setattr(notifier, "_read_shortcut", lambda p: ("old.exe", "a", "i.ico"))
+    assert notifier.ensure_shortcut("t.exe", "a", "i.ico") is True
+    assert len(writes) == 1
+
+
+def test_a_matching_shortcut_is_not_touched(shortcut, monkeypatch):
+    lnk, writes = shortcut
+    monkeypatch.setattr(notifier, "_read_shortcut", lambda p: ("T.EXE", "a", "I.ico"))
+    assert notifier.ensure_shortcut("t.exe", "a", "i.ico") is True
+    assert writes == []
+
+
+def test_an_unreadable_shortcut_is_rewritten_and_never_raises(shortcut, monkeypatch):
+    lnk, writes = shortcut
+    monkeypatch.setattr(notifier, "_read_shortcut", lambda p: None)
+    assert notifier.ensure_shortcut("t.exe", "a", "i.ico") is True
+    assert len(writes) == 1
+
+    def boom(p):
+        raise OSError("denied")
+
+    monkeypatch.setattr(notifier, "_read_shortcut", boom)
+    assert notifier.ensure_shortcut("t.exe", "a", "i.ico") is False
