@@ -5685,6 +5685,126 @@ def amend_spec_document(
 
 
 @_tool()
+def tidy_spec_document(
+    path: str,
+    op: str,
+    reason: str,
+    capability: str = "",
+    requirements: Optional[List[Dict[str, Any]]] = None,
+    retire: Any = None,
+    retire_criteria: Optional[List[str]] = None,
+    algorithms: Optional[List[Dict[str, Any]]] = None,
+    retire_algorithms: Optional[List[str]] = None,
+    criteria: Optional[List[Dict[str, Any]]] = None,
+    title: str = "",
+    area: str = "",
+    fold_from: str = "",
+    requirement: str = "",
+    statement: str = "",
+    code_wins: Optional[Dict[str, Any]] = None,
+    successor: str = "",
+    roadmap: str = "",
+    slice: str = "",  # noqa: A002 - the contract's name for a roadmap slice
+) -> Dict[str, Any]:
+    """Tidy the project's specification documents: the operator turned your spec-admin switch on.
+
+    Each act applies at once and is listed for the operator with your `reason`, so give one that
+    says why in a sentence. Approving, archiving, holding or releasing a document, and deciding
+    amendments, cannot-satisfy reports or evidence stay the operator's: naming one is refused
+    `operators_act`. A document the operator holds is refused `document_held` (you may ask them
+    whether to supersede it), and one with a running build or open tasks `live_work`.
+
+    Args:
+        path: The document the act is on, e.g. `spec/changes/<name>/spec.json`.
+        op: One of
+            `fold` — fold the approved change at `path` into `capability`, with the operator's
+              fold choices: `requirements` (`[{key, as_key?, statement?, modal?, replaces?}]`,
+              every one when omitted), `retire` (capability requirement keys it retires),
+              `retire_criteria`, `algorithms` (`[{name, replaces?}]`), `retire_algorithms`,
+              `criteria` (`[{key, replaces}]`). The change is marked superseded by the capability,
+              never archived.
+            `create_capability` — a new capability titled `title`, optionally filed under `area`
+              in the spec map; with `fold_from` (an approved change), that change is folded into
+              it with the fold choices above and marked superseded by it.
+            `edit_capability` — on the capability at `path`, give `requirement` (its key or FR id)
+              a new `statement`, or retire it with `retire` true. When the code does something
+              else and you change the requirement to match it, pass `code_wins` as `{cited}`, the
+              file or test you read: the operator sees that act marked apart.
+            `supersede` — mark the document superseded, naming its `successor` where there is one.
+            `clear_superseded` — clear that mark; the document reads as it did before.
+            `set_slice` — set or correct the change's roadmap slice: `roadmap` and `slice`.
+        reason: Why, in one sentence the operator reads in their tidy list. Required.
+
+    Returns `{ok: true, act_id, act, path}`, or a refusal `{code, reason}`.
+    """
+    fields: Dict[str, Any] = {
+        "capability": capability,
+        # `items` on the wire (the contract's name); not the argument's, because a parameter named
+        # `items` makes fastmcp prune `title` from the schema as if it were a JSON Schema keyword.
+        "items": requirements,
+        "retire": retire,
+        "retire_criteria": retire_criteria,
+        "algorithms": algorithms,
+        "retire_algorithms": retire_algorithms,
+        "criteria": criteria,
+        "title": title,
+        "area": area,
+        "fold_from": fold_from,
+        "requirement": requirement,
+        "statement": statement,
+        "code_wins": code_wins,
+        "successor": successor,
+        "roadmap": roadmap,
+        "slice": slice,
+    }
+    return _hub_request(
+        "POST",
+        "/spec/documents/tidy",
+        {
+            "path": path,
+            "op": op,
+            "reason": reason,
+            **{name: value for name, value in fields.items() if value not in (None, "")},
+        },
+    )
+
+
+#: Tools served only to a run whose agent holds a switch, by the run variable that says so. The
+#: Hub writes the variable from the agent's row at spawn (`agent_trigger`) and refuses the call
+#: regardless of what was served; this keeps the tool off the list of an agent that cannot use it
+#: (`an-agent-the-operator-trusts-can-tidy-the-specs`, D5). `agents.SWITCHED_TOOLS` restates it.
+SWITCHED_TOOLS = {"tidy_spec_document": "AW_CAN_ADMIN_SPECS"}
+
+
+def _withheld_tools() -> set:
+    """The switched tools this run is not served: those whose run variable is not `1`."""
+    return {
+        name
+        for name, variable in SWITCHED_TOOLS.items()
+        if os.environ.get(variable, "").strip() != "1"
+    }
+
+
+def _served_tools() -> Dict[str, Callable[..., Any]]:
+    """The callable tools this run is served, without changing `_CALLABLE_TOOLS`.
+
+    Call mode reads this rather than withholding by mutation: `call_main` also runs in-process
+    (the tests call it), and a mutation there would take a tool off every later caller's list.
+    """
+    withheld = _withheld_tools()
+    return {name: fn for name, fn in _CALLABLE_TOOLS.items() if name not in withheld}
+
+
+def _withhold_switched_tools() -> None:
+    """Take each withheld tool off this process's list. Only `main()`, its own stdio process."""
+    for name in _withheld_tools():
+        _CALLABLE_TOOLS.pop(name, None)
+        if not _CALL_MODE:
+            with contextlib.suppress(Exception):
+                mcp.local_provider.remove_tool(name)
+
+
+@_tool()
 def record_reconcile(
     path: str, summary: str, gaps: Optional[List[Dict[str, Any]]] = None
 ) -> Dict[str, Any]:
@@ -5832,6 +5952,7 @@ def _announce_adapter_online() -> None:
 
 def main() -> None:
     """Run the canonical Hub-owned surface over stdio; an unbound start never gets here (above)."""
+    _withhold_switched_tools()
     _announce_adapter_online()
     mcp.run(transport="stdio", show_banner=False)
 
@@ -5951,8 +6072,9 @@ def _call_parameters(fn: Callable[..., Any]) -> Tuple[List[str], List[str]]:
 
 def _call_listing() -> Dict[str, Any]:
     tools = []
-    for name in sorted(_CALLABLE_TOOLS):
-        fn = _CALLABLE_TOOLS[name]
+    served = _served_tools()
+    for name in sorted(served):
+        fn = served[name]
         parameters, required = _call_parameters(fn)
         summary = (inspect.getdoc(fn) or "").split("\n", 1)[0]
         tools.append(
@@ -5968,13 +6090,14 @@ def call_main(argv: List[str]) -> int:
     never announces: an announce from here would record `connected` for a harness that refused the
     MCP server (D4). No exception escapes as a traceback.
     """
+    served = _served_tools()
     try:
         if not argv:
             raise _CallUsageError(_CALL_HELP)
         if argv[0] in ("--help", "-h"):
             if len(argv) > 1:
                 topic = argv[1]
-                topic_fn = _CALLABLE_TOOLS.get(topic)
+                topic_fn = served.get(topic)
                 if topic_fn is None:
                     raise _CallUsageError(
                         f"{topic!r} is not a callable tool; `aw-tool --list` names them."
@@ -6005,7 +6128,7 @@ def call_main(argv: List[str]) -> int:
             )
         if len(rest) > 1:
             raise _CallUsageError(f"aw-tool takes one arguments file at most. {_CALL_HELP}")
-        fn = _CALLABLE_TOOLS.get(name)
+        fn = served.get(name)
         if fn is None:
             raise _CallUsageError(f"{name!r} is not a callable tool; `aw-tool --list` names them.")
         args = _read_call_args(rest[0]) if rest else {}

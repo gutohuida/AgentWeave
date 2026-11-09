@@ -251,6 +251,7 @@ HUB_MCP_TOOLS = frozenset(
         "submit_checkpoint_notes",
         "submit_spec_document",
         "task_history",
+        "tidy_spec_document",
         "toggle_job",
         "update_task",
         "vault_add",

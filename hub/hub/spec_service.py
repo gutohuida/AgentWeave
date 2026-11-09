@@ -31,6 +31,7 @@ from . import (
     traces,
 )
 from .db.models import (
+    Agent,
     InboundQueueEntry,
     SpecDocument,
     SpecDocumentMerge,
@@ -110,6 +111,28 @@ async def mint_document_path(
     return spec_naming.mint_placeholder_path(is_taken)
 
 
+async def may_write_capability(
+    session: AsyncSession, project_id: str, actor: spec_lifecycle.Actor
+) -> bool:
+    """Whether `actor` may write a capability's content: the operator, or an agent run whose
+    `can_admin_specs` switch is on (`an-agent-the-operator-trusts-can-tidy-the-specs`).
+
+    Read from the agent's row on every write, never from the request or the tool list, so turning
+    the switch off takes effect on the next call. A run is required: an agent's merge row must name
+    the run it came from (`ck_spec_document_merges_actor_is_operator`).
+    """
+    if actor.kind == "operator":
+        return True
+    if actor.kind != "agent" or not actor.run_id or not actor.name:
+        return False
+    switch = await session.scalar(
+        select(Agent.can_admin_specs).where(
+            Agent.project_id == project_id, Agent.name == actor.name
+        )
+    )
+    return bool(switch)
+
+
 async def save_document(
     session: AsyncSession,
     workspace: ProjectWorkspace,
@@ -168,9 +191,12 @@ async def save_document(
             code="kind_is_fixed",
         )
 
-    if document.kind == "capability" and actor.kind != "operator":
+    if document.kind == "capability" and not await may_write_capability(
+        session, document.project_id, actor
+    ):
         raise SaveRefusedError(
-            "capability documents are written by the operator",
+            "capability documents are written by the operator, or by an agent whose spec-admin "
+            "switch the operator turned on",
             code="capability_write_is_the_operators",
         )
 
@@ -1208,13 +1234,16 @@ async def link_roadmap_slice(
     slice_key: str,
     *,
     actor: spec_lifecycle.Actor,
+    replace: bool = False,
 ) -> bool:
     """Name the roadmap slice a change document built, at any phase (F674 backfill, vis-D9).
 
     A metadata write, not a content write: `save_document` refuses an approved or archived document
     whole, and this touches the `roadmap` field alone, so no requirement, digest or phase moves.
     Set-once: a document already naming a different slice is refused, since a moving link would
-    move a slice's state silently. Returns False when the same link was already there.
+    move a slice's state silently. Returns False when the same link was already there. `replace`
+    corrects a wrong link instead: a tidy act (`spec_tidy`), recorded and listed for the operator,
+    so the move is not silent.
     """
     if document.kind != "change-spec":
         raise SaveRefusedError(
@@ -1255,7 +1284,7 @@ async def link_roadmap_slice(
     current = stored.get("roadmap")
     if current == link:
         return False
-    if current:
+    if current and not replace:
         named = (
             f"slice {current.get('slice')!r} of {current.get('document')}"
             if isinstance(current, dict)
@@ -1272,7 +1301,11 @@ async def link_roadmap_slice(
     )
     document.content_digest = spec_lifecycle.digest(rewritten)
     await spec_lifecycle.record_event(
-        session, document, kind="roadmap_link", actor=actor, detail=dict(link)
+        session,
+        document,
+        kind="roadmap_link",
+        actor=actor,
+        detail={**link, **({"previous": current} if current else {})},
     )
     return True
 

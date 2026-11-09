@@ -2806,6 +2806,88 @@ async def amend_spec_document(
     return result
 
 
+class SpecTidyAct(RequestModel):
+    """One tidy act (`spec_tidy`, `an-agent-the-operator-trusts-can-tidy-the-specs`). `op` is one of
+    `spec_tidy.OPS`; the other fields are the op's, and an op ignores the ones it does not take.
+    `reason` may arrive empty so the refusal says `reason_required` rather than a schema error."""
+
+    path: str = Field(max_length=255)
+    op: str = Field(max_length=32)
+    reason: str = Field(default="", max_length=2000)
+    # fold, and create_capability's fold_from
+    capability: Optional[str] = Field(default=None, max_length=255)
+    items: Optional[List[Dict[str, Any]]] = None
+    retire: Optional[Any] = None
+    retire_criteria: Optional[List[str]] = None
+    algorithms: Optional[List[Dict[str, Any]]] = None
+    retire_algorithms: Optional[List[str]] = None
+    criteria: Optional[List[Dict[str, Any]]] = None
+    # create_capability
+    title: Optional[str] = Field(default=None, max_length=255)
+    area: Optional[str] = Field(default=None, max_length=255)
+    fold_from: Optional[str] = Field(default=None, max_length=255)
+    # edit_capability
+    requirement: Optional[str] = Field(default=None, max_length=128)
+    statement: Optional[str] = Field(default=None, max_length=4000)
+    code_wins: Optional[Dict[str, Any]] = None
+    # supersede
+    successor: Optional[str] = Field(default=None, max_length=255)
+    # set_slice
+    roadmap: Optional[str] = Field(default=None, max_length=255)
+    slice: Optional[str] = Field(default=None, max_length=64)
+
+
+@router.post("/spec/documents/tidy")
+async def tidy_spec_document(
+    body: SpecTidyAct,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Apply one tidy act for an agent whose spec-admin switch is on, or refuse it with a `code`.
+
+    Refused, writing nothing: `operators_act` (403) for the operator's own acts whatever the
+    switch says, `spec_admin_off` (403), `reason_required` (422), `document_held` and `live_work`
+    (409). An applied act answers `{ok: true, act_id, act, path}` and is listed for the operator.
+    """
+    from ... import project_workspace, spec_lifecycle, spec_tidy
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, actor.project_id)
+    except project_workspace.ProjectWorkspaceError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    fields = body.model_dump(exclude={"path", "op", "reason"}, exclude_none=True)
+    try:
+        result = await spec_tidy.tidy(
+            session,
+            workspace,
+            actor.project_id,
+            # Identity is the run's, never the request body's.
+            actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            path=body.path,
+            op=body.op,
+            reason=body.reason,
+            fields=fields,
+        )
+    except spec_tidy.TidyRefusedError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=exc.status,
+            detail={"ok": False, "code": exc.code, "reason": str(exc), "message": str(exc)},
+        ) from exc
+    await session.commit()
+    for document in result.touched:
+        await sse_manager.broadcast(
+            actor.project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+        )
+    return {
+        "ok": True,
+        "act_id": result.act_id,
+        "act": result.act,
+        "path": result.path,
+        "detail": result.detail,
+    }
+
+
 @router.post("/spec/documents/cannot-satisfy", status_code=status.HTTP_201_CREATED)
 async def report_cannot_satisfy(
     body: CannotSatisfyReport,
