@@ -1980,6 +1980,13 @@ async def _trigger_agent_directly(
         env["AW_DECISION_TIMEOUT"] = str(agent_row.permission_timeout_seconds)
     if agent_row.question_timeout_seconds is not None:
         env["AW_QUESTION_TIMEOUT"] = str(agent_row.question_timeout_seconds)
+    # The spec-admin switch, so the run's tool server lists `tidy_spec_document` only when it is on
+    # (`mcp_server.SWITCHED_TOOLS`). Always written or removed, like the grants above: the Hub's own
+    # environment must never stand in for it. The Hub refuses the call whatever the list says.
+    if agent_row.can_admin_specs:
+        env["AW_CAN_ADMIN_SPECS"] = "1"
+    else:
+        env.pop("AW_CAN_ADMIN_SPECS", None)
     if turn_depth is not None:
         env["AW_TURN_DEPTH"] = str(turn_depth)
     explicit_hub_url = os.environ.get("HUB_URL")
