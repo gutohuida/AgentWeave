@@ -578,6 +578,7 @@ async def list_agents(
                 # its default no matter what the row says — and the operator sees a switch they
                 # set turn itself off.
                 can_accept_evidence=bool(agent_row.can_accept_evidence) if agent_row else False,
+                can_admin_specs=bool(agent_row.can_admin_specs) if agent_row else False,
                 config=(
                     {k: v for k, v in (agent_row.config or {}).items() if k in ROSTER_CONFIG_KEYS}
                     if agent_row
@@ -3094,7 +3095,11 @@ CHECKPOINT_GRANT_FIELDS = ("can_read_checkpoints", "can_recall")
 # The column and its migration have existed since `0068`. Nothing could set it — no schema, no
 # route, no control — so `requirement_evidence.may_accept` refused every agent in every project,
 # and a capability enforced everywhere and grantable nowhere is a refusal of everyone.
-GRANT_FIELDS = (*CHECKPOINT_GRANT_FIELDS, "can_accept_evidence")
+#
+# `can_admin_specs` lets an agent tidy the specification corpus (`spec_tidy`, migration 0172). It is
+# written here and nowhere else: this route takes the operator's credential, so a run credential
+# cannot reach it, and no agent tool writes an agent row.
+GRANT_FIELDS = (*CHECKPOINT_GRANT_FIELDS, "can_accept_evidence", "can_admin_specs")
 
 CHECKPOINT_OVERRIDE_FIELDS = (
     "checkpoint_mode",

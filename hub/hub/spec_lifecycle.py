@@ -646,3 +646,221 @@ def divergence(document: SpecDocument, content_on_disk: Optional[str]) -> Option
     if found == document.content_digest:
         return None
     return document.content_digest, found
+
+
+# ------------------------------------------------------------------ marks and the tidy record
+#
+# `an-agent-the-operator-trusts-can-tidy-the-specs` (D2, D4). Superseded and held are marks on the
+# row, not phases: TRANSITIONS and its operator gates are untouched, so approving and archiving
+# stay the operator's by the code above. A tidy act is a `tidy` event; the operator's review of
+# acts is a `tidy_reviewed` event naming their ids, as `amendment_reviewed` does for amendments.
+
+TIDY_EVENT = "tidy"
+TIDY_REVIEWED_EVENT = "tidy_reviewed"
+HOLD_EVENT = "hold"
+
+
+class MarkError(RuntimeError):
+    """A mark, hold or review the actor may not make, with the code a route answers."""
+
+    def __init__(self, message: str, *, code: str, status: int = 409) -> None:
+        self.code = code
+        self.status = status
+        super().__init__(message)
+
+
+def superseded_view(document: SpecDocument) -> Optional[Dict[str, Any]]:
+    """`{at, by, reason, successor}` while the document is marked superseded, else None."""
+    if document.superseded_at is None:
+        return None
+    return {
+        "at": document.superseded_at.isoformat(),
+        "by": document.superseded_by or "",
+        "reason": document.superseded_reason or "",
+        "successor": document.superseded_successor,
+    }
+
+
+def held_view(document: SpecDocument) -> Optional[Dict[str, Any]]:
+    """`{at, note}` while the operator holds the document, else None."""
+    if document.held_at is None:
+        return None
+    return {"at": document.held_at.isoformat(), "note": document.held_note or ""}
+
+
+def mark_superseded(
+    document: SpecDocument, *, actor: Actor, reason: str, successor: Optional[str]
+) -> None:
+    """Mark the document superseded. Its phase, content and history are left as they are.
+
+    The caller records the act (`record_tidy_act`); this only sets the mark, so a fold and a plain
+    supersede set it the same way.
+    """
+    document.superseded_at = datetime.now(timezone.utc)
+    document.superseded_by = actor.name or actor.kind
+    document.superseded_reason = reason
+    document.superseded_successor = successor
+
+
+def clear_superseded(document: SpecDocument) -> None:
+    """Clear the mark: the document reads exactly as it did before it was marked."""
+    document.superseded_at = None
+    document.superseded_by = None
+    document.superseded_reason = None
+    document.superseded_successor = None
+
+
+def _require_operator(actor: Actor, what: str) -> None:
+    if actor.kind != "operator":
+        raise MarkError(
+            f"{what} is the operator's act; no agent may do it, whatever its switch says",
+            code="operators_act",
+            status=403,
+        )
+
+
+async def hold(
+    session: AsyncSession, document: SpecDocument, *, actor: Actor, note: str = ""
+) -> None:
+    """The operator holds the document: every tidy act on it is refused until released (FR-11).
+
+    Holding a held document again replaces its note.
+    """
+    _require_operator(actor, "holding a document")
+    document.held_at = datetime.now(timezone.utc)
+    document.held_note = note or None
+    await record_event(
+        session, document, kind=HOLD_EVENT, actor=actor, detail={"held": True, "note": note}
+    )
+
+
+async def release(session: AsyncSession, document: SpecDocument, *, actor: Actor) -> None:
+    """The operator releases a hold. Releasing a document that is not held is refused."""
+    _require_operator(actor, "releasing a held document")
+    if document.held_at is None:
+        raise MarkError("this document is not held", code="not_held")
+    document.held_at = None
+    document.held_note = None
+    await record_event(session, document, kind=HOLD_EVENT, actor=actor, detail={"held": False})
+
+
+async def record_tidy_act(
+    session: AsyncSession,
+    document: SpecDocument,
+    *,
+    actor: Actor,
+    act: str,
+    reason: str,
+    code_wins: Optional[Dict[str, Any]] = None,
+    detail: Optional[Dict[str, Any]] = None,
+) -> SpecDocumentEvent:
+    """Record one tidy act an agent applied (FR-6). The event's id is the act's id.
+
+    `code_wins` is `{requirement, before, after, cited}` for a requirement changed to match the
+    code (FR-13), else None. The record is an event, so nothing can change or remove it.
+    """
+    if actor.kind != "agent" or not actor.run_id:
+        raise MarkError(
+            "a tidy act is an agent's, recorded with the run it came from",
+            code="tidy_needs_a_run",
+            status=500,
+        )
+    return await record_event(
+        session,
+        document,
+        kind=TIDY_EVENT,
+        actor=actor,
+        detail={**(detail or {}), "act": act, "reason": reason, "code_wins": code_wins},
+    )
+
+
+def _reviewed_ids(events: List[SpecDocumentEvent]) -> set:
+    return {
+        act_id
+        for event in events
+        if event.kind == TIDY_REVIEWED_EVENT
+        for act_id in (event.detail or {}).get("ids") or []
+    }
+
+
+async def _tidy_events(
+    session: AsyncSession, project_id: str
+) -> List[Tuple[SpecDocumentEvent, str]]:
+    rows = await session.execute(
+        select(SpecDocumentEvent, SpecDocument.path)
+        .join(SpecDocument, SpecDocument.id == SpecDocumentEvent.document_id)
+        .where(
+            SpecDocumentEvent.project_id == project_id,
+            SpecDocumentEvent.kind.in_((TIDY_EVENT, TIDY_REVIEWED_EVENT)),
+        )
+        .order_by(SpecDocumentEvent.created_at, SpecDocumentEvent.id)
+    )
+    return [(event, path) for event, path in rows]
+
+
+def _act_view(event: SpecDocumentEvent, path: str, reviewed: bool) -> Dict[str, Any]:
+    detail = event.detail or {}
+    return {
+        "id": event.id,
+        "act": detail.get("act"),
+        "path": path,
+        "agent": event.actor,
+        "run_id": event.run_id,
+        "at": event.created_at.isoformat() if event.created_at else None,
+        "reason": detail.get("reason") or "",
+        "code_wins": detail.get("code_wins"),
+        "reviewed": reviewed,
+    }
+
+
+async def tidy_acts(
+    session: AsyncSession, project_id: str, *, reviewed: Optional[bool] = None
+) -> List[Dict[str, Any]]:
+    """The project's tidy acts, oldest first; `reviewed` False or True narrows to one kind."""
+    rows = await _tidy_events(session, project_id)
+    done = _reviewed_ids([event for event, _ in rows])
+    acts = [
+        _act_view(event, path, event.id in done) for event, path in rows if event.kind == TIDY_EVENT
+    ]
+    if reviewed is None:
+        return acts
+    return [act for act in acts if act["reviewed"] is reviewed]
+
+
+async def mark_tidy_reviewed(
+    session: AsyncSession,
+    project_id: str,
+    *,
+    actor: Actor,
+    ids: Optional[List[str]] = None,
+) -> List[str]:
+    """Mark acts reviewed: the named ids or, with `ids` None, every unreviewed one.
+
+    Returns the ids newly marked; one already reviewed is not marked again. An id that is not a
+    tidy act of this project is refused (404) before anything is written, so a typo is not a silent
+    no-op. One `tidy_reviewed` event per document touched, naming that document's ids, so each
+    document's history carries its own review.
+    """
+    _require_operator(actor, "marking tidy acts reviewed")
+    rows = await _tidy_events(session, project_id)
+    done = _reviewed_ids([event for event, _ in rows])
+    acts = {event.id: event for event, _ in rows if event.kind == TIDY_EVENT}
+    if ids is None:
+        wanted = [act_id for act_id in acts if act_id not in done]
+    else:
+        missing = [act_id for act_id in ids if act_id not in acts]
+        if missing:
+            raise MarkError(
+                f"this project has no tidy act {missing[0]}", code="unknown_tidy_act", status=404
+            )
+        wanted = list(dict.fromkeys(act_id for act_id in ids if act_id not in done))
+    by_document: Dict[str, List[str]] = {}
+    for act_id in wanted:
+        by_document.setdefault(acts[act_id].document_id, []).append(act_id)
+    for document_id, act_ids in by_document.items():
+        document = await session.get(SpecDocument, document_id)
+        if document is not None:
+            await record_event(
+                session, document, kind=TIDY_REVIEWED_EVENT, actor=actor, detail={"ids": act_ids}
+            )
+    return wanted

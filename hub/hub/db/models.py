@@ -337,6 +337,14 @@ class Agent(Base):
     can_accept_evidence: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # Whether this agent may tidy the project's specification corpus: fold built changes into
+    # capabilities, edit capabilities, mark documents superseded, set roadmap slices (`spec_tidy`,
+    # `an-agent-the-operator-trusts-can-tidy-the-specs`, migration 0172). Written only by the
+    # operator's agent PATCH, for the reason above. It never extends to the operator's own acts:
+    # approving, archiving, holding and deciding evidence stay refused whatever it says.
+    can_admin_specs: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # An agent is archived, never deleted — its conversations, runs and messages keep their
     # attribution, and archival is reversible. Mirrors `Conversation.lifecycle` deliberately:
     # the two are the same act at different scopes, and giving them different vocabularies
@@ -2563,6 +2571,17 @@ class SpecDocument(Base):
     acronym_chosen: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # Superseded and held are marks, not phases (`an-agent-the-operator-trusts-can-tidy-the-specs`,
+    # D2, migration 0172): the phase machine and its operator gates stay as they are. A superseded
+    # document keeps its phase and content and cannot be built; clearing the mark nulls all four.
+    # `superseded_by` is the actor's name, from its credential.
+    superseded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    superseded_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    superseded_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    superseded_successor: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # The operator's hold: a tidy act on a held document is refused. Only the operator sets it.
+    held_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    held_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
@@ -2604,6 +2623,10 @@ class SpecDocumentMerge(Base):
     this file: this table exists *because* the operator's authorship is the point, and the CHECK
     makes that true even against a caller that reaches the table directly, not only against the one
     route this change adds.
+
+    Widened by 0172: an agent's fold is admitted too, but only with the run it came from, so an
+    agent row always names the run that made it (`an-agent-the-operator-trusts-can-tidy-the-specs`).
+    The constraint keeps its name, which the migration and its downgrade find it by.
     """
 
     __tablename__ = "spec_document_merges"
@@ -2624,7 +2647,8 @@ class SpecDocumentMerge(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "actor_kind = 'operator'", name="ck_spec_document_merges_actor_is_operator"
+            "actor_kind = 'operator' OR (actor_kind = 'agent' AND run_id IS NOT NULL)",
+            name="ck_spec_document_merges_actor_is_operator",
         ),
         Index("ix_spec_document_merges_capability", "capability_document_id", "created_at"),
         Index("ix_spec_document_merges_change", "change_document_id", "created_at"),
