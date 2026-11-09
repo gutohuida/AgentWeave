@@ -41558,3 +41558,13 @@ AW-54 recorded evidence against FR-2 and FR-5 to FR-8 of `the-pr-s-ci-is-the-ful
 **Tier:** 0
 
 In `hub/tests/test_gates_consult_the_known_failing_list.py`, the `SLOW` check's `timeout_seconds = 3` is meant to make a check time out. But the same bound applies to the passing path, which has to start Python, so under load the pass can time out too. Raising it to 10 s made the test 6x slower (144 s) and was reverted. **Expected:** the timing-out check is made to time out by something it waits on (an event or a sleep far past the bound), and the passing path is not under the same short bound.
+
+## F1155 (C) -- tasks one fix closes cannot be closed together: each needs its own run, or the operator by hand
+
+**Status:** open
+**Source:** found closing the flaky-test tasks after `61cb232` (Architect, DeveloperOpus, 2026-11-09)
+**Theme:** Board
+**Ready:** needs a decision on who may close
+**Tier:** 1
+
+One merged change fixed 16 auto-filed flaky-test tasks (AW-41..58) assigned to DeveloperOpus, and the Hub's full main check passed on it. Closing them was refused three ways. Another agent may not move them, since an agent claims only its own or nobody's tasks (403). Their assignee may move only one, because a run "finishes the task it took, and takes at most one" (403). And a pending task cannot go to completed directly (409). So closing N tasks costs N agent turns or N operator clicks. **Expected:** a flaky-test task (kind `flaky`, from a check) closes itself when its test passes on main, or the board lets the operator close a selection with one note.
