@@ -1,5 +1,6 @@
 import { Icon } from '@/components/common/Icon'
 import { SpecDefectsReport } from './SpecDefectsReport'
+import { SpecTidyPanel } from './SpecTidyPanel'
 
 /** Pinned under the spec list: the Evidence entry and the defects report, which starts folded to
  *  one line with its count so it does not push the list of specs off the screen (FR-8). */
@@ -37,6 +38,7 @@ export function SpecListFooter({
           </span>
         </button>
       ) : null}
+      <SpecTidyPanel onSelect={onSelect} />
       <SpecDefectsReport currentPath={currentPath} onSelect={onSelect} />
     </>
   )

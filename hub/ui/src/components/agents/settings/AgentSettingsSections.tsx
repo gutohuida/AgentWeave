@@ -21,7 +21,7 @@ import { formatDateTime } from '@/lib/format'
  *  its own label column, so "Granted reach" was squeezed to one word per line. */
 
 export type AgentPatch = Partial<
-  Pick<AgentSummary, 'description' | 'runner_id' | 'charter_id' | 'default_permission_mode' | 'reach_grants' | 'can_read_checkpoints' | 'can_recall' | 'can_accept_evidence'>
+  Pick<AgentSummary, 'description' | 'runner_id' | 'charter_id' | 'default_permission_mode' | 'reach_grants' | 'can_read_checkpoints' | 'can_recall' | 'can_accept_evidence' | 'can_admin_specs'>
 >
 
 export function AgentIdentitySettings({
@@ -328,6 +328,17 @@ export function AgentAccessSettings({
               aria-label={`Accept evidence for ${agent.name}`}
               checked={Boolean(agent.can_accept_evidence)}
               onCheckedChange={(v) => onChange({ can_accept_evidence: v }, v ? `${agent.name} may decide on evidence` : `${agent.name} may no longer decide on evidence`)}
+            />
+          }
+        />
+        <SettingsRow
+          label="Keep the specs true"
+          description="Fold built changes into capabilities, edit capabilities, mark documents superseded and fix roadmap links. Every act applies at once and is listed for you to review. Approving and archiving stay yours."
+          control={
+            <Switch
+              aria-label={`Keep the specs true for ${agent.name}`}
+              checked={Boolean(agent.can_admin_specs)}
+              onCheckedChange={(v) => onChange({ can_admin_specs: v }, v ? `${agent.name} may tidy the specs` : `${agent.name} may no longer tidy the specs`)}
             />
           }
         />

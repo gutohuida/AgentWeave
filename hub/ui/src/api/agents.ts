@@ -60,6 +60,9 @@ export interface AgentSummary {
   can_recall?: boolean
   /** Authority over what ships: accepted evidence is what lets approval merge an agent's work. */
   can_accept_evidence?: boolean
+  /** The operator's switch for keeping the specification corpus true; off by default, and only the
+   *  operator can change it (`an-agent-the-operator-trusts-can-tidy-the-specs`). */
+  can_admin_specs?: boolean
   /** Only the keys `ROSTER_CONFIG_KEYS` (hub/hub/api/v1/agents.py) allows back (F244) — a
    *  credential stored under some other key never reaches this listing. */
   config?: {
@@ -402,7 +405,7 @@ export function useUpdateAgentGrant() {
   return useMutation({
     mutationFn: ({ agent, grant, enabled }: {
       agent: string
-      grant: 'can_read_checkpoints' | 'can_recall' | 'can_accept_evidence'
+      grant: 'can_read_checkpoints' | 'can_recall' | 'can_accept_evidence' | 'can_admin_specs'
       enabled: boolean
     }) => patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { [grant]: enabled }),
     onSuccess: () => {

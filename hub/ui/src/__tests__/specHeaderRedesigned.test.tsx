@@ -353,7 +353,7 @@ const ALWAYS_DIRECT: Look[] = [
   { label: 'spec-document-facts', by: 'testid' },
   { label: /^Changed /, by: 'text' },
 ]
-const ALWAYS_MENU = ['Copy link to this document', 'Copy its path', 'Refresh']
+const ALWAYS_MENU = ['Copy link to this document', 'Copy its path', 'Refresh', 'Hold…']
 
 const STATES: Record<string, { setup: () => void; afterLoad?: (user: ReturnType<typeof userEvent.setup>) => Promise<void>; phase: string; inventory: Inventory }> = {
   writing: {

@@ -41,6 +41,13 @@ vi.mock('@/api/spec', async (importOriginal) => {
   }
 })
 
+vi.mock('@/api/specTidy', () => ({
+  useTidyActs: () => ({ data: [], error: null }),
+  useSupersededDocuments: () => ({ data: { documents: [] }, error: null }),
+  useMarkTidyReviewed: () => ({ mutate: vi.fn(), isPending: false }),
+  useArchiveBatch: () => ({ mutate: vi.fn(), isPending: false }),
+}))
+
 const NOW = new Date('2026-11-02T13:00:00Z')
 const CAP = 'spec/capabilities/cap/spec.json'
 const path = (name: string) => `spec/changes/${name}/spec.json`
