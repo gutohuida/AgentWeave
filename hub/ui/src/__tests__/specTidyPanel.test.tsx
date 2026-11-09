@@ -18,8 +18,8 @@ const acts = [
     code_wins: { requirement: 'FR-2', before: 'old text', after: 'new text', cited: 'src/thing.py' },
   },
 ]
-const docs = ['a', 'b', 'c'].map((n) => ({
-  id: n, path: `spec/changes/${n}/spec.json`, title: `Doc ${n}`, superseded: { at: 't', by: 'Tidy', reason: 'dead', successor: null },
+const docs = ['a', 'b', 'c', 'old'].map((n) => ({
+  id: n, phase: n === 'old' ? 'archived' : 'approved', path: `spec/changes/${n}/spec.json`, title: `Doc ${n}`, superseded: { at: 't', by: 'Tidy', reason: 'dead', successor: null },
 }))
 
 vi.mock('@/api/specTidy', () => ({
@@ -43,6 +43,7 @@ describe('SpecTidyPanel', () => {
   it('archives exactly the selected superseded documents', async () => {
     render(<SpecTidyPanel onSelect={vi.fn()} />)
     await userEvent.click(screen.getByRole('button', { name: /Superseded documents/ }))
+    expect(screen.getAllByTestId('spec-superseded-row')).toHaveLength(3) // the archived one is not offered
     await userEvent.click(screen.getByLabelText('Select Doc a'))
     await userEvent.click(screen.getByLabelText('Select Doc c'))
     await userEvent.click(screen.getByTestId('spec-superseded-archive'))

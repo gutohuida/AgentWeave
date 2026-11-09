@@ -30,7 +30,8 @@ export function SpecTidyPanel({ onSelect }: { onSelect: (path: string) => void }
   const acts = useTidyActs()
   const superseded = useSupersededDocuments()
   const actList = acts.data ?? []
-  const marked = superseded.data?.documents ?? []
+  // Archived documents keep their mark (who and why); the batch archive is for those not yet archived.
+  const marked = (superseded.data?.documents ?? []).filter((d) => d.phase !== 'archived')
   if (acts.error || superseded.error) {
     return (
       <p className="px-2 py-1 text-[11px]" style={{ color: 'var(--amber)' }}>
