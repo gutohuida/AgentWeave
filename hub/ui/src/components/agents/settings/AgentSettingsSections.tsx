@@ -336,6 +336,7 @@ export function AgentAccessSettings({
           description="Fold built changes into capabilities, edit capabilities, mark documents superseded and fix roadmap links. Every act applies at once and is listed for you to review. Approving and archiving stay yours."
           control={
             <Switch
+              data-testid="agent-can-admin-specs"
               aria-label={`Keep the specs true for ${agent.name}`}
               checked={Boolean(agent.can_admin_specs)}
               onCheckedChange={(v) => onChange({ can_admin_specs: v }, v ? `${agent.name} may tidy the specs` : `${agent.name} may no longer tidy the specs`)}

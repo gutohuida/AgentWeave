@@ -32,11 +32,10 @@ vi.mock('@/api/specTidy', () => ({
 describe('SpecTidyPanel', () => {
   it('lists the acts, marks the code-wins one apart, and marks all reviewed', async () => {
     render(<SpecTidyPanel onSelect={vi.fn()} />)
-    await userEvent.click(screen.getByRole('button', { name: /Tidy acts to review/ }))
     const rows = screen.getAllByTestId('spec-tidy-act')
     expect(rows.map((r) => r.getAttribute('data-code-wins'))).toEqual(['false', 'true'])
     expect(screen.getByTestId('spec-tidy-code-wins')).toHaveTextContent('src/thing.py')
-    await userEvent.click(screen.getByTestId('spec-tidy-review-all'))
+    await userEvent.click(screen.getByTestId('spec-tidy-mark-all-reviewed'))
     expect(markReviewed).toHaveBeenCalledWith({ all: true }, expect.anything())
   })
 
@@ -46,7 +45,7 @@ describe('SpecTidyPanel', () => {
     expect(screen.getAllByTestId('spec-superseded-row')).toHaveLength(3) // the archived one is not offered
     await userEvent.click(screen.getByLabelText('Select Doc a'))
     await userEvent.click(screen.getByLabelText('Select Doc c'))
-    await userEvent.click(screen.getByTestId('spec-superseded-archive'))
+    await userEvent.click(screen.getByTestId('spec-archive-selected'))
     expect(archiveBatch).toHaveBeenCalledWith({ paths: ['spec/changes/a/spec.json', 'spec/changes/c/spec.json'] }, expect.anything())
   })
 })

@@ -539,12 +539,21 @@ export function useSpecPhaseControls(
         data-testid={document.held ? 'spec-release-hold' : 'spec-hold'}
         onSelect={() => {
           if (document.held) {
-            releaseHold.mutate(path)
+            releaseHold.mutate(path, {
+              onError: (error: unknown) =>
+                toast({ title: 'Could not release the hold', description: readableApiError(error, 'The Hub refused.'), tone: 'error' }),
+            })
             return
           }
           const note = window.prompt('Hold this document so an agent cannot tidy it. A note (optional):')
           if (note === null) return
-          holdDocument.mutate({ path, note: note.trim() })
+          holdDocument.mutate(
+            { path, note: note.trim() },
+            {
+              onError: (error: unknown) =>
+                toast({ title: 'Could not hold it', description: readableApiError(error, 'The Hub refused.'), tone: 'error' }),
+            },
+          )
         }}
       >
         {document.held ? 'Release hold' : 'Hold…'}

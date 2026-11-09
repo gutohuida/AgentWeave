@@ -48,12 +48,13 @@ export function SpecTidyPanel({ onSelect }: { onSelect: (path: string) => void }
   )
 }
 
-function Fold({ title, count, testId, children }: { title: string; count: number; testId: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
+function Fold({ title, count, testId, toggleTestId, startOpen = false, children }: { title: string; count: number; testId: string; toggleTestId?: string; startOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(startOpen)
   return (
     <section data-testid={testId} className="mt-2 flex flex-col gap-1 px-2 text-[11px]">
       <button
         type="button"
+        data-testid={toggleTestId}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className="flex items-center gap-1 text-left"
@@ -79,8 +80,8 @@ function TidyActs({ acts, onSelect }: { acts: TidyAct[]; onSelect: (path: string
     mark.mutate(args, { onError: (error: unknown) => setRefusal(readableApiError(error, 'The Hub refused.')) })
   }
   return (
-    <Fold title="Tidy acts to review" count={acts.length} testId="spec-tidy-acts">
-      <Button variant="ghost" size="xs" className="self-start" data-testid="spec-tidy-review-all" disabled={mark.isPending} onClick={() => run({ all: true })}>
+    <Fold title="Tidy acts to review" count={acts.length} testId="spec-tidy-acts" startOpen>
+      <Button variant="ghost" size="xs" className="self-start" data-testid="spec-tidy-mark-all-reviewed" disabled={mark.isPending} onClick={() => run({ all: true })}>
         Mark all reviewed
       </Button>
       <ul className="flex flex-col gap-1">
@@ -88,6 +89,7 @@ function TidyActs({ acts, onSelect }: { acts: TidyAct[]; onSelect: (path: string
           <li
             key={act.id}
             data-testid="spec-tidy-act"
+            data-act-id={act.id}
             data-code-wins={act.code_wins ? 'true' : 'false'}
             className="flex flex-col gap-0.5 rounded-[var(--radius-sm)] px-1.5 py-1"
             style={act.code_wins ? { borderLeft: '2px solid var(--amber)' } : undefined}
@@ -151,19 +153,19 @@ function SupersededList({ documents, onSelect }: { documents: TidyDocument[]; on
     )
   }
   return (
-    <Fold title="Superseded documents" count={documents.length} testId="spec-superseded">
+    <Fold title="Superseded documents" count={documents.length} testId="spec-superseded" toggleTestId="spec-filter-superseded">
       <div className="flex items-center gap-1">
         <Button variant="ghost" size="xs" onClick={() => setPicked(new Set(documents.map((d) => d.path)))}>
           Select all
         </Button>
-        <Button variant="primary" size="xs" data-testid="spec-superseded-archive" disabled={chosen.length === 0 || archive.isPending} onClick={archiveChosen}>
+        <Button variant="primary" size="xs" data-testid="spec-archive-selected" disabled={chosen.length === 0 || archive.isPending} onClick={archiveChosen}>
           Archive {chosen.length > 0 ? `${chosen.length} selected` : 'selected'}
         </Button>
       </div>
       <ul className="flex flex-col gap-1">
         {documents.map((doc) => (
-          <li key={doc.path} data-testid="spec-superseded-row" className="flex items-start gap-1.5">
-            <input type="checkbox" aria-label={`Select ${doc.title}`} checked={picked.has(doc.path)} onChange={() => toggle(doc.path)} className="mt-0.5" />
+          <li key={doc.path} data-testid="spec-superseded-row" data-path={doc.path} className="flex items-start gap-1.5">
+            <input type="checkbox" data-testid="spec-superseded-select" aria-label={`Select ${doc.title}`} checked={picked.has(doc.path)} onChange={() => toggle(doc.path)} className="mt-0.5" />
             <span className="flex min-w-0 flex-col">
               <button type="button" className="truncate text-left underline" style={{ color: 'var(--text-2)' }} onClick={() => onSelect(doc.path)} title={doc.path}>
                 {doc.title}
