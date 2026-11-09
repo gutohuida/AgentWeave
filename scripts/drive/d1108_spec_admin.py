@@ -338,7 +338,23 @@ def run_credential(pid, agent):
 
 
 def turn(pid, agent, message):
+    # The credentials run_credential minted are Run rows left `running`; while one is, the Hub queues
+    # a trigger behind it ("agent is already running") and the real turn never starts. End them first.
+    db = sqlite3.connect(base.DB.as_posix(), timeout=30)
+    db.execute("update runs set status='completed' where agent=? and id like 'run-d1108-%' and status='running'",
+               (agent,))
+    db.commit()
+    db.close()
     code, res = api("POST", f"/projects/{pid}/agent/trigger", {"agent": agent, "message": message})
+    if code < 300 and isinstance(res, dict) and not res.get("run_id") and res.get("status") == "queued":
+        # Queued behind a turn the agent is already in (beta's on live-change's task): the queued
+        # input becomes a run in the same conversation once that one ends.
+        conv = res.get("conversation_id")
+        found = lambda: base.ro("select id from runs where agent=? and conversation_id=?", (agent, conv))  # noqa: E731
+        base.poll(lambda: bool(found()), 900)
+        rows = found()
+        if rows:
+            res = {**res, "run_id": rows[0][0]}
     if not (code < 300 and isinstance(res, dict) and res.get("run_id")):
         return None, f"{code} {res}"
     run_id = res["run_id"]
@@ -473,6 +489,10 @@ def setup(scratch):
         ids[path] = make_change(spec, path, title, reqs)
     ids[PROPOSED] = make_change(spec, PROPOSED, "Proposed change",
                                 [("prop", "A proposed change MUST wait.")], approved=False)
+    # The project's spec map: the operator names its home, as a project with documents must before the
+    # Hub writes spec/index.json; a capability created later is filed into it (ac-new-capability).
+    code, out = api("POST", f"{spec}/spec/reindex", {"home": CAP})
+    assert code < 300 and (root / "spec/index.json").exists(), (code, out)
     # live-change gets an open task.
     code, task = api("POST", f"/projects/{pid}/tasks", {"title": "Live work on live-change",
                                                         "spec_document": LIVE, "assignee": BETA})
