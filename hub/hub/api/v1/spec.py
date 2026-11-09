@@ -414,6 +414,8 @@ async def get_spec(
         fold_state = await _fold_state(session, document)
         if fold_state is not None:
             payload["fold_state"] = fold_state
+        payload["superseded"] = spec_lifecycle.superseded_view(document)
+        payload["held"] = spec_lifecycle.held_view(document)
         if document.kind == "capability" and document.phase == spec_lifecycle.ARCHIVED:
             payload["retired"] = await _retirement(session, document)
         # The roadmap slice this document specifies, so the app can offer "Draft the next slice"
@@ -674,6 +676,10 @@ def _document_view(
             if spec_journey.has_journey(document)
             else None
         ),
+        # Marks, not phases (`an-agent-the-operator-trusts-can-tidy-the-specs`, D2): null when the
+        # document is not marked superseded, or not held.
+        "superseded": spec_lifecycle.superseded_view(document),
+        "held": spec_lifecycle.held_view(document),
         "updated_at": document.updated_at.isoformat(),
     }
 
@@ -760,12 +766,19 @@ async def _approval_overrides(session: AsyncSession, documents) -> Dict[str, Lis
 
 @router.get("/documents")
 async def list_documents(
+    superseded: bool = Query(False),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Every document this project tracks, with the phase it is in."""
+    """Every document this project tracks, with the phase it is in.
+
+    `superseded=true` narrows the list to the documents marked superseded, each with who marked
+    it, why and its successor (`an-agent-the-operator-trusts-can-tidy-the-specs`, FR-10).
+    """
     project_id, _ = project
     documents = await spec_lifecycle.list_documents(session, project_id)
+    if superseded:
+        documents = [document for document in documents if document.superseded_at is not None]
 
     # F29: a diverged document must be identifiable here too, not only when one is opened —
     # otherwise the operator has to open all of them to find the one that was changed behind the
@@ -839,6 +852,212 @@ async def list_documents(
         )
         views.append(view)
     return {"documents": views}
+
+
+# ------------------------------------------------------------------ holds, batch archive, tidy acts
+#
+# `an-agent-the-operator-trusts-can-tidy-the-specs`: the operator's half. Each route takes the
+# project credential, so a run credential is refused before it runs. Registered before every
+# `/documents/{path:path}...` route, because `DELETE /documents/{path:path}` would otherwise take
+# `DELETE /documents/<path>/hold` as a document deletion.
+
+
+class HoldRequest(RequestModel):
+    note: str = Field(default="", max_length=2000)
+
+
+class ArchiveBatchRequest(RequestModel):
+    paths: List[Annotated[str, StringConstraints(min_length=1, max_length=255)]] = Field(
+        min_length=1, max_length=500
+    )
+    # Said on every archive in the batch; left empty, a superseded document's own mark says why.
+    reason: str = Field(default="", max_length=2000)
+
+
+class TidyReviewedRequest(RequestModel):
+    ids: Optional[List[Annotated[str, StringConstraints(min_length=1, max_length=64)]]] = Field(
+        default=None, max_length=1000
+    )
+    all: bool = False
+
+
+def _mark_refused(exc: spec_lifecycle.MarkError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status, detail={"code": exc.code, "message": str(exc), "reason": str(exc)}
+    )
+
+
+def _batch_refusal(path: str, exc: HTTPException) -> Dict[str, Any]:
+    detail = exc.detail
+    if isinstance(detail, dict):
+        return {
+            "path": path,
+            "code": detail.get("code") or f"http_{exc.status_code}",
+            "reason": str(detail.get("message") or detail.get("reason") or detail),
+        }
+    return {"path": path, "code": f"http_{exc.status_code}", "reason": str(detail)}
+
+
+async def _archive_reason(session: AsyncSession, project_id: str, document, given: str):
+    """What an archive in the batch says, and the capability that absorbed a retired one.
+
+    A superseded document is archived as replaced by its successor: the mark is the statement that
+    it changes no capability of its own, and a superseded capability names its successor capability
+    as the one that absorbed it.
+    """
+    mark = spec_lifecycle.superseded_view(document)
+    if mark is None:
+        return given, False, None
+    reason = given or (
+        f"superseded by {mark['successor'] or 'no named document'} ({mark['by']}: {mark['reason']})"
+    )
+    absorbed_by = None
+    if document.kind == "capability" and mark["successor"]:
+        successor = await spec_lifecycle.get_document(session, project_id, mark["successor"])
+        if successor is not None and successor.kind == "capability" and successor.id != document.id:
+            absorbed_by = successor.path
+    return reason, True, absorbed_by
+
+
+@router.post("/documents/archive-batch")
+async def archive_batch(
+    body: ArchiveBatchRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Archive a selection of documents in one action, the operator's alone (FR-10).
+
+    Each path is archived as `POST /documents/phase?to=archived` would, in its own savepoint: one
+    refused leaves the others archived and is reported in `refused` with its code and reason.
+    """
+    project_id, _ = project
+    workspace = await _workspace(session, project_id)
+    archived: List[str] = []
+    refused: List[Dict[str, Any]] = []
+    for path in dict.fromkeys(body.paths):
+        try:
+            document = await _require_document(session, project_id, path)
+        except HTTPException as exc:
+            refused.append(_batch_refusal(path, exc))
+            continue
+        reason, no_capability_change, absorbed_by = await _archive_reason(
+            session, project_id, document, body.reason.strip()
+        )
+        try:
+            async with session.begin_nested():
+                moved = await _move_phase(
+                    session,
+                    workspace,
+                    project_id,
+                    document,
+                    to=spec_lifecycle.ARCHIVED,
+                    reason=reason,
+                    no_capability_change=no_capability_change,
+                    absorbed_by=absorbed_by,
+                )
+                await spec_service.rerender_phase(session, workspace, document)
+                if document.kind == "capability":
+                    await spec_index.reindex_from_file(
+                        session,
+                        workspace,
+                        document,
+                        actor=_operator(),
+                        source=spec_index.SOURCE_HUB,
+                    )
+                    await _refresh_index_entry(session, workspace, project_id, document.path)
+        except HTTPException as exc:
+            # The savepoint rolled the row back; reload it so a later read sees the stored phase.
+            await session.refresh(document)
+            refused.append(_batch_refusal(path, exc))
+            continue
+        _defer_phase_broadcasts(session, project_id, document, moved)
+        archived.append(document.path)
+    await session.commit()
+    return {"archived": archived, "refused": refused}
+
+
+@router.post("/documents/{path:path}/hold")
+async def hold_document(
+    path: str,
+    body: Optional[HoldRequest] = None,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Hold a document, with an optional note: every tidy act on it is refused until it is released
+    (FR-11). Holding a held document again replaces its note."""
+    body = body or HoldRequest()
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    try:
+        await spec_lifecycle.hold(session, document, actor=_operator(), note=body.note.strip())
+    except spec_lifecycle.MarkError as exc:
+        raise _mark_refused(exc) from exc
+    defer_broadcast(
+        session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    await session.commit()
+    return await _project_document_view(session, project_id, document)
+
+
+@router.delete("/documents/{path:path}/hold")
+async def release_document(
+    path: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Release a held document. 409 `not_held` when it is not held."""
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    try:
+        await spec_lifecycle.release(session, document, actor=_operator())
+    except spec_lifecycle.MarkError as exc:
+        raise _mark_refused(exc) from exc
+    defer_broadcast(
+        session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    )
+    await session.commit()
+    return await _project_document_view(session, project_id, document)
+
+
+@router.get("/tidy-acts")
+async def list_tidy_acts(
+    reviewed: Optional[bool] = Query(None),
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """The tidy acts agents applied, oldest first: `[{id, act, path, agent, run_id, at, reason,
+    code_wins, reviewed}]` (FR-6). `reviewed=false` is the operator's list to review; left out,
+    every act. A reviewed act stays in its document's history."""
+    project_id, _ = project
+    return await spec_lifecycle.tidy_acts(session, project_id, reviewed=reviewed)
+
+
+@router.post("/tidy-acts/reviewed")
+async def mark_tidy_acts_reviewed(
+    body: TidyReviewedRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Mark tidy acts reviewed: `{ids: [...]}` one or several, or `{all: true}` every unreviewed
+    one. 422 when the body names neither or both; 404 naming an id that is no tidy act here."""
+    if (body.ids is None) == (not body.all):
+        raise _unprocessable(
+            "ids_or_all", "send ids naming the acts to mark reviewed, or all: true; not both"
+        )
+    project_id, _ = project
+    try:
+        marked = await spec_lifecycle.mark_tidy_reviewed(
+            session, project_id, actor=_operator(), ids=None if body.all else body.ids
+        )
+    except spec_lifecycle.MarkError as exc:
+        raise _mark_refused(exc) from exc
+    if marked:
+        defer_broadcast(session, project_id, "spec_updated", {"tidy_reviewed": marked})
+    await session.commit()
+    return {
+        "marked": marked,
+        "unreviewed": await spec_lifecycle.tidy_acts(session, project_id, reviewed=False),
+    }
 
 
 def _named_roadmap(
@@ -3627,6 +3846,25 @@ async def _refuse_pull_request_landing(session: AsyncSession, project_id: str) -
             )
 
 
+def _refuse_superseded(document) -> None:
+    """A superseded document is not built (FR-9): what it described lives in its successor.
+    Clearing the mark makes it buildable again."""
+    mark = spec_lifecycle.superseded_view(document)
+    if mark is not None:
+        successor = f" by {mark['successor']}" if mark["successor"] else ""
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "superseded",
+                "message": (
+                    f"this document is marked superseded{successor} ({mark['by']}: "
+                    f"{mark['reason']}), so it is not built. Build its successor, or clear the "
+                    "mark first"
+                ),
+            },
+        )
+
+
 async def _refuse_a_second_build(session: AsyncSession, document) -> None:
     """One running build per document (FR-1): a second start is refused, naming the running one."""
     running = await builds.running_build(session, document.id)
@@ -4143,6 +4381,7 @@ async def build_document(
                 "code": "not_approved",
             },
         )
+    _refuse_superseded(document)
     payload = _read_payload(workspace, document.path)
     settings = await _build_settings(session, project_id, document, payload, body)
     _check_delivery_agent(workspace, document, body.delivery_agent, body.driver)
@@ -4187,6 +4426,7 @@ async def approve_and_build(
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
+    _refuse_superseded(document)
     _require_loaded_version(workspace, document, body.content_version)
     _check_delivery_agent(workspace, document, body.delivery_agent, body.driver)
     # A reopened document re-approved while its build still runs: approval lays the new tasks out
