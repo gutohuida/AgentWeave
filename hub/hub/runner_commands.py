@@ -119,6 +119,7 @@ CODEX_MCP_ENV_NAMES = (
     "AW_RUN_ID",
     "AW_TURN_DEPTH",
     "AW_QUESTION_TIMEOUT",
+    "AW_CAN_ADMIN_SPECS",
     "HUB_URL",
 )
 
