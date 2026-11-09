@@ -5776,11 +5776,28 @@ def tidy_spec_document(
 SWITCHED_TOOLS = {"tidy_spec_document": "AW_CAN_ADMIN_SPECS"}
 
 
+def _withheld_tools() -> set:
+    """The switched tools this run is not served: those whose run variable is not `1`."""
+    return {
+        name
+        for name, variable in SWITCHED_TOOLS.items()
+        if os.environ.get(variable, "").strip() != "1"
+    }
+
+
+def _served_tools() -> Dict[str, Callable[..., Any]]:
+    """The callable tools this run is served, without changing `_CALLABLE_TOOLS`.
+
+    Call mode reads this rather than withholding by mutation: `call_main` also runs in-process
+    (the tests call it), and a mutation there would take a tool off every later caller's list.
+    """
+    withheld = _withheld_tools()
+    return {name: fn for name, fn in _CALLABLE_TOOLS.items() if name not in withheld}
+
+
 def _withhold_switched_tools() -> None:
-    """Take each switched tool off this process's list unless its run variable is `1`."""
-    for name, variable in SWITCHED_TOOLS.items():
-        if os.environ.get(variable, "").strip() == "1":
-            continue
+    """Take each withheld tool off this process's list. Only `main()`, its own stdio process."""
+    for name in _withheld_tools():
         _CALLABLE_TOOLS.pop(name, None)
         if not _CALL_MODE:
             with contextlib.suppress(Exception):
@@ -6055,8 +6072,9 @@ def _call_parameters(fn: Callable[..., Any]) -> Tuple[List[str], List[str]]:
 
 def _call_listing() -> Dict[str, Any]:
     tools = []
-    for name in sorted(_CALLABLE_TOOLS):
-        fn = _CALLABLE_TOOLS[name]
+    served = _served_tools()
+    for name in sorted(served):
+        fn = served[name]
         parameters, required = _call_parameters(fn)
         summary = (inspect.getdoc(fn) or "").split("\n", 1)[0]
         tools.append(
@@ -6072,14 +6090,14 @@ def call_main(argv: List[str]) -> int:
     never announces: an announce from here would record `connected` for a harness that refused the
     MCP server (D4). No exception escapes as a traceback.
     """
-    _withhold_switched_tools()
+    served = _served_tools()
     try:
         if not argv:
             raise _CallUsageError(_CALL_HELP)
         if argv[0] in ("--help", "-h"):
             if len(argv) > 1:
                 topic = argv[1]
-                topic_fn = _CALLABLE_TOOLS.get(topic)
+                topic_fn = served.get(topic)
                 if topic_fn is None:
                     raise _CallUsageError(
                         f"{topic!r} is not a callable tool; `aw-tool --list` names them."
@@ -6110,7 +6128,7 @@ def call_main(argv: List[str]) -> int:
             )
         if len(rest) > 1:
             raise _CallUsageError(f"aw-tool takes one arguments file at most. {_CALL_HELP}")
-        fn = _CALLABLE_TOOLS.get(name)
+        fn = served.get(name)
         if fn is None:
             raise _CallUsageError(f"{name!r} is not a callable tool; `aw-tool --list` names them.")
         args = _read_call_args(rest[0]) if rest else {}
