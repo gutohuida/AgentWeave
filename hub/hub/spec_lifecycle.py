@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import readable_ids
@@ -793,7 +793,9 @@ async def _tidy_events(
             SpecDocumentEvent.project_id == project_id,
             SpecDocumentEvent.kind.in_((TIDY_EVENT, TIDY_REVIEWED_EVENT)),
         )
-        .order_by(SpecDocumentEvent.created_at, SpecDocumentEvent.id)
+        # `created_at` ties on a 15.625 ms wall clock and an agent's tidy acts come in bursts, so
+        # insertion order breaks the tie (`spec_document_events` has a String key: a rowid table).
+        .order_by(SpecDocumentEvent.created_at, literal_column("spec_document_events.rowid"))
     )
     return [(event, path) for event, path in rows]
 

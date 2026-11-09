@@ -6,6 +6,8 @@ superseded filter and the operator's batch archive (FR-10), the tidy record and 
 `agent-tools`; acts are recorded here through `spec_lifecycle` directly, as that tool will.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 from sqlalchemy import select
 
@@ -305,6 +307,8 @@ async def test_only_the_operator_holds_releases_or_reviews_in_spec_lifecycle(app
 
 # ------------------------------------------------------------------ FR-6 the tidy record
 
+BURST = datetime(2026, 11, 9, 1, 0, tzinfo=timezone.utc)
+
 
 @pytest.mark.asyncio
 async def test_five_tidy_acts_are_listed_and_reviewed_and_stay_in_history(
@@ -328,7 +332,7 @@ async def test_five_tidy_acts_are_listed_and_reviewed_and_stay_in_history(
                 (second, "supersede"),
             )
         ):
-            await spec_lifecycle.record_tidy_act(
+            event = await spec_lifecycle.record_tidy_act(
                 session,
                 documents[path],
                 actor=AGENT_ACTOR,
@@ -336,7 +340,10 @@ async def test_five_tidy_acts_are_listed_and_reviewed_and_stay_in_history(
                 reason=f"reason {n}",
                 code_wins=code_wins if act == "edit_capability" else None,
             )
-            # One act per request, as the tool makes them: each its own commit and time.
+            # A burst inside one 15.625 ms clock tick, as an agent folding a backlog makes: every
+            # act at the same instant, so only insertion order can put them oldest first.
+            event.created_at = BURST
+            # One act per request, as the tool makes them: each its own commit.
             await session.commit()
 
     for headers in (tidier,):
