@@ -26,15 +26,17 @@ from pathlib import Path
 
 import pytest
 
+from hub.mcp_server import SWITCHED_TOOLS  # noqa: E402
 from hub.tool_server import pinned_server_path  # noqa: E402
 
 SERVER = pinned_server_path()
 
 
-def _tools_over_stdio() -> list:
+def _tools_over_stdio(**extra_env: str) -> list:
     """Speak enough MCP to `tools/list`, against the real process."""
     env = dict(
         os.environ,
+        **extra_env,
         AW_RUN_TOKEN="aw_run_stdio-probe",
         HUB_URL="http://127.0.0.1:1",
         AW_AGENT_IDENTITY="probe",
@@ -101,11 +103,25 @@ def test_the_spawned_server_serves_what_the_imported_module_does():
     from hub.mcp_server import mcp
 
     imported = {tool.name for tool in asyncio.run(mcp.list_tools())}
-    spawned = {tool["name"] for tool in _tools_over_stdio()}
+    # Every switch on, so the spawned run is served every tool the module defines.
+    switches = dict.fromkeys(SWITCHED_TOOLS.values(), "1")
+    spawned = {tool["name"] for tool in _tools_over_stdio(**switches)}
     assert spawned == imported, (
         "importing the module and spawning it disagree about the tool surface. "
         f"import-only: {sorted(imported - spawned)}; spawn-only: {sorted(spawned - imported)}"
     )
+
+
+def test_a_spawned_run_without_a_switch_is_withheld_exactly_its_switched_tools():
+    """With no switch set, spawn serves the imported surface less the switched tools, no more."""
+    import asyncio
+
+    from hub.mcp_server import mcp
+
+    imported = {tool.name for tool in asyncio.run(mcp.list_tools())}
+    env_off = dict.fromkeys(SWITCHED_TOOLS.values(), "")
+    spawned = {tool["name"] for tool in _tools_over_stdio(**env_off)}
+    assert spawned == imported - set(SWITCHED_TOOLS)
 
 
 def test_the_spawned_server_advertises_the_spec_tools_arguments():
