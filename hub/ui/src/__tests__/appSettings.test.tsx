@@ -58,8 +58,8 @@ vi.mock('@/components/layout/SetupModal', () => ({
 // The sections of Project settings and agent settings read many project hooks; only their frame
 // (the section list and its links) is under test here.
 vi.mock('@/components/settings/sections/GeneralSection', () => ({ GeneralSection: () => <div data-testid="general-section" /> }))
-vi.mock('@/components/environment/SpecStepsSection', () => ({ SpecStepsSection: () => null }))
-vi.mock('@/components/environment/TracesSection', () => ({ TracesSection: () => null }))
+vi.mock('@/components/settings/sections/SpecStepsSection', () => ({ SpecStepsSection: () => null }))
+vi.mock('@/components/settings/sections/TracesSection', () => ({ TracesSection: () => null }))
 vi.mock('@/components/agents/settings/AgentSettingsSections', () => ({
   AgentIdentitySettings: () => <div data-testid="identity-section" />,
   AgentExecutionSettings: () => null,

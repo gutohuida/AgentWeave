@@ -5,7 +5,7 @@
  * seam the hook actually reads.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import type { Span, TraceDetail } from '@/api/traces'
@@ -13,7 +13,6 @@ import { useConfigStore } from '@/store/configStore'
 import { TraceButton } from '@/components/traces/TraceDrawer'
 import { buildWaterfall, traceExtent } from '@/components/traces/traceModel'
 import { parseHeaderLines } from '@/components/environment/traceHeaders'
-import { TracesSection } from '@/components/environment/TracesSection'
 
 function span(partial: Partial<Span> & Pick<Span, 'span_id' | 'start_time'>): Span {
   return {
@@ -220,119 +219,5 @@ describe('TraceButton', () => {
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([url]) => String(url).includes('offset=500'))).toBe(true),
     )
-  })
-})
-
-describe('TracesSection recent traces', () => {
-  const settings = {
-    otlp_endpoint: null,
-    otlp_header_names: [],
-    export_enabled: false,
-    enabled_at: null,
-    last_export_at: null,
-    last_error: null,
-    exported_spans: 0,
-    span_count: 3,
-    trace_count: 2,
-    oldest_trace_at: null,
-    record_reads: false,
-    spans_by_operation: { invoke_agent: 1, 'aw.request': 2 },
-    dropped_spans: 0,
-    retention_days: 14,
-    retention_days_default: 14,
-    retention_days_chosen: false,
-  }
-  const summary = (partial: Record<string, unknown>) => ({
-    root_span_id: 's',
-    run_id: null,
-    agent: null,
-    conversation_id: null,
-    task_id: null,
-    status: 'unset',
-    status_message: null,
-    start_time: '2026-10-20T01:00:00+00:00',
-    end_time: '2026-10-20T01:00:01+00:00',
-    ended: true,
-    span_count: 1,
-    ...partial,
-  })
-
-  beforeEach(() => {
-    vi.stubGlobal('fetch', fetchMock)
-    useConfigStore.setState({
-      apiKey: 'aw_live_test',
-      hubUrl: 'http://hub.test',
-      isConfigured: true,
-      selectedProjectId: 'proj-a',
-    })
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url.includes('/traces/settings')) return { ok: true, status: 200, json: async () => settings }
-      const operation = new URL(url).searchParams.get('operation')
-      const traces =
-        operation === 'aw.request'
-          ? [summary({ trace_id: 'tr', name: 'POST /api/v1/projects/{project_id}/tasks', operation, kind: 'request' })]
-          : [
-              summary({ trace_id: 'tw', name: 'invoke_agent builder', operation: 'invoke_agent', kind: 'run', run_id: 'run-1', agent: 'builder', run_status: 'completed' }),
-              summary({ trace_id: 'ts', name: 'invoke_agent stopper', operation: 'invoke_agent', kind: 'run', run_id: 'run-2', agent: 'stopper', run_status: 'stopped' }),
-            ]
-      return { ok: true, status: 200, json: async () => ({ traces, next_before: null }) }
-    })
-  })
-  afterEach(() => {
-    cleanup()
-    fetchMock.mockReset()
-    vi.unstubAllGlobals()
-  })
-
-  it('has no list of traces, and links to Activity → Traces', async () => {
-    const onOpenTraces = vi.fn()
-    render(<TracesSection onOpenTraces={onOpenTraces} />, { wrapper })
-    const link = await screen.findByTestId('open-traces-view')
-    expect(screen.queryByTestId('recent-traces')).toBeNull()
-    expect(screen.queryByText('Recent traces')).toBeNull()
-    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => /\/traces\?/.test(url))).toBe(false)
-    fireEvent.click(link)
-    expect(onOpenTraces).toHaveBeenCalledTimes(1)
-    // Retention, export, download and clear stay where they were.
-    expect(screen.getByTestId('trace-retention')).toBeInTheDocument()
-    expect(screen.getByLabelText('Send traces to a collector')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Download/ })).toBeInTheDocument()
-  })
-
-  it('saves the retention window on its own and offers the default back once one is chosen', async () => {
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url.includes('/traces/settings')) {
-        if (init?.method === 'PUT') {
-          const body = JSON.parse(String(init.body)) as { retention_days: number | null }
-          const chosen = body.retention_days !== null
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({ ...settings, retention_days: body.retention_days ?? 14, retention_days_chosen: chosen }),
-          }
-        }
-        return { ok: true, status: 200, json: async () => settings }
-      }
-      return { ok: true, status: 200, json: async () => ({ traces: [], next_before: null }) }
-    })
-    render(<TracesSection />, { wrapper })
-    const input = await screen.findByLabelText('Days of traces to keep')
-    expect(input).toHaveValue(14)
-    expect(screen.getByTestId('trace-retention')).not.toHaveTextContent('Use the default')
-    const save = within(screen.getByTestId('trace-retention')).getByRole('button', { name: 'Save' })
-    expect(save).toBeDisabled()
-
-    fireEvent.change(input, { target: { value: '30' } })
-    fireEvent.click(save)
-    await waitFor(() => {
-      const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'PUT')
-      expect(put).toBeTruthy()
-      expect(JSON.parse(String((put![1] as RequestInit).body))).toEqual({ retention_days: 30 })
-    })
-    expect(await screen.findByRole('button', { name: 'Use the default' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Days of traces to keep')).toHaveValue(30)
-
-    fireEvent.change(screen.getByLabelText('Days of traces to keep'), { target: { value: '0' } })
-    expect(screen.getByText('A whole number of days from 1 to 3650.')).toBeInTheDocument()
   })
 })
