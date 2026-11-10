@@ -6,7 +6,7 @@ import contextlib
 import copy
 import logging
 from datetime import datetime
-from typing import Annotated, Dict, List, Literal, Optional, Tuple
+from typing import Annotated, Dict, List, Literal, NoReturn, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import (
@@ -31,7 +31,7 @@ from ...db.engine import get_session
 from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run, Runner
 from ...model_catalog import permission_mode_values, undeclared_model_reason
 from ...project_checks import FAST_CHECK_MAX_SECONDS
-from ...project_lifecycle import ProjectLifecycleService
+from ...project_lifecycle import ProjectLifecycleService, RepositoryOfferError
 from ...project_workspace import (
     ProjectPathError,
     ProjectWorkspaceError,
@@ -784,6 +784,72 @@ async def suggest_main_branch(
         "chosen": project.main_branch,
         "is_repository": task_integration.is_repository(workspace.root),
     }
+
+
+class RepositoryPreviewOut(BaseModel):
+    """What 'Make this a git repository' would commit (`a-new-project-starts-as-a-git-repository-
+    with-an-agents-md`, FR-6): every file, ignored ones left out, and whether AGENTS.md is added."""
+
+    files: List[str]
+    agents_md: bool
+
+
+class RepositoryConfirm(RequestModel):
+    #: The list the operator was shown; refused when the folder no longer matches it.
+    files: List[str]
+
+
+#: How each refusal of the offer answers. `preview_stale` and `already_repository` are the
+#: folder having moved on from what the operator saw; no git is the Hub's own lack.
+_REPOSITORY_OFFER_STATUS = {
+    "already_repository": status.HTTP_409_CONFLICT,
+    "preview_stale": status.HTTP_409_CONFLICT,
+    "git_unavailable": status.HTTP_503_SERVICE_UNAVAILABLE,
+    "repository_failed": status.HTTP_500_INTERNAL_SERVER_ERROR,
+}
+
+
+def _raise_repository_offer_error(exc: RepositoryOfferError) -> NoReturn:
+    raise HTTPException(
+        status_code=_REPOSITORY_OFFER_STATUS.get(exc.code, status.HTTP_409_CONFLICT),
+        detail={"code": exc.code, "message": str(exc)},
+    ) from exc
+
+
+@router.get("/{project_id}/repository/preview", response_model=RepositoryPreviewOut)
+async def preview_repository(
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> RepositoryPreviewOut:
+    """Every file a first commit of the project's folder would hold. Creates nothing (FR-6)."""
+    try:
+        preview = await ProjectLifecycleService(session).preview_repository(project_identity[0])
+    except ProjectWorkspaceError as exc:
+        raise_workspace_http_error(exc)
+    except RepositoryOfferError as exc:
+        _raise_repository_offer_error(exc)
+    return RepositoryPreviewOut(files=preview.files, agents_md=preview.agents_md)
+
+
+@router.post("/{project_id}/repository", response_model=ProjectSettings)
+async def make_repository(
+    body: RepositoryConfirm,
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> ProjectSettings:
+    """The operator confirmed the preview: make the folder a repository with that first commit."""
+    project_id = project_identity[0]
+    try:
+        project = await ProjectLifecycleService(session).make_repository(project_id, body.files)
+    except ProjectWorkspaceError as exc:
+        raise_workspace_http_error(exc)
+    except RepositoryOfferError as exc:
+        _raise_repository_offer_error(exc)
+    # Approved work that skipped for want of a branch can merge now, as on any branch adoption.
+    await _integrate_what_was_waiting_for_a_branch(session, project_id)
+    settings_now = await _project_settings(session, project)
+    await sse_manager.broadcast(project_id, "project_settings_updated", settings_now.model_dump())
+    return settings_now
 
 
 class ProjectSettingsSaved(ProjectSettings):

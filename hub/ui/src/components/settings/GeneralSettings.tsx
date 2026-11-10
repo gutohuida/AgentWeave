@@ -149,6 +149,7 @@ export function GeneralSettings({
   agentsUnreadable,
   notices,
   relocating,
+  repositoryOffer,
   onChange,
   onRelocate,
   onOpenBudgets,
@@ -178,6 +179,9 @@ export function GeneralSettings({
   /** What the last save answered (warnings, a refusal), shown under the page heading. */
   notices?: React.ReactNode
   relocating?: boolean
+  /** 'Make this a git repository', shown under the folder when it is not one. The container
+   *  owns its reads and writes. */
+  repositoryOffer?: React.ReactNode
   onChange: (patch: Partial<ProjectSettings>, said: string) => void
   /** Rebind a project whose folder has moved. */
   onRelocate?: (path: string) => void
@@ -733,6 +737,7 @@ export function GeneralSettings({
               </Button>
             </form>
           ) : null}
+          {folderAvailable && !isRepository ? repositoryOffer : null}
         </SettingsRow>
       </SettingsGroup>
 
