@@ -1233,10 +1233,6 @@
     border-bottom: 1px solid var(--border);
     container-type: inline-size;
   }
-  /* Text 240 + gap 28 + control min 180: below this the control has wrapped, so it takes the row's width and starts at the text's edge. */
-  @container (max-width: 447px) {
-    .settings-row-control { flex: 1 1 100%; justify-content: flex-start; min-width: 0; }
-  }
   /* The text column keeps 240px; a control that cannot fit beside it wraps below. */
   .settings-row > :first-child { flex: 1 1 240px; min-width: min(240px, 100%); }
   .settings-row-control {
@@ -1247,6 +1243,11 @@
     justify-content: flex-end;
     gap: 8px;
     min-width: 180px;
+  }
+  /* Text 240 + gap 28 + control min 180: below this the control has wrapped, so it takes the row's width and starts at the text's edge.
+     After the base rule: equal specificity, so source order decides. */
+  @container (max-width: 447px) {
+    .settings-row-control { flex: 1 1 100%; justify-content: flex-start; min-width: 0; }
   }
   .settings-code-surface {
     max-height: min(62vh, 620px);
