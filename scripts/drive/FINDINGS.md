@@ -41311,7 +41311,7 @@ Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `
 
 ## F1128 (B) -- `/health` runs git on the event loop to compute the UI staleness warning, holding the whole Hub about 300 ms every 30 s
 
-**Status:** open
+**Status:** fixed 2026-11-10 (Tier 0). `/health` and the start-up log call `_ui_staleness_warning_off_loop` (`hub/hub/main.py`): a cached answer is read in place, an expired one is worked out on `blocking.run`. The slow-share tests' warm-up of the cache is removed. Test: `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_health_works_out_its_ui_staleness_warning_off_the_loop` (failed first: `slow_git` saw the staleness check's git on the loop's thread). Driven on a scratch Hub (:8023): an expired `/health` took 228-246 ms while a request sent 30 ms into it answered in 7 ms, three rounds.
 **Source:** found by driving: the lag probe added to `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2)
 **Theme:** Hub responsiveness
 **Ready:** yes
@@ -41321,7 +41321,7 @@ Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `
 
 ## F1131 (B) -- opening a project runs git on the event loop to detect its main branch, holding the whole Hub for one to three git processes
 
-**Status:** open
+**Status:** fixed 2026-11-10 (Tier 0). `_adopt_detected_main_branch` and `suggest_main_branch` (`hub/hub/api/v1/projects.py`) ask git through `blocking.run` (`_detected_main_branch`, `task_integration.detect_main_branch`, `is_repository`). Test: `hub/tests/test_project_open_adopts_main_branch.py::test_opening_and_suggesting_ask_git_off_the_loop` (failed first: `git rev-parse --is-inside-work-tree` and `--verify main` on `MainThread`). Driven on a scratch Hub (:8023): open of a fresh repository adopted `master`, the suggestion answered `master`/`master`/`is_repository: true`. Not re-run under `d1105_steady_under_load.py --load`.
 **Source:** found by driving: the lag probe in `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_open_does_not_block_other_requests` under `scripts/drive/d1105_steady_under_load.py --load` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2; traced by QA2's review)
 **Theme:** Hub responsiveness
 **Ready:** yes
@@ -41331,7 +41331,7 @@ Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `
 
 ## F1132 (B) -- a task view reads its spec documents on the event loop, so moving a task can hold the whole Hub on a busy disk
 
-**Status:** open
+**Status:** fixed 2026-11-10 (Tier 0). `spec_reading.payloads_for_documents` reads every document in one `blocking.run` (`_read_payloads`), and `slice_drafting.offer_for` reads its payload and the roadmap's slices the same way; `slice_claims` goes through the first. Test: `hub/tests/test_a_task_view_reads_its_documents_off_the_loop.py` (failed first: four `read_document` calls on the loop's thread across a task view, a listing and a move to `rejected`). Driven on a scratch Hub (:8023): a task view and a move answered 200.
 **Source:** found by driving: the lag probe in `hub/tests/test_approval_holds_no_write_lock_across_git.py::test_releasing_a_rejected_tasks_checkout_holds_no_write_lock` under `scripts/drive/d1105_steady_under_load.py --load` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2)
 **Theme:** Hub responsiveness
 **Ready:** yes
@@ -41568,3 +41568,23 @@ In `hub/tests/test_gates_consult_the_known_failing_list.py`, the `SLOW` check's 
 **Tier:** 1
 
 One merged change fixed 16 auto-filed flaky-test tasks (AW-41..58) assigned to DeveloperOpus, and the Hub's full main check passed on it. Closing them was refused three ways. Another agent may not move them, since an agent claims only its own or nobody's tasks (403). Their assignee may move only one, because a run "finishes the task it took, and takes at most one" (403). And a pending task cannot go to completed directly (409). So closing N tasks costs N agent turns or N operator clicks. **Expected:** a flaky-test task (kind `flaky`, from a check) closes itself when its test passes on main, or the board lets the operator close a selection with one note.
+
+## F1157 (B) -- documents left in the retired `proposed` phase still say `proposed` on disk
+
+**Status:** fixed 2026-11-10 (Tier 0), with F1158's refresh: once the Hub is serving, any commit that changes a `SpecDocument` row re-renders every indexed document whose hub block (phase, step, size) disagrees with its row, records a `rerendered` event by `system`/`index`, and updates its `content_digest` (`hub/hub/spec_index_file.py`). No migration and nothing at start-up: the four files are put right by the first document write after the operator's next restart, or now by `POST /spec/reindex`, which already re-rendered stale blocks. Test: `hub/tests/test_the_index_follows_the_rows.py::test_a_documents_file_and_index_entry_take_the_phase_from_its_row` (fails with the refresh unhooked). Driven on a scratch Hub (:8023): a file set by hand to `proposed` read `exploring` after the next document was created. The second half (approving a built exploring document in one action) is a feature and is left out.
+**Source:** found by reading the files on master beside the operator's rows (Architect, 2026-11-10)
+**Theme:** Specification
+**Ready:** yes
+**Tier:** 0
+
+Four change documents (`agents-add-files-to-the-vault-by-path`, `an-operator-sets-how-far-an-agent-reaches`, `the-vault-names-who-read-an-entry`, `a-run-is-a-trace-you-can-export`) read `"phase": "proposed"` in their `spec.json` and in `spec/index.json`. The Hub's database row says `exploring`. Migration 0149 moved the rows but never re-rendered the files. **Expected:** a document's file and its index entry carry the phase from its row.
+
+## F1158 (B) -- `spec/index.json` is regenerated by only some writes
+
+**Status:** fixed 2026-11-10 (Tier 0). `hub/hub/spec_index_file.py`: a `before_flush` listener notes each project whose `SpecDocument` rows a session changes, and its root `after_commit` schedules one background refresh per project (never two at once; one asked for meanwhile runs once after). The refresh rebuilds the index from the rows with `spec_documents.build_index`, keeping the recorded home, parents and order, on `blocking.run`, and writes it only when it changed. A project with no index is given none (its home is the operator's). The lifespan enables it once the Hub is serving, so a restart rewrites nothing on its own. Tests: `hub/tests/test_the_index_follows_the_rows.py` (`test_a_document_the_hub_writes_is_in_the_index` fails with the refresh unhooked; `test_nothing_is_refreshed_before_the_hub_is_serving`; `test_a_project_with_no_index_is_given_none`). Driven on a scratch Hub (:8023): after a reindex filed two documents, creating a third put it in the index with no reindex.
+**Source:** found by reading `spec/index.json` before and after the spec tidy (Architect, 2026-11-10)
+**Theme:** Specification
+**Ready:** yes
+**Tier:** 0
+
+Before today's spec tidy `spec/index.json` listed 11 of the 62 approved change documents. A `create_capability` act then regenerated it, so it is correct now, but it drifts again between such writes. **Expected:** every document the Hub writes appears in the index, and the index is regenerated from the rows rather than appended to.

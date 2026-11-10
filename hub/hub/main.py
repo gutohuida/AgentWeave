@@ -700,7 +700,15 @@ async def lifespan(app: FastAPI):
     from .checkpoint_fill import run_fill
 
     checkpoint_fill = asyncio.create_task(run_fill())
+    # From here on, a document write refreshes `spec/index.json` and stale hub blocks; never during
+    # start-up, so a restart rewrites no project's files on its own (F1157, F1158).
+    from . import spec_index_file
+
+    spec_index_file.enable()
     yield
+    spec_index_file.disable()
+    with contextlib.suppress(Exception):
+        await spec_index_file.settle()
     checkpoint_fill.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await checkpoint_fill
