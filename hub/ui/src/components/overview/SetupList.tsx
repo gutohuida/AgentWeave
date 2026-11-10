@@ -97,31 +97,13 @@ export function SetupList({
   )
 }
 
-/** The rail's mark: how many items are left, naming them on hover. */
-export function SetupCount({ titles, onClick }: { titles: string[]; onClick?: () => void }) {
+/** The rail's mark: how many items are left, naming them on hover. Not a control of its own: it
+ *  sits inside the project's row, which opens Overview. */
+export function SetupCount({ titles }: { titles: string[] }) {
   if (!titles.length) return null
   const label = `${titles.length} to set up: ${titles.join('; ')}`
   return (
-    <span
-      className="aw-setup-count"
-      data-testid="setup-count"
-      role={onClick ? 'button' : 'img'}
-      tabIndex={onClick ? 0 : undefined}
-      aria-label={label}
-      title={label}
-      onClick={(e) => {
-        if (!onClick) return
-        e.stopPropagation()
-        onClick()
-      }}
-      onKeyDown={(e) => {
-        if (onClick && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault()
-          e.stopPropagation()
-          onClick()
-        }
-      }}
-    >
+    <span className="aw-setup-count" data-testid="setup-count" role="img" aria-label={label} title={label}>
       {titles.length}
     </span>
   )

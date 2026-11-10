@@ -40,9 +40,8 @@
   display: inline-flex; flex: none; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   background: color-mix(in oklab, var(--blue) 18%, transparent); color: var(--blue);
-  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer;
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
 }
-.aw-setup-count:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 .aw-rail-icon .aw-setup-count { position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; padding: 0 3px; font-size: 10px; pointer-events: none; }
 .aw-settings-setup { width: min(100%, 880px); margin-inline: auto; padding: 28px clamp(20px, 4vw, 40px) 0; }
 .aw-settings-setup + .aw-settings-page { padding-top: 20px; }

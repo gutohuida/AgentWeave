@@ -42,10 +42,10 @@ interface SidebarProps {
   onOpenAppSettings?: () => void
   appSettingsActive?: boolean
   /** What each project still needs (`a-project-says-what-it-still-needs`), as item titles; a
-   *  project with none left has an empty list. Absent: no count is shown. */
+   *  project with none left has an empty list. Absent: no count is shown. The count sits inside
+   *  the project's row, beside its name like the missing-folder mark, so the actions revealed on
+   *  hover never cover it; the row itself opens Overview, where the list is. */
   setupFor?: (projectId: string) => string[]
-  /** The count opens that project's set-up list (on its Overview). */
-  onOpenSetup?: (projectId: string) => void
   /** Collapsed to an icon rail. The operator's choice and only theirs — no destination writes
    *  it (`hub-workspace-shell`: "Navigation collapses only when the operator asks"). */
   compact?: boolean
@@ -112,7 +112,6 @@ export function Sidebar({
   onOpenAppSettings,
   appSettingsActive = false,
   setupFor,
-  onOpenSetup,
   compact = false,
   onCompactChange,
   width = SIDEBAR_WIDTH,
@@ -298,6 +297,7 @@ export function Sidebar({
                           </span>
                         )}
                       </span>
+                      <SetupCount titles={setupFor?.(project.id) ?? []} />
                       {missing ? (
                         <span
                           className="aw-rail-missing"
@@ -313,7 +313,6 @@ export function Sidebar({
                       ) : null}
                     </button>
                     <span className="aw-rail-row-end">
-                      <SetupCount titles={setupFor?.(project.id) ?? []} onClick={onOpenSetup ? () => onOpenSetup(project.id) : undefined} />
                       <span className="aw-reveal aw-rail-actions">
                         <button
                           data-slot="icon-button"

@@ -99,7 +99,6 @@ export function MockApp() {
         onCompactChange={setCollapsed}
         onOpenProject={() => go({ kind: 'tab', tab: 'overview' })}
         setupFor={setupFor}
-        onOpenSetup={() => go({ kind: 'tab', tab: 'overview' })}
         onOpenAgent={(_, agent) => go({ kind: 'conversation', agent, conversationId: null })}
         onOpenConversation={(_, agent, conversationId) => go({ kind: 'conversation', agent, conversationId })}
         onNewConversation={(_, agent) => (agent ? go({ kind: 'conversation', agent, conversationId: null }) : undefined)}
