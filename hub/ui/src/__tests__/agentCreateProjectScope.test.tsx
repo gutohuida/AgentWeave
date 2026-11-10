@@ -66,6 +66,8 @@ vi.mock('@/api/projects', () => ({
   useCreateProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
   useUpdateProjectSettings: () => ({ mutate: vi.fn(), error: null, isPending: false }),
   useRelocateProject: () => ({ mutate: vi.fn(), error: null, isPending: false }),
+  useRepositoryPreview: () => ({ data: undefined, error: null, refetch: vi.fn() }),
+  useMakeRepository: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
 }))
 // Partial: the dialog reaches for `useCreateAgent` from this module too, and a whole-module mock
 // that lists only what App happens to use breaks the moment a child imports a sibling export.

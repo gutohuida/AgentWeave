@@ -247,6 +247,44 @@ export function useMainBranchSuggestion(projectId: string | null) {
   })
 }
 
+/**
+ * What 'Make this a git repository' would commit: every file in the folder, ignored ones left out,
+ * and whether AGENTS.md would be added (it is written only on confirmation, so it is not in
+ * `files`). Reading it creates nothing.
+ */
+export interface RepositoryPreview {
+  files: string[]
+  agents_md: boolean
+}
+
+/** Read only once the operator starts the action (`enabled`), and never cached as fresh: the
+ *  folder can change under it, and the confirm is refused when it has. */
+export function useRepositoryPreview(projectId: string | null, enabled: boolean) {
+  const { isConfigured } = useConfigStore()
+  return useQuery<RepositoryPreview>({
+    queryKey: ['project', projectId, 'repository-preview'],
+    queryFn: () => getJson<RepositoryPreview>(`/api/v1/projects/${projectId}/repository/preview`),
+    enabled: isConfigured && !!projectId && enabled,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  })
+}
+
+/** Confirm the preview: the folder becomes a repository whose first commit holds `files`. */
+export function useMakeRepository(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { files: string[] }) =>
+      postJson<ProjectSettings>(`/api/v1/projects/${projectId}/repository`, input),
+    onSuccess: (settings) => {
+      queryClient.setQueryData<ProjectSettings>(['project', projectId, 'settings'], settings)
+      void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'main-branch-suggestion'] })
+      queryClient.removeQueries({ queryKey: ['project', projectId, 'repository-preview'] })
+    },
+  })
+}
+
 export function useUpdateProjectSettings(projectId: string) {
   const queryClient = useQueryClient()
   return useMutation({

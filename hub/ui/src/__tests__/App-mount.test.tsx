@@ -55,6 +55,8 @@ vi.mock('@/api/projects', () => ({
   useProjectSettings: () => ({ data: undefined, isError: false, error: null }),
   useUpdateProjectSettings: () => ({ mutate: vi.fn(), error: null, isPending: false }),
   useRelocateProject: () => ({ mutate: vi.fn(), error: null, isPending: false }),
+  useRepositoryPreview: () => ({ data: undefined, error: null, refetch: vi.fn() }),
+  useMakeRepository: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
 }))
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({
