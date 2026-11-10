@@ -41598,3 +41598,13 @@ Four change documents (`agents-add-files-to-the-vault-by-path`, `an-operator-set
 **Tier:** 0
 
 Before the tidy, `spec/index.json` counted 11 approved change documents while `spec/changes/` held 62 (`kind: change-spec`, `hub.phase: approved`); 52 directories under `spec/` were also untracked in the main checkout, among them change documents a week old. After the tidy's `create_capability` acts the index was regenerated and now counts all 62, so the defect is that only some writes regenerate it, and between them the map reads as complete and is not. Overlaps the unwritten slice `the-map-is-real` of `the-specs-stay-true-and-easy-to-work-with`. **Expected:** every document the Hub writes is in the index, and the index is regenerated from the rows rather than appended to.
+
+## F1159 (C) -- `submit_spec_document` tells authors an unresolved question blocks the document; it only warns
+
+**Status:** open
+**Source:** found authoring `evidence-review-sends-work-back-only-for-what-is-wrong-with-it` (Architect, 2026-11-10)
+**Theme:** Spec documents x Tool descriptions
+**Ready:** yes
+**Tier:** 0
+
+The tool description (`hub/hub/mcp_server.py:5354`) says "An unresolved one blocks the document", but a submit with three unresolved questions answered `blocking: []`, `ready_to_approve: true`, and listed them only as `unresolved_question` warnings. The warning is the intended behaviour (`hub/hub/spec_payload.py:370`: "Approving with an unresolved question is allowed but warns"), so the description is what is wrong. An author who trusts it believes the document cannot be approved while a question is open, and may tell the operator so. **Expected:** the description says an unresolved question is a warning approval lists, not a block.
