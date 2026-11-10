@@ -1226,12 +1226,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 28px;
+    flex-wrap: wrap;
+    gap: 12px 28px;
     min-height: 76px;
     padding: 16px 0;
     border-bottom: 1px solid var(--border);
   }
+  /* The text column keeps 240px; a control that cannot fit beside it wraps below. */
+  .settings-row > :first-child { flex: 1 1 240px; min-width: min(240px, 100%); }
   .settings-row-control {
+    max-width: 100%;
     display: flex;
     flex: none;
     align-items: center;

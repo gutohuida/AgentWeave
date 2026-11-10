@@ -242,7 +242,7 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 /* A control with a one-line warning under it (no runner bound) */
 .aw-control-stack { display: flex; flex: 1; max-width: 280px; flex-direction: column; gap: 5px; min-width: 0; }
 .aw-control-stack .aw-select-trigger { width: 100%; max-width: none !important; }
-.aw-control-warning { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--amber); }
+.aw-control-warning { display: inline-flex; align-items: flex-start; gap: 5px; max-width: 100%; overflow-wrap: anywhere; font-size: 11.5px; color: var(--amber); }
 
 /* A stacked row's field takes the row's width (Description, Instructions), not the 280px control column. */
 .aw-settings-row[data-stacked="true"] .aw-settings-row-control > .control-field { max-width: 640px; }
