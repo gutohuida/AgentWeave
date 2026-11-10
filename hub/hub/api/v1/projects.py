@@ -585,6 +585,15 @@ async def open_project(
     return await _project_summary(session, project)
 
 
+def _detected_main_branch(root) -> Optional[str]:  # noqa: ANN001 -- a workspace root
+    """The repository's main branch, or None for a folder that is not a repository. Runs git."""
+    from ... import task_integration
+
+    if not task_integration.is_repository(root):
+        return None
+    return task_integration.detect_main_branch(root)
+
+
 async def _adopt_detected_main_branch(session: AsyncSession, project: Project) -> None:
     """Take the branch the repository already names, where the project has not chosen one.
 
@@ -616,13 +625,12 @@ async def _adopt_detected_main_branch(session: AsyncSession, project: Project) -
     if await _main_branch_was_decided(session, project.id):
         return
 
-    from ... import project_workspace, task_integration
+    from ... import blocking, project_workspace
 
     try:
         workspace = await project_workspace.resolve_project_workspace(session, project.id)
-        if not task_integration.is_repository(workspace.root):
-            return
-        detected = task_integration.detect_main_branch(workspace.root)
+        # Git, so off the loop: one to three `git rev-parse` on every open held the whole Hub (F1131).
+        detected = await blocking.run(_detected_main_branch, workspace.root)
     except Exception:  # noqa: BLE001 - a branch that cannot be detected is not a failure to open
         logger.warning("Could not detect a main branch for %s", project.id, exc_info=True)
         return
@@ -771,7 +779,7 @@ async def suggest_main_branch(
     is the remaining one: showing what the repository suggests next to what the project holds, so the
     operator can change it.
     """
-    from ... import project_workspace, task_integration
+    from ... import blocking, project_workspace, task_integration
 
     project = await _operator_project_row(project_identity[0], session)
     try:
@@ -779,10 +787,13 @@ async def suggest_main_branch(
     except project_workspace.ProjectWorkspaceError:
         return {"suggestion": None, "chosen": project.main_branch, "is_repository": False}
 
+    # Git, so off the loop (F1131).
+    suggestion = await blocking.run(task_integration.detect_main_branch, workspace.root)
+    is_repository = await blocking.run(task_integration.is_repository, workspace.root)
     return {
-        "suggestion": task_integration.detect_main_branch(workspace.root),
+        "suggestion": suggestion,
         "chosen": project.main_branch,
-        "is_repository": task_integration.is_repository(workspace.root),
+        "is_repository": is_repository,
     }
 
 
