@@ -14,7 +14,9 @@ element for each of:
   * an element outside the window: text or a control past the window's edge;
   * content spilling out of its own box (a non-wrapping value running past its row);
   * a text column under 240px beside its control (a row's label and description squeezed to
-    one word per line).
+    one word per line);
+  * a runner warning (.aw-control-warning) wider than its column, or none rendering on the
+    Agent -> Execution page of the seeded agent the Hub reports as not runnable.
 
 It needs nothing that is not in git: no mock fixtures, no testbed data. It uses two free ports
 chosen at random and never touches :8000 (the operator's Hub) or :8010 (the trial Hub); the Hub it
@@ -241,6 +243,16 @@ def seed(api: Api, project_dir: Path, scratch: Path) -> Dict[str, Any]:
             },
         )
 
+    # An agent the Hub reports as not runnable, so Agent -> Execution shows a real runner warning
+    # ("This agent cannot run: <reason>") with a long reason: the agent's own config pins a runner
+    # CLI that is not a file. The Hub puts that path in the reason verbatim.
+    broken = agents[-1]
+    missing_cli = str(scratch.joinpath(*[f"no-such-folder-{j}-{'z' * 16}" for j in range(6)], "missing-runner-cli"))
+    api.call("PATCH", f"{base}/agents/{broken}", {"config": {"cli": missing_cli}})
+    verdict = api.call("GET", f"{base}/agents/launchability")["agents"][broken]
+    if verdict.get("runnable") is not False:
+        raise SeedError(f"the seeded agent {broken} should be reported not runnable, got {verdict}")
+
     checks = [
         {
             "name": long_name(f"check-{i}-with-a-name-at-the-stored-limit", 64),
@@ -266,7 +278,7 @@ def seed(api: Api, project_dir: Path, scratch: Path) -> Dict[str, Any]:
             "reach_grants": grants,
         },
     )
-    return {"project_id": pid, "agents": agents}
+    return {"project_id": pid, "agents": agents, "broken_agent": broken}
 
 
 # --------------------------------------------------------------------------------------------
@@ -274,7 +286,7 @@ def seed(api: Api, project_dir: Path, scratch: Path) -> Dict[str, Any]:
 # --------------------------------------------------------------------------------------------
 
 MEASURE_JS = r"""
-({ minText }) => {
+({ minText, expectWarning }) => {
   const W = window.innerWidth
   const findings = []
   const seen = new Set()
@@ -377,12 +389,30 @@ MEASURE_JS = r"""
         add('narrow-text-column', text, `text column is ${Math.round(tr.width)}px wide beside its ${Math.round(cr.width)}px control (needs ${minText}px)`)
     }
   }
-  return findings
+
+  // 5. A warning under a control: it wraps inside the control's column and never widens the row.
+  const warnings = Array.from(document.querySelectorAll('.aw-control-warning')).filter(visible)
+  for (const w of warnings) {
+    const wr = w.getBoundingClientRect()
+    const holder = w.closest('.aw-settings-row-control, .settings-row-control, .aw-control-stack') || w.parentElement
+    const hr = holder.getBoundingClientRect()
+    if (w.scrollWidth > w.clientWidth + 1)
+      add('warning-overflows', w, `warning text is ${w.scrollWidth}px wide in a ${w.clientWidth}px box`)
+    else if (wr.right > hr.right + 1 || wr.left < hr.left - 1)
+      add('warning-overflows', w, `warning spans ${Math.round(wr.left)}..${Math.round(wr.right)}px outside its column ${Math.round(hr.left)}..${Math.round(hr.right)}px`)
+  }
+  if (expectWarning && warnings.length === 0)
+    add('no-runner-warning', document.body, 'this page should show a runner warning (.aw-control-warning) and shows none, so wrapping was not measured')
+  return { findings, warnings: warnings.length }
 }
 """
 
 FAULT_JS = r"""
 () => {
+  // Break the warnings' wrapping the way a regression would: no wrapping, no break opportunities.
+  for (const w of document.querySelectorAll('.aw-control-warning'))
+    w.style.cssText += ';white-space:nowrap;overflow-wrap:normal;word-break:keep-all'
+
   const row = document.querySelector('.aw-settings-row-text, .settings-row > div')
   if (!row) return false
   const span = document.createElement('span')
@@ -400,7 +430,7 @@ FAULT_JS = r"""
 # --------------------------------------------------------------------------------------------
 
 
-def targets(project_id: str, agent: str) -> List[Dict[str, str]]:
+def targets(project_id: str, agent: str, broken_agent: str) -> List[Dict[str, str]]:
     out = []
     for s in APP_SECTIONS:
         out.append({"label": f"App:{s}", "query": f"appSettings={s}&project={project_id}"})
@@ -408,17 +438,32 @@ def targets(project_id: str, agent: str) -> List[Dict[str, str]]:
         out.append({"label": f"Project:{s}", "query": f"project={project_id}&tab=environment&section={s}"})
     for s in AGENT_SECTIONS:
         out.append({"label": f"Agent:{s}", "query": f"project={project_id}&agent={agent}&settings={s}"})
+    # The agent the Hub reports as not runnable: its runner picker carries a long warning.
+    out.append(
+        {
+            "label": "Agent:execution (runner warning)",
+            "query": f"project={project_id}&agent={broken_agent}&settings=execution",
+            "expect_warning": "1",
+        }
+    )
     return out
 
 
-def sweep(args: argparse.Namespace, ui_url: str, hub_url: str, project_id: str, agent: str) -> List[Dict[str, Any]]:
+def sweep(
+    args: argparse.Namespace, ui_url: str, hub_url: str, project_id: str, agent: str, broken_agent: str
+) -> List[Dict[str, Any]]:
     from playwright.sync_api import sync_playwright
 
-    chosen = [t for t in targets(project_id, agent) if not args.section or any(f in t["label"] for f in args.section)]
+    chosen = [
+        t
+        for t in targets(project_id, agent, broken_agent)
+        if not args.section or any(f in t["label"] for f in args.section)
+    ]
     if not chosen:
         raise SystemExit("no section matches --section")
     failures: List[Dict[str, Any]] = []
     measured = 0
+    warnings_measured = 0
     shots = Path(args.shots) if args.shots else None
     if shots:
         shots.mkdir(parents=True, exist_ok=True)
@@ -454,7 +499,11 @@ def sweep(args: argparse.Namespace, ui_url: str, hub_url: str, project_id: str, 
                         if args.inject_fault:
                             page.evaluate(FAULT_JS)
                             page.wait_for_timeout(100)
-                        found = page.evaluate(MEASURE_JS, {"minText": MIN_TEXT_COLUMN})
+                        result = page.evaluate(
+                            MEASURE_JS, {"minText": MIN_TEXT_COLUMN, "expectWarning": bool(t.get("expect_warning"))}
+                        )
+                        found = result["findings"]
+                        warnings_measured += result["warnings"]
                         measured += 1
                         if shots:
                             safe = t["label"].replace(":", "-")
@@ -464,7 +513,7 @@ def sweep(args: argparse.Namespace, ui_url: str, hub_url: str, project_id: str, 
                     context.close()
         finally:
             browser.close()
-    print(f"measured {measured} section renders ({len(chosen)} sections)")
+    print(f"measured {measured} section renders ({len(chosen)} sections), {warnings_measured} runner warning render(s)")
     return failures
 
 
@@ -566,7 +615,7 @@ def main() -> int:
         print(f"UI from this checkout on {ui_url}")
         wait_for(ui_url + "/", vite, "the Vite dev server", timeout=120)
 
-        failures = sweep(args, ui_url, hub_url, data["project_id"], data["agents"][0])
+        failures = sweep(args, ui_url, hub_url, data["project_id"], data["agents"][0], data["broken_agent"])
         return report(failures)
     except SeedError as exc:
         print(f"long-values check: could not seed the Hub: {exc}", file=sys.stderr)
