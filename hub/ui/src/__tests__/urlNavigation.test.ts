@@ -30,7 +30,7 @@ describe('phase 5 URL navigation contract', () => {
     })
 
     it('round-trips the environment tab with its section', () => {
-      const destination = environmentDestination('proj-1', 'runners')
+      const destination = environmentDestination('proj-1', 'spec-steps')
       expect(parseDestination(serializeDestination(destination))).toEqual(destination)
     })
 

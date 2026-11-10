@@ -712,7 +712,7 @@ export default function App() {
                 onAddProject={() => setProjectManagerMode('open')}
                 onOpenSetup={() => setSetupOpen(true)}
                 onOpenPalette={openCommandPalette}
-                onOpenSettings={() => navigateTo(environmentDestination(currentProject.id, 'settings'))}
+                onOpenSettings={() => navigateTo(environmentDestination(currentProject.id, 'general'))}
                 settingsActive={destination.kind === 'project' && destination.tab === 'environment'}
                 mode={mode === 'light' ? 'light' : 'dark'}
                 onToggleMode={toggleMode}
@@ -767,7 +767,7 @@ export default function App() {
         }}
         onOpenAppSettings={(section) => navigateTo(appSettingsDestination(currentProjectId || null, section))}
         onOpenProjectSettings={
-          currentProject ? () => navigateTo(environmentDestination(currentProject.id, 'settings')) : undefined
+          currentProject ? () => navigateTo(environmentDestination(currentProject.id, 'general')) : undefined
         }
         onOpenAgentSettings={
           currentProject ? (agent) => navigateTo(agentSettingsDestination(currentProject.id, agent)) : undefined
