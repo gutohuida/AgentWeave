@@ -245,6 +245,9 @@ class CopilotAdapter(RunnerAdapter):
     # Each names its files under `locations[].path`, a diff's `changes[].path` as the fallback.
     write_tool_kinds = dict.fromkeys(sorted(COPILOT_WRITE_TOOLS), "locations[].path")
     one_shot_takes_schema = False
+    # DOCUMENTED: Copilot CLI's custom instructions include AGENTS.md in the repository root and
+    # its working directory. Not measured over ACP on this machine.
+    reads_agents_md = True
     # DOCUMENTED, `context-management` (design D9).
     compaction_percent = 80
 

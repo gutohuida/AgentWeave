@@ -290,6 +290,11 @@ class RunnerAdapter(ABC):
     # Whether the Hub's workspace judge, and so the operator's reach grants (reach-1019), decide
     # this runner's calls. Codex is decided by its own sandbox instead.
     applies_reach_grants: ClassVar[bool] = True
+    # Whether this runner's CLI reads the AGENTS.md of the folder it runs in by itself. Where it
+    # does, a project whose AGENTS.md is its instructions does not have them put into the turn's
+    # context as well: they would arrive twice (`a-new-project-starts-as-a-git-repository-with-
+    # an-agents-md`, FR-8). Stated from each CLI's documentation, not measured here.
+    reads_agents_md: ClassVar[bool] = False
     # The percentage of the context window at which this runner's CLI compacts by itself
     # (`a-copilot-run-shows-its-credits` D9). No base default: an adapter that omits it fails
     # the conformance test that every `ADAPTERS` entry declares it.
