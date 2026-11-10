@@ -41404,7 +41404,7 @@ On 2026-11-06 the first save of `spec/changes/a-trace-of-a-whole-conversation` (
 
 ## F1140 (B) -- a generated file that every branch rebuilds sends finished work back as merge-needed
 
-**Status:** open 2026-11-07. Seen four times in two builds.
+**Status:** built, not yet configured here (Architect, 2026-11-10). The product fix landed 2026-11-08 (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`, `hub/hub/generated_files.py`): a project's Generated files setting names the paths and the command that rebuilds them. This repository has none set on the operator's Hub (`projects.generated_files` is NULL for proj-d85a82bf4216, read-only query), so its bundle conflicts still send work back. Closes once the bundle paths and rebuild command are set and a parallel UI build lands without a merge-needed send-back. First seen open 2026-11-07, four times in two builds.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Landing & merges
 **Ready:** needs a decision: a project setting naming generated paths and the command that regenerates them (product), or a repo-only rebuild step (this repository's settings)
