@@ -17,13 +17,20 @@ acceptance criteria on a scratch project with real Haiku turns:
                             check that stopped at a 404 (`c-unreached`) and one that passed on the
                             pre-build code (`c-vacuous`). The drive's reviewer reviews it; the flow
                             is fired once more afterwards, so a dependent that could start, would.
-      K1  the drive task went to revision_needed
-      K2  the send-back names both checks (task notes or the evidence's rejection reason)
+      K1  the drive task went to revision_needed after its review, and was never approved
+      K2  the send-back names both checks (the notes it left, or the evidence's rejection reason)
       K3  the dependent task has not started (never handed out, not in progress)
 
 Each covered check is reported as reached or not, and as passed or failed at its own assertion, in
 a per-check baseline printed at the end: a check whose setup did not happen (a turn that did not
 complete, a branch that could not be staged) reads `not reached`, never `failed`.
+
+K1 and K2 read what a send-back leaves durably, not the task as it stands at the end: a flow
+firing hands a revision_needed task straight back to its builder, so by the time the checks run
+DriveBuilder may already be reworking the drive task, and its turn can overwrite the notes. K1
+reads the task's transitions; K2 reads the rejection reasons and the notes a watcher captured
+while the task sat in revision_needed. DriveBuilder is not held: it also builds the dependent, so
+holding it would make K3 pass whatever the gate did.
 
 The baseline evidence's shape is a convention this drive fixes for the build to enforce: one line per
 check, `check <key>: reached=<yes|no> failed_at_assertion=<yes|no> -- <detail>`.
@@ -38,6 +45,7 @@ six Haiku turns, 15-30 minutes.
 
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 
@@ -167,14 +175,42 @@ def evidence(task):
                 "order by e.produced_at", (task,))
 
 
-def send_back_words(base, task):
-    """What a send-back said: the task's notes once it went to revision_needed, and the reasons
-    on decisions that did not accept. An approval's notes that mention a check name are not one
-    (observed on master: the approving reviewer listed both checks while approving)."""
-    moves = [to for (to,) in d.ro("select to_status from task_transitions where task_id=?", (task,))]
-    _, card = d.api("GET", f"{base}/tasks/{task}")
-    notes = str((card or {}).get("notes") or "") if "revision_needed" in moves else ""
-    return " ".join([notes, *[r for (r,) in d.ro(
+def moves_of(task):
+    return [to for (to,) in d.ro("select to_status from task_transitions where task_id=? "
+                                 "order by sequence", (task,))]
+
+
+def sent_back_after_review(task):
+    """The task reached revision_needed after under_review and was never approved. Read from the
+    transitions, because a flow firing moves a sent-back task on to its builder's rework."""
+    moves = moves_of(task)
+    reviewed = [i for i, to in enumerate(moves) if to == "under_review"]
+    return bool(reviewed) and "revision_needed" in moves[reviewed[0]:] and "approved" not in moves
+
+
+class NotesWatcher(threading.Thread):
+    """Captures a task's notes whenever it reads revision_needed: the send-back's notes last only
+    until the builder's rework turn writes its own."""
+
+    def __init__(self, task):
+        super().__init__(daemon=True)
+        self.task, self.seen, self.done = task, [], threading.Event()
+
+    def run(self):
+        while not self.done.wait(2):
+            try:
+                status, notes = d.ro("select status, notes from tasks where id=?", (self.task,))[0]
+            except Exception:  # noqa: BLE001 -- the database mid-write; the next poll reads it
+                continue
+            if status == "revision_needed" and notes and str(notes) not in self.seen:
+                self.seen.append(str(notes))
+
+
+def send_back_words(task, captured):
+    """What a send-back said: the notes captured while the task read revision_needed, and the
+    reasons on decisions that did not accept. An approval's notes that mention a check name are
+    not one (observed on master: the approving reviewer listed both checks while approving)."""
+    return " ".join([*captured, *[r for (r,) in d.ro(
         "select r.reason from evidence_reviews r join requirement_evidence e on e.id=r.evidence_id "
         "where e.task_id=? and r.decision <> 'accepted'", (task,))]])
 
@@ -221,6 +257,9 @@ def drive(state):
     # through its builder, its reviewer and whatever that review lets start.
     hold_run, _ = d.hold(pid, R1)
     state["held"] = hold_run
+    watcher = NotesWatcher(dt)
+    watcher.start()
+    state["watcher"] = watcher
     for _ in range(FIRINGS):
         fire_and_wait(base, pid, note["job"], drv["job"])
         if status_of(t1)[0] == "completed" and d.handouts(dt, review=True):
@@ -278,8 +317,7 @@ def drive(state):
     accepted = [e for e in evidence(t1) if e[2] == "accepted"]
     # Accepted at B by the review itself: a send-back and a builder's re-recording is the
     # paperwork round this criterion removes, not a way to satisfy it.
-    moves = [to for (to,) in d.ro("select to_status from task_transitions where task_id=? "
-                                  "order by sequence", (t1,))]
+    moves = moves_of(t1)
     covered("R1", "ac-reanchor-lands", reach,
             any(e[3] == staged_b for e in accepted) and "revision_needed" not in moves,
             f"B {staged_b}; accepted footprints {[e[3] for e in accepted]}; t1 {status_of(t1)}; "
@@ -297,9 +335,11 @@ def drive(state):
 
     # ac-bad-baseline
     reach = drive_ready and reviewed_drive
-    covered("K1", "ac-bad-baseline", reach, status_of(dt)[0] == "revision_needed",
-            f"drive {status_of(dt)}")
-    said = send_back_words(base, dt)
+    watcher.done.set()
+    watcher.join(5)
+    covered("K1", "ac-bad-baseline", reach, sent_back_after_review(dt),
+            f"drive {status_of(dt)}; moves {moves_of(dt)}")
+    said = send_back_words(dt, watcher.seen)
     covered("K2", "ac-bad-baseline", reach, UNREACHED in said and VACUOUS in said,
             said[:600] or "no send-back said anything")
     covered("K3", "ac-bad-baseline", reach,
@@ -308,6 +348,8 @@ def drive(state):
 
 
 def tidy(state):
+    if state.get("watcher"):
+        state["watcher"].done.set()
     if state.get("held"):
         d.release(state["held"])
     base = state.get("base")
@@ -347,19 +389,20 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Observed on master f68059f, 2026-11-10, three runs (artefacts drive1110-reviewer-reproduces/211422,
-# 212120, 213230). Every covered check is reached and fails at its own assertion:
+# Observed on master f68059f, 2026-11-10, four runs (artefacts drive1110-reviewer-reproduces/211422,
+# 212120, 213230, 220321). Every covered check is reached and fails at its own assertion:
 #   R1  the note's checker sent t1 back once its branch had moved past A (revision_needed, evidence
 #       held); the builder then took a whole turn, rewrote NOTE.md and re-recorded, so no accepted
 #       footprint ever named B.
 #   R2  what landed was that rework commit: main:NOTE.md reads `note`, without B's fix line, although
-#       B is an ancestor of it.
+#       B is an ancestor of it (220321: t1 re-reviewed and approved, integration 84e0500).
 #   K1  DriveChecker (Haiku) approved the baseline listing c-unreached (404) and c-vacuous (passed), in
-#       all three runs.
+#       all four runs: moves under_review -> approved, never revision_needed.
 #   K2  no send-back named either check. In 213230 the approving notes named both while approving, and
-#       the first form of K2 passed on that: it now counts only a send-back's words.
+#       the first form of K2 passed on that: it counts only a send-back's words (220321: "no
+#       send-back said anything").
 #   K3  the dependent task was built and reviewed (under_review, then approved).
 # The first run had no hold on the note's checker and reviewed t1 before B could be staged; the hold
-# was added for that. R1's "never sent back" half ran in 213230. K2's send-back-only rule was added
-# after 213230 and evaluated against its rows (no revision_needed move, no non-accepting decision),
-# not re-run.
+# was added for that. After 213230, K1 moved from the task's final status to its transitions and K2
+# from the task's final notes to notes captured while it read revision_needed, because a flow firing
+# hands a sent-back task to its builder before the checks run; 220321 is the run of that form.
