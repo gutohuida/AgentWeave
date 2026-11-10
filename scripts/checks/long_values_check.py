@@ -335,7 +335,9 @@ MEASURE_JS = r"""
       for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
         if (clipsX(p)) { clipped = true; break }
       }
-      if (!clipped && !(el.closest('[data-radix-popper-content-wrapper], [role="dialog"]')))
+      // A clipping ancestor excuses only what it can scroll to (right/bottom); overflow past the
+      // start edge cannot be scrolled to, so it is reported even when clipped.
+      if ((!clipped || r.left < -1) && !(el.closest('[data-radix-popper-content-wrapper], [role="dialog"]')))
         add('outside-window', el, `spans ${Math.round(r.left)}..${Math.round(r.right)}px in a ${W}px window`)
     }
     const cs = getComputedStyle(el)
