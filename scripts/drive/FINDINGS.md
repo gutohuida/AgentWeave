@@ -41568,3 +41568,13 @@ In `hub/tests/test_gates_consult_the_known_failing_list.py`, the `SLOW` check's 
 **Tier:** 1
 
 One merged change fixed 16 auto-filed flaky-test tasks (AW-41..58) assigned to DeveloperOpus, and the Hub's full main check passed on it. Closing them was refused three ways. Another agent may not move them, since an agent claims only its own or nobody's tasks (403). Their assignee may move only one, because a run "finishes the task it took, and takes at most one" (403). And a pending task cannot go to completed directly (409). So closing N tasks costs N agent turns or N operator clicks. **Expected:** a flaky-test task (kind `flaky`, from a check) closes itself when its test passes on main, or the board lets the operator close a selection with one note.
+
+## F1156 (C) -- a task cannot wait for a task in another document, so two slices that share one file cannot be built side by side safely
+
+**Status:** open
+**Source:** found writing slice 5 of `settings-that-are-easy-to-find-and-match-the-app` while slice 2 was building (Architect, 2026-11-10)
+**Theme:** Dependencies x Spec documents
+**Ready:** needs a decision on how a task names a prerequisite outside its document
+**Tier:** 1
+
+Slice 5 (`a-project-says-what-it-still-needs`) has three chained tasks. The first two share no file with slice 2 (`settings-in-the-app-s-style-where-you-expect-them`), which was building. The third edits `ProjectSettingsScreen.tsx` and the committed UI bundle, both of which slice 2 rewrites, and links to a page slice 2's last task creates. Naming that task's id (`task-c621c88c5bc9`) in the third task's `depends_on` is refused: `depends_on_unresolved`, "names neither a task declared in this document nor an imported entry's key". `create_task` does accept an existing task id in `depends_on`, so the board can express the wait but a document cannot. The operator either waits for slice 2 to finish before building slice 5 at all, or builds now and stops the build by hand before its third task starts. **Expected:** a document task's `depends_on` may name a task on the board (or another document's task key), and the flow does not start it until that task is done.
