@@ -32,8 +32,12 @@
   display: flex; align-items: stretch; gap: 2px; height: 100%;
   margin-left: 6px; padding-left: 10px;
   border-left: 1px solid var(--border-region);
-  overflow-x: auto; scrollbar-width: none;
+  flex: 1 1 0; min-width: 0; position: relative;
+  overflow: hidden;
 }
+/* A tab that does not fit stays laid out (so it can be measured) but unseen; the more menu holds it. */
+.aw-topbar-tab[data-overflow="true"] { position: absolute; visibility: hidden; pointer-events: none; }
+.aw-topbar-tab-more { flex: none; }
 .aw-topbar-tab {
   position: relative;
   display: inline-flex; align-items: center; gap: 6px;
