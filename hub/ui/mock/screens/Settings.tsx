@@ -65,7 +65,6 @@ const SECTIONS: Array<{ id: SettingsSection; label: string; icon: string; group:
   { id: 'budgets', label: 'Budgets', icon: 'bar_chart', group: 'Project' },
   { id: 'instructions', label: 'Instructions', icon: 'description', group: 'Agents' },
   { id: 'charters', label: 'Charters', icon: 'menu_book', group: 'Agents' },
-  { id: 'runners', label: 'Runners', icon: 'terminal', group: 'Agents' },
   { id: 'checkpoints', label: 'Checkpoints', icon: 'book_marked', group: 'Agents' },
   { id: 'manager', label: 'Manager', icon: 'memory', group: 'Agents' },
   { id: 'checks', label: 'Checks', icon: 'verified_user', group: 'Landing work' },
