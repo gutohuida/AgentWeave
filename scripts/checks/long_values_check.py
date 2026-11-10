@@ -38,6 +38,7 @@ import json
 import os
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -502,6 +503,7 @@ def main() -> int:
 
     scratch = Path(tempfile.mkdtemp(prefix="aw-lv-"))
     procs: List[subprocess.Popen] = []
+    logs: List[Any] = []
     try:
         hub_port, ui_port = free_port(), free_port()
         while ui_port == hub_port:
@@ -510,7 +512,11 @@ def main() -> int:
         home = scratch / "home"
         home.mkdir()
         db = scratch / "db" / "agentweave.db"
-        env = dict(os.environ)
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in ("HUB_URL", "AW_PORT") and not k.startswith(("AW_RUN_", "AW_AGENT_"))
+        }
         env.update(
             DATABASE_URL="sqlite+aiosqlite:///" + db.as_posix(),
             AW_BOOTSTRAP_API_KEY=API_KEY,
@@ -525,6 +531,7 @@ def main() -> int:
         env.pop("PYTHONPATH", None)
         py = [sys.executable]
         hub_log = (scratch / "hub.log").open("w")
+        logs.append(hub_log)
         hub = subprocess.Popen(
             [*py, "-m", "uvicorn", "hub.main:app", "--host", "127.0.0.1", "--port", str(hub_port)],
             cwd=HUB_DIR,
@@ -543,6 +550,7 @@ def main() -> int:
 
         vite_env = dict(os.environ, AW_DEV_HUB=hub_url)
         vite_log = (scratch / "vite.log").open("w")
+        logs.append(vite_log)
         vite = subprocess.Popen(
             f"npx vite --host 127.0.0.1 --port {ui_port} --strictPort",
             cwd=UI_DIR,
@@ -571,10 +579,21 @@ def main() -> int:
     finally:
         for proc in reversed(procs):
             kill_tree(proc)
+        for log_file in logs:
+            log_file.close()
         if args.keep:
             print(f"kept {scratch}")
         else:
-            shutil.rmtree(scratch, ignore_errors=True)
+            shutil.rmtree(scratch, onerror=_clear_readonly_and_retry)
+
+
+def _clear_readonly_and_retry(func: Any, path: str, _exc: Any) -> None:
+    """git writes object files read-only, which makes rmtree fail on Windows."""
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except OSError as exc:
+        print(f"long-values check: could not remove {path}: {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":
