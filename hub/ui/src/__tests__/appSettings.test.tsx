@@ -40,6 +40,8 @@ vi.mock('@/api/projects', () => ({
   useCreateProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
   useUpdateProjectSettings: () => ({ mutate: vi.fn(), error: null, isPending: false }),
   useRelocateProject: () => ({ mutate: vi.fn(), error: null, isPending: false }),
+  useRepositoryPreview: () => ({ data: undefined, error: null, refetch: vi.fn() }),
+  useMakeRepository: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
 }))
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),

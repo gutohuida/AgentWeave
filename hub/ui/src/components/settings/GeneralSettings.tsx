@@ -149,6 +149,7 @@ export function GeneralSettings({
   agentsUnreadable,
   notices,
   relocating,
+  repositoryOffer,
   onChange,
   onRelocate,
   onOpenBudgets,
@@ -178,6 +179,9 @@ export function GeneralSettings({
   /** What the last save answered (warnings, a refusal), shown under the page heading. */
   notices?: React.ReactNode
   relocating?: boolean
+  /** 'Make this a git repository', shown under the folder when it is not one. The container
+   *  owns its reads and writes. */
+  repositoryOffer?: React.ReactNode
   onChange: (patch: Partial<ProjectSettings>, said: string) => void
   /** Rebind a project whose folder has moved. */
   onRelocate?: (path: string) => void
@@ -352,8 +356,9 @@ export function GeneralSettings({
               {checks.map((check, i) => (
                 <div key={`${check.name}-${i}`} className="aw-check-row aw-reveal-host" data-testid={`project-check-${i}`}>
                   <Icon name="terminal" size={13} className="aw-check-icon" />
+                  <div className="aw-check-body">
                   <span className="aw-check-name">{check.name}</span>
-                  <code className="aw-check-command">{check.command}</code>
+                  <code className="aw-check-command" title={check.command}>{check.command}</code>
                   <span className="aw-check-timeout" title={check.paths?.length ? `Runs only when the work changes ${check.paths.join(', ')}` : undefined}>
                     {check.paths?.length ? (
                       <span data-testid={`project-check-paths-${i}`}>
@@ -379,6 +384,7 @@ export function GeneralSettings({
                     {check.timeout_seconds}s limit
                     <UsualDuration usual={usualDurations ? (usualDurations[check.name] ?? null) : undefined} index={i} />
                   </span>
+                  </div>
                   <span className="aw-reveal">
                     <button type="button" data-slot="icon-button" className="aw-icon-button" aria-label={`Move ${check.name} up`} title="Move up" disabled={i === 0} onClick={() => moveCheck(i, -1)}>
                       <Icon name="arrow_upward" size={13} />
@@ -733,6 +739,7 @@ export function GeneralSettings({
               </Button>
             </form>
           ) : null}
+          {folderAvailable && !isRepository ? repositoryOffer : null}
         </SettingsRow>
       </SettingsGroup>
 
@@ -781,8 +788,8 @@ function GeneratedFilesEditor({
   const dirty = paths !== stored.paths || command !== stored.command || timeout !== stored.timeout
   return (
     <div className="flex flex-col gap-2" data-testid="generated-files-editor">
-      <Input aria-label="Generated file paths" className="font-mono" value={paths} placeholder="package-lock.json, dist/**" onChange={(e) => setPaths(e.target.value)} />
-      <Input aria-label="Generated files command" className="font-mono" value={command} placeholder="npm install --package-lock-only" aria-invalid={Boolean(error && !command.trim())} onChange={(e) => setCommand(e.target.value)} />
+      <Textarea rows={1} aria-label="Generated file paths" className="font-mono aw-textarea-grow" value={paths} placeholder="package-lock.json, dist/**" onChange={(e) => setPaths(e.target.value)} />
+      <Textarea rows={1} aria-label="Generated files command" className="font-mono aw-textarea-grow" value={command} placeholder="npm install --package-lock-only" aria-invalid={Boolean(error && !command.trim())} onChange={(e) => setCommand(e.target.value)} />
       <Input aria-label="Generated files timeout" inputMode="numeric" className="tabular" style={{ width: 96 }} value={timeout} onChange={(e) => setTimeoutValue(e.target.value)} />
       {error ? <span role="alert" className="text-xs">{error}</span> : null}
       <Button

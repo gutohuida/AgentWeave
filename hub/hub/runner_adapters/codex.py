@@ -226,6 +226,8 @@ class CodexAdapter(RunnerAdapter):
     display_name = "Codex"
     catalog_provider = "codex"
     applies_reach_grants = False
+    # DOCUMENTED: Codex reads AGENTS.md from the repository root down to its working directory.
+    reads_agents_md = True
     transport_sentinels = codex_appserver.TRANSPORT_SENTINELS
     mcp_env_names = runner_commands.CODEX_MCP_ENV_NAMES
     write_tool_kinds = {CODEX_WRITE_TOOL: "changes[].path"}

@@ -28,7 +28,7 @@ function StepRow({
 }) {
   return (
     <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
-      <div className="min-w-0">
+      <div className="min-w-0" style={{ flex: 'none' }}>
         <div className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{label}</div>
         <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>{description}</p>
       </div>

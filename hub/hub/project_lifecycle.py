@@ -15,7 +15,7 @@ from typing import Any, Optional
 from sqlalchemy import Table, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import readable_ids
+from . import project_repository, readable_ids
 from .db.models import RUNNER_CLIS, Base, Charter, DeletedProject, Project, Run, Runner
 from .project_workspace import (
     PROJECT_MARKER_PATH,
@@ -37,6 +37,23 @@ logger = logging.getLogger(__name__)
 class DeletedProjectSummary:
     id: str
     name: str
+
+
+@dataclass(frozen=True)
+class RepositoryPreview:
+    """What 'Make this a git repository' would commit: *files* as they are, plus AGENTS.md when
+    *agents_md* (it is written only on confirmation, so it is not among *files*)."""
+
+    files: list[str]
+    agents_md: bool
+
+
+class RepositoryOfferError(Exception):
+    """The folder cannot be made a repository as offered; `code` says why."""
+
+    def __init__(self, message: str, *, code: str) -> None:
+        self.code = code
+        super().__init__(message)
 
 
 class ProjectLifecycleService:
@@ -190,12 +207,156 @@ class ProjectLifecycleService:
             ) from exc
 
         try:
-            return await self.open_existing(
+            # Before the marker exists, so the folder reads as one nothing instructs yet (FR-3),
+            # and before registration, so a git failure registers nothing.
+            branch = await asyncio.to_thread(project_repository.initialise_repository, target)
+        except project_repository.GitUnavailableError:
+            # A Hub with no git (its Docker image) still creates projects, as it did before: an
+            # empty folder, the same as opening a folder that is not a repository.
+            logger.warning("project_created_without_git path=%s", target, exc_info=True)
+            _remove_created_repository(target)
+            branch = None
+        except project_repository.RepositoryInitError as exc:
+            _remove_created_project_directory(target)
+            raise ProjectPathError(
+                f"could not make the new project folder a git repository: {exc}",
+                code="project_create_failed",
+            ) from exc
+
+        try:
+            project = await self.open_existing(
                 target, name=name, register_copy_as_new=False, _allow_legacy_binding=False
             )
         except Exception:
             _remove_created_project_directory(target)
             raise
+
+        if branch:
+            await self._record_hub_made_branch(project, branch)
+        if branch and await asyncio.to_thread((target / project_repository.AGENTS_MD).is_file):
+            # AgentWeave created it, so it is the project's instructions from the start (FR-11).
+            project.instructions_in_agents_md = True
+            await self.session.commit()
+        return project
+
+    async def _record_hub_made_branch(self, project: Project, branch: str) -> None:
+        """The Hub made *branch*, so it is the project's main branch from the start (FR-1);
+        recorded the way `_adopt_detected_main_branch` records its own choice."""
+        if project.main_branch:
+            return
+        project.main_branch = branch
+        await self.session.commit()
+        await persist_event(
+            self.session,
+            project.id,
+            "project_settings_updated",
+            {"changed": {"main_branch": {"was": None, "now": branch}}, "by": "hub"},
+        )
+
+    async def preview_repository(self, project_id: str) -> "RepositoryPreview":
+        """What making this project's folder a repository would commit (FR-6). Writes nothing."""
+        root = await self._repository_candidate(project_id)
+        agents_md = await self._would_create_agents_md(project_id, root)
+        try:
+            files = await asyncio.to_thread(project_repository.preview_first_commit, root)
+        except project_repository.GitUnavailableError as exc:
+            raise RepositoryOfferError(str(exc), code="git_unavailable") from exc
+        except project_repository.RepositoryInitError as exc:
+            raise RepositoryOfferError(str(exc), code="repository_failed") from exc
+        return RepositoryPreview(files=files, agents_md=agents_md)
+
+    async def make_repository(self, project_id: str, files: list[str]) -> Project:
+        """Make the folder a repository whose first commit holds the previewed *files* (FR-6).
+
+        *files* is what the operator was shown. The preview is taken again here, and a folder that
+        no longer matches it is refused: the operator confirmed a list, not whatever the folder
+        holds by the time the request lands. A failure removes the repository and an AGENTS.md
+        this call wrote, and nothing else; the operator's own files are never touched.
+        """
+        preview = await self.preview_repository(project_id)
+        if sorted(set(files)) != preview.files:
+            raise RepositoryOfferError(
+                "the folder's files changed since the preview; look at the list again and "
+                "confirm what it shows now",
+                code="preview_stale",
+            )
+        root = await self._repository_candidate(project_id)
+        try:
+            branch = await asyncio.to_thread(
+                project_repository.initialise_repository,
+                root,
+                files=preview.files,
+                agents_md=preview.agents_md,
+            )
+        except project_repository.RepositoryInitError as exc:
+            _remove_offered_repository(root, wrote_agents_md=preview.agents_md)
+            code = (
+                "git_unavailable"
+                if isinstance(exc, project_repository.GitUnavailableError)
+                else "repository_failed"
+            )
+            raise RepositoryOfferError(
+                f"could not make the project folder a git repository: {exc}", code=code
+            ) from exc
+
+        project = await self.session.get(Project, project_id)
+        assert project is not None  # `_repository_candidate` resolved it
+        logger.info(
+            "project_repository_created project_id=%s files=%d agents_md=%s",
+            project_id,
+            len(preview.files),
+            preview.agents_md,
+        )
+        await persist_event(
+            self.session,
+            project_id,
+            "project_repository_created",
+            {"files": len(preview.files), "agents_md": preview.agents_md, "branch": branch},
+        )
+        if branch:
+            await self._record_hub_made_branch(project, branch)
+        if preview.agents_md:
+            await self._adopt_created_agents_md(project, root)
+        return project
+
+    async def _adopt_created_agents_md(self, project: Project, root: Path) -> None:
+        """AgentWeave created this AGENTS.md, so it becomes the instructions (FR-11), taking any
+        database instructions with it in a commit of their own (FR-10). Where that move cannot be
+        made, the project stays on its database instructions rather than lose them from turns."""
+        from . import instructions_file
+
+        try:
+            await instructions_file.move_database_instructions(self.session, project, root)
+        except instructions_file.InstructionsSaveRefusedError:
+            logger.warning("agents_md_not_adopted project_id=%s", project.id, exc_info=True)
+            return
+        project.instructions_in_agents_md = True
+        await self.session.commit()
+
+    async def _repository_candidate(self, project_id: str) -> Path:
+        from .project_workspace import resolve_project_workspace
+
+        root = (await resolve_project_workspace(self.session, project_id)).root
+        if await asyncio.to_thread((root / ".git").exists):
+            raise RepositoryOfferError(
+                f"{root} is already a git repository", code="already_repository"
+            )
+        return root
+
+    async def _would_create_agents_md(self, project_id: str, root: Path) -> bool:
+        """FR-3 for a registered folder. The marker this Hub wrote on opening it does not count;
+        one the folder carried in -- an adopted project, whose id came from the folder -- does
+        (operator, 2026-11-10)."""
+        from .db.models import EventLog
+
+        adopted = await self.session.scalar(
+            select(func.count())
+            .select_from(EventLog)
+            .where(EventLog.project_id == project_id, EventLog.event_type == "project_adopted")
+        )
+        return await asyncio.to_thread(
+            project_repository.should_create_agents_md, root, marker_counts=bool(adopted)
+        )
 
     async def relocate(self, project_id: str, directory: str | Path) -> Project:
         canonical = await self._canonicalize(directory)
@@ -575,6 +736,8 @@ def _restore_marker(marker_path: Path, previous: Optional[bytes]) -> None:
 
 
 def _remove_created_project_directory(target: Path) -> None:
+    """Remove what `create_new` put in *target*, and *target* once it is empty. Never more."""
+    _remove_created_repository(target)
     marker_dir = target / ".agentweave"
     for candidate in (marker_dir / "project.json.tmp", marker_dir / "project.json"):
         try:
@@ -585,3 +748,33 @@ def _remove_created_project_directory(target: Path) -> None:
         marker_dir.rmdir()
     with contextlib.suppress(OSError):
         target.rmdir()
+
+
+def _remove_offered_repository(root: Path, *, wrote_agents_md: bool) -> None:
+    """Undo a failed 'Make this a git repository': the `.git` it made (there was none before), and
+    AGENTS.md only when it wrote one. The folder's own files stay exactly as they were."""
+    if wrote_agents_md:
+        _remove_created_repository(root)
+    else:
+        _remove_git_directory(root)
+
+
+def _remove_created_repository(target: Path) -> None:
+    """The repository and AGENTS.md `project_repository.initialise_repository` made in *target*."""
+    with contextlib.suppress(OSError):
+        (target / project_repository.AGENTS_MD).unlink(missing_ok=True)
+    _remove_git_directory(target)
+
+
+def _remove_git_directory(target: Path) -> None:
+    import shutil
+    import stat
+
+    def _writable_then_retry(function, path, _excinfo) -> None:  # type: ignore[no-untyped-def]
+        # Git writes its objects read-only, which Windows refuses to delete.
+        with contextlib.suppress(OSError):
+            os.chmod(path, stat.S_IWRITE)
+            function(path)
+
+    if (target / ".git").is_dir():
+        shutil.rmtree(target / ".git", onerror=_writable_then_retry)

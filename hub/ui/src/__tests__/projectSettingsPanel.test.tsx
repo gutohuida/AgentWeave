@@ -101,6 +101,8 @@ vi.mock('@/api/projects', () => ({
   useCheckUsualDurations: () => ({ data: usualDurations, error: usualDurationsError }),
   useUpdateProjectSettings: () => ({ mutate: update, isPending: false, error: null }),
   useRelocateProject: () => ({ mutate: relocate, isPending: false, error: null, isError: false }),
+  useRepositoryPreview: () => ({ data: undefined, error: null, refetch: vi.fn() }),
+  useMakeRepository: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
   useDeleteProject: () => ({
     mutate: deleteProject, isPending: false, error: null, isSuccess: false, reset: vi.fn(),
   }),
@@ -545,6 +547,22 @@ describe('Project settings → General, applied on change', () => {
     expect(screen.getByLabelText('Main branch')).toBeDisabled()
     expect(screen.queryByText(/^Use “/)).not.toBeInTheDocument()
     expect(screen.getByText(/not a git repository/)).toBeInTheDocument()
+  })
+
+  it('offers to make the folder a git repository beside it, only when it is not one', () => {
+    const missing = project.directory_state
+    project.directory_state = 'available'
+    try {
+      suggestion = { suggestion: null, chosen: null, is_repository: false }
+      const { unmount } = render(<GeneralSection />)
+      expect(screen.getByRole('button', { name: /make this a git repository/i })).toBeInTheDocument()
+      unmount()
+      suggestion = { suggestion: 'master', chosen: null, is_repository: true }
+      render(<GeneralSection />)
+      expect(screen.queryByRole('button', { name: /make this a git repository/i })).toBeNull()
+    } finally {
+      project.directory_state = missing
+    }
   })
 
   it('saves each setting on its own, sending only what changed', () => {
