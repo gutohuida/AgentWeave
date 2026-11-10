@@ -87,11 +87,11 @@
 }
 
 /* Reach chips */
-.aw-reach { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.aw-reach { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
 .aw-reach-chips { display: contents; }
 .aw-reach-empty { font-size: 12.5px; color: var(--text-3); margin-right: 4px; }
 .aw-reach-chip {
-  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
   height: 26px; padding: 0 4px 0 8px;
   border: 1px solid var(--border); border-radius: var(--radius-md);
   background: var(--surface-2); color: var(--text); font-size: 12.5px;

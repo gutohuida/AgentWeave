@@ -146,6 +146,13 @@ class Project(Base):
     pr_ci_cutoff_minutes: Mapped[int] = mapped_column(
         Integer, default=60, server_default="60", nullable=False
     )
+    # Whether the project's AGENTS.md is its instructions
+    # (`a-new-project-starts-as-a-git-repository-with-an-agents-md`, FR-11, migration 0173). On
+    # when AgentWeave created the file, otherwise only by the operator's opt-in; off is today's
+    # behaviour, the `project_instructions` row. That row is kept, unread, while this is on.
+    instructions_in_agents_md: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
 
     # --- Evidence retention (UNUSED) ---
     # Nothing reads or writes this column. It held a retention policy that no cleaner ever applied;

@@ -44,13 +44,13 @@ from ...db.models import (
     InboundQueueEntry,
     Message,
     Project,
-    ProjectInstructions,
     ProjectSession,
     Run,
     Runner,
     Task,
 )
 from ...inbound_queue import new_entry
+from ...instructions_file import instructions_for_turn
 from ...launchability import (
     EXPLORING_ASKS_IN_REPLY,
     agent_config,
@@ -2323,12 +2323,6 @@ async def _render_hub_agent_context(
     registered = agent_row is not None
     missing: List[str] = []
 
-    instructions_result = await db.execute(
-        select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
-    )
-    instructions_row = instructions_result.scalars().first()
-    project_instructions = instructions_row.content if instructions_row else ""
-
     charter = None
     if agent_row and agent_row.charter_id:
         candidate = await db.get(Charter, agent_row.charter_id)
@@ -2336,6 +2330,16 @@ async def _render_hub_agent_context(
             charter = candidate
 
     project_row = await db.get(Project, project_id)
+
+    # From the database row, or from AGENTS.md where the project chose it -- and then not at all
+    # for a runner that reads AGENTS.md itself, so the turn carries them once (FR-8).
+    _instructions_adapter = get_adapter(runner) if runner else None
+    project_instructions, instructions_read_natively = await instructions_for_turn(
+        db,
+        project_row,
+        project_id,
+        reads_agents_md=bool(_instructions_adapter and _instructions_adapter.reads_agents_md),
+    )
 
     # The roster is the part that makes collaboration possible at all: an agent cannot message a
     # peer whose name it was never told. Read it from the Hub's own tables, binding each agent to
@@ -2904,6 +2908,14 @@ async def _render_hub_agent_context(
         lines.append("## Project Instructions")
         lines.append("")
         lines.append(project_instructions)
+        lines.append("")
+    elif instructions_read_natively:
+        lines.append("## Project Instructions")
+        lines.append("")
+        lines.append(
+            "This project's instructions are its AGENTS.md, which your runner reads from your "
+            "working directory itself; they are not repeated here."
+        )
         lines.append("")
 
     if registered:
