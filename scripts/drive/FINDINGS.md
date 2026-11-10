@@ -41578,3 +41578,23 @@ One merged change fixed 16 auto-filed flaky-test tasks (AW-41..58) assigned to D
 **Tier:** 1
 
 Slice 5 (`a-project-says-what-it-still-needs`) has three chained tasks. The first two share no file with slice 2 (`settings-in-the-app-s-style-where-you-expect-them`), which was building. The third edits `ProjectSettingsScreen.tsx` and the committed UI bundle, both of which slice 2 rewrites, and links to a page slice 2's last task creates. Naming that task's id (`task-c621c88c5bc9`) in the third task's `depends_on` is refused: `depends_on_unresolved`, "names neither a task declared in this document nor an imported entry's key". `create_task` does accept an existing task id in `depends_on`, so the board can express the wait but a document cannot. The operator either waits for slice 2 to finish before building slice 5 at all, or builds now and stops the build by hand before its third task starts. **Expected:** a document task's `depends_on` may name a task on the board (or another document's task key), and the flow does not start it until that task is done.
+
+## F1157 (C) -- documents left in the retired `proposed` phase still say `proposed` on disk, and built work in them cannot be folded
+
+**Status:** open
+**Source:** found tidying the spec corpus (Architect, 2026-11-10)
+**Theme:** Spec documents x Lifecycle
+**Ready:** yes
+**Tier:** 0
+
+Four change documents (`agents-add-files-to-the-vault-by-path`, `an-operator-sets-how-far-an-agent-reaches`, `the-vault-names-who-read-an-entry`, `a-run-is-a-trace-you-can-export`) read `"phase": "proposed"` in their `spec.json` and in `spec/index.json`, while the Hub's row says `exploring` (`read_spec_document` on the first answers `phase: exploring`). The retirement of `proposed` (migration 0149) moved the rows but never re-rendered the files, so anyone reading the corpus from disk sees a phase that no longer exists. All four are fully built in code, so they sit unfolded until the operator approves an exploring document of finished work. **Expected:** the migration (or a one-off re-render) writes the files' phase from the rows; and an agent tidying the corpus can say "this exploring document is already built" in a way the operator approves in one action.
+
+## F1158 (C) -- `spec/index.json` lists only a fraction of the corpus's approved changes
+
+**Status:** open
+**Source:** found tidying the spec corpus (Architect, 2026-11-10)
+**Theme:** Spec corpus map
+**Ready:** yes
+**Tier:** 0
+
+Before the tidy, `spec/index.json` counted 11 approved change documents while `spec/changes/` held 62 (`kind: change-spec`, `hub.phase: approved`); 52 directories under `spec/` were also untracked in the main checkout, among them change documents a week old. After the tidy's `create_capability` acts the index was regenerated and now counts all 62, so the defect is that only some writes regenerate it, and between them the map reads as complete and is not. Overlaps the unwritten slice `the-map-is-real` of `the-specs-stay-true-and-easy-to-work-with`. **Expected:** every document the Hub writes is in the index, and the index is regenerated from the rows rather than appended to.
