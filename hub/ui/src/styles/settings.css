@@ -9,15 +9,15 @@
 }
 .aw-settings-back {
   display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
-  height: 26px; margin-bottom: 8px; padding: 0 8px 0 6px;
-  border-radius: var(--radius-sm); font-size: 12.5px; color: var(--text-3);
+  max-width: 100%; min-height: 26px; margin-bottom: 8px; padding: 3px 8px 3px 6px;
+  border-radius: var(--radius-sm); font-size: 12.5px; color: var(--text-3); text-align: left; overflow-wrap: anywhere;
   transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
 }
 .aw-settings-back:hover { background: var(--row-hover); color: var(--text); }
 .aw-settings-back:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 .aw-settings-nav-head { display: flex; flex-direction: column; padding: 0 8px 10px; }
-.aw-settings-nav-title { font-size: 13.5px; font-weight: 650; letter-spacing: -.005em; }
-.aw-settings-nav-sub { margin-top: 1px; font-size: 12px; color: var(--text-3); }
+.aw-settings-nav-title { overflow-wrap: anywhere; font-size: 13.5px; font-weight: 650; letter-spacing: -.005em; }
+.aw-settings-nav-sub { overflow-wrap: anywhere; margin-top: 1px; font-size: 12px; color: var(--text-3); }
 .aw-settings-nav-list { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
 .aw-settings-nav-item {
   display: flex; align-items: center; gap: 9px; width: 100%;
@@ -116,15 +116,16 @@
 .aw-checks { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .aw-checks-empty { font-size: 12.5px; color: var(--text-3); }
 .aw-check-row {
-  display: grid; grid-template-columns: 16px minmax(100px, 160px) minmax(0, 1fr) auto auto; align-items: center; gap: 10px;
-  height: 34px; padding: 0 6px 0 10px;
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 10px;
+  padding: 7px 6px 7px 10px;
   border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2);
 }
 .aw-check-row .aw-reveal { display: inline-flex; gap: 2px; }
-.aw-check-icon { color: var(--text-3); }
-.aw-check-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.aw-check-command { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.aw-check-timeout { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aw-check-icon { color: var(--text-3); margin-top: 3px; }
+.aw-check-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.aw-check-name { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.aw-check-command { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; white-space: pre-wrap; }
+.aw-check-timeout { overflow-wrap: anywhere; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 
 /* Danger zone */
 .aw-danger {
@@ -183,7 +184,7 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
   width: 32px; height: 32px; border-radius: var(--radius-md);
   border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
 }
-.aw-list-title { display: flex; align-items: center; font-size: 13.5px; font-weight: 500; color: var(--text); }
+.aw-list-title { display: flex; align-items: center; min-width: 0; overflow-wrap: anywhere; font-size: 13.5px; font-weight: 500; color: var(--text); }
 .aw-list-sub { display: block; margin-top: 2px; font-size: 12.5px; color: var(--text-3); line-height: 1.45; }
 .aw-list-clamp { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; max-width: 70ch; }
 .aw-list-warn { color: var(--amber); }
@@ -191,7 +192,7 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 .aw-list-open:hover .aw-list-title { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border-hi); }
 .aw-list-open:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 .aw-list-row .aw-reveal-host, .aw-list-row { position: relative; }
-.aw-list-meta { flex: none; min-width: 120px; text-align: right; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.aw-list-meta { flex: 0 1 auto; min-width: 0; max-width: 40%; text-align: right; font-size: 12px; color: var(--text-3); overflow-wrap: anywhere; }
 .aw-list-actions { position: absolute; right: 6px; top: 50%; translate: 0 -50%; display: inline-flex; gap: 2px; }
 .aw-charter-read { font-size: 13.5px; line-height: 1.6; color: var(--text-2); max-width: 68ch; }
 .aw-charter-read h2 { margin: 20px 0 6px; font-size: 13.5px; font-weight: 600; color: var(--text); }
@@ -277,14 +278,17 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 /* Grouped lists inside a page (worktrees, conflicts, task checkouts) */
 .aw-group-label { margin: 18px 0 2px; font-size: 12px; font-weight: 600; color: var(--text-2); }
 .aw-group-note { margin: 0 0 6px; font-size: 12px; color: var(--text-3); }
-.aw-path { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--text-2); }
+.aw-path { display: block; min-width: 0; max-width: 100%; overflow-wrap: anywhere; white-space: normal; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: var(--text-2); }
+.aw-path-copy { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+.aw-path-copy .aw-icon-button { flex: none; }
+.aw-textarea-grow { field-sizing: content; min-height: 34px; resize: none; overflow-wrap: anywhere; white-space: pre-wrap; }
 .aw-conflict-files { margin: 4px 0 0; padding: 0; list-style: none; }
 .aw-committed { flex-wrap: wrap; }
 .aw-committed-error { flex-basis: 100%; font-size: 11.5px; line-height: 1.4; color: var(--red); }
 .aw-usage-notes { display: flex; flex-direction: column; gap: 0; padding: 10px 0 4px; }
 .aw-usage-notes + .aw-notice, .aw-usage > [role="alert"] { margin-top: 10px; }
 .aw-usage-extra { display: block; font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.aw-raw-status { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; line-height: 1.55; white-space: pre; }
+.aw-raw-status { margin: 0; padding: 12px 14px; max-height: 420px; overflow: auto; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .aw-raw-status:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
 
 /* An old-vocabulary section (SettingsSection) inside the new frame: its rows take the page width. */

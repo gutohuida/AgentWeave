@@ -467,7 +467,7 @@ function WorkspaceLocation({ agent }: { agent: string }) {
       >
         <div style={{ minWidth: 0 }}>
           <code
-            className="block truncate text-xs"
+            className="block text-xs break-all"
             data-testid="agent-working-dir"
             style={{
               background: 'var(--surface-2)',
