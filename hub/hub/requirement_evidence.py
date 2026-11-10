@@ -130,8 +130,12 @@ async def _refuse_a_reviewer_recording(
         return
     raise EvidenceRefusedError(
         f"This run is reviewing {task_id}, and a reviewer judges the evidence the task's author "
-        f"recorded rather than recording its own. If that evidence does not demonstrate "
-        f"{requirement.identifier}, move {task_id} to revision_needed and say what is missing.",
+        f"recorded rather than recording its own. If you reproduced a piece of it on the task's "
+        f"current commit, accept that piece with your reproduction (`decide_evidence` with "
+        f"`command`, `output` and `commit`). If no recorded evidence demonstrates part of "
+        f"{requirement.identifier}, that part goes back to its builder: move {task_id} to "
+        f"revision_needed, naming the missing piece in `notes` (and in `failing_pieces` where a "
+        f"recorded piece claims it).",
         code="reviewer_records_evidence",
     )
 
@@ -1355,6 +1359,212 @@ async def may_accept(session: AsyncSession, project_id: str, actor: Actor) -> bo
     return bool(agent and agent.can_accept_evidence)
 
 
+@dataclass(kw_only=True)
+class Reproduction:
+    """What a reviewer ran itself, and what it corrects, on an acceptance (FR-1, FR-3).
+
+    `commit` is the commit it ran on; omitted, the HEAD of the directory its run was given. `summary`
+    and `covers` correct the author's, which the evidence row keeps as recorded.
+    """
+
+    command: Optional[str] = None
+    output: Optional[str] = None
+    commit: Optional[str] = None
+    summary: Optional[str] = None
+    covers: Optional[str] = None
+
+    def normalised(self) -> "Reproduction":
+        return Reproduction(
+            command=(self.command or "").strip()[:COMMAND_MAX] or None,
+            output=output_tail(self.output),
+            commit=(self.commit or "").strip() or None,
+            summary=(self.summary or "").strip() or None,
+            covers=check_covers(self.covers),
+        )
+
+    @property
+    def empty(self) -> bool:
+        return not any((self.command, self.output, self.commit, self.summary, self.covers))
+
+
+async def _reviews_the_task(
+    session: AsyncSession, actor: Actor, evidence: RequirementEvidence
+) -> bool:
+    """Whether *actor*'s run was started to review the task *evidence* was recorded for."""
+    from .run_task_binding import review_task_for_run
+
+    if actor.kind != "agent" or not actor.run_id or not evidence.task_id:
+        return False
+    run = await session.get(Run, actor.run_id)
+    return run is not None and await review_task_for_run(session, run) == evidence.task_id
+
+
+async def _refuse_over_an_operator_rejection(
+    session: AsyncSession, evidence: RequirementEvidence
+) -> None:
+    """F500, kept on the requirement (D2): the operator rejected evidence for this requirement on
+    this task, and a reviewer's acceptance of another piece would lift that block."""
+    rejected = await session.scalar(
+        select(EvidenceReview.evidence_id)
+        .join(RequirementEvidence, RequirementEvidence.id == EvidenceReview.evidence_id)
+        .where(
+            RequirementEvidence.requirement_id == evidence.requirement_id,
+            RequirementEvidence.task_id == evidence.task_id,
+            RequirementEvidence.review_state == REJECTED,
+            EvidenceReview.actor_kind == "operator",
+            EvidenceReview.decision == REJECTED,
+        )
+        .limit(1)
+    )
+    if rejected is None:
+        return
+    requirement = await session.get(SpecRequirement, evidence.requirement_id)
+    name = (requirement.identifier if requirement is not None else None) or "this requirement"
+    raise EvidenceRefusedError(
+        f"the operator rejected {rejected} for {name} on {evidence.task_id}, so a reviewer cannot "
+        f"accept evidence for {name} there: the operator's rejection stands until its author "
+        f"records evidence the operator's decision allows. Send {evidence.task_id} back with "
+        f"revision_needed, naming what was rejected and why.",
+        code="operator_rejected_requirement",
+        http_status=409,
+    )
+
+
+def _refuse_a_filled_gap(evidence: RequirementEvidence, reproduction: Reproduction) -> None:
+    """D3, FR-5: a piece its author said covers only part of the requirement is not made whole by
+    the reviewer. The part no recorded evidence demonstrates goes back to the builder."""
+    if reproduction.covers == "full" and (evidence.covers or "") == "partial":
+        raise EvidenceRefusedError(
+            f"{evidence.id} covers only part of its requirement, as its author recorded it, and a "
+            f"reviewer does not make it whole: no recorded evidence demonstrates the rest. Send "
+            f"{evidence.task_id} back with revision_needed, naming the missing piece in `notes`, "
+            f"so its builder demonstrates it. Accepting this piece as `partial` stays open.",
+            code="missing_piece",
+            http_status=409,
+        )
+
+
+@dataclass(frozen=True)
+class _Anchor:
+    commit: str
+    previous: Optional[str]
+    taken: Optional[Footprint]
+
+
+def _verify_reproduction_commit(
+    root: Path,
+    named: str,
+    *,
+    task_branch: str,
+    recorded: Optional[str],
+    locator: str,
+    main_branch: Optional[str],
+) -> _Anchor:
+    """FR-2: *named* resolved, on the task's own branch and at or after *recorded*, with the
+    footprint it re-anchors the evidence to (None where it is the recorded commit itself)."""
+    resolved = _git(root, "rev-parse", "--verify", f"{named}^{{commit}}")
+    if resolved is None:
+        raise EvidenceRefusedError(
+            f"reproduction commit {named} is not in this project's repository; name the commit "
+            f"you ran the reproduction on",
+            code="reproduction_commit_unknown",
+            http_status=409,
+        )
+    if is_reachable_from(root, resolved, f"refs/heads/{task_branch}") is not True:
+        raise EvidenceRefusedError(
+            f"reproduction commit {resolved[:12]} is not on {task_branch}, the task's own branch. "
+            f"Acceptance decides what lands, so a reproduction names a commit of the task under "
+            f"review; check out that branch's tip and run it there",
+            code="reproduction_commit_off_branch",
+            http_status=409,
+        )
+    if (
+        recorded
+        and resolved != recorded
+        and is_reachable_from(root, recorded, resolved) is not True
+    ):
+        raise EvidenceRefusedError(
+            f"reproduction commit {resolved[:12]} is before {recorded[:12]}, the commit this "
+            f"evidence was recorded at. A reproduction re-anchors the evidence forward, onto the "
+            f"task's current work, never back; run it at {recorded[:12]} or later",
+            code="reproduction_commit_before_evidence",
+            http_status=409,
+        )
+    if resolved == recorded:
+        return _Anchor(commit=resolved, previous=recorded, taken=None)
+    taken = read_footprint(
+        root, at=resolved, task_branch=task_branch, locator=locator, main_branch=main_branch
+    )
+    return _Anchor(commit=resolved, previous=recorded, taken=taken)
+
+
+async def _anchor_for(
+    session: AsyncSession,
+    evidence: RequirementEvidence,
+    reproduction: Reproduction,
+    actor: Actor,
+) -> Tuple[_Anchor, Optional[EvidenceFootprint]]:
+    """Where a reviewer's reproduction re-anchors *evidence*, verified (FR-1, FR-2). Reads only."""
+    from . import project_workspace
+    from .db.models import Project
+
+    task_branch = _task_branch_of(evidence.task_id)
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, evidence.project_id)
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 -- a refusal: without the repository nothing is verified
+        raise EvidenceRefusedError(
+            f"the project's repository could not be located ({exc}), so the reproduction's commit "
+            "cannot be verified",
+            code="reproduction_commit_unknown",
+            http_status=409,
+        ) from exc
+    if task_branch is None:
+        raise EvidenceRefusedError(
+            f"{evidence.id} belongs to no task branch, so a reproduction has no work to re-anchor to",
+            code="reproduction_commit_off_branch",
+            http_status=409,
+        )
+    named = reproduction.commit
+    if named is None:
+        recorded_dir = await recorded_workspace_dir(session, actor.run_id)
+        if recorded_dir and Path(recorded_dir).is_dir():
+            named = await blocking.run(_git, Path(recorded_dir), "rev-parse", "HEAD")
+    if not named:
+        raise EvidenceRefusedError(
+            "the reproduction names no commit, and the directory this run was given has none to "
+            "read: name the commit you ran it on (`commit`)",
+            code="reproduction_commit_unknown",
+            http_status=422,
+        )
+    footprint = (
+        (
+            await session.execute(
+                select(EvidenceFootprint).where(EvidenceFootprint.evidence_id == evidence.id)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    recorded = (
+        footprint.commit_sha
+        if footprint is not None and footprint.kind == "git" and footprint.commit_sha
+        else None
+    )
+    project = await session.get(Project, evidence.project_id)
+    anchor = await blocking.run(
+        _verify_reproduction_commit,
+        workspace.root,
+        named,
+        task_branch=task_branch,
+        recorded=recorded,
+        locator=evidence.locator or "",
+        main_branch=project.main_branch if project is not None else None,
+    )
+    return anchor, footprint
+
+
 async def decide(
     session: AsyncSession,
     evidence: RequirementEvidence,
@@ -1362,6 +1572,7 @@ async def decide(
     decision: str,
     actor: Actor,
     reason: str = "",
+    reproduction: Optional[Reproduction] = None,
 ) -> EvidenceReview:
     """Accept or reject one piece of evidence, and record who decided.
 
@@ -1377,7 +1588,19 @@ async def decide(
     A `held` piece (K: a send-back did not name it as failing) is no decision to overturn: the
     operator decides it as an awaiting one, accepting with no reason and rejecting with one; an
     agent leaves it to be recorded again at the next commit.
+
+    *reproduction* is a reviewer verifying rather than authoring (`evidence-review-sends-work-back-
+    only-for-what-is-wrong-with-it`, D1): the run reviewing the evidence's task accepts it with what
+    it ran itself, at a commit of the task's own branch at or after the recorded one (FR-2), and the
+    evidence's footprint is re-anchored there, so approval lands that commit (FR-1). The review is
+    the judgement, so the grant is not asked; every other refusal here still is, and it is refused
+    over the operator's rejection of the requirement on the task (FR-4) and for a partial piece
+    claimed whole (FR-5). The author's record stays on the row; the reviewer's is on the review.
     """
+    if reproduction is not None:
+        reproduction = reproduction.normalised()
+        if reproduction.empty:
+            reproduction = None
     if decision not in (ACCEPTED, REJECTED):
         # Names what would work, the way `model_catalog.validate_overrides` names the permitted
         # `permission_mode` values. The product's own stated principle — "a refusal the author
@@ -1391,7 +1614,21 @@ async def decide(
             http_status=422,
         )
 
-    if not await may_accept(session, evidence.project_id, actor):
+    if reproduction is not None:
+        if decision != ACCEPTED:
+            raise EvidenceRefusedError(
+                "a reproduction accompanies an acceptance; a piece that does not hold up is sent "
+                "back with the verdict (`revision_needed`, naming it in `failing_pieces`)",
+                code="reproduction_needs_acceptance",
+                http_status=422,
+            )
+        if not await _reviews_the_task(session, actor, evidence):
+            raise EvidenceRefusedError(
+                f"only the run reviewing {evidence.task_id or 'its task'} accepts {evidence.id} "
+                "with its own reproduction",
+                code="reproduction_not_reviewing",
+            )
+    elif not await may_accept(session, evidence.project_id, actor):
         raise EvidenceRefusedError(
             "accepting evidence is the operator's, or an agent the operator has granted it. "
             "A project that has granted no agent still has the operator.",
@@ -1502,6 +1739,21 @@ async def decide(
             http_status=409,
         )
 
+    anchor: Optional[_Anchor] = None
+    if reproduction is not None:
+        # Every refusal before any write: a refused acceptance leaves the evidence as it was.
+        await _refuse_over_an_operator_rejection(session, evidence)
+        _refuse_a_filled_gap(evidence, reproduction)
+        anchor, footprint = await _anchor_for(session, evidence, reproduction, actor)
+        if anchor.taken is not None:
+            _apply_footprint(
+                session,
+                evidence,
+                anchor.taken,
+                footprint,
+                outside_writes=footprint.outside_workspace_writes if footprint else None,
+            )
+
     review = EvidenceReview(
         id=f"evr-{short_id()}",
         project_id=evidence.project_id,
@@ -1512,6 +1764,13 @@ async def decide(
         run_id=actor.run_id,
         reason=reason,
     )
+    if reproduction is not None and anchor is not None:
+        review.reproduction_command = reproduction.command
+        review.reproduction_output = reproduction.output
+        review.reproduction_commit = anchor.commit
+        review.anchored_from_commit = anchor.previous
+        review.corrected_summary = reproduction.summary
+        review.corrected_covers = reproduction.covers
     session.add(review)
     # Materialised from the append-only reviews so coverage is a join rather than a correlated
     # subquery. `evidence_reviews` is what governs; this follows it.
@@ -1529,6 +1788,35 @@ async def decide(
             .values(state="superseded")
         )
     return review
+
+
+async def corrected_covers(session: AsyncSession, evidence_ids: Sequence[str]) -> Dict[str, str]:
+    """`{evidence_id: covers}` where the review that accepted it corrected the author's `covers`.
+
+    The latest review per piece decides, as `review_state` follows it: a correction on an acceptance
+    the operator later overturned no longer speaks for the piece.
+    """
+    wanted = [evidence_id for evidence_id in evidence_ids if evidence_id]
+    if not wanted:
+        return {}
+    latest: Dict[str, EvidenceReview] = {}
+    for review in (
+        (
+            await session.execute(
+                select(EvidenceReview)
+                .where(EvidenceReview.evidence_id.in_(wanted))
+                .order_by(EvidenceReview.sequence)
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        latest[review.evidence_id] = review
+    return {
+        evidence_id: review.corrected_covers
+        for evidence_id, review in latest.items()
+        if review.decision == ACCEPTED and review.corrected_covers
+    }
 
 
 async def verdict_pieces(
