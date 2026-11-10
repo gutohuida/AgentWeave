@@ -157,7 +157,10 @@ async def offer_for(
     """The offer *document* makes now, or None (D6: derived from the record)."""
     if document.kind != "change-spec":
         return None
-    payload = spec_documents.read_payload(workspace, document.path) or {}
+    from . import blocking
+
+    # File reads, so off the loop: every task move asks this (F1132).
+    payload = await blocking.run(spec_documents.read_payload, workspace, document.path) or {}
     link = payload.get("roadmap")
     if not isinstance(link, dict) or not link.get("document") or not link.get("slice"):
         return None
@@ -169,7 +172,7 @@ async def offer_for(
     if not requests and not (document.phase == spec_lifecycle.APPROVED and tasks):
         return None
     roadmap_path, approved_key = str(link["document"]), str(link["slice"])
-    slices = spec_service.roadmap_slices(workspace, roadmap_path)
+    slices = await blocking.run(spec_service.roadmap_slices, workspace, roadmap_path)
     keys = [str(item["key"]) for item in slices]
     if approved_key not in keys or keys.index(approved_key) + 1 >= len(keys):
         return None
