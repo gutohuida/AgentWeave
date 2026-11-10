@@ -1,4 +1,8 @@
-"""Project-wide instructions endpoints."""
+"""Project-wide instructions endpoints.
+
+Instructions come from the `project_instructions` row, or, where the project has chosen it, from
+its AGENTS.md (`instructions_file`, spec `a-new-project-starts-as-a-git-repository-with-an-agents-md`).
+"""
 
 from typing import Tuple
 
@@ -6,18 +10,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import instructions_file
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import ProjectInstructions
+from ...db.models import Project, ProjectInstructions
+from ...instructions_file import MAX_INSTRUCTIONS_CHARS, InstructionsSaveRefusedError
+from ...project_workspace import ProjectWorkspaceError, raise_workspace_http_error
 from ...schemas.common import RequestModel
 
-router = APIRouter(prefix="/project", tags=["instructions"])
+__all__ = ["MAX_INSTRUCTIONS_CHARS", "router"]
 
-#: The most characters project instructions may hold (F686). They are prepended to every agent
-#: turn, so their size is paid in input tokens on each one: 300,000 characters were accepted and
-#: carried by every later turn (~70k input tokens for a Haiku first turn). 40,000 is the size at
-#: which Claude Code itself warns that a CLAUDE.md is large enough to hurt.
-MAX_INSTRUCTIONS_CHARS = 40_000
+router = APIRouter(prefix="/project", tags=["instructions"])
 
 
 class InstructionsUpdate(RequestModel):
@@ -36,18 +39,35 @@ class InstructionsUpdate(RequestModel):
     content: str
 
 
+class InstructionsSourceUpdate(RequestModel):
+    """Switch 'Use AGENTS.md as this project's instructions' on or off (FR-11)."""
+
+    agents_md: bool
+
+
+async def _project(session: AsyncSession, project_id: str) -> Project:
+    row = await session.get(Project, project_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return row
+
+
+def _refused(exc: InstructionsSaveRefusedError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={"code": exc.code, "message": str(exc)},
+    )
+
+
 @router.get("/instructions")
 async def get_instructions(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Return project-wide instructions content (empty string if none set)."""
+    """The project's instructions from their chosen source, which source that is, and whether
+    using AGENTS.md is offered."""
     project_id, _ = project
-    result = await session.execute(
-        select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
-    )
-    row = result.scalars().first()
-    return {"content": row.content if row else "", "max_chars": MAX_INSTRUCTIONS_CHARS}
+    return await instructions_file.instructions_state(session, await _project(session, project_id))
 
 
 @router.put("/instructions")
@@ -56,7 +76,7 @@ async def put_instructions(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    """Upsert project-wide instructions content."""
+    """Replace the project's instructions in their chosen source."""
     project_id, _ = project
     content = body.content
     if len(content) > MAX_INSTRUCTIONS_CHARS:
@@ -64,15 +84,21 @@ async def put_instructions(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={
                 "code": "instructions_too_long",
-                "message": (
-                    f"These instructions are {len(content):,} characters; the limit is "
-                    f"{MAX_INSTRUCTIONS_CHARS:,}. They are sent with every agent turn, so their "
-                    "size is paid on each one. Shorten them, or keep reference material in the "
-                    "project's files or knowledge vault and point to it from here."
-                ),
+                "message": instructions_file.too_long_message(len(content)),
                 "max_chars": MAX_INSTRUCTIONS_CHARS,
             },
         )
+
+    project_row = await _project(session, project_id)
+    if project_row.instructions_in_agents_md:
+        try:
+            outcome = await instructions_file.save_to_agents_md(session, project_row, content)
+        except InstructionsSaveRefusedError as exc:
+            raise _refused(exc) from exc
+        except ProjectWorkspaceError as exc:
+            raise_workspace_http_error(exc)
+        state = await instructions_file.instructions_state(session, project_row)
+        return {**state, "committed": outcome.committed, "notice": outcome.notice}
 
     result = await session.execute(
         select(ProjectInstructions).where(ProjectInstructions.project_id == project_id)
@@ -85,4 +111,32 @@ async def put_instructions(
         session.add(row)
 
     await session.commit()
-    return {"content": content, "max_chars": MAX_INSTRUCTIONS_CHARS}
+    return {"content": content, "max_chars": MAX_INSTRUCTIONS_CHARS, "source": "hub"}
+
+
+@router.put("/instructions/source")
+async def put_instructions_source(
+    body: InstructionsSourceUpdate,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Switch AGENTS.md on as the project's instructions (moving the database instructions into it
+    once, FR-10), or back off to the database instructions, which were kept unchanged."""
+    project_id, _ = project
+    project_row = await _project(session, project_id)
+    outcome = None
+    if body.agents_md and not project_row.instructions_in_agents_md:
+        try:
+            outcome = await instructions_file.use_agents_md(session, project_row)
+        except InstructionsSaveRefusedError as exc:
+            raise _refused(exc) from exc
+        except ProjectWorkspaceError as exc:
+            raise_workspace_http_error(exc)
+    elif not body.agents_md and project_row.instructions_in_agents_md:
+        await instructions_file.stop_using_agents_md(session, project_row)
+    state = await instructions_file.instructions_state(session, project_row)
+    return {
+        **state,
+        "committed": bool(outcome and outcome.committed),
+        "notice": outcome.notice if outcome else None,
+    }

@@ -233,6 +233,10 @@ class ProjectLifecycleService:
 
         if branch:
             await self._record_hub_made_branch(project, branch)
+        if branch and await asyncio.to_thread((target / project_repository.AGENTS_MD).is_file):
+            # AgentWeave created it, so it is the project's instructions from the start (FR-11).
+            project.instructions_in_agents_md = True
+            await self.session.commit()
         return project
 
     async def _record_hub_made_branch(self, project: Project, branch: str) -> None:
@@ -311,7 +315,23 @@ class ProjectLifecycleService:
         )
         if branch:
             await self._record_hub_made_branch(project, branch)
+        if preview.agents_md:
+            await self._adopt_created_agents_md(project, root)
         return project
+
+    async def _adopt_created_agents_md(self, project: Project, root: Path) -> None:
+        """AgentWeave created this AGENTS.md, so it becomes the instructions (FR-11), taking any
+        database instructions with it in a commit of their own (FR-10). Where that move cannot be
+        made, the project stays on its database instructions rather than lose them from turns."""
+        from . import instructions_file
+
+        try:
+            await instructions_file.move_database_instructions(self.session, project, root)
+        except instructions_file.InstructionsSaveRefusedError:
+            logger.warning("agents_md_not_adopted project_id=%s", project.id, exc_info=True)
+            return
+        project.instructions_in_agents_md = True
+        await self.session.commit()
 
     async def _repository_candidate(self, project_id: str) -> Path:
         from .project_workspace import resolve_project_workspace
