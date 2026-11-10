@@ -4,9 +4,11 @@ import { useAgents } from '@/api/agents'
 import {
   useCheckUsualDurations,
   useMainBranchSuggestion,
+  useMakeRepository,
   useProjectSettings,
   useProjects,
   useRelocateProject,
+  useRepositoryPreview,
   useUpdateProjectSettings,
   type ProjectSettings,
 } from '@/api/projects'
@@ -19,6 +21,7 @@ import { runnerModelPart } from '@/lib/runnerLabel'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
 import { GeneralSettings } from '../GeneralSettings'
+import { MakeRepositoryOffer } from '../MakeRepositoryOffer'
 import { catalogModelOptions, runnerChoiceOptions } from '../settingsOptions'
 
 /** Project settings → General, on the Hub. Each change is its own save, sending only the fields
@@ -49,6 +52,10 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
   const { data: catalog } = useModelCatalog()
   const update = useUpdateProjectSettings(projectId ?? '')
   const relocate = useRelocateProject(projectId ?? '')
+  // 'Make this a git repository' (FR-6): the list is read only once the operator starts it.
+  const [offerStarted, setOfferStarted] = React.useState(false)
+  const repositoryPreview = useRepositoryPreview(projectId ?? null, offerStarted)
+  const makeRepository = useMakeRepository(projectId ?? '')
   // Shown at once, before the Hub answers, so a switch does not snap back while its save is in
   // flight; dropped when the save settles (the cache then holds what is stored).
   const [pending, setPending] = React.useState<Partial<ProjectSettings>>({})
@@ -146,6 +153,36 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
         ceilingNotes={projectCeilingNotes(settings.checkpoint_threshold_mode, settings.checkpoint_threshold_value, agents)}
         agentsUnreadable={agentsFailed}
         relocating={relocate.isPending}
+        repositoryOffer={
+          <MakeRepositoryOffer
+            started={offerStarted}
+            preview={repositoryPreview.data ?? null}
+            previewError={repositoryPreview.error ? readableApiError(repositoryPreview.error, 'The Hub did not return a reason.') : null}
+            confirming={makeRepository.isPending}
+            refusal={makeRepository.error ? readableApiError(makeRepository.error, 'The Hub did not return a reason.') : null}
+            onStart={() => {
+              makeRepository.reset()
+              setOfferStarted(true)
+            }}
+            onCancel={() => {
+              makeRepository.reset()
+              setOfferStarted(false)
+            }}
+            onConfirm={(files) =>
+              makeRepository.mutate(
+                { files },
+                {
+                  onSuccess: () => {
+                    setOfferStarted(false)
+                    toast({ title: 'The folder is now a git repository', tone: 'success' })
+                  },
+                  // The folder moved on from the list shown: read it again for the operator.
+                  onError: () => void repositoryPreview.refetch(),
+                },
+              )
+            }
+          />
+        }
         notices={
           <>
             {/* The checkpoint runner menu below would otherwise offer no runners, as if none existed. */}
