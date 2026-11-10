@@ -1,0 +1,29 @@
+{
+  "id": "fct-1e71c75e91f6",
+  "kind": "fact",
+  "claim": "Specs should name new setting fields, result fields and the API transitions a drive relies on, in the spec's design section.",
+  "citations": [
+    {
+      "source": "src-0e454f2c9ee6",
+      "quote": "Specs should name new setting fields, result fields and the API transitions a drive relies on (for example, a task goes through under_review before approved), so that drives do not have to guess.",
+      "line_start": 11,
+      "line_end": 11
+    },
+    {
+      "source": "src-0e454f2c9ee6",
+      "quote": "Name new settings fields, result fields and the required status path for drives (completed → under_review → approved) in the spec's design section.",
+      "line_start": 17,
+      "line_end": 17
+    }
+  ],
+  "sources": [
+    "src-0e454f2c9ee6"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-06T22:45:52.287602Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

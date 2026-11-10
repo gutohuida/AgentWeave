@@ -1,0 +1,23 @@
+{
+  "id": "fct-2aa0cbae48af",
+  "kind": "fact",
+  "claim": "The overlapping NPSAG-2 gate run on the same machine noticeably slowed sweep and black.",
+  "citations": [
+    {
+      "source": "src-bee1f99d4616",
+      "quote": "the overlapping NPSAG-2 run slowed sweep and black noticeably",
+      "line_start": 22,
+      "line_end": 22
+    }
+  ],
+  "sources": [
+    "src-bee1f99d4616"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-10T14:26:03.411494Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

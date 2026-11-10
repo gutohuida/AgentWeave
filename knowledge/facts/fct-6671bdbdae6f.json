@@ -1,0 +1,23 @@
+{
+  "id": "fct-6671bdbdae6f",
+  "kind": "fact",
+  "claim": "Each UI task should build the bundle and run the relevant drive checks itself instead of deferring all real-browser measurement and the bundle refresh to a final task.",
+  "citations": [
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "Let each UI task build the bundle and run the relevant drive checks itself, instead of deferring every real-browser measurement and the bundle refresh to a final task.",
+      "line_start": 22,
+      "line_end": 22
+    }
+  ],
+  "sources": [
+    "src-a13ebcf48a62"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-03T03:26:56.638216Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

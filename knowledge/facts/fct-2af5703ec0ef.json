@@ -1,0 +1,23 @@
+{
+  "id": "fct-2af5703ec0ef",
+  "kind": "fact",
+  "claim": "When a drive must fail before the UI exists, the spec must contain the test-id contract and the DOM nesting, matched to the mock, so the drive and the view are written against the same structure.",
+  "citations": [
+    {
+      "source": "src-c29c895e24ef",
+      "quote": "When a drive must fail before the UI exists, put the test-id contract and the DOM nesting in the spec, matched to the mock, so the drive and the view are written against the same structure.",
+      "line_start": 9,
+      "line_end": 9
+    }
+  ],
+  "sources": [
+    "src-c29c895e24ef"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T21:24:05.768201Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

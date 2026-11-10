@@ -1,0 +1,29 @@
+{
+  "id": "fct-10620a873dea",
+  "kind": "fact",
+  "claim": "It remains to be confirmed that the surface-ceiling ratchets raised in AOTCT-2 were lowered once the UI clients landed, as the record does not show the reversal.",
+  "citations": [
+    {
+      "source": "src-ef3dcca8bfe3",
+      "quote": "Confirm that the surface-ceiling ratchets raised in AOTCT-2 were lowered once the UI clients landed.",
+      "line_start": 21,
+      "line_end": 21
+    },
+    {
+      "source": "src-ef3dcca8bfe3",
+      "quote": "The record does not show the reversal.",
+      "line_start": 21,
+      "line_end": 21
+    }
+  ],
+  "sources": [
+    "src-ef3dcca8bfe3"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-09T02:38:45.365480Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-5bbd726e1aa5",
+  "kind": "fact",
+  "claim": "Recurring flaky Hub tests, especially test_a_slow_project_open_does_not_block_other_requests, should be stabilised or quarantined so hub-tests runs do not pay for first-run failures.",
+  "citations": [
+    {
+      "source": "src-0d2ef11b7769",
+      "quote": "Stabilise or quarantine the recurring flaky Hub tests, especially test_a_slow_project_open_does_not_block_other_requests, so hub-tests runs do not pay for first-run failures.",
+      "line_start": 17,
+      "line_end": 17
+    }
+  ],
+  "sources": [
+    "src-0d2ef11b7769"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-08T01:13:24.050908Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

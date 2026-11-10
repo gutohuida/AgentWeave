@@ -1,0 +1,23 @@
+{
+  "id": "fct-21b91288cd68",
+  "kind": "fact",
+  "claim": "A route and its UI hook should be kept together in one task, or the routes task should add the hook.",
+  "citations": [
+    {
+      "source": "src-dc306dd182e5",
+      "quote": "Keep a route and its UI hook together, or have the routes task add the hook.",
+      "line_start": 8,
+      "line_end": 8
+    }
+  ],
+  "sources": [
+    "src-dc306dd182e5"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T00:09:19.536965Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

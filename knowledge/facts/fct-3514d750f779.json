@@ -1,0 +1,29 @@
+{
+  "id": "fct-3514d750f779",
+  "kind": "fact",
+  "claim": "The Hub's test suite flags literal 'proposed' strings in spec.py and other readiness sources, so spec_lifecycle.PROPOSED must be used instead.",
+  "citations": [
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "The Hub's test suite flags literal 'proposed' strings in spec.py and other readiness sources.",
+      "line_start": 15,
+      "line_end": 15
+    },
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "Use spec_lifecycle.PROPOSED instead.",
+      "line_start": 15,
+      "line_end": 15
+    }
+  ],
+  "sources": [
+    "src-a13ebcf48a62"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-03T03:26:56.362887Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

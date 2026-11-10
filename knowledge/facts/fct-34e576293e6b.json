@@ -1,0 +1,23 @@
+{
+  "id": "fct-34e576293e6b",
+  "kind": "fact",
+  "claim": "The bundle-matches-source stamp test is currently skipped in the gate unless AW_CHECK_UI_BUNDLE=1 is set.",
+  "citations": [
+    {
+      "source": "src-c29c895e24ef",
+      "quote": "Run the bundle-matches-source stamp test in the gate whenever hub/ui/src changes, instead of skipping it unless AW_CHECK_UI_BUNDLE=1 is set.",
+      "line_start": 19,
+      "line_end": 19
+    }
+  ],
+  "sources": [
+    "src-c29c895e24ef"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T21:24:05.970810Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

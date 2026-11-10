@@ -1,0 +1,23 @@
+{
+  "id": "fct-6c7c3a477e8d",
+  "kind": "fact",
+  "claim": "A drive task must not be approved while its later steps are unverified; either its final review is scheduled after the feature task or the stripped-field run is required as evidence.",
+  "citations": [
+    {
+      "source": "src-0e454f2c9ee6",
+      "quote": "Do not approve a drive task while its later steps are unverified. Either schedule its final review after the feature task, or require the stripped-field run as evidence.",
+      "line_start": 19,
+      "line_end": 19
+    }
+  ],
+  "sources": [
+    "src-0e454f2c9ee6"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-06T22:45:52.422837Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

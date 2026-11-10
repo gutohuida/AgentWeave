@@ -1,0 +1,23 @@
+{
+  "id": "fct-7dfd6362b39d",
+  "kind": "fact",
+  "claim": "Specs should say how NULL values are reported for pre-migration rows versus new rows that skip the step, and for historical data that predates a table, such as builds before task_landings.",
+  "citations": [
+    {
+      "source": "src-a1c950abd4af",
+      "quote": "Say how NULL values are reported for each case, such as pre-migration rows versus new rows that skip the step, and for historical data that predates a table, such as builds before task_landings.",
+      "line_start": 21,
+      "line_end": 21
+    }
+  ],
+  "sources": [
+    "src-a1c950abd4af"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T23:11:47.835869Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

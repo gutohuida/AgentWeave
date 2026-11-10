@@ -1,0 +1,23 @@
+{
+  "id": "fct-8c506bf87292",
+  "kind": "fact",
+  "claim": "An acceptance drive written before its feature exists must still be executed with the unbuilt settings stripped out, so that every step after the expected failure reaches its assertion.",
+  "citations": [
+    {
+      "source": "src-0e454f2c9ee6",
+      "quote": "An acceptance drive written before its feature exists must still be executed, with the unbuilt settings stripped out, so that every step after the expected failure reaches its assertion.",
+      "line_start": 8,
+      "line_end": 8
+    }
+  ],
+  "sources": [
+    "src-0e454f2c9ee6"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-06T22:45:52.207583Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

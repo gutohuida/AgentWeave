@@ -1,0 +1,29 @@
+{
+  "id": "fct-094e0ecc1706",
+  "kind": "fact",
+  "claim": "Any 'oldest first' list in the Hub needs a tie-break that follows insertion order, such as rowid, because on Windows the clock ticks only about every 15 ms and event ids are random.",
+  "citations": [
+    {
+      "source": "src-ef3dcca8bfe3",
+      "quote": "Any 'oldest first' list in this Hub needs a tie-break that follows insertion order, such as rowid.",
+      "line_start": 9,
+      "line_end": 9
+    },
+    {
+      "source": "src-ef3dcca8bfe3",
+      "quote": "On Windows the clock ticks only about every 15 ms, and event ids are random.",
+      "line_start": 9,
+      "line_end": 9
+    }
+  ],
+  "sources": [
+    "src-ef3dcca8bfe3"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-09T02:38:45.171680Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

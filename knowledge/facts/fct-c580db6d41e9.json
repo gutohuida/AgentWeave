@@ -1,0 +1,23 @@
+{
+  "id": "fct-c580db6d41e9",
+  "kind": "fact",
+  "claim": "The operator settings API test should be added to the sweep set, or its settings assertion made tolerant of new fields, so a new setting fails before landing rather than in the landing batch.",
+  "citations": [
+    {
+      "source": "src-0d2ef11b7769",
+      "quote": "Add the operator settings API test to the sweep set, or make its settings assertion tolerant of new fields, so a new setting fails before landing rather than in the landing batch.",
+      "line_start": 18,
+      "line_end": 18
+    }
+  ],
+  "sources": [
+    "src-0d2ef11b7769"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-08T01:13:24.065397Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

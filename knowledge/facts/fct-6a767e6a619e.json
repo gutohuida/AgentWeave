@@ -1,0 +1,23 @@
+{
+  "id": "fct-6a767e6a619e",
+  "kind": "fact",
+  "claim": "Committed UI bundle drift causes send-backs, so the bundle should be regenerated at landing time or its conflicts treated as auto-resolvable.",
+  "citations": [
+    {
+      "source": "src-19951ad9b2b5",
+      "quote": "Regenerate the committed UI bundle at landing time, or treat its conflicts as auto-resolvable, so bundle drift does not cause send-backs.",
+      "line_start": 25,
+      "line_end": 25
+    }
+  ],
+  "sources": [
+    "src-19951ad9b2b5"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T12:07:18.210463Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

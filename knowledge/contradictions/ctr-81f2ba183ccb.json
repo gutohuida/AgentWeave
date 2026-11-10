@@ -1,0 +1,19 @@
+{
+  "id": "ctr-81f2ba183ccb",
+  "kind": "contradiction",
+  "facts": [
+    "fct-1f0125cc742e",
+    "fct-8b33d9a811d6"
+  ],
+  "presumed": "fct-1f0125cc742e",
+  "explanation": "The new fact says the full Hub test suite takes roughly 8 to 20 minutes, while the existing fact says the full hub-tests gate takes 30–40 minutes.",
+  "status": "open",
+  "visibility": "tracked",
+  "holder": null,
+  "created_at": "2026-11-05T21:13:23.242738Z",
+  "found_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  },
+  "resolution": null
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-6415c3f80eb5",
+  "kind": "fact",
+  "claim": "Migration revision numbers can collide across parallel branches, and the Hub currently does not reserve or check them, leaving builders to guess at head collisions.",
+  "citations": [
+    {
+      "source": "src-400939c6a155",
+      "quote": "Have the Hub reserve or check migration revision numbers across parallel branches, so builders do not have to guess at head collisions.",
+      "line_start": 25,
+      "line_end": 25
+    }
+  ],
+  "sources": [
+    "src-400939c6a155"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-04T13:13:19.235437Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

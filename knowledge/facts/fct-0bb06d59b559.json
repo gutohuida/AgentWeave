@@ -1,0 +1,23 @@
+{
+  "id": "fct-0bb06d59b559",
+  "kind": "fact",
+  "claim": "Drives that touch per-user app registrations must save and restore them.",
+  "citations": [
+    {
+      "source": "src-25a0a75c5a44",
+      "quote": "Drives that touch it must save and restore it.",
+      "line_start": 13,
+      "line_end": 13
+    }
+  ],
+  "sources": [
+    "src-25a0a75c5a44"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-08T21:30:51.628264Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "fct-41a7997986e0",
+  "kind": "fact",
+  "claim": "On the project's Windows hosts, scratch-directory cleanup must handle read-only git object files and verify the directory is gone, because rmtree with ignore_errors fails silently.",
+  "citations": [
+    {
+      "source": "src-a1c950abd4af",
+      "quote": "On this project's Windows hosts, scratch-directory cleanup must handle read-only git object files and verify the directory is gone.",
+      "line_start": 10,
+      "line_end": 10
+    },
+    {
+      "source": "src-a1c950abd4af",
+      "quote": "rmtree with ignore_errors fails silently.",
+      "line_start": 10,
+      "line_end": 10
+    }
+  ],
+  "sources": [
+    "src-a1c950abd4af"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T23:11:47.747660Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

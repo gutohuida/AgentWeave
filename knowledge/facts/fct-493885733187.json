@@ -1,0 +1,29 @@
+{
+  "id": "fct-493885733187",
+  "kind": "fact",
+  "claim": "Each requirement's criteria should have a single owning task; for example, sq-ac1/sq-ac2 belong to the push task, not split across settings and push.",
+  "citations": [
+    {
+      "source": "src-4a40052b8cca",
+      "quote": "Give each requirement's criteria a single owning task.",
+      "line_start": 23,
+      "line_end": 23
+    },
+    {
+      "source": "src-4a40052b8cca",
+      "quote": "For example, sq-ac1/sq-ac2 belong to the push task, not split across settings and push.",
+      "line_start": 23,
+      "line_end": 23
+    }
+  ],
+  "sources": [
+    "src-4a40052b8cca"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T00:55:31.829636Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

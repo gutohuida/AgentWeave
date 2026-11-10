@@ -1,0 +1,29 @@
+{
+  "id": "fct-a5df3293f2d7",
+  "kind": "fact",
+  "claim": "The d1102 drive should read labels via textContent, target stable data-testid selectors for the condensed line, and have its seeds validated against the approve route so a seed not in its claimed state fails as SETUP rather than as a behaviour check.",
+  "citations": [
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "Make the d1102 drive read labels via textContent and target stable data-testid selectors for the condensed line.",
+      "line_start": 19,
+      "line_end": 19
+    },
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "Its seeds should be validated against the approve route, so a seed that is not in its claimed state fails as SETUP, not as a behaviour check.",
+      "line_start": 19,
+      "line_end": 19
+    }
+  ],
+  "sources": [
+    "src-a13ebcf48a62"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-03T03:26:56.425977Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

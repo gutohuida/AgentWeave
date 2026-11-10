@@ -1,0 +1,23 @@
+{
+  "id": "fct-59f5e2ea3477",
+  "kind": "fact",
+  "claim": "A spec that will be checked by a browser drive should name the page handles (test ids, data attributes, open or closed state) and the agent routes in its contract.",
+  "citations": [
+    {
+      "source": "src-ef3dcca8bfe3",
+      "quote": "A spec that will be checked by a browser drive should name the page handles (test ids, data attributes, open or closed state) and the agent routes in its contract, so UI and Hub builders don't have to discover them in the drive script.",
+      "line_start": 8,
+      "line_end": 8
+    }
+  ],
+  "sources": [
+    "src-ef3dcca8bfe3"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-09T02:38:45.154168Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

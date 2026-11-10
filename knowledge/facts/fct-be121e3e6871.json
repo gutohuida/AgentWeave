@@ -1,0 +1,23 @@
+{
+  "id": "fct-be121e3e6871",
+  "kind": "fact",
+  "claim": "Under the new spec, any other error, or a check that runs out of time without naming a failing test, is retried once on the current tip right away.",
+  "citations": [
+    {
+      "source": "src-518e204db0f2",
+      "quote": "Any other error, or a check that runs out of time without naming a failing test, is retried once on the current tip right away.",
+      "line_start": 24,
+      "line_end": 24
+    }
+  ],
+  "sources": [
+    "src-518e204db0f2"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-04T12:47:10.624779Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-13dc40aa3019",
+  "kind": "fact",
+  "claim": "The cause of a named-profile launch registering no project (in _hub_resolve_launch_url / _fetch_setup_token) should be investigated, after which the drive's POST /projects/open fallback should be removed.",
+  "citations": [
+    {
+      "source": "src-40507bd03662",
+      "quote": "Investigate why a launch on a named profile registers no project (_hub_resolve_launch_url / _fetch_setup_token), then remove the drive's POST /projects/open fallback.",
+      "line_start": 21,
+      "line_end": 21
+    }
+  ],
+  "sources": [
+    "src-40507bd03662"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T16:09:01.007709Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

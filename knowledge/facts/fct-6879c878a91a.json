@@ -1,0 +1,29 @@
+{
+  "id": "fct-6879c878a91a",
+  "kind": "fact",
+  "claim": "When a spec includes an acceptance drive written before the feature, it should also include a task that reconciles the drive with the shipped routes and runs it, depending on the route-owning tasks.",
+  "citations": [
+    {
+      "source": "src-4a40052b8cca",
+      "quote": "When a spec includes an acceptance drive written before the feature, also include a task that reconciles the drive with the shipped routes and runs it.",
+      "line_start": 22,
+      "line_end": 22
+    },
+    {
+      "source": "src-4a40052b8cca",
+      "quote": "That task should depend on the route-owning tasks.",
+      "line_start": 22,
+      "line_end": 22
+    }
+  ],
+  "sources": [
+    "src-4a40052b8cca"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T00:55:31.813582Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

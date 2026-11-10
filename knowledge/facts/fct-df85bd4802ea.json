@@ -1,0 +1,29 @@
+{
+  "id": "fct-df85bd4802ea",
+  "kind": "fact",
+  "claim": "A fresh scratch project has no spec/index.json and the Hub will not guess its home, so specs and drives that expect a new capability in the spec map must reindex with a home first.",
+  "citations": [
+    {
+      "source": "src-ef3dcca8bfe3",
+      "quote": "A fresh scratch project has no spec/index.json, and the Hub will not guess its home.",
+      "line_start": 12,
+      "line_end": 12
+    },
+    {
+      "source": "src-ef3dcca8bfe3",
+      "quote": "Specs and drives that expect a new capability in the spec map must reindex with a home first.",
+      "line_start": 12,
+      "line_end": 12
+    }
+  ],
+  "sources": [
+    "src-ef3dcca8bfe3"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-09T02:38:45.241280Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

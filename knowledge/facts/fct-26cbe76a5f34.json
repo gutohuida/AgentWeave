@@ -1,0 +1,29 @@
+{
+  "id": "fct-26cbe76a5f34",
+  "kind": "fact",
+  "claim": "New UI code that builds dates with raw new Date(...) trips the hubTime sweep and needs an EXEMPT entry with a reason, committed with the change.",
+  "citations": [
+    {
+      "source": "src-43b46688d641",
+      "quote": "New UI code that builds dates with raw new Date(...) trips the hubTime sweep.",
+      "line_start": 14,
+      "line_end": 14
+    },
+    {
+      "source": "src-43b46688d641",
+      "quote": "Such code needs an EXEMPT entry with a reason, committed with the change.",
+      "line_start": 14,
+      "line_end": 14
+    }
+  ],
+  "sources": [
+    "src-43b46688d641"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-03T11:21:21.909569Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

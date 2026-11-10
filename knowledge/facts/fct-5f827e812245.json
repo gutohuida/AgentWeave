@@ -1,0 +1,29 @@
+{
+  "id": "fct-5f827e812245",
+  "kind": "fact",
+  "claim": "Acceptance-drive assertions should test what a criterion means rather than raw run state, and should build scenarios that a correct build's completion gate will not short-circuit.",
+  "citations": [
+    {
+      "source": "src-b8ed975e77a6",
+      "quote": "Acceptance-drive assertions should test what a criterion means, such as 'only listed tests fail' or 'the task is not revision_needed', rather than raw run state.",
+      "line_start": 12,
+      "line_end": 12
+    },
+    {
+      "source": "src-b8ed975e77a6",
+      "quote": "They should build scenarios that a correct build's completion gate will not short-circuit.",
+      "line_start": 12,
+      "line_end": 12
+    }
+  ],
+  "sources": [
+    "src-b8ed975e77a6"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-06T08:26:10.987597Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

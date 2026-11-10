@@ -1,0 +1,25 @@
+{
+  "id": "fct-525e28659260",
+  "kind": "fact",
+  "claim": "Tests in test_checks_refresh_when_main_moves.py hold checks open using file-released gates in a sibling control directory.",
+  "citations": [
+    {
+      "source": "src-518e204db0f2",
+      "quote": "Tests in test_checks_refresh_when_main_moves.py hold checks open with file-released gates in a sibling control directory.",
+      "line_start": 11,
+      "line_end": 11
+    }
+  ],
+  "sources": [
+    "src-518e204db0f2"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-04T01:25:01.742753Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  },
+  "superseded_by": "src-518e204db0f2",
+  "superseded_at": "2026-11-04T12:47:10.634665Z"
+}

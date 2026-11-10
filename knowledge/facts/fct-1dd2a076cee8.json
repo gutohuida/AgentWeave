@@ -1,0 +1,29 @@
+{
+  "id": "fct-1dd2a076cee8",
+  "kind": "fact",
+  "claim": "Full hub-tests runs should be serialized, or their xdist workers capped, when several tasks reach the check gate together, because the first attempt crashed with workers going down under contention.",
+  "citations": [
+    {
+      "source": "src-8723a13b3ffc",
+      "quote": "Serialize full hub-tests runs, or cap their xdist workers, when several tasks reach the check gate together.",
+      "line_start": 17,
+      "line_end": 17
+    },
+    {
+      "source": "src-8723a13b3ffc",
+      "quote": "The first attempt here crashed with workers going down under contention.",
+      "line_start": 17,
+      "line_end": 17
+    }
+  ],
+  "sources": [
+    "src-8723a13b3ffc"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-04T01:26:24.998859Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

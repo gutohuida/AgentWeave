@@ -1,0 +1,23 @@
+{
+  "id": "fct-d6943e9fc524",
+  "kind": "fact",
+  "claim": "UI tasks that change hub/ui must rebuild the committed bundle against current master just before review to avoid conflicts in the generated assets.",
+  "citations": [
+    {
+      "source": "src-19951ad9b2b5",
+      "quote": "UI tasks that change hub/ui must rebuild the committed bundle against current master just before review. Otherwise the generated assets conflict.",
+      "line_start": 13,
+      "line_end": 13
+    }
+  ],
+  "sources": [
+    "src-19951ad9b2b5"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T12:07:18.083730Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
