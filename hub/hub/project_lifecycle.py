@@ -15,7 +15,7 @@ from typing import Any, Optional
 from sqlalchemy import Table, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import readable_ids
+from . import project_repository, readable_ids
 from .db.models import RUNNER_CLIS, Base, Charter, DeletedProject, Project, Run, Runner
 from .project_workspace import (
     PROJECT_MARKER_PATH,
@@ -190,12 +190,42 @@ class ProjectLifecycleService:
             ) from exc
 
         try:
-            return await self.open_existing(
+            # Before the marker exists, so the folder reads as one nothing instructs yet (FR-3),
+            # and before registration, so a git failure registers nothing.
+            branch = await asyncio.to_thread(project_repository.initialise_repository, target)
+        except project_repository.GitUnavailableError:
+            # A Hub with no git (its Docker image) still creates projects, as it did before: an
+            # empty folder, the same as opening a folder that is not a repository.
+            logger.warning("project_created_without_git path=%s", target, exc_info=True)
+            _remove_created_repository(target)
+            branch = None
+        except project_repository.RepositoryInitError as exc:
+            _remove_created_project_directory(target)
+            raise ProjectPathError(
+                f"could not make the new project folder a git repository: {exc}",
+                code="project_create_failed",
+            ) from exc
+
+        try:
+            project = await self.open_existing(
                 target, name=name, register_copy_as_new=False, _allow_legacy_binding=False
             )
         except Exception:
             _remove_created_project_directory(target)
             raise
+
+        if branch and not project.main_branch:
+            # The Hub made the branch, so it is the project's main branch from the start (FR-1);
+            # recorded the way `_adopt_detected_main_branch` records its own choice.
+            project.main_branch = branch
+            await self.session.commit()
+            await persist_event(
+                self.session,
+                project.id,
+                "project_settings_updated",
+                {"changed": {"main_branch": {"was": None, "now": branch}}, "by": "hub"},
+            )
+        return project
 
     async def relocate(self, project_id: str, directory: str | Path) -> Project:
         canonical = await self._canonicalize(directory)
@@ -575,6 +605,8 @@ def _restore_marker(marker_path: Path, previous: Optional[bytes]) -> None:
 
 
 def _remove_created_project_directory(target: Path) -> None:
+    """Remove what `create_new` put in *target*, and *target* once it is empty. Never more."""
+    _remove_created_repository(target)
     marker_dir = target / ".agentweave"
     for candidate in (marker_dir / "project.json.tmp", marker_dir / "project.json"):
         try:
@@ -585,3 +617,20 @@ def _remove_created_project_directory(target: Path) -> None:
         marker_dir.rmdir()
     with contextlib.suppress(OSError):
         target.rmdir()
+
+
+def _remove_created_repository(target: Path) -> None:
+    """The repository and AGENTS.md `project_repository.initialise_repository` made in *target*."""
+    import shutil
+    import stat
+
+    def _writable_then_retry(function, path, _excinfo) -> None:  # type: ignore[no-untyped-def]
+        # Git writes its objects read-only, which Windows refuses to delete.
+        with contextlib.suppress(OSError):
+            os.chmod(path, stat.S_IWRITE)
+            function(path)
+
+    with contextlib.suppress(OSError):
+        (target / project_repository.AGENTS_MD).unlink(missing_ok=True)
+    if (target / ".git").is_dir():
+        shutil.rmtree(target / ".git", onerror=_writable_then_retry)
