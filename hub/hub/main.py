@@ -326,6 +326,19 @@ def _ui_staleness_warning() -> Optional[str]:
     return warning
 
 
+async def _ui_staleness_warning_off_loop() -> Optional[str]:
+    """`_ui_staleness_warning` for a caller on the event loop: a cached answer is read in place,
+    and an expired one is worked out on the blocking pool. Working it out runs git two or three
+    times and stats every UI source file, which on the loop held the whole Hub about 300 ms every
+    TTL for whoever polls `/health` (F1128)."""
+    from . import blocking
+
+    cached = _ui_staleness_cache
+    if cached is not None and cached[0] > time.monotonic():
+        return cached[1]
+    return await blocking.run(_ui_staleness_warning)
+
+
 def _reset_ui_staleness_cache() -> None:
     """Forget the cached answer. A test seam, and the only way to clear it deliberately."""
     global _ui_staleness_cache
@@ -639,7 +652,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Could not pin the tool server at start: %s", exc)
     for pruned in tool_server.PIN.prune_stale():
         logger.warning("Pruned stale tool server %s", pruned)
-    warning = _ui_staleness_warning()
+    warning = await _ui_staleness_warning_off_loop()
     if warning:
         logger.warning(warning)
     # Ended spans to each project's OTLP endpoint, when one is enabled (trace-1019, D4).
@@ -830,7 +843,7 @@ def create_app() -> FastAPI:
     @app.get("/health", include_in_schema=False)
     async def health():
         payload: Dict[str, Any] = {"status": "ok", "runtime": _runtime_kind()}
-        warning = _ui_staleness_warning()
+        warning = await _ui_staleness_warning_off_loop()
         if warning:
             payload["ui_stale"] = True
             payload["ui_stale_detail"] = warning
