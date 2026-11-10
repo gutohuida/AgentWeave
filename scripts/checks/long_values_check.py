@@ -71,6 +71,8 @@ PROJECT_SECTIONS = (
     "settings",
 )
 AGENT_SECTIONS = ("identity", "execution", "charter", "interaction", "context", "access", "workspace")
+# Selector that must be on the page before a section is measured (its seeded data has loaded).
+SECTION_READY = {"Agent:workspace": '[data-testid="agent-working-dir"]'}
 
 API_KEY = "aw_live_" + "l0ngvalues" * 3 + "ab"  # throwaway key for the throwaway Hub
 
@@ -450,6 +452,21 @@ def sweep(args: argparse.Namespace, ui_url: str, hub_url: str, project_id: str, 
                             page.wait_for_selector("main, .aw-settings-page, [data-testid]", timeout=60000)
                         except Exception:  # noqa: BLE001
                             pass
+                        # Never measure before the section's seeded content is on the page: a render
+                        # taken while the data still loads has nothing long in it and passes vacuously.
+                        try:
+                            page.wait_for_load_state("networkidle", timeout=30000)
+                        except Exception:  # noqa: BLE001
+                            pass
+                        expect = SECTION_READY.get(t["label"])
+                        if expect:
+                            try:
+                                page.locator(expect).first.wait_for(state="attached", timeout=60000)
+                            except Exception:  # noqa: BLE001
+                                raise SystemExit(
+                                    f"{t['label']} at {width}/{mode}: {expect!r} never appeared, "
+                                    "so the render cannot be measured"
+                                )
                         page.wait_for_timeout(1500)
                         if args.inject_fault:
                             page.evaluate(FAULT_JS)
