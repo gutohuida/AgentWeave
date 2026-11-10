@@ -168,7 +168,6 @@ export interface GeneralSettingsProps {
   onChange: (patch: Partial<ProjectSettings>, said: string) => void
   /** Rebind a project whose folder has moved. */
   onRelocate?: (path: string) => void
-  onOpenBudgets?: () => void
   /** Opens the type-to-confirm delete dialog the container owns. */
   onDeleteProject: () => void
 }
@@ -791,48 +790,6 @@ function DangerZone({ settings, onDeleteProject }: Pick<GeneralSettingsProps, 's
           Delete project…
         </Button>
       </section>
-  )
-}
-
-/** Today's single General page, kept until the app is wired to the sections below
- *  (`settings-in-the-app-s-style-where-you-expect-them`). */
-export function GeneralSettings(props: GeneralSettingsProps) {
-  const { settings, notices, onChange, onOpenBudgets } = props
-  return (
-    <SettingsPage icon="settings" title="General" description="How agents work together in this project, what they may reach, and where approved work lands.">
-      {notices}
-      <SettingsGroup title="Collaboration">
-        <CollaborationRows settings={settings} onChange={onChange} />
-        <AgentBudgetRow settings={settings} onChange={onChange} />
-        {onOpenBudgets ? (
-          <SettingsRow
-            label="Token limit"
-            description="Set in Budgets, beside the usage it limits."
-            control={
-              <Button variant="outline" size="sm" onClick={onOpenBudgets}>
-                Open Budgets
-              </Button>
-            }
-          />
-        ) : null}
-      </SettingsGroup>
-      <SettingsGroup title="Reach" description="What agents may do when nobody said otherwise. An agent's own settings win over these.">
-        <PermissionRows {...props} />
-      </SettingsGroup>
-      <SettingsGroup title="Integration" description="Where approved work lands, and what must pass first.">
-        <MainBranchRow {...props} />
-        <ChecksRows {...props} />
-        <GeneratedFilesRow {...props} />
-        <PullRequestRows {...props} />
-      </SettingsGroup>
-      <SettingsGroup title="Checkpointing" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">
-        <CheckpointRows {...props} />
-      </SettingsGroup>
-      <SettingsGroup title="Project">
-        <ProjectRows {...props} />
-      </SettingsGroup>
-      <DangerZone {...props} />
-    </SettingsPage>
   )
 }
 
