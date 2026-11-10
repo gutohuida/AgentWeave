@@ -1,3 +1,4 @@
+import { useCopy } from '@/hooks/useCopy'
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
@@ -213,6 +214,22 @@ export function WorktreesSettings({
   )
 }
 
+/** A path shown whole: it wraps (so the folder that differs between rows is never cut off), the full
+ *  value is on hover, and one click copies it. */
+function CopyablePath({ value }: { value: string }) {
+  const { copied, copy } = useCopy()
+  return (
+    <span className="aw-path-copy">
+      <code className="aw-path" title={value}>
+        {value}
+      </code>
+      <button type="button" data-slot="icon-button" className="aw-icon-button" aria-label={`Copy ${value}`} title={copied ? 'Copied' : 'Copy path'} onClick={() => void copy(value)}>
+        <Icon name={copied ? 'check' : 'content_copy'} size={12} />
+      </button>
+    </span>
+  )
+}
+
 function WorkspaceGroup({ title, note, workspaces }: { title: string; note?: string; workspaces: WorkspaceInfo[] }) {
   if (workspaces.length === 0) return null
   return (
@@ -225,9 +242,7 @@ function WorkspaceGroup({ title, note, workspaces }: { title: string; note?: str
             </span>
             <span className="min-w-0 flex-1">
               <span className="aw-list-title">{workspace.name}</span>
-              <code className="aw-path" title={workspace.path}>
-                {workspace.path}
-              </code>
+              <CopyablePath value={workspace.path} />
               {workspace.task_deleted && (
                 <span className="aw-list-meta">Task deleted -- its work is kept on this branch.</span>
               )}
