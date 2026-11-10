@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { SetupCount } from '@/components/overview/SetupList'
 import { useProjects, type ProjectSummary } from '@/api/projects'
 import { BrandLoop } from '@/components/common/BrandLoop'
 import { Icon } from '@/components/common/Icon'
@@ -40,6 +41,11 @@ interface SidebarProps {
    *  they are reachable with no project open, where no other settings entry exists. */
   onOpenAppSettings?: () => void
   appSettingsActive?: boolean
+  /** What each project still needs (`a-project-says-what-it-still-needs`), as item titles; a
+   *  project with none left has an empty list. Absent: no count is shown. */
+  setupFor?: (projectId: string) => string[]
+  /** The count opens that project's set-up list (on its Overview). */
+  onOpenSetup?: (projectId: string) => void
   /** Collapsed to an icon rail. The operator's choice and only theirs — no destination writes
    *  it (`hub-workspace-shell`: "Navigation collapses only when the operator asks"). */
   compact?: boolean
@@ -105,6 +111,8 @@ export function Sidebar({
   onAddProject,
   onOpenAppSettings,
   appSettingsActive = false,
+  setupFor,
+  onOpenSetup,
   compact = false,
   onCompactChange,
   width = SIDEBAR_WIDTH,
@@ -241,6 +249,7 @@ export function Sidebar({
           onAddProject={onAddProject}
           onOpenAppSettings={onOpenAppSettings}
           appSettingsActive={appSettingsActive}
+          setupFor={setupFor}
         />
       ) : (
         <>
@@ -304,6 +313,7 @@ export function Sidebar({
                       ) : null}
                     </button>
                     <span className="aw-rail-row-end">
+                      <SetupCount titles={setupFor?.(project.id) ?? []} onClick={onOpenSetup ? () => onOpenSetup(project.id) : undefined} />
                       <span className="aw-reveal aw-rail-actions">
                         <button
                           data-slot="icon-button"
@@ -421,7 +431,9 @@ function CompactRail({
   onAddProject,
   onOpenAppSettings,
   appSettingsActive,
+  setupFor,
 }: {
+  setupFor?: (projectId: string) => string[]
   projects: ProjectSummary[]
   selectedProjectId: string | null
   activeAgent: string | null
@@ -459,6 +471,7 @@ function CompactRail({
                 onClick={() => onOpenProject(project.id)}
               >
                 {project.name.slice(0, 2).toUpperCase()}
+                <SetupCount titles={setupFor?.(project.id) ?? []} />
               </button>
               {project.agents.map((agent) => {
                 const colors = agentColorVars(agent.color_index)

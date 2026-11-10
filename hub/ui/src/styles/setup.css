@@ -1,0 +1,49 @@
+/* What a project still needs (`a-project-says-what-it-still-needs`): one card holding its items,
+ * on Overview and at the top of Project settings, and the rail's count. Tokens only. */
+
+.aw-setup {
+  --tone: var(--blue);
+  border: 1px solid color-mix(in oklab, var(--tone) 28%, var(--border));
+  border-radius: var(--radius-lg);
+  background: linear-gradient(to right, color-mix(in oklab, var(--tone) 6%, var(--surface)), var(--surface) 55%);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .08), inset 0 1px var(--lift-hi);
+  padding: 14px 16px 6px;
+  margin-bottom: 24px;
+}
+.aw-setup[data-place="settings"] { margin-bottom: 28px; }
+.aw-setup-head { margin-bottom: 6px; }
+.aw-setup-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.aw-setup-items { list-style: none; margin: 0; padding: 0; }
+.aw-setup-item {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: 12px; align-items: center;
+  padding: 10px 0;
+}
+.aw-setup-item + .aw-setup-item { border-top: 1px solid var(--border); }
+.aw-setup-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--tone) 14%, transparent); color: var(--tone);
+}
+.aw-setup-body { min-width: 0; }
+.aw-setup-item-title { font-size: 13.5px; font-weight: 500; color: var(--text); }
+.aw-setup-item-detail { margin-top: 2px; max-width: 72ch; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.aw-setup-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.aw-setup-dismissed { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; font-size: 12px; color: var(--text-3); }
+.aw-setup-item + .aw-setup-dismissed, .aw-setup-items + .aw-setup-dismissed { border-top: 1px solid var(--border); }
+@container (max-width: 560px) {
+  .aw-setup-item { grid-template-columns: 30px minmax(0, 1fr); row-gap: 8px; }
+  .aw-setup-actions { grid-column: 2; justify-content: flex-start; }
+}
+
+/* The rail: how many items are left, beside the project's name. */
+.aw-setup-count {
+  display: inline-flex; flex: none; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: color-mix(in oklab, var(--blue) 18%, transparent); color: var(--blue);
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.aw-setup-count:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-rail-icon .aw-setup-count { position: absolute; top: -4px; right: -4px; min-width: 15px; height: 15px; padding: 0 3px; font-size: 10px; pointer-events: none; }
+.aw-settings-setup { width: min(100%, 880px); margin-inline: auto; padding: 28px clamp(20px, 4vw, 40px) 0; }
+.aw-settings-setup + .aw-settings-page { padding-top: 20px; }
+.aw-settings-setup .aw-setup { margin-bottom: 0; }

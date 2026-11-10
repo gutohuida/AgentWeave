@@ -30,6 +30,8 @@ import { formatCount } from '@/lib/format'
 import { catalogModelOptions, runnerChoiceOptions } from '@/components/settings/settingsOptions'
 import { agents, conversations, project } from '../fixtures'
 import type { ScreenProps, SettingsSection } from '../routes'
+import { SetupList } from '@/components/overview/SetupList'
+import { dismissSetup, restoreSetup, useTerraSetup } from '../setupMock'
 import settingsJson from '../fixtures/settings.json'
 import runnersJson from '../fixtures/runners.json'
 import chartersJson from '../fixtures/charters.json'
@@ -132,6 +134,7 @@ export default function Settings({ route, go, now }: ScreenProps) {
   const [traceRange, setTraceRange] = React.useState<TraceRange>('week')
 
   const say = (title: string) => toast({ title, tone: 'success' })
+  const setup = useTerraSetup(go)
   const conversationTitle = (id?: string) => conversations.find((c) => c.id === id)?.title ?? null
 
   const counts: Partial<Record<SettingsSection, React.ReactNode>> = {
@@ -319,6 +322,23 @@ export default function Settings({ route, go, now }: ScreenProps) {
       onSelect={(id) => go({ kind: 'settings', section: id })}
       footer={{ label: 'App settings', icon: 'settings', onClick: () => go({ kind: 'app-settings', section: 'notifications' }) }}
     >
+      {setup.items.length || (section === 'general' && setup.dismissed.length) ? (
+      <div className="aw-settings-setup">
+        <SetupList
+          place="settings"
+          items={setup.items}
+          dismissed={section === 'general' ? setup.dismissed : []}
+          onDismiss={(item) => {
+            dismissSetup(item.id)
+            say('Dismissed for this project')
+          }}
+          onRestore={(item) => {
+            restoreSetup(item.id)
+            say('Shown again')
+          }}
+        />
+      </div>
+      ) : null}
       {body}
     </SettingsNavLayout>
   )

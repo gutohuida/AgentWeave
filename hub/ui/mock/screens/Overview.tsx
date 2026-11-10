@@ -6,6 +6,8 @@ import { formatAgoLong } from '@/lib/format'
 import ledgerJson from '../fixtures/ledger.json'
 import { agentAttention, agents, conversations, tasks } from '../fixtures'
 import type { ScreenProps } from '../routes'
+import { SetupList, type SetupItem } from '@/components/overview/SetupList'
+import { dismissSetup, restoreSetup, useTerraSetup } from '../setupMock'
 
 const ledger = ledgerJson as unknown as ProjectLedger
 
@@ -20,6 +22,11 @@ interface LatestIntegration {
 const colorOf = (name: string) => agents.find((a) => a.name === name)?.color_index
 
 export default function Overview({ go, now }: ScreenProps) {
+  const setup = useTerraSetup(go)
+  const dismiss = (item: SetupItem) => {
+    dismissSetup(item.id)
+    toast({ title: 'Dismissed for this project', description: 'You can show it again from Project settings.', action: { label: 'Undo', onClick: () => restoreSetup(item.id) } })
+  }
   const [answered, setAnswered] = React.useState<string[]>([])
   const minutesAgo = (m: number) => new Date(now.getTime() - m * 60_000).toISOString()
 
@@ -115,6 +122,7 @@ export default function Overview({ go, now }: ScreenProps) {
 
   return (
     <OverviewView
+      setup={<SetupList place="overview" items={setup.items} onDismiss={dismiss} />}
       needs={needs}
       running={running}
       finished={finished}

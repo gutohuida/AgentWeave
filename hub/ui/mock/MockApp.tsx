@@ -6,6 +6,7 @@ import { APP_SETTINGS_SECTIONS, PROJECT_TABS, type AppSettingsSection, type Proj
 import { MOCK_NOW, project, projects, tasks } from './fixtures'
 import { beforeKey, type MockRoute } from './routes'
 import { SCREENS, screenFor } from './screens'
+import { useSetupTitles } from './setupMock'
 import { NOTICE_LEVELS } from './specBanner'
 import { SPEC_MOCK_STATES, setSpecMockControls, useSpecMockControls } from './specMock'
 
@@ -87,6 +88,8 @@ export function MockApp() {
     return key ? BEFORE[`./before/${key}.webp`] : undefined
   })()
 
+  const setupFor = useSetupTitles()
+
   return (
     <div className="aw-app">
       <Sidebar
@@ -95,6 +98,8 @@ export function MockApp() {
         compact={collapsed}
         onCompactChange={setCollapsed}
         onOpenProject={() => go({ kind: 'tab', tab: 'overview' })}
+        setupFor={setupFor}
+        onOpenSetup={() => go({ kind: 'tab', tab: 'overview' })}
         onOpenAgent={(_, agent) => go({ kind: 'conversation', agent, conversationId: null })}
         onOpenConversation={(_, agent, conversationId) => go({ kind: 'conversation', agent, conversationId })}
         onNewConversation={(_, agent) => (agent ? go({ kind: 'conversation', agent, conversationId: null }) : undefined)}

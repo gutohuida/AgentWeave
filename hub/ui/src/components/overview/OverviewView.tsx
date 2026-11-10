@@ -109,6 +109,7 @@ export function OverviewView({
   heldByBudget,
   onOpenTasks,
   notice,
+  setup,
   knownFailing,
   loading,
   onAddAgent,
@@ -141,6 +142,8 @@ export function OverviewView({
   onOpenTasks?: () => void
   /** A project-wide condition worth one line above everything (a paused budget). */
   notice?: React.ReactNode
+  /** What the project still needs (`SetupList`), above everything else. */
+  setup?: React.ReactNode
   /** The project's known-failing list (`KnownFailingList`), below what is running. */
   knownFailing?: React.ReactNode
   loading?: boolean
@@ -157,6 +160,7 @@ export function OverviewView({
   }
   return (
     <div className="aw-overview">
+      {setup}
       {notice ? <div className="aw-overview-notice">{notice}</div> : null}
       <div className="aw-overview-summary">
         <p className="aw-overview-status">
