@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from '@/components/ui/menu'
 import { TAB_LABELS, type ProjectTab } from '@/lib/navigation'
@@ -16,6 +17,9 @@ import { elidePathSegments } from '@/lib/pathDisplay'
  *  A project whose folder is gone says so beside its name, in amber — the one fact about the
  *  directory that changes what the operator can do. The path itself lives in the switcher's menu,
  *  elided in the middle with the whole of it on hover, where it no longer competes with the name. */
+
+/** Room the "more" control needs, count badge included. */
+const MORE_WIDTH = 56
 
 export interface TopBarProject {
   id: string
@@ -59,6 +63,42 @@ export function TopBar({
   settingsActive?: boolean
 }) {
   const segments = project.path ? elidePathSegments(project.path) : []
+  const navRef = useRef<HTMLElement>(null)
+  const [visibleCount, setVisibleCount] = useState(tabs.length)
+  const hiddenCount = tabs.slice(visibleCount).reduce((sum, tab) => sum + (counts?.[tab] ?? 0), 0)
+
+  // Every tab stays in the DOM (the overflowed ones are laid out invisibly) so each can be
+  // measured; the ones that do not fit beside the "more" control move into its menu.
+  useLayoutEffect(() => {
+    const nav = navRef.current
+    if (!nav) return
+    const measure = () => {
+      const buttons = Array.from(nav.querySelectorAll<HTMLElement>('[data-testid^="project-tab-"]:not(.aw-topbar-tab-more)'))
+      const widths = buttons.map((button) => button.offsetWidth)
+      const style = getComputedStyle(nav)
+      const gap = parseFloat(style.columnGap) || 2
+      const available = nav.clientWidth - (parseFloat(style.paddingLeft) || 0)
+      const total = widths.reduce((sum, w) => sum + w, 0) + gap * Math.max(0, widths.length - 1)
+      let next = widths.length
+      if (available > 0 && total > available) {
+        const room = available - MORE_WIDTH - gap
+        let used = 0
+        next = 0
+        for (const w of widths) {
+          if (used + w > room) break
+          used += w + gap
+          next += 1
+        }
+      }
+      setVisibleCount(next)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(nav)
+    return () => observer.disconnect()
+  }, [tabs, counts])
+
   return (
     <header className="aw-topbar" data-testid="topbar">
       <Menu>
@@ -107,9 +147,10 @@ export function TopBar({
         </span>
       )}
 
-      <nav aria-label="Project views" className="aw-topbar-tabs">
-        {tabs.map((tab) => {
+      <nav aria-label="Project views" className="aw-topbar-tabs" ref={navRef}>
+        {tabs.map((tab, index) => {
           const count = counts?.[tab]
+          const overflowed = index >= visibleCount
           return (
             <button data-slot="topbar-tab"
               key={tab}
@@ -117,7 +158,10 @@ export function TopBar({
               data-testid={`project-tab-${tab}`}
               className="aw-topbar-tab"
               data-active={active === tab ? 'true' : 'false'}
+              data-overflow={overflowed ? 'true' : undefined}
               aria-current={active === tab ? 'page' : undefined}
+              tabIndex={overflowed ? -1 : undefined}
+              aria-hidden={overflowed ? true : undefined}
               onClick={() => onSelectTab(tab)}
             >
               {TAB_LABELS[tab]}
@@ -125,6 +169,28 @@ export function TopBar({
             </button>
           )
         })}
+        {visibleCount < tabs.length ? (
+          <Menu>
+            <MenuTrigger
+              data-slot="topbar-tab"
+              data-testid="project-tab-more"
+              className="aw-topbar-tab aw-topbar-tab-more"
+              data-active={tabs.slice(visibleCount).includes(active as ProjectTab) ? 'true' : 'false'}
+              aria-label="More views"
+            >
+              <Icon name="more_horiz" size={15} />
+              {hiddenCount ? <span className="aw-topbar-tab-count">{hiddenCount}</span> : null}
+            </MenuTrigger>
+            <MenuContent align="end" style={{ minWidth: 160 }}>
+              {tabs.slice(visibleCount).map((tab) => (
+                <MenuItem key={tab} icon={active === tab ? 'check' : undefined} onSelect={() => onSelectTab(tab)}>
+                  {TAB_LABELS[tab]}
+                  {counts?.[tab] ? <span className="aw-topbar-tab-count">{counts[tab]}</span> : null}
+                </MenuItem>
+              ))}
+            </MenuContent>
+          </Menu>
+        ) : null}
       </nav>
 
       <div className="aw-topbar-actions">
