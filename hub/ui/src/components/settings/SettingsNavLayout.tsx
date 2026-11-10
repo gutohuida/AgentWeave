@@ -15,6 +15,9 @@ export interface SettingsNavItem<T extends string> {
   icon: string
   /** A short count or state shown at the end of the item ("9", "Off"). */
   meta?: React.ReactNode
+  /** The heading this item sits under; a heading shows where the group changes. Items without
+   *  one sit in a single unheaded list. */
+  group?: string
 }
 
 export function SettingsNavLayout<T extends string>({
@@ -53,8 +56,9 @@ export function SettingsNavLayout<T extends string>({
           {subtitle ? <span className="aw-settings-nav-sub">{subtitle}</span> : null}
         </div>
         <ul className="aw-settings-nav-list">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <li key={item.id}>
+              {item.group && item.group !== items[index - 1]?.group ? <span className="aw-settings-nav-group">{item.group}</span> : null}
               <button
                 type="button"
                 data-slot="settings-nav-item"

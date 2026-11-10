@@ -134,27 +134,10 @@ const CHECKPOINT_MODE_LABEL: Record<ProjectSettings['checkpoint_mode'], string> 
   automatic: 'Automatic',
 }
 
-export function GeneralSettings({
-  settings,
-  runnerOptions,
-  modelOptions,
-  permissionModes,
-  folder,
-  folderAvailable,
-  mainBranch,
-  usualDurations,
-  usualDurationsUnreadable,
-  contextWindow,
-  ceilingNotes = [],
-  agentsUnreadable,
-  notices,
-  relocating,
-  repositoryOffer,
-  onChange,
-  onRelocate,
-  onOpenBudgets,
-  onDeleteProject,
-}: {
+
+/** Everything the project settings pages read. Each page takes what it needs from it, so a
+ *  container can hand the same object to whichever section is open. */
+export interface GeneralSettingsProps {
   settings: ProjectSettings
   /** The checkpoint-runner menu (the container names each runner's model from the catalog). */
   runnerOptions: SelectOption<string>[]
@@ -188,31 +171,13 @@ export function GeneralSettings({
   onOpenBudgets?: () => void
   /** Opens the type-to-confirm delete dialog the container owns. */
   onDeleteProject: () => void
-}) {
-  const checks = settings.checks ?? []
-  const [unit, setUnit] = React.useState<ThresholdMode>(settings.checkpoint_threshold_mode ?? 'percent')
-  React.useEffect(() => {
-    if (settings.checkpoint_threshold_mode) setUnit(settings.checkpoint_threshold_mode)
-  }, [settings.checkpoint_threshold_mode])
-  const [newPath, setNewPath] = React.useState('')
-  const isRepository = mainBranch ? mainBranch.is_repository : true
-  const stored = settings.checkpoint_threshold_value
-  const storedMode = settings.checkpoint_threshold_mode
-  const reading = describeThreshold(storedMode, stored, contextWindow ?? null)
-  const setChecks = (next: ProjectCheck[], said: string) => onChange({ checks: next.length ? next : null }, said)
-  const moveCheck = (index: number, by: number) => {
-    const next = [...checks]
-    const [item] = next.splice(index, 1)
-    next.splice(index + by, 0, item)
-    setChecks(next, `Moved the check ${item.name} ${by < 0 ? 'up' : 'down'}`)
-  }
-  const clearThreshold = (said: string) =>
-    onChange({ checkpoint_threshold_value: null, checkpoint_threshold_mode: null, checkpoint_notes_value: null }, said)
+}
 
+type RowsProps = Pick<GeneralSettingsProps, 'settings' | 'onChange'>
+
+function CollaborationRows({ settings, onChange }: RowsProps) {
   return (
-    <SettingsPage icon="settings" title="General" description="How agents work together in this project, what they may reach, and where approved work lands.">
-      {notices}
-      <SettingsGroup title="Collaboration">
+    <>
         <SettingsRow
           label="Agents may start jobs, flows and loops"
           description="Off: an agent asking to start a job, flow or loop is refused, and you are asked instead."
@@ -262,6 +227,13 @@ export function GeneralSettings({
             />
           }
         />
+    </>
+  )
+}
+
+/** How many agents the project may hold: a budget, so it sits in Budgets beside the token limit. */
+export function AgentBudgetRow({ settings, onChange }: RowsProps) {
+  return (
         <SettingsRow
           label="Agent budget"
           htmlFor="s-agents"
@@ -280,20 +252,12 @@ export function GeneralSettings({
             />
           }
         />
-        {onOpenBudgets ? (
-          <SettingsRow
-            label="Token limit"
-            description="Set in Budgets, beside the usage it limits."
-            control={
-              <Button variant="outline" size="sm" onClick={onOpenBudgets}>
-                Open Budgets
-              </Button>
-            }
-          />
-        ) : null}
-      </SettingsGroup>
+  )
+}
 
-      <SettingsGroup title="Reach" description="What agents may do when nobody said otherwise. An agent's own settings win over these.">
+function PermissionRows({ settings, permissionModes, onChange }: RowsProps & Pick<GeneralSettingsProps, 'permissionModes'>) {
+  return (
+    <>
         <SettingsRow
           label="Default permissions"
           description="For every run whose conversation and agent have not chosen. Full access allows everything, Copilot and specification turns included."
@@ -317,9 +281,13 @@ export function GeneralSettings({
           stacked
           control={<ReachGrantsChips grants={settings.reach_grants} onChange={(g) => onChange({ reach_grants: g }, 'Granted reach updated')} />}
         />
-      </SettingsGroup>
+    </>
+  )
+}
 
-      <SettingsGroup title="Integration" description="Where approved work lands, and what must pass first.">
+function MainBranchRow({ settings, mainBranch, onChange }: RowsProps & Pick<GeneralSettingsProps, 'mainBranch'>) {
+  const isRepository = mainBranch ? mainBranch.is_repository : true
+  return (
         <SettingsRow
           label="Main branch"
           htmlFor="s-branch"
@@ -341,6 +309,25 @@ export function GeneralSettings({
             </span>
           }
         />
+  )
+}
+
+function ChecksRows({
+  settings,
+  usualDurations,
+  usualDurationsUnreadable,
+  onChange,
+}: RowsProps & Pick<GeneralSettingsProps, 'usualDurations' | 'usualDurationsUnreadable'>) {
+  const checks = settings.checks ?? []
+  const setChecks = (next: ProjectCheck[], said: string) => onChange({ checks: next.length ? next : null }, said)
+  const moveCheck = (index: number, by: number) => {
+    const next = [...checks]
+    const [item] = next.splice(index, 1)
+    next.splice(index + by, 0, item)
+    setChecks(next, `Moved the check ${item.name} ${by < 0 ? 'up' : 'down'}`)
+  }
+  return (
+    <>
         <SettingsRow
           label="Checks"
           description="Commands run on the main branch plus a task's work before approval merges it, in this order. Approval is refused until they pass."
@@ -445,13 +432,25 @@ export function GeneralSettings({
             />
           }
         />
+    </>
+  )
+}
+
+function GeneratedFilesRow({ settings, onChange }: RowsProps) {
+  return (
         <SettingsRow
           label="Generated files"
-          description="Files a command rebuilds from other files (a lockfile, a bundle). When work lands and only these files conflict, the Hub rebuilds them instead of sending the task back. Paths are comma-separated globs; the timeout is 1 to 3600 seconds. Leave the paths empty and save to turn it off."
+          description="Files a command rebuilds from other files (a lockfile, a bundle). When work lands and only these files conflict, the Hub rebuilds them instead of sending the task back. Paths are comma-separated globs; the timeout is 1 to 3600 seconds. Empty the paths to turn it off."
           changed={Boolean(settings.generated_files)}
           onReset={() => onChange({ generated_files: null }, 'Generated files cleared')}
           control={<GeneratedFilesEditor value={settings.generated_files ?? null} onSave={(v) => onChange({ generated_files: v }, v ? 'Generated files saved' : 'Generated files cleared')} />}
         />
+  )
+}
+
+function PullRequestRows({ settings, onChange }: RowsProps) {
+  return (
+    <>
         <SettingsRow
           label="Land builds as pull requests"
           description="A build may put its approved work on one GitHub pull request instead of merging into the main branch. Pushing publishes the work, so this is off until you turn it on. It needs a GitHub remote and a logged-in GitHub CLI."
@@ -559,9 +558,30 @@ export function GeneralSettings({
             />
           }
         />
-      </SettingsGroup>
+    </>
+  )
+}
 
-      <SettingsGroup title="Checkpointing" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">
+function CheckpointRows({
+  settings,
+  runnerOptions,
+  modelOptions,
+  contextWindow,
+  ceilingNotes = [],
+  agentsUnreadable,
+  onChange,
+}: RowsProps & Pick<GeneralSettingsProps, 'runnerOptions' | 'modelOptions' | 'contextWindow' | 'ceilingNotes' | 'agentsUnreadable'>) {
+  const [unit, setUnit] = React.useState<ThresholdMode>(settings.checkpoint_threshold_mode ?? 'percent')
+  React.useEffect(() => {
+    if (settings.checkpoint_threshold_mode) setUnit(settings.checkpoint_threshold_mode)
+  }, [settings.checkpoint_threshold_mode])
+  const stored = settings.checkpoint_threshold_value
+  const storedMode = settings.checkpoint_threshold_mode
+  const reading = describeThreshold(storedMode, stored, contextWindow ?? null)
+  const clearThreshold = (said: string) =>
+    onChange({ checkpoint_threshold_value: null, checkpoint_threshold_mode: null, checkpoint_notes_value: null }, said)
+  return (
+    <>
         <SettingsRow
           label="Checkpoints"
           changed={settings.checkpoint_mode !== PROJECT_DEFAULTS.checkpoint_mode}
@@ -690,9 +710,24 @@ export function GeneralSettings({
             />
           }
         />
-      </SettingsGroup>
+    </>
+  )
+}
 
-      <SettingsGroup title="Project">
+function ProjectRows({
+  settings,
+  folder,
+  folderAvailable,
+  mainBranch,
+  relocating,
+  repositoryOffer,
+  onChange,
+  onRelocate,
+}: RowsProps & Pick<GeneralSettingsProps, 'folder' | 'folderAvailable' | 'mainBranch' | 'relocating' | 'repositoryOffer' | 'onRelocate'>) {
+  const [newPath, setNewPath] = React.useState('')
+  const isRepository = mainBranch ? mainBranch.is_repository : true
+  return (
+    <>
         <SettingsRow
           label="Name"
           htmlFor="s-name"
@@ -741,8 +776,12 @@ export function GeneralSettings({
           ) : null}
           {folderAvailable && !isRepository ? repositoryOffer : null}
         </SettingsRow>
-      </SettingsGroup>
+    </>
+  )
+}
 
+function DangerZone({ settings, onDeleteProject }: Pick<GeneralSettingsProps, 'settings' | 'onDeleteProject'>) {
+  return (
       <section className="aw-danger" aria-label="Danger zone">
         <div className="min-w-0">
           <h2 className="aw-danger-title">Delete project</h2>
@@ -752,9 +791,128 @@ export function GeneralSettings({
           Delete project…
         </Button>
       </section>
+  )
+}
+
+/** Today's single General page, kept until the app is wired to the sections below
+ *  (`settings-in-the-app-s-style-where-you-expect-them`). */
+export function GeneralSettings(props: GeneralSettingsProps) {
+  const { settings, notices, onChange, onOpenBudgets } = props
+  return (
+    <SettingsPage icon="settings" title="General" description="How agents work together in this project, what they may reach, and where approved work lands.">
+      {notices}
+      <SettingsGroup title="Collaboration">
+        <CollaborationRows settings={settings} onChange={onChange} />
+        <AgentBudgetRow settings={settings} onChange={onChange} />
+        {onOpenBudgets ? (
+          <SettingsRow
+            label="Token limit"
+            description="Set in Budgets, beside the usage it limits."
+            control={
+              <Button variant="outline" size="sm" onClick={onOpenBudgets}>
+                Open Budgets
+              </Button>
+            }
+          />
+        ) : null}
+      </SettingsGroup>
+      <SettingsGroup title="Reach" description="What agents may do when nobody said otherwise. An agent's own settings win over these.">
+        <PermissionRows {...props} />
+      </SettingsGroup>
+      <SettingsGroup title="Integration" description="Where approved work lands, and what must pass first.">
+        <MainBranchRow {...props} />
+        <ChecksRows {...props} />
+        <GeneratedFilesRow {...props} />
+        <PullRequestRows {...props} />
+      </SettingsGroup>
+      <SettingsGroup title="Checkpointing" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">
+        <CheckpointRows {...props} />
+      </SettingsGroup>
+      <SettingsGroup title="Project">
+        <ProjectRows {...props} />
+      </SettingsGroup>
+      <DangerZone {...props} />
     </SettingsPage>
   )
 }
+
+/* The sections General splits into (`settings-in-the-app-s-style-where-you-expect-them`). Each is
+ * a page of its own in Project settings; together they hold every row General held, except the
+ * agent budget, which moves to Budgets. */
+
+export function ProjectBasicsSettings(props: GeneralSettingsProps) {
+  return (
+    <SettingsPage icon="folder" title="Project" description="What this project is called and where it lives on this machine.">
+      {props.notices}
+      <SettingsGroup title="Name and folder">
+        <ProjectRows {...props} />
+      </SettingsGroup>
+      <DangerZone {...props} />
+    </SettingsPage>
+  )
+}
+
+export function CollaborationSettings(props: GeneralSettingsProps) {
+  return (
+    <SettingsPage icon="forum" title="Collaboration" description="How far agents may pass work between themselves before you are asked.">
+      {props.notices}
+      <SettingsGroup title="Agents working together">
+        <CollaborationRows {...props} />
+      </SettingsGroup>
+    </SettingsPage>
+  )
+}
+
+export function PermissionsSettings(props: GeneralSettingsProps) {
+  return (
+    <SettingsPage icon="lock" title="Permissions" description="What agents may do when nobody said otherwise. An agent's own settings win over these.">
+      {props.notices}
+      <SettingsGroup title="Defaults for every agent">
+        <PermissionRows {...props} />
+      </SettingsGroup>
+    </SettingsPage>
+  )
+}
+
+export function ChecksSettings(props: GeneralSettingsProps) {
+  return (
+    <SettingsPage icon="verified_user" title="Checks" description="What must pass before approved work lands.">
+      {props.notices}
+      <SettingsGroup title="Before work lands">
+        <ChecksRows {...props} />
+      </SettingsGroup>
+      <SettingsGroup title="When work conflicts">
+        <GeneratedFilesRow {...props} />
+      </SettingsGroup>
+    </SettingsPage>
+  )
+}
+
+export function LandingSettings(props: GeneralSettingsProps) {
+  return (
+    <SettingsPage icon="git_merge" title="Landing" description="Where approved work goes: merged into the main branch, or onto a pull request.">
+      {props.notices}
+      <SettingsGroup title="Merging">
+        <MainBranchRow {...props} />
+      </SettingsGroup>
+      <SettingsGroup title="Pull requests" description="Off until you turn it on: pushing publishes the work.">
+        <PullRequestRows {...props} />
+      </SettingsGroup>
+    </SettingsPage>
+  )
+}
+
+export function CheckpointsSettings(props: GeneralSettingsProps) {
+  return (
+    <SettingsPage icon="book_marked" title="Checkpoints" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">
+      {props.notices}
+      <SettingsGroup title="When and who">
+        <CheckpointRows {...props} />
+      </SettingsGroup>
+    </SettingsPage>
+  )
+}
+
 
 function GeneratedFilesEditor({
   value,
@@ -786,20 +944,22 @@ function GeneratedFilesEditor({
         ? 'The timeout is a whole number from 1 to 3600.'
         : null
   const dirty = paths !== stored.paths || command !== stored.command || timeout !== stored.timeout
+  // Applies when focus leaves the three fields together, once they make a whole value: saved on
+  // change, like every other row, without saving a half-typed command.
+  const commit = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    if (!dirty || error) return
+    onSave(list.length ? { paths: list, command: command.trim(), timeout_seconds: seconds } : null)
+  }
   return (
-    <div className="flex flex-col gap-2" data-testid="generated-files-editor">
+    <div className="flex flex-col gap-2" data-testid="generated-files-editor" onBlur={commit}>
       <Textarea rows={1} aria-label="Generated file paths" className="font-mono aw-textarea-grow" value={paths} placeholder="package-lock.json, dist/**" onChange={(e) => setPaths(e.target.value)} />
       <Textarea rows={1} aria-label="Generated files command" className="font-mono aw-textarea-grow" value={command} placeholder="npm install --package-lock-only" aria-invalid={Boolean(error && !command.trim())} onChange={(e) => setCommand(e.target.value)} />
-      <Input aria-label="Generated files timeout" inputMode="numeric" className="tabular" style={{ width: 96 }} value={timeout} onChange={(e) => setTimeoutValue(e.target.value)} />
-      {error ? <span role="alert" className="text-xs">{error}</span> : null}
-      <Button
-        size="xs"
-        className="self-start"
-        disabled={!dirty || Boolean(error)}
-        onClick={() => onSave(list.length ? { paths: list, command: command.trim(), timeout_seconds: seconds } : null)}
-      >
-        Save
-      </Button>
+      <span className="aw-committed">
+        <Input aria-label="Generated files timeout" inputMode="numeric" className="tabular text-right" style={{ width: 72 }} value={timeout} onChange={(e) => setTimeoutValue(e.target.value)} />
+        <span className="aw-committed-suffix">seconds</span>
+      </span>
+      {error ? <span role="alert" className="aw-committed-error">{error}</span> : null}
     </div>
   )
 }

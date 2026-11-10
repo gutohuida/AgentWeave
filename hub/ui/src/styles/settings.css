@@ -19,6 +19,8 @@
 .aw-settings-nav-title { overflow-wrap: anywhere; font-size: 13.5px; font-weight: 650; letter-spacing: -.005em; }
 .aw-settings-nav-sub { overflow-wrap: anywhere; margin-top: 1px; font-size: 12px; color: var(--text-3); }
 .aw-settings-nav-list { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.aw-settings-nav-group { display: block; padding: 12px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .02em; color: var(--text-3); }
+.aw-settings-nav-list > li:first-child > .aw-settings-nav-group { padding-top: 2px; }
 .aw-settings-nav-item {
   display: flex; align-items: center; gap: 9px; width: 100%;
   height: 30px; padding: 0 8px;
@@ -45,7 +47,7 @@
 @media (max-width: 860px) {
   .aw-settings-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
   .aw-settings-nav { flex-direction: row; align-items: center; overflow-x: auto; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--border-region); }
-  .aw-settings-nav-head, .aw-settings-back { display: none; }
+  .aw-settings-nav-head, .aw-settings-back, .aw-settings-nav-group { display: none; }
   .aw-settings-nav-list { flex-direction: row; }
   .aw-settings-nav-item { width: auto; white-space: nowrap; }
   .aw-settings-nav-footer { width: auto; margin-top: 0; border-top: 0; white-space: nowrap; }
@@ -285,6 +287,8 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 .aw-conflict-files { margin: 4px 0 0; padding: 0; list-style: none; }
 .aw-committed { flex-wrap: wrap; }
 .aw-committed-error { flex-basis: 100%; font-size: 11.5px; line-height: 1.4; color: var(--red); }
+.aw-committed-block { display: flex; width: 100%; }
+.aw-committed-block > textarea { width: 100%; }
 .aw-usage-notes { display: flex; flex-direction: column; gap: 0; padding: 10px 0 4px; }
 .aw-usage-notes + .aw-notice, .aw-usage > [role="alert"] { margin-top: 10px; }
 .aw-usage-extra { display: block; font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -302,3 +306,26 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 .aw-charter-inline { padding: 4px 12px 16px 30px; animation: aw-reveal-in var(--dur-pop) var(--ease-out); }
 @keyframes aw-reveal-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .aw-charter-inline { animation: none; } }
+
+/* Spec steps and Traces as settings pages (`settings-in-the-app-s-style-where-you-expect-them`). */
+.aw-picks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.aw-pick {
+  display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: 999px; background: transparent;
+  font-size: 12.5px; color: var(--text-2); cursor: pointer;
+  transition: background var(--dur-pop) var(--ease-out), border-color var(--dur-pop) var(--ease-out);
+}
+.aw-pick:hover { background: var(--row-hover); color: var(--text); }
+.aw-pick[aria-pressed="true"] { border-color: color-mix(in oklab, var(--ring) 60%, transparent); background: color-mix(in oklab, var(--ring) 12%, transparent); color: var(--text); }
+.aw-pick:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-step-label { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.aw-step-index {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 999px;
+  background: var(--surface-2); font-size: 11px; font-variant-numeric: tabular-nums; color: var(--text-3);
+}
+.aw-step-badge { font-size: 11px; font-weight: 400; color: var(--text-3); padding: 1px 7px; border: 1px solid var(--border); border-radius: 999px; }
+.aw-step-actions { display: inline-flex; align-items: center; gap: 2px; }
+.aw-step-body { display: flex; flex-direction: column; gap: 8px; }
+.aw-step-form { display: flex; flex-direction: column; gap: 4px; padding: 12px 0 4px; max-width: 640px; }
+.aw-range { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.aw-row-value { font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; text-align: right; }

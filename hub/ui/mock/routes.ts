@@ -16,7 +16,16 @@ export type MockRoute =
   | { kind: 'conversation-trace'; conversationId: string | null }
 
 /** Project settings, one place under one name. Replaces Environment / Configuration / Settings. */
-export type SettingsSection = 'general' | 'agents-defaults' | 'manager' | 'runners' | 'charters' | 'instructions' | 'budgets' | 'worktrees' | 'diagnostics'
+export type SettingsSection =
+  | 'general'
+  | 'collaboration'
+  | 'permissions'
+  | 'checks'
+  | 'landing'
+  | 'checkpoints'
+  | 'spec-steps'
+  | 'traces'
+  | 'agents-defaults' | 'manager' | 'runners' | 'charters' | 'instructions' | 'budgets' | 'worktrees' | 'diagnostics'
 export type AgentSettingsSection = 'identity' | 'execution' | 'charter' | 'interaction' | 'context' | 'access' | 'workspace'
 
 export interface ScreenProps {

@@ -132,6 +132,8 @@ import {
   CircleCheckBig,
   ClipboardCheck,
   Trophy,
+  Download,
+  ChartGantt,
 } from 'lucide-react'
 
 /**
@@ -278,6 +280,8 @@ const ICONS: Record<string, LucideIcon> = {
   layers: Layers,
   list_tree: ListTree,
   timer: Timer,
+  download: Download,
+  timeline: ChartGantt,
   stamp: Stamp,
   pen_line: PenLine,
   circle: Circle,

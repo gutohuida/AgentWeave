@@ -58,6 +58,7 @@ export function BudgetsSettings({
   onSetLimit,
   saving,
   notices,
+  agentBudget,
 }: {
   accounting: AccountingSnapshot
   agentColor: (agent: string) => number | null | undefined
@@ -66,6 +67,8 @@ export function BudgetsSettings({
   saving?: boolean
   /** A refused save, under the page heading. */
   notices?: React.ReactNode
+  /** How many agents the project may hold (`AgentBudgetRow`), moved here from General. */
+  agentBudget?: React.ReactNode
 }) {
   const project = accounting.project
   const total = project.total_tokens
@@ -197,6 +200,7 @@ export function BudgetsSettings({
           />
         ) : null}
       </SettingsGroup>
+      {agentBudget ? <SettingsGroup title="Agents">{agentBudget}</SettingsGroup> : null}
     </SettingsPage>
   )
 }
