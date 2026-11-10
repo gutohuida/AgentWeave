@@ -1,0 +1,228 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose check run is executing a check that passes after a few seconds",
+      "how_to_check": "Run test_a_run_main_moved_past_runs_to_the_end in hub/tests/test_checks_refresh_when_main_moves.py (it replaces test_a_run_main_moved_past_is_superseded_and_replaced); it must fail on master, where the run is recorded superseded, and pass after.",
+      "key": "ac-runs-through-a-move",
+      "requirement": "a-main-move-does-not-end-a-run",
+      "then": "the task's runs are exactly one run, recorded passed, with main_sha the tip it was cut from, and approving the task is not refused for checks",
+      "when": "main moves to a new commit and the Hub's refresh runs while the check is executing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same task with its check executing",
+      "how_to_check": "Run test_an_outside_commit_does_not_end_the_run in hub/tests/test_checks_refresh_when_main_moves.py, which commits on main with git and calls project_checks.watch_main_once while the check executes; it must fail on master and pass after.",
+      "key": "ac-outside-move-too",
+      "requirement": "a-main-move-does-not-end-a-run",
+      "then": "the run is not ended and records passed",
+      "when": "a commit is made on the main branch with git directly and the watcher notices it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check run is executing",
+      "how_to_check": "Run test_new_work_still_supersedes_the_run in hub/tests/test_checks_refresh_when_main_moves.py; it passes on master and after (the behaviour must not change).",
+      "key": "ac-new-completion-supersedes",
+      "requirement": "new-work-still-ends-the-run",
+      "then": "the first run ends recorded superseded and a run on the new work starts",
+      "when": "the task is completed again with new work"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check run is executing",
+      "how_to_check": "Run test_two_moves_start_no_second_run in hub/tests/test_checks_refresh_when_main_moves.py, which moves main twice and calls refresh after each move while the check executes; it must fail on master and pass after.",
+      "key": "ac-no-second-run",
+      "requirement": "one-run-per-task-across-a-move",
+      "then": "no other run for the task is recorded until the first one has ended",
+      "when": "main moves twice before it ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose run was cut from tip T1 and fails with a failure that also fails on T1's main (not the task's own)",
+      "how_to_check": "Run test_a_failure_shared_with_an_old_main_is_checked_again in hub/tests/test_checks_refresh_when_main_moves.py, using a repository whose T1 main fails a test that T2 fixes; it must fail on master and pass after.",
+      "key": "ac-old-tip-failure-rerun",
+      "requirement": "a-failure-on-an-older-tip-is-checked-again",
+      "then": "a new run for the task on T2 starts without approval being requested",
+      "when": "main has moved to T2 before that run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose run was cut from tip T1 and fails with a failure confirmed as the task's own",
+      "how_to_check": "Run test_an_own_failure_on_an_old_tip_goes_back_once in hub/tests/test_checks_refresh_when_main_moves.py; it asserts the task's status is revision_needed and exactly one run is recorded for it.",
+      "key": "ac-own-failure-returns",
+      "requirement": "an-own-failure-goes-back-unchanged",
+      "then": "the task is returned to its author and no further run is started for it",
+      "when": "main has moved to T2 before that run ends"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1d4eaa1c88b6589841e82259e8ae2a36e8c4c0aa751b0d3e3baf1945151b67e2",
+      "FR-2": "386f76e6477ff2ef65445ac118f4357a15685f786efa5ffb6d6082aca074dc3c",
+      "FR-3": "87086305a924fd4d0104f21174cf37981997cacbbe02d586d2efcd3adc9ba9fb",
+      "FR-4": "71645a73bcd6d54cec4e010c26cb4e1376b5490738ebffdd0ef542992828302a",
+      "FR-5": "cae3ecc39b5c3705bbf1c4d4b68e844a4eae44858142d76c6b0c43552df2a01a"
+    },
+    "high_water": 5,
+    "requirements": {
+      "a-failure-on-an-older-tip-is-checked-again": "FR-4",
+      "a-main-move-does-not-end-a-run": "FR-1",
+      "an-own-failure-goes-back-unchanged": "FR-5",
+      "new-work-still-ends-the-run": "FR-2",
+      "one-run-per-task-across-a-move": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer (Sonnet) builds by default to spare quota.",
+      "builder": "A single-module change with tests written first suits Sonnet.",
+      "checker": "QA checks it because it changes when the gate's inputs are produced for every project.",
+      "cron": "Every five minutes, as other flows.",
+      "mode": "One small task; a flow lands it through the normal gate.",
+      "stop": "Stop when the one task is done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "In `refresh` (hub/hub/project_checks.py:1671), stop calling `supersede` for in-flight runs cut from another tip; a task with a run in flight is skipped as today (`is_running`). When a run ends `failed` and main has moved since it was cut, and the failure is not confirmed as the task's own (`own_failure`), the Hub requests a run on the current tip, as `refresh` would have, so a failure that belongs to the old main does not stand. `_stop_run_on_older_work` (a new completion replacing the task's work) is unchanged. The `superseded` state stays for that case and for existing rows. The project-checks capability's superseded requirement is reworded at fold, and its stale gate requirement (`checks-wait-less-fresh-the-gate-still-requires-a-current-result`, which says a pass on an older tip must not count) is restated to match FR-9.",
+  "evidence": {
+    "checked": [
+      "task_check_runs on the operator's Hub (mode=ro): 19 superseded runs 1-3 Nov, 14 on 3 Nov",
+      "hub/hub/project_checks.py refresh (:1671), supersede (:1623), _stop_run_on_older_work (:1868)",
+      "project-checks capability requirements checks-wait-less-fresh-* (spec/capabilities/project-checks/spec.json)",
+      "hub/tests/test_checks_refresh_when_main_moves.py:181 and :289"
+    ],
+    "limits": [
+      "Whether ending runs early ever surfaced a merge conflict sooner was not measured; landing still reports conflicts",
+      "The saving is estimated from three days of records, to be re-measured after the build",
+      "The test names in each how_to_check are proposed coverage: none exists yet"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-04T01:24:13.389601+00:00",
+        "id": "build-f754b88b11f6",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-03T23:36:48.462540+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "finish-runs-across-a-move": {
+            "builder": null,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "On the operator's Hub, 19 pre-review runs (about 8 hours of hub-tests) were ended as superseded between 1 and 3 November 2026 because master moved while they ran; 14 of them on 3 November alone, with two specs building in parallel. Each was then started again from the beginning. The waste grows with the number of tasks in flight, since every landing moves main and ends every other task's running check.\n\nThe rule that ends them (project-checks, `checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced`) gives as its reason: \"Finishing it produces a result the gate will refuse as stale anyway.\" That stopped being true when approved-work-merges-in-batches (FR-9) made a pass of a task's work count on any main tip: `refresh` documents it (hub/hub/project_checks.py:1675-1678) and `test_a_green_on_an_older_tip_counts_and_is_not_run_again` (hub/tests/test_checks_refresh_when_main_moves.py:289) proves it. Landing is gated by the batch's own run on the exact merged tree, which is unchanged. So the run that is ended would, if it passed, have been accepted, and the run that replaces it repeats the same work.",
+  "requirements": [
+    {
+      "key": "a-main-move-does-not-end-a-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A pass of the task's work counts on any main tip (approved-work-merges-in-batches FR-9), so the result is usable; ending it repeated the same work and cost about 8 hours of hub-tests in three days.",
+      "statement": "A pre-review check run that is in progress when its project's main tip changes MUST run to completion and record its own outcome (passed, failed or error) against the main tip it was cut from; it MUST NOT be ended, recorded superseded, or replaced because of that change."
+    },
+    {
+      "key": "new-work-still-ends-the-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "That run checks work that no longer exists; its result could never be used.",
+      "statement": "A pre-review check run whose task's own work is replaced by a new completion MUST still be ended, recorded superseded, and replaced by a run on the new work."
+    },
+    {
+      "key": "one-run-per-task-across-a-move",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A main tip change while a task's run is in progress MUST NOT start a second run for that task; the task has at most one run in progress at any time."
+    },
+    {
+      "key": "a-failure-on-an-older-tip-is-checked-again",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The failure may belong to the old main, which has since moved; before this change the run would have been replaced on the new tip, so this keeps that outcome for failures only.",
+      "statement": "When a run cut from a main tip other than the current one ends failed, and its failure is not confirmed as the task's own, the Hub MUST start a run for the task on the current main tip without anyone requesting approval."
+    },
+    {
+      "key": "an-own-failure-goes-back-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A run cut from an older tip that ends with a failure confirmed as the task's own MUST return the task to its author exactly as a failure on the current tip does, with no extra run started."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-cost-less-on-a-machine-that-is-in-use/spec.json",
+    "slice": "runs-survive-a-main-move"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Pre-review check runs (task_check_runs) when the project's main tip moves, by the Hub's own merge or by the watcher noticing an outside commit",
+      "What happens after a run cut from an older tip ends failed",
+      "Rewording the project-checks capability requirements this changes, at fold"
+    ],
+    "non_goals": [
+      "Landing batch checks: a batch whose base moved is still superseded and requeued, because landing must check the exact merged tree",
+      "Ending a run because the task's own work changed (a new completion): unchanged",
+      "The limit of two concurrent runs per Hub",
+      "Which result the approval gate accepts: a pass on any tip already counts (FR-9) and still does",
+      "Any AgentWeave-specific check configuration (later slices of the roadmap)"
+    ]
+  },
+  "summary": "A task's pre-review check run that is still running when the project's main tip moves runs to the end and its result counts, instead of being ended as superseded and started again on the new tip. A run whose task's own work changed is still ended. Product behaviour, for every project.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "A single-module change with its tests written first suits Sonnet, which spares the weekly quota.",
+      "checker": "QA",
+      "checker_reason": "It changes when the approval gate's inputs are produced for every project, so an Opus checker runs the move scenarios itself rather than trusting the builder's tests.",
+      "depends_on": [],
+      "description": "Acceptance tests first, at the seam, failing on master where each criterion's how_to_check says so: in hub/tests/test_checks_refresh_when_main_moves.py replace test_a_run_main_moved_past_is_superseded_and_replaced (which asserts the old behaviour) with test_a_run_main_moved_past_runs_to_the_end, then add test_an_outside_commit_does_not_end_the_run, test_new_work_still_supersedes_the_run, test_two_moves_start_no_second_run, test_a_failure_shared_with_an_old_main_is_checked_again and test_an_own_failure_on_an_old_tip_goes_back_once (names as in each criterion's how_to_check); keep or adjust test_a_move_during_the_checkout_still_ends_the_check to the new rule. Then change refresh in hub/hub/project_checks.py to stop superseding in-flight runs on a main move, and on a run's end request a run on the current tip when it failed on an older tip with a failure that is not the task's own. Leave _stop_run_on_older_work and landing batches unchanged. Run ruff, black, and the check/landing test files (test_checks_refresh_when_main_moves, test_checks_run_before_review, test_project_checks_*, test_approved_work_merges_in_batches*, test_a_held_landing_is_released).",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/tests/test_checks_refresh_when_main_moves.py"
+      ],
+      "from": null,
+      "key": "finish-runs-across-a-move",
+      "requirements": [
+        "a-main-move-does-not-end-a-run",
+        "new-work-still-ends-the-run",
+        "one-run-per-task-across-a-move",
+        "a-failure-on-an-older-tip-is-checked-again",
+        "an-own-failure-goes-back-unchanged"
+      ],
+      "reviewer": null,
+      "title": "A check run finishes when master moves"
+    }
+  ],
+  "title": "A check run finishes when master moves"
+}

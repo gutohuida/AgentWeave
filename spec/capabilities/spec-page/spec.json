@@ -1,0 +1,448 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a document with one unreviewed amendment and three other messages, open on the spec page in a 1920x1080 browser window on a real Hub",
+      "how_to_check": "The acceptance drive measures it with a real browser against a Hub on :8020.",
+      "key": "the-spec-header-redesigned-page-many-messages",
+      "requirement": "the-spec-header-redesigned-body-gets-the-page",
+      "then": "the top of the body's first line is at most 200px below the top of the spec header",
+      "when": "the page has loaded with the header expanded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same document in the conversation's side panel at 1920x1080 with the conversation at 480px, on a real Hub",
+      "how_to_check": "The acceptance drive measures it in the same browser session.",
+      "key": "the-spec-header-redesigned-panel-many-messages",
+      "requirement": "the-spec-header-redesigned-body-gets-the-panel",
+      "then": "the body's first line is at most 320px below the top of the spec header",
+      "when": "the panel has loaded on the Document tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with one blocking finding and three warnings",
+      "how_to_check": "A UI component test fed the route payloads in the order the routes return them, and the acceptance drive's click on the count.",
+      "key": "the-spec-header-redesigned-count-opens-all",
+      "requirement": "the-spec-header-redesigned-messages-behind-a-count",
+      "then": "before the click the header shows 4 in the blocking tone and the height above the body equals that of a document with no messages; after it all four messages are listed, and opening the amendment shows its reason, how to check it and Mark reviewed",
+      "when": "the operator opens it, then clicks the count"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document open in the page and, separately, in the panel",
+      "how_to_check": "The acceptance drive scrolls and measures in a real browser.",
+      "key": "the-spec-header-redesigned-condensed-line",
+      "requirement": "the-spec-header-redesigned-condenses-on-scroll",
+      "then": "while scrolled the header is one line at most 48px tall showing the title, the phase, the count, the primary action and More; back at the top, and after the click, it is expanded",
+      "when": "the operator scrolls the body down, then back to its top, then down and clicks the condensed line"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a list of every button, menu item, link, message and fact the header and banner render on master, taken from the components",
+      "how_to_check": "UI component tests, one per state, assert each control by its label or test id.",
+      "key": "the-spec-header-redesigned-every-control-reachable",
+      "requirement": "the-spec-header-redesigned-nothing-is-lost",
+      "then": "each is found, and each that needs no menu on master needs none, other than a message's own action and the journey-step and size control",
+      "when": "each is looked for in the new header, message list and body for a document in each state (writing, ready, approved, building, done, archived, capability)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with changes that have defects",
+      "how_to_check": "A UI component test, and the acceptance drive's screenshot.",
+      "key": "the-spec-header-redesigned-defects-folded",
+      "requirement": "the-spec-header-redesigned-defects-start-folded",
+      "then": "the list's footer shows Evidence and one 'Defects by step' line with the defect count, and no change row of the report is shown until it is opened",
+      "when": "the operator opens the spec page"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved roadmap with slices a and b, and two change documents naming slice b and slice a, neither with a parent in the spec index",
+      "how_to_check": "A UI test fed the list route's real payload, and the acceptance drive on a real Hub.",
+      "key": "the-spec-header-redesigned-slices-grouped",
+      "requirement": "the-spec-header-redesigned-slices-under-their-roadmap",
+      "then": "in both, the two documents are under the roadmap, slice a's above slice b's, and neither under 'Not in a roadmap'",
+      "when": "the Spec tab's list and the panel's Open a spec screen are shown in roadmap order"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one document in each state",
+      "how_to_check": "UI component tests over every state for SpecDocList and SpecOpenPicker, and the acceptance drive's screenshots of the Spec tab and the panel's Open a spec screen.",
+      "key": "the-spec-header-redesigned-marks-differ",
+      "requirement": "the-spec-header-redesigned-done-is-unmistakable",
+      "then": "every row and card marks its state with the icon set 2 gives it, done is a solid green disc with a check, no two states share an icon, and no old state dot remains",
+      "when": "the Spec tab's list, the panel's Open a spec screen (its cards and All specs), the Specs switcher and the search dialog are rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "documents ready to approve, with an unreviewed amendment, approved with open tasks and no build, done and not folded, being written with a blocking gap, building, archived, and a capability",
+      "how_to_check": "A UI test fed the list route's real payload, and the acceptance drive on a real Hub with such documents.",
+      "key": "the-spec-header-redesigned-needs-you-groups",
+      "requirement": "the-spec-header-redesigned-what-needs-you",
+      "then": "in both, the first four are under Waiting on you with the reasons ready to approve, amendments to review, ready to build and ready to fold; the gap-blocked and building ones are under In progress; the archived one under Finished; the capability under Capabilities",
+      "when": "the Spec tab's list and the panel's Open a spec screen are shown in 'What needs you' order"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project holding a change naming a roadmap slice, a clean exploring document, an exploring document with a blocking gap, an approved document with an unreviewed amendment, an approved document with open tasks and no build, and a done unfolded change",
+      "how_to_check": "A Hub test that fails before the change.",
+      "key": "the-spec-header-redesigned-route-says-what-waits",
+      "requirement": "the-spec-header-redesigned-the-list-says-what-waits",
+      "then": "each entry carries its named roadmap and slice and exactly the conditions that hold for it",
+      "when": "the spec list route is read"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built page, panel and spec pickers on a real Hub, next to the mock",
+      "how_to_check": "The operator compares the drive's screenshots with the mock.",
+      "key": "the-spec-header-redesigned-operator-approves-shipped",
+      "requirement": "the-spec-header-redesigned-matches-the-approved-mock",
+      "then": "the operator approves them as matching",
+      "when": "the operator reviews them"
+    },
+    {
+      "given": "the mock server (npx vite --config vite.mock.config.ts)",
+      "key": "the-spec-page-redesigned-mock-renders",
+      "requirement": "the-spec-page-redesigned-mock-first",
+      "then": "both show the redesigned page with recorded data, every action responds (toast or state change), and `npx tsc -p tsconfig.mock.json --noEmit` passes",
+      "when": "the operator opens the Spec screen and the conversation screen with the spec panel open, in dark and in light"
+    },
+    {
+      "given": "documents in each state (being written, ready, approved with no build, approved with a build running, archived)",
+      "key": "the-spec-page-redesigned-header-actions",
+      "requirement": "the-spec-page-redesigned-one-clear-next-action",
+      "then": "the header shows exactly the actions open to it, one of them primary, and Check never changes the phase shown",
+      "when": "each is opened"
+    },
+    {
+      "given": "a document with one blocking gap and one warning",
+      "key": "the-spec-page-redesigned-check-inline",
+      "requirement": "the-spec-page-redesigned-check-shows-results-in-place",
+      "then": "the gap and the warning appear beside the requirement or task they concern, and the outline marks them",
+      "when": "Check is pressed"
+    },
+    {
+      "given": "a document",
+      "key": "the-spec-page-redesigned-native-sections",
+      "requirement": "the-spec-page-redesigned-rendered-natively",
+      "then": "its requirements and criteria are app components, not a frame, and a filter hides and shows them without reloading",
+      "when": "it is opened"
+    },
+    {
+      "given": "the document list",
+      "key": "the-spec-page-redesigned-list-filters",
+      "requirement": "the-spec-page-redesigned-document-list-filter-order",
+      "then": "only those show, slices under their roadmap in build order, and the choice is still applied after reopening the tab",
+      "when": "the operator filters to approved change documents and orders by roadmap order"
+    },
+    {
+      "given": "a document with requirements in several evidence states",
+      "key": "the-spec-page-redesigned-doc-filters",
+      "requirement": "the-spec-page-redesigned-within-document-filter-order",
+      "then": "only those requirements show, and tasks appear in dependency order",
+      "when": "the operator filters to 'awaiting evidence' and orders tasks by build order"
+    },
+    {
+      "given": "a long document",
+      "key": "the-spec-page-redesigned-outline-jump",
+      "requirement": "the-spec-page-redesigned-navigation",
+      "then": "the view moves to that requirement, the link copied there reopens it, and back returns to the previous position",
+      "when": "the operator picks a requirement in the outline, then presses back"
+    },
+    {
+      "given": "a document with one finished and one running build",
+      "key": "the-spec-page-redesigned-build-numbers",
+      "requirement": "the-spec-page-redesigned-build-progress-on-the-document",
+      "then": "each build shows its driver, level, people, task counts, the four-way time split and cost by role, and the running one updates as it advances",
+      "when": "it is opened"
+    },
+    {
+      "given": "the conversation screen with the spec panel open at its narrowest width",
+      "key": "the-spec-page-redesigned-panel-parity",
+      "requirement": "the-spec-page-redesigned-side-panel-parity",
+      "then": "the actions, outline, filters and build progress are all reachable, with nothing clipped",
+      "when": "the same document is shown"
+    },
+    {
+      "given": "the panel on a document with 18 requirements",
+      "key": "the-spec-page-redesigned-panel-strip",
+      "requirement": "the-spec-page-redesigned-panel-navigation",
+      "then": "the view moves to FR-11 then FR-12, the strip marks the one in view and shows its position, and each strip item is coloured by its evidence state",
+      "when": "the operator clicks requirement 11 in the strip, then presses next"
+    },
+    {
+      "given": "the panel's filter tray",
+      "key": "the-spec-page-redesigned-panel-tray",
+      "requirement": "the-spec-page-redesigned-panel-navigation",
+      "then": "each active filter shows as a chip with a count on the tray button, removing a chip removes only that filter, and clear all restores the full document",
+      "when": "the operator filters by evidence and by task, then removes one chip, then clears all"
+    },
+    {
+      "given": "a conversation attached to a document, two documents building and three opened recently",
+      "key": "the-spec-page-redesigned-picker-shortcuts",
+      "requirement": "the-spec-page-redesigned-open-a-spec",
+      "then": "the attached document, the two building documents with their progress and the three recent ones show as shortcuts above every document, which can be filtered, ordered and grouped by roadmap",
+      "when": "the operator opens the panel's Specs tab with nothing typed"
+    },
+    {
+      "given": "the picker",
+      "key": "the-spec-page-redesigned-picker-enter",
+      "requirement": "the-spec-page-redesigned-open-a-spec",
+      "then": "the field names the first match before Enter, Enter opens it for reading in the panel, and the conversation's attached document is unchanged",
+      "when": "the operator types part of a title and presses Enter"
+    },
+    {
+      "given": "the panel's Specs tab, the Ctrl/Cmd+K picker and the panel's switcher",
+      "key": "the-spec-page-redesigned-picker-everywhere",
+      "requirement": "the-spec-page-redesigned-open-a-spec",
+      "then": "each shows the same picker with the same filters and order",
+      "when": "each is opened"
+    },
+    {
+      "given": "the page in dark, light and with reduced motion",
+      "key": "the-spec-page-redesigned-motion-and-modes",
+      "requirement": "the-spec-page-redesigned-aesthetic",
+      "then": "no literal colours appear (grep), state changes animate in dark and light, and nothing animates under reduced motion",
+      "when": "the operator checks, opens and filters"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "fe4ca7724aa9652dbf7c1e12590dc2a9fd8e317ae5b3d8e169154f8383b48d90",
+      "FR-10": "6addb03aa8c2e7048615633712f25fc0ead76104cff2c5b1b54ffbaef88aafea",
+      "FR-11": "cdb9c9837ab41c56537d08dbd669bd4de016b21195dbfbebee49a7e8afbc9c09",
+      "FR-12": "d02706e5bd278676290eba915025f66588b1d6506c9d5abeada56b712152aeb7",
+      "FR-13": "62bb62daa3f4abcfcca57afa120ec96306edb155659629202301a3c46721d615",
+      "FR-14": "0335a889f917aa709d1851a78c3d5cee1dbf5a7b1c5a7c3dc8c579a1f3a6641d",
+      "FR-15": "0269c4652b20509be708c12a9a289631e4969792c501fbeb3d0a14b42f211695",
+      "FR-16": "2e5fa7843fafca2262a183a6237e07e72b20cb3ddd31c51f09331e7fa1e35234",
+      "FR-17": "081302b70c9eb99dce5ca4b7a0b5e33b414cd177d8847fe35351a4ee690a25ab",
+      "FR-18": "6d5dfa7fa5e1f5004f94024f863593f5d008d38a1f38c23dbb87223fd9b3a99f",
+      "FR-19": "31a032d65957fb69746b89651195d286bfcbfbdaa6c00b9928e29b2968244f10",
+      "FR-2": "86cc939e2499aec71516adc959ff3f6c2128367838d747b21e3e9b3ea7d37bd1",
+      "FR-20": "c9a9298b984dbc6564b3935001c7609c3b34531cda0d232db3cee2e21a7d9583",
+      "FR-21": "4d7b7103cf99fef3e60325ece49ed7be2fd765ba564cc30f22a94bb12e10dd29",
+      "FR-22": "fc852db8d377e8d9d65866b94895feef148d7d3f10c34ebe0ad7b197b8db313e",
+      "FR-23": "ca3e8b83c56cda10bafac4d70960cfb5fd24624c42adc2f85c216dfb935f28e6",
+      "FR-3": "569aa4fdd2fa395b83fb56914c540d6ef3f39045cf14b142f3a94b116311e9ab",
+      "FR-4": "2fc9bdb8744afbdb6ab1c6198b973813784eebb835bdc6cabf6169d857519d33",
+      "FR-5": "0cd0af953b711a831e6bf42a3ba12a742a35e992024b72e3dfaffb14cd56a253",
+      "FR-6": "19dd8b7f854b317798ae4d0d9e69cea9065fa04fff8eaa6980aaf689fd4a9078",
+      "FR-7": "14c98867b8837646ce0364295db8ee427b63b5e53c2b998ac393ae30f120ccbb",
+      "FR-8": "739feb0a7fe4d879200e604427a70f132b0ed90537b3af9d6f988dff9618c1a4",
+      "FR-9": "a18a2bb0cacd8dccda72a2195c0f1e3ce0543c57f670f221bdb7d1a99e1f3ae8"
+    },
+    "high_water": 23,
+    "requirements": {
+      "the-spec-header-redesigned-body-gets-the-page": "FR-1",
+      "the-spec-header-redesigned-body-gets-the-panel": "FR-2",
+      "the-spec-header-redesigned-condenses-on-scroll": "FR-4",
+      "the-spec-header-redesigned-defects-start-folded": "FR-6",
+      "the-spec-header-redesigned-done-is-unmistakable": "FR-8",
+      "the-spec-header-redesigned-matches-the-approved-mock": "FR-11",
+      "the-spec-header-redesigned-messages-behind-a-count": "FR-3",
+      "the-spec-header-redesigned-nothing-is-lost": "FR-5",
+      "the-spec-header-redesigned-slices-under-their-roadmap": "FR-7",
+      "the-spec-header-redesigned-the-list-says-what-waits": "FR-10",
+      "the-spec-header-redesigned-what-needs-you": "FR-9",
+      "the-spec-page-redesigned-aesthetic": "FR-22",
+      "the-spec-page-redesigned-build-progress-on-the-document": "FR-18",
+      "the-spec-page-redesigned-check-shows-results-in-place": "FR-13",
+      "the-spec-page-redesigned-document-list-filter-order": "FR-15",
+      "the-spec-page-redesigned-mock-first": "FR-23",
+      "the-spec-page-redesigned-navigation": "FR-17",
+      "the-spec-page-redesigned-one-clear-next-action": "FR-12",
+      "the-spec-page-redesigned-open-a-spec": "FR-21",
+      "the-spec-page-redesigned-panel-navigation": "FR-20",
+      "the-spec-page-redesigned-rendered-natively": "FR-14",
+      "the-spec-page-redesigned-side-panel-parity": "FR-19",
+      "the-spec-page-redesigned-within-document-filter-order": "FR-16"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "the-spec-header-redesigned-body-gets-the-page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today it is 290 to 667px; the chosen design measured 154px.",
+      "statement": "On the spec page in a 1920x1080 window with the header expanded, the first line of the document body starts at most 200px below the top of the spec header, whatever messages, warnings and facts are showing."
+    },
+    {
+      "key": "the-spec-header-redesigned-body-gets-the-panel",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today it is 459 to 874px; the chosen design measured 248 to 276px with the panel's four navigation rows kept.",
+      "statement": "In the conversation's side panel in a 1920x1080 window, with the conversation column at its default 480px and the header expanded, the first line of the body starts at most 320px below the top of the spec header, the tabs and section navigation included, whatever messages are showing."
+    },
+    {
+      "key": "the-spec-header-redesigned-messages-behind-a-count",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each message adding its own height is what made the body shrink with every warning. The operator chose the count (B) over a line (A) and a side column (C).",
+      "statement": "However many messages and warnings a document has, they add no height above the body: the header shows their count, in the tone of the most urgent, and the count opens all of them, each on one line with its full text and its action reachable from there."
+    },
+    {
+      "key": "the-spec-header-redesigned-condenses-on-scroll",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Once the body is scrolled away from its top, the header condenses to a single line of at most 48px, in the page and in the panel, still showing the title, the phase, the message count, the primary action and the More menu; it expands again when the body returns to its top or the line is clicked."
+    },
+    {
+      "key": "the-spec-header-redesigned-nothing-is-lost",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every action, navigation, message, fact and detail panel the header and the banner offer today stays available from the header, the message list or the body; each action reachable today without opening a menu is still reachable without opening one, except a message's own action and the journey-step and size control, which are one click away."
+    },
+    {
+      "key": "the-spec-header-redesigned-defects-start-folded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Open by default it took most of the list's column on the operator's project (14 changes, 72 defects).",
+      "statement": "The spec list's defects report starts folded to one line showing the number of defects, and opens only when the operator opens it."
+    },
+    {
+      "key": "the-spec-header-redesigned-slices-under-their-roadmap",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "In roadmap order, in every list of specs, every change document that names a roadmap slice is listed under that roadmap, in the roadmap's slice order, whether or not the spec index records a parent for it."
+    },
+    {
+      "key": "the-spec-header-redesigned-done-is-unmistakable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today approved and done are the same green dot. The operator chose set 2 (paperwork) on the mock, and asked that it apply wherever specs are listed.",
+      "statement": "Wherever a spec's state is marked in a list of specs (the Spec tab's column, the side panel's Open a spec screen including its cards, its Specs switcher, and the search dialog), each state has its own icon (writing, ready, approved, building, done, capability, archived), done is a solid green disc with a check, and no two states share an icon."
+    },
+    {
+      "key": "the-spec-header-redesigned-what-needs-you",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator opens the list to find what is waiting on them; no other order answers that.",
+      "statement": "Every list of specs offers a 'What needs you' order that groups documents as Waiting on you, In progress, Approved not started, Finished and Capabilities, and shows beside each waiting document why: ready to approve, amendments to review, ready to build, or ready to fold."
+    },
+    {
+      "key": "the-spec-header-redesigned-the-list-says-what-waits",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "For every document it lists, the Hub returns the roadmap and slice the document names, if any, and which of these hold: being written with nothing blocking approval, amendments unreviewed or proposed, approved with open tasks and no build, done and not folded."
+    },
+    {
+      "key": "the-spec-header-redesigned-matches-the-approved-mock",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The shipped header and lists match the mock the operator approved, in the page and in the panel, in each state the mock shows."
+    },
+    {
+      "key": "the-spec-page-redesigned-one-clear-next-action",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A document's header shows its phase and the actions open to it as buttons: Check while it is being written (never changing its phase), Approve when it is ready, Build or 'Approve and build' once it may be built, with the one the document is waiting for visually primary."
+    },
+    {
+      "key": "the-spec-page-redesigned-check-shows-results-in-place",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Pressing Check shows what blocks approval and what only warns, beside the parts of the document they concern, without leaving the page or freezing the document."
+    },
+    {
+      "key": "the-spec-page-redesigned-rendered-natively",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Filtering and ordering inside a document, and showing each requirement's evidence and each task's build state beside it, are not possible in a sandboxed frame of pre-rendered HTML. The operator approved replacing the frame (2026-10-26).",
+      "statement": "The document's sections, requirements, acceptance criteria and tasks are rendered by the app from the document's structure, so the page can filter, order, highlight and link them."
+    },
+    {
+      "key": "the-spec-page-redesigned-document-list-filter-order",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The document list can be filtered by kind, phase, text and 'has a build running', ordered by last change, phase, title or roadmap order, and grouped under its roadmap, and the choice persists per project."
+    },
+    {
+      "key": "the-spec-page-redesigned-within-document-filter-order",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Within a document, requirements can be filtered by evidence state and by task, and tasks by status and agent; tasks can be ordered by status or by build order (dependencies)."
+    },
+    {
+      "key": "the-spec-page-redesigned-navigation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An outline of the open document jumps to any section, requirement or task; a slice links to its roadmap and to the previous and next slice; back and forward return to the previous position; every position has a link that reopens it."
+    },
+    {
+      "key": "the-spec-page-redesigned-build-progress-on-the-document",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each build of the document shows, live: its driver, level and people; tasks by status; wall time split into building, waiting for review, checks and waiting to be handed out; runs; and cost split between building, reviewing and leading."
+    },
+    {
+      "key": "the-spec-page-redesigned-side-panel-parity",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26, approving the mock: 'don't forget that should be on the side panel as well'.",
+      "statement": "The conversation's spec side panel shows the same document, actions, navigation and build progress as the Spec tab, in a layout that fits the panel's width."
+    },
+    {
+      "key": "the-spec-page-redesigned-panel-navigation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: 'a better navigation of the spec side panel, better filtering and ordering' (approved: 'that's amazing, keep this').",
+      "statement": "The side panel switches to any other document from a switcher above its tabs; jumps to any section, and to any requirement or task from a strip that shows each one's state, with previous and next and its position; and filters and orders from one tray whose active choices stay visible as chips that remove themselves one at a time or all at once."
+    },
+    {
+      "key": "the-spec-page-redesigned-open-a-spec",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: 'when we open the side panel and open specs we open a navigation to choose the spec to open, I want that improved as well' (approved: 'It works. Perfect'). Attaching stays the composer's control (SpecIndexTab design D9).",
+      "statement": "Choosing a spec to open, from the panel's Specs tab, the Ctrl/Cmd+K picker or the panel's switcher, is one picker: a search field from which Enter opens the first match it names; with nothing typed, shortcuts to the conversation's attached document, to documents with a build running (with their progress) and to the last three opened; then every document with the Spec tab's filters, order and roadmap grouping. Opening never attaches a document to the conversation."
+    },
+    {
+      "key": "the-spec-page-redesigned-aesthetic",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The page uses only the app's tokens and primitives, works in dark and light, animates state changes (opening, checking, a build's progress) with the motion tokens, and stops animating under reduced motion."
+    },
+    {
+      "key": "the-spec-page-redesigned-mock-first",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator practice since 2026-10-20: mocks are real components, so applying the approved mock is wiring, not redrawing.",
+      "statement": "A mock of the Spec tab and the side panel, built from the real components fed recorded fixtures under hub/ui/mock, is approved by the operator before the page is wired to the Hub."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Spec page"
+}

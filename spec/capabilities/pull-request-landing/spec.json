@@ -1,0 +1,505 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project that has never changed its PR landing setting",
+      "how_to_check": "hub test on the Build route and the project settings route; drive step 1",
+      "key": "a-build-lands-as-one-pull-request-off-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-off-by-default",
+      "then": "it is refused naming the PR landing setting, and the Build dialog offers only main and nowhere",
+      "when": "a Build request names landing 'pull request'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project directory whose remote is not GitHub, or with the GitHub CLI absent from PATH",
+      "how_to_check": "hub test with a stubbed CLI and a local bare remote",
+      "key": "a-build-lands-as-one-pull-request-gh-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-needs-github",
+      "then": "it is refused naming which of the three is missing",
+      "when": "PR landing is turned on"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR build whose approved task fails a landing-phase check on a test not on the known-failing list",
+      "how_to_check": "hub test against a local bare remote",
+      "key": "a-build-lands-as-one-pull-request-chk-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-checked-before-push",
+      "then": "the task is sent back and the remote branch is unchanged",
+      "when": "it is processed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR build of two tasks on this repository",
+      "how_to_check": "acceptance drive, reading `gh pr view --json isDraft,baseRefName,commits`",
+      "key": "a-build-lands-as-one-pull-request-draft-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-draft-at-first",
+      "then": "a draft PR against master exists on GitHub from the build branch, and approving the second task adds its commit to the same PR",
+      "when": "the first task is approved and passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's PR with both tasks pushed",
+      "how_to_check": "acceptance drive, `gh pr view --json isDraft` after each step",
+      "key": "a-build-lands-as-one-pull-request-ready-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-ready-and-back",
+      "then": "it reads ready, then draft, then ready",
+      "when": "it is read, then the second task is sent back, then approved again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's PR after a push",
+      "how_to_check": "acceptance drive, `gh pr view --json title,body`",
+      "key": "a-build-lands-as-one-pull-request-desc-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-description",
+      "then": "it names the spec path, every requirement identifier the build serves, the accepted evidence ids, and each task with its state",
+      "when": "its body is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "single-commit mode and a build branch on the remote someone else pushed to since the Hub's last push",
+      "how_to_check": "hub test against a local bare remote",
+      "key": "a-build-lands-as-one-pull-request-sq-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-squash-setting",
+      "then": "the push is refused, the other commit is still on the branch, and the build shows the refusal",
+      "when": "the next task is pushed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "single-commit mode and two approved tasks",
+      "how_to_check": "hub test against a local bare remote",
+      "key": "a-build-lands-as-one-pull-request-sq-ac2",
+      "requirement": "a-build-lands-as-one-pull-request-squash-setting",
+      "then": "the remote build branch holds exactly one commit above main containing both tasks' changes",
+      "when": "both are pushed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the remote main gained a commit after the build's first push, touching a file the next task also changes",
+      "how_to_check": "hub test against a local bare remote",
+      "key": "a-build-lands-as-one-pull-request-main-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-main-moved",
+      "then": "the task is sent back to its builder as a merge conflict and the remote branch is unchanged; with a non-conflicting commit, the branch is pushed with main merged in",
+      "when": "the next task is pushed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open PR and a GitHub CLI stub that counts calls and takes 30 s to answer",
+      "how_to_check": "hub test with a stubbed CLI and a frozen clock",
+      "key": "a-build-lands-as-one-pull-request-ask-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-asks-on-actions",
+      "then": "the turn starts without waiting for the stub, the stub was asked once for the action, and it was not asked during the idle hour",
+      "when": "a task worktree is created and a turn starts in the project, and then an hour passes with no action"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a second drive PR",
+      "how_to_check": "acceptance drive (closes it with `gh pr close`)",
+      "key": "a-build-lands-as-one-pull-request-mc-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-merged-or-closed",
+      "then": "its tasks read not landed and the build branch still exists on GitHub and locally",
+      "when": "it is closed without merging on GitHub and the operator opens the build"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's PR whose only change is a line in testbed/README.md",
+      "how_to_check": "human step in the drive's guide, then the drive reads the tasks' landings",
+      "key": "a-build-lands-as-one-pull-request-mc-ac2",
+      "requirement": "a-build-lands-as-one-pull-request-merged-or-closed",
+      "then": "its tasks read landed, naming GitHub's merge commit",
+      "when": "the operator merges it on GitHub and presses 'check now'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a merged PR and a project whose main is not checked out with changes",
+      "how_to_check": "hub test with a local bare remote; drive after mc-ac2",
+      "key": "a-build-lands-as-one-pull-request-lm-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-local-main",
+      "then": "the local main equals GitHub's main",
+      "when": "the Hub finds it merged"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a merged PR and the project's main checked out with an uncommitted change",
+      "how_to_check": "hub test with a local bare remote",
+      "key": "a-build-lands-as-one-pull-request-lm-ac2",
+      "requirement": "a-build-lands-as-one-pull-request-local-main",
+      "then": "the local main and the uncommitted change are untouched, the project shows 'main is behind GitHub', and Update says why it cannot yet",
+      "when": "the Hub finds it merged"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a whole drive run",
+      "how_to_check": "hub test asserting the set of CLI commands the PR module can issue; drive's recorded call list",
+      "key": "a-build-lands-as-one-pull-request-nm-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-never-merges",
+      "then": "none is a merge, a review approval, a base change or a branch-protection change",
+      "when": "the GitHub CLI calls the Hub made are listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's build with an open draft PR",
+      "how_to_check": "UI test on the build card; drive screenshot of the card",
+      "key": "a-build-lands-as-one-pull-request-sh-ac1",
+      "requirement": "a-build-lands-as-one-pull-request-shown",
+      "then": "both show the PR link, 'draft' and the last-asked time; after a push refused by GitHub the card shows GitHub's error",
+      "when": "the operator opens the build card and a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with PR landing off, and another with PR landing and the CI setting on",
+      "how_to_check": "Hub test through the project settings route.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-setting",
+      "requirement": "the-pr-s-ci-is-the-full-check-ci-setting",
+      "then": "the first is refused with a reason naming PR landing, and the second reads the CI setting as off afterwards",
+      "when": "the operator turns the CI setting on in the first, and turns PR landing off in the second"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR build in a project with the setting on, and one in a project with it off, both with a landing-phase check configured",
+      "how_to_check": "Hub test with a fake GitHub CLI and a local bare remote; the acceptance drive confirms on a scratch GitHub repository.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-no-local",
+      "requirement": "the-pr-s-ci-is-the-full-check-no-local-landing-checks",
+      "then": "the first starts no landing-phase check run and its commits reach the PR's branch; the second runs the landing-phase checks before pushing",
+      "when": "a task of each is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a repository with one required check and one other check",
+      "how_to_check": "Hub test with a fake GitHub CLI answering each case.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-counted",
+      "requirement": "the-pr-s-ci-is-the-full-check-counted-checks",
+      "then": "the result is passed; with no required checks the listed names decide it; with neither, turning the setting on and starting a PR build are refused with a reason naming both",
+      "when": "the other check fails and the required one passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR where task B was pushed while task A's run was still pending",
+      "how_to_check": "Hub test with a fake GitHub CLI.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-head",
+      "requirement": "the-pr-s-ci-is-the-full-check-head-only",
+      "then": "no task is sent back and A's result shows as superseded",
+      "when": "a failure is reported on A's commit"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open PR with a pending counted check, nobody acting on the build, and a cutoff of 30 minutes",
+      "how_to_check": "Hub test with a controllable clock and a fake GitHub CLI counting its calls; the drive checks the concluding case with a real run.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-pending",
+      "requirement": "the-pr-s-ci-is-the-full-check-ask-while-pending",
+      "then": "the result shows within one interval; no interval asks follow until a new push; in the second case interval asks stop at 30 minutes and the build shows CI has not finished",
+      "when": "the check concludes, and in a second case never concludes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pushed task",
+      "how_to_check": "Acceptance drive on a scratch GitHub repository whose workflow passes.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-passed",
+      "requirement": "the-pr-s-ci-is-the-full-check-ci-passed",
+      "then": "the build card and the pushed tasks show CI passed with the head commit",
+      "when": "every counted check on the head commit succeeds"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a ready PR whose head commit was made by task B's push, with main green",
+      "how_to_check": "Acceptance drive on a scratch GitHub repository whose workflow fails when a marker file is present.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-failed",
+      "requirement": "the-pr-s-ci-is-the-full-check-ci-failed",
+      "then": "the PR is back to draft and task B is sent back with the failing check's name and link",
+      "when": "a counted check fails on it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "every task of the build pushed",
+      "how_to_check": "Acceptance drive, reading the PR's draft state from GitHub.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-ready",
+      "requirement": "the-pr-s-ci-is-the-full-check-ready-on-green",
+      "then": "the PR stays a draft while pending and is marked ready when it passes",
+      "when": "CI is still pending, and then passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR with counted checks running",
+      "how_to_check": "UI test over the build card with fixtures in the order the build route returns; a screenshot in the drive.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-shown",
+      "requirement": "the-pr-s-ci-is-the-full-check-ci-shown",
+      "then": "each counted check is listed as pending with a link to it on GitHub and the time of the last ask",
+      "when": "the operator opens the build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the setting on",
+      "how_to_check": "Hub test through the project settings route.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-interval",
+      "requirement": "the-pr-s-ci-is-the-full-check-interval-setting",
+      "then": "0, 61, 4, 1441 and the cutoff of 3 under an interval of 5 are refused naming the rule; an interval of 5 and a cutoff of 90 are saved and read back; a new setting reads 2 and 60",
+      "when": "the operator saves an interval of 0, 61 and 5, and a cutoff of 4, 1441, 3 with an interval of 5, and 90"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a counted check that fails on the PR's head and also on main's latest commit",
+      "how_to_check": "Hub test with a fake GitHub CLI answering main's result as failed.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-main-too",
+      "requirement": "the-pr-s-ci-is-the-full-check-fails-on-main-too",
+      "then": "the build shows the check as failing on main too, no task is sent back, and the PR stays a draft",
+      "when": "the Hub reads the result"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a counted check that fails on the PR's head while main's latest commit has it pending, and in a second case has no run of it",
+      "how_to_check": "Hub test with a fake GitHub CLI answering main's result as pending, then as absent.",
+      "key": "the-pr-s-ci-is-the-full-check-ac-main-none",
+      "requirement": "the-pr-s-ci-is-the-full-check-fails-on-main-too",
+      "then": "in both cases the latest task pushed is sent back, and the send-back names the check and says main had no result for it",
+      "when": "the Hub reads the result"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "0b360cf5868fe9282f08bc57cc3eabef81028b113fcaa7de0e71d1e180e66ed2",
+      "FR-10": "f0f03a7de57a9b16fa7e037c06a8d65ef30c7b9d515d1a15350aab0669d1baae",
+      "FR-11": "e871b83f42199a0063d48ab44fcf8db42f62c95f71c3aef98fa5c5a527d4250e",
+      "FR-12": "04ed0034687ddbeebe740b5d975f42efbd9f7f7677e893f1a578c75973352601",
+      "FR-13": "c69ad6f31d86b2a660510c5ea32c964c12f580194c7a45175ea03b43471a1606",
+      "FR-14": "10b6b748db762db5bc65b3ab30ec346eb54f938fc394d8e0599cc670e59fe215",
+      "FR-15": "c87309671834f90dcb4d605880406212d6facd9c1d67275fcb93ed8a4b6c5a22",
+      "FR-16": "f4caae50ca92512d9c3112f2be0decc6f4d0bc69f7db507764f4bb9295d51064",
+      "FR-17": "a79b84d6536b5afc78158520224e06e0964e1dfc94f7eb319924310ffe1c0eaf",
+      "FR-18": "3d0f83c896eb56f5704cf74d35f4841db07629e944a8254cf1fe8f55cca7cb7d",
+      "FR-19": "cacfdc9838d388f7861c770d1067384bc11b616c33a387e8a2875bcba1f867a1",
+      "FR-2": "521a707953c9d0f9c3d7413d269b2087aca3e43f70c3f8fa73e37843a2a2b98a",
+      "FR-20": "e8100a2ac56f768ff3c41e882325afce73a6d4a9d45293da2286000e249d043f",
+      "FR-21": "7b1350cbc8d14b49ab32a02d941c49d8c9d678c7f9770d6924cc214c4af335a7",
+      "FR-22": "e8585f344498cf38590855856aedbed016ea6b5d15f00987ee22c14751062fdc",
+      "FR-23": "0cfef8250537459abb29b8c571803e837b6deec05dec1fb80fde707217dfa871",
+      "FR-24": "d28dc9f5c6eeaf24a922298703ef5b2e710e0c30f9b50002a0b7684d4f5de8b1",
+      "FR-3": "4b0cb976ec4a39f2969cdcccbfb166d10c4873815ef71a5acf4451c9404f6f56",
+      "FR-4": "c22887f19b8b5a2bbe52ff2290bcfdad44db934e77cb7f42d39de94d041feea7",
+      "FR-5": "3402e1a11af0cdf1662adc5df4c674e1936ab6bdf96d4bbcd8573570613e8b28",
+      "FR-6": "eb7e7e2d50a63458c4bfea232cda992c7b3bba26c037a96d054bb6377c68c2d7",
+      "FR-7": "1f25b50ccd92b28f541936c3512a9567ecdcb1d7f5493614c98a1c3d13f00191",
+      "FR-8": "7497770752474cc1caaeb12e9315b5a49b3e63c391b5dfed3ba6024321e71901",
+      "FR-9": "222a22717cf87abc904de41d10aeeb010940ba47913b8ae5cf1f9f2b66e534f3"
+    },
+    "high_water": 24,
+    "requirements": {
+      "a-build-lands-as-one-pull-request-asks-on-actions": "FR-9",
+      "a-build-lands-as-one-pull-request-checked-before-push": "FR-3",
+      "a-build-lands-as-one-pull-request-description": "FR-6",
+      "a-build-lands-as-one-pull-request-draft-at-first": "FR-4",
+      "a-build-lands-as-one-pull-request-local-main": "FR-11",
+      "a-build-lands-as-one-pull-request-main-moved": "FR-8",
+      "a-build-lands-as-one-pull-request-merged-or-closed": "FR-10",
+      "a-build-lands-as-one-pull-request-needs-github": "FR-2",
+      "a-build-lands-as-one-pull-request-never-merges": "FR-12",
+      "a-build-lands-as-one-pull-request-off-by-default": "FR-1",
+      "a-build-lands-as-one-pull-request-ready-and-back": "FR-5",
+      "a-build-lands-as-one-pull-request-shown": "FR-13",
+      "a-build-lands-as-one-pull-request-squash-setting": "FR-7",
+      "the-pr-s-ci-is-the-full-check-ask-while-pending": "FR-18",
+      "the-pr-s-ci-is-the-full-check-ci-failed": "FR-20",
+      "the-pr-s-ci-is-the-full-check-ci-passed": "FR-19",
+      "the-pr-s-ci-is-the-full-check-ci-setting": "FR-14",
+      "the-pr-s-ci-is-the-full-check-ci-shown": "FR-22",
+      "the-pr-s-ci-is-the-full-check-counted-checks": "FR-16",
+      "the-pr-s-ci-is-the-full-check-fails-on-main-too": "FR-24",
+      "the-pr-s-ci-is-the-full-check-head-only": "FR-17",
+      "the-pr-s-ci-is-the-full-check-interval-setting": "FR-23",
+      "the-pr-s-ci-is-the-full-check-no-local-landing-checks": "FR-15",
+      "the-pr-s-ci-is-the-full-check-ready-on-green": "FR-21"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "a-build-lands-as-one-pull-request-off-by-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Pushing publishes the work; it must be a choice, never a default.",
+      "statement": "A project has PR landing off until the operator turns it on in the project's settings; a build's landing can be 'pull request' only in a project that has it on, and a Build request naming it in any other project is refused with a reason that names the setting."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-needs-github",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Found at the start, not at the first approved task after hours of work.",
+      "statement": "Turning PR landing on, and starting a build whose landing is 'pull request', are refused with a reason naming the problem when the project directory has no GitHub remote, when the GitHub CLI is not installed, or when it is not logged in."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-checked-before-push",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Until slice 2 the PR's CI is not the gate, so the PR must only ever hold work that passed the full local check.",
+      "statement": "An approved task of a PR build is pushed only after the project's landing-phase checks pass on the build branch with the task merged in, judged against the known-failing list as any landing is; a failing task is sent back as a landing failure is today and nothing is pushed for it."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-draft-at-first",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "When the first task of a PR build has passed its checks, the Hub pushes the build branch to the project's GitHub remote and opens a draft PR from it against the project's main branch; each later task that passes is pushed to the same branch, and the build keeps one PR."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-ready-and-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The PR is marked ready for review once every task of the build has been pushed, and is returned to draft when any task of the build is sent back while the PR is open, until every task has been pushed again."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-description",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "The PR's title is the spec's title, and its description names the spec document, each requirement the build serves by identifier and statement, the accepted evidence for each requirement, and each task with its state; the description is rewritten on every push and every draft or ready change."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-squash-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Replacing a branch someone else pushed to would destroy their work.",
+      "statement": "A project with PR landing on chooses whether the build branch carries one commit per task as built or a single commit holding the whole build; with the single commit, each push replaces the branch's commit only if the branch on GitHub is still the one the Hub last pushed, and otherwise the push is refused and shown on the build."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-main-moved",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Before each push, when the project's main branch on GitHub holds commits the build branch does not, the Hub merges GitHub's main into the build branch; a conflict sends the task being pushed back to its builder, as a merge conflict on landing does today, and nothing is pushed."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-asks-on-actions",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The state matters only when something is about to start from main or the operator is looking (operator, 2026-11-06). A slow GitHub must not freeze turn starts.",
+      "statement": "While a build's PR is open, the Hub asks GitHub for its state when a build starts in that project, when a task branch or worktree is created in it, before each push to the PR, when the operator opens the build or the project, when the Hub starts, and when the operator presses 'check now' on the build; it does not ask on a schedule, and asking never delays a turn starting."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-merged-or-closed",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "A PR found merged on GitHub records every task of its build as landed, naming the merge commit; a PR found closed without merging records them as not landed, and the build branch is kept on GitHub and locally."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-local-main",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The next build must start from the merged work, and the Hub never touches a checkout holding the operator's changes.",
+      "statement": "After a PR is found merged, the Hub fetches from GitHub and moves the project's local main to GitHub's main only when that is a fast-forward and the main branch is not checked out with uncommitted changes; otherwise it shows on the project that main is behind GitHub, with an Update button that does the same fast-forward once it is safe and says why when it is not."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-never-merges",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Teams that land through PRs keep their own rules (operator, 2026-11-06).",
+      "statement": "The Hub never merges the PR, changes its base branch, approves it, or changes the repository's branch protection or required reviews and checks; the only GitHub operations it issues are pushing the build branch and opening, editing, drafting, readying and reading its PR."
+    },
+    {
+      "key": "a-build-lands-as-one-pull-request-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build card and each of its tasks show the PR's link and state (draft, ready, merged, closed) and when the Hub last asked GitHub; a failed push or a failed ask is shown on the build with GitHub's error."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-ci-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A project with PR landing on has a setting 'the PR's CI is the full check', off until the operator turns it on; it cannot be turned on while PR landing is off, and turning PR landing off turns it off."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-no-local-landing-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a project with the setting on, an approved task of a PR build is pushed without running the project's landing-phase checks locally; its pre-review checks run as before, and a project with the setting off keeps slice 1's local landing checks."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-counted-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The checks that count for a PR are the status checks GitHub marks required for the PR's base branch; when none are marked required, or the Hub cannot read them, they are the check names listed in the project's setting; the setting cannot be turned on, and a PR build cannot start, while the repository marks no required checks and the list is empty, and the refusal names both."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-head-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Only the counted checks' results on the PR's current head commit decide anything; a result on a commit a later push has superseded is shown as superseded and neither passes nor sends back any task."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-ask-while-pending",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While any counted check on an open PR's head commit is pending or has not yet reported, the Hub asks GitHub for the result at the project's interval, in addition to slice 1's actions; it stops asking on the interval once every counted check has concluded, the PR is merged or closed, or the project's cutoff has passed since the push with a counted check still unconcluded, in which case the build shows that CI has not finished and only slice 1's actions ask again until the next push."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-ci-passed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When every counted check on the head commit succeeds, the build and each task pushed in that head read as checked by CI, naming the commit."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-ci-failed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a counted check on the head commit fails and does not also fail on main, the PR is returned to draft and the latest task pushed is sent back to its builder as a landing failure, naming each such failing check with its link; with the squash setting the latest task pushed is chosen the same way."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-ready-on-green",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a project with the setting on, the PR is marked ready for review only when every task of the build has been pushed and every counted check on the head commit has succeeded; until then it stays a draft."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-ci-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build card and each of its tasks show CI's state on the head commit (pending, passed, failed, failing on main too, superseded, not finished), each counted check with its name, state and link, and when the Hub last asked; a failed ask is shown with GitHub's error."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-interval-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator made the cutoff a setting (2026-11-06) because CI duration differs widely between projects; the cutoff's range is the author's choice: 5 minutes is the shortest that outlasts a fast CI run, 24 hours the longest a build should sit unnoticed.",
+      "statement": "The project's setting carries the interval between asks while CI is pending, in whole minutes from 1 to 60, 2 by default, and the cutoff after which interval asking stops, in whole minutes from 5 to 1440, 60 by default; a value out of its range, or a cutoff shorter than the interval, is refused on save with a reason naming the rule broken."
+    },
+    {
+      "key": "the-pr-s-ci-is-the-full-check-fails-on-main-too",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: with no result on main, the task is held responsible rather than the build waiting, so a build never hangs on main's CI; naming the missing result lets a wrong send-back be spotted.",
+      "statement": "Before sending anything back, the Hub reads each failing counted check's result on the latest commit of the project's main branch on GitHub; a check that also failed there is shown on the build as failing on main too and is not the task's; when every failing counted check also fails on main, no task is sent back and the PR stays a draft; a check with no concluded result on main (pending, or never run there) counts as not failing on main, and the send-back says main had no result for it."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Pull request landing"
+}

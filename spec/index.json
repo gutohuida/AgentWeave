@@ -155,6 +155,14 @@
       "order": 110
     },
     {
+      "path": "spec/capabilities/agent-run-traces/spec.json",
+      "title": "Agent run traces",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/work-and-traceability.json",
+      "order": 2550
+    },
+    {
       "path": "spec/capabilities/agent-stream-events/spec.json",
       "title": "Agent stream events",
       "kind": "capability",
@@ -185,6 +193,14 @@
       "status": "current",
       "parent": "spec/areas/work-and-traceability.json",
       "order": 700
+    },
+    {
+      "path": "spec/capabilities/builds/spec.json",
+      "title": "Builds",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/work-and-traceability.json",
+      "order": 1640
     },
     {
       "path": "spec/capabilities/conversation-checkpoint/spec.json",
@@ -219,6 +235,14 @@
       "order": 170
     },
     {
+      "path": "spec/capabilities/development-test-suite/spec.json",
+      "title": "Development test suite",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/the-local-instance.json",
+      "order": 2510
+    },
+    {
       "path": "spec/capabilities/hub-api-request-contract/spec.json",
       "title": "Hub API request contract",
       "kind": "capability",
@@ -233,6 +257,14 @@
       "status": "current",
       "parent": "spec/areas/interface.json",
       "order": 180
+    },
+    {
+      "path": "spec/capabilities/hub-responsiveness-under-agent-load/spec.json",
+      "title": "Hub responsiveness under agent load",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/the-local-instance.json",
+      "order": 2500
     },
     {
       "path": "spec/capabilities/hub-workspace-shell/spec.json",
@@ -291,6 +323,14 @@
       "order": 230
     },
     {
+      "path": "spec/capabilities/operator-notifications/spec.json",
+      "title": "Operator notifications",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/interface.json",
+      "order": 2490
+    },
+    {
       "path": "spec/capabilities/peer-message-routing/spec.json",
       "title": "Peer message routing",
       "kind": "capability",
@@ -323,12 +363,28 @@
       "order": 340
     },
     {
+      "path": "spec/capabilities/project-thread/spec.json",
+      "title": "Project thread",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/work-and-traceability.json",
+      "order": 2560
+    },
+    {
       "path": "spec/capabilities/provider-allowance-holds/spec.json",
       "title": "Provider allowance holds",
       "kind": "capability",
       "status": "current",
       "parent": "spec/areas/agents-and-execution.json",
       "order": 740
+    },
+    {
+      "path": "spec/capabilities/pull-request-landing/spec.json",
+      "title": "Pull request landing",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/work-and-traceability.json",
+      "order": 2520
     },
     {
       "path": "spec/capabilities/requirement-traceability/spec.json",
@@ -395,12 +451,36 @@
       "order": 300
     },
     {
+      "path": "spec/capabilities/spec-page/spec.json",
+      "title": "Spec page",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/interface.json",
+      "order": 2540
+    },
+    {
       "path": "spec/capabilities/spec-roadmaps/spec.json",
       "title": "Spec roadmaps",
       "kind": "capability",
       "status": "current",
       "parent": "spec/areas/specification.json",
       "order": 490
+    },
+    {
+      "path": "spec/capabilities/spec-tidying-by-a-trusted-agent/spec.json",
+      "title": "Spec tidying by a trusted agent",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/specification.json",
+      "order": 2530
+    },
+    {
+      "path": "spec/capabilities/stalls-and-the-mender/spec.json",
+      "title": "Stalls and the mender",
+      "kind": "capability",
+      "status": "current",
+      "parent": "spec/areas/agents-and-execution.json",
+      "order": 2480
     },
     {
       "path": "spec/capabilities/task-dependencies/spec.json",
@@ -451,6 +531,22 @@
       "order": 530
     },
     {
+      "path": "spec/changes/a-build-has-a-driver-a-level-and-its-people/spec.json",
+      "title": "A build has a driver, a level and its people",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1650
+    },
+    {
+      "path": "spec/changes/a-build-lands-as-one-pull-request/spec.json",
+      "title": "A build lands as one pull request",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1660
+    },
+    {
       "path": "spec/changes/a-call-mode-turn-starts-with-an-empty-calls-directory/spec.json",
       "title": "A call-mode turn starts with an empty calls directory",
       "kind": "change-spec",
@@ -483,6 +579,14 @@
       "order": 780
     },
     {
+      "path": "spec/changes/a-change-names-the-capabilities-it-changes/spec.json",
+      "title": "A change names the capabilities it changes",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1670
+    },
+    {
       "path": "spec/changes/a-changed-runner-configuration-holds-the-turn/spec.json",
       "title": "A changed runner configuration holds the next turn",
       "kind": "change-spec",
@@ -491,12 +595,36 @@
       "order": 1040
     },
     {
+      "path": "spec/changes/a-check-can-run-only-the-tests-for-what-a-task-changed/spec.json",
+      "title": "A check can run only the tests for what a task changed",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1680
+    },
+    {
+      "path": "spec/changes/a-check-run-finishes-when-master-moves/spec.json",
+      "title": "A check run finishes when master moves",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1690
+    },
+    {
       "path": "spec/changes/a-check-that-fails-on-main-too-is-not-the-tasks/spec.json",
       "title": "A check that fails on main too is not the task's",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1050
+    },
+    {
+      "path": "spec/changes/a-checks-send-back-returns-the-task-s-accepted-evidence/spec.json",
+      "title": "A checks send-back returns the task's accepted evidence",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1700
     },
     {
       "path": "spec/changes/a-codex-app-server-spec-turn-keeps-no-write-tools/spec.json",
@@ -531,6 +659,14 @@
       "order": 1070
     },
     {
+      "path": "spec/changes/a-development-checkout-updates-the-same-way/spec.json",
+      "title": "A development checkout updates the same way",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1710
+    },
+    {
       "path": "spec/changes/a-document-names-its-default-reviewer/spec.json",
       "title": "A document names its default reviewer, and approval says who reviews",
       "kind": "change-spec",
@@ -545,6 +681,14 @@
       "status": "archived",
       "parent": null,
       "order": 620
+    },
+    {
+      "path": "spec/changes/a-finished-spec-gets-a-build-retrospective/spec.json",
+      "title": "A finished spec gets a build retrospective",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1720
     },
     {
       "path": "spec/changes/a-fold-can-retire-what-the-change-supersedes/spec.json",
@@ -619,6 +763,14 @@
       "order": 900
     },
     {
+      "path": "spec/changes/a-new-project-starts-as-a-git-repository-with-an-agents-md/spec.json",
+      "title": "A new project starts as a git repository with an AGENTS.md",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1730
+    },
+    {
       "path": "spec/changes/a-project-orders-its-own-spec-steps/spec.json",
       "title": "A project orders its own spec steps, adds its own and appends instructions",
       "kind": "change-spec",
@@ -627,12 +779,28 @@
       "order": 790
     },
     {
+      "path": "spec/changes/a-project-says-what-it-still-needs/spec.json",
+      "title": "A project says what it still needs",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1740
+    },
+    {
       "path": "spec/changes/a-read-only-agent-holds-no-task-work/spec.json",
       "title": "A read-only agent does not hold a task's work",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 640
+    },
+    {
+      "path": "spec/changes/a-red-main-does-not-hold-the-night/spec.json",
+      "title": "A red main or a flake does not hold the night",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1750
     },
     {
       "path": "spec/changes/a-redistilled-fact-keeps-its-id/spec.json",
@@ -710,9 +878,17 @@
       "path": "spec/changes/a-run-is-a-trace-you-can-export/spec.json",
       "title": "A run is a trace you can view, export and clear",
       "kind": "change-spec",
-      "status": "proposed",
+      "status": "exploring",
       "parent": null,
       "order": 1190
+    },
+    {
+      "path": "spec/changes/a-run-that-goes-quiet-is-shown-to-the-operator/spec.json",
+      "title": "A run that goes quiet is shown to the operator",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1760
     },
     {
       "path": "spec/changes/a-runner-s-flags-cannot-override-the-posture/spec.json",
@@ -779,6 +955,22 @@
       "order": 1240
     },
     {
+      "path": "spec/changes/a-task-s-checks-and-merges-use-its-own-work-and-a-live-run-is-never-reset/spec.json",
+      "title": "A task's checks and merges use its own work, and a live run is never reset",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1770
+    },
+    {
+      "path": "spec/changes/a-task-shows-the-spec-it-came-from-and-a-spec-shows-its-open-follow-ups/spec.json",
+      "title": "A task shows the spec it came from, and a spec shows its open follow-ups",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1780
+    },
+    {
       "path": "spec/changes/a-tasks-prerequisites-can-be-declared-at-creation-and-in-its-drawer/spec.json",
       "title": "A task's prerequisites can be declared when it is created and from its drawer",
       "kind": "change-spec",
@@ -801,6 +993,22 @@
       "status": "archived",
       "parent": null,
       "order": 810
+    },
+    {
+      "path": "spec/changes/a-trace-of-a-whole-conversation/spec.json",
+      "title": "A trace of a whole conversation",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1790
+    },
+    {
+      "path": "spec/changes/a-traces-view-with-filters-grouping-and-stats/spec.json",
+      "title": "A traces view with filters, grouping and stats",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1800
     },
     {
       "path": "spec/changes/a-vault-the-operator-fills-with-text-and-agents-can-read/spec.json",
@@ -830,7 +1038,7 @@
       "path": "spec/changes/agents-add-files-to-the-vault-by-path/spec.json",
       "title": "Agents add files to the vault by path, in bulk",
       "kind": "change-spec",
-      "status": "proposed",
+      "status": "exploring",
       "parent": null,
       "order": 1270
     },
@@ -843,12 +1051,52 @@
       "order": 1280
     },
     {
+      "path": "spec/changes/agentweave-feels-like-a-desktop-app/spec.json",
+      "title": "AgentWeave feels like a desktop app",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 1810
+    },
+    {
+      "path": "spec/changes/agentweave-is-its-own-app-on-windows/spec.json",
+      "title": "AgentWeave is its own app on Windows",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1820
+    },
+    {
       "path": "spec/changes/agentweave-opens-on-the-thread/spec.json",
       "title": "AgentWeave opens on the thread",
       "kind": "change-spec",
       "status": "approved",
       "parent": null,
       "order": 1290
+    },
+    {
+      "path": "spec/changes/agentweave-performance-overhaul/spec.json",
+      "title": "AgentWeave performance overhaul",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 1830
+    },
+    {
+      "path": "spec/changes/agentweave-s-checks-fit-a-busy-machine/spec.json",
+      "title": "AgentWeave's checks fit a busy machine",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1840
+    },
+    {
+      "path": "spec/changes/agentweave-updates-itself/spec.json",
+      "title": "AgentWeave updates itself",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1850
     },
     {
       "path": "spec/changes/already-built-work-is-approved-without-approve-anyway/spec.json",
@@ -859,12 +1107,28 @@
       "order": 1300
     },
     {
+      "path": "spec/changes/amendments-main-watch-and-the-next-slice/spec.json",
+      "title": "Amendments after approval, main watched, the next slice offered",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1860
+    },
+    {
       "path": "spec/changes/an-agent-checkout-catches-up-with-main/spec.json",
       "title": "An agent's own checkout is brought up to main before its turn",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1310
+    },
+    {
+      "path": "spec/changes/an-agent-the-operator-trusts-can-tidy-the-specs/spec.json",
+      "title": "An agent the operator trusts can tidy the specs",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1870
     },
     {
       "path": "spec/changes/an-exploring-turn-asks-its-questions-in-its-reply/spec.json",
@@ -878,7 +1142,7 @@
       "path": "spec/changes/an-operator-sets-how-far-an-agent-reaches/spec.json",
       "title": "An operator sets how far an agent reaches",
       "kind": "change-spec",
-      "status": "proposed",
+      "status": "exploring",
       "parent": null,
       "order": 1320
     },
@@ -891,6 +1155,102 @@
       "order": 820
     },
     {
+      "path": "spec/changes/approved-work-merges-in-batches/spec.json",
+      "title": "Approved work merges in batches",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1880
+    },
+    {
+      "path": "spec/changes/ask-any-agent-for-a-dashboard-and-get-one-that-stays/spec.json",
+      "title": "Ask any agent for a dashboard and get one that stays",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1890
+    },
+    {
+      "path": "spec/changes/building-a-spec-ties-together-from-plan-to-board/spec.json",
+      "title": "Building a spec ties together, from plan to board",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 1900
+    },
+    {
+      "path": "spec/changes/builds-land-on-gitlab-merge-requests/spec.json",
+      "title": "Other code hosts",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1910
+    },
+    {
+      "path": "spec/changes/change-a-dashboard-by-asking/spec.json",
+      "title": "Change a dashboard by asking",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 1920
+    },
+    {
+      "path": "spec/changes/checkpoints-and-traces-you-can-find-and-use/spec.json",
+      "title": "Checkpoints and traces you can find and use",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 1930
+    },
+    {
+      "path": "spec/changes/checks-any-project-can-use-judged-against-a-known-failing-list/spec.json",
+      "title": "Checks any project can use, judged against a known-failing list",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 1940
+    },
+    {
+      "path": "spec/changes/checks-cost-less-on-a-machine-that-is-in-use/spec.json",
+      "title": "Checks cost less on a machine that is in use",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 1950
+    },
+    {
+      "path": "spec/changes/checks-know-their-phase-and-give-way-to-the-user/spec.json",
+      "title": "Checks know their phase and give way to the user",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1960
+    },
+    {
+      "path": "spec/changes/checks-report-which-tests-failed-in-any-language/spec.json",
+      "title": "Checks report which tests failed, in any language",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1970
+    },
+    {
+      "path": "spec/changes/checks-run-before-anyone-reviews/spec.json",
+      "title": "Checks run before anyone reviews",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 1980
+    },
+    {
+      "path": "spec/changes/checks-wait-less-fresh-results-after-master-moves-and-checks-scoped-to-the-paths-they-cover/spec.json",
+      "title": "Checks wait less",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 1990
+    },
+    {
       "path": "spec/changes/codex-requirements-say-they-are-not-driven/spec.json",
       "title": "Codex requirements say they have not been driven since the plan was cancelled",
       "kind": "change-spec",
@@ -899,12 +1259,36 @@
       "order": 940
     },
     {
+      "path": "spec/changes/conflict-caused-review-rounds-are-counted-per-slice/spec.json",
+      "title": "Conflict-caused review rounds are counted per slice",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2000
+    },
+    {
       "path": "spec/changes/copilot-spend-is-counted-in-its-own-units/spec.json",
       "title": "Copilot spend is counted in its own units",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1330
+    },
+    {
+      "path": "spec/changes/dashboards-an-agent-builds-from-the-project-s-data/spec.json",
+      "title": "Dashboards an agent builds from the project's data",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 2010
+    },
+    {
+      "path": "spec/changes/each-piece-of-evidence-is-judged-on-its-own/spec.json",
+      "title": "Each piece of evidence is judged on its own",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2020
     },
     {
       "path": "spec/changes/edit-files-asks-the-operator-for-everything-else/spec.json",
@@ -931,12 +1315,52 @@
       "order": 870
     },
     {
+      "path": "spec/changes/every-checkpoint-findable-and-readable/spec.json",
+      "title": "Every checkpoint, findable and readable",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2030
+    },
+    {
       "path": "spec/changes/every-piece-of-evidence-in-one-place/spec.json",
       "title": "Every piece of evidence in one place",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1360
+    },
+    {
+      "path": "spec/changes/every-same-file-overlap-reaches-the-operator-at-gated/spec.json",
+      "title": "Every same-file overlap reaches the operator (Gated build)",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2040
+    },
+    {
+      "path": "spec/changes/every-same-file-overlap-reaches-the-operator/spec.json",
+      "title": "Every same-file overlap reaches the operator",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2050
+    },
+    {
+      "path": "spec/changes/every-task-can-always-be-moved-on/spec.json",
+      "title": "Every task can always be moved on",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2060
+    },
+    {
+      "path": "spec/changes/every-task-comes-with-a-recommended-builder-and-checker/spec.json",
+      "title": "Every task comes with a recommended builder and checker",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2070
     },
     {
       "path": "spec/changes/everything-the-hub-does-is-in-a-trace/spec.json",
@@ -963,12 +1387,52 @@
       "order": 1390
     },
     {
+      "path": "spec/changes/exploring-ends-at-an-approved-plan/spec.json",
+      "title": "Exploring ends at an approved plan: check, approve and build are separate",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2080
+    },
+    {
+      "path": "spec/changes/failures-already-known-are-on-a-list-not-re-argued/spec.json",
+      "title": "Failures already known are on a list, not re-argued",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2090
+    },
+    {
+      "path": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
+      "title": "Flows that do not stall: the work after the 2026-10-25 retrospective",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 2100
+    },
+    {
+      "path": "spec/changes/generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back/spec.json",
+      "title": "Generated files are rebuilt when work lands instead of sending it back",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2110
+    },
+    {
       "path": "spec/changes/how-a-requirement-changed-and-what-proved-it/spec.json",
       "title": "How a requirement changed and what proved it",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1400
+    },
+    {
+      "path": "spec/changes/hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time/spec.json",
+      "title": "Hub tests pass on a busy machine, and the migration tests take less time",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2120
     },
     {
       "path": "spec/changes/images-and-pdfs-are-vault-sources-too/spec.json",
@@ -1011,12 +1475,44 @@
       "order": 1430
     },
     {
+      "path": "spec/changes/overlaps-the-planner-missed-are-flagged-from-real-work/spec.json",
+      "title": "Overlaps the planner missed are flagged from real work",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2130
+    },
+    {
       "path": "spec/changes/partial-evidence-does-not-verify/spec.json",
       "title": "Partial evidence does not verify",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1440
+    },
+    {
+      "path": "spec/changes/project-checks-path-pattern-syntax-and-retirements/spec.json",
+      "title": "project-checks path pattern syntax, and the retirements",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 2140
+    },
+    {
+      "path": "spec/changes/project-checks-says-what-a-run-does/spec.json",
+      "title": "project-checks says what a run does",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 2150
+    },
+    {
+      "path": "spec/changes/project-stats-come-from-the-same-records/spec.json",
+      "title": "Project stats come from the same records as the spec page",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2160
     },
     {
       "path": "spec/changes/pull-the-thread-project-history-page/spec.json",
@@ -1027,6 +1523,14 @@
       "order": 1450
     },
     {
+      "path": "spec/changes/quick-checks-run-at-normal-priority/spec.json",
+      "title": "Quick checks run at normal priority",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2170
+    },
+    {
       "path": "spec/changes/re-approving-an-amended-document-refreshes-its-open-tasks/spec.json",
       "title": "Re-approving an amended document refreshes its open tasks",
       "kind": "change-spec",
@@ -1035,12 +1539,36 @@
       "order": 680
     },
     {
+      "path": "spec/changes/rebinding-an-agents-runner-starts-clean/spec.json",
+      "title": "An agent moved to a runner of another CLI starts a fresh session on that runner's model, and the Hub records the model that ran",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2180
+    },
+    {
+      "path": "spec/changes/record-what-the-thread-shows-is-missing/spec.json",
+      "title": "Record what the thread shows is missing",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2190
+    },
+    {
       "path": "spec/changes/red-thread-project-history-roadmap/spec.json",
       "title": "The red thread: a project's history you can pull",
       "kind": "roadmap",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 1460
+    },
+    {
+      "path": "spec/changes/requested-changes-on-a-pull-request-come-back-to-the-builder/spec.json",
+      "title": "Requested changes come back to the builder",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2200
     },
     {
       "path": "spec/changes/same-file-tasks-build-in-order-the-shim-planner-is-told/spec.json",
@@ -1067,12 +1595,44 @@
       "order": 570
     },
     {
+      "path": "spec/changes/settings-in-the-app-s-style-where-you-expect-them/spec.json",
+      "title": "Settings in the app's style, where you expect them",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2210
+    },
+    {
+      "path": "spec/changes/settings-rows-that-hold-any-value/spec.json",
+      "title": "Settings rows that hold any value",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2220
+    },
+    {
+      "path": "spec/changes/settings-that-are-easy-to-find-and-match-the-app/spec.json",
+      "title": "Settings that are easy to find and match the app",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 2230
+    },
+    {
       "path": "spec/changes/sources-that-disagree-are-pointed-out/spec.json",
       "title": "Sources that disagree are pointed out, and the operator decides",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 960
+    },
+    {
+      "path": "spec/changes/start-a-conversation-from-any-checkpoint-with-any-agent/spec.json",
+      "title": "Start a conversation from any checkpoint, with any agent",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2240
     },
     {
       "path": "spec/changes/stop-closes-the-tool-card-it-interrupted/spec.json",
@@ -1115,12 +1675,76 @@
       "order": 970
     },
     {
+      "path": "spec/changes/the-app-keeps-opening-fast-and-streaming-smooth-on-a-weak-machine/spec.json",
+      "title": "The app opens fast and stays smooth on a weak machine",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2250
+    },
+    {
+      "path": "spec/changes/the-app-stays-responsive-while-agents-run/spec.json",
+      "title": "The app stays responsive while agents run",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2260
+    },
+    {
+      "path": "spec/changes/the-apps-other-surfaces-make-sense/spec.json",
+      "title": "The app's other surfaces make sense",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2270
+    },
+    {
+      "path": "spec/changes/the-board-shows-one-spec-no-spec-or-all/spec.json",
+      "title": "The board shows one spec, no spec, or all",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2280
+    },
+    {
+      "path": "spec/changes/the-build-card-shows-where-check-time-went/spec.json",
+      "title": "The build card shows where check time went",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2290
+    },
+    {
+      "path": "spec/changes/the-build-dialog-redesigned/spec.json",
+      "title": "The Build dialog, redesigned",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2300
+    },
+    {
+      "path": "spec/changes/the-build-plan-lives-in-the-spec-and-every-task-goes-to-its-people/spec.json",
+      "title": "The build plan lives in the spec, and every task goes to its people",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2310
+    },
+    {
       "path": "spec/changes/the-copilot-catalog-tracks-the-cli/spec.json",
       "title": "The Copilot catalog tracks the CLI",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1500
+    },
+    {
+      "path": "spec/changes/the-database-stays-fast-as-history-grows/spec.json",
+      "title": "The database stays fast as history grows",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2320
     },
     {
       "path": "spec/changes/the-hubs-background-jobs-are-configured-on-a-manager-page/spec.json",
@@ -1145,6 +1769,22 @@
       "status": "archived",
       "parent": null,
       "order": 880
+    },
+    {
+      "path": "spec/changes/the-measured-re-run/spec.json",
+      "title": "A slice-sized change built at Fast and at Gated is compared with the two slow nights, from the app's own views",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2330
+    },
+    {
+      "path": "spec/changes/the-mender-wakes-only-for-real-stalls/spec.json",
+      "title": "The mender wakes only for real stalls, runs on Sonnet, and leaves the operator notes instead of waiting on them",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2340
     },
     {
       "path": "spec/changes/the-model-catalog-tracks-the-newest-clis/spec.json",
@@ -1177,6 +1817,14 @@
       "status": "archived",
       "parent": null,
       "order": 1530
+    },
+    {
+      "path": "spec/changes/the-pr-s-ci-is-the-full-check/spec.json",
+      "title": "The PR's CI is the full check",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2350
     },
     {
       "path": "spec/changes/the-project-header-and-tabs-keep-a-faint-rule/spec.json",
@@ -1219,6 +1867,38 @@
       "order": 1560
     },
     {
+      "path": "spec/changes/the-spec-header-redesigned/spec.json",
+      "title": "The spec header, redesigned",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2360
+    },
+    {
+      "path": "spec/changes/the-spec-page-redesigned/spec.json",
+      "title": "The spec page redesigned",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2370
+    },
+    {
+      "path": "spec/changes/the-spec-page-reopens-the-spec-you-were-reading/spec.json",
+      "title": "The spec page reopens the spec you were reading",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2380
+    },
+    {
+      "path": "spec/changes/the-specs-stay-true-and-easy-to-work-with/spec.json",
+      "title": "The specs stay true and easy to work with",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 2390
+    },
+    {
       "path": "spec/changes/the-thread-is-how-agentweave-shows-it-is-loading/spec.json",
       "title": "The thread is how AgentWeave shows it is loading",
       "kind": "change-spec",
@@ -1230,9 +1910,17 @@
       "path": "spec/changes/the-thread-reads-as-chapters-the-manager-writes/spec.json",
       "title": "The thread reads as chapters the manager writes",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 1580
+    },
+    {
+      "path": "spec/changes/the-thread-runs-left-to-right-as-a-wave-with-the-selected-knot-shown-beneath-it/spec.json",
+      "title": "The thread runs left to right as a wave, with the selected knot shown beneath it",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2400
     },
     {
       "path": "spec/changes/the-turn-clock-counts-work-not-waiting/spec.json",
@@ -1254,7 +1942,7 @@
       "path": "spec/changes/the-vault-names-who-read-an-entry/spec.json",
       "title": "The vault names who read an entry",
       "kind": "change-spec",
-      "status": "proposed",
+      "status": "exploring",
       "parent": null,
       "order": 1600
     },
@@ -1267,6 +1955,38 @@
       "order": 1610
     },
     {
+      "path": "spec/changes/tickets-have-readable-ids/spec.json",
+      "title": "Tickets have readable ids",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2410
+    },
+    {
+      "path": "spec/changes/turn-starts-approvals-and-evidence-never-freeze-the-hub/spec.json",
+      "title": "Turn starts, approvals and evidence never freeze the Hub",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2420
+    },
+    {
+      "path": "spec/changes/vault-sources-can-be-edited-replaced-and-archived/spec.json",
+      "title": "Vault sources can be edited, replaced and archived",
+      "kind": "change-spec",
+      "status": "archived",
+      "parent": null,
+      "order": 2430
+    },
+    {
+      "path": "spec/changes/windows-notifications-for-what-calls-the-operator/spec.json",
+      "title": "Windows notifications for what calls the operator",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2440
+    },
+    {
       "path": "spec/changes/work-from-a-mid-turn-claim-reaches-the-task/spec.json",
       "title": "Work from a turn that claimed its task mid-turn reaches the task",
       "kind": "change-spec",
@@ -1275,12 +1995,36 @@
       "order": 1620
     },
     {
+      "path": "spec/changes/work-lands-through-pull-requests/spec.json",
+      "title": "Work lands through pull requests",
+      "kind": "roadmap",
+      "status": "approved",
+      "parent": null,
+      "order": 2450
+    },
+    {
       "path": "spec/changes/worker-spend-counts-against-the-budget/spec.json",
       "title": "Worker spend counts against the budget",
       "kind": "change-spec",
       "status": "archived",
       "parent": null,
       "order": 1630
+    },
+    {
+      "path": "spec/changes/worktrees-never-destroy-or-strand-anything/spec.json",
+      "title": "Worktrees never destroy or strand anything",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2460
+    },
+    {
+      "path": "spec/changes/woven-traces-the-agents-of-one-task-or-build-as-lanes-with-hand-offs/spec.json",
+      "title": "Woven traces",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2470
     }
   ]
 }

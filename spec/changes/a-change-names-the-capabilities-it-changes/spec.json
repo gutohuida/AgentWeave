@@ -1,0 +1,399 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with a current capability 'alpha'",
+      "how_to_check": "Hub test over submit and read; drive reads the page.",
+      "key": "ac-named",
+      "requirement": "names-capabilities",
+      "then": "reading the change returns both, and its page shows them",
+      "when": "a change is submitted naming alpha and a new capability titled 'Beta things'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change",
+      "how_to_check": "Hub test.",
+      "key": "ac-unknown",
+      "requirement": "unknown-refused",
+      "then": "the submission is refused with code capability_unknown naming the path, and the stored document is unchanged",
+      "when": "it is submitted naming spec/capabilities/nope/spec.json, or a capability of another project"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change naming no capability",
+      "how_to_check": "Hub test.",
+      "key": "ac-unnamed",
+      "requirement": "unnamed-warns",
+      "then": "both show the warning capability_unnamed, and approval succeeds",
+      "when": "it is submitted and then approved by the operator"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved, unfolded change naming alpha, and an agent with the switch on",
+      "how_to_check": "Hub test plus drive.",
+      "key": "ac-relink",
+      "requirement": "link-editable-until-folded",
+      "then": "the change names gamma and stays approved with the same requirement digests, the act appears in the operator's tidy list, alpha no longer lists it and gamma does",
+      "when": "the agent sets it to name gamma instead, giving a reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a folded change",
+      "how_to_check": "Hub test.",
+      "key": "ac-fixed-after-fold",
+      "requirement": "link-editable-until-folded",
+      "then": "the attempt is refused with code change_folded",
+      "when": "anyone tries to change its named capabilities"
+    },
+    {
+      "checked_by": "agent",
+      "given": "capability alpha named by an approved built change, an approved unbuilt change, an exploring change and an already-folded change",
+      "how_to_check": "Hub test that also fails if the order is reversed; drive reads the page.",
+      "key": "ac-waiting",
+      "requirement": "waiting-list",
+      "then": "it holds the first three, in the stated order, the same both times, with built shown only on the first; the folded change is absent",
+      "when": "alpha's waiting list is read twice, in the app and through the route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three capabilities, two of them named by open changes",
+      "how_to_check": "Drive.",
+      "key": "ac-affects",
+      "requirement": "affects-view",
+      "then": "the list shows the counts 2, 1 and 0 as seeded, and each agent read returns the same changes as the app",
+      "when": "the operator opens the spec list and an agent reads each capability with include=waiting"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved built change naming alpha",
+      "how_to_check": "Drive for the dialog, Hub test for the tool.",
+      "key": "ac-default-target",
+      "requirement": "fold-starts-from-link",
+      "then": "the dialog's target is alpha, and the agent's fold lands in alpha",
+      "when": "the operator opens Fold, and separately a spec-admin agent calls tidy fold with no capability"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same change",
+      "how_to_check": "Hub test.",
+      "key": "ac-off-link",
+      "requirement": "fold-starts-from-link",
+      "then": "the fold succeeds and its record carries fold_target_not_named",
+      "when": "it is folded into beta instead"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved built change naming a new capability 'Beta things'",
+      "how_to_check": "Drive.",
+      "key": "ac-create-named",
+      "requirement": "fold-starts-from-link",
+      "then": "the dialog offers to create 'Beta things' and fold into it in one step",
+      "when": "the operator opens Fold"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one change folded before this slice (a merge row exists) and one folded after",
+      "how_to_check": "Hub test seeded with a pre-existing merge row.",
+      "key": "ac-folded",
+      "requirement": "folded-says-where",
+      "then": "both show the capability they were folded into, and neither is on any waiting list",
+      "when": "each is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub started from the built checkout on a scratch port and profile, and a fresh scratch project with two capabilities",
+      "how_to_check": "py -3.11 scripts/drive/d1110_change_names_capability.py --port <scratch> --profile <scratch>; one PASS or FAIL line per step, non-zero exit on any FAIL.",
+      "key": "ac-drive",
+      "requirement": "any-project",
+      "then": "every step prints PASS: the waiting list follows the link, the fold dialog opens on the named capability, and after the fold the change is on no list and names its capability; on master before the build the drive fails",
+      "when": "scripts/drive/d1110_change_names_capability.py writes a change naming one capability through a real Haiku agent turn, reads the waiting list in the page, relinks it with a spec-admin agent, approves it, opens Fold and folds it"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built feature on the operator's own Hub",
+      "how_to_check": "The operator looks and says whether it serves.",
+      "key": "ac-operator-backlog",
+      "requirement": "any-project",
+      "then": "the operator can tell from the capability's page what is waiting to change it",
+      "when": "the spec-admin agent names the capability of this repository's unfolded changes and the operator opens a capability"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "62fe4b76a888d3837be76fba5a06392aa5bf9fd321ca371f904ab25aabed2b86",
+      "FR-2": "fb2f5122bf7b6ac04426754806f47dc301fdc2b9b4eb45ff82852c8c216d7f7f",
+      "FR-3": "66fac6bdca8ca5ce3345bb69940b85d380b03586d363eb2ec8602d45c92d30df",
+      "FR-4": "50efe9481e5469aa4afaffdfdfe624bb25b9bdf6c8e98651573f549e75a48459",
+      "FR-5": "2d42ab763665855d26a5a8e9ccda049e2157857f6f52f85da5b5eb3ef09479c2",
+      "FR-6": "68cfb7e08d2c5f3428e5bee99868484dc1bec07f4bc5bfb1fbd68820201680ad",
+      "FR-7": "65b368697aae283f4cb8950fd31b3110ff70bf9ba4fcd5ed315be633c97c2ee6",
+      "FR-8": "f807dad7bcc1a7e753d8fd641251c4af4cadb75a65e01abafd1cbd2ad9b65e64",
+      "FR-9": "786a4d84234935e70397c00dbe9201c5ebf4758b0f26e2e2d4b387576b787850"
+    },
+    "high_water": 9,
+    "requirements": {
+      "affects-view": "FR-6",
+      "any-project": "FR-9",
+      "fold-starts-from-link": "FR-7",
+      "folded-says-where": "FR-8",
+      "link-editable-until-folded": "FR-4",
+      "names-capabilities": "FR-1",
+      "unknown-refused": "FR-2",
+      "unnamed-warns": "FR-3",
+      "waiting-list": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus2",
+    "builder": "DeveloperOpus2",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Opus for the Hub task, which touches fold and the tidy tool.",
+      "checker": "QA checks the Hub work; QA2 owns the drive and checks the UI against it.",
+      "cron": "Every 5 minutes, the default.",
+      "mode": "Four chained tasks suit a flow.",
+      "stop": "One slice with no follow-on tasks."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "D1. The link is content, carried in the change's payload, not a database column. It is validated on save and survives every submission, like `roadmap`. It needs no migration, so this is Tier 1. Rejected: a link table, because it would let the link and the document disagree, and the document is the source.\n\nD2. The waiting lists are computed from the parsed documents the spec lists already reuse (commit cda8adb, spec-list-cost), plus spec_document_merges to tell which changes are folded. Rejected: a stored reverse index, which would have to be kept in step on every save, fold and archive.\n\nD3. An author may change the link only while exploring, because an approved document refuses submissions. After approval, the operator changes it through a route, and a spec-admin agent through a new tidy op. Neither changes requirement digests, so approval stands.\n\nD4. The fold keeps every choice it has today. Only its starting target changes; an off-link fold is allowed and recorded.\n\nLESSONS FROM SLICE 1, applied here:\n- The drive and the UI disagreed on element names (AOTCT-4, evidence for FR-1/6/10/13 rejected). The test ids below are part of the contract, and the drive asserts only these.\n- A list ordered by wall clock was random within a tick (AOTCT-2). Every list here names a total order.\n\nCONTRACT:\n- Payload field on change-spec: `capabilities: {\"changes\": [<capability path>], \"creates\": [{\"title\": str}]}`. It is optional; absent means none.\n- Submission refusal code `capability_unknown`. Warning code `capability_unnamed`.\n- Capability read: `waiting_changes: [{path, title, phase, built: bool, first_approved_at | null}]`, ordered by first_approved_at ascending with nulls last, then path.\n- Change read: `folded_into: <capability path> | null`.\n- read_spec_document accepts `include=waiting` on a capability.\n- Operator route: `PUT /documents/{path}/capabilities` with body {changes, creates, reason}. It returns the document, or 409 with `change_folded`.\n- Spec list rows for capabilities carry `waiting_count`.\n- Tidy op `set_capabilities(path, changes, creates, reason)`. The tidy op `fold` with no `capability` uses the single named capability, or refuses with `capability_ambiguous` (several named) or `capability_unnamed` (none named).\n- The fold record carries `fold_target_not_named: true` when the target is not named.\n- UI test ids:\n  - On a change's page: `change-capabilities` (the named list), `change-capabilities-edit`.\n  - On a capability's page: `capability-waiting-list`, whose rows are `capability-waiting-row` with `data-path` and `data-built`.\n  - On the spec list: `capability-waiting-count`.\n  - In the fold dialog: `fold-target` (its value is the selected path) and `fold-create-named`.\n\nGUARDS: none relaxed. Existing fold tests keep passing because a change with no link falls back to today's picker.",
+  "evidence": {
+    "checked": [
+      "slice 1 on master (495d00a): AOTCT-1..5 approved and merged. The rejections were fixed: test ids spec-filter-superseded, spec-archive-selected and spec-superseded-select are in SpecTidyPanel.tsx, and _tidy_events orders by created_at then rowid (spec_lifecycle.py:786-799)",
+      "code: FoldIntoCapabilityDialog.tsx:53 lists every capability as the target; spec_service.py:877 fold; spec_payload.py:453 roadmap link as the pattern for a content link; no migration needed",
+      "project record (read_model_record, 2026-11-08): Opus ~$4.06/task with 13 defect send-backs in 94; Sonnet ~$1.97/task with 45 in 94"
+    ],
+    "limits": [
+      "The record does not separate task difficulty",
+      "Slice 1's own drive result is taken from the task states, not re-run here"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Ships as slice 2 of 'The specs stay true and easy to work with'. Once built, the spec-admin agent names the capability of this repository's unfolded changes, which slice 3 then folds automatically.",
+  "open_questions": [],
+  "problem": "A change says which capability it changes only at the moment it is folded, when FoldIntoCapabilityDialog.tsx:53 offers every capability in the project to pick from. On this repository only 14 of 165 changes mention a capability at all. Nobody can ask which open changes affect capability X, and every fold begins with a hunt for its target. That is part of why the 48 built changes stayed unfolded. Slice 1 (an-agent-the-operator-trusts-can-tidy-the-specs, merged on master) gave a trusted agent the power to fold. This slice gives each fold a target it can read rather than guess.",
+  "requirements": [
+    {
+      "key": "names-capabilities",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A change document can name zero or more existing capabilities it changes and zero or more new capabilities it will create, each new one by title. The names are part of the document's content, are shown on the change's page, and survive every later submission that carries them."
+    },
+    {
+      "key": "unknown-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A link to nothing would put a change on no capability's waiting list and fail silently at fold time.",
+      "statement": "A submission naming a path that is not a current capability of the same project is refused, naming the path, and the document is unchanged."
+    },
+    {
+      "key": "unnamed-warns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approvals are scarce: warn, do not gate (operator, 2026-10-08). Some changes, like a test-only fix, change no capability.",
+      "statement": "A change that names no capability, existing or new, draws a warning on submission and at approval, and is never blocked by it."
+    },
+    {
+      "key": "link-editable-until-folded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The named capabilities can be changed until the change is folded or archived: by an author's submission while the document is exploring, by the operator at any phase, and by an agent with the spec-admin switch as a tidy act with a reason. A change to the link on an approved document does not alter its requirements or reopen it. After a fold the link is fixed."
+    },
+    {
+      "key": "waiting-list",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice 1's tidy list failed review because acts in the same clock tick came back in random order. Every list this slice adds names a total order.",
+      "statement": "Each capability lists the changes that name it and are neither folded nor archived. Each entry shows the change's title, phase, and whether every one of its tasks is approved. Entries are ordered by first approval, oldest first, with changes never approved after them, and the path breaks every tie."
+    },
+    {
+      "key": "affects-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can see, for every capability in a project, how many open changes name it, and open the list. An agent can read the same list with read_spec_document on the capability."
+    },
+    {
+      "key": "fold-starts-from-link",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Folding a change that names exactly one existing capability opens with that capability as the target, both in the operator's fold dialog and in the agent's tidy fold when no capability is given. A change naming several asks which; a change naming a new capability offers to create it with the named title. Folding into a capability the change does not name is allowed, and the fold's record says so."
+    },
+    {
+      "key": "folded-says-where",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Once folded, a change leaves every waiting list and shows which capability it was folded into. Changes folded before this slice show the capability recorded by their fold."
+    },
+    {
+      "key": "any-project",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The link, the waiting lists and the default fold target behave the same in every project, with no dependence on this repository's layout."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/the-specs-stay-true-and-easy-to-work-with/spec.json",
+    "slice": "changes-name-their-capability"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in": [
+      "A field on a change document naming the existing capabilities it changes, and any new capability it will create",
+      "Validation of the named capabilities on submission, and a warning when a change names none",
+      "Changing the link while the change is not yet folded, by its authors, the operator, or a spec-admin agent",
+      "A list on each capability of the changes naming it that are not yet folded or archived",
+      "A view of which open changes affect any capability, for the operator in the app and for agents through read_spec_document",
+      "The fold (operator dialog and agent tidy fold) defaulting to the named capability"
+    ],
+    "in_scope": [],
+    "non_goals": [
+      "Guessing the capability of existing changes automatically; the spec-admin agent sets them as tidy acts",
+      "Folding automatically when a build finishes (slice a-finished-build-folds-itself)",
+      "Search by words (slice find-the-spec)",
+      "Moving files on disk or changing the index layout (slice live-apart-from-finished)",
+      "Blocking approval of a change that names no capability: it warns"
+    ]
+  },
+  "summary": "A change document names, while it is being written, the existing capabilities it changes and any new capability it will create. Each capability then lists the changes waiting to fold into it. The operator and agents can see which open changes affect any capability. A fold starts from the named capability instead of a search.",
+  "tasks": [
+    {
+      "builder": "QA2",
+      "builder_reason": "Opus: the drive is the contract's first consumer and must be able to fail for the right reason.",
+      "checker": "QA",
+      "checker_reason": "Opus checker, independent of the drive's author.",
+      "depends_on": [],
+      "description": "scripts/drive/d1110_change_names_capability.py on a scratch port and profile (never :8000 or :8010), using only the CONTRACT names and test ids: a Haiku agent writes a change naming a capability, the waiting list is read in the page and through read_spec_document, a spec-admin agent relinks it, the operator approves, opens Fold (target asserted) and folds. Commit it failing on master.",
+      "files": [
+        "scripts/drive/d1110_change_names_capability.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "names-capabilities",
+        "unknown-refused",
+        "link-editable-until-folded",
+        "waiting-list",
+        "affects-view",
+        "fold-starts-from-link",
+        "folded-says-where",
+        "any-project"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Opus: it threads one field through save, read, fold and the tidy tool, and the same builder wrote slice 1's tidy code.",
+      "checker": "QA",
+      "checker_reason": "Opus checker for fold and authority paths.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "The payload field and its validation (capability_unknown, capability_unnamed). waiting_changes, folded_into and waiting_count on reads. read_spec_document include=waiting. The operator PUT route. The tidy op set_capabilities, and tidy fold's default target and refusals. fold_target_not_named on the fold record. Hub tests, including one that fails if the waiting order is reversed.",
+      "files": [
+        "hub/hub/spec_payload.py",
+        "hub/hub/spec_completeness.py",
+        "hub/hub/spec_service.py",
+        "hub/hub/spec_tidy.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/mcp_server.py"
+      ],
+      "from": null,
+      "key": "hub",
+      "requirements": [
+        "names-capabilities",
+        "unknown-refused",
+        "unnamed-warns",
+        "link-editable-until-folded",
+        "waiting-list",
+        "affects-view",
+        "fold-starts-from-link",
+        "folded-says-where",
+        "any-project"
+      ],
+      "reviewer": null,
+      "title": "The link, its validation, waiting lists and the default fold target in the Hub"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Sonnet: UI wiring against a fixed contract with named test ids, at about half Opus's cost.",
+      "checker": "QA2",
+      "checker_reason": "Opus checker, and the drive's author, so it checks the test ids against what the drive asserts.",
+      "depends_on": [
+        "hub"
+      ],
+      "description": "Show and edit the named capabilities on a change, the waiting list on a capability, waiting_count on the spec list, and the fold dialog opening on the named target with create-named. Every element carries the CONTRACT test ids, and a UI test asserts each one exists. Refresh and commit the bundle with its source.",
+      "files": [
+        "hub/ui/src/components/spec/FoldIntoCapabilityDialog.tsx",
+        "hub/ui/src/components/spec/SpecIndexTab.tsx",
+        "hub/ui/src/components/spec/ChangeCapabilities.tsx",
+        "hub/ui/src/components/spec/CapabilityWaitingList.tsx",
+        "hub/ui/src/api/spec.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "names-capabilities",
+        "link-editable-until-folded",
+        "waiting-list",
+        "affects-view",
+        "fold-starts-from-link",
+        "folded-says-where"
+      ],
+      "reviewer": null,
+      "title": "The link on the change page, waiting lists, counts and the fold dialog's target"
+    },
+    {
+      "builder": "QA2",
+      "builder_reason": "Opus: the drive's author reads its failures best.",
+      "checker": "QA",
+      "checker_reason": "Opus checker, independent of the drive's author.",
+      "depends_on": [
+        "hub",
+        "ui"
+      ],
+      "description": "Merge master in, run d1110_change_names_capability.py on a scratch port and profile, and record each criterion against the current commit. A failing criterion goes back to the task that owns it. Fix nothing in product code.",
+      "files": [
+        "scripts/drive/d1110_change_names_capability.py"
+      ],
+      "from": null,
+      "key": "run-drive",
+      "requirements": [
+        "names-capabilities",
+        "unknown-refused",
+        "link-editable-until-folded",
+        "waiting-list",
+        "affects-view",
+        "fold-starts-from-link",
+        "folded-says-where",
+        "any-project"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive on the built feature"
+    }
+  ],
+  "title": "A change names the capabilities it changes"
+}

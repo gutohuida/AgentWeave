@@ -1,0 +1,432 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub started from the checkout on its own port with a throwaway database, and a fixture project whose `gen.txt` is produced by `python gen.py` from `a.txt` and `b.txt`, declared as generated with that command; two tasks branched from the same commit, one editing a.txt and one editing b.txt, each committing its own rebuilt gen.txt",
+      "how_to_check": "Acceptance drive scripts/drive/generated_files_drive.py run against the scratch Hub; today it fails because the second task is sent back merge-needed",
+      "key": "ac-drive",
+      "requirement": "rebuild-on-generated-only-conflict",
+      "then": "neither is sent back, and master's gen.txt equals what `python gen.py` produces on master's a.txt and b.txt",
+      "when": "both are approved and land one after the other"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project",
+      "how_to_check": "Hub test over the settings route with an operator key and a run credential",
+      "key": "ac-setting-operator-only",
+      "requirement": "operator-sets-generated",
+      "then": "the operator's values are stored and read back; the agent's attempt is refused and changes nothing",
+      "when": "the operator saves generated paths, a command and a timeout in settings, and an agent's run tries to set the same field through any route it can reach"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with no generated paths and two tasks conflicting on a file",
+      "how_to_check": "Hub test at each of the three conflict points",
+      "key": "ac-unset",
+      "requirement": "unset-is-unchanged",
+      "then": "it is sent back merge-needed with today's report",
+      "when": "the second lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with generated paths set and a task whose only conflict is in a generated file",
+      "how_to_check": "One Hub test per conflict point over a temporary git repository",
+      "key": "ac-three-points",
+      "requirement": "rebuild-on-generated-only-conflict",
+      "then": "at each point the task is not sent back and the resulting commit holds the rebuilt file",
+      "when": "the conflict is met at the check run before review, at the landing batch, and at the push to a build's PR (a local bare remote standing in for GitHub)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "generated paths set, and a task conflicting in both a generated file and a source file",
+      "how_to_check": "Hub test whose command writes a marker file; the marker is absent",
+      "key": "ac-source-conflict",
+      "requirement": "source-conflict-still-sent-back",
+      "then": "it is sent back merge-needed naming the source file, and the command did not run",
+      "when": "it lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a generated-only conflict and a command that also modifies a.txt",
+      "how_to_check": "Hub test",
+      "key": "ac-unexpected-path",
+      "requirement": "only-declared-paths-committed",
+      "then": "nothing is committed, and the task is sent back naming a.txt as an unexpected path",
+      "when": "it lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a generated-only conflict and a command that exits 1, and separately one that sleeps past a 2-second timeout",
+      "how_to_check": "Hub tests",
+      "key": "ac-fail-timeout",
+      "requirement": "only-declared-paths-committed",
+      "then": "nothing is committed, and the send-back names the exit code with the output tail, or the timeout",
+      "when": "each lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a generated-only conflict, and a project check that fails when gen.txt contains the word BAD, and a command that writes BAD",
+      "how_to_check": "Hub test",
+      "key": "ac-checked",
+      "requirement": "rebuilt-tree-is-checked",
+      "then": "the landing's check runs on the rebuilt tree and fails, and nothing reaches main",
+      "when": "it lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a generated-only conflict and a command that records its working directory and whether the Hub's database URL is in its environment",
+      "how_to_check": "Hub test",
+      "key": "ac-isolated",
+      "requirement": "runs-like-a-check",
+      "then": "the directory is a scratch worktree under .agentweave/, not the project's checkout, and the Hub's database URL is absent",
+      "when": "it lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a landing that rebuilt gen.txt",
+      "how_to_check": "Hub test reading git log and the task-history route",
+      "key": "ac-recorded",
+      "requirement": "rebuild-is-recorded",
+      "then": "the commit message ends '(generated files rebuilt)', and the record and history name gen.txt and a duration",
+      "when": "the merge commit, the landing record and the task's history are read"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "91537fb5445892780e95a86fbd21de84463b3325e5a57cd71693c6eb12e0815f",
+      "FR-2": "4973b7042d0e6f2a70b5ced27880ba72dde1a73811ca92849e18b0b0d893c4b3",
+      "FR-3": "3b5e915b991c54d4790ac8d9cbe30449c9294821a6bdabc2420a869202858867",
+      "FR-4": "98b39e8af54242bc991b110976d22a6e09f391daad63a66c97009eda42f97cd3",
+      "FR-5": "e9e315c234fb275ea363a829ef4706e48405fa9919a1f4c05961c282292a1e7c",
+      "FR-6": "49075704b3ada70ca6017ef30cb628e244d14987a13f69ada2f85cc157e4b104",
+      "FR-7": "e1c5ff1984df175a44e9d514ea59bd3a01a3c611a0ae11da6eaaf850310e7484",
+      "FR-8": "0000de5ddfacbcc7a53760f86bb59f7bc764f08753d658765c512d5afa65e4e5"
+    },
+    "high_water": 8,
+    "requirements": {
+      "only-declared-paths-committed": "FR-5",
+      "operator-sets-generated": "FR-1",
+      "rebuild-is-recorded": "FR-8",
+      "rebuild-on-generated-only-conflict": "FR-3",
+      "rebuilt-tree-is-checked": "FR-6",
+      "runs-like-a-check": "FR-7",
+      "source-conflict-still-sent-back": "FR-4",
+      "unset-is-unchanged": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus owns the riskiest task (rebuild), so it is the natural lead.",
+      "builder": "Default for any task that names no builder; every task here names one.",
+      "checker": "QA is the default Opus checker; tasks name their own where it differs.",
+      "cron": "Every 5 minutes, the standard cadence.",
+      "mode": "Four tasks with dependencies; a flow starts each one as soon as its prerequisites are approved and has it reviewed.",
+      "stop": "Stop when the queue empties, because the work is finished when the last task is approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "**Contract.**\n- Setting: a new nullable JSON column `Project.generated_files`, shaped `{\"paths\": [\"<glob>\", ...], \"command\": \"<shell command>\", \"timeout_seconds\": <int, default 600>}`. The globs use the same syntax as a check's `paths` (`project_checks` glob: `**` crosses directories). It is set only by the operator, through the same project-settings route (`hub/hub/api/v1/projects.py`, beside `checks`) and screen (`GeneralSettings.tsx`) that set `checks`. The UI type is `generated_files` on the project type in `hub/ui/src/api/projects.ts`. No MCP tool or agent route accepts it. Null or empty `paths` means off.\n- Where it acts: the three conflict points named in the problem. At each one the conflicting paths are already known (`merge-tree --name-only`; `task_integration.would_conflict`). The rebuild itself lives in one new module, `hub/hub/generated_files.py`, which all three points call.\n- What it records:\n  - The merge commit message ends ` (generated files rebuilt)`.\n  - The landing or check-run record gains `regenerated: {\"paths\": [...], \"seconds\": <float>}`.\n  - A failed rebuild's send-back report names the reason: `unexpected_paths` (listed), `exit` (code and the tail of the output), or `timeout`.\n- Isolation: the command runs the way a check does. It runs in a scratch worktree under `.agentweave/`, never in the project's own checkout, with the Hub's own configuration withheld (`project_checks` header, D2).\n- Status path the drive walks: completed -> under_review -> approved for each task, with accepted evidence recorded before approval (a flow's approval merges only work backed by accepted evidence).\n\n**Decisions.**\n- Only on a conflict, not at every landing (operator, 2026-11-07). A stale generated file that does not conflict is still caught by the project's own checks.\n- All three conflict points, including the check run before review (operator, 2026-11-07). Otherwise PSCFC-5-style refusals remain.\n- A rebuild that changes anything outside the declared paths is a failure, never a partial success (operator, 2026-11-07). The Hub must not commit source changes no reviewer saw.\n\n**Hazard and rollback.** One migration adds the nullable column, numbered from master's head at build time (0170 today, so 0171 unless another branch takes it first; whichever merges second renumbers). Downgrade drops the column. With the column null the Hub behaves exactly as today, so rolling back the code alone is also safe. The feature writes merge commits to the main branch without review, so each regenerated commit is limited to the declared paths and goes through the landing's checks.",
+  "evidence": {
+    "checked": [
+      "Models judged from what I already know (operator's choice, 2026-11-07): Opus (DeveloperOpus, DeveloperOpus2, QA, QA2) is the strongest and most expensive, suited to hazardous and cross-cutting work and to reviews that must run things; Sonnet (Developer, DeveloperSonnet2) is much cheaper and strong on contained work with a clear contract.",
+      "master:hub/hub/landing_queue.py:927 build_chain merges with merge-tree --write-tree --name-only, collecting conflicting paths; ~1136 sends each back SEND_BACK_MERGE_NEEDED",
+      "master:hub/hub/project_checks.py ~2641-2680: a check run that finds the work does not merge sends a completed task back merge-needed",
+      "master:hub/hub/pull_requests.py ~1140-1150: a conflict before the push to a build's PR sends it back merge-needed",
+      "master:hub/hub/db/models.py Project: checks is a JSON column set only by the operator; no existing column fits generated paths, hence one migration (master's head is 0170)",
+      "Build retrospectives evt-516f58af8135, evt-917355f23cc6, evt-be2f1c20bcce and evt-6f20148c1b17: four send-backs for generated-file clashes or staleness in two days"
+    ],
+    "limits": [
+      "The model judgement is from general knowledge only; this project's per-model record was not consulted, by the operator's choice",
+      "Whether the landing's scratch worktree has what a real generator needs (for this repo, Node and node_modules) is not checked; the drive uses a Python generator",
+      "The PR-push point is tested against a local bare remote, not GitHub"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus2",
+          "DeveloperSonnet2",
+          "DeveloperOpus",
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-08T01:11:39.948854+00:00",
+        "id": "build-13b2cd1e0b59",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-07T23:48:29.649861+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "approval-gate": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "drive": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA2"
+          },
+          "drive-run": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "rebuild": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "setting": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which moment does it cover? Answered (operator, 2026-11-07): all three conflict points, including the check run before review.",
+      "resolved": true
+    },
+    {
+      "question": "Only on conflict, or always? Answered (operator, 2026-11-07): only on conflict.",
+      "resolved": true
+    },
+    {
+      "question": "A command that changes files outside the declared paths? Answered (operator, 2026-11-07): a failed rebuild; the task is sent back as today, naming the paths.",
+      "resolved": true
+    },
+    {
+      "question": "Size? Answered (operator, 2026-11-07): small. It needs one nullable column, named with its rollback in the design.",
+      "resolved": true
+    }
+  ],
+  "problem": "Many projects keep files in git that a tool produces rather than a person writes: lockfiles, generated API clients, compiled assets. This repository keeps its built dashboard (`hub/hub/static/ui`, with `ui-build-stamp.json`). When two tasks running in parallel both rebuild such a file, their source changes merge cleanly but the generated output clashes. Today the Hub treats that like any other conflict, at each of the three points where it merges: the check run before review (`project_checks.py` ~2676), the landing batch (`landing_queue.build_chain`, send-back at ~1136) and the push to a build's PR (`pull_requests.py` ~1146). Each one sends the task back with `SEND_BACK_MERGE_NEEDED`. The builder then only merges master, re-runs the generator and goes through review again. Between 2026-11-06 and 2026-11-07 that happened four times (BLAOP-4, PSCFC-5, PSCFC-6 after approval, and TWC-3; finding F1140). Each cost an extra builder run, check run and review run, and none of them involved anything wrong with the work.",
+  "requirements": [
+    {
+      "key": "operator-sets-generated",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The command runs with the project's files at landing; like checks, only the operator decides what runs there.",
+      "statement": "The operator can set, per project, one or more generated-path globs, the command that rebuilds them, and its timeout, through the same settings route and screen as the project's checks; no agent tool or agent route accepts or changes this setting."
+    },
+    {
+      "key": "unset-is-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With no generated paths set, every conflict at every conflict point sends the task back exactly as it does today."
+    },
+    {
+      "key": "rebuild-on-generated-only-conflict",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "When a task's work conflicts with the main branch (or a build's PR branch) only in paths matching the declared globs, at the check run before review, the landing batch or the push to a build's PR, the Hub does not send the task back: it merges the work, runs the command on the merged tree, and continues with the result."
+    },
+    {
+      "key": "source-conflict-still-sent-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When any conflicting path is outside the declared globs, the task is sent back as merge-needed exactly as today, and the command is not run."
+    },
+    {
+      "key": "only-declared-paths-committed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub writes this commit without review, so it may contain only files nobody writes by hand.",
+      "statement": "A rebuild's result is committed only when the command exits zero within its timeout and every path it changed or created matches a declared glob; otherwise nothing is committed and the task is sent back as merge-needed with a report naming the unexpected paths, the exit code and output tail, or the timeout."
+    },
+    {
+      "key": "rebuilt-tree-is-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The tree that lands after a rebuild goes through the same checks any landing does; a rebuild never skips or reuses a check result from a different tree."
+    },
+    {
+      "key": "runs-like-a-check",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The command runs in a scratch worktree, never in the project's own checkout, with the Hub's own configuration withheld, the same way a project check runs."
+    },
+    {
+      "key": "rebuild-is-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every rebuild is visible afterwards: the merge commit message says generated files were rebuilt, and the landing or check-run record and the task's history name the rebuilt paths and how long the command took."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A project setting, made by the operator, naming generated paths, the command that rebuilds them and its timeout",
+      "At the check run before review, the landing batch and the push to a build's PR: when every conflicting path is a declared generated path, the Hub rebuilds them on the merged tree and continues",
+      "The checks run on the tree that actually lands, including the rebuilt files",
+      "When the rebuild fails, times out, or touches a path outside the declared ones, the task is sent back as today, with the reason",
+      "The merge commit, the landing or check-run record and the task's history say that files were rebuilt, and which"
+    ],
+    "non_goals": [
+      "Resolving conflicts in source files: any conflicting path outside the declared ones still sends the work back",
+      "Commands supplied by agents: like checks, only the operator configures what runs",
+      "Rebuilding at landings where nothing conflicts",
+      "Setting this repository's own generated paths and command: the operator does that in settings once the feature exists",
+      "Changing how builders produce generated files on their own branches"
+    ]
+  },
+  "summary": "A project can declare which of its files are generated, and the command that rebuilds them. When finished work clashes with the main branch only in those files, the Hub rebuilds them on the merged work and carries on, instead of sending the task back as merge-needed.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "A drive against a Hub feature that does not exist yet, with a scratch Hub and git fixtures, has been the most send-back-prone task kind; Opus's stronger reasoning is worth its cost here.",
+      "checker": "QA2",
+      "checker_reason": "Opus checking: the review must actually run the drive and trace its failures, which needs the stronger model.",
+      "depends_on": [],
+      "description": "Write scripts/drive/generated_files_drive.py, the ac-drive check, against the contract in the design: the setting field `generated_files`, the status path completed -> under_review -> approved with evidence accepted first, and the ` (generated files rebuilt)` commit-message suffix. It starts a scratch Hub from the checkout on its own free port with a throwaway database (never :8010 or :8000), registers a fixture project with gen.py, a.txt and b.txt, and drives two parallel tasks to landing. Run it on today's code and record it failing at the second task's merge-needed send-back. Name no testbed file after a standard-library module.",
+      "files": [
+        "scripts/drive/generated_files_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "rebuild-on-generated-only-conflict"
+      ],
+      "reviewer": null,
+      "title": "Generated-files acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "A nullable column, a validated settings field and one form control follow existing patterns closely; Sonnet handles that contained work well at a fraction of Opus's cost.",
+      "checker": "QA2",
+      "checker_reason": "Opus checking, because the task carries a migration and an operator-only permission boundary that a review must probe, not just read.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add the nullable `Project.generated_files` column (migration numbered from master's head), validate its shape (paths as globs, a non-empty command, timeout_seconds 1-3600, default 600), and expose it on the project-settings route beside `checks` and in GeneralSettings, with the UI type in api/projects.ts. Agent routes and MCP tools must not accept it. Rebuild the UI bundle after merging master, just before completing.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions",
+        "hub/hub/api/v1/projects.py",
+        "hub/ui/src/api/projects.ts",
+        "hub/ui/src/components/settings/GeneralSettings.tsx",
+        "hub/ui/src/__tests__/projectSettingsPanel.test.tsx",
+        "hub/hub/static/ui",
+        "hub/tests/test_generated_files_setting.py"
+      ],
+      "from": null,
+      "key": "setting",
+      "requirements": [
+        "operator-sets-generated",
+        "unset-is-unchanged"
+      ],
+      "reviewer": null,
+      "title": "The generated-files setting, operator only"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Cross-cutting, hazardous work that changes three landing paths and commits to main without review; Opus's stronger performance on complex code justifies its higher cost.",
+      "checker": "QA",
+      "checker_reason": "Opus checking, because a missed edge case here lands unreviewed files on main, so the review needs the strongest model.",
+      "depends_on": [
+        "drive",
+        "setting"
+      ],
+      "description": "New hub/hub/generated_files.py: given the conflicting paths, decide whether every one matches the declared globs; if so, merge in a scratch worktree under .agentweave/ with main's side for the generated paths, run the command there the way a check runs (Hub configuration withheld, timeout, whole process tree ended on timeout), refuse any change outside the globs, and return the commit with the ` (generated files rebuilt)` suffix or the failure reason. Call it at the check run before review (project_checks.py), the landing batch (landing_queue.build_chain and its send-back) and the PR push (pull_requests.py), record `regenerated` on the landing or check-run record and in the task's history, and keep today's send-back for every other case. The landing's checks run on the rebuilt tree. One Hub test per criterion.",
+      "files": [
+        "hub/hub/generated_files.py",
+        "hub/hub/landing_queue.py",
+        "hub/hub/project_checks.py",
+        "hub/hub/pull_requests.py",
+        "hub/tests/test_generated_files_rebuild.py"
+      ],
+      "from": null,
+      "key": "rebuild",
+      "requirements": [
+        "rebuild-on-generated-only-conflict",
+        "unset-is-unchanged",
+        "source-conflict-still-sent-back",
+        "only-declared-paths-committed",
+        "rebuilt-tree-is-checked",
+        "runs-like-a-check",
+        "rebuild-is-recorded"
+      ],
+      "reviewer": null,
+      "title": "Rebuild generated files at the three conflict points"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Running an existing script and recording its result is routine; Sonnet is enough and much cheaper.",
+      "checker": "QA",
+      "checker_reason": "Opus checking, because the reviewer must re-run the drive and judge whether its evidence covers the requirements in full.",
+      "depends_on": [
+        "drive",
+        "setting",
+        "rebuild"
+      ],
+      "description": "Run scripts/drive/generated_files_drive.py against the built feature on a scratch Hub with a throwaway database. Fix the drive only where it disagrees with the shipped contract, and say so. Record its result as evidence for every requirement it shows, with the command and output.",
+      "files": [
+        "scripts/drive/generated_files_drive.py"
+      ],
+      "from": null,
+      "key": "drive-run",
+      "requirements": [
+        "rebuild-on-generated-only-conflict",
+        "only-declared-paths-committed",
+        "rebuild-is-recorded"
+      ],
+      "reviewer": null,
+      "title": "Run the generated-files drive against the built feature"
+    },
+    {
+      "depends_on": [
+        "setting",
+        "rebuild"
+      ],
+      "description": "Reviewing GFARW-1, QA2 ran scripts/drive/generated_files_drive.py at 26e77fe. The second task never reaches the landing batch. Its PATCH status=approved is refused 409 gate_unsatisfied by hub/hub/requirement_gate.py _check_mergeable (line 767, called at line 1309), which lists unmergeable paths ['gen.txt']. The rebuild task's files (generated_files.py, landing_queue.py, project_checks.py, pull_requests.py) do not include requirement_gate.py. When generated_files is set and every conflicting path of the evidenced commit matches the declared globs, _check_mergeable must not count that conflict as unmergeable, so approval goes on to the landing batch, where the rebuild runs. A conflict in any path outside the globs, or with the setting unset, is refused exactly as today. Reuse the glob decision from hub/hub/generated_files.py. Add one Hub test for each case (generated-only passes, mixed refused, unset refused).",
+      "files": [
+        "hub/hub/requirement_gate.py",
+        "hub/tests/test_generated_files_rebuild.py"
+      ],
+      "from": null,
+      "key": "approval-gate",
+      "requirements": [
+        "rebuild-on-generated-only-conflict"
+      ],
+      "reviewer": null,
+      "title": "Let a generated-only conflict through the approval gate"
+    }
+  ],
+  "title": "Generated files are rebuilt when work lands instead of sending it back"
+}

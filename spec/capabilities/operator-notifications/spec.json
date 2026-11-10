@@ -1,0 +1,343 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "A recorded sequence of the Hub events the page's notifier sees today, including a blocking and a non-blocking question, a permission request, a failed run, a finished loop, an agent reply and events the page treats as silent",
+      "how_to_check": "Hub test reading the operator stream in the order the route returns, against a fixture whose expected kinds were taken from the page's rules before they were moved; a page test that the toast renders from a notice.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-notice",
+      "requirement": "windows-notifications-for-what-calls-the-op-one-notice-per-event",
+      "then": "Exactly one notice per non-silent event, of the kind the page assigns today, none for the silent ones, and the in-app toast for each is drawn from its notice",
+      "when": "They pass through the Hub"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A fresh scratch profile",
+      "how_to_check": "Drive flips the switches through the page, restarts the scratch Hub, closes the window and triggers both events, counting notifications.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-kinds",
+      "requirement": "windows-notifications-for-what-calls-the-operator-kinds-chosen",
+      "then": "Defaults read question and failure on, done and reply off; after the restart the changed choices are still in force, and with the window closed a question gives no Windows notification while a reply gives one",
+      "when": "App settings is opened, then 'reply' is switched on for Windows and 'question' off, then the Hub is restarted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A scratch Hub and the app window open and minimized, a Haiku agent turn",
+      "how_to_check": "Drive reads the shell's notification history for AgentWeave, timing against the notice's timestamp; AW_TOAST_COMMAND recording is used for the timing where focus assist hides history.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-behind",
+      "requirement": "windows-notifications-for-what-calls-the-opera-toast-when-behind",
+      "then": "One Windows notification within 5 seconds",
+      "when": "The agent calls ask_user"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The window closed with 'closing leaves AgentWeave running' on",
+      "how_to_check": "Drive reads the history and compares visible console windows before and after.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-closed",
+      "requirement": "windows-notifications-for-what-calls-the-opera-toast-when-closed",
+      "then": "A notification within 5 seconds, and no conhost or powershell window was shown",
+      "when": "A run made to fail fails"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The window in front",
+      "how_to_check": "Drive counts history entries per notice id.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-in-front",
+      "requirement": "windows-notifications-for-what-calls-the-oper-none-when-in-front",
+      "then": "No notification for the first; exactly one each for the second and third",
+      "when": "A question is asked; then the window is closed while a second question is asked at the same moment; then the window is reopened while a third is asked"
+    },
+    {
+      "checked_by": "operator",
+      "given": "A notification shown",
+      "how_to_check": "Drive reads the toast XML and the Start-menu shortcut's AppUserModelID (must equal the process's AgentWeave.Hub); the operator looks once at a real one.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-identity",
+      "requirement": "windows-notifications-for-what-calls-the-operator-own-identity",
+      "then": "The source is AgentWeave with the packaged icon and the text names the agent",
+      "when": "Its source and image are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A question's notification, the window closed and the Hub running a turn",
+      "how_to_check": "Drive opens the link through the shell, reads the window's route and the Hub pid; the operator clicks one real notification once.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-click",
+      "requirement": "windows-notifications-for-what-calls-th-click-opens-conversation",
+      "then": "A window opens on that agent's conversation; the Hub's process id and the running turn are unchanged. With a window already open and minimized, it is restored and navigates instead",
+      "when": "Its activation link is opened through Windows itself (the registered agentweave: link, as a click does), not by calling the launcher directly"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A question asked from a conversation",
+      "how_to_check": "Hub test posting a question and reading the stream, in the order the route returns.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-event",
+      "requirement": "windows-notifications-for-what-cal-question-carries-conversation",
+      "then": "It has conversation_id; an old-style consumer still parses it",
+      "when": "The event is read from the operator stream"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The shell call made to fail through AW_TOAST_COMMAND",
+      "how_to_check": "Drive with a forced failure; unit test at the launcher seam, and one that the notifier does nothing off Windows.",
+      "key": "windows-notifications-for-what-calls-the-operator-c-quiet",
+      "requirement": "windows-notifications-for-what-calls-the-operator-quiet-failure",
+      "then": "The in-app toast, sound and flash still happen; no error is shown; the run continues",
+      "when": "A question is asked with the window minimized and again with it closed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "SSE events in the shapes the Hub broadcasts (questions.py question_asked {id, from_agent, blocking}; agent_trigger.py permission_requested {id, agent, tool_name, run_id}; stalls.view(); run_failed {agent, run_id, ...}; scheduler.py loop_stopped {job_id, loop_id, reason}; messages.py queue_chain_suspended), each stamped with project_id",
+      "how_to_check": "npx vitest run src/__tests__/notifications.test.ts (written first)",
+      "key": "agentweave-calls-you-with-its-own-sound-classifies-real-payloads",
+      "requirement": "agentweave-calls-you-with-its-own-sound-ask-and-fail-sound",
+      "then": "ask for the first two, fail for stall/run_failed/queue_chain_suspended/loop_stopped with any reason, done for loop_stopped with reason 'loop queue is empty', nothing for run_completed or task_updated",
+      "when": "the notifier receives each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the notifier with a fake sound player and a fake native bridge",
+      "how_to_check": "npx vitest run src/__tests__/notifications.test.ts",
+      "key": "agentweave-calls-you-with-its-own-sound-front-and-behind",
+      "requirement": "agentweave-calls-you-with-its-own-sound-behind",
+      "then": "first: one toast and a sound at the quiet gain; then: sound at the normal gain, document.title '(2) AgentWeave', bridge.attention(2); after focus: title 'AgentWeave', bridge.attention(0)",
+      "when": "an ask arrives with focus, then two arrive without focus, then focus returns"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the notifier on fake timers",
+      "how_to_check": "npx vitest run src/__tests__/notifications.test.ts",
+      "key": "agentweave-calls-you-with-its-own-sound-burst",
+      "requirement": "agentweave-calls-you-with-its-own-sound-one-per-burst",
+      "then": "the first two give one sound (fail) and one toast naming both projects; the third gives a second sound",
+      "when": "an ask and a fail from two projects arrive 1 s apart, then another ask 5 s later"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the repository",
+      "how_to_check": "npx vitest run src/__tests__/notifications.test.ts",
+      "key": "agentweave-calls-you-with-its-own-sound-same-synth",
+      "requirement": "agentweave-calls-you-with-its-own-sound-one-synth",
+      "then": "hub/ui/src/lib/sound/agentweave-sound.js and brand/sound/agentweave-sound.js have the same bytes",
+      "when": "the synth identity test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Vite against the trial Hub :8010, the app open on a project other than the drive's scratch project, AudioContext oscillators counted by an init script",
+      "how_to_check": "py -3.11 scripts/drive/d1023_notifications.py (written first; fails on master d660693)",
+      "key": "agentweave-calls-you-with-its-own-sound-it-fires-live",
+      "requirement": "agentweave-calls-you-with-its-own-sound-every-project",
+      "then": "a toast naming the scratch project appears and oscillators start; with focus lost, the title reads '(1) AgentWeave'; muting in Settings then asking again starts no oscillator",
+      "when": "the drive asks a real question through the trial Hub's questions route in the scratch project, first with the page focused, then with focus reported lost"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the real app launched by the CLI on a scratch profile, minimised without ever being clicked",
+      "how_to_check": "py -3.11 scripts/drive/d1023_notifications.py --real",
+      "key": "agentweave-calls-you-with-its-own-sound-native-window",
+      "requirement": "agentweave-calls-you-with-its-own-sound-sounds-before-a-click",
+      "then": "the native window's title becomes '(1) AgentWeave' (read with EnumWindows by PID) and the page's AudioContext reports running",
+      "when": "a question is asked in its Hub"
+    },
+    {
+      "checked_by": "agent",
+      "given": "~/.agentweave/hub/app-window/sound.json saying sound is off, or AGENTWEAVE_SOUND=0",
+      "how_to_check": "py -3.11 -m pytest tests/test_splash.py",
+      "key": "agentweave-calls-you-with-its-own-sound-opening-follows",
+      "requirement": "agentweave-calls-you-with-its-own-sound-operator-controls",
+      "then": "it does not play; with neither, it plays",
+      "when": "the CLI is about to play the opening sound"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's app after the bundle lands and the CLI is reinstalled",
+      "how_to_check": "operator, by ear and eye",
+      "key": "agentweave-calls-you-with-its-own-sound-sounds-right",
+      "requirement": "agentweave-calls-you-with-its-own-sound-in-front",
+      "then": "the toast reads clearly, the in-front sound is quiet, the behind sound carries across the room, and the taskbar button flashes",
+      "when": "an agent asks them something with the window in front, and again with it behind"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "397e20f60a535e1b3b4679851f1a68d08c49864efb89489a3481f6fe3b14ec7f",
+      "FR-10": "1b81a0547b33596d37e41fbd3d9127ce054acdb3e3f07254c4aef559b815e31e",
+      "FR-11": "ceaf2a1178a72b5b676edf6e22fefe4a7b2e4207d823ecdf717d24346cbc5995",
+      "FR-12": "a96aa8ca98bf66398ded48265d0e1ddd20ca001b5c1b266b462a084cb16913d9",
+      "FR-13": "6e9544a3101e0c4fd9f5d9e408226355f7463e1a5960c3c1f4f2c4acf77dd08f",
+      "FR-14": "f0c512d08545340344b99616b3c28bd6e93708600a11263f7acba2b99ac912b1",
+      "FR-15": "4de475cb8b6bed984b6535301c0d6985abfeac25dec70d4df8223d2240420d2e",
+      "FR-16": "13c8de8ae6f7795b8c29608e6d1e99dd636e983886da61ef97209d2382838a1a",
+      "FR-17": "ff6a919b892d922365ddc6d528ea8b58d2aeaef8ab1ca03834fc58125d9e3e50",
+      "FR-2": "9d697e968156d209b02765263fd2575938600b8ecac9ca4aa28b01e59da73306",
+      "FR-3": "02b5d0c9f72d8b272e900ac3cadce09727dfebd447eb56cb4e78b19dee515aa9",
+      "FR-4": "8af08f43777b9ff2f8447c7d8bbc6dd492bb7f86af1be4683fa2268221bf21a3",
+      "FR-5": "601e07e3086c11fa276c83654b6ff69b7de196fd70daabcc35ce080eb6f6132f",
+      "FR-6": "6147112769408b0c66b9207e1b19323d6f9c36d0f30a3d93d67421f193a3f725",
+      "FR-7": "1a32edeb10d9eaae8b5107a7bfe8e02c089cbc6d7222d3309fa2fc6a8c55aea8",
+      "FR-8": "4137b636202014e24c3ae6f3297abb82d715f2caeff637d70abbd26ccf26c87a",
+      "FR-9": "00ef311e87c62e63229ab0f00857dd709c3b6f79e86a49eae36e80850d2904bf"
+    },
+    "high_water": 17,
+    "requirements": {
+      "agentweave-calls-you-with-its-own-sound-ask-and-fail-sound": "FR-10",
+      "agentweave-calls-you-with-its-own-sound-behind": "FR-12",
+      "agentweave-calls-you-with-its-own-sound-every-project": "FR-14",
+      "agentweave-calls-you-with-its-own-sound-in-front": "FR-11",
+      "agentweave-calls-you-with-its-own-sound-one-per-burst": "FR-13",
+      "agentweave-calls-you-with-its-own-sound-one-synth": "FR-17",
+      "agentweave-calls-you-with-its-own-sound-operator-controls": "FR-15",
+      "agentweave-calls-you-with-its-own-sound-sounds-before-a-click": "FR-16",
+      "windows-notifications-for-what-cal-question-carries-conversation": "FR-8",
+      "windows-notifications-for-what-calls-th-click-opens-conversation": "FR-7",
+      "windows-notifications-for-what-calls-the-op-one-notice-per-event": "FR-1",
+      "windows-notifications-for-what-calls-the-oper-none-when-in-front": "FR-5",
+      "windows-notifications-for-what-calls-the-opera-toast-when-behind": "FR-3",
+      "windows-notifications-for-what-calls-the-opera-toast-when-closed": "FR-4",
+      "windows-notifications-for-what-calls-the-operator-kinds-chosen": "FR-2",
+      "windows-notifications-for-what-calls-the-operator-own-identity": "FR-6",
+      "windows-notifications-for-what-calls-the-operator-quiet-failure": "FR-9"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "windows-notifications-for-what-calls-the-op-one-notice-per-event",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator chose (2026-11-08) one Hub-made notice over a second copy of the rules: the review already found the design's copied rule table disagreeing with the page on blocking questions, so a copy drifts.",
+      "statement": "For every Hub event the in-app notifier treats today as ask, fail, done or reply (non-blocking questions included, as ask), the Hub SHALL publish exactly one notice on the operator stream carrying a stable notice id, its kind, project, agent, conversation when known, and the title and text the in-app toast shows; for every event it treats as silent, none. The in-app toast and any Windows notification for that event SHALL both be drawn from this notice."
+    },
+    {
+      "key": "windows-notifications-for-what-calls-the-operator-kinds-chosen",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator, 2026-11-08: the operator selects which events reach Windows. The Hub holds it because the closed-window case has no page to read it from.",
+      "statement": "App settings SHALL let the operator turn each kind (question, failure, done, reply) on or off for Windows notifications, separately from the in-app switches. The defaults SHALL be question and failure on, done and reply off. The choice SHALL be held by the Hub, apply while no window is open, and survive a Hub restart."
+    },
+    {
+      "key": "windows-notifications-for-what-calls-the-opera-toast-when-behind",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The in-app toast, sound and flash are not seen from another app.",
+      "statement": "While the app window is open but not the foreground window (minimized or covered), each notice of a kind switched on for Windows SHALL appear as one Windows notification within 5 seconds of the notice."
+    },
+    {
+      "key": "windows-notifications-for-what-calls-the-opera-toast-when-closed",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Closing to the background currently silences the app entirely.",
+      "statement": "While no app window is open and a Hub this launcher started is running, the same notices SHALL appear as Windows notifications within 5 seconds, with no console window shown at any point."
+    },
+    {
+      "key": "windows-notifications-for-what-calls-the-oper-none-when-in-front",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The in-app toast covers a window in front; the hand-over between window and background watcher must not duplicate or drop.",
+      "statement": "While the app window is the foreground window, no Windows notification SHALL appear. No notice SHALL produce more than one Windows notification, including across the moment the window closes or reopens."
+    },
+    {
+      "key": "windows-notifications-for-what-calls-the-operator-own-identity",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An unnamed or 'Windows PowerShell' notification cannot be told from anything else.",
+      "statement": "A Windows notification SHALL show AgentWeave's name and icon as its source, and say which agent or project needs the operator and why, in the words of the in-app toast."
+    },
+    {
+      "key": "windows-notifications-for-what-calls-th-click-opens-conversation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A notification that opens the app in the wrong place is a second hunt. Operator, 2026-11-08 (option A): try real click activation first; if it proves impossible, the builder reports the criterion as not satisfiable and the operator decides, rather than shipping a click that only appears to work.",
+      "statement": "Clicking a notification SHALL bring the single AgentWeave window to the front, restored if minimized, on the project and conversation of its notice (the project overview for a permission request or a notice with no conversation). With no window open it SHALL open one on the running Hub without restarting it, so running work continues."
+    },
+    {
+      "key": "windows-notifications-for-what-cal-question-carries-conversation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Without it, a question's notice can reach no further than the project.",
+      "statement": "The question_asked event SHALL carry the id of the conversation the question belongs to (null when it has none); consumers that ignore the extra field SHALL behave as before."
+    },
+    {
+      "key": "windows-notifications-for-what-calls-the-operator-quiet-failure",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A notification is a convenience, never a dependency for work.",
+      "statement": "When Windows cannot show a notification (notifications off, focus assist, the shell call failing, not Windows), the app MUST carry on as before: the in-app toast, sound and flash still happen, and no error reaches the operator or interrupts any run."
+    },
+    {
+      "key": "agentweave-calls-you-with-its-own-sound-ask-and-fail-sound",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Thread lab, 2026-10-23: sounds by default for 'needs you' and 'stalled or failed'; 'done' is off by default.",
+      "statement": "The app MUST play the brand's ask sound when an agent asks the operator a question or requests a permission, and the fail sound when a stall is recorded, a run fails, a message chain is suspended or a loop stops for any reason but a drained queue; a loop that drained its queue is done, which is silent unless the operator turns it on."
+    },
+    {
+      "key": "agentweave-calls-you-with-its-own-sound-in-front",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator's pick: 'Toast and quiet sound'.",
+      "statement": "The app MUST show a toast naming the event's project and what happened, with an action that opens that project, and play the sound at a quiet level, when its window has focus."
+    },
+    {
+      "key": "agentweave-calls-you-with-its-own-sound-behind",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Identity record §7: window in the background gets the sound, a count in the title and a flashing taskbar button.",
+      "statement": "The app MUST, when its window does not have focus, play the sound at the normal level, prefix the title with the count of unseen notifications as '(n) AgentWeave', and in the native app window flash the taskbar button; the count and the flash MUST clear when the window regains focus."
+    },
+    {
+      "key": "agentweave-calls-you-with-its-own-sound-one-per-burst",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "'One sound at most every few seconds; a burst is one sound and one grouped toast.'",
+      "statement": "The app MUST play at most one notification sound per 4 seconds, and MUST group the events arriving within that window into one toast, the more urgent kind (fail over ask over done) choosing the sound."
+    },
+    {
+      "key": "agentweave-calls-you-with-its-own-sound-every-project",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Thread lab answer: 'All projects (Recommended)'.",
+      "statement": "The app MUST notify for events from every project on the Hub, not only the selected one, and label each with its project's name."
+    },
+    {
+      "key": "agentweave-calls-you-with-its-own-sound-operator-controls",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "brand/sound/README.md: 'the operator can turn sound off'; the handoff asked that AGENTWEAVE_SOUND and the app setting agree.",
+      "statement": "The operator MUST be able to turn notification sound off, set its volume and choose which kinds sound, in Settings, and the choice MUST survive a relaunch; turning sound off MUST also silence the opening sound of the native app, and AGENTWEAVE_SOUND=0 MUST still silence the opening whatever the setting says."
+    },
+    {
+      "key": "agentweave-calls-you-with-its-own-sound-sounds-before-a-click",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Spike 2026-10-23: a page's AudioContext in pywebview's WebView2 starts suspended, so an operator who opens the app and walks away would never hear the call this change exists for; --autoplay-policy=no-user-gesture-required makes it running.",
+      "statement": "The native app window MUST let a notification sound play before the operator has interacted with the page; in a plain browser tab the sound MUST become available on the operator's first click or key press."
+    },
+    {
+      "key": "agentweave-calls-you-with-its-own-sound-one-synth",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The first shipped opening came from a second synth that drifted out of tune; the brand keeps one source.",
+      "statement": "The app MUST play its notification sounds from a copy of brand/sound/agentweave-sound.js that is byte-identical to it, and a test MUST fail when the two differ."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Operator notifications"
+}

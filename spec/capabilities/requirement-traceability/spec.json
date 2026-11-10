@@ -1137,7 +1137,7 @@
       "FR-72": "2f4ded375338b84576353999610d25edc712286b5f703e7b06fc9467d5c11302",
       "FR-73": "a642bd1e6700a73ee2a92cea2f87c838ec3d5481eb2ec6c1d46f202f283b64dd",
       "FR-74": "40ff9495c7b4d5bbe673e94e57da66c43199f3eda715840570c09e82be0dc2fd",
-      "FR-75": "6804c82acf1f930276c793a22fa0699e418fa0f0f67bb3ccd34376cb76d40549",
+      "FR-75": "4b17a14d696ac919507a8b4b8df95908c47001f2adb852a4d5c1a5458d629e53",
       "FR-8": "e320eebf6045fc12d206c38c7d6e54299432f7f6fe1c4948faddb267d400fea3",
       "FR-9": "da908b42a1d65c2b719f110fe3b3f6d9af59a64cde27ad8f1118a0164cdc9ee3"
     },
@@ -1230,7 +1230,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -1720,7 +1719,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "The gate follows coverage: partial-only is in_progress.",
-      "statement": "A gate-rigor document SHALL refuse approval of a task serving a requirement whose accepted current evidence is partial only, with a remedy that names the partial evidence and asks for a piece with covers: full; contract SHALL report it and sketch SHALL stay silent, as for any in_progress requirement."
+      "statement": "Approval of a task built at the Gated level SHALL be refused while a requirement it serves has accepted current evidence that is partial only, with a remedy that names the partial evidence and asks for a piece with covers: full; at Reviewed it SHALL be reported and at Fast (and for a task outside any build) it SHALL stay silent, as for any in_progress requirement."
     }
   ],
   "schema_version": 1,

@@ -1,0 +1,370 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a task with a run, evidence and a transition, deleted by the operator",
+      "how_to_check": "Hub test deleting through the route and reading the table; the test fails if the record is written in a different transaction that a rollback of the deletion would leave behind.",
+      "key": "ac-delete",
+      "requirement": "deletion-leaves-a-record",
+      "then": "one record exists naming the task's kind, title, readable id, the operator and the time, and holding none of its description or evidence text",
+      "when": "the deletion completes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a deleted task that belonged to a document, and a deleted document",
+      "how_to_check": "Thread route test fed the route's own order and failing if reversed; the drive deletes through the app and opens the thread.",
+      "key": "ac-delete-knot",
+      "requirement": "deletion-on-the-thread",
+      "then": "a 'Deleted' knot sits under the document for the task and at the surface for the document, each naming what, who and when, and neither links to an object",
+      "when": "the thread is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task assigned to Developer, reassigned to QA by the operator, then updated again with QA",
+      "how_to_check": "Hub test through the task PATCH route; a second test for an agent making the change records its name and run.",
+      "key": "ac-assign",
+      "requirement": "reassignment-recorded",
+      "then": "exactly one record exists, from Developer to QA by the operator",
+      "when": "both updates complete"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with a status change, a reassignment and a run, in that time order",
+      "how_to_check": "Thread route test; drive.",
+      "key": "ac-assign-knot",
+      "requirement": "reassignment-on-the-thread",
+      "then": "its children read in that order and the reassignment names both assignees and who changed it",
+      "when": "the task knot is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with a stopped build and a build reopened once by a follow-up",
+      "how_to_check": "Thread route test over Build rows including the reopenings field; drive with a real stopped build.",
+      "key": "ac-build",
+      "requirement": "builds-on-the-thread",
+      "then": "two build knots appear with their start and who chose them, the stopped one with its reason, the other with one child knot for the reopening; each links to the build's card",
+      "when": "the document knot is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a checkpoint that started a successor conversation bound to a task",
+      "how_to_check": "Thread route test; drive with a real handoff.",
+      "key": "ac-checkpoint",
+      "requirement": "carry-overs-on-the-thread",
+      "then": "a knot names the agent, trigger and date under that task and links to the checkpoint; a checkpoint that started nothing adds no knot",
+      "when": "the thread is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database copy with tasks deleted and reassigned before the migration",
+      "how_to_check": "Migration test over a pre-change database, also run against a copy of the operator's database in a scratch directory.",
+      "key": "ac-none-before",
+      "requirement": "no-invented-history",
+      "then": "no deletion or reassignment knot exists for them and their table is empty",
+      "when": "the migration runs and the thread is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a saved chapter version and a deletion recorded after it",
+      "how_to_check": "Test through the thread route and the chapters store with the new kinds in the surface keys.",
+      "key": "ac-chapters",
+      "requirement": "chapters-hold-new-kinds",
+      "then": "the deletion knot appears after the chapters, ungrouped, and the saved chapters stay valid",
+      "when": "the thread is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a deletion recorded before a chapter version is saved, so its knot lies inside the version's span",
+      "how_to_check": "Test through the chapters save (hub/hub/chapters.py surface_keys) with a deletion knot in the surface keys.",
+      "key": "ac-chapters-drop",
+      "requirement": "chapters-hold-new-kinds",
+      "then": "both saves are refused naming the knot",
+      "when": "a chapter version that omits that knot is saved, and another that lists it twice"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "078e25aad4127874fa1973105e4f40d1c670ddc4e723e01877edaf1c3f1aeb7b",
+      "FR-2": "956d99cae10301dd93c40d4ddae771a18e4f242159b582145d48ed84d8b2598f",
+      "FR-3": "a6c1243f60d51f5f14c320d347f4f08c5afe190591b8647ebc93a55bf29b0704",
+      "FR-4": "f985396d3990b01bf54487228486acd1fabd27ef56ec9e52bf5b6a330f879c38",
+      "FR-5": "a12305b68aa42e760a8b0df464ae54da3e29c5c9caf225de4f3b55f71258f1e2",
+      "FR-6": "ca807df4a982dc676123d22ab77bfb1b4faa94b4a6e305caca2f66d38c82b11f",
+      "FR-7": "d8031f31324dee4bf0c4dd8a18ec92932b7badcf3693fdad1598335bd1ac6753",
+      "FR-8": "85858fdac20254634cec539367503ad239243924c74e4785cfc94d5d413c04aa"
+    },
+    "high_water": 8,
+    "requirements": {
+      "builds-on-the-thread": "FR-5",
+      "carry-overs-on-the-thread": "FR-6",
+      "chapters-hold-new-kinds": "FR-8",
+      "deletion-leaves-a-record": "FR-1",
+      "deletion-on-the-thread": "FR-2",
+      "no-invented-history": "FR-7",
+      "reassignment-on-the-thread": "FR-4",
+      "reassignment-recorded": "FR-3"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "A migration with a live-data hazard on the operator's Hub: Opus builders.",
+      "builder": "Same as the agent; the show task names DeveloperOpus2 to be checked by different eyes from the record task.",
+      "checker": "QA (Opus) for the migration and transaction checks; the show task names QA2.",
+      "cron": "Every five minutes picks up the next task soon after the previous is approved.",
+      "mode": "The drive and record start together; show waits for record, the final drive run for all three; a flow runs them.",
+      "stop": "Nothing to do once its tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 2: two gaps need new records, so a migration, and the operator's :8000 runs this checkout's migrations on its next restart. Hazard: a new table and, for the assignment history, a write on the task-update path. Rollback: both tables are additive and nothing reads them but the thread; dropping them returns the thread to what slice 1 shows. No backfill: a row invented for earlier deletions or assignments would put a claim in a history record that nothing observed (the rule TaskTransition already follows, models.py:914-930). The thread says plainly that history before the change shipped has no such knots. The acceptance drive is written and failing first on a dedicated trial Hub.\n\nDecisions (author's choices, to confirm on review):\n- Recommended gaps close at the cheapest honest level: show what exists (builds, carry-over checkpoints), record the two events whose loss is irreversible (deletion, reassignment).\n- A deletion tombstone is one row per deleted task or document: kind, title, readable id, who deleted it, when, and the document it belonged to. It keeps no body, so it cannot leak what was deleted.\n- Reassignment is one row per change of assignee (from, to, who, run when an agent did it, when), written in the same transaction as the change.\n- New knot kinds are placed under the same parent rules as slice 1 (a build under its document, an assignment under its task, a tombstone under the document it left, else at the surface) and every one must belong to exactly one chapter (manager-chapters' every-knot-once), so the chapters job and its checks are told of the new kinds.\n- The not-recommended candidates stay candidates: see the open question.\n\nCONTRACT (names the tasks, tests and drive share; grounded in hub/hub/db/models.py, deletion.py, project_thread.py, chapters.py):\n- Migration: revision 0169 in hub/hub/migrations/versions/ (latest is 0168_a_build_lands_as_one_pull_request.py), following .claude/rules' migration checklist; two additive tables, no data written by the migration.\n- Table `deletion_records`: id, project_id, subject_kind ('task' | 'document'), title, readable_id, deleted_by ('operator'), placed_under (the owning document's id for a task, else null), deleted_at. The column is deliberately NOT named document_id or task_id: hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py:49 (`_REFERENCE`, test_every_reference_column_is_covered_by_a_cascade) fails for any column matching (task_id|document_id|...) that deletion.py does not list, and a tombstone must survive the deletion of what it names. If `placed_under` names a document later deleted, the knot goes to the surface.\n- Table `task_assignee_changes`: id, project_id, task_id, from_assignee (nullable), to_assignee (nullable), changed_by ('operator' or an agent name), run_id (nullable), changed_at. Its task_id MUST be added to deletion.py's TASK_REFERENCES as (\"task_assignee_changes\", \"task_id\", DELETE): it goes with its task, and the tombstone is what remains. This relaxes nothing; it satisfies the guard above.\n- Writers: tombstone in deletion.delete_task and deletion.delete_document, in the caller's session (routes DELETE /tasks/{task_id}, tasks.py:1708, and DELETE /documents/{path} in hub/hub/api/v1/spec.py:4801; a document's deletion writes one record for the document and one for each task that goes with it). Assignment change through one helper called from every site that writes Task.assignee (tasks.py:2123, 2458, 2464, 2577, 2726, 2730; builds.py:575, 594, 637, 1363; scheduler.py:1032; task_transition_service.py:739, 1024, 1188; run_divergence.py:754; run_task_binding.py:734; mender.py:425; already_built.py:227); see the open question on which sites count. A flow or the Hub acting without an operator or agent records changed_by 'hub'.\n- Thread: knot kinds `deletion` (key `deleted:{record id}`, word 'Deleted', no link), `assignment` (key `assignment:{id}`, child of `task:{task_id}`), `build` (key `build:{build id}`, child of `document:{document_id}`, link to the build's card, reopenings as child knots `build:{id}:reopen:{n}`), `checkpoint` (key `checkpoint:{id}`, link to the checkpoint, parent the task bound to the successor conversation or the surface). Built in project_thread.build next to the existing leaf() calls; served unchanged by GET /api/v1/projects/{project_id}/thread (hub/hub/api/v1/thread.py:52). No new route, setting or SSE event. ROUTINE (project_thread.py:54) is not widened: these kinds are never folded away.\n- Chapters: hub/hub/chapters.py surface_keys(thread) is thread.top, so a deletion or checkpoint at the surface joins it by construction; hub/tests/test_chapters_store.py and test_thread_feed_chapters.py are the existing guards to extend, none is relaxed.\n- Task status path the drive walks: pending -> assigned -> in_progress -> completed -> under_review -> approved, with one reassignment while assigned, then DELETE of one task and of the document.\n- Test files (named so the tasks share no path): hub/tests/test_deletion_records.py, test_task_assignee_changes.py, test_migration_0169_deletion_and_assignment_records.py, test_thread_history_gaps.py.\n\nCURRENT   delete a task -> gone, and the thread has no trace it existed\nPROPOSED  delete a task -> a 'Deleted' knot on the thread naming it, who and when; reassign it -> a knot under it; a build -> a knot under its document",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_thread.py:28-48 and :403-470: the tables the thread reads; Build, Checkpoint, Stall, RunDivergence, TaskCheckRun, TaskLanding are not among them.",
+      "hub/hub/deletion.py:6-13: deleting a task or document removes its transitions, evidence, events, integrations and queued input; no record of the deletion is written. deletion.py TASK_REFERENCES/DOCUMENT_REFERENCES are the cascade maps; the guard test at hub/tests/test_the_operator_can_delete_a_document_a_task_or_an_archived_agent.py:49-59.",
+      "hub/hub/api/v1/tasks.py:2123: task.assignee is overwritten in place (inside update_task_for_actor, :1999); about twenty other sites write Task.assignee (listed in the design); hub/hub/db/models.py:914-980 TaskTransition records status moves only.",
+      "hub/hub/db/models.py:3385 Build, :2194 Checkpoint, :1329 Stall, :1015 RunDivergence, :2692 SpecEditProposal exist with timestamps.",
+      "hub/hub/task_story.py:24-37: the per-task story already draws divergences, checks, integrations and unstaffed reviews, so those records are readable.",
+      "hub/hub/chapters.py:71 surface_keys is thread.top; hub/hub/api/v1/thread.py:52 the thread route; latest migration is 0168.",
+      "spec/changes/the-thread-reads-as-chapters-the-manager-writes/spec.json every-knot-once and citations-resolve, which the new kinds must satisfy."
+    ],
+    "limits": [
+      "No requirement is demonstrated yet: the acceptance drive is proposed coverage, to be written and recorded failing before the build.",
+      "Neither earlier slice is visible on the operator's data yet, so the gap list is the author's reading of the code, not what the thread showed; the operator may add gaps on seeing it.",
+      "That no table records settings, roster or trace-clearing changes is from the model list and a grep, not an exhaustive search of event_logs, which could hold some in its data field.",
+      "Whether a checkpoint's successor conversation is reachable from the checkpoint row, for the carry-over knot's placement, was not traced (see the open question)."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "large",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which gaps to close? Candidates. RECORD (nothing exists today): (1) deletion of a task or document leaves no record; (2) reassignment of a task is overwritten in place; (3) changes to agents, runners, charters, project and manager-job settings are state, not events; (4) clearing traces leaves no event of its own. SHOW (records exist, thread does not read them): (5) builds, their stops and reopenings; (6) checkpoints that carried a conversation over; (7) stalls and the mender's actions; (8) run divergences and their retries; (9) task check runs, landings and landing batches; (10) main-red notices and main check runs; (11) spec rigor changes and edit proposals; (12) queued input the Hub withdrew or abandoned. Recommendation: close 1, 2, 5 and 6 (this document's requirements). 1 and 2 are the only irreversible losses; 5 and 6 are the answer to 'who built this and how did the work move between conversations' at no recording cost. Defer 3 (large, wants its own change and a settings-history design), 4 (the cost of losing a trace is stated in retention settings already), and 7 to 12, which the task story already draws per task, so a later slice can lift them to the thread cheaply once the operator has seen whether they want that much detail. The requirements are cut to the chosen set on approval.",
+      "resolved": false
+    },
+    {
+      "question": "Should the deletion tombstone be kept when a project is itself deleted, and should the operator be able to purge one (for example a title that should not persist)? Options: (a) kept until the project goes, no purge; (b) purgeable one by one. Recommendation: (a); the record holds a title and identifier only.",
+      "resolved": false
+    },
+    {
+      "question": "Which writers of Task.assignee count as 'changing a task's assignee' (reassignment-recorded)? The PATCH route is one of about twenty sites, including the flow's hand-outs (builds.py), the mender, run-task binding and transitions that move work between builder and checker, which would make the history mostly the Hub's own moves. Options: (a) every site, through one helper, with changed_by 'hub' for non-operator non-agent moves; (b) only the operator's and agents' explicit changes (tasks.py PATCH and MCP update_task). Recommendation: (a), since a history that skips the flow's hand-offs is not the history of who held the task; the thread can fold the Hub's moves as routine.",
+      "resolved": false
+    },
+    {
+      "question": "Is a checkpoint's successor conversation reachable from the Checkpoint row, so the carry-over knot can sit under the task its conversation was bound to and a checkpoint that started nothing add no knot (carry-overs-on-the-thread)? Checkpoint carries previous_checkpoint_id, lineage_id and covers_through_run_id (models.py:2236-2243) but the link to the successor Conversation was not traced; if there is none, the criterion's given cannot be built. Recommendation: confirm in the show task; if absent, the knot is placed by the checkpoint's own loop_id/lineage or at the surface and the 'started nothing' clause is cut.",
+      "resolved": false
+    }
+  ],
+  "problem": "The roadmap says gaps are 'decided once they are visible' (spec/changes/red-thread-project-history-roadmap/spec.json, slice history-gaps). The thread is built by hub/hub/project_thread.py:403 from column reads of: SpecDocument, Task, Run, Conversation, AIJob, Loop, SpecRequirement, SpecDocumentEvent, SpecDocumentMerge, TaskTransition, TaskIntegration, RequirementEvidence, EvidenceReview, Question, PermissionRequest, Message, JobRun and vault entries (imports at project_thread.py:28-48). Two kinds of gap follow, found by reading, not by driving the thread. (A) Events that leave no record. Deleting a task or document removes its transitions, evidence, events, integrations and queued input and clears the pointer on what survives (hub/hub/deletion.py:6-13), so the thread, which never shows what has no stored record (slice 1, faithful), loses the work and the fact of deleting it together. A task's assignee is overwritten in place (hub/hub/api/v1/tasks.py:2123), so reassignments are not history: TaskTransition records status moves only (db/models.py:914), and Task has no revision table among the models. Changes to the agents, runners, charters and manager job settings of a project are state, not events: no table among the models records one. Clearing traces removes spans (hub/hub/traces.py:2531) with no event of its own that was found. (B) Records the thread does not show: Build (start, stop, stop_reason, level, people, reopenings; db/models.py:3385), Checkpoint (carry-over between conversations; :2194), Stall (:1329), RunDivergence (:1015), TaskCheckRun and TaskLanding/LandingBatch (:3454), MainNotice and MainCheckRun, SpecRigorEvent, SpecEditProposal (:2692), and a queued input the Hub withdrew or abandoned (InboundQueueEntry.abandoned_reason, :660). The task story already draws several of these per task (hub/hub/task_story.py:24-37) but the project's thread does not. The thread-from-records and manager-chapters documents are specified; this one is written before either is visible on the operator's data, so the list is the author's reading and is to be re-checked against the built thread.",
+  "requirements": [
+    {
+      "key": "deletion-leaves-a-record",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A deletion is the one event after which the rest of the history cannot reconstruct it (hub/hub/deletion.py:6-13).",
+      "statement": "Deleting a task or a specification document records, in the same transaction as the deletion, the kind, title and readable identifier of what was deleted, who deleted it, when, and for a task the document it belonged to; the record keeps no description, requirement text or evidence."
+    },
+    {
+      "key": "deletion-on-the-thread",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each such record appears on the thread as a knot worded 'Deleted' that names what was deleted, who deleted it and when, placed by its recorded time under the document the task belonged to or, for a document or a task without one, at the surface; it links to nothing, since the object no longer exists."
+    },
+    {
+      "key": "reassignment-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Changing a task's assignee records the previous assignee, the new one, who changed it (the operator, or an agent's name and run) and when, in the same transaction as the change; setting the same assignee again records nothing."
+    },
+    {
+      "key": "reassignment-on-the-thread",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each reassignment appears under its task as a knot naming the old and new assignee and who changed it, in time order among the task's status changes and runs."
+    },
+    {
+      "key": "builds-on-the-thread",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each build of a document appears under that document as a knot recording when it started and who chose it, how it was driven, and, once it ended, how and why; a build reopened by a follow-up shows each reopening as a child knot, and the knot links to the build's card."
+    },
+    {
+      "key": "carry-overs-on-the-thread",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each checkpoint that started a new conversation appears as a knot naming the agent, the trigger and the date, placed under the task its conversation was bound to or at the surface, and linking to the checkpoint."
+    },
+    {
+      "key": "no-invented-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The thread shows nothing without a stored record (slice 1, faithful).",
+      "statement": "No tombstone or reassignment knot appears for anything that happened before this change was installed, and nothing is added to the earlier history by a migration."
+    },
+    {
+      "key": "chapters-hold-new-kinds",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A knot of any new kind belongs to exactly one chapter or, if recorded after the latest chapter version, appears after the chapters ungrouped, as every other knot does; a chapter version that drops or duplicates one is refused."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/red-thread-project-history-roadmap/spec.json",
+    "slice": "history-gaps"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A tombstone knot for a deleted task or document",
+      "A history of reassignments, as knots under the task",
+      "Builds and carry-over checkpoints shown as knots from records that already exist",
+      "Telling the chapters job and its checks about the new knot kinds"
+    ],
+    "non_goals": [
+      "Backfilling any earlier deletion or reassignment",
+      "Recording changes to agents, runners, charters, project and manager settings (candidate, not recommended now)",
+      "Showing stalls, divergences, check runs, landings, main notices, rigor events, edit proposals or withdrawn input (candidates, left to the open question)",
+      "Keeping the content of anything deleted",
+      "Any change to what the first two slices show"
+    ]
+  },
+  "summary": "Slice 3 of the red-thread roadmap. Reading the code the thread is built from, this lists the history the Hub never recorded or records and the thread does not show, and specifies closing the gaps recommended: a tombstone when a task or document is deleted, the history of who a task was assigned to, and builds and carry-over checkpoints appearing as knots. Which gaps to close is the operator's choice and is the open question; requirements here are for the recommended ones and are cut to whatever is chosen.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "A drive over a migration change; Opus builder to keep the whole Tier 2 slice with one pair. May be busy with PR slice 2; DeveloperOpus2 is the alternative.",
+      "checker": "QA",
+      "checker_reason": "QA checks the drive can fail for the right reason before the build.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the contract named in the design (the two tables' effects through the thread route, the knot kinds deletion, assignment, build, checkpoint). It runs on a dedicated trial Hub (own port and database): it creates a document with tasks, reassigns one, deletes one task and one document, stops a build, hands off a conversation (Haiku agents), then opens the thread and checks each new knot, that nothing earlier invents one, and that chapters accept the new kinds. Screenshots in dark and light. Recorded failing on today's code before the build.",
+      "files": [
+        "scripts/drive/d1107_history_gaps.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "deletion-on-the-thread",
+        "reassignment-on-the-thread",
+        "builds-on-the-thread",
+        "carry-overs-on-the-thread",
+        "no-invented-history",
+        "chapters-hold-new-kinds"
+      ],
+      "reviewer": null,
+      "title": "History-gaps acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Migration and a write on a hot path, with a live-data hazard on the operator's :8000: Opus.",
+      "checker": "QA",
+      "checker_reason": "QA (Opus) checks the migration against a copy of a real database and the transaction behaviour.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Migration 0169 adding deletion_records and task_assignee_changes, the writers in the same transaction as the deletion (hub/hub/deletion.py) and as every assignee change (tasks.py and the sites in the design), the TASK_REFERENCES entry for task_assignee_changes, and tests per the criteria, including the migration test over a pre-change database and a rollback test. Follows the migration checklist in .claude/rules.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/hub/deletion.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/builds.py",
+        "hub/hub/scheduler.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/run_divergence.py",
+        "hub/hub/run_task_binding.py",
+        "hub/hub/api/v1/mender.py",
+        "hub/hub/already_built.py",
+        "hub/tests/test_deletion_records.py",
+        "hub/tests/test_task_assignee_changes.py",
+        "hub/tests/test_migration_0169_deletion_and_assignment_records.py"
+      ],
+      "from": null,
+      "key": "record",
+      "requirements": [
+        "deletion-leaves-a-record",
+        "reassignment-recorded",
+        "no-invented-history"
+      ],
+      "reviewer": null,
+      "title": "Record deletions and reassignments"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Touches the chapters checks that guard the manager's output; Opus. Alternative if busy: DeveloperOpus.",
+      "checker": "QA2",
+      "checker_reason": "QA2 is not checking the record task, so the two halves are checked by different eyes.",
+      "depends_on": [
+        "record"
+      ],
+      "description": "The thread reads the two new tables and the existing Build and Checkpoint rows and places their knots (deletion, assignment, build, checkpoint) by the slice-1 parent rules, with their faces and links; the chapters job and its checks are told of the new kinds. Tests per the criteria in the route's own order.",
+      "files": [
+        "hub/hub/project_thread.py",
+        "hub/hub/api/v1/thread.py",
+        "hub/hub/chapters.py",
+        "hub/tests/test_thread_history_gaps.py",
+        "hub/tests/test_chapters_store.py"
+      ],
+      "from": null,
+      "key": "show",
+      "requirements": [
+        "deletion-on-the-thread",
+        "reassignment-on-the-thread",
+        "builds-on-the-thread",
+        "carry-overs-on-the-thread",
+        "chapters-hold-new-kinds"
+      ],
+      "reviewer": null,
+      "title": "The thread shows the new and the unshown records"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Runs the drive against a migrated trial Hub and reads its result against a Tier 2 change: Opus, as for the other tasks of this slice.",
+      "checker": "QA",
+      "checker_reason": "QA (Opus) re-runs the drive and compares it with the recorded evidence.",
+      "depends_on": [
+        "drive",
+        "record",
+        "show"
+      ],
+      "description": "Run the acceptance drive on a trial Hub that has run migration 0169 and serves the built feature, fix only drive faults, and record the drive's output and screenshots as evidence on each requirement it covers. Every line that failed before the build must now pass.",
+      "files": [
+        "scripts/drive/d1107_history_gaps.py"
+      ],
+      "from": null,
+      "key": "drive-run",
+      "requirements": [
+        "deletion-leaves-a-record",
+        "deletion-on-the-thread",
+        "reassignment-recorded",
+        "reassignment-on-the-thread",
+        "builds-on-the-thread",
+        "carry-overs-on-the-thread",
+        "no-invented-history",
+        "chapters-hold-new-kinds"
+      ],
+      "reviewer": null,
+      "title": "Run the history-gaps drive on the built feature"
+    }
+  ],
+  "title": "Record what the thread shows is missing"
+}

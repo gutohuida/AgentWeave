@@ -1,0 +1,624 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "A trial Hub (:8010) on this change, with a project whose agent is bound to Haiku, a conversation with at least two finished runs, and a second agent with a conversation of its own",
+      "how_to_check": "Acceptance drive, written and failing before the build: a scripted drive against the trial Hub (port from AW_DRIVE_PORT) with real Haiku turns that makes each assertion through the Hub's routes and the rendered view.",
+      "key": "drive-checkpoint-end-to-end",
+      "requirement": "project-checkpoints-view",
+      "then": "The checkpoint is listed in the Checkpoints tab with a title and summary its generation wrote, its agent, 'the operator asked' in place of 'operator', and its conversation; narrowing hides the second agent's checkpoints; opening it shows formatted text and the runs it covers; and the successor conversation shows it as the checkpoint it started from. Before this change the drive fails at the first step: there is no project checkpoints view.",
+      "when": "The operator takes a checkpoint of the first conversation, carries it over to a successor, then opens the project's Checkpoints tab and narrows it to the first agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Checkpoints in three conversations of two agents, one conversation archived and one carried over",
+      "how_to_check": "Hub route test for the project-level list over the three conversations, and a UI test fed the route's response in the order the route returns it; the UI test fails if that order is reversed.",
+      "key": "lists-across-conversations",
+      "requirement": "project-checkpoints-view",
+      "then": "All of them are listed, newest first",
+      "when": "The checkpoints view is opened with no narrowing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint with a title, summary, agent, trigger, time, status and conversation",
+      "how_to_check": "UI test on the list row.",
+      "key": "row-shows-identity",
+      "requirement": "row-identifies-checkpoint",
+      "then": "Its row shows each of those seven things",
+      "when": "It is listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Checkpoints with each trigger the Hub records (task_completion, operator, context_pressure) and each status (ready, unwritten, failed)",
+      "how_to_check": "UI test over every trigger and status value.",
+      "key": "no-internal-words",
+      "requirement": "trigger-in-operator-words",
+      "then": "No row or opened checkpoint shows 'task_completion', 'context_pressure', 'unwritten' or 'probe' as a label; each shows a plain description of what happened",
+      "when": "They are listed and opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint whose trigger is a value the screen has no wording for",
+      "how_to_check": "UI test with an unrecognised trigger value.",
+      "key": "unknown-trigger-readable",
+      "requirement": "trigger-in-operator-words",
+      "then": "The row still shows a readable trigger rather than a blank or an error",
+      "when": "It is listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Checkpoints from agents A and B, each with operator-asked and task-finished checkpoints, in several conversations",
+      "how_to_check": "Hub route test for each filter and their combination, and a UI test of the narrowing controls.",
+      "key": "filters-combine",
+      "requirement": "filter-by-agent-and-trigger",
+      "then": "First only A's operator-asked checkpoints are shown, then only those in that conversation",
+      "when": "The view is narrowed to agent A and 'operator asked', then also to one of A's conversations"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A conversation of agent A, and agent A's own screen",
+      "how_to_check": "UI test of both entry points.",
+      "key": "opens-narrowed",
+      "requirement": "reach-from-the-work",
+      "then": "The Checkpoints tab opens narrowed to that conversation in the first case and to agent A in the second",
+      "when": "The operator opens checkpoints from the conversation, and separately from the agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Every place in the app that mentions a specific checkpoint, listed by searching the UI for checkpoint references (today at least the carry-over offer in a conversation's banners and the checkpoint status notice)",
+      "how_to_check": "UI test per entry point, plus the recorded search showing no other place mentions a specific checkpoint without opening it.",
+      "key": "mentions-open-the-checkpoint",
+      "requirement": "every-mention-opens-it",
+      "then": "Each opens the checkpoint it mentions; the list of places checked is recorded with the evidence",
+      "when": "The operator follows each one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint body containing '## Objective' and a bulleted list",
+      "how_to_check": "UI test on the opened checkpoint.",
+      "key": "body-formatted",
+      "requirement": "readable-body",
+      "then": "The heading and list are rendered as a heading and list items, and the text '## ' does not appear",
+      "when": "The checkpoint is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint covering three runs",
+      "how_to_check": "Hub route test that the covered runs are returned, and a UI test that each opens its trace.",
+      "key": "runs-named-and-traced",
+      "requirement": "what-it-covers",
+      "then": "All three runs are named, and choosing one opens that run's trace",
+      "when": "It is opened and one named run is chosen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint recording no covered runs (one exists on the operator's Hub)",
+      "how_to_check": "UI test.",
+      "key": "no-covered-runs",
+      "requirement": "what-it-covers",
+      "then": "It says it covers no recorded run, instead of an empty list or an error",
+      "when": "It is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "One checkpoint with files changed, open questions, citations and a carried agent note, and one with none of them",
+      "how_to_check": "UI test on both checkpoints.",
+      "key": "details-when-present",
+      "requirement": "details-shown",
+      "then": "The first shows all four, and the second shows no empty headings for them",
+      "when": "Each is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint whose title was made from its body after both answers lacked a title, one whose title was made from the Hub's facts after neither answer could be read, and one whose probe found files missing",
+      "how_to_check": "UI test; the two failed checkpoints on the operator's Hub serve as a manual check after its restart.",
+      "key": "failure-reason-shown",
+      "requirement": "failure-explained",
+      "then": "All three are listed; the first two show their titles marked as made by the Hub and say why the answers were rejected or could not be read, the second offers 'show what the model returned', and the third names what the probe found missing or invented",
+      "when": "Each is listed and opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A conversation carried over from checkpoint C into a successor",
+      "how_to_check": "Hub route test and UI test; also asserted by the acceptance drive.",
+      "key": "lineage-both-ways",
+      "requirement": "carried-over-lineage",
+      "then": "The successor shows C as the checkpoint it started from, and the predecessor shows which conversation it was carried into",
+      "when": "The successor's checkpoints are opened, and then the predecessor's"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A conversation with finished runs and checkpoint generation running on this change",
+      "how_to_check": "Hub test with a stubbed worker counting invocations, and the acceptance drive with a real Haiku turn.",
+      "key": "title-in-same-call",
+      "requirement": "generation-writes-title-and-summary",
+      "then": "It has a title of at most 8 words and 60 characters and a summary of at most two sentences and 300 characters, and the generation made exactly one model call (one checkpoint worker invocation, plus the probe as before)",
+      "when": "A checkpoint is generated and its first answer is accepted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A stubbed generation whose first answer has no title and whose second answer is valid",
+      "how_to_check": "Hub test with a stubbed worker returning the two answers in order.",
+      "key": "rejected-answer-asked-again",
+      "requirement": "title-is-obligatory",
+      "then": "The model was asked twice, the second request said the title was missing, and the checkpoint is recorded with the second answer's body, title and summary",
+      "when": "The checkpoint is generated"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Stubbed generations whose two answers have every section but no title, an empty summary, or a 12-word title",
+      "how_to_check": "Hub test with a stubbed worker returning each pair.",
+      "key": "rejected-twice-falls-back",
+      "requirement": "title-is-obligatory",
+      "then": "Each was asked exactly twice; each is saved with its readable body, a title of at most 8 words taken from the first words of that body, a summary from its opening sentences, the mark that both were made by the Hub, and the rejection reason",
+      "when": "Each checkpoint is generated"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Stubbed generations whose two answers are both unreadable (plain prose with no structure), and one where the worker cannot be reached either time",
+      "how_to_check": "Hub test with a stubbed worker returning each pair.",
+      "key": "unreadable-titled-from-facts",
+      "requirement": "title-is-obligatory",
+      "then": "Each is saved with a title naming its agent, trigger and date, the files, tasks, questions and citations the Hub recorded, the mark that it was made by the Hub, and the reason; the prose answer's raw text is returned on request and is not the body; the unreachable one has no raw text",
+      "when": "Each checkpoint is generated"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Checkpoints taken before this change, with bodies and no title or summary",
+      "how_to_check": "Hub test with a stubbed worker over several untitled checkpoints, started the way the Hub starts its background work.",
+      "key": "fill-every-existing",
+      "requirement": "older-checkpoints-without-title",
+      "then": "Without anyone asking, the fill runs in the background, off the request path, and afterwards every one of them has a title and summary within the limits, each written from that checkpoint's body only, or made by the fallback after two rejected answers",
+      "when": "The Hub starts on this change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The fill has completed, one checkpoint's answer was rejected twice and got the fallback, and the Hub could not reach the model at all for another",
+      "how_to_check": "Hub test with a stubbed worker, then a second start.",
+      "key": "fill-runs-once",
+      "requirement": "older-checkpoints-without-title",
+      "then": "Only the one the model could not be reached for is attempted; checkpoints already filled, by the model or by the fallback, are not sent to a model again, and one failure did not stop the others in the first pass",
+      "when": "The Hub starts again"
+    },
+    {
+      "checked_by": "operator",
+      "given": "The operator's Hub after it is restarted on this change",
+      "how_to_check": "Read-only (mode=ro) SQLite query on the operator's database after their restart, run by an agent; the operator confirms the view shows titles.",
+      "key": "fill-on-real-hub",
+      "requirement": "older-checkpoints-without-title",
+      "then": "A read-only count of its checkpoints with no title or summary is zero",
+      "when": "The fill has run"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "4b7dd3e873c5dc0bae862110f05b79a9cdc158711dc430a7d8218f0f5ef7d130",
+      "FR-10": "05ad50d9d916f9c3ccc41ff16d84489c3a92f14e8bf1c783575f254a85085c09",
+      "FR-11": "b86ea589b6a8d95d5d420c71f468b197aa89824b7ee9ed2ecd6bef75183b622a",
+      "FR-12": "b978c5f7cb6eca9cc08e0bd22ea4fbdcda30f60e384eaf9b3f80481e4ff40e3e",
+      "FR-13": "ac8563120f49bd135a917c30d058543caa7439106fba1ad010b31dd517d67ea4",
+      "FR-14": "e1eadbe82416effa9fc8a24eb9917ec1198f873284e1bf6f6e87b32f7ae4d10c",
+      "FR-2": "cd5541cbc4ac101c10bf4a8d7f5a99dadf544ea758a6a90b42f3b79d74d26ccf",
+      "FR-3": "3ae05c01db0a7da3d48c7ab736f4d3425bc362b85d03ba00a9ddf293ef2f3c87",
+      "FR-4": "c3f62f69b56df79b47a59cbbcd0167f383c012dd3eca87f2fd9c72d5fcf6d917",
+      "FR-5": "3a3e0399c0c5dcebc5fb0684bafb6d0ee3816eecf95ce272683e2ea96abdb0bb",
+      "FR-6": "2df7e17689f20266e26f27d9a28393bca35bb25cc412e4975333156be48245ae",
+      "FR-7": "c8936398d05cb467fb03cc789faff6b3b975658c0df81f2124967e494d23d1c0",
+      "FR-8": "a5102456e6d02180c640c94f30d0436816cebcb046bfd578494d5a93e3c82fd7",
+      "FR-9": "90ad487fd40e325a607dae25289563a10a3ade8f5ac94f89d2f591ee59477596"
+    },
+    "high_water": 14,
+    "requirements": {
+      "carried-over-lineage": "FR-10",
+      "details-shown": "FR-8",
+      "every-mention-opens-it": "FR-14",
+      "failure-explained": "FR-9",
+      "filter-by-agent-and-trigger": "FR-4",
+      "generation-writes-title-and-summary": "FR-11",
+      "older-checkpoints-without-title": "FR-12",
+      "project-checkpoints-view": "FR-1",
+      "reach-from-the-work": "FR-5",
+      "readable-body": "FR-6",
+      "row-identifies-checkpoint": "FR-2",
+      "title-is-obligatory": "FR-13",
+      "trigger-in-operator-words": "FR-3",
+      "what-it-covers": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer (Sonnet) by default, per the quota-aware choice; DeveloperOpus2 takes the two hazardous tasks.",
+      "builder": "Developer builds the drive, the route and the mock-led UI.",
+      "checker": "QA checks all five by driving the view on real checkpoints, not only reading the code.",
+      "cron": "Every five minutes, so a finished task is picked up for checking promptly.",
+      "mode": "A flow of five chained tasks; it runs beside checks slice 3, which uses a different builder (DeveloperOpus), a different checker (QA2) and none of these files.",
+      "stop": "Stop when the queue empties."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Where it lives (operator, 2026-11-04): a new project tab, Checkpoints, beside Thread/Tasks/Spec/Vault/Jobs/Activity. A conversation's menu and an agent's screen open it already narrowed. The existing per-conversation modal is replaced by the tab, not kept beside it. The view is built first as real components fed fixtures (hub/ui/mock), and the operator judges that mock before the build is approved.\n\nTitle and summary come from the same generation call as the rest of the checkpoint (operator, 2026-11-02). They are required parts of its answer; an over-long one is a rejection, not cut short. A rejected answer is asked for once more, naming what was wrong. After a second rejection, the Hub makes the title from the body's first words and marks it as made by the Hub.\n\nWhen neither answer can be read at all (no readable structure, or the model could not be reached), there are no first words to use (operator, 2026-11-04). The title is then made from what the Hub knows (agent, trigger and date), the checkpoint keeps the files, tasks, questions and citations the Hub recorded itself, and whatever raw text the model returned is kept behind a 'show what the model returned' link, never shown as the body.\n\nHazard (Tier 2): this adds stored fields to checkpoints (a migration), and the one-time fill runs on its own against the operator's real data at their next restart, spending model tokens (about 100k on a cheap model for 75 checkpoints). Rollback: the migration's downgrade drops the new fields, and the view falls back to showing the trigger and date where a title is missing. The fill is resumable: a checkpoint already given a title is never sent again, and one failure does not stop the others.",
+  "evidence": {
+    "checked": [
+      "Read-only queries on the operator's :8000 database, 2026-11-02: 75 checkpoints (73 ready, 2 failed) across 74 conversations, 18 carried over; triggers task_completion 57, operator 17, context_pressure 1; 68 checkpoint notes, 57 consumed by a checkpoint; bodies average 5,169 characters, 387,653 in total; both failed checkpoints failed their probe and have bodies; one checkpoint records no covered runs.",
+      "hub/hub/checkpoint_generation.py:73-130: one generation model call returns objective, state, decisions, dead_ends, next_actions, risks as JSON; render_body (249) turns it into markdown starting with '## Objective'.",
+      "hub/hub/checkpoint_generation.py:574-614: a rejected answer leaves the checkpoint with no body (status unwritten); 628-690: the probe runs as a second worker call and can mark a checkpoint failed.",
+      "hub/hub/worker.py module docstring and 579-589: a worker is a one-shot model process with no tool server; the Hub validates its answer, rejecting any violation as schema_invalid with no retry.",
+      "hub/hub/checkpoint_handover.py:199-215: a task-completion checkpoint is generated after the run that completed the task has ended.",
+      "Checkpoint mentions on screen today: ConversationBar.tsx:196 (menu item), BannerStack.tsx (carry-over offer), CheckpointStatusBanner.tsx (status notice).",
+      "hub/hub/api/v1/checkpoints.py:88: the only list route is per conversation; CheckpointSummary carries the body, files, questions, citations, probe findings and cut_over_to_conversation_id.",
+      "hub/hub/checkpoint_cutover.py:114-208: a cut-over opens a successor for the same agent and archives the predecessor; the checkpoint stays on the predecessor.",
+      "hub/hub/db/models.py:2184: Checkpoint has no title or summary column today.",
+      "hub/ui/src/lib/navigation.ts:26: project tabs are overview, thread, tasks, spec, vault, jobs, activity; run traces exist under Activity (App.tsx:106, 'traces' subview).",
+      "People, judged by what the author already knows (operator's choice of source, 2026-11-04): Opus 5.5 is the strongest and most expensive model on the roster, used here for the migration and the unattended fill; Sonnet 5.5 is much cheaper and reliable on contained, well-specified work, used for the drive, the route and the mock-led UI."
+    ],
+    "limits": [
+      "That the screen 'looks broken' because of per-conversation scoping and the cut-over gap is inferred from data and code, not observed by driving it.",
+      "The acceptance criteria are proposed coverage; none has run.",
+      "Hazard: the fill runs on its own against the operator's real data at their next restart, and spends model tokens there.",
+      "The model picks rest on general knowledge only; this project's per-model record and a web search were not consulted, by the operator's choice."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer",
+          "DeveloperOpus2"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-05T00:07:34.851010+00:00",
+        "id": "build-8e104894c365",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-04T16:09:49.706808+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "fill": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "generation": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "routes": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "view": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "A checkpoint's title and summary are in one of four states:\n- written: the model wrote them, and the first or second answer was accepted.\n- made from the body: both answers were rejected, so the title and summary come from the body's first words and opening sentences, marked as made by the Hub, with the rejection reason.\n- made from the Hub's facts: neither answer could be read, so the title is made from the agent, trigger and date, marked as made by the Hub, with any raw text kept behind a link.\n- awaiting the fill: an older checkpoint the one-time fill has not reached yet. A checkpoint whose fill could not reach the model returns to this state and is tried again at the next start.\nNothing moves a checkpoint out of written or either made-by-the-Hub state.",
+  "open_questions": [
+    {
+      "question": "When neither answer can be read at all. Operator 2026-11-04: title from agent, trigger and date; keep the Hub-recorded files, tasks, questions and citations; raw text behind a 'show what the model returned' link, never as the body.",
+      "resolved": true
+    },
+    {
+      "question": "Where the checkpoints view lives. Operator 2026-11-04: a new project tab, judged in the mock.",
+      "resolved": true
+    },
+    {
+      "question": "Second rejection. Operator 2026-11-02: fall back to the checkpoint's first words; never leave a checkpoint with no information.",
+      "resolved": true
+    },
+    {
+      "question": "A rejected answer. Operator 2026-11-02: ask the model once more before giving up.",
+      "resolved": true
+    },
+    {
+      "question": "When the one-time fill runs. Operator 2026-11-02: on its own in the background at the first start after this change.",
+      "resolved": true
+    },
+    {
+      "question": "Output missing the title. Operator 2026-11-02: the title is obligatory; output without it is rejected.",
+      "resolved": true
+    },
+    {
+      "question": "Limits. Operator 2026-11-02: title at most 8 words and 60 characters, summary at most two sentences and 300 characters; going over is a rejection, not cut short.",
+      "resolved": true
+    },
+    {
+      "question": "Who fills the existing checkpoints. Operator 2026-11-02: the Hub runs a one-time pass; no agent tool.",
+      "resolved": true
+    },
+    {
+      "question": "Older checkpoints: fallback or fill. Operator 2026-11-02: fill them once.",
+      "resolved": true
+    }
+  ],
+  "problem": "Checkpoints are generated well (75 on the operator's Hub on 2026-11-02, 73 passed their probe), but the operator's reading is that the checkpoint screen 'doesn't show anything useful' and may not work. The only view is a modal opened from a conversation's overflow menu (ConversationBar.tsx:196), and it lists only that conversation's checkpoints (hub/hub/api/v1/checkpoints.py:88). The 75 checkpoints are spread across 74 conversations, so it rarely shows more than one. A conversation started by a cut-over (18 so far) shows 'No checkpoint has been taken', because the checkpoint it was born from stays on the predecessor. The body is shown as raw markdown in a monospace block (CheckpointsPanel.tsx:61). Status, trigger and probe are shown in internal words ('ready', 'task completion', 'Probe: passed'). Nothing says which runs a checkpoint covers, and nothing tells checkpoints apart without opening each one: the generation writes objective, state, decisions, dead ends, next actions and risks (checkpoint_generation.py:73-95), but no title or summary.",
+  "requirements": [
+    {
+      "key": "project-checkpoints-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today the only list is scoped to one conversation, and 75 checkpoints sit in 74 conversations, so the list almost never shows more than one.",
+      "statement": "The project has a checkpoints view that lists every checkpoint the project holds, newest first, across all agents and conversations, including checkpoints whose conversation is archived or was carried over."
+    },
+    {
+      "key": "row-identifies-checkpoint",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each listed checkpoint shows its title, summary, the agent that produced it, what triggered it, when it was taken, its status, and the conversation it belongs to."
+    },
+    {
+      "key": "trigger-in-operator-words",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator defined a checkpoint's type as what triggered it (2026-11-02); the type only helps if it can be read.",
+      "statement": "A checkpoint's trigger and status are shown in words that describe what happened (for example that a task finished, that the operator asked, that the conversation grew long), not the Hub's internal identifiers such as 'task_completion' or 'probe passed'."
+    },
+    {
+      "key": "filter-by-agent-and-trigger",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The checkpoints view can be narrowed to one agent, to one trigger, and to one conversation, and the narrowing can be combined."
+    },
+    {
+      "key": "reach-from-the-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "From a conversation, and from an agent, the operator reaches the checkpoints view already narrowed to that conversation or that agent."
+    },
+    {
+      "key": "every-mention-opens-it",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: every screen a checkpoint can be reached from is to be checked, and each should open the right one.",
+      "statement": "Every screen that mentions a specific checkpoint (including the offer to carry a conversation over, and the notice that a checkpoint is being written or is ready) opens that checkpoint, not a list it has to be found in."
+    },
+    {
+      "key": "readable-body",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An opened checkpoint renders its body as formatted text (headings, lists, emphasis), not as markdown source."
+    },
+    {
+      "key": "what-it-covers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An opened checkpoint names the runs it covers, and each named run opens that run's trace."
+    },
+    {
+      "key": "details-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An opened checkpoint shows the files changed, the open questions, the citations, and the agent notes it carried, each only when present."
+    },
+    {
+      "key": "failure-explained",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A checkpoint that failed, or whose title was made by the Hub, is listed like any other and, when opened, says why: the reason its answers were rejected or could not be read, or what its probe found missing or invented."
+    },
+    {
+      "key": "carried-over-lineage",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today the successor shows 'No checkpoint has been taken in this conversation' (18 such conversations on 2026-11-02), which is the likeliest reason the screen reads as broken.",
+      "statement": "A conversation started by carrying over a checkpoint shows that checkpoint as the one it started from, and the conversation it was carried from shows which conversation it was carried into."
+    },
+    {
+      "key": "generation-writes-title-and-summary",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: the checkpoint generation is already a manager-like run, so it is asked for this data rather than a separate distillation pass being added. Length agreed the same day.",
+      "statement": "Every checkpoint generated after this change carries a title of at most 8 words and 60 characters and a summary of at most two sentences and 300 characters, written by the same model call that writes the rest of its body; no separate model call is made to write them."
+    },
+    {
+      "key": "title-is-obligatory",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: the title is obligatory, an over-long one is rejected rather than shortened, a rejected answer is asked for once more, and a checkpoint must never end with no information. Operator, 2026-11-04: an answer that cannot be read at all is titled from the Hub's facts, and its raw text is kept behind a link rather than shown as the body, so junk never reads as a summary. Today any rejected answer loses the whole written body with no retry (hub/hub/worker.py:579-589).",
+      "statement": "The Hub accepts a checkpoint generation's answer only when it includes a title and a summary within those limits. When an answer is rejected, the Hub asks the model once more, saying what was wrong. When the second answer is rejected too, the checkpoint is still saved with every part of the answer that could be read, a title made from the first words of its body, a summary made from its opening sentences, a mark that they were made by the Hub rather than written by the model, and the reason the answers were rejected. When neither answer can be read at all, the title is made from the agent, the trigger and the date, the checkpoint keeps the files, tasks, questions and citations the Hub recorded, it is marked as made by the Hub with the reason, and any raw text the model returned is available on request but is not shown as the body."
+    },
+    {
+      "key": "older-checkpoints-without-title",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: fill the existing checkpoints in one go rather than show a fallback, have the Hub do it rather than an agent, and run it on its own at the first start. All 75 existing checkpoints have a body (387,653 characters in total, about 100k tokens on a cheap model).",
+      "statement": "Every checkpoint that existed before this change is given a title and summary within the same limits once, by a pass the Hub runs on its own in the background after its first start on this change, reading only that checkpoint's existing body, so that no checkpoint in the view is left without them; the same ask-once-more and first-words fallback applies."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checkpoints-and-traces-you-can-find-and-use/spec.json",
+    "slice": "checkpoints-you-can-read"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A project-level Checkpoints tab listing every checkpoint across agents and conversations, including archived and carried-over conversations.",
+      "Reaching that view narrowed to one conversation or one agent from where that conversation or agent is shown.",
+      "Every screen that mentions a specific checkpoint opening that checkpoint.",
+      "Each checkpoint's title, summary, agent, trigger, date, status and conversation in the list.",
+      "An opened checkpoint: its body rendered as formatted text, the runs it covers, files changed, open questions, citations, the agent notes it carried, and why it failed when it did.",
+      "A carried-over conversation showing the checkpoint it started from, and its predecessor showing where it was carried to.",
+      "The checkpoint generation writing a title and summary as required parts of the same model call, asked once more when its answer is rejected, and falling back to the checkpoint's first words, or to the Hub's facts when no answer can be read.",
+      "Giving the checkpoints that already exist a title and summary, once, by a pass the Hub runs on its own after it starts."
+    ],
+    "non_goals": [
+      "Starting a conversation from a checkpoint (slice 'start-from-a-checkpoint').",
+      "Any new trace screen (slices 'traces-you-can-browse', 'conversation-trace', 'woven-traces'); a covered run opens the run trace the app already has.",
+      "A separate distillation or manager run over checkpoints as an ongoing process (operator, 2026-11-02: the checkpoint is already that run). The one-time fill of existing checkpoints is not ongoing.",
+      "An agent tool that writes a checkpoint's title or summary (operator, 2026-11-02: the Hub runs the one-time fill).",
+      "How checkpoints are probed, and when they are triggered.",
+      "Varying the generation prompt by trigger."
+    ]
+  },
+  "summary": "A slice of 'Checkpoints and traces you can find and use'. A new Checkpoints project tab lists every checkpoint in the project. Each one can be told apart at a glance by its title and summary, its agent, its trigger and its date, and opens as readable text that names the runs it covers. A conversation carried over from a checkpoint shows the checkpoint it started from, and every screen that mentions a checkpoint opens it. Taken off the shelf on 2026-11-04, after the operator settled its last two questions; built in parallel with checks roadmap slice 3.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet: a drive script against existing routes is routine, well-specified work the cheaper model handles.",
+      "checker": "QA",
+      "checker_reason": "Opus: confirms the drive fails for the right reason, which needs the stronger model's judgement.",
+      "depends_on": [],
+      "description": "Write scripts/drive/d1104_checkpoints_view.py: the drive-checkpoint-end-to-end criterion against the trial Hub (port from AW_DRIVE_PORT, never one it did not start), real Haiku turns. Show it failing on master at its first step (no project checkpoints view) and record that output. It is run again, passing, by the view task's checker.",
+      "files": [
+        "scripts/drive/d1104_checkpoints_view.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "project-checkpoints-view"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Opus: a migration on the operator's real data plus retry and fallback logic is the hazardous part of this slice, so the stronger model is worth its cost.",
+      "checker": "QA",
+      "checker_reason": "Opus: a migration and its downgrade need the stronger model to check.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add title, summary, who made them, the rejection reason and the raw unreadable text to checkpoints (migration with a downgrade). Make the generation ask for title and summary in the same call, validate the limits, ask once more naming what was wrong, and fall back to first words, or to the Hub's facts when nothing can be read.",
+      "files": [
+        "hub/hub/checkpoint_generation.py",
+        "hub/hub/worker.py",
+        "hub/hub/db/models.py",
+        "hub/migrations/versions/"
+      ],
+      "from": null,
+      "key": "generation",
+      "requirements": [
+        "generation-writes-title-and-summary",
+        "title-is-obligatory",
+        "failure-explained"
+      ],
+      "reviewer": null,
+      "title": "Generation writes a title and summary, asks again, falls back"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Opus: runs unattended on the operator's real data at startup and spends tokens, so a mistake is costly; the stronger model is used.",
+      "checker": "QA",
+      "checker_reason": "Opus: resumability and failure isolation at startup need a careful check.",
+      "depends_on": [
+        "generation"
+      ],
+      "description": "A background pass started with the Hub's other background work: each checkpoint with no title is sent its own body with the same ask-again and fallback rules. Resumable, never resends a filled one, and one failure does not stop the rest.",
+      "files": [
+        "hub/hub/checkpoint_fill.py",
+        "hub/hub/checkpoint_generation.py",
+        "hub/hub/main.py"
+      ],
+      "from": null,
+      "key": "fill",
+      "requirements": [
+        "older-checkpoints-without-title"
+      ],
+      "reviewer": null,
+      "title": "One-time fill of existing checkpoints"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet: a read route with filters over existing data is contained, well-specified work.",
+      "checker": "QA",
+      "checker_reason": "Opus: checks the route's ordering and project scoping, which tests can fake by accident.",
+      "depends_on": [
+        "generation"
+      ],
+      "description": "A project-level checkpoints route, newest first, narrowable by agent, trigger and conversation (combinable), returning title, summary, who made them, the covered runs, the raw text on request, and the lineage both ways (carried from and carried into).",
+      "files": [
+        "hub/hub/api/v1/checkpoints.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "routes",
+      "requirements": [
+        "project-checkpoints-view",
+        "filter-by-agent-and-trigger",
+        "what-it-covers",
+        "carried-over-lineage"
+      ],
+      "reviewer": null,
+      "title": "Project checkpoints list, filters, covered runs, lineage"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet: UI built against a mock the operator has judged is well-specified, and the cheaper model suits its size.",
+      "checker": "QA",
+      "checker_reason": "Opus: drives the tab on real checkpoints and runs the acceptance drive, where judgement matters more than cost.",
+      "depends_on": [
+        "routes"
+      ],
+      "description": "Build the Checkpoints project tab as real components, first fed fixtures in hub/ui/mock for the operator to judge, then wired to the route: rows, plain-word triggers and statuses, filters, formatted body, covered runs opening their traces, details, failure reasons, lineage, the conversation and agent entry points, and every checkpoint mention opening its checkpoint. Replace the per-conversation modal. Rebuild the UI bundle. Then run the acceptance drive passing.",
+      "files": [
+        "hub/ui/src/components/checkpoints/",
+        "hub/ui/src/components/agents/CheckpointsPanel.tsx",
+        "hub/ui/src/components/agents/ConversationBar.tsx",
+        "hub/ui/src/components/conversation/",
+        "hub/ui/src/lib/navigation.ts",
+        "hub/ui/src/App.tsx",
+        "hub/ui/src/api/",
+        "hub/ui/mock/",
+        "hub/ui/src/__tests__/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "view",
+      "requirements": [
+        "project-checkpoints-view",
+        "row-identifies-checkpoint",
+        "trigger-in-operator-words",
+        "filter-by-agent-and-trigger",
+        "reach-from-the-work",
+        "every-mention-opens-it",
+        "readable-body",
+        "what-it-covers",
+        "details-shown",
+        "failure-explained",
+        "carried-over-lineage"
+      ],
+      "reviewer": null,
+      "title": "Checkpoints tab, opened checkpoint, entry points"
+    }
+  ],
+  "title": "Every checkpoint, findable and readable"
+}

@@ -1,0 +1,99 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "Rhythm the slices build towards: builder runs lint and the tests for what it changed; before review the Hub runs fast checks first, then a check sized to the change; landing runs the full suite on the merged tree (keeps master always green); heavy, slow and timing-sensitive runs happen when the machine is idle, detected rather than scheduled, and stop when the operator returns. Success is measured against the baseline above after each slice: full suites per task, hub-tests hours per day, superseded runs per day, time from completion to a check result.",
+  "evidence": {
+    "checked": [
+      "task_check_runs and landing_batches on the operator's Hub, read with mode=ro, 2026-10-24 to 2026-11-03",
+      "Seven full hub-tests runs at master 6ed8604 in scratch checkouts outside the repo (C:/Users/huida/probe-checks/out)",
+      "Probe 2 replay of 21 failing runs (C:/Users/huida/probe-checks/out/probe2.md)",
+      "hub/hub/project_checks.py check run lifecycle and hub/hub/landing_queue.py batch checks"
+    ],
+    "limits": [
+      "Worker count 10 vs 20 was not settled: that run fell in a slow window",
+      "Probe 2's sweep set came from a heuristic and was not audited by hand; three misses were not re-run to confirm they are unrelated flakes",
+      "Estimates of runs per task after each slice are arithmetic, to be measured after each slice"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Measured on the operator's Hub (proj-d85a82bf4216, read-only) and by probes on 2026-11-03:\n- hub-tests is ~98% of check time. 129 pre-review runs and 34 landing runs in three days for 35 tasks (about 4.7 full suites per task).\n- A full suite takes 5.3-5.8 min on a quiet machine (4 probe runs, 20 workers) but 12-25 min (up to 104) in the Hub's records, because the machine is busy: agents' own suites, other sessions, the operator's own use. In one probe window every test ran 3.7x slower for an outside reason.\n- Two suites side by side took 10.1 and 10.7 min each: no throughput gain over one at a time, only later results.\n- 19 runs (about 8 hours) were ended as superseded when master moved, although the Hub's own rule is that a pass of a task's work counts on any main tip (hub/hub/project_checks.py:13-16).\n- test_surface_ceilings caused 16 of 27 recorded hub-tests failures, each reported only after the full suite (11-42 min) although the test itself is a source scan.\n- Timing-limit tests (never-freezes-the-hub family) fail under load; about six 'Fix flaky test' tasks came from them.\n- Probe 2 (replay of 21 failing runs, 74 failing test ids): selecting tests by import graph selects 100% of test files at the median, because hub/tests/conftest.py imports hub.main; it saves almost nothing. Changes with no Python change under hub/hub (UI, scripts) are the exception: there a small set (the tests that read those files plus the whole-repo sweep tests) caught every failure except two that look unrelated to their diffs.\n- The landing check caught 3 real breaks in 79 batches that had passed before review, so it stays the full gate.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Product: a check run is not thrown away when master moves",
+      "Product: a check can be limited to the review phase or the landing phase, opt-in, and checks run at a priority below the user's own work",
+      "AgentWeave project: its check commands adapt to machine load and run one full suite at a time",
+      "AgentWeave project: sweep tests as a fast check; changes with no Hub Python change run a reduced Hub test set before review",
+      "AgentWeave project: heavy and timing tests run when the machine is idle, with one list of failures found on master",
+      "AgentWeave project: the slowest test families get faster or steadier"
+    ],
+    "non_goals": [
+      "Rules in the product that only make sense for AgentWeave's own repository",
+      "Changing the Hub's limit of two concurrent check runs, or making it a setting",
+      "Test selection by import graph for Hub Python changes (probe 2: saves almost nothing)",
+      "Running checks on another machine or in the cloud",
+      "Changing what the landing check requires: it stays the full suite on the exact merged tree",
+      "The F1126 landing bugs: fixed separately as Tier 0 tasks AW-28, AW-29, AW-30"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "With two tasks in flight, landing one while the other's check runs leaves that run to finish and decide, and the superseded count per day on the operator's Hub falls to about zero.",
+      "intent": "A task's pre-review check that is running when master moves runs to the end and its result counts, instead of being ended and started again. Product, general.",
+      "key": "runs-survive-a-main-move",
+      "title": "A check run finishes when master moves"
+    },
+    {
+      "builds_after": [],
+      "done": "A project with a landing-only check sees it skipped before review and run at landing, and a check running while the user plays or works leaves their applications responsive.",
+      "intent": "A project can mark a check as review-only or landing-only, and every check process runs below the user's own work in priority. Product, general, opt-in where behaviour changes.",
+      "key": "checks-know-their-phase",
+      "title": "Checks know their phase and give way to the user"
+    },
+    {
+      "builds_after": [
+        "checks-know-their-phase"
+      ],
+      "done": "A sweep-test failure is reported within about two minutes of completion, and two tasks completing together produce one full suite at a time rather than two side by side.",
+      "intent": "This repository's hub-tests check adapts its worker count to current load, holds a machine-wide lock so one full suite runs at a time (agents' own runs included), the sweep tests become a fast check, and builders and QA run only the tests for what they changed. Project only.",
+      "key": "agentweave-checks-fit-a-busy-machine",
+      "title": "AgentWeave's checks fit a busy machine"
+    },
+    {
+      "builds_after": [
+        "agentweave-checks-fit-a-busy-machine"
+      ],
+      "done": "A UI-only task's pre-review hub-tests takes a few minutes instead of a full suite, the landing check still runs everything, and an idle-time run on master files its failures into the list.",
+      "intent": "Before review, a change with no Hub Python change runs a reduced Hub test set (tests that read the changed files plus the sweep set) and slow tests are left to landing; landing runs the full suite; when the machine goes idle the slow and timing tests run on master and failures go to one list. Project only.",
+      "key": "tiered-tests",
+      "title": "Tiered tests: sized to the change by day, everything when idle"
+    },
+    {
+      "builds_after": [
+        "tiered-tests"
+      ],
+      "done": "The migration tests take a fraction of their current ~10% of suite time, and the never-freezes-the-hub family passes on a loaded machine across repeated runs.",
+      "intent": "The migration tests share prepared databases, the timing tests stop asserting wall-clock limits that fail under load, and the slowest tests are slimmed. Project only.",
+      "key": "faster-steadier-tests",
+      "title": "Faster, steadier tests"
+    }
+  ],
+  "summary": "Project checks dominate build time: about 50 hours of hub-tests in three days (1-3 Nov 2026), about 4.7 full suites per task, 19 runs thrown away when master moved. This roadmap cuts the number and size of check runs without lowering what reaches master, on a machine the operator is also using (games, other Claude sessions), so quiet time cannot be assumed or scheduled by the clock. Product slices are general, opt-in where they change behaviour; AgentWeave-only slices live in this repository's check configuration, tests and scripts, never as rules in the product.",
+  "tasks": [],
+  "title": "Checks cost less on a machine that is in use"
+}

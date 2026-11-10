@@ -1,0 +1,318 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an approved document with three declared tasks and a recommended build",
+      "how_to_check": "hub/ui/src/__tests__/buildPlanDialog.test.tsx, test 'one row per declared task, by title', rendered through useSpecPhaseControls (the container), not the component alone.",
+      "key": "ac-sections-and-rows",
+      "requirement": "one-plan-two-sections",
+      "then": "the dialog shows both sections and three rows, each naming its task's title (not its key) with a builder and a checker control",
+      "when": "the operator presses Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a recommendation naming a builder and checker for each task, with reasons for some",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'opens on the recommendation with its reasons'.",
+      "key": "ac-prefilled-with-reasons",
+      "requirement": "opens-on-the-recommendation",
+      "then": "each control shows the recommended agent, each given reason is visible beside it, and each pick without a reason reads 'No reason given'",
+      "when": "the dialog opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog open on a recommendation",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'a changed pick names the recommendation and puts it back'.",
+      "key": "ac-put-back",
+      "requirement": "a-change-is-visible-and-undoable",
+      "then": "that row reads 'Recommended <agent>' with Put back, the footer reads 'One task differs from the recommendation', and Put back restores the agent and the footer reads 'As the document recommends.'",
+      "when": "the operator changes one task's builder"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a recommendation naming an agent that is archived for one task's builder",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'a recommended agent that is not open is not chosen'.",
+      "key": "ac-closed-agent",
+      "requirement": "a-closed-agent-is-not-chosen",
+      "then": "that task's builder control shows the default, the row says the recommended agent is not open here, and confirming sends an empty builder for that task",
+      "when": "the dialog opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog at the Reviewed level",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'a task cannot check its own work'.",
+      "key": "ac-own-work",
+      "requirement": "no-task-checks-its-own-work",
+      "then": "that row reads 'Checks its own work', the footer names one task, and Build is disabled until it is changed",
+      "when": "the operator makes one task's checker the same agent as its builder"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog open on a recommendation",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'confirming unchanged sends the recommendation', asserting the request body the mocked build route receives.",
+      "key": "ac-sent-unchanged",
+      "requirement": "what-is-shown-is-sent",
+      "then": "the build route receives the recommended driver, level, landing, defaults and per-task people, and no delivery_agent",
+      "when": "the operator confirms without changing anything"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub on :8010 with a scratch project and an approved document whose tasks name builders and checkers",
+      "how_to_check": "py -3.11 scripts/drive/d1029_build_dialog_browser.py, updated to the new dialog's controls; it fails while the app still serves BuildDialog and passes once the bundle is refreshed.",
+      "key": "ac-drive-recorded",
+      "requirement": "what-is-shown-is-sent",
+      "then": "the build the Hub records carries every task's builder and checker as the dialog showed them, labelled the operator's",
+      "when": "a browser opens the served app, presses Build and confirms"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog open",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'Fast hides the checkers'.",
+      "key": "ac-fast",
+      "requirement": "fast-has-no-checker",
+      "then": "the checker column and the default checker are gone and confirming sends no checkers",
+      "when": "the operator chooses Fast"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog rendered in the app",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'themed controls only'.",
+      "key": "ac-no-native-controls",
+      "requirement": "agents-as-everywhere-else",
+      "then": "it contains no select element, no checkbox input and no date or datetime input, and each agent option carries its colour dot",
+      "when": "its controls are inspected"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's :8000 after the refreshed bundle is merged and reloaded",
+      "how_to_check": "The operator opens Build on any approved change and compares it with the mock (hub/ui/mock, #tab/spec?state=approved, then Build).",
+      "key": "ac-operator-compares",
+      "requirement": "matches-the-mock",
+      "then": "the dialog is the one they approved in the mock",
+      "when": "they press Build on an approved change document"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "4a1c80b313f1e3e3da771e44fa7d9a83c9cd21dfadbe999cf91662fc89768542",
+      "FR-2": "85a961e383ff03d804ca8523c07cf9d94a3d780a898d101b5b67898a3ccd62f4",
+      "FR-3": "bcc2c5082675db22d13372c55c9beb0c609e2971d9cf85c14dcf04e87ca94ced",
+      "FR-4": "add9ee2c038865aa83105406f6b96d7c854abb07171d17a66124d26342c67a00",
+      "FR-5": "3071523d7ddf9ef53790fa29ce11f57eaff938c4c8d8112cfc22887db4f07190",
+      "FR-6": "2152ab80799519e4d553b111eebd8ff108033ef50442b265e9682a54f6136393",
+      "FR-7": "6d41ad73058705c79f640b8a5a1d84f1e8b835f845b70b319db6d205358a5017",
+      "FR-8": "78cd59aa6e6947d3f5fdd8ee3ef36c7b7ffa51ac6364242e62e2ed5c1389dd55",
+      "FR-9": "6ba8ea4cef7ff240bfb79c613739d8f932c6df75a4a850a88b61ffc0d0d85fdf"
+    },
+    "high_water": 9,
+    "requirements": {
+      "a-change-is-visible-and-undoable": "FR-3",
+      "a-closed-agent-is-not-chosen": "FR-4",
+      "agents-as-everywhere-else": "FR-8",
+      "fast-has-no-checker": "FR-7",
+      "matches-the-mock": "FR-9",
+      "no-task-checks-its-own-work": "FR-5",
+      "one-plan-two-sections": "FR-1",
+      "opens-on-the-recommendation": "FR-2",
+      "what-is-shown-is-sent": "FR-6"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer (Sonnet) builds by default to spare quota.",
+      "builder": "Wiring an approved component suits Sonnet.",
+      "checker": "QA runs the browser drive and compares with the mock.",
+      "cron": "Every five minutes, as other flows.",
+      "mode": "One task; a flow lands it through the normal checks.",
+      "stop": "Stop when the one task is done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "The component is built and approved: hub/ui/src/components/spec/BuildPlanDialog.tsx with hub/ui/src/styles/build-plan.css, presentational, taking the Hub's SpecRecommendedBuild, the document's declared tasks and the open agents, and answering BuildChoices (mock: hub/ui/mock, #tab/spec?state=approved then Build; decisions recorded in hub/ui/mock/README.md, 'The Build dialog'). Building it is wiring: useSpecPhaseControls renders BuildPlanDialog in place of BuildDialog, feeding it the declared tasks' titles from the document's payload (components/spec/page/adapt.ts already parses it), the open agents with their colour (color_index) and model where the Hub reports one, the Hub refusal as `error`, and the pending state. BuildDialog.tsx and its tests are removed, not kept beside it. The operator's decisions on the mock: the separate Builders checklist and Flow agent control are gone (the builders sent are the agents the table names; the default builder is the flow's agent, sent as delivery_agent only when changed from the recommendation); the window end is a short list (when the work is done, in two hours, in four hours, tonight at 23:00, tomorrow at 07:00, in the operator's local time); the Fast level hides the checker column. The committed bundle is refreshed (scripts/refresh_ui_bundle.py) with the source, so it reaches the operator's :8000 on their next reload.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/spec/BuildDialog.tsx (today's dialog) and its call site useSpecPhaseControls.tsx:868",
+      "SpecRecommendedBuild and BuildChoices in hub/ui/src/api/spec.ts: every field the new dialog reads and sends already exists; recommended_build.task_reasons is served by hub/hub/api/v1/spec.py:494",
+      "The mock (hub/ui/mock, BuildPlanDialog with PLAN_RECOMMENDED), screenshots in dark and light, approved by the operator 2026-11-03",
+      "Design-system check against the mock rules and the approved screens: agent colours and plain (non-italic) notes adopted; the 760px width is the widest dialog in the app, accepted for the table"
+    ],
+    "limits": [
+      "The test names in each how_to_check are proposed coverage: none exists yet",
+      "The mock was looked at with five tasks; a document with a dozen tasks makes the dialog scroll, which was not looked at",
+      "Agents' models: the Hub's agent list reports a display model per runner, not always the exact model; the dialog shows what the Hub reports"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-04T01:25:40.955867+00:00",
+        "id": "build-f81ddd027d33",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-03T23:36:09.759242+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "ship-the-dialog": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Today's Build dialog (hub/ui/src/components/spec/BuildDialog.tsx, opened from useSpecPhaseControls.tsx:868) was grown one field at a time as the build plan gained parts. It is 448px wide and lists each task by its key, with two native selects squeezed beside it and the reasons below. It asks for the builders twice (a Builders checklist and a default builder) and the flow's agent a third time, uses a native date input for the window, and shows agents without the colour they carry everywhere else. The mock rules (hub/ui/mock/README.md) forbid native selects, checkboxes and date inputs and raw ids on screen; today's dialog breaks all four. It is the last slice of the roadmap 'Building a spec ties together, from plan to board': the other five are done.",
+  "requirements": [
+    {
+      "key": "one-plan-two-sections",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The build plan is one plan: the operator reads and changes it in one place, task by task, as the agents will be given it.",
+      "statement": "Build and Approve and build on a change document MUST open one dialog with two sections: 'How it runs' (who hands out the work, the level, the lead when the driver is a lead, the flow's stop rule and schedule in words when it is a flow, where the work lands, the budget cap, and when the build stops handing out work) and 'Who builds and checks' (the default builder, the default checker, and one row per declared task, in the document's order and by its title, with that task's builder and checker)."
+    },
+    {
+      "key": "opens-on-the-recommendation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator decides; the recommendation and its reason are what they decide from, and a missing reason is a gap in the spec they should see.",
+      "statement": "Every choice in the dialog MUST open on the document's recommendation, with the reason the document gives for it shown beside the control; a task's builder or checker that is recommended without a reason MUST read 'No reason given', and one with no recommendation MUST read 'No recommendation'."
+    },
+    {
+      "key": "a-change-is-visible-and-undoable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task's builder or checker changed from its recommendation MUST name the recommended agent and offer to put it back, and the dialog MUST say how many tasks differ from the recommendation, or that the plan is as the document recommends."
+    },
+    {
+      "key": "a-closed-agent-is-not-chosen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "What is shown is what is sent: a closed agent selected silently would be sent and refused, or worse, sent and stall.",
+      "statement": "A recommended agent that is not an open agent of the project MUST NOT be selected; its row MUST say that the recommended agent is not open, and the task falls to the default."
+    },
+    {
+      "key": "no-task-checks-its-own-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub refuses a task whose builder would be its checker; the dialog says so before the operator presses Build, on the row that causes it.",
+      "statement": "At the Reviewed and Gated levels, a task whose builder (its own, else the default) is also its checker (its own, else the default) MUST be marked in its row, and the dialog MUST NOT confirm until no task is."
+    },
+    {
+      "key": "what-is-shown-is-sent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The build the Hub records is the operator's decision (a-build-has-a-driver-a-level-and-its-people); the dialog must not add or drop a choice between screen and record.",
+      "statement": "Confirming MUST send exactly what the dialog shows: driver, level, landing, default builder and checker, each task's builder and checker (empty where it falls to the default), the lead for a lead, the cap when one is given, the window end chosen, and as builders the distinct agents that build some task. The flow's agent MUST be sent only when the default builder differs from the recommended flow agent."
+    },
+    {
+      "key": "fast-has-no-checker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "At the Fast level the dialog MUST NOT show the default checker or any task's checker, and MUST NOT send checkers."
+    },
+    {
+      "key": "agents-as-everywhere-else",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The mock rules (hub/ui/mock/README.md, rules 2 and 5); today's dialog breaks both.",
+      "statement": "Every agent the dialog lists MUST carry its colour as the rest of the app shows it and, where the Hub reports one, its model; the dialog MUST use the app's themed controls only, with no native select, checkbox or date input."
+    },
+    {
+      "key": "matches-the-mock",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The dialog the app ships MUST match the mock the operator approved on 2026-11-03, in dark and in light."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/building-a-spec-ties-together-from-plan-to-board/spec.json",
+    "slice": "build-dialog-overhaul"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The dialog that Build and Approve and build open on a change document, in the Spec tab and in the conversation's spec panel",
+      "What that dialog sends to the build and approve-and-build routes",
+      "Removing today's BuildDialog and its tests, and updating the browser drive that exercises it",
+      "Refreshing the committed UI bundle"
+    ],
+    "non_goals": [
+      "Any Hub change: every field shown is in recommended_build today and every field sent is accepted by the build routes today",
+      "How a recommendation is made (slice recommended-people, done)",
+      "The spec page's builds section and how it shows people",
+      "The older Start a flow dialog (StartFlowDialog)",
+      "Choosing a branch to land on: landing is the main branch or nowhere, as the Hub accepts today"
+    ]
+  },
+  "summary": "Build and Approve and build open the dialog the operator approved in the mock on 2026-11-03: how the build runs, its default builder and checker, and a row per task with that task's builder, checker and the document's reason for each, every choice opened on the recommendation. It replaces today's dialog in the app; nothing the Hub sends or accepts changes.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Wiring an approved, presentational component into one container, with tests named in each criterion, suits Sonnet and spares the weekly quota.",
+      "checker": "QA",
+      "checker_reason": "The checker must run the browser drive against the trial Hub and compare the shipped dialog with the mock, which an Opus checker does rather than reading the diff.",
+      "depends_on": [],
+      "description": "Acceptance drive first: update scripts/drive/d1029_build_dialog_browser.py to the new dialog's controls (it must fail against today's bundle). Then render BuildPlanDialog in place of BuildDialog in useSpecPhaseControls.tsx, feeding it the declared tasks' titles from the document payload (components/spec/page/adapt.ts), the open agents with color_index and model, the Hub's refusal as error and the pending state; delete BuildDialog.tsx and buildDialog.test.tsx, and move the build-related assertions of specApprovalDelivery and specApprovalWarnings to the new dialog. Write hub/ui/src/__tests__/buildPlanDialog.test.tsx with the tests each criterion's how_to_check names, through the container. Do not restyle the component: it is the approved mock; a change it needs is reported, not made. Run npm run lint, npx tsc, the vitest suite, then npm run build and py -3.11 scripts/refresh_ui_bundle.py, committing hub/ui/src and hub/hub/static/ui together, and run the drive green against the trial Hub :8010 (never :8000).",
+      "files": [
+        "hub/ui/src/components/spec/useSpecPhaseControls.tsx",
+        "hub/ui/src/components/spec/BuildDialog.tsx",
+        "hub/ui/src/components/spec/BuildPlanDialog.tsx",
+        "hub/ui/src/styles/build-plan.css",
+        "hub/ui/src/__tests__/buildDialog.test.tsx",
+        "hub/ui/src/__tests__/buildPlanDialog.test.tsx",
+        "hub/ui/src/__tests__/specApprovalDelivery.test.tsx",
+        "hub/ui/src/__tests__/specApprovalWarnings.test.tsx",
+        "scripts/drive/d1029_build_dialog_browser.py",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ship-the-dialog",
+      "requirements": [
+        "one-plan-two-sections",
+        "opens-on-the-recommendation",
+        "a-change-is-visible-and-undoable",
+        "a-closed-agent-is-not-chosen",
+        "no-task-checks-its-own-work",
+        "what-is-shown-is-sent",
+        "fast-has-no-checker",
+        "agents-as-everywhere-else",
+        "matches-the-mock"
+      ],
+      "reviewer": null,
+      "title": "Ship the Build dialog from the mock"
+    }
+  ],
+  "title": "The Build dialog, redesigned"
+}

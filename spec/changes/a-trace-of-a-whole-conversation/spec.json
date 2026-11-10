@@ -1,0 +1,382 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a conversation with three runs, and one with none",
+      "how_to_check": "UI test over the conversation bar and the Traces view; the acceptance drive clicks the menu item on a live Hub.",
+      "key": "ac-open",
+      "requirement": "open-from-conversation",
+      "then": "the first offers 'Trace of this conversation' and the Traces view offers to open it as one trace, both opening a view of its three turns; the second offers neither",
+      "when": "the operator opens each conversation's menu, and narrows the Traces view to the first"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation whose runs the traces route returns newest first",
+      "how_to_check": "Model test fed the run rows in the order the list route returns them, failing if that order is reversed; UI test for the labels.",
+      "key": "ac-turns",
+      "requirement": "turns-on-one-timeline",
+      "then": "turn 1 is the earliest run and the last turn the newest, each bar starts after the previous turn's start, and a turn the operator started reads 'from you'",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two turns of 5 minutes each, 9 hours apart, then a third 5 minutes after the second",
+      "how_to_check": "Model test of the axis; screenshot in the drive.",
+      "key": "ac-gaps",
+      "requirement": "gaps-folded",
+      "then": "one break labelled '9h 0m later' separates the first turn from the second, the second and third are drawn to scale with their 5-minute gap, and the first turn's bar is wider than 10% of the axis",
+      "when": "the view is drawn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a 10-minute turn with a model call starting 5 minutes in",
+      "how_to_check": "UI test with a recorded turn; the drive unfolds a turn on a live Hub.",
+      "key": "ac-unfold",
+      "requirement": "unfold-a-turn",
+      "then": "its spans are listed under it, the model call's bar starts half way across the track, and the call's attributes show below",
+      "when": "the operator unfolds it and selects the model call"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation of 24 turns",
+      "how_to_check": "UI test; the drive narrows a live conversation.",
+      "key": "ac-narrow",
+      "requirement": "narrow-turns",
+      "then": "first, four turns are drawn and the totals read '4 of 24' turns with those turns' cost; then the view says no turn matches and offers every turn again",
+      "when": "the operator narrows to turns 9 to 12, then to the last hour where no turn started"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three turns of 1, 2 and 3 minutes spread over an hour, one unpriced and one failed",
+      "how_to_check": "Model test; compared in the drive with /traces/totals for the same conversation and time range.",
+      "key": "ac-totals",
+      "requirement": "conversation-totals",
+      "then": "it reads 3 turns, 6 minutes working over about an hour, the two priced turns' cost with one unpriced turn left out, and 1 failed turn",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation carried over from one with 21 turns, itself having 24",
+      "how_to_check": "UI test; the drive uses a handoff on a live Hub.",
+      "key": "ac-carried",
+      "requirement": "carried-over",
+      "then": "the first shows 24 turns and names the earlier conversation; following it opens the earlier conversation's 21 turns",
+      "when": "the operator opens its trace and follows 'Continued from'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation of 24 turns, one of whose traces was cleared",
+      "how_to_check": "UI test counting requests to the by-run trace route.",
+      "key": "ac-lazy",
+      "requirement": "spans-on-unfold",
+      "then": "no span is requested on opening, one span request is made per unfolded turn, and the cleared turn says it has no trace",
+      "when": "the operator opens its trace, then unfolds two turns including the cleared one"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1936bd17453994f8153bdadc5644759094cb75b512db3ec27000dcf39b3e8faf",
+      "FR-2": "8937166c46bccd4e1c49b5056b9888302540d796a264126df850bd7dddba63f6",
+      "FR-3": "39a2572acd3e036d8946349ca1ec7e0d0eb24de244aa40cc39d982caff7b91bb",
+      "FR-4": "859b0992be9c1360ebe2014ee4bdc120d7916d81aca38182c9d7693a0a0b959c",
+      "FR-5": "8659a6ce43704193a10fad48482f43cf9751c7c73e355c6de35ace0ba7ae85c9",
+      "FR-6": "dc5669df961a17bcc434a3fa5dcc530bc79d213a34597039ad3ac40ec889b72c",
+      "FR-7": "24c8b73b100f0c8cea6c8ff009367905bb383fed5bc2d32839f76e0f393d6933",
+      "FR-8": "e5e87a2af276951e203e39bddd2cfdb4fcb75fd787c6dc9e34ef641bf4dc56de"
+    },
+    "high_water": 8,
+    "requirements": {
+      "carried-over": "FR-7",
+      "conversation-totals": "FR-6",
+      "gaps-folded": "FR-3",
+      "narrow-turns": "FR-5",
+      "open-from-conversation": "FR-1",
+      "spans-on-unfold": "FR-8",
+      "turns-on-one-timeline": "FR-2",
+      "unfold-a-turn": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperSonnet2",
+    "builder": "DeveloperSonnet2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "UI wiring of mocked components with one small route field, no migration: Sonnet, and DeveloperSonnet2 is free of PR slice 2 and dashboards.",
+      "builder": "Same as the agent.",
+      "checker": "QA2 checked the traces view this builds on.",
+      "cron": "Every five minutes picks up the next task soon after the previous one is approved without firing idle turns often.",
+      "mode": "Three chained tasks; a flow runs them in order.",
+      "stop": "Nothing to do once its tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 1: UI over routes that exist, plus one field. No migration, no Hub-restart hazard.\n\nDecisions (operator, 2026-11-06): opened from the conversation's menu and from the Traces view narrowed to one conversation; long idle gaps folded; a carried-over conversation shows its own turns and links to the one it continued; mocked before building.\n\nFrom the mock (author, 2026-11-06, against three recorded conversations of 17-24 turns):\n- Gaps over 20 minutes fold. 10 minutes produced 16 breaks in a two-day conversation, and the axis labels piled up.\n- An unfolded turn's spans are drawn on the turn's own scale, in a tinted track with a line saying so. On the conversation's axis they were 1-pixel slivers.\n- Axis labels that would overlap are dropped from the drawing and kept in hover text.\n- 'from you' marks the turns the operator started. Runs record only operator or autonomous, so the others carry no label rather than an internal word.\n\nData: the list route with conversation_id already returns each run's row (start, end, cost, model, status) and /totals the statistics; a turn range is a since/until pair on both. The run's initiator (aw.run.initiator on the root span) is not in the list's row yet. Spans come from /traces/by-run/{run_id} when a turn is unfolded.\n\nCURRENT   conversation -> 'Trace of the latest run' -> one run\nPROPOSED  conversation -> 'Trace of this conversation' -> turns on one axis, gaps folded -> unfold a turn -> its spans on its own scale -> span detail",
+  "evidence": {
+    "checked": [
+      "hub/hub/api/v1/traces.py:41-70 selects runs by conversation_id for both the list and /totals routes, and both take since/until.",
+      "hub/ui/src/components/traces/ holds the traces view, one run's waterfall (bars relative to the one trace) and the drawer.",
+      "Operator's Hub, mode=ro, 2026-11-06: 1,711 runs in 1,193 conversations; the largest has 24 runs over about 18 hours; spans per trace average 5.5, maximum 511; aw.run.initiator is 'operator' (424) or 'autonomous' (1,224).",
+      "The mock (hub/ui/mock, #conversation-trace) draws three recorded conversations (24, 17 and 21 turns; the first carried over from the third) with the components the build wires."
+    ],
+    "limits": [
+      "The mock reads recorded fixtures, not the routes; paging past 200 runs and request counts are not exercised by it.",
+      "No requirement is demonstrated yet: the acceptance drive is proposed coverage, to be written and recorded failing before the build."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperSonnet2",
+        "builders": [
+          "DeveloperSonnet2"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-07T21:22:28.624930+00:00",
+        "id": "build-85bb11a3b5db",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "reopenings": [
+          {
+            "at": "2026-11-07T20:50:08.444855+00:00",
+            "cleared_at": "2026-11-07T21:22:28.624930+00:00",
+            "closed_window": null,
+            "dismissed_at": null,
+            "finished_ago": "9 hours",
+            "finished_at": "2026-11-07T11:34:57.515641+00:00",
+            "tasks": [
+              {
+                "display_id": "TWC-4",
+                "filer": "Architect",
+                "id": "task-b8a22f7bb7e3",
+                "title": "Conversation trace totals show tool errors (F1147, FR-6)"
+              }
+            ]
+          }
+        ],
+        "started_at": "2026-11-07T10:12:20.335884+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "initiator": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "task-b8a22f7bb7e3": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "view": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Where is it opened from? Answered (operator, 2026-11-06): the conversation's menu, and the Traces view narrowed to one conversation.",
+      "resolved": true
+    },
+    {
+      "question": "Idle gaps? Answered (operator, 2026-11-06): folded into marked breaks, no to-scale switch.",
+      "resolved": true
+    },
+    {
+      "question": "A carried-over conversation? Answered (operator, 2026-11-06): only its own turns, with a link to the earlier conversation's trace.",
+      "resolved": true
+    },
+    {
+      "question": "Mock first? Answered (operator, 2026-11-06): yes; mocked the same day in hub/ui/mock (#conversation-trace). Its choices — the 20-minute fold, spans drawn on their turn's own scale, the 24h/6h/1h start choices — are the author's and stand until the operator changes them on review.",
+      "resolved": true
+    }
+  ],
+  "problem": "A run is a trace today: each turn of a conversation is its own trace, opened one at a time from a per-turn link, the task story, the ledger or the Traces view (hub/ui/src/components/traces/TraceDrawer.tsx, opened from ten screens). The Traces view can filter to one conversation (hub/hub/api/v1/traces.py:59, conversation_id) and total it (/traces/totals), but it lists the runs as separate rows; nothing draws them together. So the questions a conversation raises — where its time went across turns, which turn got expensive, what the agent was doing between two answers — mean opening runs one by one and comparing them by hand. On the operator's Hub (read-only, 2026-11-06) conversations run up to 24 runs over about 18 hours, and a two-day conversation has turns spread across mornings and evenings; a single run's trace holds up to 511 spans.",
+  "requirements": [
+    {
+      "key": "open-from-conversation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A conversation with at least one run offers 'Trace of this conversation' in its menu, and the Traces view narrowed to one conversation offers to open that conversation as one trace; both open the same view of that conversation."
+    },
+    {
+      "key": "turns-on-one-timeline",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The view shows every run of the conversation as a numbered turn, in the order the runs started, each placed on one time axis shared by all turns, with its start time, its cost when priced, 'from you' when the operator started it, and its duration; a turn still running is drawn open and grows."
+    },
+    {
+      "key": "gaps-folded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: a conversation that spans a night drawn to scale is slivers; folding keeps every turn readable.",
+      "statement": "A stretch longer than 20 minutes in which no turn of the conversation was running is drawn as a break of fixed width, marked across every row and labelled in the axis with its length; turns and shorter gaps are drawn to scale; axis labels that would overlap are left out of the drawing and kept in the hover text of their tick or break."
+    },
+    {
+      "key": "unfold-a-turn",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On the conversation's axis a ten-minute turn of a day-long conversation is a sliver, and its spans would be invisible (seen in the mock, 2026-11-06).",
+      "statement": "A turn unfolds to show its spans as the single-run trace shows them (nested, named, coloured by kind), drawn across that turn's own duration rather than the conversation's axis, with a line saying so; selecting a turn or a span shows its detail below the timeline."
+    },
+    {
+      "key": "narrow-turns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator narrows the view to a range of turns (from one turn to another) and to turns that started within the last 24 hours, 6 hours or hour, or at any time; the timeline, its breaks and the totals are redrawn over the turns that remain, a narrowed view offers to show every turn again, and a narrowing that leaves no turn says so."
+    },
+    {
+      "key": "conversation-totals",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Above the timeline the view totals the turns shown: how many of the conversation's turns, the time they were running and the time from the first one's start to the last one's end, their cost with the count of unpriced turns left out, their errors as failed turns and tool errors, and their model calls, tool calls and time waiting on the operator."
+    },
+    {
+      "key": "carried-over",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: each conversation's trace keeps a clear boundary; a chain of carry-overs would otherwise grow without limit.",
+      "statement": "The trace of a conversation carried over from an earlier one shows only its own turns, names the conversation it continued, and opens that conversation's trace from there."
+    },
+    {
+      "key": "spans-on-unfold",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A conversation of 24 turns can hold over 10,000 spans; the turn rows answer most questions without them.",
+      "statement": "Opening the view reads the conversation's turn rows and totals without reading every turn's spans; a turn's spans are read when it is first unfolded, and a turn whose trace was cleared or never recorded unfolds to a line saying it has no trace."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checkpoints-and-traces-you-can-find-and-use/spec.json",
+    "slice": "conversation-trace"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Opening one trace of a whole conversation from the conversation's menu, and from the Traces view narrowed to one conversation",
+      "Every turn of the conversation on one timeline, long idle gaps folded into marked breaks",
+      "Unfolding a turn to see its spans, and any row's detail",
+      "Narrowing to a range of turns or a start time, with the drawing and totals following",
+      "Totals over the turns shown",
+      "Naming the conversation a carried-over one continued, and opening its trace"
+    ],
+    "non_goals": [
+      "Several agents or conversations on one timeline (slice 'woven-traces')",
+      "Including the turns of the conversation a carried-over one continued in its own trace (operator, 2026-11-06)",
+      "A switch to draw the idle gaps to scale (operator, 2026-11-06: folded)",
+      "Changing what the Hub records as spans",
+      "Trace retention, export, download and clearing",
+      "Runs of other conversations the agent delegated to or was handed by"
+    ]
+  },
+  "summary": "From a conversation, the operator opens one trace covering its turns on one timeline, narrows it to a range of turns or a start time, and unfolds a turn to see its spans, instead of opening one run's trace at a time. Long idle gaps are folded into marked breaks. Slice 2 of 'Checkpoints and traces you can find and use'; builds on the traces view (slice 1, built). Mocked 2026-11-06 against three recorded conversations.",
+  "tasks": [
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "The drive follows the existing scripts/drive pattern against a trial Hub, routine scripting that Sonnet handles; DeveloperSonnet2 is the one developer not busy with PR slice 2 or dashboards, and the builder of the view that this drive must fail on and later pass.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checked the traces view slice this one builds on, so it knows those routes and what a real trace looks like, and it isn't checking either of the other two builds.",
+      "depends_on": [],
+      "description": "A drive on a dedicated trial Hub (its own port and database): a conversation with several Haiku turns, one carried over by handoff. It opens 'Trace of this conversation' from the conversation's menu, checks the turns are in start order with a folded break where the recorded gap is long (a gap is made by back-dating a run's spans in the drive's own database), unfolds a turn and selects a span, narrows to a range of turns and compares the totals with /traces/totals for the same range, and follows 'Continued from'. Screenshots in dark and light. Recorded failing on today's code before the build.",
+      "files": [
+        "scripts/drive/d1107_conversation_trace.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "open-from-conversation",
+        "turns-on-one-timeline",
+        "gaps-folded",
+        "unfold-a-turn",
+        "narrow-turns",
+        "conversation-totals",
+        "carried-over"
+      ],
+      "reviewer": null,
+      "title": "Conversation-trace acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "A one-field addition to an existing route and its type, small enough for Sonnet, and kept with the same builder as the view that reads it so the field and its consumer are made by one hand.",
+      "checker": "QA2",
+      "checker_reason": "QA2 knows the traces routes from slice 1 and can check the field against real runs' root spans.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "The traces list route's run row carries the run's initiator (from the root span's aw.run.initiator), and its type in hub/ui/src/api/traces.ts; a Hub test reads it back for an operator-started and an autonomous run.",
+      "files": [
+        "hub/hub/traces.py",
+        "hub/ui/src/api/traces.ts",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "initiator",
+      "requirements": [
+        "turns-on-one-timeline"
+      ],
+      "reviewer": null,
+      "title": "A run's row says who started it"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "The components are already built and approved in the mock, so the work is wiring them to existing routes, which is within Sonnet's reach at a fraction of Opus's quota; DeveloperSonnet2 is free while the other two builds run.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checked the traces view and drawer this extends, so it can tell a regression there from this slice's own behaviour, and it isn't checking either of the other two builds.",
+      "depends_on": [
+        "drive",
+        "initiator"
+      ],
+      "description": "Wire the mocked components (src/components/traces/ConversationTrace.tsx, conversationTraceModel.ts, src/styles/conversation-trace.css) to the list, totals and by-run routes: a container reads the conversation's runs (paging past 200), totals for the selected range as since/until, and a turn's spans on first unfold. The conversation bar's 'Trace of this conversation' and the Traces view's 'open as one trace' open it in a drawer. Model and UI tests per the criteria, the model fed runs in the list route's order. The mock screen keeps working. UI bundle refreshed.",
+      "files": [
+        "hub/ui/src/components/traces/",
+        "hub/ui/src/components/conversation/ConversationBar.tsx",
+        "hub/ui/src/components/agents/",
+        "hub/ui/src/styles/conversation-trace.css",
+        "hub/ui/mock/screens/ConversationTrace.tsx",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "view",
+      "requirements": [
+        "open-from-conversation",
+        "turns-on-one-timeline",
+        "gaps-folded",
+        "unfold-a-turn",
+        "narrow-turns",
+        "conversation-totals",
+        "carried-over",
+        "spans-on-unfold"
+      ],
+      "reviewer": null,
+      "title": "The conversation trace, wired into the conversation and the Traces view"
+    }
+  ],
+  "title": "A trace of a whole conversation"
+}

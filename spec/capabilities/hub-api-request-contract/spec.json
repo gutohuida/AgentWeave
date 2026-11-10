@@ -83,6 +83,51 @@
       "requirement": "a-time-shown-for-a-loop-is-the-instant-it-happened",
       "then": "it carries `Z` or an explicit offset",
       "when": "any Hub route returns a stored timestamp"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8107 with a fresh database and one project with a Claude runner (scripts/drive/d1021_route_shadow_names.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1021_route_shadow_names.py",
+      "key": "a-name-a-caller-chooses-reaches-its-own-resource-drive",
+      "requirement": "a-name-a-caller-chooses-reaches-its-ow-agent-route-words-refused",
+      "then": "settings and Sessions answer 400 with a detail naming /queue/settings and /agent/sessions/{agent} respectively; board answers 422 naming id; conflict and boardroom are created, and GET /queue/conflict and GET /tasks/boardroom answer for them. Fails on today's Hub at the first check (settings is created, 201).",
+      "when": "the operator creates agents named settings, Sessions and conflict, and tasks with ids board and boardroom, through the routes the app calls"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test project",
+      "how_to_check": "Hub test",
+      "key": "a-name-a-caller-chooses-reaches-its-own-resource-doors",
+      "requirement": "a-name-a-caller-chooses-reaches-its-ow-agent-route-words-refused",
+      "then": "each creation is refused naming the route; the existing settings row syncs, triggers and resolves through validate_agent_name unchanged; user and operator keep their existing reasons",
+      "when": "POST /agents, POST /agents/request and a session sync each try to create an agent named conflicts, and the sync is repeated for an agent row named settings that already exists"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test project with a bound run credential",
+      "how_to_check": "Hub test",
+      "key": "a-name-a-caller-chooses-reaches-its-own-resource-task-doors",
+      "requirement": "a-name-a-caller-chooses-reaches-its-own-task-route-words-refused",
+      "then": "each answers 422 naming id; none answers 500",
+      "when": "POST /tasks with id board, POST /agent/tasks with id Boards, and a loop created with an initial task id boards"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the built app",
+      "how_to_check": "Hub test",
+      "key": "a-name-a-caller-chooses-reaches-its-own-resource-walk",
+      "requirement": "a-name-a-caller-chooses-reaches-its-own-reso-route-table-checked",
+      "then": "it passes on the change's tree and fails on the second naming /queue/peek and peek; on today's tree it fails naming conflicts, settings, sessions, board and boards",
+      "when": "the route-walk test runs, and again with a literal GET /queue/peek route registered before GET /queue/{agent} in the test"
+    },
+    {
+      "checked_by": "operator",
+      "given": "their project",
+      "how_to_check": "operator, in the app",
+      "key": "a-name-a-caller-chooses-reaches-its-own-resource-dialog",
+      "requirement": "a-name-a-caller-chooses-reaches-its-ow-agent-route-words-refused",
+      "then": "the dialog shows the refusal naming the queue route, and another name is accepted",
+      "when": "they type settings in the Add-agent dialog and submit"
     }
   ],
   "algorithms": [],
@@ -92,10 +137,16 @@
       "FR-2": "097d755fc10b9f0fe494504cb930c8c647e1d7904424f9748396ac8df3eb7dbb",
       "FR-3": "dd8ae8f8284dbd8d46b4809968b25e0070421bf98e9876c0263ae6cea0f274a8",
       "FR-4": "f387dfc62ada90dc506a2000e154fed47c7d1bc28f340d209a23d5c328fd4255",
-      "FR-5": "51b2d2e8c2f7d2a46c2af7f3a4cd003d75e3510a0b44b0a8d97553f875f1853d"
+      "FR-5": "51b2d2e8c2f7d2a46c2af7f3a4cd003d75e3510a0b44b0a8d97553f875f1853d",
+      "FR-6": "79674be58ca8470d8314cbd2dda336250323891491287a95dfa2cfbe81ca2f02",
+      "FR-7": "491e46ef7639c9418b40b2961e10cf895c54e83a9af70307a9d35d8717bf0c7b",
+      "FR-8": "4bcd28481003061adab49bf445248d76408ee557c8262a0f88e239000bcf1d48"
     },
-    "high_water": 5,
+    "high_water": 8,
     "requirements": {
+      "a-name-a-caller-chooses-reaches-its-ow-agent-route-words-refused": "FR-6",
+      "a-name-a-caller-chooses-reaches-its-own-reso-route-table-checked": "FR-8",
+      "a-name-a-caller-chooses-reaches-its-own-task-route-words-refused": "FR-7",
       "a-request-body-field-the-system-cannot-honour-is-refused-by-": "FR-1",
       "a-time-shown-for-a-loop-is-the-instant-it-happened": "FR-5",
       "n1-a-contract-that-declines-the-rule-says-why": "FR-2",
@@ -117,7 +168,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -160,6 +210,27 @@
       "party": null,
       "rationale": "SQLite stores no zone; a bare timestamp is read as local time by browsers and was shown an hour off on a UTC+1 machine.",
       "statement": "Every timestamp the Hub returns SHALL state its zone (UTC), and the app SHALL show it as that instant whatever the operator's machine's zone."
+    },
+    {
+      "key": "a-name-a-caller-chooses-reaches-its-ow-agent-route-words-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "overhaul-route-shadow-names (F248): refuse at creation only, Hub-only, so an existing agent that holds the word is not stopped by a check at every use site.",
+      "statement": "Every Hub door that creates an agent row MUST refuse a name that a route registered before the agent's own routes would answer for (today conflicts, settings and sessions, compared case-insensitively), with a sentence naming that route; no check outside agent creation MUST refuse such a name."
+    },
+    {
+      "key": "a-name-a-caller-chooses-reaches-its-own-task-route-words-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "AgentTaskCreate re-validates through TaskCreate inside the handler (agent_actions.py:245); a TaskCreate-only check would answer 500 at the agent door.",
+      "statement": "Creating a task through the operator door, the agent door or a loop's initial tasks MUST refuse an id that a route registered before GET /tasks/{task_id} would answer for (today board and boards, case-insensitively) with a 422 naming id, never a 500."
+    },
+    {
+      "key": "a-name-a-caller-chooses-reaches-its-own-reso-route-table-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The queue and sessions collisions existed when F248 was filed and nobody saw them; a list is only durable if the route table checks it.",
+      "statement": "The Hub's tests MUST fail, naming the route and the word, when a route with a fixed segment is registered before a route whose caller-named parameter at that segment it matches over the whole path, unless the word is refused for that parameter's resource or the parameter is Hub-minted (runner_id, the UI catch-all full_path)."
     }
   ],
   "schema_version": 1,

@@ -1,0 +1,741 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "operator",
+      "given": "the trial Hub's Thread page for this repository and the mock at mock-loom.html?layout=horizontal&thread=wave, both at 1440x900 with the same chapter selected, in dark and in light",
+      "how_to_check": "The drive saves the four screenshots (page and mock, dark and light) side by side as evidence and states every difference it sees; the operator opens them, or both pages, and confirms they look the same.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-s-ac-mock-match",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-looks-like-mock",
+      "then": "the thread's shape, knot positions and sizes, labels, header line and panel layout match, and any difference is limited to agent chip colours or knots the mock's recording does not have",
+      "when": "the two are screenshotted after the draw-in has finished"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with 17 chapters and one newer knot not in a chapter",
+      "how_to_check": "Drive: open the Thread tab on the trial Hub, read the selected bead (aria-selected) and its bounding box against the scroller's, compare every bead's start time left to right, press 'The beginning' and read the selected bead again. A ThreadScreen unit test covers the same with a route-ordered payload.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-ac-opens-newest",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-s-left-to-right",
+      "then": "the newest surface knot is selected and in view at the right, every knot to its left is older, and the beginning control selects chapter 1",
+      "when": "the operator opens the Thread tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two neighbouring chapters two months apart and two a day apart",
+      "how_to_check": "Unit test of geometry.weave: bead positions for knots with uneven time gaps differ by the same step; the drive also measures bead centres on the real page.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-ac-even",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-s-left-to-right",
+      "then": "the horizontal distance between each pair of neighbouring knots is the same",
+      "when": "the thread is drawn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two neighbouring surface knots, the second starting 60 days after the first ended",
+      "how_to_check": "Unit test rendering Loom with such knots and asserting the gap labels present and absent.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-sele-ac-silence",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-k-wave",
+      "then": "the stretch between them carries the label '2 months later', and a stretch between knots a day apart carries none",
+      "when": "the thread is drawn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a surface of 5 knots",
+      "how_to_check": "Unit test of geometry.weave (bead sides alternate around the middle) and of Loom (each label's data-side matches its bead); the drive reads the line's computed stroke against --brand-madder.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-se-ac-alternate",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-k-wave",
+      "then": "the knots sit alternately above and below the middle, each label is on the side away from the middle, and the line is the madder colour",
+      "when": "the thread is drawn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "17 chapters spanning Mar 7 to Oct 24 and 1 newer conversation not in a chapter",
+      "how_to_check": "Unit test rendering ThreadLoom with that surface and reading the header text; the drive reads it on the trial Hub.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-select-ac-count",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-sele-page-count",
+      "then": "it reads '17 chapters', 'Mar 7 to Oct 24', and '1 newer knot not in a chapter yet'",
+      "when": "the page opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the chapter 'The mender and the stall alarms' (47 knots, 97 all the way down: 45 conversations, 1 vault entry, 1 document) selected",
+      "how_to_check": "Unit test rendering ThreadLoom with that chapter from mock/thread-chapters-fixture.json and reading the panel's text; the drive repeats it on whichever chapter the trial Hub has, with its own figures.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-select-ac-panel",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-se-detail-panel",
+      "then": "it reads 'Chapter 17 of 17', the title, the summary, 'Oct 24 · 1 day', '47 knots · 97 all the way down', chips for manager, Operator, mender and Architect, and '45 conversations', '1 vault entry', '1 document'",
+      "when": "the panel shows it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation knot selected",
+      "how_to_check": "Drive: select a conversation knot, press the button, and confirm the app shows that conversation (URL and heading).",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-s-ac-panel-link",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-se-detail-panel",
+      "then": "the app opens that conversation, as the old thread's link did",
+      "when": "the operator presses 'Open the conversation'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "chapter 16 selected",
+      "how_to_check": "Unit test clicking 'The knot after' and reading the selection and the control's disabled state.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-ac-before-after",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-se-detail-panel",
+      "then": "chapter 17 is selected, and on chapter 17 the 'after' control is disabled",
+      "when": "the operator presses the panel's 'after' control"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a chapter holding 47 conversations selected",
+      "how_to_check": "Unit test clicking the third inner bead and then the trail entry; the drive does the same on the trial Hub.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-sele-ac-descend",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-descend",
+      "then": "the panel describes that conversation as 'Conversation 3 of 47', with a trail naming the chapter, and choosing the chapter in the trail selects the chapter again",
+      "when": "the operator chooses the third knot on the panel's thread"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a knot that holds nothing selected",
+      "how_to_check": "Unit test selecting a leaf and reading the inner thread's beads and which one is aria-selected.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-ac-leaf",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-descend",
+      "then": "the panel's thread shows the knots beside it with it marked as selected",
+      "when": "the panel shows it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a chapter stored as 2026-10-24T00:00:00Z to 2026-10-24T23:59:59Z, with the browser in UTC+1 and in UTC-5",
+      "how_to_check": "Unit test run under TZ=Europe/Berlin and TZ=America/New_York (or the drive with Playwright's timezone_id set to each) reading the bead label and the panel.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-ac-days",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-se-chapter-days",
+      "then": "both read 'Oct 24' and the panel reads '1 day'",
+      "when": "it is shown on the thread and in the panel"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a surface of 165 knots with the newest 40 loaded and the 40th selected",
+      "how_to_check": "ThreadScreen unit test with route-ordered pages and a 'before' cursor, asserting the request and the selection; the drive turns the chapters overlay off (the trial project's structural surface has 160+ knots), scrolls left, and compares a visible bead's screen position before and after the page arrives.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-ac-page-earlier",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-paging",
+      "then": "the next older page is requested and drawn to the left, the selected knot is unchanged and the knots that were in view stay where they were on screen",
+      "when": "the reader scrolls to within one screen width of the left end"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with 10,000 recorded items on the operator's machine",
+      "how_to_check": "Drive on this machine against a trial project seeded with 10,000 items: time from navigation to the first bead visible, and from pressing 'The beginning' to its bead visible.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-select-ac-scale",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-paging",
+      "then": "knots show within one second each time",
+      "when": "the Thread tab is opened, and then the beginning control is pressed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run three levels below a chapter selected, and the URL copied",
+      "how_to_check": "Drive: descend three levels, copy the URL, open it in a fresh page, and read the selection, the trail, both beads' visibility and document.activeElement.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-sele-ac-address",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-address",
+      "then": "that run is selected with a trail of its chapter and the knots between, it is in view on the panel's thread, its chapter is in view on the surface, and it has keyboard focus",
+      "when": "the URL is opened in a new tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the page open at the beginning of the thread with chapter 1 selected",
+      "how_to_check": "Drive: with chapter 1 selected, start a real Haiku run in the trial project, and within five seconds read the newest page for the new knot while chapter 1 stays aria-selected and visible.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-ac-live",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-k-live",
+      "then": "within five seconds the new activity is on the thread's present end, and chapter 1 is still selected and still in view",
+      "when": "an agent's run starts in the project"
+    },
+    {
+      "checked_by": "agent",
+      "given": "chapter 10 focused",
+      "how_to_check": "Unit test with user-event key presses, reading selection and document.activeElement after each; the drive repeats it in the browser.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-ac-keys",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-th-keyboard-pointer",
+      "then": "chapter 11 is selected, then the first knot inside chapter 11, then chapter 11 again, focus following each time",
+      "when": "the reader presses Right, then Enter, then Escape"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the pointer pressed on a knot",
+      "how_to_check": "Drive: mouse down on a bead, move 200px, mouse up, and compare the scroller's scrollLeft and the selected bead before and after.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-ac-drag",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-th-keyboard-pointer",
+      "then": "the thread has scrolled 200 pixels and the selected knot has not changed",
+      "when": "it is dragged 200 pixels left and released"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the browser set to reduced motion",
+      "how_to_check": "Drive with Playwright's reduced_motion='reduce': screenshot at 50ms and at 2s and confirm they match, read getAnimations() as empty, and compare the page text with a normal-motion run.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-sele-ac-reduced",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-motion",
+      "then": "the thread, knots, labels and panel show at once with no drawing, glint, pulse, rise or glide, and the content is the same as without reduced motion",
+      "when": "the page opens and a knot is chosen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "normal motion settings",
+      "how_to_check": "Drive: screenshots at 250ms (thread partly drawn from the left) and at 2s (all beads at full opacity).",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-select-ac-draws",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-motion",
+      "then": "the thread is partly drawn from the left a quarter of a second in, and fully drawn with every knot shown within two seconds",
+      "when": "the page opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the chapters job on",
+      "how_to_check": "ThreadScreen unit test with can_weave true asserting the button and its POST; the existing weave test carried over.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-select-ac-weave",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-th-carried-controls",
+      "then": "'Weave the thread' is offered and pressing it asks the job to fire, as before",
+      "when": "the page opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the thread route failing",
+      "how_to_check": "ThreadScreen unit test with the route answering 500, reading the alert text.",
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-s-ac-unreadable",
+      "requirement": "the-thread-runs-left-to-right-as-a-wave-with-th-carried-controls",
+      "then": "it says the thread could not be read and to reload",
+      "when": "the page opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a trial-Hub project with two stored chapters, and a second project with none",
+      "how_to_check": "Hub test over the thread feed plus browser drive on trial Hub :8010",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-surface",
+      "requirement": "the-thread-reads-as-chapters-the-manager-wri-chapters-on-surface",
+      "then": "the first shows the two chapters ordered by start, each with title, summary, span and author, and the opened chapter shows its knots beneath it; the second shows exactly slice 1's structural surface",
+      "when": "the Thread tab of each is opened and one chapter is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two chapters whose spans intersect",
+      "how_to_check": "Hub test",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-overlap",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-overlap-allowed",
+      "then": "both are accepted and shown, ordered by start",
+      "when": "they are saved and the surface is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with stored chapters, then one more task recorded after them",
+      "how_to_check": "Hub test comparing the chapter walk to the structural walk; fails if a knot is dropped or doubled",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-once",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-every-knot-once",
+      "then": "the knots reached equal slice 1's surface knots with no duplicates, and the new task appears after the chapters ungrouped",
+      "when": "every chapter is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "existing chapters",
+      "how_to_check": "Hub test",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-once-refused",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-every-knot-once",
+      "then": "both are refused naming the knot, and the previous version is still shown",
+      "when": "a version that leaves one knot out, and another that puts one knot in two chapters, are saved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "existing chapters",
+      "how_to_check": "Hub test against a fixture git repository",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-cite",
+      "requirement": "the-thread-reads-as-chapters-the-manager-write-citations-resolve",
+      "then": "both are refused naming the citation, and the previous version is still shown",
+      "when": "a version citing a task id that does not exist, and one citing a commit sha absent from the repository, are saved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "this repository's project on the trial Hub with the job on and a real runner",
+      "how_to_check": "e2e drive on trial Hub :8010 with a cheap model; check each cited sha with git cat-file",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-git",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-before-the-hub",
+      "then": "chapters dated before the project's first Hub record appear above every Hub knot, every commit they cite exists in the repository, and opening one shows its commits grouped under release tags with date, author and subject",
+      "when": "'Weave the thread' is pressed"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the chapters written by the ac-git drive",
+      "how_to_check": "operator review of the running page",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-story",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-before-the-hub",
+      "then": "the operator judges that it tells this project's story truthfully enough to show a stakeholder",
+      "when": "the operator reads the Thread surface"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the job on with automatic firing",
+      "how_to_check": "e2e drive on trial Hub :8010 counting manager_job_fired events for the chapters job",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-fires",
+      "requirement": "the-thread-reads-as-chapters-the-manager-w-fires-on-major-events",
+      "then": "each records one chapters firing",
+      "when": "a document is approved, a document is archived, a document's last task is approved, and the button is pressed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a new project",
+      "how_to_check": "e2e drive on trial Hub :8010",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-controls",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-user-controls",
+      "then": "the default shows no button and records no firing; button-only records no firing on approval but one on the press; the press's firing records the chosen runner and model",
+      "when": "a document is approved with the job at its default, then with button-only, then with a chosen runner and model and the button pressed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two chapters firings in a project",
+      "how_to_check": "browser drive on trial Hub :8010 comparing the shown figures to the recorded events",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-cost",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-cost-visible",
+      "then": "each firing's tokens (and money where reported) and the project's total for the job are shown, and match what the firings recorded",
+      "when": "the operator looks for their cost in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "existing chapters and a new document approved",
+      "how_to_check": "Hub test with a stubbed model answer",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-no-rewrite",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writ-no-unasked-rewrite",
+      "then": "the new chapter is saved, the retitle is refused, and the existing chapter is unchanged",
+      "when": "an automatic firing returns output that both adds a chapter for the new knots and retitles an existing chapter"
+    },
+    {
+      "checked_by": "agent",
+      "given": "existing chapters",
+      "how_to_check": "Hub test with a stubbed model answer",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-rewrite-asked",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writ-no-unasked-rewrite",
+      "then": "the retitle is saved as a new version",
+      "when": "the operator presses 'Weave the thread' and the firing retitles an existing chapter"
+    },
+    {
+      "checked_by": "agent",
+      "given": "chapters changed by an automatic firing, a requested firing and an agent",
+      "how_to_check": "Hub test reading the versions route and the firing's prompt",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-versions",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-versions-kept",
+      "then": "all three versions are returned with author, who asked, time and reason, and the firing's input contains them",
+      "when": "an agent reads the chapters' versions, and the next firing is started"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with the job off",
+      "how_to_check": "e2e drive on trial Hub :8010 with a Haiku agent asked to make a chapter",
+      "key": "the-thread-reads-as-chapters-the-manager-writes-ac-agent",
+      "requirement": "the-thread-reads-as-chapters-the-manager-writes-agent-tools",
+      "then": "the chapter appears on the surface as a version under the agent's name, and the edit is refused",
+      "when": "it creates a chapter through its tools, then submits an edit citing a missing record"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two projects on the trial Hub",
+      "how_to_check": "e2e drive on trial Hub :8010 with two projects; assert tab order and that no knot links to the other project's objects",
+      "key": "pull-the-thread-project-history-page-ac-tab",
+      "requirement": "pull-the-thread-project-history-page-thread-tab",
+      "then": "the tab sits right after Overview and each shows only its own project's knots",
+      "when": "the operator opens the Thread tab of each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fixture project seeded with at least one item of every listed kind",
+      "how_to_check": "Hub test over the thread feed: seeded ids equal the ids reached by walking every knot, with no duplicates",
+      "key": "pull-the-thread-project-history-page-ac-whole",
+      "requirement": "pull-the-thread-project-history-page-whole-history",
+      "then": "every seeded item appears exactly once",
+      "when": "the thread is fully opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two documents with three hand-made tasks and a conversation recorded between them",
+      "how_to_check": "Hub test over the surface level of the feed",
+      "key": "pull-the-thread-project-history-page-ac-surface",
+      "requirement": "pull-the-thread-project-history-page-surface-knots",
+      "then": "it shows document, one folded knot of four items naming its span, document — in that order",
+      "when": "the surface is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the surface of this repository's project",
+      "how_to_check": "browser drive scanning rendered text",
+      "key": "pull-the-thread-project-history-page-ac-face",
+      "requirement": "pull-the-thread-project-history-page-knot-face",
+      "then": "every knot shows glyph, kind word, title, date or span and actors, and no text on the page matches an id pattern (tsk-, run-, spdoc-, fct-) or a snake_case event name",
+      "when": "the page is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run knot",
+      "how_to_check": "browser drive; repeat for one knot of each object kind",
+      "key": "pull-the-thread-project-history-page-ac-links",
+      "requirement": "pull-the-thread-project-history-page-object-links",
+      "then": "the run's transcript opens",
+      "when": "its link is followed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fixture project whose records carry known timestamps",
+      "how_to_check": "Hub test over the feed; the test fails if the feed's order is reversed",
+      "key": "pull-the-thread-project-history-page-ac-faithful",
+      "requirement": "pull-the-thread-project-history-page-faithful",
+      "then": "every knot names at least one stored record and siblings are in non-decreasing recorded time",
+      "when": "the feed is walked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with six consecutive runs and then a merge",
+      "how_to_check": "Hub test over the task's children",
+      "key": "pull-the-thread-project-history-page-ac-fold",
+      "requirement": "pull-the-thread-project-history-page-fold-routine",
+      "then": "one folded knot reads six runs, followed by the merge knot unfolded",
+      "when": "the task knot is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a trial-Hub project seeded with 10,000 items",
+      "how_to_check": "timed browser drive on the operator's machine, three runs, worst case reported",
+      "key": "pull-the-thread-project-history-page-ac-scale",
+      "requirement": "pull-the-thread-project-history-page-scale",
+      "then": "each shows content within one second",
+      "when": "the tab is opened, the beginning is jumped to, and a knot is opened"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Saving a chapters version",
+      "steps": [
+        "Take the proposed chapters, the author (manager or agent name), who asked (operator or none), the reason, and whether the save was asked for.",
+        "Every citation must resolve: Hub record ids against the project's tables, commit shas and tag names against the project's repository. Any that does not resolve refuses the whole version, naming it.",
+        "Every surface knot of the structural thread that existed when the previous version was saved must sit in exactly one chapter; a missing or doubled knot refuses the version, naming it. Knots recorded since may be placed or left ungrouped.",
+        "If the save was not asked for, compare each existing chapter with the proposal: any change to its title, summary or members is dropped and named in the result; only new chapters are kept. If nothing new is left, no version is written.",
+        "Write the version as a new row; never update or delete an earlier one."
+      ]
+    },
+    {
+      "name": "A chapters firing",
+      "steps": [
+        "Skip if the job is off; skip an automatic trigger if the job is button-only.",
+        "Gather the structural surface (slice 1's feed), the current chapters with every earlier version and its reason, and, if no chapter yet covers the time before the first Hub record, a digest of the repository's history before it: release tags with their dates and the subjects of the commits between them.",
+        "Spawn the job's runner and model once with that input; record the firing with its usage whatever the outcome.",
+        "Save the answer through 'Saving a chapters version' with author manager, asked-for when the trigger was the button."
+      ]
+    }
+  ],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9daaf54f9b4f4de0a4fcca981d36c6280388444451b8fe8690b55076c26a1977",
+      "FR-10": "79a1b1e869696c6b73f90cb390c4b44c0adea5983f29e3abd768cdf40ccf5789",
+      "FR-11": "e92ff61bde39a5647bec211bbb1f7042f594839b38d63c04f712f73062807646",
+      "FR-12": "236229c12a454d12d70e4de3632b3f6d512c2ab3733aefa88d7ceead92176a5f",
+      "FR-13": "13028e73234bfb1e5156e1e25bca1207637acd10497b5d0a2fcb4a22790eea5e",
+      "FR-14": "78be174ac9c3baa8e38a3456fb0e6a4678b0b55fa6bd71fceeea127772a66814",
+      "FR-15": "feec7d04b7cf0b7121fd196b1c6da9b3854bcfa81e604fa11029c7b526faf6c0",
+      "FR-16": "80c713d07b001ce5cea106e1d2f446871f9c369e0465249cd661c318b1416d78",
+      "FR-17": "ba195e420802b64183558b18877dba7f92169750cb83ebf97a1a107d5e065735",
+      "FR-18": "d0511ebb2d7e6b5a131cd7f1f1a246dfbf7422e667eb97463a3ef32c5357e09c",
+      "FR-19": "1822cecc01a162a3a6887dd9a516b8ac1e1a6f3e1689f6fcc77b620eb8a3446e",
+      "FR-2": "5a15f455d9adca808e8ac61e1d9d8c8745535454353fa6039e48eebdcdf5252e",
+      "FR-20": "5152ac681639105f01335e1fe09fc3fe8d0a5bd4136ba61655961035a17ed25a",
+      "FR-21": "db9ba6796265e301df398d8ff1ee8870aa4d452078a64dea13ea8d6ff5fd2852",
+      "FR-22": "35e3366c04372b1556ec3b2517225b369e064f146b1cd1a8fd1f390885bd82ae",
+      "FR-23": "e5fc7f79decc9b3e111abb18117f0a14c3e2d27a134ff723d0f4801023c350b1",
+      "FR-24": "ea37f0cc14f540603acc5e0ee6da36962c52cd712beb65cb6b4775495f400037",
+      "FR-25": "ff81a3d69244b5422c9653697c18160a3ed117422adb3fa4ebacd703c6761959",
+      "FR-26": "0a870deba60193d25001349ff0459094e1be4cdcd1323adb7f2a48e68e00ddb5",
+      "FR-27": "bf8305d7bacdbbc81bbcfc49ce4e7ecf01a1a8c0ed353ddaa7b6960c130b5f39",
+      "FR-28": "66dedb8e08d3bce3aec73e306abc59f9c0d3708ebf01d2f6cb4f8e8488f8a1d9",
+      "FR-29": "a62110bd77454967615f4a433b828ad95f94565bd2129ca5854b2d0dcce921a0",
+      "FR-3": "1f629a8ac7f8a9cbaad895d297cd6b380916def2bed36c8a854813bf569d03d5",
+      "FR-30": "45c7adaeb3f3a1accd0c732ee7da591dc2b916581b7e5081b6441c71da887cfd",
+      "FR-31": "5a06202acc6a3e87ffa1fecc2155ce51f027d62a07a372586d2403705116a77e",
+      "FR-32": "6acff8b0e66d1511cc79d0824df0e8cd9268ce89102ea4e5d88cb07e980dac22",
+      "FR-4": "1721caf29bcbe94ff59f2369b0937e3256b76314a9c64e0f2a550e79e1e86eab",
+      "FR-5": "1eb88cb363672f3922ab9b85b6a9b84f472c26b05eb49f26239d1027b4a744ef",
+      "FR-6": "f9a9b5a404f7a2314e8a4c826c5b2e6341e315a72ab17121639138a84d0c5b95",
+      "FR-7": "7965b721f5bc79095933003eed7eb718d6418df23fcf89b49d33cddbe8c336fc",
+      "FR-8": "65c4ef6315e6c7cbb4bd75164a7e2799f4c01e1f6b449fd9a32e2745fb210627",
+      "FR-9": "8120cff34176e7ceceaf0da1b40937546ab3ae2a67f5ee676fa228f5b09d5ab8"
+    },
+    "high_water": 32,
+    "requirements": {
+      "pull-the-thread-project-history-page-faithful": "FR-30",
+      "pull-the-thread-project-history-page-fold-routine": "FR-31",
+      "pull-the-thread-project-history-page-knot-face": "FR-28",
+      "pull-the-thread-project-history-page-object-links": "FR-29",
+      "pull-the-thread-project-history-page-scale": "FR-32",
+      "pull-the-thread-project-history-page-surface-knots": "FR-27",
+      "pull-the-thread-project-history-page-thread-tab": "FR-25",
+      "pull-the-thread-project-history-page-whole-history": "FR-26",
+      "the-thread-reads-as-chapters-the-manager-w-fires-on-major-events": "FR-19",
+      "the-thread-reads-as-chapters-the-manager-wri-chapters-on-surface": "FR-14",
+      "the-thread-reads-as-chapters-the-manager-writ-no-unasked-rewrite": "FR-22",
+      "the-thread-reads-as-chapters-the-manager-write-citations-resolve": "FR-17",
+      "the-thread-reads-as-chapters-the-manager-writes-agent-tools": "FR-24",
+      "the-thread-reads-as-chapters-the-manager-writes-before-the-hub": "FR-18",
+      "the-thread-reads-as-chapters-the-manager-writes-cost-visible": "FR-21",
+      "the-thread-reads-as-chapters-the-manager-writes-every-knot-once": "FR-16",
+      "the-thread-reads-as-chapters-the-manager-writes-overlap-allowed": "FR-15",
+      "the-thread-reads-as-chapters-the-manager-writes-user-controls": "FR-20",
+      "the-thread-reads-as-chapters-the-manager-writes-versions-kept": "FR-23",
+      "the-thread-runs-left-to-right-as-a-wave-with-th-carried-controls": "FR-13",
+      "the-thread-runs-left-to-right-as-a-wave-with-th-keyboard-pointer": "FR-11",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-looks-like-mock": "FR-1",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-s-left-to-right": "FR-2",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-se-chapter-days": "FR-7",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-se-detail-panel": "FR-5",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-sele-page-count": "FR-4",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-address": "FR-9",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-descend": "FR-6",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-selected-k-live": "FR-10",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-selected-k-wave": "FR-3",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-selected-motion": "FR-12",
+      "the-thread-runs-left-to-right-as-a-wave-with-the-selected-paging": "FR-8"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-looks-like-mock",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-25: 'the agent should use the mock. It should look exactly like that'.",
+      "statement": "The Thread page renders as the approved mock (hub/ui/mock-loom.html, left to right, wave) renders the same knots: the same thread shape, knot spacing and sizes, labels, header line, panel layout, typography, colours in dark and light, and motion; the only differences allowed are agents' registered colours and what real data adds (paging, live knots)."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-s-left-to-right",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator chose left to right on 2026-10-24. Even spacing keeps knots from a busy few days legible beside months-long chapters.",
+      "statement": "The Thread page lays the project's surface knots on one thread from left (oldest) to right (newest), evenly spaced in time order; opening the page selects the newest surface knot with it in view, and two controls select the first surface knot and the newest one."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-k-wave",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A straight line with dots read as a git graph; the wave is the operator's chosen thread.",
+      "statement": "The thread is drawn in madder as a smooth wave that passes through each knot, alternately above and below the middle, swinging further for knots that hold more; each knot carries its date or date span and its title on the side away from the middle; and where 10 or more days pass between two neighbouring knots the thread is labelled with that silence ('3 weeks later', '2 months later')."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-sele-page-count",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Above the thread the page states how many chapters the project has, the span of days they cover, and how many newer surface knots are not yet in a chapter; with no chapters it states the number of surface knots instead."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-se-detail-panel",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator asked for more information under the thread about the selected knot, 'whatever we can show'.",
+      "statement": "Beneath the thread a panel describes the one selected knot: its kind as glyph and word with its position among the knots of that kind beside it ('Chapter 17 of 17'); its title; its summary when it has one; when it happened and how long it lasted; how many knots it holds directly and all the way down; who was in it, as named chips in each agent's registered colour, including the actors of what it holds; what it is made of, as a count per kind; a control that opens the object it stands for; and controls for the knot before and after it."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-descend",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the selected knot holds others, the panel shows them as a smaller thread of the same kind; choosing one selects it, the panel then describes it and shows a trail naming every knot above it, each of which selects that knot again; when the selected knot holds nothing, the smaller thread shows the knots beside it with it marked."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-se-chapter-days",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Chapter spans are stored as whole UTC days; read as instants they move a day east of UTC (seen in the mock).",
+      "statement": "A chapter's dates are shown as the calendar days the manager wrote, in any time zone: a chapter written for 24 October shows 'Oct 24' and '1 day', never 'Oct 24 – Oct 25' or '23h 59m'."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-paging",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Carries pull-the-thread FR-12 into the horizontal layout, where an Earlier/Later button at the end of a list no longer fits.",
+      "statement": "A thread, surface or inner, whose loaded knots do not reach the beginning or the present loads the next page on that side when the reader scrolls within one screen width of that end, without changing the selected knot or moving the knots already in view; for a project with 10,000 recorded items the first knots show within one second of opening the page and any page loads within one second."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selecte-address",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Carries pull-the-thread FR-10: links to a knot keep working after the redesign.",
+      "statement": "Selecting a knot puts its address in the URL; opening a knot's address selects that knot with the trail of every knot above it, brings it into view in the panel's thread and on the surface, and gives it keyboard focus."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-k-live",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Carries pull-the-thread FR-11.",
+      "statement": "Activity recorded while the page is open appears at the present end of the surface thread, and in the panel when it belongs to the selected knot, within five seconds without a reload, and does not change the selected knot or move the view when the reader is elsewhere on the thread."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-th-keyboard-pointer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With a knot focused, Left and Right select and focus the knot before and after it, Home and End the first and last loaded knot, Enter on a knot that holds others selects the first knot it holds, and Escape selects the knot above; a vertical mouse wheel over a thread scrolls it sideways, and pressing and dragging a thread pulls it along without selecting the knot the drag started on."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-the-selected-motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator asked for more animation and polish, and accepted the mock's motion.",
+      "statement": "On opening, and whenever a thread is shown afresh, the thread draws in from its oldest end and each knot appears as the thread reaches it; a glint passes along the thread after it is drawn and then about every 14 seconds; the selected knot is tied with a loop and gently pulses; choosing a knot glides it into view; and the panel's contents rise in as the selection changes. Under reduced-motion settings none of this moves and the page shows the same content."
+    },
+    {
+      "key": "the-thread-runs-left-to-right-as-a-wave-with-th-carried-controls",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While the chapters job is on, the page offers 'Weave the thread' as it does today; a page that cannot be read says so and asks for a reload, and a part that cannot be read says so without hiding what did load."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-wri-chapters-on-surface",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: the manager decides what grouping best represents the work, whether by time, theme or roadmap; once chapters exist they stay shown.",
+      "statement": "When a project has chapters, the Thread surface shows them ordered by when each begins, each with a title, a plain-language summary, its time span and who wrote it; opening a chapter shows, in place, the knots it groups. A project with no chapters shows slice 1's structural surface."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-writes-overlap-allowed",
+      "modal": "MAY",
+      "party": null,
+      "rationale": "Operator, 2026-10-23.",
+      "statement": "Chapters may overlap in time, so that two themes built in the same weeks are two chapters whose spans intersect."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-writes-every-knot-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Chapters are a reading of the history, not a filter on it; an item a chapter drops appears to the reader as if it never happened.",
+      "statement": "Every surface knot of slice 1 belongs to exactly one chapter, so opening every chapter reaches the same items as the structural thread, none twice and none missing; a knot recorded after the latest chapter version appears after the chapters, ungrouped, until a later version places it. A chapter version that would drop or duplicate a knot is refused."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-write-citations-resolve",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done-condition: chapters cite only real records. The page's promise is that nothing appears out of thin air.",
+      "statement": "Every record a chapter cites (a stored Hub record, or a commit or tag in the project's repository) exists when the chapter is saved; a chapter version with any citation that does not resolve is refused and the previous version stays shown."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-writes-before-the-hub",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: this project's imported history is distilled from git, and its commits are shown grouped. Here that is 5,382 commits from 2026-03-07, 91 release tags and 221 dated archived openspec changes.",
+      "statement": "For history earlier than the project's first Hub record, the manager writes chapters distilled from the project's git history, placed at the dates of the commits they cite and before every Hub-recorded knot. Opening one shows its commits grouped by the release tag they shipped in, each commit with its date, author and subject."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-w-fires-on-major-events",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: these events are enough for now.",
+      "statement": "With the chapters job enabled and automatic firing on, it fires after each major event in the project: a specification document approved, a document archived, or the last task of a document approved. It also fires whenever the operator presses 'Weave the thread' on the Thread page."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-writes-user-controls",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: a user who does not want this, or wants it done only by hand with a specific agent, must be able to say so.",
+      "statement": "The operator can, per project: leave the chapters job off (the default), turn it on with automatic firing, or turn it on for the 'Weave the thread' button only; and choose which runner and model it uses. With the job off, the button is absent and nothing fires, and an agent the operator asks can still write chapters through its tools."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-writes-cost-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: no cost cap; control and visibility instead. The first firing over a long git history is the expensive one.",
+      "statement": "Each chapters firing records what it cost (tokens and, where the runner reports it, money) and the operator can see the cost of each firing and the project's total for the job."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-writ-no-unasked-rewrite",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: rewriting is allowed but avoided unless the user asked, so the story a reader saw yesterday is still there today. The Hub enforces it rather than trusting the model to obey.",
+      "statement": "A firing the operator did not ask for only adds chapters for knots no chapter yet holds; any change it proposes to an existing chapter is refused and the existing chapter stays as it was. Existing chapters are rewritten only by a firing the operator asked for, or by an agent a user asked to."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-writes-versions-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: future runs must know how the thread changed. Shown to agents only, for now.",
+      "statement": "Every change to a project's chapters is kept as a new version recording who made it (the manager or a named agent), who asked for it when anyone did, when, and why; no earlier version is lost, and each firing and each agent reading chapters is given the earlier versions and their reasons."
+    },
+    {
+      "key": "the-thread-reads-as-chapters-the-manager-writes-agent-tools",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-23: a user can ask an agent to organise the view as they like, using git commits or anything else the agent can read.",
+      "statement": "An agent can read a project's chapters and their versions, and can create, retitle, resummarise, regroup or remove chapters through its tools; each edit is subject to citations-resolve and every-knot-once, and is recorded as a version under the agent's name."
+    },
+    {
+      "key": "pull-the-thread-project-history-page-thread-tab",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every project offers a tab labelled Thread, placed immediately after Overview, that shows that project's thread and nothing from any other project."
+    },
+    {
+      "key": "pull-the-thread-project-history-page-whole-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One thread for the whole project: an item missing from it is history that appears out of thin air.",
+      "statement": "Every recorded item of these kinds appears beneath exactly one surface knot: specification documents and their phase changes; tasks and their status changes; runs; evidence and its review verdicts; merges into main; questions and their answers; permission decisions; messages between agents; job and loop firings; operator conversations; vault additions."
+    },
+    {
+      "key": "pull-the-thread-project-history-page-surface-knots",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "At the surface, each specification document is one knot placed at its first recorded activity; items belonging to no document are surface knots of their own, and consecutive such knots with no document knot between them are folded into one knot naming their count and time span."
+    },
+    {
+      "key": "pull-the-thread-project-history-page-knot-face",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every knot shows, without being opened: its kind as a glyph and a word, a plain-language title, its date or time span, the names of who acted, and how many knots it holds when it holds any. No raw identifiers or event-type names appear on the face."
+    },
+    {
+      "key": "pull-the-thread-project-history-page-object-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every knot that stands for a stored object (document, task, run, evidence, conversation, job firing, vault entry) links to that object's existing view in the app."
+    },
+    {
+      "key": "pull-the-thread-project-history-page-faithful",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The page's whole claim is traceability; an invented or misplaced knot breaks it for every reader.",
+      "statement": "Every knot corresponds to stored records and is placed by their recorded time; the thread never shows an item that has no stored record, and never reorders items against their recorded times."
+    },
+    {
+      "key": "pull-the-thread-project-history-page-fold-routine",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Within any thread, four or more consecutive knots of the same routine kind (runs, status changes, messages, firings) are shown as one folded knot naming the kind and count, which opens to show them individually; milestone knots (document approved, evidence accepted, merge) are never folded."
+    },
+    {
+      "key": "pull-the-thread-project-history-page-scale",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "For a project with 10,000 recorded items, the tab shows its first knots within one second of opening on the operator's machine, and moving to the beginning or opening any knot shows its contents within one second; scrolling never waits for the whole history to load."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Project thread"
+}

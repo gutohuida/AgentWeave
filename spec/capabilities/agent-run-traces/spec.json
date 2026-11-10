@@ -1,0 +1,595 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a conversation with three runs, and one with none",
+      "how_to_check": "UI test over the conversation bar and the Traces view; the acceptance drive clicks the menu item on a live Hub.",
+      "key": "a-trace-of-a-whole-conversation-ac-open",
+      "requirement": "a-trace-of-a-whole-conversation-open-from-conversation",
+      "then": "the first offers 'Trace of this conversation' and the Traces view offers to open it as one trace, both opening a view of its three turns; the second offers neither",
+      "when": "the operator opens each conversation's menu, and narrows the Traces view to the first"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation whose runs the traces route returns newest first",
+      "how_to_check": "Model test fed the run rows in the order the list route returns them, failing if that order is reversed; UI test for the labels.",
+      "key": "a-trace-of-a-whole-conversation-ac-turns",
+      "requirement": "a-trace-of-a-whole-conversation-turns-on-one-timeline",
+      "then": "turn 1 is the earliest run and the last turn the newest, each bar starts after the previous turn's start, and a turn the operator started reads 'from you'",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two turns of 5 minutes each, 9 hours apart, then a third 5 minutes after the second",
+      "how_to_check": "Model test of the axis; screenshot in the drive.",
+      "key": "a-trace-of-a-whole-conversation-ac-gaps",
+      "requirement": "a-trace-of-a-whole-conversation-gaps-folded",
+      "then": "one break labelled '9h 0m later' separates the first turn from the second, the second and third are drawn to scale with their 5-minute gap, and the first turn's bar is wider than 10% of the axis",
+      "when": "the view is drawn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a 10-minute turn with a model call starting 5 minutes in",
+      "how_to_check": "UI test with a recorded turn; the drive unfolds a turn on a live Hub.",
+      "key": "a-trace-of-a-whole-conversation-ac-unfold",
+      "requirement": "a-trace-of-a-whole-conversation-unfold-a-turn",
+      "then": "its spans are listed under it, the model call's bar starts half way across the track, and the call's attributes show below",
+      "when": "the operator unfolds it and selects the model call"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation of 24 turns",
+      "how_to_check": "UI test; the drive narrows a live conversation.",
+      "key": "a-trace-of-a-whole-conversation-ac-narrow",
+      "requirement": "a-trace-of-a-whole-conversation-narrow-turns",
+      "then": "first, four turns are drawn and the totals read '4 of 24' turns with those turns' cost; then the view says no turn matches and offers every turn again",
+      "when": "the operator narrows to turns 9 to 12, then to the last hour where no turn started"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three turns of 1, 2 and 3 minutes spread over an hour, one unpriced and one failed",
+      "how_to_check": "Model test; compared in the drive with /traces/totals for the same conversation and time range.",
+      "key": "a-trace-of-a-whole-conversation-ac-totals",
+      "requirement": "a-trace-of-a-whole-conversation-conversation-totals",
+      "then": "it reads 3 turns, 6 minutes working over about an hour, the two priced turns' cost with one unpriced turn left out, and 1 failed turn",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation carried over from one with 21 turns, itself having 24",
+      "how_to_check": "UI test; the drive uses a handoff on a live Hub.",
+      "key": "a-trace-of-a-whole-conversation-ac-carried",
+      "requirement": "a-trace-of-a-whole-conversation-carried-over",
+      "then": "the first shows 24 turns and names the earlier conversation; following it opens the earlier conversation's 21 turns",
+      "when": "the operator opens its trace and follows 'Continued from'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation of 24 turns, one of whose traces was cleared",
+      "how_to_check": "UI test counting requests to the by-run trace route.",
+      "key": "a-trace-of-a-whole-conversation-ac-lazy",
+      "requirement": "a-trace-of-a-whole-conversation-spans-on-unfold",
+      "then": "no span is requested on opening, one span request is made per unfolded turn, and the cleared turn says it has no trace",
+      "when": "the operator opens its trace, then unfolds two turns including the cleared one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A trial Hub (:8010) on this change, with two agents bound to Haiku, each having finished at least one run, one of them on a task, and one run that failed",
+      "how_to_check": "Acceptance drive, written and failing before the build: a scripted drive against :8010 with real Haiku turns, asserting through the Hub's routes and the rendered view.",
+      "key": "a-traces-view-with-filters-grouping-and-drive-traces-end-to-end",
+      "requirement": "a-traces-view-with-filters-grouping-an-traces-view-in-navigation",
+      "then": "The view first lists only runs; the filter leaves only the first agent's runs; the group shows the run count, total cost equal to the sum of those runs' recorded costs, total and average duration, and the failed run counted as an error; the opened run and both entry points show that run's trace. Before this change the drive fails at the first step: Activity has no Traces view.",
+      "when": "The operator opens Activity → Traces, filters to the first agent over the last hour, groups by agent, opens a listed run, then goes to that agent's conversation and opens the trace of its latest run from the conversation's controls, and to the task and opens its run's trace"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A project holding run traces and the Hub's worker, request, work and event traces",
+      "how_to_check": "Hub route test and UI test.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-default-is-runs",
+      "requirement": "a-traces-view-with-filters-grouping-and-stats-runs-by-default",
+      "then": "At first only run traces are listed and counted, and the Hub's kinds are offered only inside the Hub internals choice, not beside the run filters; after choosing Requests, requests are listed and no runs, and the choice shows which internal kind is in force with a way back to agent runs",
+      "when": "The traces view is opened, then 'Requests' is chosen from Hub internals"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Runs from agents A and B, across two conversations and two tasks, spread over three days",
+      "how_to_check": "Hub route test for each filter and the combination (agent and time range are new on the route), and a UI test fed the route's response in the order the route returns it; the UI test fails if that order is reversed.",
+      "key": "a-traces-view-with-filters-grouping-an-every-filter-and-combined",
+      "requirement": "a-traces-view-with-filters-grouping-and-stats-filters-combine",
+      "then": "Each filter alone leaves exactly the matching runs; combined, only A's runs on that task on that day remain, and the statistics change to match",
+      "when": "Each filter is applied alone, then agent A, one task and one day together"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A run with an agent, model, task, start, end, recorded cost and a failed outcome; a conversation turn with no task; and a run whose task no longer exists",
+      "how_to_check": "UI test on the rows.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-row-fields",
+      "requirement": "a-traces-view-with-filters-grouping-and-stats-row-shows-a-run",
+      "then": "The first row shows all of those, the error visibly; the second shows its conversation, marked as a conversation turn, rather than a blank or a placeholder id; the third reads as a task that no longer exists and shows no raw task id",
+      "when": "All three are listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A filtered set of runs across two agents, two models, two tasks and two days",
+      "how_to_check": "Hub test of grouped totals and a UI test of the switch.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-grouping-switches",
+      "requirement": "a-traces-view-with-filters-grouping-and-stat-switchable-grouping",
+      "then": "Each switch regroups the same runs, every group's count adds up to the filtered total, and each group shows its statistics",
+      "when": "The grouping is switched through agent, model, task, conversation, kind and day"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Five runs with known recorded costs and durations: one completed, one failed, one stopped, one whose trace ended in error, and one completed with a failed tool call inside",
+      "how_to_check": "Hub test on the totals and a UI test on their order.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-headline-numbers",
+      "requirement": "a-traces-view-with-filters-grouping-and-stats-headline-stats",
+      "then": "Total cost equals the sum of the five, total and average duration match, errors count three (failed, stopped, trace error) and not the completed run with the failed tool call, and those three statistics appear before any other",
+      "when": "The view shows them, ungrouped and grouped"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Runs with recorded tokens, model calls, tool calls and a permission wait",
+      "how_to_check": "Hub test and UI test.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-secondary-numbers",
+      "requirement": "a-traces-view-with-filters-grouping-and-stats-secondary-stats",
+      "then": "Tokens, model and tool call counts and waiting time are available and match the recorded values",
+      "when": "The view shows them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "More matching runs than one page of the list holds",
+      "how_to_check": "Hub test with more runs than the page size.",
+      "key": "a-traces-view-with-filters-grouping-and-st-stats-beyond-the-page",
+      "requirement": "a-traces-view-with-filters-grouping-stats-cover-the-whole-filter",
+      "then": "The statistics count every matching run, not just the page",
+      "when": "The first page is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The traces view filtered and grouped",
+      "how_to_check": "UI test.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-open-and-return",
+      "requirement": "a-traces-view-with-filters-grouping-and-stats-opens-the-run",
+      "then": "That run's trace was shown, no filter was added by the choice, and the view returns with the same filters and grouping",
+      "when": "A run is opened by choosing its row (including on its task or conversation text), and then closed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Every screen that names or lists a specific agent run, found by searching the UI and recorded with the evidence; today at least a conversation turn, a task story's run row, a task's transition history, an evidence piece still being recorded by a run, a spec retrospective's list of transcripts read, and loop and job firing history where a firing has a run",
+      "how_to_check": "A UI test per entry point, plus the recorded search showing no other screen names a run without offering its trace.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-audit-run-mentions",
+      "requirement": "a-traces-view-with-filters-grouping-an-every-run-opens-its-trace",
+      "then": "Each opens that run's trace",
+      "when": "The operator follows the trace from each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A conversation with three finished runs",
+      "how_to_check": "UI test; also asserted by the acceptance drive.",
+      "key": "a-traces-view-with-filters-grouping-and-latest-from-conversation",
+      "requirement": "a-traces-view-with-filters-grouping-an-conversation-latest-trace",
+      "then": "The third run's trace opens, and each turn's own trace link still opens its own run",
+      "when": "The operator opens the latest trace from the conversation's own controls"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A build showing '7 runs' and a task with runs",
+      "how_to_check": "UI test.",
+      "key": "a-traces-view-with-filters-grouping-and-sta-count-opens-filtered",
+      "requirement": "a-traces-view-with-filters-grouping-and-sta-counts-open-filtered",
+      "then": "Activity → Traces opens filtered to exactly those runs",
+      "when": "The operator follows the run count"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A copy of the operator's database taken with the backup API",
+      "how_to_check": "Timed route calls against a trial Hub serving the copy.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-fast-on-real-data",
+      "requirement": "a-traces-view-with-filters-grouping-and-responsive-on-real-data",
+      "then": "Both return within 2 seconds",
+      "when": "The default traces list and statistics are requested"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Four runs: two finished with a measured cost, one finished whose cost could not be measured, and one still running",
+      "how_to_check": "Hub test on the totals and UI test on the rows and totals.",
+      "key": "a-traces-view-with-filters-grouping-and-stats-unpriced-shown",
+      "requirement": "a-traces-view-with-filters-grouping-and-sta-unpriced-is-not-zero",
+      "then": "The unmeasured run's row says unpriced, not $0.00; the running run's row shows no cost and is not counted as unpriced; the total is the sum of the two and says one run is left out; a group of only unpriced runs shows no cost figure rather than $0.00",
+      "when": "They are listed and totalled, ungrouped and grouped"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Project Settings' traces section on this change",
+      "how_to_check": "UI test on the section; the existing traces.test.tsx retention, export and clear tests still pass.",
+      "key": "a-traces-view-with-filters-grouping-and-stat-settings-shows-link",
+      "requirement": "a-traces-view-with-filters-grouping-and-s-settings-links-to-view",
+      "then": "It has no list of traces, its link opens Activity → Traces, and retention, collector export, download and clear are all still there and still work",
+      "when": "It is opened and its link followed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "proj-test",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "everything-the-hub-does-is-in-a-trace-requests-recorded",
+      "requirement": "everything-the-hub-does-is-in-a-trace-a-hub-request-is-a-span",
+      "then": "GET /traces?operation=aw.request lists the POST and the 404 with method, route template, status and actor operator, and not the 200 GET",
+      "when": "the operator creates a task (POST), reads the task list (GET) and reads a task that does not exist (GET, 404)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project above",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "everything-the-hub-does-is-in-a-trace-reads-when-asked",
+      "requirement": "everything-the-hub-does-read-polling-is-recorded-only-when-asked",
+      "then": "that GET is listed as an aw.request trace",
+      "when": "PUT /traces/settings sets record_reads true and the task list is read again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running run with a credential whose trace has an open execute_tool span for a Bash call",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "everything-the-hub-does-is-in-a-trace-agent-request-nests",
+      "requirement": "everything-the-hub-d-an-agents-request-nests-under-its-tool-call",
+      "then": "GET /traces/by-run/{run} holds an aw.request span for /agent-actions/permission-decisions whose parent is that tool span, actor run",
+      "when": "the run posts a permission decision with its credential"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task created with a dependency the Hub records an event for, and persist_event called with no trace current",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "everything-the-hub-does-is-in-a-trace-events-in-traces",
+      "requirement": "everything-the-hub-does-is-in-a-trace-every-event-is-in-a-trace",
+      "then": "the request span carries the event it emitted as a span event, and the lone event is an aw.event trace of its own",
+      "when": "the traces are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with work and a project with two checks, one failing (the test_project_checks_run fixtures)",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "everything-the-hub-does-is-in-a-trace-check-run-traced",
+      "requirement": "everything-the-hub-does-is-in-a-a-command-the-hub-runs-is-a-span",
+      "then": "an aw.work trace of kind check_run holds aw.command spans for the git plumbing and each check, the failing one with exit code 3 and error status",
+      "when": "project_checks.request_run runs to the end"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check run whose merge raises an error naming an aw_live_ key",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "everything-the-hub-does-is-in-a-trace-warning-on-trace",
+      "requirement": "everything-the-hub-does-is-in-a-hub-warnings-are-on-their-trace",
+      "then": "the check_run trace carries a log event at WARNING with the exception, the key appears nowhere, and the export's resourceLogs holds that record with the trace's traceId",
+      "when": "the run ends and the day is downloaded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the span writer made to raise",
+      "how_to_check": "hub/tests/test_the_hub_is_traced.py (failed before the build)",
+      "key": "everything-the-hub-does-is-in-a-trace-span-write-isolated",
+      "requirement": "everything-the-hub-does-is-in-a-span-write-never-holds-a-request",
+      "then": "the request answers 201 as before and the settings payload counts a dropped span",
+      "when": "the operator creates a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub whose project pushes to a local OTLP receiver",
+      "how_to_check": "scripts/drive/d1020_hub_wide_trace_drive.py on a scratch Hub with otlp_receiver.py",
+      "key": "everything-the-hub-does-is-in-a-trace-drive-hub-wide",
+      "requirement": "everything-the-hub-does-is-in-a-trace-background-work-is-a-trace",
+      "then": "the receiver gets request spans nested under the MCP tool span, the check_run and job traces, and the logs on /v1/logs; no polling spans; spans and bytes per item are measured and stated",
+      "when": "real Haiku turns run (one calling a Hub MCP tool, one bound to a task that completes and runs its checks), a manager job fires, and the app is left polling for a minute"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1936bd17453994f8153bdadc5644759094cb75b512db3ec27000dcf39b3e8faf",
+      "FR-10": "f240f8d7fc2b118a48c2c57311fe32136213523336d27bbfbc6aa6b140332707",
+      "FR-11": "5ba0e59943868fd7be8ea9254748dbbb0935f4948835e5ce55b88a019216bf62",
+      "FR-12": "c1fc190a6d5042dde125194cf6084b7dc073a9593a0d818a177da1faf3a364e7",
+      "FR-13": "44673a0f63b455403caa6b9850f98504f5e9e5b5b0f74b2a8d36883176d3ecc2",
+      "FR-14": "111dc372ce3fa1c6764f67e6551fab779ecf06fe487cb0f0383452074b6f4a05",
+      "FR-15": "74d671ef37f3ac644040ff591eb2c49105ca10a5ef5958827143e0322e5ddaf7",
+      "FR-16": "bfe5e04564fa6f9bf1f32045ff5ed731f310bb363fbeea5619bf5a1741eb78a7",
+      "FR-17": "9a5db750a9ef30ccf6a0760944bf4dbea968f15b9e189fa8bef2e118204c39ab",
+      "FR-18": "1ec0d67536c7a50276d7a74a597fc4e68a7cd80d915346d7c8fb2e9b9bdb29fc",
+      "FR-19": "3e78d94f49f507631e9aab5230e8f61ede05698884f9caec568cd91ed04c4695",
+      "FR-2": "8937166c46bccd4e1c49b5056b9888302540d796a264126df850bd7dddba63f6",
+      "FR-20": "19cb0d0c190335ebae1da9a63ff1daf370d122b185a399c02c4668343a69b4d4",
+      "FR-21": "8cf598fcb48ae23c4fb733a1178000d9ba57be963966796275b3c3f760631c18",
+      "FR-22": "50972363e7d64a0da30194a5788f271f673109a829df6cd4dd1efe00da917c57",
+      "FR-23": "9adc85a82efdff53ba968a33a3aa610477907fac03a6810ec7fb5ac179d96c95",
+      "FR-24": "01322a43498ba9f6bea6826e6b4c8ae9f92f7f6582768a0cd61771a9f944114f",
+      "FR-25": "c460ed3cbdf7003394110a211f6c9ab76a9da6c2b6509abaaf8c1bce306b12b5",
+      "FR-26": "f64cf508f6cb0305f8253ac91901e3e65d482d30a6819e296262c01aeda93209",
+      "FR-27": "ebc65080a8e4793b1b369de10026cf19937146b9a39b04785d998cb2917b9bc3",
+      "FR-28": "cded3ba88806bbfcbbe1f82ac540afd5426c62fdf8ce9b8afd68b967695876fc",
+      "FR-29": "2b05957576688d9ffa993dc930a08c49488b1ea6dd0d033ea2f593f74c5057b6",
+      "FR-3": "39a2572acd3e036d8946349ca1ec7e0d0eb24de244aa40cc39d982caff7b91bb",
+      "FR-30": "c15d9e61b1e8bc3f62a02822e588479dd77b58130e11a82b3475dbbc8ddbf4de",
+      "FR-31": "e11710982b7b14a1f6b79713c2ad949e443670bf6df3b169cd239d6935b8cbee",
+      "FR-4": "859b0992be9c1360ebe2014ee4bdc120d7916d81aca38182c9d7693a0a0b959c",
+      "FR-5": "8659a6ce43704193a10fad48482f43cf9751c7c73e355c6de35ace0ba7ae85c9",
+      "FR-6": "dc5669df961a17bcc434a3fa5dcc530bc79d213a34597039ad3ac40ec889b72c",
+      "FR-7": "24c8b73b100f0c8cea6c8ff009367905bb383fed5bc2d32839f76e0f393d6933",
+      "FR-8": "e5e87a2af276951e203e39bddd2cfdb4fcb75fd787c6dc9e34ef641bf4dc56de",
+      "FR-9": "0a69a2aba2b5122d3457c83e96d73389b3ed585ab54a4696d6f8c409ca62f873"
+    },
+    "high_water": 31,
+    "requirements": {
+      "a-trace-of-a-whole-conversation-carried-over": "FR-7",
+      "a-trace-of-a-whole-conversation-conversation-totals": "FR-6",
+      "a-trace-of-a-whole-conversation-gaps-folded": "FR-3",
+      "a-trace-of-a-whole-conversation-narrow-turns": "FR-5",
+      "a-trace-of-a-whole-conversation-open-from-conversation": "FR-1",
+      "a-trace-of-a-whole-conversation-spans-on-unfold": "FR-8",
+      "a-trace-of-a-whole-conversation-turns-on-one-timeline": "FR-2",
+      "a-trace-of-a-whole-conversation-unfold-a-turn": "FR-4",
+      "a-traces-view-with-filters-grouping-an-conversation-latest-trace": "FR-19",
+      "a-traces-view-with-filters-grouping-an-every-run-opens-its-trace": "FR-18",
+      "a-traces-view-with-filters-grouping-an-traces-view-in-navigation": "FR-9",
+      "a-traces-view-with-filters-grouping-and-responsive-on-real-data": "FR-21",
+      "a-traces-view-with-filters-grouping-and-s-settings-links-to-view": "FR-23",
+      "a-traces-view-with-filters-grouping-and-sta-counts-open-filtered": "FR-20",
+      "a-traces-view-with-filters-grouping-and-sta-unpriced-is-not-zero": "FR-22",
+      "a-traces-view-with-filters-grouping-and-stat-switchable-grouping": "FR-13",
+      "a-traces-view-with-filters-grouping-and-stats-filters-combine": "FR-11",
+      "a-traces-view-with-filters-grouping-and-stats-headline-stats": "FR-14",
+      "a-traces-view-with-filters-grouping-and-stats-opens-the-run": "FR-17",
+      "a-traces-view-with-filters-grouping-and-stats-row-shows-a-run": "FR-12",
+      "a-traces-view-with-filters-grouping-and-stats-runs-by-default": "FR-10",
+      "a-traces-view-with-filters-grouping-and-stats-secondary-stats": "FR-15",
+      "a-traces-view-with-filters-grouping-stats-cover-the-whole-filter": "FR-16",
+      "everything-the-hub-d-an-agents-request-nests-under-its-tool-call": "FR-26",
+      "everything-the-hub-does-is-in-a-a-command-the-hub-runs-is-a-span": "FR-29",
+      "everything-the-hub-does-is-in-a-hub-warnings-are-on-their-trace": "FR-30",
+      "everything-the-hub-does-is-in-a-span-write-never-holds-a-request": "FR-31",
+      "everything-the-hub-does-is-in-a-trace-a-hub-request-is-a-span": "FR-24",
+      "everything-the-hub-does-is-in-a-trace-background-work-is-a-trace": "FR-28",
+      "everything-the-hub-does-is-in-a-trace-every-event-is-in-a-trace": "FR-27",
+      "everything-the-hub-does-read-polling-is-recorded-only-when-asked": "FR-25"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "a-trace-of-a-whole-conversation-open-from-conversation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A conversation with at least one run offers 'Trace of this conversation' in its menu, and the Traces view narrowed to one conversation offers to open that conversation as one trace; both open the same view of that conversation."
+    },
+    {
+      "key": "a-trace-of-a-whole-conversation-turns-on-one-timeline",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The view shows every run of the conversation as a numbered turn, in the order the runs started, each placed on one time axis shared by all turns, with its start time, its cost when priced, 'from you' when the operator started it, and its duration; a turn still running is drawn open and grows."
+    },
+    {
+      "key": "a-trace-of-a-whole-conversation-gaps-folded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: a conversation that spans a night drawn to scale is slivers; folding keeps every turn readable.",
+      "statement": "A stretch longer than 20 minutes in which no turn of the conversation was running is drawn as a break of fixed width, marked across every row and labelled in the axis with its length; turns and shorter gaps are drawn to scale; axis labels that would overlap are left out of the drawing and kept in the hover text of their tick or break."
+    },
+    {
+      "key": "a-trace-of-a-whole-conversation-unfold-a-turn",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On the conversation's axis a ten-minute turn of a day-long conversation is a sliver, and its spans would be invisible (seen in the mock, 2026-11-06).",
+      "statement": "A turn unfolds to show its spans as the single-run trace shows them (nested, named, coloured by kind), drawn across that turn's own duration rather than the conversation's axis, with a line saying so; selecting a turn or a span shows its detail below the timeline."
+    },
+    {
+      "key": "a-trace-of-a-whole-conversation-narrow-turns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator narrows the view to a range of turns (from one turn to another) and to turns that started within the last 24 hours, 6 hours or hour, or at any time; the timeline, its breaks and the totals are redrawn over the turns that remain, a narrowed view offers to show every turn again, and a narrowing that leaves no turn says so."
+    },
+    {
+      "key": "a-trace-of-a-whole-conversation-conversation-totals",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Above the timeline the view totals the turns shown: how many of the conversation's turns, the time they were running and the time from the first one's start to the last one's end, their cost with the count of unpriced turns left out, their errors as failed turns and tool errors, and their model calls, tool calls and time waiting on the operator."
+    },
+    {
+      "key": "a-trace-of-a-whole-conversation-carried-over",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: each conversation's trace keeps a clear boundary; a chain of carry-overs would otherwise grow without limit.",
+      "statement": "The trace of a conversation carried over from an earlier one shows only its own turns, names the conversation it continued, and opens that conversation's trace from there."
+    },
+    {
+      "key": "a-trace-of-a-whole-conversation-spans-on-unfold",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A conversation of 24 turns can hold over 10,000 spans; the turn rows answer most questions without them.",
+      "statement": "Opening the view reads the conversation's turn rows and totals without reading every turn's spans; a turn's spans are read when it is first unfolded, and a turn whose trace was cleared or never recorded unfolds to a line saying it has no trace."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-an-traces-view-in-navigation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02, after driving the mock: 'lives inside Activity'.",
+      "statement": "The Activity tab has a Traces view for the selected project, beside Ledger, Activity and Logs, which the operator reaches without going through Settings."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-stats-runs-by-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: agents by default, and the Hub's internals behind a quieter choice. About 1,170 of the operator's traces are runs, beside tens of thousands of the Hub's own; unfiltered, the runs are buried.",
+      "statement": "The traces view opens showing agents' runs only. The Hub's own traces (worker calls, requests, background work, events) are reached through a separate 'Hub internals' choice that is less prominent than the filters on runs, and appear only once one of them is chosen."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-stats-filters-combine",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The traces view can be filtered by agent, conversation, task, run, kind and time range, any of them together, and the list and the statistics both show only what matches every filter in force."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-stats-row-shows-a-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02. Six tasks behind runs on the operator's Hub no longer exist; the mock showed one as 'task-b9bf0f35c2c5'.",
+      "statement": "Each listed run shows its agent, model, task (its reference and title, when it worked one) or the conversation it was a turn of, when it started, how long it took, what it cost, and whether it counts as an error. A task with no reference and no title is shown as a task that no longer exists, never by its raw id."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-stat-switchable-grouping",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: switchable grouping.",
+      "statement": "The filtered traces can be grouped by agent, model, task, conversation, kind or day, switchable from the view, and each group shows how many traces it holds and its statistics."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-stats-headline-stats",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: cost, duration and errors are what they want to see most; cancelled and interrupted runs count as errors, routine failed tool calls inside a finished run do not. On the operator's Hub runs are completed 1,211, failed 12, stopped 5, running 3.",
+      "statement": "The view shows, over everything the current filter matches and for each group, the total cost, the total and average duration, and the number of errors, and these three are shown before any other statistic. A run counts as an error when it failed, when it was stopped (cancelled or interrupted), or when its trace ended in error; a run that completed with a failed tool call inside it does not."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-stats-secondary-stats",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The view also offers, less prominently, token counts, the number of model calls and tool calls, and time spent waiting for a permission or an answer, over the same filter and groups."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-stats-cover-the-whole-filter",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The list is paged (the Settings list shows 10 at a time); totals over one page would understate cost and errors without saying so.",
+      "statement": "The statistics count every trace the filter matches, not only the page of rows currently loaded."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-stats-opens-the-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Driving the mock, a click in the middle of a row landed on its task and filtered instead of opening the run.",
+      "statement": "Choosing a listed trace opens it in the existing trace view, and closing it returns to the traces view with the same filters and grouping. Narrowing to a row's task or conversation is a control of its own, so choosing the row anywhere else opens its trace."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-an-every-run-opens-its-trace",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: check every screen a trace can be reached from; the task story's run row already does this and is the model.",
+      "statement": "Every screen that names or lists a specific agent run offers that run's trace, and following it opens that run's trace, not another run's or a list."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-an-conversation-latest-trace",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The per-turn link is faint and the 'Trace of the last turn' menu item exists but is never shown (ConversationBar.tsx:201).",
+      "statement": "From a conversation, the operator opens the trace of its most recent run from the conversation's own controls, without finding the per-turn link, and each turn's own trace link stays."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-sta-counts-open-filtered",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A run count shown elsewhere (a build's runs, a task's runs, the project's work summary) opens the traces view filtered to exactly those runs."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-responsive-on-real-data",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "On the operator's Hub (about 137k spans, 1,170 runs on 2026-11-02), the traces view's default list and statistics appear within 2 seconds."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-sta-unpriced-is-not-zero",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02. 16 finished runs on the operator's Hub have no measured cost; counting them as zero would make a total look complete when it is not. The project's model record already reports them this way. A running run has not reported its cost yet, which is not the same as the Hub failing to measure it (found driving the mock).",
+      "statement": "A finished run whose cost the Hub could not measure is shown as unpriced, never as a zero cost, and a cost total that leaves such runs out says how many it left out. A run still running is shown with no cost yet and is not counted as unpriced."
+    },
+    {
+      "key": "a-traces-view-with-filters-grouping-and-s-settings-links-to-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: one place to look for traces.",
+      "statement": "Project Settings' traces section no longer lists traces itself; in place of its 'Recent traces' list it links to the traces view in Activity. Retention, export to a collector, download and clearing stay where they are."
+    },
+    {
+      "key": "everything-the-hub-does-is-in-a-trace-a-hub-request-is-a-span",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D4: all mutating, all agent-credential, all errors and slow requests.",
+      "statement": "The Hub SHALL record a project's API request as an `aw.request` span carrying its method, route template, status code, duration, actor and project when the request is not a GET or HEAD, was made with a run credential, answered 4xx or 5xx, or took longer than one second."
+    },
+    {
+      "key": "everything-the-hub-does-read-polling-is-recorded-only-when-asked",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "trace-D4: the app's routine read polling and the SSE stream are skipped by default, behind a setting.",
+      "statement": "The operator's other GET and HEAD requests and the SSE stream SHALL NOT be recorded unless the project's trace settings turn `record_reads` on, in which case they SHALL be."
+    },
+    {
+      "key": "everything-the-hub-d-an-agents-request-nests-under-its-tool-call",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 1: an agent's calls into the Hub nest under the tool call that made them.",
+      "statement": "A request made with a run's credential SHALL be a span in that run's trace, parented under the run's newest unended `execute_tool` span, or under the run's root when none is open."
+    },
+    {
+      "key": "everything-the-hub-does-is-in-a-trace-every-event-is-in-a-trace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 2; persist_event is the one writer of event_logs.",
+      "statement": "Every event `persist_event` records SHALL appear in a trace: as a span event on the current span when there is one, else as an `aw.event` span of its own committed with the event."
+    },
+    {
+      "key": "everything-the-hub-does-is-in-a-trace-background-work-is-a-trace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 3.",
+      "statement": "A job firing, a loop tick, flow and review staffing, inbound queue processing, worktree create, merge and release, task integration, a project check run, a spec fold and a distil batch SHALL each be recorded as an `aw.work` trace naming its kind."
+    },
+    {
+      "key": "everything-the-hub-does-is-in-a-a-command-the-hub-runs-is-a-span",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 3: git and check commands as child spans.",
+      "statement": "Each git or check command the Hub runs SHALL be an `aw.command` child span of the current trace carrying its redacted arguments, exit code and duration, with error status on a non-zero exit."
+    },
+    {
+      "key": "everything-the-hub-does-is-in-a-hub-warnings-are-on-their-trace",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "APPROVALS 2026-10-19 scope 4.",
+      "statement": "A WARNING-or-higher record the Hub logs while a trace is current SHALL be stored on that trace's current span, redacted as span content is, and the download and the OTLP push SHALL carry it as an OTLP log record with its trace and span ids."
+    },
+    {
+      "key": "everything-the-hub-does-is-in-a-span-write-never-holds-a-request",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Hazard 3: the request path.",
+      "statement": "Recording a request, event, background or command span SHALL NOT delay, fail or change the answer of the request or work it records; a span that cannot be written SHALL be counted as dropped."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Agent run traces"
+}

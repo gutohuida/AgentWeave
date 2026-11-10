@@ -416,6 +416,177 @@
       "requirement": "the-project-view-switcher-is-separated-by-its-plane-alone",
       "then": "the stylesheet's `.project-tabs` rule draws `border-bottom: 1px solid var(--border-region)`, no background and no other border, and ProjectTabs.tsx paints no fill or border of its own; the check fails if the strip gains a background",
       "when": "they are displayed in either mode"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Overview fed, in the order their routes return, one row of each kind it lists: a question with an asker waiting, a question whose wait ended, a blocked task, an approved task with an open integration_skipped stall, a stall nobody is mending, and an open flaky-test list",
+      "how_to_check": "The acceptance drive: cd hub/ui && npx vitest run src/__tests__/overviewNoticesCanBeActedOn.test.tsx, run on master first (fails on the question rows and the merge row) and then on the branch (passes).",
+      "key": "the-apps-other-surfaces-make-se-every-row-has-a-clearing-control",
+      "requirement": "the-apps-other-surfaces-make-sense-every-need-can-be-cleared",
+      "then": "every row has a button whose click calls a mutation that answers, declines, resumes, retries, ends a stall or handles the flaky list; on master the two question rows have no such button and the test fails",
+      "when": "each row is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an unanswered question row on the Overview",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewNoticesCanBeActedOn.test.tsx (the decline mutation is called with the row's id).",
+      "key": "the-apps-other-surfaces-make-sense-decline-one",
+      "requirement": "the-apps-other-surfaces-make-sense-questions-can-be-declined",
+      "then": "POST /questions/{id}/decline is sent for that question and, once the questions query is refetched, the row is gone",
+      "when": "the operator presses Decline"
+    },
+    {
+      "checked_by": "agent",
+      "given": "28 unanswered questions whose asker_waiting is false, the shape GET /questions returned on :8000 on 2026-10-27, and one question an asker waits on",
+      "how_to_check": "Same vitest file; then drive: on a scratch Hub started from the branch over a read-only backup of :8000's database (sqlite3 backup, per .claude/reference/hubs.md), open proj-d85a82bf4216's Overview, decline all, and screenshot 'Needs you' before and after.",
+      "key": "the-apps-other-surfaces-make-sense-decline-all-unwaited",
+      "requirement": "the-apps-other-surfaces-make-sense-questions-can-be-declined",
+      "then": "the confirmation names 28, the decline route is called 28 times and never for the waited-on question, and 'Needs you' then lists one question",
+      "when": "the operator uses the section's decline-all control and confirms"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task whose latest_integration is skipped with reason '09617d3b6920 is already in master; there was nothing to merge' and no open stall, and an approved task whose latest_integration is skipped 'no accepted evidence names a commit' whose integration_skipped stall has ended",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewNoticesCanBeActedOn.test.tsx, red on master, green on the branch.",
+      "key": "the-apps-other-surfaces-make-sense-already-merged-is-not-listed",
+      "requirement": "the-apps-other-surfaces-make-sense-merge-row-follows-its-stall",
+      "then": "neither task is listed under 'Needs you'; on master both are listed as 'approved but not merged'",
+      "when": "the Overview renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task with an open integration_failed stall and a latest_integration whose retryable is true",
+      "how_to_check": "Same vitest file, asserting the two mutations and the row's absence once the stalls query returns the stall ended.",
+      "key": "the-apps-other-surfaces-make-sense-merge-row-retry-and-dismiss",
+      "requirement": "the-apps-other-surfaces-make-sense-merge-row-follows-its-stall",
+      "then": "Try again calls the task's integrations/retry route; Dismiss calls POST /stalls/{id}/end for that stall; after a stall_ended event the row is gone",
+      "when": "the operator presses Try again, and separately Dismiss"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a stall row, a blocked-task row and a flaky row",
+      "how_to_check": "Same vitest file, with each mutation's onError invoked.",
+      "key": "the-apps-other-surfaces-make-sense-refusal-toasts",
+      "requirement": "the-apps-other-surfaces-make-sense-a-failed-action-says-so",
+      "then": "a toast with tone error carries that detail and each row is still listed",
+      "when": "their Dismiss, Resume and Dismiss mutations fail with a 409 carrying a detail"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Overview with the flaky-tests read failed",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewScreen.test.tsx (extend 'names the parts it could not read').",
+      "key": "the-apps-other-surfaces-make-sense-read-failure-retries",
+      "requirement": "the-apps-other-surfaces-make-sense-other-notices-act-or-clear",
+      "then": "the failed query's refetch is called, and the line is gone once it answers",
+      "when": "the operator presses Retry on the 'Couldn't read the flaky tests from the Hub' line, and the read then succeeds"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose queue status waiting_reason is the hop-budget hold",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewNoticesCanBeActedOn.test.tsx (onNavigate called with the General section).",
+      "key": "the-apps-other-surfaces-make-sense-hop-chip-opens-settings",
+      "requirement": "the-apps-other-surfaces-make-sense-other-notices-act-or-clear",
+      "then": "the app navigates to Project settings > General",
+      "when": "the operator clicks its 'held by hop budget' chip"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the app with no project open (the zero destination), and again with a project open on any tab",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/appSettings.test.tsx, red on master, green on the branch.",
+      "key": "the-apps-other-surfaces-make-sense-settings-from-the-rail",
+      "requirement": "the-apps-other-surfaces-make-sense-app-settings-have-a-home",
+      "then": "App settings opens showing Sound and notifications, Appearance and Hub connection; on master there is no such control and the test fails",
+      "when": "the operator activates the rail footer's Settings control, expanded and compact"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the command palette open",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/commandPalette.test.tsx (new cases).",
+      "key": "the-apps-other-surfaces-make-sense-settings-from-the-palette",
+      "requirement": "the-apps-other-surfaces-make-sense-app-settings-have-a-home",
+      "then": "App settings opens at Sound and notifications; 'settings' also lists Project settings and, for each open agent, its settings",
+      "when": "the operator types 'notif', 'sound' or 'settings' and presses Enter on the first match"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator in the refreshed app on :8000, told only 'turn off the sound for finished work'",
+      "how_to_check": "Operator check after the bundle reaches :8000; record how long it took in the task's evidence.",
+      "key": "the-apps-other-surfaces-make-sense-operator-finds-notifications",
+      "requirement": "the-apps-other-surfaces-make-sense-app-settings-have-a-home",
+      "then": "they reach the 'Work finished' switch and turn it off",
+      "when": "they look for it without help"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Project settings > General, and App settings with the project-settings query pending and then failed",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/appSettings.test.tsx src/__tests__/projectSettingsPanel.test.tsx (the group list at projectSettingsPanel.test.tsx:318 drops 'Sound and notifications').",
+      "key": "the-apps-other-surfaces-make-sense-notifications-moved",
+      "requirement": "the-apps-other-surfaces-make-sens-notifications-are-app-settings",
+      "then": "Project settings lists no 'Sound and notifications' group; App settings shows the sound switch, volume and four kinds in both states, and toggling one writes localStorage 'agentweave-notify'",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "App settings, Project settings and an agent's settings",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/appSettings.test.tsx",
+      "key": "the-apps-other-surfaces-make-sense-scopes-named-and-linked",
+      "requirement": "the-apps-other-surfaces-make-each-settings-page-names-its-scope",
+      "then": "each heading names its scope, and Project settings' and agent settings' section lists each end with an 'App settings' link that navigates there",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Add-agent dialog with 'kbtwo' typed and the Provider list open",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/agentCreateDialogFocusRestore.test.tsx (fails today, per F1027); browser drive: py -3.11 scripts/drive/s1023_kb_layers.py popover against a scratch Hub serving the refreshed bundle.",
+      "key": "the-apps-other-surfaces-make-sense-provider-escape",
+      "requirement": "the-apps-other-surfaces-make-sense-escape-closes-one-layer",
+      "then": "ArrowDown moves the active option, Enter picks it, and Escape closes only the list: the dialog is open, the name still reads 'kbtwo', focus is on Provider",
+      "when": "ArrowDown, Enter, then reopen and Escape"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the task drawer with the inline 'Delete this task?' confirm open and focus on its Cancel",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/taskDetailDrawer.test.tsx (fails today, per F1030); browser drive: py -3.11 scripts/drive/s1023_kb_tasks.py.",
+      "key": "the-apps-other-surfaces-make-sense-delete-confirm-escape",
+      "requirement": "the-apps-other-surfaces-make-sense-escape-closes-one-layer",
+      "then": "the first closes the confirm only, drawer mounted and focus on Delete; the second closes the drawer",
+      "when": "Escape is pressed once, then again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a useDialogFocus dialog open and the command palette opened over it with Ctrl+K",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/useDialogFocus.test.tsx src/__tests__/commandPalette.test.tsx (fails today, per F1028); browser drive: py -3.11 scripts/drive/s1023_kb_palette_over.py.",
+      "key": "the-apps-other-surfaces-make-sense-palette-tab-stays",
+      "requirement": "the-apps-other-surfaces-make-s-palette-keeps-focus-over-a-dialog",
+      "then": "focus is inside the palette after the Tab, the palette's input holds 'zz', and the dialog's fields are unchanged",
+      "when": "Tab is pressed and 'zz' typed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Vault with one entry",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/vaultTab.test.tsx (fails today, per F1029); browser drive: py -3.11 scripts/drive/s1023_kb_dialogs.py vault.",
+      "key": "the-apps-other-surfaces-make-sense-vault-dialog-focus-returns",
+      "requirement": "the-apps-other-surfaces-make-sense-focus-returns-to-the-opener",
+      "then": "document.activeElement is the Add button, then the Vault storage button, after every close",
+      "when": "Add is opened with Enter and closed with Escape, then with Cancel; and the same with Vault storage"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open task drawer",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/taskDetailDrawer.test.tsx (fails today, per F1031); browser drive: py -3.11 scripts/drive/s1023_kb_tasks.py.",
+      "key": "the-apps-other-surfaces-make-sense-rename-by-keyboard",
+      "requirement": "the-apps-other-surfaces-make-sense-focus-returns-to-the-opener",
+      "then": "the title is a Tab stop named 'Rename', Enter opens the input, one PATCH is sent on save, and after both save and cancel the active element is the title control",
+      "when": "the operator Tabs to the title, presses Enter, types, presses Enter; then reopens the rename and presses Escape"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the rail's pane resizer",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/PaneResizer.test.tsx (fails today, per F1032); browser drive: py -3.11 scripts/drive/s1023_kb_rings.py, screenshots in both modes.",
+      "key": "the-apps-other-surfaces-make-sense-resizer-ring",
+      "requirement": "the-apps-other-surfaces-make-sense-resizer-focus-is-visible",
+      "then": "its line is drawn in the --ring colour; no inline style pins its background",
+      "when": "it is focused with the keyboard in light and in dark mode"
     }
   ],
   "algorithms": [],
@@ -436,7 +607,7 @@
       "FR-20": "ca8db5518443a69fce39ee86972b0ea4fccde588cba9caa03b1cad6033090309",
       "FR-21": "8174ba3cad603c7a9e1da804e6a052a17f4893ab82dcbb615731fb3ab23a6c58",
       "FR-22": "0032ec1f21bad0fe83c3035217ff5531ce1eeb877e2703300fc1b13eac559017",
-      "FR-23": "47cde3309c2fe7617e6cf387458475bc35152a5f732317b9bb90f0898975b3c7",
+      "FR-23": "486312b224dcd927b4f5077047d8de04a3ff0bfe050aec037a7ec7ac1c399691",
       "FR-24": "4d83ddaecc8bedb5605263103dabfd12fc27b91dbab199e25bd7896e96cd3bee",
       "FR-25": "48a0390556d16f8cdc7dfef562b64a0bada3a281f57ee984a7a9e65b2fbdc4ba",
       "FR-26": "d43821cecaed9d02bdaf18855917787be0efd3cdd22b5e31a4fe7c20b8cef24f",
@@ -445,14 +616,26 @@
       "FR-29": "e3baf96572606d2aa782f9c39d52df9cc6f0ffc3632d8bdd6ad97695ef4418f5",
       "FR-3": "6de0cd4b2eabf8d4c00320e1fd4014ff85b0f34d9ed3db0326bcea9f8411ec5a",
       "FR-30": "baacaf3c6ffca91b8c9ffbd5229ae8d5ea59d4b8a409d1a3d254982c9b2e35fb",
+      "FR-31": "32ac1954cf39757565cecef3b1ade72fd6c7d0b411ca85f5355cf9cc28fc5197",
+      "FR-32": "6d98d3e52b490b19f458fe3ae94229074e2d6ad0bdaa74797796ecffcb76f4cb",
+      "FR-33": "817d2b10e29473e712566e3790643239cb0e4cde8f598f181d484b6786b8a280",
+      "FR-34": "7fb4df20f54fff3173f1c0d5f9be1685a4586958ee82b5da7cb7e226d4e674e7",
+      "FR-35": "7d3e0adb67a0f49096e3d4622c4bb4adb1f5921f4045729a333c2f4b5d4afada",
+      "FR-36": "e7fcf075989e1e3e4da2886d59e8e5f7583a8dfadc85e130bddd261d6dd46fba",
+      "FR-37": "147631372b4b2f260420272e2d09b14bb9d28d8bc3dd1a1b8ec28aca157b6691",
+      "FR-38": "424ef3f830edad5bcfb61c5363893fda41c77ec1c8033a410c82671a6a142d76",
+      "FR-39": "593cc93b97e846d49225f3b4f4be223a70c05d07d9e5eb6d0a865ccc098db114",
       "FR-4": "c20307737b2be63a36d8a6be55c4bf8df041e0d2a068c209107c4469aa4d9b7c",
+      "FR-40": "ba382fa8b1c3e5625697a7b42cb9e091203364e880c2de6a00ef3c27849476e0",
+      "FR-41": "8ca8d43a7c70bcb4c107876109c0d5acb0025c6f5a1d64dd6908ffb7a63b9bef",
+      "FR-42": "c2e9edf17d4d07fb3ac3a76169830b6c94a5e6e64e031ddd65e626ec69e318cb",
       "FR-5": "1bb948151f8ae106e732cd9258426d4f948132b741efac608c594cda44d4d766",
       "FR-6": "7c824bd6168c0ada0e9207b7461fb154ddc2b1d3f888f1a8af3414f2a8a2b09b",
       "FR-7": "bc516b6f71b61028b4e1eb98bd6606059c3860c9e4bb319f0c006c6df353e430",
       "FR-8": "826b87911a01569820cd47246928d2b19509a960b7faffc86cbfb5ecf6afc2bd",
       "FR-9": "a2ef8f77a1b1581d7d9c091ece09a0659a68025ee84e1186e36cfc0d10fcaf4b"
     },
-    "high_water": 30,
+    "high_water": 42,
     "requirements": {
       "a-command-palette-reaches-conversations-agents-documents-and": "FR-19",
       "a-project-s-location-is-displayed-as-structure-not-as-a-sent": "FR-6",
@@ -473,6 +656,18 @@
       "project-views-live-inside-the-selected-project": "FR-23",
       "the-active-navigation-row-is-marked-without-a-resting-fill": "FR-12",
       "the-application-offers-light-and-dark-modes-only": "FR-15",
+      "the-apps-other-surfaces-make-each-settings-page-names-its-scope": "FR-38",
+      "the-apps-other-surfaces-make-s-palette-keeps-focus-over-a-dialog": "FR-40",
+      "the-apps-other-surfaces-make-sens-notifications-are-app-settings": "FR-37",
+      "the-apps-other-surfaces-make-sense-a-failed-action-says-so": "FR-34",
+      "the-apps-other-surfaces-make-sense-app-settings-have-a-home": "FR-36",
+      "the-apps-other-surfaces-make-sense-escape-closes-one-layer": "FR-39",
+      "the-apps-other-surfaces-make-sense-every-need-can-be-cleared": "FR-31",
+      "the-apps-other-surfaces-make-sense-focus-returns-to-the-opener": "FR-41",
+      "the-apps-other-surfaces-make-sense-merge-row-follows-its-stall": "FR-33",
+      "the-apps-other-surfaces-make-sense-other-notices-act-or-clear": "FR-35",
+      "the-apps-other-surfaces-make-sense-questions-can-be-declined": "FR-32",
+      "the-apps-other-surfaces-make-sense-resizer-focus-is-visible": "FR-42",
       "the-chrome-is-neutral-and-hue-is-reserved-for-meaning": "FR-9",
       "the-navigation-region-carries-the-navigation-of-whatever-the": "FR-16",
       "the-overview-names-agents-held-by-the-hop-budget": "FR-27",
@@ -504,7 +699,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -665,7 +859,7 @@
       "modal": "MUST",
       "party": null,
       "rationale": "The rail is for choosing a project or an agent; everything about a project lives inside it.",
-      "statement": "The rail SHALL list registered projects and their open agents; a project SHALL offer Overview, Tasks, Spec, Jobs and Activity tabs and an Environment destination (quality, instructions, runners, charters, worktrees, diagnostics, budgets, settings), and adding a project view MUST NOT add a rail destination."
+      "statement": "The rail SHALL list registered projects and their open agents; a project SHALL offer Overview, Thread, Tasks, Spec, Checkpoints, Vault, Jobs and Activity tabs and a Settings destination for its configuration, and adding a project view MUST NOT add a rail destination."
     },
     {
       "key": "agent-identity-color-remains-project-consistent",
@@ -715,6 +909,90 @@
       "party": null,
       "rationale": "Today only ['projects'] and accounting are invalidated (useSSE.ts:611); a value read from useProjectSettings would stay stale.",
       "statement": "The Overview's Collaboration values MUST follow a settings change made from any surface without a reload: project_settings_updated MUST invalidate the project's settings query as well as the keys it invalidates today."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-every-need-can-be-cleared",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1045: on :8000 on 2026-10-27 the Overview listed 28 questions nobody was waiting on and up to 22 'approved but not merged' rows whose only control was 'Open conversation' or 'Open task'. A row that can only be visited lives forever.",
+      "statement": "Every row under the Overview's 'Needs you' offers, on the row itself, at least one control that ends the condition that raised it or dismisses the row (answer or decline a question, resume a blocked task, try a merge again or dismiss it, dismiss a stall, make a fix task for flaky tests or dismiss them). No row offers only navigation."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-questions-can-be-declined",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The decline route exists (hub/hub/api/v1/questions.py:640) and the Questions page offers it (QuestionsPanel.tsx:92-105); the Overview does not. 27 of the 28 open questions on :8000 are copies of one mender question whose wait ended.",
+      "statement": "Each unanswered question row on the Overview offers Decline, which closes the question through the existing decline route and removes the row. When two or more listed questions have no asker waiting, one control on the section declines all of them after a confirmation that names how many."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-merge-row-follows-its-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub already decides which approved work did not reach the product: it records a stall for every skip or failure except 'already in the target' and ends it when the work merges (task_transition_service.py:1308-1337, stalls.py:325-346). The Overview re-derives the rule from latest_integration (OverviewScreen.tsx:140-154) and gets it wrong for 22 of 33 approved tasks on :8000.",
+      "statement": "An 'approved but not merged' row is listed only while its task has an open integration_skipped or integration_failed stall, and leaves the Overview when that stall ends (the work merged, the mender fixed it, or the operator dismissed it). A task whose skip says its commit is already in the target branch is never listed. The row offers Try again when the task's latest integration is retryable, and Dismiss, which ends the stall."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-a-failed-action-says-so",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Resume, Dismiss (stall) and Dismiss (flaky) mutate with no error handler today (OverviewScreen.tsx:137, :172, :201), so a refusal looks like a button that does nothing.",
+      "statement": "When an Overview row's action or dismiss is refused by the Hub, the app shows a toast carrying the Hub's reason and the row stays listed."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-other-notices-act-or-clear",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Every other notice on the Overview either offers an action or clears itself when its cause ends: the 'Couldn't read ... from the Hub' line offers Retry, which refetches the failed reads, and disappears once they answer; the budget notice keeps its link to Budgets and disappears when the budget is no longer exhausted; the 'held by hop budget' chip on an agent row opens Project settings at the hop budget; 'launch not checked' and 'queue not read' disappear once their reads answer."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-app-settings-have-a-home",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today the only gear is 'Project settings' (TopBar.tsx:145-155), the TopBar is rendered only with a project open (App.tsx:653), Hub connection sits in the project switcher's menu (TopBar.tsx:94-98) and the palette has no settings entry at all (no match for 'settings' in CommandPalette.tsx).",
+      "statement": "An App settings page holds the settings that belong to the operator rather than to a project: Sound and notifications, Appearance (light or dark) and Hub connection. It is reachable from a Settings control in the rail's footer on every screen, including when no project is open, and from the command palette by typing 'settings', 'sound' or 'notifications'."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sens-notifications-are-app-settings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "They are the operator's, kept per window for every project (NotificationSettings.tsx:17-31, prefs.ts:3-19), but live inside Project settings > General (GeneralSettings.tsx:439), which renders nothing of them while that project's settings load or after their read fails (GeneralSection.tsx:58-81).",
+      "statement": "Sound and notifications appear in App settings and nowhere in Project settings, and they render and save whether or not any project's settings have loaded."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-each-settings-page-names-its-scope",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "An operator looking for sound in Project settings or agent settings is pointed to it from the page they are on.",
+      "statement": "App settings, Project settings and an agent's settings each say in their heading whose settings they are (yours on this Hub, this project's, this agent's), and Project settings and agent settings each carry a link to App settings in their section list."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-escape-closes-one-layer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Escape closes only the innermost open layer and returns focus to the control that opened it: with the Add-agent dialog's Provider list open, Escape closes the list and keeps the dialog and its typed name (F1027); with the task drawer's 'Delete this task?' confirm open, Escape cancels the confirm and keeps the drawer, focus on Delete (F1030). In the Provider list, arrow keys move between providers and Enter picks one."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-s-palette-keeps-focus-over-a-dialog",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With the command palette open over a dialog or the task drawer, Tab and typed text stay inside the palette; the dialog beneath does not take focus until the palette closes (F1028)."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-focus-returns-to-the-opener",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Closing any dialog built on the shared DialogContent by Escape, Cancel or its close button returns focus to the element that was focused when it opened (the Vault's Add and Vault storage buttons, the Jobs archive confirm's opener; F1029). The task drawer's title is reachable with Tab and opened for renaming with Enter, and after the rename is saved or cancelled focus is on the title control (F1031). Focus never falls to the page body after a close."
+    },
+    {
+      "key": "the-apps-other-surfaces-make-sense-resizer-focus-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A focused pane resizer (Resize navigation, Resize conversation) shows its line in the --ring colour in light and dark mode, and its hover colour applies too (F1032)."
     }
   ],
   "schema_version": 1,

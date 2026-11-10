@@ -1,0 +1,317 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project opened on an existing folder with no git and no agents",
+      "how_to_check": "py -3.11 scripts/checks/setup_list_check.py (its own Hub on a temporary database, a scratch folder)",
+      "key": "ac-fresh-folder",
+      "requirement": "four-items",
+      "then": "the list shows the repository and agent items and nothing else",
+      "when": "its Overview is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose model's coding agent is not on PATH",
+      "how_to_check": "setup_list_check.py with that CLI removed from the Hub's PATH",
+      "key": "ac-cannot-run",
+      "requirement": "four-items",
+      "then": "the can-run item names that agent and says its coding agent is not installed",
+      "when": "Overview is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each item shown",
+      "how_to_check": "setup_list_check.py clicks each item",
+      "key": "ac-links",
+      "requirement": "item-links",
+      "then": "the screen it names opens with the named field or action in view",
+      "when": "it is clicked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with no git",
+      "how_to_check": "Hub test for the dismissal surviving a restart; setup_list_check.py for the three places",
+      "key": "ac-dismiss",
+      "requirement": "dismiss",
+      "then": "the item is gone from all three places across the restart and returns when shown again; the folder, agent and can-run items offer no dismiss",
+      "when": "Not for this project is chosen on the repository item, the Hub is restarted, then Show it again is chosen in Project settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with two items shown",
+      "how_to_check": "setup_list_check.py, comparing the count's box with the hover actions' boxes",
+      "key": "ac-three-places",
+      "requirement": "three-places",
+      "then": "the list is at the top of the first two and the rail row shows 2 beside the name, naming both on hover, with no hover action overlapping it; after resolving both, none of the three shows anything",
+      "when": "Overview, any Project settings section and the rail are looked at, the rail row hovered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project row created before this change with no agents",
+      "how_to_check": "Hub test on a project row created without any set-up state",
+      "key": "ac-existing",
+      "requirement": "all-projects",
+      "then": "that project carries the agent item",
+      "when": "the Hub with this change lists projects"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Overview showing the agent item",
+      "how_to_check": "setup_list_check.py",
+      "key": "ac-live",
+      "requirement": "stays-current",
+      "then": "the item and the rail count disappear",
+      "when": "an agent is added without reloading"
+    },
+    {
+      "checked_by": "operator",
+      "given": "this repository registered in a Hub with its agents able to run",
+      "how_to_check": "operator opens this project after the build",
+      "key": "ac-this-repo",
+      "requirement": "this-repo-clean",
+      "then": "no list and no rail count are shown",
+      "when": "its Overview is opened"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "b0a80880f80e22a16376c63db4fbff14cd227eff75b1925564a5f2a0a82d7b2e",
+      "FR-2": "b7363025dbea1b3e544c1ffe0163e1979b91e2a45645e96e3031cc83813a91f3",
+      "FR-3": "8ea853503871e1986f2b3e6bdb745cfae2153c13993824253d9eb5bae30d8d5c",
+      "FR-4": "5516522796894452fe3744ea2183a4951de0f1dbee8f3c2ea3a5ec1143c7105e",
+      "FR-5": "dea4b16c5db5b8e5266f2b5a24d8dfc85c130c8a05e41f9541e696d2cb7e1588",
+      "FR-6": "886bba05b05ce7255a6d3b53c45e9fbb05730a4cf49e53f2fc9d296a88b65b31",
+      "FR-7": "752747cc58c113afbd13efb9fa147e88749efbf32c9eb2ded748d8ef3012b3a3"
+    },
+    "high_water": 7,
+    "requirements": {
+      "all-projects": "FR-5",
+      "dismiss": "FR-3",
+      "four-items": "FR-1",
+      "item-links": "FR-2",
+      "stays-current": "FR-6",
+      "this-repo-clean": "FR-7",
+      "three-places": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperSonnet2",
+    "builder": "DeveloperSonnet2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperSonnet2 is not on slice 2's chain, so this does not queue behind it.",
+      "builder": "Sonnet by default; the Hub task names DeveloperOpus for its migration.",
+      "checker": "QA2 by default; the Hub task names QA for its migration.",
+      "cron": "Every five minutes.",
+      "mode": "Three chained tasks; a flow carries them in order.",
+      "stop": "Stops when the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Mock approved by the operator (2026-11-10), built from real components fed mock state: `cd hub/ui && npx vite --config vite.mock.config.ts`, then http://localhost:5199/mock.html#tab/overview. Screenshots: testbed/ui-judge/setup-list/ (dark and light, 1440 and 960; dismissing on Overview and in settings; the rail hovered). Components on master (f9f10ee): hub/ui/src/components/overview/SetupList.tsx (SetupList, SetupCount), hub/ui/src/styles/setup.css, OverviewView's `setup` slot, Sidebar's `setupFor`. Mock state lives in hub/ui/mock/setupMock.ts.\n\nWhere it shows: Overview (one card above everything else), every Project settings section (above its heading; dismissed items listed only on Project with 'Show it again'), and the rail (a count beside the project's name, inside the row, naming the items on hover; on the compact rail a small count on the project's icon). The count is not a control of its own: the row opens Overview. It first sat at the row's end, where the hover actions cover it (operator, 2026-11-10).\n\nWhat each item reads, all state the Hub already has:\n- Folder found: the project's working directory exists.\n- Git repository: is_repository. A missing main branch is not its own item: the Hub adopts one whenever it opens a repository.\n- At least one agent: the roster, archived agents excluded.\n- Every agent can run: launchability per provider (present = installed, authorized = logged in) for each agent's bound model.\n\nOnly dismissals are new state.\n\nBuild order against slice 2: setup-drive and setup-state share no file with slice 2 and use other agents, so they may run beside it. setup-ui must not start until slice 2's last task is done: it edits ProjectSettingsScreen.tsx and the committed bundle slice 2 rewrites (two branches rebuilding the bundle at once is F1140) and links to slice 2's Running page. The Hub cannot hold it for a task in another document (F1156), so if slice 2 is still running when setup-state is approved, the slice 5 build is stopped and pressed again once slice 2 finishes.\n\nHazard (Tier 2): the dismissal adds a migration; the operator's :8000 applies it on its next restart. The column defaults to nothing dismissed, so existing projects read as today.",
+  "evidence": {
+    "checked": [
+      "MakeRepositoryOffer.tsx (anchor make-repository)",
+      "hub/hub/api/v1/projects.py:588 _adopt_detected_main_branch",
+      "hub/ui/src/api/runners.ts: RunnerLaunchability present/authorized/runnable, /runners/launchability-by-provider",
+      "hub/hub/api/v1/worktrees.py:340 a non-repository folder runs every agent in the shared folder",
+      "Sidebar.tsx: the rail already marks a missing folder ('Directory unavailable')",
+      "Mock rendered on Overview, Project settings and the rail at 1440 and 960, dark and light, with dismissal shared across them; no console errors",
+      "Rail hovered: the count's box does not overlap the add-agent or settings buttons (dark and light)",
+      "tsc and eslint clean on the touched files; vitest rail/sidebar/overview tests: 251 passed",
+      "Naming slice 2's task id in depends_on is refused (depends_on_unresolved): F1156"
+    ],
+    "limits": [
+      "A freshly added project has not been driven since slice 4 shipped",
+      "Whether 'authorized' is reliable for every provider (Codex, Copilot) was not checked",
+      "The file names hub/hub/project_setup.py and the migration are the builder's to settle"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "The rail mark: a number or a dot? Resolved: a number naming the items on hover, inside the row beside the name (operator, 2026-11-10).",
+      "resolved": true
+    },
+    {
+      "question": "Which items count? Resolved: folder found, git repository, at least one agent, every agent can run. Checks out (operator, 2026-11-10); instructions out (the Hub cannot see the files coding agents read on their own).",
+      "resolved": true
+    },
+    {
+      "question": "Can the operator dismiss an item? Resolved: yes (operator, 2026-11-10); the git item can be dismissed, the folder, agent and can-run items cannot.",
+      "resolved": true
+    },
+    {
+      "question": "Existing projects too? Resolved: all projects (operator, 2026-11-10).",
+      "resolved": true
+    }
+  ],
+  "problem": "Operator, 2026-11-10: a new project gives no sign that it needs setting up, and no easy way to reach what does. Today the only hint is \"No agents yet.\" on Overview (OverviewView.tsx:352). Slice 4 shipped what a list can link to: 'Make this a git repository' (MakeRepositoryOffer.tsx exports a `make-repository` anchor for this list). Opening a repository already adopts its main branch on its own (projects.py `_adopt_detected_main_branch`), so a missing main branch only happens without git. The Hub already knows, per provider, whether its coding agent is installed and logged in (`/runners/launchability-by-provider`: present, authorized, runnable), and whether the project's folder is still where it was bound (General → Folder: Available / Missing; the rail's 'Directory unavailable' mark).",
+  "requirements": [
+    {
+      "key": "four-items",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each is something without which work does not happen or is not isolated, and each is something the Hub can tell for itself. Checks and instructions were left out: a starting project may have no checks (operator, 2026-11-10), and the Hub cannot see the instruction files coding agents read on their own.",
+      "statement": "A project's set-up list holds exactly these items, each shown only while it is not met: its folder is found where it was bound; its folder is a git repository; it has at least one agent that is not archived; every agent that is not archived can run, meaning its model's coding agent is installed and logged in on this machine (one item per agent that cannot)."
+    },
+    {
+      "key": "item-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each item opens what resolves it: a missing folder opens Project settings → Project at its 'Locate project' field; no repository opens the 'Make this a git repository' action; no agent opens adding an agent; an agent that cannot run names that agent and why (not installed, or not logged in), and opens its Running → Model."
+    },
+    {
+      "key": "dismiss",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A scratch folder may deliberately have no git, and an item that can never clear teaches the operator to ignore the mark. Without a folder, an agent, or an agent that runs, nothing works at all, so those cannot be waved away.",
+      "statement": "The operator can dismiss the git repository item for a project with 'Not for this project', after which it is not shown in any of the three places and the dismissal survives a Hub restart; a dismissed item is listed in Project settings → Project with a way to show it again. The folder, agent and can-run items cannot be dismissed."
+    },
+    {
+      "key": "three-places",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-10: the count first sat where the row's hover actions appear and was covered by them.",
+      "statement": "While any item is shown, the list appears at the top of the project's Overview and at the top of every Project settings section, and the project's row in the rail carries a count of the items left beside its name, naming them on hover, never covered by the row's hover actions; the row opens the project's Overview. When none is shown, none of the three appears."
+    },
+    {
+      "key": "all-projects",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The list is worked out for every project, including those created before this change, from the project's current state and nothing recorded at its creation."
+    },
+    {
+      "key": "stays-current",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An item disappears without a reload once what it names is resolved, in the same session it was resolved in: making the repository, adding an agent, choosing a model that can run, or locating the folder."
+    },
+    {
+      "key": "this-repo-clean",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A project with a found folder, a git repository, and only agents that can run shows no list and no count; this repository on the operator's Hub is such a project."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/settings-that-are-easy-to-find-and-match-the-app/spec.json",
+    "slice": "a-project-says-what-it-needs"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The four conditions that make a project not ready: folder found, a git repository, at least one agent, every agent able to run",
+      "The list on Overview, a count on the project in the rail, and the list in project settings",
+      "Each item linking to the setting or action that resolves it",
+      "Dismissing the repository item, and undoing that",
+      "Every project, including those already in use"
+    ],
+    "non_goals": [
+      "Checks: a project just starting may have none (operator, 2026-11-10)",
+      "Instructions: the Hub cannot tell whether an agent has them, since each coding agent reads its own file (CLAUDE.md, AGENTS.md) without the Hub",
+      "Charters, permissions, budgets, landing and anything else that has a working default",
+      "Doing the set-up for the operator: each item links to it",
+      "A wizard or forced flow on project creation",
+      "New Hub settings beyond remembering what was dismissed"
+    ]
+  },
+  "summary": "A project that cannot yet do its work says so on Overview, in the rail and in settings. It lists what it still needs, and each item opens the setting or action that resolves it. The list goes away once every item is done or dismissed.",
+  "tasks": [
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "A browser drive on an existing harness is Sonnet work, and DeveloperSonnet2 is free of slice 2's chain.",
+      "checker": "QA2",
+      "checker_reason": "QA2 has run the long-values harness this reuses, so it can tell a real failure from a harness one.",
+      "depends_on": [],
+      "description": "Write scripts/checks/setup_list_check.py on the harness scripts/checks/long_values_check.py uses (its own Hub on a temporary database, Playwright, never :8000 or :8010). It opens a scratch folder with no git as a project, reads Overview, the rail and a Project settings section (ac-fresh-folder, ac-three-places), adds an agent whose CLI is missing from the Hub's PATH (ac-cannot-run), clicks each item (ac-links), dismisses and restores the repository item (ac-dismiss's screen half), and adds an agent without reloading (ac-live). It fails on master today; record that failing output. It is not added to the project's checks.",
+      "files": [
+        "scripts/checks/setup_list_check.py"
+      ],
+      "from": null,
+      "key": "setup-drive",
+      "requirements": [
+        "four-items",
+        "item-links",
+        "three-places",
+        "stays-current"
+      ],
+      "reviewer": null,
+      "title": "Set-up list check"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Tier 2: a migration the operator's :8000 applies on its next restart, so Opus builds it (same reasoning as slice 4).",
+      "checker": "QA",
+      "checker_reason": "QA checked slice 4's migration and Hub routes; the same review applies here.",
+      "depends_on": [
+        "setup-drive"
+      ],
+      "description": "Each project the Hub lists carries its set-up items: folder found (the check behind the rail's 'Directory unavailable'), git repository, a non-archived agent, and each non-archived agent's launchability (installed and logged in) for its bound provider. Store the repository dismissal per project (a migration; a project with no row stays undismissed), with routes to dismiss and show again; only the repository item accepts a dismissal. Publish a project update on the events that change an item (agent created or archived, model bound, repository made, project relocated) so the app re-reads. Tests: ac-existing, the dismissal surviving a restart, a refused dismissal of the agent item.",
+      "files": [
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/project_setup.py",
+        "hub/hub/db/models.py",
+        "hub/alembic/versions",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "setup-state",
+      "requirements": [
+        "four-items",
+        "dismiss",
+        "all-projects",
+        "stays-current"
+      ],
+      "reviewer": null,
+      "title": "The Hub works out what each project needs"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Wiring components the mock already holds; Sonnet per the quota rule.",
+      "checker": "QA2",
+      "checker_reason": "Checked by running setup_list_check.py and comparing with the mock.",
+      "depends_on": [
+        "setup-state"
+      ],
+      "description": "Needs slice 2 (`settings-in-the-app-s-style-where-you-expect-them`) finished first: it edits ProjectSettingsScreen.tsx and the committed UI bundle, which slice 2 rewrites, and links to slice 2's Running page (a document cannot yet name another document's task as a prerequisite: F1156). Wire the mock's components to the Hub: SetupList (components/overview/SetupList.tsx) at the top of OverviewScreen (OverviewView's `setup` slot) and above every Project settings section (dismissed items listed only on Project), SetupCount in the rail through Sidebar's `setupFor` (inside the project's row beside its name; the row opens Overview). Item actions: folder → Project settings → Project's Locate field; repository → the make-repository anchor; agent → the add-agent dialog; can-run → that agent's Running → Model. Re-read on the project update events. Run setup_list_check.py to PASS. Rebuild and commit the UI bundle.",
+      "files": [
+        "hub/ui/src/components/overview",
+        "hub/ui/src/components/layout/Sidebar.tsx",
+        "hub/ui/src/components/settings/ProjectSettingsScreen.tsx",
+        "hub/ui/src/api/projects.ts",
+        "hub/ui/src/styles/setup.css",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "setup-ui",
+      "requirements": [
+        "item-links",
+        "three-places",
+        "stays-current",
+        "dismiss",
+        "this-repo-clean"
+      ],
+      "reviewer": null,
+      "title": "The list on Overview, settings and the rail"
+    }
+  ],
+  "title": "A project says what it still needs"
+}

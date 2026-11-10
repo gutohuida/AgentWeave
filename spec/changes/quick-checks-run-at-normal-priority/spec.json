@@ -1,0 +1,177 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with 'checks give way' on and two checks, one marked fast and one not, each a command that reports its own process priority",
+      "how_to_check": "hub test that starts the real processes through the check runner (Windows: priority class; POSIX: niceness) and fails on master",
+      "key": "fast-not-lowered",
+      "requirement": "fast-checks-normal-priority",
+      "then": "the fast check reports normal priority and the other reports below normal. Before the build both report below normal",
+      "when": "a task's check run executes both"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same project with 'checks give way' off",
+      "how_to_check": "same hub test, setting off",
+      "key": "off-unchanged",
+      "requirement": "fast-checks-normal-priority",
+      "then": "both report normal priority",
+      "when": "both checks run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "project settings open",
+      "how_to_check": "projectSettingsPanel vitest asserting the description text",
+      "key": "text-says-fast",
+      "requirement": "setting-says-which",
+      "then": "its description names fast checks as keeping normal priority",
+      "when": "the operator reads 'Checks give way to me'"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "2cd586db5d024ba1f13271a9f04ef31a2b0bd769272756857c84cfeef5f5c933",
+      "FR-2": "09071619fac8ba45399c102ad67f1e3b2a1e08692347a92bce5fdba1abeecfa0"
+    },
+    "high_water": 2,
+    "requirements": {
+      "fast-checks-normal-priority": "FR-1",
+      "setting-says-which": "FR-2"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "builder": "Sonnet for quota. It is a one-line change plus text, small enough to finish before slice 1's tasks reach project_checks.py.",
+      "checker": "QA is slice 1's checker; QA2 keeps the two builds from queuing on one reviewer.",
+      "mode": "One task; a flow ties its evidence to the requirements so approval can land it.",
+      "stop": "Stops when its one task is done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decision 1: the line is the existing 'fast' flag, not a new setting. The operator already marks which checks a completion waits for, and those are the ones a delay hurts. A per-check priority setting was not added: one more knob for a distinction the project already states.\n\nDecision 2: CPU-time limits were considered in the roadmap and rejected there in favour of this simpler change.\n\nDecision 3: priority stays out of the check's digest, as today, so a pass at either priority is reused.",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_checks.py:142,163: every normalised check carries the project's give_way",
+      "hub/hub/project_checks.py:520-547: give_way applies BELOW_NORMAL_PRIORITY_CLASS on Windows and nice on POSIX",
+      "hub/tests/test_checks_give_way.py: the existing tests for the setting",
+      "hub/ui/src/components/settings/GeneralSettings.tsx:376-390: the setting's description says every check process runs below normal",
+      "Operator's Hub, read-only, 2026-11-05: ruff and black are fast with 120 s limits; sweep is no longer fast"
+    ],
+    "limits": [
+      "The POSIX branch's real-process check runs only in CI on Linux; this machine tests the Windows branch"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-05T19:16:19.208915+00:00",
+        "id": "build-8cdb22af79d2",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-05T18:56:54.013578+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "fast-keeps-priority": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "fix",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Exploring until the operator approves it. It builds in parallel with slice 1: it touches only the priority line and the setting's text. Once built, the requirement below-user-priority in 'checks-know-their-phase-and-give-way-to-the-user' is superseded by this document's narrower one.",
+  "open_questions": [],
+  "problem": "Since 2026-11-04 the setting 'Checks give way to me' starts every check process below normal priority (hub/hub/project_checks.py:163 gives every check the project's flag; :530-547 applies it). On 2026-11-05, with three tasks building in parallel on the operator's machine, quick checks (ruff, black, each with a 120 s limit) were starved: one ruff run printed 'All checks passed!' and then ran past its limit, and that timeout was blamed on a task (fixed separately as AW-39). A fast check is the one an agent's completion waits on, so slowing it holds a running agent and its turn, not just a background job. The full suite is what is heavy, and is what should give way.",
+  "requirements": [
+    {
+      "key": "fast-checks-normal-priority",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Operator, 2026-11-05 (roadmap approval): a fast check is what an agent's completion waits on, so slowing it holds a running turn; on 2026-11-05 a starved ruff run timed out after passing.",
+      "statement": "While the project's 'checks give way to the user' setting is on, every process a check marked fast starts, including the processes those start, runs at the same scheduling priority as it would with the setting off. Every process a check not marked fast starts runs below the priority of a normally started user application, as before."
+    },
+    {
+      "key": "setting-says-which",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "The 'Checks give way to me' setting's description says that checks marked fast keep normal priority and only the other checks give way."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-any-project-can-use-judged-against-a-known-failing-list/spec.json",
+    "slice": "quick-checks-do-not-give-way"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Which checks run below normal priority while a project's checks give way",
+      "The setting's description in project settings"
+    ],
+    "non_goals": [
+      "Changing what 'fast' means, or which checks an agent's completion waits for",
+      "Per-check priority settings",
+      "Time limits based on CPU time",
+      "Changing the setting's default (off) or the opt-out rule priority-opt-out",
+      "Making checks faster or the suite smaller"
+    ]
+  },
+  "summary": "When a project's checks give way to the user, only the longer checks do. Checks marked fast, which an agent's completion waits for, run at normal priority, so a busy machine slows the full suite but not the quick gate every task passes through. This is slice 3 of 'Checks any project can use, judged against a known-failing list'. It narrows the approved requirement below-user-priority of 'checks-know-their-phase-and-give-way-to-the-user', which put every check process below normal priority.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: one condition and a line of help text. It finishes before slice 1's report task, which DeveloperOpus builds, reaches project_checks.py.",
+      "checker": "QA2",
+      "checker_reason": "QA holds slice 1's gate tasks; QA2 keeps the two builds from queuing on one checker, and it must run the real-process priority test, not just read the diff.",
+      "depends_on": [],
+      "description": "In hub/hub/project_checks.py a check gives way only when the project's checks_give_way is on and the check is not fast (today :163 copies the project flag onto every check). Write the failing hub test first, in the existing hub/tests/test_checks_give_way.py: real processes started through the check runner report their own priority. Update the 'Checks give way to me' description in GeneralSettings.tsx and its vitest, rebuild the UI bundle (make ui / scripts/refresh_ui_bundle.py) and commit hub/ui/src with hub/hub/static/ui. One agent builds, tests and fixes; run the touched tests and the sweep set.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/tests/test_checks_give_way.py",
+        "hub/ui/src/components/settings/GeneralSettings.tsx",
+        "hub/ui/src/__tests__/projectSettingsPanel.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "fast-keeps-priority",
+      "requirements": [
+        "fast-checks-normal-priority",
+        "setting-says-which"
+      ],
+      "reviewer": null,
+      "title": "Fast checks keep normal priority when checks give way"
+    }
+  ],
+  "title": "Quick checks run at normal priority"
+}

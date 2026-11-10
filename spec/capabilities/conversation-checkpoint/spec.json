@@ -673,6 +673,195 @@
       "requirement": "the-rest-of-what-the-hub-records-becomes-reach-checkpoints-panel",
       "then": "a conversation's checkpoints panel shows its notes, the story's transitions and runs open their conversation, the checks row lists the earlier runs with exit codes, and the proposals panel lists the resolved ones with reasons",
       "when": "scripts/drive/d1017_hidden_data_screens.py runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A trial Hub (:8010) on this change, with a project whose agent is bound to Haiku, a conversation with at least two finished runs, and a second agent with a conversation of its own",
+      "how_to_check": "Acceptance drive, written and failing before the build: a scripted drive against the trial Hub (port from AW_DRIVE_PORT) with real Haiku turns that makes each assertion through the Hub's routes and the rendered view.",
+      "key": "every-checkpoint-findable-and-readab-drive-checkpoint-end-to-end",
+      "requirement": "every-checkpoint-findable-and-readable-project-checkpoints-view",
+      "then": "The checkpoint is listed in the Checkpoints tab with a title and summary its generation wrote, its agent, 'the operator asked' in place of 'operator', and its conversation; narrowing hides the second agent's checkpoints; opening it shows formatted text and the runs it covers; and the successor conversation shows it as the checkpoint it started from. Before this change the drive fails at the first step: there is no project checkpoints view.",
+      "when": "The operator takes a checkpoint of the first conversation, carries it over to a successor, then opens the project's Checkpoints tab and narrows it to the first agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Checkpoints in three conversations of two agents, one conversation archived and one carried over",
+      "how_to_check": "Hub route test for the project-level list over the three conversations, and a UI test fed the route's response in the order the route returns it; the UI test fails if that order is reversed.",
+      "key": "every-checkpoint-findable-and-readabl-lists-across-conversations",
+      "requirement": "every-checkpoint-findable-and-readable-project-checkpoints-view",
+      "then": "All of them are listed, newest first",
+      "when": "The checkpoints view is opened with no narrowing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint with a title, summary, agent, trigger, time, status and conversation",
+      "how_to_check": "UI test on the list row.",
+      "key": "every-checkpoint-findable-and-readable-row-shows-identity",
+      "requirement": "every-checkpoint-findable-and-readable-row-identifies-checkpoint",
+      "then": "Its row shows each of those seven things",
+      "when": "It is listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Checkpoints with each trigger the Hub records (task_completion, operator, context_pressure) and each status (ready, unwritten, failed)",
+      "how_to_check": "UI test over every trigger and status value.",
+      "key": "every-checkpoint-findable-and-readable-no-internal-words",
+      "requirement": "every-checkpoint-findable-and-readable-trigger-in-operator-words",
+      "then": "No row or opened checkpoint shows 'task_completion', 'context_pressure', 'unwritten' or 'probe' as a label; each shows a plain description of what happened",
+      "when": "They are listed and opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint whose trigger is a value the screen has no wording for",
+      "how_to_check": "UI test with an unrecognised trigger value.",
+      "key": "every-checkpoint-findable-and-readable-unknown-trigger-readable",
+      "requirement": "every-checkpoint-findable-and-readable-trigger-in-operator-words",
+      "then": "The row still shows a readable trigger rather than a blank or an error",
+      "when": "It is listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Checkpoints from agents A and B, each with operator-asked and task-finished checkpoints, in several conversations",
+      "how_to_check": "Hub route test for each filter and their combination, and a UI test of the narrowing controls.",
+      "key": "every-checkpoint-findable-and-readable-filters-combine",
+      "requirement": "every-checkpoint-findable-and-readab-filter-by-agent-and-trigger",
+      "then": "First only A's operator-asked checkpoints are shown, then only those in that conversation",
+      "when": "The view is narrowed to agent A and 'operator asked', then also to one of A's conversations"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A conversation of agent A, and agent A's own screen",
+      "how_to_check": "UI test of both entry points.",
+      "key": "every-checkpoint-findable-and-readable-opens-narrowed",
+      "requirement": "every-checkpoint-findable-and-readable-reach-from-the-work",
+      "then": "The Checkpoints tab opens narrowed to that conversation in the first case and to agent A in the second",
+      "when": "The operator opens checkpoints from the conversation, and separately from the agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Every place in the app that mentions a specific checkpoint, listed by searching the UI for checkpoint references (today at least the carry-over offer in a conversation's banners and the checkpoint status notice)",
+      "how_to_check": "UI test per entry point, plus the recorded search showing no other place mentions a specific checkpoint without opening it.",
+      "key": "every-checkpoint-findable-and-reada-mentions-open-the-checkpoint",
+      "requirement": "every-checkpoint-findable-and-readable-every-mention-opens-it",
+      "then": "Each opens the checkpoint it mentions; the list of places checked is recorded with the evidence",
+      "when": "The operator follows each one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint body containing '## Objective' and a bulleted list",
+      "how_to_check": "UI test on the opened checkpoint.",
+      "key": "every-checkpoint-findable-and-readable-body-formatted",
+      "requirement": "every-checkpoint-findable-and-readable-readable-body",
+      "then": "The heading and list are rendered as a heading and list items, and the text '## ' does not appear",
+      "when": "The checkpoint is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint covering three runs",
+      "how_to_check": "Hub route test that the covered runs are returned, and a UI test that each opens its trace.",
+      "key": "every-checkpoint-findable-and-readable-runs-named-and-traced",
+      "requirement": "every-checkpoint-findable-and-readable-what-it-covers",
+      "then": "All three runs are named, and choosing one opens that run's trace",
+      "when": "It is opened and one named run is chosen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint recording no covered runs (one exists on the operator's Hub)",
+      "how_to_check": "UI test.",
+      "key": "every-checkpoint-findable-and-readable-no-covered-runs",
+      "requirement": "every-checkpoint-findable-and-readable-what-it-covers",
+      "then": "It says it covers no recorded run, instead of an empty list or an error",
+      "when": "It is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "One checkpoint with files changed, open questions, citations and a carried agent note, and one with none of them",
+      "how_to_check": "UI test on both checkpoints.",
+      "key": "every-checkpoint-findable-and-readable-details-when-present",
+      "requirement": "every-checkpoint-findable-and-readable-details-shown",
+      "then": "The first shows all four, and the second shows no empty headings for them",
+      "when": "Each is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A checkpoint whose title was made from its body after both answers lacked a title, one whose title was made from the Hub's facts after neither answer could be read, and one whose probe found files missing",
+      "how_to_check": "UI test; the two failed checkpoints on the operator's Hub serve as a manual check after its restart.",
+      "key": "every-checkpoint-findable-and-readable-failure-reason-shown",
+      "requirement": "every-checkpoint-findable-and-readable-failure-explained",
+      "then": "All three are listed; the first two show their titles marked as made by the Hub and say why the answers were rejected or could not be read, the second offers 'show what the model returned', and the third names what the probe found missing or invented",
+      "when": "Each is listed and opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A conversation carried over from checkpoint C into a successor",
+      "how_to_check": "Hub route test and UI test; also asserted by the acceptance drive.",
+      "key": "every-checkpoint-findable-and-readable-lineage-both-ways",
+      "requirement": "every-checkpoint-findable-and-readable-carried-over-lineage",
+      "then": "The successor shows C as the checkpoint it started from, and the predecessor shows which conversation it was carried into",
+      "when": "The successor's checkpoints are opened, and then the predecessor's"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A conversation with finished runs and checkpoint generation running on this change",
+      "how_to_check": "Hub test with a stubbed worker counting invocations, and the acceptance drive with a real Haiku turn.",
+      "key": "every-checkpoint-findable-and-readable-title-in-same-call",
+      "requirement": "every-checkpoint-findable-an-generation-writes-title-and-summary",
+      "then": "It has a title of at most 8 words and 60 characters and a summary of at most two sentences and 300 characters, and the generation made exactly one model call (one checkpoint worker invocation, plus the probe as before)",
+      "when": "A checkpoint is generated and its first answer is accepted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A stubbed generation whose first answer has no title and whose second answer is valid",
+      "how_to_check": "Hub test with a stubbed worker returning the two answers in order.",
+      "key": "every-checkpoint-findable-and-readab-rejected-answer-asked-again",
+      "requirement": "every-checkpoint-findable-and-readable-title-is-obligatory",
+      "then": "The model was asked twice, the second request said the title was missing, and the checkpoint is recorded with the second answer's body, title and summary",
+      "when": "The checkpoint is generated"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Stubbed generations whose two answers have every section but no title, an empty summary, or a 12-word title",
+      "how_to_check": "Hub test with a stubbed worker returning each pair.",
+      "key": "every-checkpoint-findable-and-readable-rejected-twice-falls-back",
+      "requirement": "every-checkpoint-findable-and-readable-title-is-obligatory",
+      "then": "Each was asked exactly twice; each is saved with its readable body, a title of at most 8 words taken from the first words of that body, a summary from its opening sentences, the mark that both were made by the Hub, and the rejection reason",
+      "when": "Each checkpoint is generated"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Stubbed generations whose two answers are both unreadable (plain prose with no structure), and one where the worker cannot be reached either time",
+      "how_to_check": "Hub test with a stubbed worker returning each pair.",
+      "key": "every-checkpoint-findable-and-reada-unreadable-titled-from-facts",
+      "requirement": "every-checkpoint-findable-and-readable-title-is-obligatory",
+      "then": "Each is saved with a title naming its agent, trigger and date, the files, tasks, questions and citations the Hub recorded, the mark that it was made by the Hub, and the reason; the prose answer's raw text is returned on request and is not the body; the unreachable one has no raw text",
+      "when": "Each checkpoint is generated"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Checkpoints taken before this change, with bodies and no title or summary",
+      "how_to_check": "Hub test with a stubbed worker over several untitled checkpoints, started the way the Hub starts its background work.",
+      "key": "every-checkpoint-findable-and-readable-fill-every-existing",
+      "requirement": "every-checkpoint-findable-and-re-older-checkpoints-without-title",
+      "then": "Without anyone asking, the fill runs in the background, off the request path, and afterwards every one of them has a title and summary within the limits, each written from that checkpoint's body only, or made by the fallback after two rejected answers",
+      "when": "The Hub starts on this change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The fill has completed, one checkpoint's answer was rejected twice and got the fallback, and the Hub could not reach the model at all for another",
+      "how_to_check": "Hub test with a stubbed worker, then a second start.",
+      "key": "every-checkpoint-findable-and-readable-fill-runs-once",
+      "requirement": "every-checkpoint-findable-and-re-older-checkpoints-without-title",
+      "then": "Only the one the model could not be reached for is attempted; checkpoints already filled, by the model or by the fallback, are not sent to a model again, and one failure did not stop the others in the first pass",
+      "when": "The Hub starts again"
+    },
+    {
+      "checked_by": "operator",
+      "given": "The operator's Hub after it is restarted on this change",
+      "how_to_check": "Read-only (mode=ro) SQLite query on the operator's database after their restart, run by an agent; the operator confirms the view shows titles.",
+      "key": "every-checkpoint-findable-and-readable-fill-on-real-hub",
+      "requirement": "every-checkpoint-findable-and-re-older-checkpoints-without-title",
+      "then": "A read-only count of its checkpoints with no title or summary is zero",
+      "when": "The fill has run"
     }
   ],
   "algorithms": [],
@@ -704,9 +893,23 @@
       "FR-36": "d1a07c35c666563a295143673dde06a4a35947607a299fff992a9693102f3223",
       "FR-37": "fe7552644a58e21f5c93cf6af29969d0fa17766bdf2cbdf100e165a832011127",
       "FR-38": "05b7b9a73bbe3ed1ccc123e5170d48cfbd5be5c1b0e71bdaf3c9ea2b6cf41e63",
-      "FR-39": "51806a4bdb651f67e9df377b81c09e82e8b5bfdf3d7be075af44fc9f0bcf4235"
+      "FR-39": "51806a4bdb651f67e9df377b81c09e82e8b5bfdf3d7be075af44fc9f0bcf4235",
+      "FR-40": "4b7dd3e873c5dc0bae862110f05b79a9cdc158711dc430a7d8218f0f5ef7d130",
+      "FR-41": "cd5541cbc4ac101c10bf4a8d7f5a99dadf544ea758a6a90b42f3b79d74d26ccf",
+      "FR-42": "3ae05c01db0a7da3d48c7ab736f4d3425bc362b85d03ba00a9ddf293ef2f3c87",
+      "FR-43": "c3f62f69b56df79b47a59cbbcd0167f383c012dd3eca87f2fd9c72d5fcf6d917",
+      "FR-44": "3a3e0399c0c5dcebc5fb0684bafb6d0ee3816eecf95ce272683e2ea96abdb0bb",
+      "FR-45": "e1eadbe82416effa9fc8a24eb9917ec1198f873284e1bf6f6e87b32f7ae4d10c",
+      "FR-46": "2df7e17689f20266e26f27d9a28393bca35bb25cc412e4975333156be48245ae",
+      "FR-47": "c8936398d05cb467fb03cc789faff6b3b975658c0df81f2124967e494d23d1c0",
+      "FR-48": "a5102456e6d02180c640c94f30d0436816cebcb046bfd578494d5a93e3c82fd7",
+      "FR-49": "90ad487fd40e325a607dae25289563a10a3ade8f5ac94f89d2f591ee59477596",
+      "FR-50": "05ad50d9d916f9c3ccc41ff16d84489c3a92f14e8bf1c783575f254a85085c09",
+      "FR-51": "b86ea589b6a8d95d5d420c71f468b197aa89824b7ee9ed2ecd6bef75183b622a",
+      "FR-52": "ac8563120f49bd135a917c30d058543caa7439106fba1ad010b31dd517d67ea4",
+      "FR-53": "b978c5f7cb6eca9cc08e0bd22ea4fbdcda30f60e384eaf9b3f80481e4ff40e3e"
     },
-    "high_water": 39,
+    "high_water": 53,
     "requirements": {
       "a-checkpoint-cites-observations-that-remain-exactly-recovera": "FR-19",
       "a-checkpoint-is-a-durable-hub-record-not-a-file-an-agent-is-": "FR-13",
@@ -719,6 +922,20 @@
       "automatic-checkpointing-is-configured-as-a-threshold-in-prop": "FR-22",
       "checkpoint-generation-runs-on-a-worker-with-an-operator-chos": "FR-14",
       "crossing-the-threshold-warns-before-it-spends": "FR-24",
+      "every-checkpoint-findable-an-generation-writes-title-and-summary": "FR-51",
+      "every-checkpoint-findable-and-re-older-checkpoints-without-title": "FR-53",
+      "every-checkpoint-findable-and-readab-filter-by-agent-and-trigger": "FR-43",
+      "every-checkpoint-findable-and-readable-carried-over-lineage": "FR-50",
+      "every-checkpoint-findable-and-readable-details-shown": "FR-48",
+      "every-checkpoint-findable-and-readable-every-mention-opens-it": "FR-45",
+      "every-checkpoint-findable-and-readable-failure-explained": "FR-49",
+      "every-checkpoint-findable-and-readable-project-checkpoints-view": "FR-40",
+      "every-checkpoint-findable-and-readable-reach-from-the-work": "FR-44",
+      "every-checkpoint-findable-and-readable-readable-body": "FR-46",
+      "every-checkpoint-findable-and-readable-row-identifies-checkpoint": "FR-41",
+      "every-checkpoint-findable-and-readable-title-is-obligatory": "FR-52",
+      "every-checkpoint-findable-and-readable-trigger-in-operator-words": "FR-42",
+      "every-checkpoint-findable-and-readable-what-it-covers": "FR-47",
       "fields-the-hub-can-determine-are-computed-never-requested-fr": "FR-15",
       "lineage-is-recorded-and-participation-is-derived": "FR-21",
       "n1": "FR-30",
@@ -756,7 +973,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -939,6 +1155,104 @@
       "party": null,
       "rationale": "A checkpoint nobody can read is the defect checkpoints exist to remove.",
       "statement": "A conversation MUST offer its checkpoints and notes, each checkpoint showing its body, files changed, open questions, citations and probe verdict with findings."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-project-checkpoints-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today the only list is scoped to one conversation, and 75 checkpoints sit in 74 conversations, so the list almost never shows more than one.",
+      "statement": "The project has a checkpoints view that lists every checkpoint the project holds, newest first, across all agents and conversations, including checkpoints whose conversation is archived or was carried over."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-row-identifies-checkpoint",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each listed checkpoint shows its title, summary, the agent that produced it, what triggered it, when it was taken, its status, and the conversation it belongs to."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-trigger-in-operator-words",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator defined a checkpoint's type as what triggered it (2026-11-02); the type only helps if it can be read.",
+      "statement": "A checkpoint's trigger and status are shown in words that describe what happened (for example that a task finished, that the operator asked, that the conversation grew long), not the Hub's internal identifiers such as 'task_completion' or 'probe passed'."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readab-filter-by-agent-and-trigger",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The checkpoints view can be narrowed to one agent, to one trigger, and to one conversation, and the narrowing can be combined."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-reach-from-the-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "From a conversation, and from an agent, the operator reaches the checkpoints view already narrowed to that conversation or that agent."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-every-mention-opens-it",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: every screen a checkpoint can be reached from is to be checked, and each should open the right one.",
+      "statement": "Every screen that mentions a specific checkpoint (including the offer to carry a conversation over, and the notice that a checkpoint is being written or is ready) opens that checkpoint, not a list it has to be found in."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-readable-body",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An opened checkpoint renders its body as formatted text (headings, lists, emphasis), not as markdown source."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-what-it-covers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An opened checkpoint names the runs it covers, and each named run opens that run's trace."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-details-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An opened checkpoint shows the files changed, the open questions, the citations, and the agent notes it carried, each only when present."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-failure-explained",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A checkpoint that failed, or whose title was made by the Hub, is listed like any other and, when opened, says why: the reason its answers were rejected or could not be read, or what its probe found missing or invented."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-carried-over-lineage",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today the successor shows 'No checkpoint has been taken in this conversation' (18 such conversations on 2026-11-02), which is the likeliest reason the screen reads as broken.",
+      "statement": "A conversation started by carrying over a checkpoint shows that checkpoint as the one it started from, and the conversation it was carried from shows which conversation it was carried into."
+    },
+    {
+      "key": "every-checkpoint-findable-an-generation-writes-title-and-summary",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: the checkpoint generation is already a manager-like run, so it is asked for this data rather than a separate distillation pass being added. Length agreed the same day.",
+      "statement": "Every checkpoint generated after this change carries a title of at most 8 words and 60 characters and a summary of at most two sentences and 300 characters, written by the same model call that writes the rest of its body; no separate model call is made to write them."
+    },
+    {
+      "key": "every-checkpoint-findable-and-readable-title-is-obligatory",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: the title is obligatory, an over-long one is rejected rather than shortened, a rejected answer is asked for once more, and a checkpoint must never end with no information. Operator, 2026-11-04: an answer that cannot be read at all is titled from the Hub's facts, and its raw text is kept behind a link rather than shown as the body, so junk never reads as a summary. Today any rejected answer loses the whole written body with no retry (hub/hub/worker.py:579-589).",
+      "statement": "The Hub accepts a checkpoint generation's answer only when it includes a title and a summary within those limits. When an answer is rejected, the Hub asks the model once more, saying what was wrong. When the second answer is rejected too, the checkpoint is still saved with every part of the answer that could be read, a title made from the first words of its body, a summary made from its opening sentences, a mark that they were made by the Hub rather than written by the model, and the reason the answers were rejected. When neither answer can be read at all, the title is made from the agent, the trigger and the date, the checkpoint keeps the files, tasks, questions and citations the Hub recorded, it is marked as made by the Hub with the reason, and any raw text the model returned is available on request but is not shown as the body."
+    },
+    {
+      "key": "every-checkpoint-findable-and-re-older-checkpoints-without-title",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: fill the existing checkpoints in one go rather than show a fallback, have the Hub do it rather than an agent, and run it on its own at the first start. All 75 existing checkpoints have a body (387,653 characters in total, about 100k tokens on a cheap model).",
+      "statement": "Every checkpoint that existed before this change is given a title and summary within the same limits once, by a pass the Hub runs on its own in the background after its first start on this change, reading only that checkpoint's existing body, so that no checkpoint in the view is left without them; the same ask-once-more and first-words fallback applies."
     }
   ],
   "schema_version": 1,

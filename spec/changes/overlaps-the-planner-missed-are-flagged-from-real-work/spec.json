@@ -1,0 +1,362 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "two unordered tasks of one spec, neither declaring files, whose branches both change lib.py and one other file each",
+      "how_to_check": "Hub test over a temp git repository with two task branches; the drive repeats it on a trial Hub",
+      "key": "ac-real",
+      "requirement": "overlap-from-real-changes",
+      "then": "the preview reports the second task and the shared file lib.py",
+      "when": "the first task is completed and its integration preview is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two unordered tasks whose declared files overlap but whose branches change different files",
+      "how_to_check": "Hub test; fails if the report reads declared files",
+      "key": "ac-declared",
+      "requirement": "real-not-declared",
+      "then": "nothing is reported",
+      "when": "the preview is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A, B and C where B depends on A, C on B, all changing lib.py; and a task of another document changing lib.py; and a sibling already merged into main",
+      "how_to_check": "Hub test with a transitive dependency chain, a landed sibling and a foreign-document task",
+      "key": "ac-ordered",
+      "requirement": "only-unordered",
+      "then": "nothing is reported for A or C",
+      "when": "the preview is read for A and for C"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the overlapping pair from ac-real",
+      "how_to_check": "Hub test of review_turn's prompt text; the drive reads the delivered prompt",
+      "key": "ac-reviewer",
+      "requirement": "reaches-the-reviewer",
+      "then": "the prompt contains a sentence naming the second task and lib.py, and the prompt for a task with no overlap contains no such sentence",
+      "when": "the review turn for the first task is prepared"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose preview reports a sibling",
+      "how_to_check": "UI test over the drawer fed the route's payload; screenshot in the drive",
+      "key": "ac-drawer",
+      "requirement": "reaches-the-operator",
+      "then": "the sibling's id, title and shared files are shown beside Approve, and nothing is shown for a task with no report",
+      "when": "its drawer is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the pair from ac-real, the first approved",
+      "how_to_check": "Hub test comparing the approval result with and without the overlap; the drive approves the first task",
+      "key": "ac-warns",
+      "requirement": "warns-only",
+      "then": "approval succeeds and lands as it does for a pair with no report, and the second task's status is unchanged by the first's report",
+      "when": "approval and landing run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a sibling whose branch cannot be resolved",
+      "how_to_check": "Hub test with a deleted branch",
+      "key": "ac-unknown",
+      "requirement": "unknown-is-said",
+      "then": "it says the overlap with that sibling could not be determined, and the answer is not an empty list",
+      "when": "the preview is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a sibling sharing 25 files with the task",
+      "how_to_check": "Hub test counting diff calls",
+      "key": "ac-bounded",
+      "requirement": "bounded",
+      "then": "ten files are named with a total of 25, and the git diff is run once for that sibling",
+      "when": "the preview is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "093869b606c294174936630f59db1931fb68304137120d128917b86e04925a97",
+      "FR-2": "b1fa99630737bc63b1bff63b0ac016c15e8cc7f32380627e9e25c8193b944449",
+      "FR-3": "e154ae15c465fbb50a9eadde511e9ffe9a69da9626bdbebb0501ec2d1453e2e8",
+      "FR-4": "fdb500bbef56147febb62ac3c24f525c6639fb72c130b032a14664d4ad3291a9",
+      "FR-5": "ea48951c4a479aa804cc16d9443e75543adce5b49d19e259e56a421854d7dcbe",
+      "FR-6": "f25e86d3fe25eb19026867f4fb24e5e0199cd576c858bd275b34f93562a9fb4b",
+      "FR-7": "8388957e8035ece02b63ee4ceca618f6c814d88e92b8b0a5d3762e99f6622dac",
+      "FR-8": "9bacc2c4c4cdff6763dc75bf1eaca8128ce25101a174b25d0bec7ac6b6c54acb"
+    },
+    "high_water": 8,
+    "requirements": {
+      "bounded": "FR-8",
+      "only-unordered": "FR-3",
+      "overlap-from-real-changes": "FR-1",
+      "reaches-the-operator": "FR-5",
+      "reaches-the-reviewer": "FR-4",
+      "real-not-declared": "FR-2",
+      "unknown-is-said": "FR-7",
+      "warns-only": "FR-6"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Read-only git and wiring work, no migration: Sonnet, and Developer is not named busy.",
+      "builder": "Same as the agent; two tasks name DeveloperSonnet2 and fall back to Developer if it is busy.",
+      "checker": "QA is a different agent from the builder and is not named busy; the wiring task names QA2.",
+      "cron": "Every five minutes picks up the next task soon after the previous one is approved without firing idle turns often.",
+      "mode": "Five tasks; the finder, route and drawer chain on what each builds, the drive runs first and last.",
+      "stop": "Nothing to do once its tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 1: computed on read from git and existing rows; no migration, no stored flag, no change to any gate. A warning only.\n\nDecisions:\n- A task's real changes are the files changed between the merge base of its work and the main branch tip, and the work's commit: the task's check targets where it has them, else its branch tip (the same answer the checks give, project_checks.check_targets). Computed per read, never stored, so it cannot go stale after a rebase.\n- A sibling is another task of the same spec document. Unordered means no path of task dependencies joins them in either direction (the same test as spec_completeness.overlap_warnings, but on live task edges, TaskDependency, models.py:2927). A sibling already landed on main is not flagged: its overlap is a conflict the checks find, not a missed ordering.\n- The result names each sibling (readable id, title, status) and the shared files, capped at ten files per sibling with a count.\n- Not knowing is not 'none': if git cannot be read, the result says the overlap could not be determined.\n- Where it shows: the integration-preview route the drawer already reads beside Approve, and the reviewer's turn prompt. The build card is left alone (author's choice: a per-task fact belongs where the task is).\n- Warn only. Holding the later task or ordering the pair is the open question below; the requirements here do not depend on it.\n\nCURRENT   declared files overlap -> warning at submission; real overlap -> nothing until a gate refuses or a landing conflicts\nPROPOSED  real overlap with an unordered, unlanded sibling -> named in the drawer and in the reviewer's prompt while the task is completed or under review, before approval\n\nThe contract (names a drive and the tests assert):\n- Route: the existing `GET /api/v1/projects/{project_id}/tasks/{task_id}/integration-preview` (hub/hub/api/v1/tasks.py:1342, `task_integration_preview`; UI type `TaskIntegrationPreview` and hook `useTaskIntegrationPreview` in hub/ui/src/api/tasks.ts) gains one field, `overlaps`: a list, `[]` when there is none, of `{\"task_id\": str, \"readable_id\": str|null, \"title\": str, \"status\": str, \"files\": [str], \"total\": int, \"undetermined\": bool}`. `files` holds at most ten shared paths and `total` the full count; an entry with `undetermined: true` has `files: []`, `total: 0` and means the overlap with that sibling could not be read (never silently dropped). The field is absent from a Hub older than it, which the UI reads as `[]`. Like the existing `conflicts`, it is additive and the route still refuses nothing. It is computed only for a task whose status the drawer previews (completed or under_review; the drawer enables the hook with `canApprove`, TaskDetailDrawer.tsx:56).\n- New module hub/hub/sibling_overlap.py, one public coroutine `sibling_overlaps(session, task) -> list[dict]` returning exactly that list, built on `project_checks.changed_paths`, `project_checks.check_targets`, `project_checks.main_tip` and `task_integration.task_branch_tip`; dependency edges from `TaskDependency` (models.py:2927), walked transitively in both directions.\n- Reviewer's prompt: a new `_overlaps_sentence(session, task)` in hub/hub/review_turn.py, joined into the same sentence tuple as `_dependencies_sentence` and `_checks_sentence` in `verdict_evidence_sentence` (review_turn.py:345-355). The builder must check that tuple's early returns and placement so the sentence reaches the reviewer's prompt for an overlap whether or not evidence is awaiting; the test asserts the prompt text itself, not the helper. No sentence when `overlaps` is empty; an `undetermined` entry produces the 'could not be determined' sentence for that sibling.\n- No event name, setting or migration is added. Task statuses the drive walks: in_progress -> completed (first task, preview read) -> under_review (review prompt read) -> approved -> landed; the second task stays in_progress or completed throughout and its status must be unchanged (FR-6).\n- Guards to relax: none. Existing tests that assert the exact key set of the preview response (grep hub/tests for `integration-preview`) must accept `overlaps`. The PR slices' `GH_ALLOWED` list (hub/hub/pull_requests.py on master) is not touched: this change makes no `gh` call, and the drive makes none.",
+  "evidence": {
+    "checked": [
+      "hub/hub/spec_completeness.py:433-475 slice 1's overlap warning compares declared files only.",
+      "hub/hub/project_checks.py:217 changed_paths(root, base, merged); :1353 check_targets; :2669-2677 the checks gate sends conflicting work back as merge-needed.",
+      "hub/hub/landing_queue.py:927-975 build_chain uses changed_paths to learn what earlier tasks touched; :1126-1137 conflicts are sent back from approved.",
+      "hub/hub/task_integration.py:454 task_branch_tip gives a task's branch tip.",
+      "hub/hub/api/v1/tasks.py:1342 the integration-preview route the drawer reads beside Approve.",
+      "hub/hub/review_turn.py:345-355 sentences already assembled for the reviewer's prompt.",
+      "hub/hub/db/models.py:2927 TaskDependency edges."
+    ],
+    "limits": [
+      "No measurement of how often real overlaps occur among unordered siblings: only the F504/F506 drives are cited by the roadmap.",
+      "No requirement is demonstrated yet: the acceptance drive is proposed coverage, to be written and recorded failing before the build.",
+      "Whether tasks that are in_progress (not yet completed) should also be flagged on their sibling is not specified; the report is read for completed and under-review tasks, and a sibling in progress is compared by its branch tip, which may be incomplete."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Should a flag only warn, or also hold the second task until the first lands? Options: (a) warn only; (b) warn and hold the later task automatically; (c) warn and offer the operator a one-click 'make this task wait for that one' that adds the ordinary depends_on edge. Holding automatically (b) stops work on the Hub's guess of overlap, which is computed from a branch that may still change. Recommendation: (c), as its own later slice; this document builds (a), which (c) needs anyway.",
+      "resolved": false
+    },
+    {
+      "question": "Should a flag also appear when the sibling is still in progress, before either task completes? Recommendation: no for now, since an in-progress branch changes between reads; revisit after (a) has been used.",
+      "resolved": false
+    }
+  ],
+  "problem": "Slice 1 warns about overlaps only among the files a planner declared (hub/hub/spec_completeness.py:433-475). A planner that declares nothing, or declares the wrong files, gets no warning, and a builder routinely edits files nobody listed (F504/F506 measured this: the extra review rounds were merge conflicts). The Hub learns of the overlap only when it fails: the checks gate finds that completed work does not merge onto main and sends it back (hub/hub/project_checks.py:2669-2677), the landing batch finds that approved work conflicts with work ahead of it (hub/hub/landing_queue.py:1126-1137), and the approval-time preview and gate report a conflict (hub/hub/api/v1/tasks.py:1342+, requirement_gate.merge_situation). Each is after the conflicting sibling has already landed; before that, nothing says 'this task and its unordered sibling both changed lib.py'. The Hub already knows what is needed: every task has a branch (task_integration.task_branch_tip, hub/hub/task_integration.py:454), the checks name the commits a task would merge (project_checks.check_targets, project_checks.py:1353), and changed_paths lists the files between two commits (project_checks.py:217; landing_queue.build_chain uses it to learn what earlier batch tasks touched, landing_queue.py:971). Nothing compares one task's changed files with a sibling's. The reviewer's turn prompt already carries sentences about what a task builds on and what its checks said (hub/hub/review_turn.py:345-355) but none about siblings that touch the same files.",
+  "requirements": [
+    {
+      "key": "overlap-from-real-changes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Declared files are the planner's guess; changed files are what happened.",
+      "statement": "For a task in a spec document that has work to merge, the Hub reports each other task of that document that has no dependency path to or from it, whose work has not landed on the main branch, and whose changed files share at least one file or directory with this task's changed files, with the shared files."
+    },
+    {
+      "key": "real-not-declared",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The report is built from changed files only: a pair whose tasks declare no files, or declare disjoint ones, is reported when their changes overlap, and a pair whose declared files overlap is not reported when their changes do not."
+    },
+    {
+      "key": "only-unordered",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A sibling that depends on this task or that this task depends on, directly or through other tasks, a sibling whose work is already on the main branch, and a task of another document are never reported."
+    },
+    {
+      "key": "reaches-the-reviewer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The turn prompt given to a task's reviewer contains a sentence naming each reported sibling and the shared files when there is a report, and contains none when there is not."
+    },
+    {
+      "key": "reaches-the-operator",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The task drawer shows the report beside the approve control for a task that is completed or under review, before approval is attempted."
+    },
+    {
+      "key": "warns-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A report changes no task's status, hold or approval: the same task is approved, refused and landed exactly as it would be without the report."
+    },
+    {
+      "key": "unknown-is-said",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the changed files of this task or of a sibling cannot be read, the report says the overlap could not be determined for that sibling, never an empty list."
+    },
+    {
+      "key": "bounded",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "The drawer polls; a wide spec must not make every open slow.",
+      "statement": "Computing the report for one task reads at most one diff per sibling and, for a sibling with more than ten shared files, names ten and the total."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/same-file-tasks-run-in-order-roadmap/spec.json",
+    "slice": "flag-missed-overlap"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Finding, for a task with work to merge, the unordered unlanded siblings of its spec whose real changed files overlap its own",
+      "Showing the siblings and shared files in the task drawer's integration preview and in the reviewer's turn prompt",
+      "Saying so when the overlap could not be determined"
+    ],
+    "non_goals": [
+      "Holding either task, refusing approval or changing any gate (see the open question)",
+      "Adding a dependency edge automatically",
+      "Changing slice 1's warning on declared files",
+      "Comparing tasks of different spec documents",
+      "Persisting the flag or a migration",
+      "Resolving the conflict",
+      "Showing the flag on the board card or the build card"
+    ]
+  },
+  "summary": "When a task's real changes (its branch against main) touch the same files as a sibling task of the same spec that nothing orders against it, the operator's drawer and the reviewer's turn say so, naming the sibling and the files, before approval or the landing runs into the conflict. It warns and refuses nothing. Slice 3 of 'Same-file tasks of a slice run in order'; catches what slice 1's declared files could not.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Routine drive scripting on the existing scripts/drive pattern; Sonnet.",
+      "checker": "QA",
+      "checker_reason": "QA can run the drive and tell a really-failing drive from a script error.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the contract named in the design (the `overlaps` field of the integration-preview route, the reviewer's prompt sentence, the drawer) and record it failing. It runs on a dedicated trial Hub (its own port and database): a spec with two tasks that declare no files and no depends_on, built by real Haiku turns told to edit the same file. It completes the first and reads its integration preview, the second's review prompt and the drawer, and fails unless each names the other task and the shared file; it then approves the first and checks the approval is not affected. Screenshots of the drawer. Recorded failing on today's code, where the preview has no such field.",
+      "files": [
+        "scripts/drive/d1107_missed_overlap.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "overlap-from-real-changes",
+        "real-not-declared",
+        "reaches-the-reviewer",
+        "reaches-the-operator",
+        "warns-only"
+      ],
+      "reviewer": null,
+      "title": "Missed-overlap acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "One new module over existing git helpers (changed_paths, check_targets) with temp-repo tests; Sonnet. DeveloperSonnet2 is building the conversation-trace slice now; Developer is the fallback.",
+      "checker": "QA",
+      "checker_reason": "QA can reproduce the git cases and check the transitive-ordering test would fail if the chain were only direct.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "A new module hub/hub/sibling_overlap.py with `sibling_overlaps(session, task)` that lists the other tasks of its document with no dependency path either way and no landing on main, reads each one's changed files against the main tip (one diff per sibling, the task's own computed once), and returns the contract's list: shared files, ten at most with the total, or undetermined. The tests for each criterion (real versus declared, transitive ordering, landed sibling, other document, unreadable branch, bound) are part of this task.",
+      "files": [
+        "hub/hub/sibling_overlap.py",
+        "hub/tests/test_sibling_overlap.py"
+      ],
+      "from": null,
+      "key": "finder",
+      "requirements": [
+        "overlap-from-real-changes",
+        "real-not-declared",
+        "only-unordered",
+        "unknown-is-said",
+        "bounded"
+      ],
+      "reviewer": null,
+      "title": "The Hub finds a task's overlaps with unordered siblings"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Wiring one result into two existing seams; Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "QA2 differs from the builder and the finder's checker, and can compare approval behaviour with and without the report.",
+      "depends_on": [
+        "finder"
+      ],
+      "description": "Add the finder's result as the `overlaps` field of the integration-preview route and a `_overlaps_sentence` to the reviewer's turn prompt beside the dependencies and checks sentences, nothing when there is no report. A report refuses or changes nothing. Tests for the route payload, the prompt text with and without a report, the undetermined case, and that approval behaves identically with the report; update any test that pins the preview's exact keys.",
+      "files": [
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/review_turn.py",
+        "hub/tests/test_missed_overlap_surfaces.py"
+      ],
+      "from": null,
+      "key": "surface",
+      "requirements": [
+        "reaches-the-reviewer",
+        "reaches-the-operator",
+        "warns-only",
+        "unknown-is-said"
+      ],
+      "reviewer": null,
+      "title": "The preview route and the reviewer's prompt carry the overlaps"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "A small UI rendering of one new field; Sonnet. Developer if DeveloperSonnet2 is busy.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checks UI against a live Hub and differs from the builder.",
+      "depends_on": [
+        "surface"
+      ],
+      "description": "Type the `overlaps` field on `TaskIntegrationPreview` in hub/ui/src/api/tasks.ts and show each sibling's id, title and shared files (and the could-not-be-determined case) beside the approve control for completed and under-review tasks; nothing otherwise. UI tests for the criteria; UI bundle refreshed per .claude/rules (commit hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/ui/src/api/tasks.ts",
+        "hub/ui/src/components/tasks/TaskDetailDrawer.tsx",
+        "hub/ui/src/__tests__/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "drawer",
+      "requirements": [
+        "reaches-the-operator",
+        "unknown-is-said"
+      ],
+      "reviewer": null,
+      "title": "The task drawer shows the overlaps beside Approve"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Running an existing drive and recording its output is routine; Sonnet is enough.",
+      "checker": "QA",
+      "checker_reason": "QA can tell a drive that passes for the right reason from one that passes because it read nothing.",
+      "depends_on": [
+        "drive",
+        "finder",
+        "surface",
+        "drawer"
+      ],
+      "description": "Run the acceptance drive from the first task against the built feature on a dedicated trial Hub, with the UI bundle built, and record its evidence (run output, the preview payload, the delivered review prompt, the drawer screenshots, the approval result) against every requirement of this document. A failure here sends the task that builds the behaviour back, not this one.",
+      "files": [
+        "scripts/drive/d1107_missed_overlap.py"
+      ],
+      "from": null,
+      "key": "accept",
+      "requirements": [
+        "overlap-from-real-changes",
+        "real-not-declared",
+        "only-unordered",
+        "reaches-the-reviewer",
+        "reaches-the-operator",
+        "warns-only",
+        "unknown-is-said"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive and record its evidence"
+    }
+  ],
+  "title": "Overlaps the planner missed are flagged from real work"
+}

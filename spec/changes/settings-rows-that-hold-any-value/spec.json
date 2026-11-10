@@ -1,0 +1,412 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the long values seeded by the check",
+      "how_to_check": "Run the long-values check; read its report",
+      "key": "ac-sweep-clean",
+      "requirement": "no-sideways-scroll",
+      "then": "it reports zero sideways-scrolling containers and zero elements outside the window",
+      "when": "the long-values check runs over every settings section at 960 and 1440px in dark and light"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Agent settings → Context and → Workspace with long values",
+      "how_to_check": "The check's text-column measurement; screenshots of both sections",
+      "key": "ac-agent-context",
+      "requirement": "readable-text-column",
+      "then": "every description column measures at least 240px wide, or its control sits below it",
+      "when": "rendered at 960 and 1440px"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Worktrees with several 200+ character paths that differ only in their last folder",
+      "how_to_check": "The check's seeded Hub: Settings · Worktrees; hover and copy one row",
+      "key": "ac-worktree-path",
+      "requirement": "long-values-readable",
+      "then": "each row shows its path's last folder, hovering shows the whole path, and a copy action copies it whole",
+      "when": "rendered at 960px"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a 400-character generated-files command and five paths",
+      "how_to_check": "Screenshot of General from the check's seeded Hub",
+      "key": "ac-generated-files",
+      "requirement": "long-values-editable",
+      "then": "the whole command and every path are visible without clicking into the field",
+      "when": "Project General is rendered at 960px"
+    },
+    {
+      "checked_by": "agent",
+      "given": "five checks, one with a 64-character name, path filters and change and re-run commands",
+      "how_to_check": "The check plus a screenshot of the Checks list",
+      "key": "ac-checks-list",
+      "requirement": "lists-grow",
+      "then": "no check row overlaps another or 'Add check', and every check's move, edit and remove buttons are inside the window",
+      "when": "Project General is rendered at 960px"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent whose runner carries a refused flag (a long error under the runner picker)",
+      "how_to_check": "The check's seeded Hub with such a runner; screenshot",
+      "key": "ac-runner-error",
+      "requirement": "messages-fit",
+      "then": "the error wraps inside the row and the row is no wider than the page",
+      "when": "Agent → Execution is rendered at 960px"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a window 960px wide",
+      "how_to_check": "Seeded Hub at 960px: open the overflow control and choose Activity",
+      "key": "ac-tabs",
+      "requirement": "tab-bar-overflow",
+      "then": "no tab label is cut, and Jobs and Activity are reachable from the bar",
+      "when": "any project page is open"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a settings row deliberately given a non-wrapping 600px value",
+      "how_to_check": "Temporarily break one row locally, run the check, observe the failure, revert",
+      "key": "ac-check-fails",
+      "requirement": "long-values-check",
+      "then": "it fails and names that section and element",
+      "when": "the long-values check runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a checkout with no ignored files (no mock fixtures, no testbed data)",
+      "how_to_check": "Run it in a fresh task checkout; confirm the ports it used",
+      "key": "ac-fresh-checkout",
+      "requirement": "long-values-check",
+      "then": "it starts its own Hub, seeds it, sweeps and reports, touching neither :8000 nor :8010",
+      "when": "the check's one command is run"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built slice in the app",
+      "how_to_check": "Operator click-through after landing",
+      "key": "ac-operator-look",
+      "requirement": "no-sideways-scroll",
+      "then": "each reads whole, with nothing cut off or one word per line",
+      "when": "the operator opens Agent → Context, Agent → Workspace, Project General and Worktrees on their own data"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "b446ed4816295b3d711613e6f7dd9bd60394166cd46abf08bab6be565175f472",
+      "FR-2": "605cc300fcaef5f2ef8dda147a91861554a6a0700f9517c6d421b9739b9c6762",
+      "FR-3": "a06dff27766214f7cde0becced5fdf55202152229eefd43191d46258d7ea84a8",
+      "FR-4": "7d2d6a69dcaebefbd2da95822c0754e187f086fa719b599bd7e378c4b0ae6df6",
+      "FR-5": "c863455c15455d12aea7d7f7a77b7a65a7de5cb1883dd07691db2cc346a97a38",
+      "FR-6": "62f9c4a25d492a4f1bcbd5bf8e75cd6fb80fdbe89aa7d7140a267973f40ebee6",
+      "FR-7": "039cf653db14646210b6891cfa62bfe223d533c8f8d9314130500d83d20581b5",
+      "FR-8": "b14cdb69e65e291d564319995009063c56ceace9419004d1028045ccd080cc28"
+    },
+    "high_water": 8,
+    "requirements": {
+      "lists-grow": "FR-5",
+      "long-values-check": "FR-8",
+      "long-values-editable": "FR-4",
+      "long-values-readable": "FR-3",
+      "messages-fit": "FR-6",
+      "no-sideways-scroll": "FR-1",
+      "readable-text-column": "FR-2",
+      "tab-bar-overflow": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "DeveloperSonnet2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Layout work with a measurable check suits a Sonnet builder (quota-aware model choice).",
+      "builder": "Developer (Sonnet) builds the settings tasks; DeveloperSonnet2 builds the independent tab-bar task in parallel.",
+      "checker": "Each task is checked by the other Sonnet developer by running the long-values check and reading screenshots — execution, not reading.",
+      "cron": "Every five minutes keeps the queue moving without piling up turns.",
+      "mode": "Four tasks, the tab-bar one independent; a flow runs it beside the row work.",
+      "stop": "Stops when the four tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "What the code shows (2026-11-10): two settings-row systems coexist. The newer `SettingsRow` (hub/ui/src/components/ui/settings.tsx; grid in styles/primitives.css, text column `minmax(0,1fr)` beside a 220–300px control column) holds up better. The older `settings-row` (components/environment/SettingsSection.tsx; flex in index.css, stacking only under a narrow-viewport media query) is used by Agent settings, Spec steps, Traces and the Quality panel — and every screen whose label column collapses is on it. Converging on one row behaviour is the expected direction, but which component survives is the builder's call; the requirements state only what must be observable.\n\n\"Long values\" in this document means: names at their stored maximum (agent 32 characters, check name 64), folder paths of 260 characters, commands of 400 characters, model ids and branch names of 80 characters, and lists of at least five such items.\n\nWhere the check runs (readiness review, 2026-11-10): NOT the UI mock. The mock's fixtures (hub/ui/mock/fixtures/*.json) are recorded from the operator's own projects and gitignored, so no builder's checkout has them and the mock does not build there. The check therefore starts its own Hub from the checkout's source on a temporary database and a temporary project folder (deeply nested, so its paths are long), seeds the long values through the Hub's own API (runners, agents, charters, checks, reach grants, generated files, main branch, CI check names), serves the checkout's UI against it (Vite dev server with AW_DEV_HUB, or a local build), and sweeps every section with a headless browser (Python Playwright is installed). It must never point at :8000, and should not use the trial Hub :8010, whose database carries enabled jobs that would fire. The audit's throwaway sweep (testbed/ui-judge/settings-audit/sweep.py) shows the measurement; it is a starting point, not the deliverable.\n\nEnvironment: task checkouts may lack hub/ui/node_modules (the shared-folder link can fail on this machine); run `npm ci` in hub/ui first when it is missing. That is set-up, not a defect of the work.",
+  "evidence": {
+    "checked": [
+      "Audit sweep and screenshots, 2026-11-10: testbed/ui-judge/settings-audit/ (real and long-value data, 1440 and 1024px, dark)",
+      "Row implementations: hub/ui/src/components/ui/settings.tsx + styles/primitives.css:280-300; components/environment/SettingsSection.tsx + index.css:1225 and the narrow-viewport rule at index.css:2087",
+      "Readiness: hub/ui/mock/fixtures/*.json is gitignored (.gitignore:207) and absent from the main checkout and the Developer, DeveloperSonnet2 and QA worktrees; hub/ui/node_modules absent from DeveloperSonnet2 and QA worktrees"
+    ],
+    "limits": [
+      "960px and light mode were not captured in the audit; the check this slice adds covers them",
+      "Whether every section renders on a freshly seeded Hub (e.g. Worktrees needs agent checkouts to exist) is for the first task to establish"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer",
+          "DeveloperSonnet2"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-10T15:55:25.153548+00:00",
+        "id": "build-3c9887fb15f2",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-10T12:51:56.157831+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "long-values-and-lists": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "long-values-check": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "rows-fit": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "settings-row-wrapped-control-takes-row-width": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "tab-bar-overflow": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "task-457da2f2f1dd": {
+            "builder": "Developer",
+            "checker": null
+          },
+          "task-6841ab59110d": {
+            "builder": "Developer",
+            "checker": null
+          },
+          "task-a6a0eb600734": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": null,
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "The 2026-11-10 audit (roadmap `settings-that-are-easy-to-find-and-match-the-app`) found settings screens that break on long content. Agent settings → Context and Workspace collapse their label column to one word per line at every width and scroll sideways by 157–236px at 1024px; project General's granted-reach paths run off the page; a check with path filters overflows its row, overlaps the next one and hides its edit/move/remove buttons at 1024px; long main branch, CI check names and generated-file commands are cut to one input width; provider-session rows squeeze their label to ~120px; Diagnostics scrolls sideways; worktree paths lose the part that differs; and the project tab bar is clipped at 1024px. Nothing measures this, so it returns whenever a screen is touched.",
+  "requirements": [
+    {
+      "key": "no-sideways-scroll",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Sideways scroll hides controls entirely; the audit found three sections doing it at 1024px.",
+      "statement": "At window widths of 960px and wider, in dark and light mode, no App, Project or Agent settings section scrolls horizontally or places any text or control outside the window, when its values are long values as defined in this document."
+    },
+    {
+      "key": "readable-text-column",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agent Context and Workspace showed a description one word per line because the control beside it would not give up width.",
+      "statement": "Where a setting's label and description sit beside its control, the text column is at least 240px wide; when the control cannot fit beside text of that width, the control moves below the text and takes the row's width instead."
+    },
+    {
+      "key": "long-values-readable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "End-truncation hid exactly the part of a worktree path that differs between rows.",
+      "statement": "A long value shown read-only (a path, command, id, branch or model id) either wraps or is shortened in the middle keeping its beginning and its last segment, and its full value is shown on hover; a path or id can also be copied whole in one action."
+    },
+    {
+      "key": "long-values-editable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Generated files, Main branch and CI check names showed only their first ~30 characters.",
+      "statement": "A command or a list of paths or names is edited in a field that shows the whole value, wrapping onto further lines as needed; a single-line field whose value is longer than it can show displays the full value on hover."
+    },
+    {
+      "key": "lists-grow",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A check with path filters overlapped the next row and 'Add check', and its edit buttons left the screen.",
+      "statement": "Each item in a settings list (checks, granted folders and hosts, provider sessions, worktrees, CI check names, spec steps) grows in height to fit its content; no item overlaps another item or the list's add control, and each item's actions stay visible inside its row at 960px."
+    },
+    {
+      "key": "messages-fit",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Errors, warnings and hints shown under or beside a control wrap within the row and never widen it."
+    },
+    {
+      "key": "tab-bar-overflow",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "At 1024px the bar showed 'Vaul' and no way to Jobs or Activity, so settings at the supported width could not be left for those tabs.",
+      "statement": "When the project's tabs do not all fit in the top bar, none is cut mid-word, and the ones that do not fit are reachable from an overflow control in the bar."
+    },
+    {
+      "key": "long-values-check",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Nothing measured this, which is how it broke unnoticed; the check is what keeps the slice true. It must not depend on files only one checkout has.",
+      "statement": "A repeatable check, runnable from a fresh checkout of the repository on this machine with one command, renders every App, Project and Agent settings section with long values at 960px and 1440px, dark and light, and fails naming the section and the element whenever something scrolls sideways, sits outside the window, or leaves a text column under 240px beside its control."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/settings-that-are-easy-to-find-and-match-the-app/spec.json",
+    "slice": "rows-that-hold-any-value"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Every App, Project and Agent settings section and the rows, lists, fields and messages inside them",
+      "The project tab bar, at the widths where settings are used",
+      "A repeatable long-values check over all those sections"
+    ],
+    "non_goals": [
+      "Restructuring sections, renaming settings, changing save behaviour or restyling — that is slice settings-in-the-apps-style",
+      "Windows narrower than 960px",
+      "Rewording messages (e.g. the runner error naming an API route) — slice 2; this slice only makes them fit",
+      "Screens outside settings, other than the tab bar",
+      "Making the check part of the project's landing checks — it needs a browser and a Hub, and stays a check agents and the operator run"
+    ]
+  },
+  "summary": "Every settings screen (app, project, agent) stays readable and usable with long paths, commands, names and ids at 960px and wider: no sideways scroll, labels keep a readable width, long values can be read whole, lists grow to fit, and a repeatable check keeps it that way.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "A scripted harness (scratch Hub, API seeding, Playwright sweep) is well within Sonnet, per the quota-aware default.",
+      "checker": "DeveloperSonnet2",
+      "checker_reason": "Runs the check from its own fresh checkout, which is exactly what proves it needs no ignored files, and breaks a row to see it fail.",
+      "depends_on": [],
+      "description": "Build the long-values check described in the design: one command that starts a Hub from this checkout's source on a temporary database and deeply nested temporary project folder, seeds long values through the Hub API, serves this checkout's UI against it, and sweeps every App, Project and Agent settings section at 960 and 1440px, dark and light, failing with section and element named on sideways scroll, off-window elements, or a text column under 240px beside its control. Never touches :8000 or :8010. Record its first (failing) report as the acceptance drive.",
+      "files": [
+        "scripts/checks/"
+      ],
+      "from": null,
+      "key": "long-values-check",
+      "requirements": [
+        "long-values-check"
+      ],
+      "reviewer": null,
+      "title": "Long-values check"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Same builder as the check, so the one who wrote the measurement fixes what it measures; CSS layout work suits Sonnet.",
+      "checker": "DeveloperSonnet2",
+      "checker_reason": "Verifies by running the long-values check and reading the Context and Workspace screenshots, not by reading the diff.",
+      "depends_on": [
+        "long-values-check"
+      ],
+      "description": "Make every settings row — the newer SettingsRow and the older settings-row used by Agent settings, Spec steps, Traces and Quality — keep a text column of at least 240px and move its control below the text when it cannot fit beside it; messages under controls wrap within the row. Fixes Agent Context and Workspace. Verify with the long-values check.",
+      "files": [
+        "hub/ui/src/components/ui/settings.tsx",
+        "hub/ui/src/components/environment/SettingsSection.tsx",
+        "hub/ui/src/styles/primitives.css",
+        "hub/ui/src/index.css",
+        "hub/ui/src/components/agents/"
+      ],
+      "from": null,
+      "key": "rows-fit",
+      "requirements": [
+        "readable-text-column",
+        "messages-fit",
+        "no-sideways-scroll"
+      ],
+      "reviewer": null,
+      "title": "Rows keep a readable text column"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Continues on the row work it just landed, touching the same files; Sonnet suffices for component and CSS changes.",
+      "checker": "DeveloperSonnet2",
+      "checker_reason": "Runs the full check clean at both widths and themes and hovers/copies a worktree path, as the criteria require.",
+      "depends_on": [
+        "rows-fit"
+      ],
+      "description": "Long read-only values wrap or shorten in the middle with the full value on hover and a copy action for paths and ids; commands and path lists edit in fields that show the whole value; settings lists (checks, granted reach, provider sessions, worktrees, CI check names, spec steps) grow to fit with their actions in view; Diagnostics' status block fits. Then run the long-values check clean in both themes at both widths.",
+      "files": [
+        "hub/ui/src/components/settings/",
+        "hub/ui/src/components/agents/",
+        "hub/ui/src/components/environment/",
+        "hub/ui/src/styles/primitives.css",
+        "hub/ui/src/index.css"
+      ],
+      "from": null,
+      "key": "long-values-and-lists",
+      "requirements": [
+        "long-values-readable",
+        "long-values-editable",
+        "lists-grow",
+        "no-sideways-scroll"
+      ],
+      "reviewer": null,
+      "title": "Long values and lists fit"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Independent of the row work and in different files, so a second Sonnet builder takes it in parallel.",
+      "checker": "Developer",
+      "checker_reason": "The other Sonnet developer, since the builder cannot check its own work; checks at 960px by opening the overflow and reaching Activity.",
+      "depends_on": [
+        "long-values-check"
+      ],
+      "description": "When the project's tabs do not all fit in the top bar, show those that fit uncut and reach the rest from an overflow control in the bar.",
+      "files": [
+        "hub/ui/src/components/layout/TopBar.tsx",
+        "hub/ui/src/styles/shell.css"
+      ],
+      "from": null,
+      "key": "tab-bar-overflow",
+      "requirements": [
+        "tab-bar-overflow"
+      ],
+      "reviewer": null,
+      "title": "Tab bar overflow"
+    },
+    {
+      "depends_on": [],
+      "description": "In hub/ui/src/index.css the rule `@container (max-width: 447px) { .settings-row-control { flex: 1 1 100%; justify-content: flex-start; min-width: 0 } }` sits before the base `.settings-row-control { display:flex; flex:none; ... justify-content:flex-end }` at equal specificity, so the base rule wins and the container query never takes effect. A control that has wrapped below its text in the older .settings-row therefore keeps its content width and stays right-aligned. Example: Agent → Workspace → Provider sessions at 960px, where the control box is 503–683 and 'No sessions yet.' sits at 599–683, mid-row. Make the wrapped control take the row's width and start at the text's edge: reorder the rules or raise the container rule's specificity. Then rebuild the bundle (npm run build + scripts/refresh_ui_bundle.py) and commit src and bundle together. Ideally the long-values check should also measure that a wrapped control spans the row, so this cannot regress unseen.",
+      "files": [
+        "hub/ui/src/index.css",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "settings-row-wrapped-control-takes-row-width",
+      "requirements": [
+        "readable-text-column"
+      ],
+      "reviewer": null,
+      "title": "Wrapped settings-row control takes the row's width"
+    }
+  ],
+  "title": "Settings rows that hold any value"
+}

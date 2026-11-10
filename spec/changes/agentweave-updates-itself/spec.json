@@ -1,0 +1,418 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "A scratch Hub on a drive port and profile with version 2.1.0 installed",
+      "how_to_check": "Drive step reads the `version` field of GET /health and the settings text. (The launcher's own read of that field without a window is covered by a unit test in the updater task.)",
+      "key": "c-shows-version",
+      "requirement": "shows-version",
+      "then": "Both show 2.1.0",
+      "when": "The drive asks the Hub for its version and opens App settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A local index offering 2.1.1 and then the index made unreachable",
+      "how_to_check": "Drive against a local package index it starts and stops (AW_UPDATE_INDEX_URL); time the launch.",
+      "key": "c-knows-newer-offline",
+      "requirement": "knows-newer",
+      "then": "Up: the newer version 2.1.1 is named in App settings and on the Update button. Down: no error is shown and a launch opens in under 5 seconds extra",
+      "when": "The app checks, first with the index up and then with it down"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Version 2.1.0 installed in a scratch environment, a local index offering 2.1.1, nothing running, and the automatic-update setting at its default (on; see open question 2)",
+      "how_to_check": "Drive reads the version in the opened window and lists processes for a console host.",
+      "key": "c-launch-updates-idle",
+      "requirement": "launch-updates-when-idle",
+      "then": "The window opens on 2.1.1 and no console window was created",
+      "when": "The drive launches the app as the shortcut does"
+    },
+    {
+      "checked_by": "agent",
+      "given": "2.1.0 running with an agent turn in progress and 2.1.1 published",
+      "how_to_check": "Drive records the pid and run state before and after.",
+      "key": "c-never-interrupts",
+      "requirement": "never-interrupts-work",
+      "then": "The Hub process id and the turn are unchanged, the version is 2.1.0 and the Update button is shown",
+      "when": "A second launch happens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "2.1.0 running with an agent turn in progress and 2.1.1 published, the Update button shown",
+      "how_to_check": "Drive presses the button through the window bridge (`apply_update`) and reads the prompt text.",
+      "key": "c-button-names-work",
+      "requirement": "button-names-work",
+      "then": "The prompt names the running turn; cancel changes nothing; confirm applies the update",
+      "when": "The Update button is pressed, then cancelled, then pressed and confirmed"
+    },
+    {
+      "checked_by": "operator",
+      "given": "Work running, button shown",
+      "how_to_check": "Operator presses it once on the scratch install and looks; the drive checks version, geometry file and row counts.",
+      "key": "c-after-work-ends",
+      "requirement": "apply-sequence",
+      "then": "The same window returns on 2.1.1 at the same size and maximized state, with the projects and history that were there",
+      "when": "The work ends and the operator presses Update"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A published 2.1.1 whose migration is made to fail",
+      "how_to_check": "Drive compares a database checksum before and after and reads the version.",
+      "key": "c-migration-failure",
+      "requirement": "failed-update-restores",
+      "then": "2.1.0 is installed and running again, the database equals the copy taken before, and the window states the failure",
+      "when": "An update is applied"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Two Hubs from the same scratch install on different ports",
+      "how_to_check": "Drive checks the second Hub's pid and health after the request.",
+      "key": "c-other-hub",
+      "requirement": "only-its-own-hub",
+      "then": "The other keeps running untouched and the update names it and waits",
+      "when": "An update is requested for one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A Hub run from an editable install",
+      "how_to_check": "Drive on a scratch editable install.",
+      "key": "c-checkout",
+      "requirement": "pip-installs-only",
+      "then": "The version shows and no Update button or automatic upgrade occurs",
+      "when": "The app opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A newer version and nothing running",
+      "how_to_check": "Drive counts index requests and windows.",
+      "key": "c-concurrent",
+      "requirement": "idempotent-and-single",
+      "then": "The index sees the package downloaded once and both windows resolve to one",
+      "when": "Two launches start within one second"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a9ac1c0a9eea3ef2351a7faf845fdb6ad22b9a1b67638624def1411d09422656",
+      "FR-10": "8a557f5115783d6c6614be826d182631217b6dc06de8337290791c481a785975",
+      "FR-2": "15a40d3d4e7975c82f08d2a9c51303e1e0d11d73577e512b1c06fd3e703382d7",
+      "FR-3": "6e6700244ce089bd23883aa851ce1d31ab8f92350f239fcc22e713c22bab7d43",
+      "FR-4": "57500ea81ea64aaac0ce4e8c7ede687fc863db2b77f26663672da7b81b40d909",
+      "FR-5": "6ba4a659d307a33e599b35471e70cf121bf7e94a145d918a0ab247953ed82182",
+      "FR-6": "a00b2ed4cdcdce6cd70a85a1cefc1077b5972923c56e8fc94a593d49859ac708",
+      "FR-7": "df07fe6920170022ade9a68b85fb9c64994f406f98fe13a6607ced7695ab3dc3",
+      "FR-8": "5211d39563fb99a35ae72a09a53fc20a1add5751d94ba94de8c2dab1e8926367",
+      "FR-9": "e79bf880babd6d6e4104df07299fe04e53ba1e7814c193e79d9dccaaa399acfb"
+    },
+    "high_water": 10,
+    "requirements": {
+      "apply-sequence": "FR-6",
+      "button-names-work": "FR-5",
+      "failed-update-restores": "FR-7",
+      "idempotent-and-single": "FR-10",
+      "knows-newer": "FR-2",
+      "launch-updates-when-idle": "FR-3",
+      "never-interrupts-work": "FR-4",
+      "only-its-own-hub": "FR-8",
+      "pip-installs-only": "FR-9",
+      "shows-version": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus2",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus is the Tier 2 default.",
+      "builder": "Opus builders for a restart-and-migrate change.",
+      "checker": "QA is an Opus checker.",
+      "cron": "The usual five minutes.",
+      "mode": "A flow, because the operator is dogfooding builds.",
+      "stop": "Stop when the queue empties."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "TIER 2. Hazard: restarting the Hub kills runs in flight; the new version's migrations run on live data. Mitigations are requirements: no update while work runs unless the operator chooses (never-interrupts-work, button-names-work); a copy of the database is taken first and restored with the old version if the new one does not come up (failed-update-restores); only pip installs are touched. Rollback of a shipped bad release is the operator pinning the old version by hand; the in-flight rollback is the restore above.\n\nDECISIONS (author's choices unless marked)\nD1. The launcher does the checking and the applying, not the Hub: a Hub cannot replace the package it runs from. The page reaches it through the window bridge slice 1 added (a browser tab has no launcher, so shows the version and the newer-version notice but no Update button). No new CLI command: the CLI only keeps what the app cannot do, and this is reached from the app.\nD2. The Hub reports its version in the /health payload it already serves (one more field), so the launcher can compare the running Hub with the installed package without a new route.\nD3. 'Nothing running' is the answer slice 1 already built: the instance-wide work check (/api/v1 'running'). A Hub that cannot answer is not idle (same rule as closing).\nD4. Apply order: stop the Hub through the stop path the close already uses; copy the database file; run `pip install -U` for the AgentWeave packages with the same interpreter; start; wait for health with the new version; reload the window. Any failure after the copy restores the database and reinstalls the previous version, then starts it. The pip upgrade is run as `python -m pip` from a process that is not the installed console script, because Windows will not overwrite a running .exe.\nD5. 'Published' and the check interval are open questions below; the requirements say only that a check exists, is quiet when offline, and never blocks a launch for more than a few seconds.\nD6. Drives use a local package index and a scratch port/profile (never :8000 or :8010); the index location is an environment override read only by the updater.\n\nCONTRACT (names a task builds and a drive walks; grounded in the code as of master)\n- GET /health (hub/hub/main.py:830, the `health()` handler; unauthenticated, outside /api/v1) gains two fields beside `status` and `runtime`: `version` (string, `hub.version.__version__`, e.g. \"2.1.0\") and `install` (string, one of \"pip\", \"editable\", \"checkout\"; computed once at start in main.py next to `_runtime_kind()` and the checkout detection at main.py:212-262). A Hub without `version` (an older one) is treated by the launcher as version unknown: it may show the Update button, never updates automatically. The additions are additive; the existing CLI tests that fake /health with only status and runtime (tests/test_cli_port_and_runtime.py, tests/test_desktop_close.py) must keep passing unchanged, and the launcher must tolerate those fakes.\n- Work check, existing and unchanged: GET /api/v1/work/running (hub/hub/api/v1/status.py:132) returns `running` (bool), `turns`, `check_runs`, `landings`, `builds` (ints), `turn_agents` ([{agent, project}]) and `build_list` ([{id, title, project}]). The prompt text comes from desktop_window.describe_work (desktop_window.py:520), the same function the close prompt uses.\n- Launcher module: new src/agentweave/updater.py (stdlib only; CLI keeps its five cmd_* functions, so no new command). Test seam: functions `check_latest()`, `decide_at_launch()`, `apply_update()` taking the injectable pip/stop/start/health callables.\n- Environment override, read only by updater.py: `AW_UPDATE_INDEX_URL` (a PEP 503 simple index base URL, used both for the newest-version check and as pip's `--index-url`). Unset means PyPI.\n- Files under HUB_DIR/app-window/ (src/agentweave/cli.py:334, :1171, :1474 pattern): `update-check.json` = {\"checked_at\": ISO-8601 UTC string, \"latest\": \"2.1.1\" or null}; `update.json` = {\"auto\": true} (the open question 2 setting; absent means on); `update.lock` = the single-update lock (FR idempotent-and-single; instance-wide because the package files are shared). Database copies: HUB_DIR/update-backups/<UTC stamp>/ made with the sqlite3 backup API, not a file copy, so a WAL-mode database is consistent; kept after a successful update, newest three retained.\n- Window bridge (pywebview js_api, cli._AppWindowApi, cli.py:1565) gains `update_status()` returning {\"current\": str, \"latest\": str or null, \"available\": bool, \"applicable\": bool (false for editable/checkout), \"work\": the /work/running answer or null when it did not answer, \"message\": str} and `apply_update(confirmed)` returning {\"state\": \"needs_confirm\" | \"applied\" | \"failed\" | \"blocked\", \"detail\": str}. `state` \"needs_confirm\" is returned when work is running and `confirmed` is false; \"blocked\" names another Hub of the install (only-its-own-hub); \"failed\" carries the reason and means the previous version is back. The page's interface (hub/ui/src/hooks/useNotifications.ts:7, `AppWindowApi`) gains the same two optional methods; a browser tab has neither and shows no button.\n- Page: new hub/ui/src/components/app/UpdateButton.tsx; the version and newer-version text are rendered in components/settings/AppSettingsScreen.tsx. Any change under hub/ui/src is committed together with hub/hub/static/ui (UI bundle rule; test_ui_staleness guards it).\n- Task status path the drive walks: none (the drive uses real agent turns only to make `turns` > 0; tasks need not change status).\n- Existing guards the change must keep or relax: tests/test_package_exports.py and the stdlib-only CLI rule (updater.py imports only the stdlib); no test pins the exact /health body, so none is relaxed. Nothing in this slice relaxes a guard.\n\nCURRENT: launch -> Hub answers /health (no version) -> window. Upgrade = manual stop/pip/start.\nPROPOSED: launch -> installed version vs published (quiet if offline) -> if newer and work check says idle: stop, backup, pip, start, verify -> window; if newer and busy: window on the old Hub + Update button that lists the work and applies on confirmation.",
+  "evidence": {
+    "checked": [
+      "hub/hub/main.py:830-837: /health returns status and runtime only, no version.",
+      "hub/hub/version.py:12-19 and src/agentweave/__init__.py:13-20: versions come from package metadata.",
+      "src/agentweave/cli.py:224-262: cmd_stop kills the Hub after a health check; it does not ask the work check.",
+      "hub/hub/api/v1/status.py:133-175: the instance-wide work check (turns, check runs, landings, running builds) built in slice 1; route is /api/v1/work/running.",
+      "src/agentweave/cli.py:1940-1975: a launch on a running Hub focuses or opens a window; no version comparison.",
+      "docs/getting-started/installation.md:89-96: the manual upgrade steps.",
+      "spec/changes/agentweave-is-its-own-app-on-windows/spec.json: slice 1 is built (finished build, 2026-11-05); src/agentweave/desktop_window.py exists.",
+      "hub/ui/src/hooks/useNotifications.ts:7-19: the window bridge the page uses; cli.py:1565 _AppWindowApi is its launcher side.",
+      "tests/test_cli_port_and_runtime.py and tests/test_desktop_close.py fake /health with a fixed body; the new fields are additive to them."
+    ],
+    "limits": [
+      "The acceptance drive is proposed coverage; none of it has run.",
+      "Not checked: whether pip can replace the launcher's own files while the launcher process runs on Windows (assumed fine under `python -m pip` from pythonw; the drive must prove it).",
+      "Not checked: whether the CLI package's dependency range pulls the matching Hub package on upgrade; the updater may need to name both.",
+      "Not checked: SQLite migration atomicity, which is why a database copy is required."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "large",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "What counts as 'published'? Options: (a) the newest final release on PyPI; (b) also pre-releases; (c) GitHub releases. Recommendation: (a), because it is what `pip install -U` would install anyway.",
+      "resolved": false
+    },
+    {
+      "question": "Can the automatic upgrade at launch be turned off (a setting 'Update automatically when I open AgentWeave')? Options: always on, or a setting that leaves only the Update button. Recommendation: a setting, on by default, since the operator already chose auto-update but an unattended restart onto new migrations is the riskiest thing this app does.",
+      "resolved": false
+    },
+    {
+      "question": "When another Hub from the same install is running (e.g. a second profile), refuse until it is stopped, or upgrade anyway and leave it on old code in memory? Recommendation: refuse and name it, as written in only-its-own-hub.",
+      "resolved": false
+    },
+    {
+      "question": "If the new version fails, restore automatically (as written) or stop and ask? Recommendation: restore automatically, it is the only state the operator can use without a terminal.",
+      "resolved": false
+    }
+  ],
+  "problem": "Today the operator cannot see which version runs and nothing tells them a newer one exists.\n- No version is reported while running: /health returns only status and runtime (hub/hub/main.py:830-837). The version is read from package metadata (hub/hub/version.py:12-19, src/agentweave/__init__.py:13-20) and appears only in `agentweave --version`.\n- Updating is four manual steps: `pip install -U agentweave-ai`, `agentweave stop`, `agentweave`, then reopen the window (docs/getting-started/installation.md:89-96). The stop step kills runs in flight: `agentweave stop` kills the Hub process (src/agentweave/cli.py:224-262), and the work check that protects a close (hub/hub/api/v1/status.py:133-175, 'running') is not consulted by it.\n- A launch that finds a Hub already running only focuses its window or opens a new one on it (src/agentweave/cli.py:1940-1975); it never compares versions, so after `pip install -U` a still-running old Hub keeps being opened.\n- Slice 1 (its-own-app, built) gave the launcher the pieces this needs: one window per Hub, the work check on close, and a window bridge the page uses to ask the launcher for things (hub/ui/src/hooks/useNotifications.ts:7-19; src/agentweave/desktop_window.py:473-550).\nHAZARD (Tier 2): an update stops and restarts the Hub. That kills runs in flight and, at start, runs database migrations on the operator's real data. The operator's :8000 instance runs a git checkout, not a pip install, so this slice does not touch it (see the pip-installs-only requirement); it is exercised on scratch ports only.",
+  "requirements": [
+    {
+      "key": "shows-version",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Without it the operator cannot tell whether an update took.",
+      "statement": "The running app SHALL show the version of the Hub it is connected to, in App settings, and the launcher SHALL be able to read the same version from the Hub without opening a window."
+    },
+    {
+      "key": "knows-newer",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A flaky network must never stop the operator opening their work.",
+      "statement": "The app SHALL learn the newest published version no later than a launch's start and then at most once every 24 hours while it runs, and when a newer one exists App settings and the Update button SHALL say which version it is. Offline, or when the source does not answer within 3 seconds, the check SHALL end silently and the launch SHALL go on with the installed version."
+    },
+    {
+      "key": "launch-updates-when-idle",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: update automatically on a double-click launch when nothing was running.",
+      "statement": "A launch (shortcut, pin or bare `agentweave`) that finds a newer published version and no work running SHALL upgrade first and then open the window on the new version, with no terminal window shown at any point. 'Nothing running' includes a Hub that is not running and a Hub running in the background with an answer of no work."
+    },
+    {
+      "key": "never-interrupts-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the live-data hazard: runs in flight are lost on a restart.",
+      "statement": "A launch that finds a newer version and work running, or a Hub that does not answer the work check, MUST NOT stop, restart or upgrade anything: it SHALL open the window on the Hub as it is and show the Update button."
+    },
+    {
+      "key": "button-names-work",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator chooses when interrupting work is worth it.",
+      "statement": "The Update button SHALL appear whenever a newer version exists and an update has not been applied. Pressed while work is running, it SHALL name what is running (number of agent turns, check runs, landings and builds, as the close prompt does) and apply only after the operator confirms stopping it; pressed with nothing running it SHALL apply at once."
+    },
+    {
+      "key": "apply-sequence",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A reload into a different window, or an empty data folder, would feel like a reinstall.",
+      "statement": "Applying an update SHALL stop the Hub of this window's port only, upgrade the AgentWeave packages, start the Hub on the same port and profile, and reload the same window, which SHALL keep its size, place and maximized state. Afterwards the app SHALL report the new version, and the project data and history present before the update SHALL still be there."
+    },
+    {
+      "key": "failed-update-restores",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A migration that fails halfway must not leave a Hub that will not start on the operator's only data.",
+      "statement": "Before the new version starts, the update SHALL keep a copy of the Hub's database. If the upgrade fails, or the new version does not report healthy within 120 seconds (a migration failure included), the update MUST put the previous version back, restore the database from the copy and start it, and the window SHALL say that the update failed and why."
+    },
+    {
+      "key": "only-its-own-hub",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The package files are shared by every Hub started from the install, so replacing them under a running Hub is the risk to avoid; refusing is the author's choice, see the open question.",
+      "statement": "An update SHALL stop at most the Hub serving that window's port. If another Hub of the same installation is running on this machine, the update SHALL name it and not proceed until the operator has stopped it."
+    },
+    {
+      "key": "pip-installs-only",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator's own checkout is the next slice; it must not be pip-upgraded over.",
+      "statement": "For a Hub that is not a pip-installed release (a git checkout or an editable install), this slice SHALL show the version but offer no automatic update and no Update button."
+    },
+    {
+      "key": "idempotent-and-single",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A double-click twice is normal.",
+      "statement": "Two launches or button presses at the same time SHALL run one update, not two, and a launch or press when the installed version is already the newest SHALL change nothing."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/agentweave-feels-like-a-desktop-app/spec.json",
+    "slice": "updates-itself"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The version the running app reports, and a check for a newer published one.",
+      "A launch that upgrades first when nothing is running.",
+      "An Update button, offered when a newer version exists, that names the work running and applies the update when chosen.",
+      "Keeping the old version and the operator's data when an update fails.",
+      "Pip installs of AgentWeave on Windows."
+    ],
+    "non_goals": [
+      "A Hub run from a git checkout or an editable install (next slice, updates-a-checkout).",
+      "Docker mode.",
+      "macOS and Linux.",
+      "Updating in the background without the operator having launched or pressed anything.",
+      "Release notes or a changelog view in the app.",
+      "Choosing or downgrading to a particular version."
+    ]
+  },
+  "summary": "Slice 2 of 'AgentWeave feels like a desktop app'. For a pip-installed AgentWeave, the app shows the version it runs and learns when a newer one is published. A launch with nothing running upgrades first and then opens. A launch with work running opens the current version unchanged and offers an Update button that names the work and, when the operator chooses, stops, upgrades, starts and reloads. A failed upgrade or a version that does not come up leaves the old version running on the operator's data.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Tier 2 with live-data hazard; Opus builds the drive and fixtures. May be busy with PR slice 2.",
+      "checker": "QA",
+      "checker_reason": "Opus checker confirms the drive fails for the right reason before the build.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the CONTRACT in the design (GET /health `version` and `install`, AW_UPDATE_INDEX_URL, the bridge methods `update_status` and `apply_update`, update-backups) and record it failing, before anything is built. It builds a scratch environment with 2.1.0 installed, a local package index offering 2.1.1 (and a variant whose migration fails), a dedicated port and database of its own, and real agent turns on Haiku where work is needed. It covers every criterion above.",
+      "files": [
+        "scripts/drive/d1107_updates_itself.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "shows-version",
+        "knows-newer",
+        "launch-updates-when-idle",
+        "never-interrupts-work",
+        "button-names-work",
+        "apply-sequence",
+        "failed-update-restores",
+        "only-its-own-hub",
+        "pip-installs-only",
+        "idempotent-and-single"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive: update from an older install"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Small routine Hub and UI change; Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "Different agent from the builder; QA2 may be busy with the trace change.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add `version` and `install` to the /health answer (see CONTRACT), with a test that fails before and passes after, including that a fake /health without them still works for the CLI; show the version in App settings.",
+      "files": [
+        "hub/hub/main.py",
+        "hub/tests/test_health_version.py",
+        "hub/ui/src/components/settings/AppSettingsScreen.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "hub-version",
+      "requirements": [
+        "shows-version"
+      ],
+      "reviewer": null,
+      "title": "The Hub reports its version"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Migrations and live-data hazard: Opus. May be busy with PR slice 2.",
+      "checker": "QA",
+      "checker_reason": "Opus checker for a Tier 2 change.",
+      "depends_on": [
+        "hub-version"
+      ],
+      "description": "A stdlib-only updater (src/agentweave/updater.py) beside the launcher: the check (quiet offline, AW_UPDATE_INDEX_URL, update-check.json), the launcher reading `version` from /health without a window (unit test), the launch decision using the work check, the apply sequence with the database backup and restore, update.lock one-update-at-a-time, the pip-only guard (`install`), and the other-Hub guard. Wired into the launch path in cli.py. Tests at each seam, including a route that raises.",
+      "files": [
+        "src/agentweave/updater.py",
+        "src/agentweave/cli.py",
+        "tests/test_updater.py"
+      ],
+      "from": null,
+      "key": "updater",
+      "requirements": [
+        "launch-updates-when-idle",
+        "only-its-own-hub",
+        "pip-installs-only",
+        "idempotent-and-single"
+      ],
+      "reviewer": null,
+      "title": "The launcher checks, upgrades, verifies and restores"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Routine UI work on a pattern slice 1 set; may be busy with the trace change.",
+      "checker": "QA2",
+      "checker_reason": "Different agent from the builder.",
+      "depends_on": [
+        "updater"
+      ],
+      "description": "The bridge methods `update_status` and `apply_update` in cli._AppWindowApi, the button, the prompt naming the running work, the reload of the same window with its geometry, the failure message, and the newer-version text in App settings; refreshed UI bundle. Satisfies the requirements whose criteria need the window: the newer version named, the button shown while work runs and nothing interrupted, the prompt, the reload, and the failure stated after a restore.",
+      "files": [
+        "hub/ui/src/components/app/UpdateButton.tsx",
+        "hub/ui/src/components/settings/AppSettingsScreen.tsx",
+        "hub/ui/src/hooks/useNotifications.ts",
+        "hub/ui/src/__tests__/updateButton.test.tsx",
+        "src/agentweave/cli.py",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "update-button",
+      "requirements": [
+        "knows-newer",
+        "never-interrupts-work",
+        "button-names-work",
+        "apply-sequence",
+        "failed-update-restores"
+      ],
+      "reviewer": null,
+      "title": "The Update button and its prompt"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Running a Tier 2 restart-and-migrate drive and judging its evidence needs Opus; it is bounded work, not new design.",
+      "checker": "QA",
+      "checker_reason": "Opus checker reads the recorded evidence against each criterion.",
+      "depends_on": [
+        "drive",
+        "hub-version",
+        "updater",
+        "update-button"
+      ],
+      "description": "Run the drive from the first task against the built feature on the scratch port and profile (never :8000 or :8010), fix nothing in product code, and record the evidence: each criterion's result, the Hub pids and database checksums before and after, and the console-host listing. A failing criterion sends the task that builds it back.",
+      "from": null,
+      "key": "acceptance-run",
+      "requirements": [
+        "shows-version",
+        "knows-newer",
+        "launch-updates-when-idle",
+        "never-interrupts-work",
+        "button-names-work",
+        "apply-sequence",
+        "failed-update-restores",
+        "only-its-own-hub",
+        "pip-installs-only",
+        "idempotent-and-single"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive on the built update"
+    }
+  ],
+  "title": "AgentWeave updates itself"
+}

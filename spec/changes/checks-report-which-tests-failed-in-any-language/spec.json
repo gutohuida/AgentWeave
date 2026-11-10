@@ -1,0 +1,431 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a testbed project on the trial Hub (:8010) whose only check runs Node's built-in test runner with --test-reporter=junit to a report file, with one test failing on a task's work, and a re-run command using {tests}",
+      "how_to_check": "py -3.11 scripts/drive/d1105_checks_report_tests.py against :8010; fails on master before the build",
+      "key": "drive-node-project",
+      "requirement": "ids-from-the-report",
+      "then": "the check result names exactly that failing test's id, and its confirmation ran the re-run command with only that id. Before the build the result names no test",
+      "when": "the task completes and its check run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same Node project, and recorded pytest (xunit1 and xunit2), Vitest and Node reports including two pytest classes in one file with a same-named method",
+      "how_to_check": "hub test of the report reader with the recorded reports; plus the drive",
+      "key": "rerun-ids-match",
+      "requirement": "stable-ids",
+      "then": "the re-run's id equals the full run's id, and the two same-named methods get different ids",
+      "when": "the failing test's re-run report is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three failing checks: one with no report configured, one whose report file is absent, one whose report is not XML",
+      "how_to_check": "hub test at the run-execution seam",
+      "key": "missing-report-said",
+      "requirement": "no-report-whole-check",
+      "then": "each is judged as a whole, names no test, and its result reads 'no report configured', 'report missing' and 'report unreadable' respectively",
+      "when": "each run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check whose full run wrote a report naming a failure, and whose re-run in the same directory writes no report",
+      "how_to_check": "hub test at confirm_failure; fails if the report is not removed before the re-run",
+      "key": "stale-report-not-read",
+      "requirement": "no-report-whole-check",
+      "then": "the re-run reads 'report missing', not the full run's failures",
+      "when": "the failure is confirmed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check that exits 3 and writes a valid report with no failing testcase, and a check that exits 0 with a report listing a failure",
+      "how_to_check": "hub test",
+      "key": "exit-3-whole-check",
+      "requirement": "exit-code-decides",
+      "then": "the first is a failed whole-check result naming no test; the second passes",
+      "when": "each run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a landing batch of two tasks whose check fails one test, with a re-run command configured",
+      "how_to_check": "hub test of landing narrowing with a recorded command log",
+      "key": "narrowing-uses-command",
+      "requirement": "rerun-through-the-command",
+      "then": "each probe ran the re-run command with {tests} replaced by that id, and the culprit found is the same as with today's pytest rewrite",
+      "when": "the batch is narrowed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check with a re-run command and enough failing test ids that the substituted command exceeds 8,000 characters",
+      "how_to_check": "hub test with a recorded command log",
+      "key": "long-rerun-whole",
+      "requirement": "rerun-through-the-command",
+      "then": "the check is re-run as a whole with its own command",
+      "when": "the failure is confirmed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub source after the build",
+      "how_to_check": "sweep test that greps hub/hub for the retired names and patterns",
+      "key": "no-parser-left",
+      "requirement": "no-runner-knowledge",
+      "then": "no pytest summary regex, pytest option list, xdist option handling or command rewriting remains in hub/hub; a sweep test fails if one is reintroduced",
+      "when": "searched"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project settings route",
+      "how_to_check": "hub route test",
+      "key": "placeholder-required",
+      "requirement": "report-settings",
+      "then": "the save is refused naming {tests}; a check without either setting saves and reads back without them",
+      "when": "a check is saved with a re-run command lacking {tests}"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the check settings in the app",
+      "how_to_check": "vitest component test of the settings panel; operator glance",
+      "key": "settings-examples",
+      "requirement": "settings-explain",
+      "then": "report path and re-run command fields show with the five examples, the id form and the whole-check note",
+      "when": "a check is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "this repository's delivered check settings applied on the trial Hub",
+      "how_to_check": "drive step in d1105_checks_report_tests.py against this repo registered on :8010; plus a test of the re-run wrapper's id translation and serial run",
+      "key": "repo-per-test",
+      "requirement": "this-repo-judged-per-test",
+      "then": "a failing test inside a test class is named, confirmed by a serial re-run of that test alone, and the delivered settings text matches what was applied",
+      "when": "a task introduces one failing Hub test"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "3cfd782b90c67e796c80e59bf59f558861ef34fd1ee12f085f5c17a56301d11b",
+      "FR-2": "9976413eabfcf3d1294c32a66d5fe0f350b0dc556b22228195454614b39c4c81",
+      "FR-3": "46e161a90f1aa34e65a2625660135c974f235107da83064c3853d5e30260d3a4",
+      "FR-4": "fa835686eb9a2d12b49034091f95da1ab6308633b424608c0045971602d379e6",
+      "FR-5": "a623b4876c71b85edddeb880ab9f1628fbb12ec2b2b76c3dd383d09ac19daf4e",
+      "FR-6": "b59124878a911f9a3785eb905a0f6270dbc6d89d8388f4875a60a547d129c907",
+      "FR-7": "e2fdc0510c2d541cd53ab23354790d8856d1fc8de9d0367160b538c0b5b0cae0",
+      "FR-8": "cf167c03b72f5bdd189843b09f9a535729bcc20032f5c05b688cb7bcfa6db342",
+      "FR-9": "7ecc55ca78513e0d21ca520a07865b76bc86c958f8f886da2507a584d9665adb"
+    },
+    "high_water": 9,
+    "requirements": {
+      "exit-code-decides": "FR-5",
+      "ids-from-the-report": "FR-2",
+      "no-report-whole-check": "FR-4",
+      "no-runner-knowledge": "FR-7",
+      "report-settings": "FR-1",
+      "rerun-through-the-command": "FR-6",
+      "settings-explain": "FR-8",
+      "stable-ids": "FR-3",
+      "this-repo-judged-per-test": "FR-9"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "builder": "Default only: each task names its own builder. The two tasks that change the approval and landing gate go to DeveloperOpus; the rest go to Developer on Sonnet for quota.",
+      "checker": "Default only: QA checks the gate-changing tasks; QA2 takes the settings UI so the two checks run in parallel.",
+      "mode": "Five dependent tasks; a flow staffs them as each unblocks.",
+      "stop": "Stops when its tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decision 1: the contract is a file, not a parser. A check declares where its JUnit XML report lands. The Hub deletes that file before each run and reads it after the check ends. Console output stays for people to read, and no test id is taken from it.\n\nDecision 2: re-running named tests is the operator's command, not the Hub's rewrite. A check declares a re-run command containing `{tests}`. The Hub substitutes the failing test ids and reads the re-run's own report. How a re-run is run, serially or in parallel, is the command's choice. A runner whose selector syntax differs from the id form gets a small wrapper script in the project. That keeps runner knowledge out of the product.\n\nDecision 3: exit code decides pass or fail, and the report only names which tests failed. This keeps today's meaning of a failed check. A non-zero exit whose report names no failing test is a whole-check failure that names no test, so pytest's exit 3 needs no rule of its own.\n\nDecision 4: no transition period with both paths. Keeping the pytest parser as a fallback would keep the debt this slice exists to remove. Existing checks without a report are judged as a whole until the operator adds one, and their result says so. This repository's checks get their report settings before the parser is removed, in the same build.\n\nDecision 5 (operator, 2026-11-05): a test id is the testcase's classname and name, joined by '::'. These are the two attributes every runner writes. File plus name was rejected because it collides for same-named methods in different classes in one file and cannot select a class-based pytest test (hub/tests has 173 test classes in 39 files). A pytest-shaped id was rejected because it puts runner knowledge back into the Hub. The project's re-run wrapper translates ids into its runner's selectors.",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_checks.py:808-1190: pytest summary regexes, option lists, narrowed_command, -n 0 forcing, and refusal of shell characters",
+      "hub/hub/project_checks.py:1055, :1061: confirm_failure re-runs in the same directory as the full run",
+      "hub/hub/landing_queue.py:1825-1843: narrowing calls narrowed_command and falls back to check-level",
+      "hub/hub/api/v1/projects.py:95-122: ProjectCheck fields and validators (paths, fast, phase, timeout)",
+      "hub/tests: 173 test classes in 39 files, so a file::name id would collide and fail to select",
+      "scripts/checks/hub_suite.py (master): passes its arguments to pytest and adds -n workers unless one is given, so a '-n 0' re-run is possible",
+      "Batch lbat-e7d9ae9007dc (2026-11-05): main's confirmation ended with exit 3 and could not be compared per test",
+      "Operator's Hub, read-only, 2026-11-05: AgentWeave is the only project with checks configured (Terra has none), so no other project loses pytest parsing",
+      "Node v24.14.0 is installed here (its runner writes JUnit XML); go and cargo are not"
+    ],
+    "limits": [
+      "Go and Rust support are claimed from the report format, not run on this machine",
+      "flaky_tests and build_caught history recorded under pytest node ids is not translated; an open Hub-filed fix task may be duplicated once per still-failing test"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-05T21:11:34.994307+00:00",
+        "id": "build-b8ee808a5b17",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-05T18:58:19.519070+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "repo-settings": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "report": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "retire": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "settings-ui": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "The roadmap was approved on 2026-11-05. This slice is exploring until the operator approves it. It builds alongside slice 3 (quick checks at normal priority), and before slice 4, which shares project_checks.py and landing_queue.py with it. After the build, slice 2 (the known-failing list) is drafted with what this one taught.",
+  "open_questions": [],
+  "problem": "The Hub decides which tests failed by reading pytest's console summary (`project_checks.py:808-873`). To re-run only those tests it rewrites the check's command, using a hard-coded list of about 30 pytest options, forcing `-n 0` and refusing any command containing shell characters (`project_checks.py:815-972`).\n\nAny other test runner's failure can only be judged as a whole check. It is never confirmed per test, never compared with main per test, and never overridden. So a JavaScript or Go project gets a weaker gate than a Python one.\n\nPytest's own odd endings also fall through. On 2026-11-05, main's run in batch lbat-e7d9ae9007dc ended with exit 3 and a summary the parser could not use, so the batch was held for the operator.\n\nJUnit XML is the structured result format that CI tools read. pytest (`--junitxml`), Jest and Vitest (junit reporters), Node's built-in runner (`--test-reporter=junit`), Go (gotestsum) and cargo-nextest all write it.",
+  "requirements": [
+    {
+      "key": "report-settings",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "Each check in a project's check settings can carry an optional report path, relative to the directory the check runs in, naming the JUnit XML file the check writes, and an optional re-run command containing the placeholder {tests}. Both are set through the app's check settings and the project settings route. A check saved before this change, or without them, reads as having neither. A re-run command without {tests} is refused on save with a message naming the placeholder."
+    },
+    {
+      "key": "ids-from-the-report",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "The report is the runner's own statement of what failed; console output differs per runner and per version, and the pytest summary was cut off or missing in exactly the cases that held batches. Classname and name are the two attributes every JUnit writer fills (Decision 5).",
+      "statement": "When a check that names a report ends with a non-zero exit and the report exists and is valid JUnit XML, the failing tests recorded for that check are exactly the testcases in the report that carry a failure or error element. Each has a test id of the testcase's classname attribute, followed by '::' and its name attribute. When the testcase has a file attribute, the file is recorded alongside the id for display and for telling whether the build changed it; it is not part of the id. No test id is taken from the check's console output."
+    },
+    {
+      "key": "stable-ids",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "A test that fails in a check's full run and again in a re-run of only that test is recorded under the same test id in both, so the Hub matches it across runs, across tasks and against main. Two different testcases in one report never share an id unless their classname and name are both equal."
+    },
+    {
+      "key": "no-report-whole-check",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "A re-run in the same directory as the full run (project_checks.py:1055, :1061) would otherwise read the full run's report as its own.",
+      "statement": "Before every run of a check that names a report, full or re-run, the Hub removes any file at the report path, so only a report the run itself wrote is read. A failing check that names no report, or whose report is missing, empty or not valid JUnit XML when the check ends, is judged as a whole by its exit code and names no failing test. Its result in the task's checks and the build's caught list says which of 'no report configured', 'report missing' or 'report unreadable' applied."
+    },
+    {
+      "key": "exit-code-decides",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Keeps today's meaning of a pass; pytest's exit 3 (internal error) and similar endings need no rule of their own.",
+      "statement": "A check passes or fails by its exit code and time limit exactly as before this change. A report naming failures on a check that exited 0 does not fail it. A non-zero exit whose valid report names no failing testcase is a whole-check failure that names no test."
+    },
+    {
+      "key": "rerun-through-the-command",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Windows' command interpreter refuses a command line over 8,191 characters.",
+      "statement": "Wherever the Hub re-runs a check's failing tests (confirming a failure is real, comparing with main, narrowing a landing batch), it runs that check's re-run command with {tests} replaced by the failing test ids, each passed as a separate argument, and reads the re-run's report by the same rules. A check with no re-run command, or whose re-run command with the ids substituted would be longer than 8,000 characters, is re-run as a whole with its own command."
+    },
+    {
+      "key": "no-runner-knowledge",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-05: AgentWeave must be usable to build any type of project. Runner-specific parsing is what kept a non-Python check weaker and kept adding rules.",
+      "statement": "The Hub's judgement of a check depends only on that check's settings, exit code, time limit and report. The Hub does not parse any test runner's console output for results and does not rewrite a check's command."
+    },
+    {
+      "key": "settings-explain",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The check settings show the report path and re-run command for each check. They give a working example for pytest, Vitest or Jest, Node's built-in test runner, Go (gotestsum) and cargo-nextest. They say that test ids are the report's classname and name joined by '::', that a re-run command receives them as separate arguments, and that a check without a report is judged as a whole, with no per-test re-run or narrowing."
+    },
+    {
+      "key": "this-repo-judged-per-test",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Re-runs are serial today by rule (a-red-main-does-not-hold-the-night FR-2): a timing test passed one parallel re-run and failed the next under load. After this slice that rule lives in the project's re-run command.",
+      "statement": "This repository's hub-tests and sweep checks write a JUnit XML report and declare a re-run command that accepts classname::name ids, including tests inside classes, and runs them serially. The build delivers the exact check settings as text the operator can paste into the check settings, and the settings are in place before the pytest parsing is removed. With those settings, a failing Hub test, including one in a test class, is named, confirmed and narrowed per test, as it was before this change."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-any-project-can-use-judged-against-a-known-failing-list/spec.json",
+    "slice": "checks-report-their-tests"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Two optional per-check settings: a report path (JUnit XML) and a re-run command with a {tests} placeholder",
+      "Taking failing test ids from the report, for every place the Hub needs them: confirming a failure, comparing with main, narrowing a landing batch, filing a fix task, the build's caught list",
+      "Re-running named tests only through the check's re-run command",
+      "Removing the pytest console parsing and pytest command rewriting from the Hub",
+      "The check settings UI for the two settings, with examples",
+      "This repository's hub-tests and sweep checks writing a report and declaring a serial re-run command"
+    ],
+    "non_goals": [
+      "The known-failing list and retiring the per-failure main re-run and hold rules: slice 2",
+      "Report formats other than JUnit XML (TAP, runner-specific JSON)",
+      "Choosing tests by changed files before review: the other roadmap's tiered-tests slice",
+      "Changing what makes a check pass or fail (exit code and time limit)",
+      "Changing how a timeout is judged: a timeout naming no failing test stays unjudged (timeout-not-the-tasks)",
+      "Installing test runners: the operator's project supplies its own",
+      "Translating test ids recorded before this change: open Hub-filed fix tasks keyed on old pytest node ids are not matched to new ids, so a test still failing may get one more fix task after the switch"
+    ]
+  },
+  "summary": "A project check can name the JUnit XML test report it writes and a command that re-runs named tests. The Hub takes the failing tests from that report instead of parsing pytest's console output, and re-runs failing tests through the check's own command instead of rewriting a pytest command. A JavaScript, Go, Rust or Python project's check gets the same per-test judgement. A check with no report is judged as a whole by its exit code. The pytest-specific parsing and command rewriting leave the product. This is slice 1 of 'Checks any project can use, judged against a known-failing list'; slice 2's known-failing list needs these test ids.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: a drive script against the trial Hub, following the existing scripts/drive pattern.",
+      "checker": "QA",
+      "checker_reason": "QA checks the whole slice, so the agent that later judges the build's evidence runs this drive first.",
+      "depends_on": [],
+      "description": "Write scripts/drive/d1105_checks_report_tests.py: it creates fresh per-run scratch on the trial Hub :8010, with a Node testbed project (node:test, --test-reporter=junit) whose check fails one test. It asserts the result names that test and that the confirmation used the re-run command, then cleans up everything it wrote. Show it failing on master before any other task depends on it. Also add a step for this repository's checks using the delivered settings, with a failing test inside a test class (it can be skipped with a clear message until the repo-settings task lands).",
+      "files": [
+        "scripts/drive/d1105_checks_report_tests.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "ids-from-the-report",
+        "this-repo-judged-per-test"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive: a Node project's failing test is named"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus: this decides whose a failure is and what lands on main, across every project (Tier 2). It also keeps it off Developer, who builds slice 3 in parallel.",
+      "checker": "QA",
+      "checker_reason": "Same checker through the slice; Opus for a change to the approval gate.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add report_path and rerun_command to ProjectCheck (with the {tests} validation). Remove the report file before every run of the check, full or re-run. Read the JUnit XML after a check ends: ids are classname::name, with the file attribute kept alongside when present; whole-check fallback with its reason. Route every re-run of named tests (confirmation, main comparison) through the re-run command and its report, falling back to a whole re-run past 8,000 characters. Tests at the run-execution seam for each criterion.",
+      "files": [
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/project_checks.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "report",
+      "requirements": [
+        "report-settings",
+        "ids-from-the-report",
+        "stable-ids",
+        "no-report-whole-check",
+        "exit-code-decides",
+        "rerun-through-the-command"
+      ],
+      "reviewer": null,
+      "title": "Read failing tests from the check's report"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: a contained change to two repo scripts with its own tests; Developer is free once slice 3's single task is done.",
+      "checker": "QA",
+      "checker_reason": "Same checker through the slice; it must run the drive's repo step with the delivered settings.",
+      "depends_on": [
+        "report"
+      ],
+      "description": "Make scripts/checks/hub_suite.py and sweep_check.py write a JUnit XML report (pytest xunit1 family, so testcases also carry their file). Give them a re-run mode that takes classname::name ids, translates each into a pytest node id (the longest dotted prefix of the classname that is a .py file is the module, the rest are classes), and runs them serially (-n 0). Test the translation for a module-level test, a test in a class and a parametrized test. Deliver the exact check settings text for the operator to paste, and run the drive's repo step. This lands before retire so this repository is never judged without per-test ids.",
+      "files": [
+        "scripts/checks/",
+        "tests/"
+      ],
+      "from": null,
+      "key": "repo-settings",
+      "requirements": [
+        "this-repo-judged-per-test"
+      ],
+      "reviewer": null,
+      "title": "This repository's checks write a report"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus, and the same builder as report: it removes code across the landing queue and fix-task filing, which hold work on main, and report's builder knows the new path it switches to.",
+      "checker": "QA",
+      "checker_reason": "Same checker through the slice; Opus for a change to how landing batches are narrowed.",
+      "depends_on": [
+        "report",
+        "repo-settings"
+      ],
+      "description": "Delete the pytest summary parsing, option list, xdist handling and narrowed_command from project_checks.py. Make landing narrowing, flaky_tests and build_caught use the report ids (and the recorded file for build_caught's 'this build changed the file') and the re-run command. Add the sweep test that fails if any of it returns. AW-39 (landing timeouts) also edits landing_queue.py: rebase on it once it has landed.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/landing_queue.py",
+        "hub/hub/flaky_tests.py",
+        "hub/hub/build_caught.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "retire",
+      "requirements": [
+        "no-runner-knowledge",
+        "rerun-through-the-command"
+      ],
+      "reviewer": null,
+      "title": "Remove pytest parsing and command rewriting"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: two fields and help text in an existing settings panel.",
+      "checker": "QA2",
+      "checker_reason": "A UI-only check that can run in parallel with QA's checks of report and retire; QA2 is free once slice 3 is checked.",
+      "depends_on": [
+        "report"
+      ],
+      "description": "Show and edit report path and re-run command per check, with the five runner examples, the id form (classname::name, passed as separate arguments) and the whole-check note; vitest component test; refresh the UI bundle (hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/ui/src/components/settings/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "settings-ui",
+      "requirements": [
+        "settings-explain",
+        "report-settings"
+      ],
+      "reviewer": null,
+      "title": "Report and re-run fields in check settings"
+    }
+  ],
+  "title": "Checks report which tests failed, in any language"
+}

@@ -239,20 +239,6 @@
       "when": "a non-operator actor reaches the close-exploration operation"
     },
     {
-      "given": "an incomplete document in exploring",
-      "key": "n3-c1",
-      "requirement": "n3",
-      "then": "the answer carries proposed false and lists every blocker, and the document stays in exploring",
-      "when": "the operator proposes it"
-    },
-    {
-      "given": "a complete document whose exploration is closed",
-      "key": "n3-c2",
-      "requirement": "n3",
-      "then": "the answer carries proposed true and the document is proposed",
-      "when": "the operator proposes it"
-    },
-    {
       "given": "",
       "key": "ac24",
       "requirement": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
@@ -328,13 +314,6 @@
       "requirement": "n6",
       "then": "an `unknown_field` finding names that field on that requirement it says acceptance criteria go in the top-level list, each naming the requirement's key",
       "when": "a document is submitted whose requirement carries its own `acceptance_criteria`"
-    },
-    {
-      "given": "",
-      "key": "ac20",
-      "requirement": "n7",
-      "then": "the answer reports it as not ready to propose",
-      "when": "an agent submits a document that is saved with blocking findings"
     },
     {
       "given": "an approved document",
@@ -650,209 +629,6 @@
       "requirement": "the-rendered-document-visually-distinguishes-requirement-str",
       "then": "each is rendered with a treatment distinct to its obligation the treatment is consistent for every requirement sharing that obligation",
       "when": "a document contains requirements with different modal obligations"
-    },
-    {
-      "given": "",
-      "key": "ac108",
-      "requirement": "a-document-declares-how-strictly-it-is-enforced",
-      "then": "its rigor is `sketch` it blocks no work",
-      "when": "a document is created"
-    },
-    {
-      "given": "",
-      "key": "ac109",
-      "requirement": "a-document-declares-how-strictly-it-is-enforced",
-      "then": "the rendered document states it, from the row and never from a submission",
-      "when": "a document's rigor is set"
-    },
-    {
-      "given": "",
-      "key": "ac110",
-      "requirement": "a-document-declares-how-strictly-it-is-enforced",
-      "then": "the previous level, the new level, the actor and the reason are recorded, and the record is never edited",
-      "when": "rigor moves from one level to another"
-    },
-    {
-      "given": "",
-      "key": "ac111",
-      "requirement": "a-document-declares-how-strictly-it-is-enforced",
-      "then": "it is refused rather than applied",
-      "when": "a rigor change is submitted against a digest that is no longer current"
-    },
-    {
-      "given": "",
-      "key": "ac112",
-      "requirement": "only-the-operator-changes-rigor",
-      "then": "it is refused",
-      "when": "an agent attempts to promote a document's rigor"
-    },
-    {
-      "given": "",
-      "key": "ac113",
-      "requirement": "only-the-operator-changes-rigor",
-      "then": "it is refused the document's rigor is unchanged",
-      "when": "an agent blocked by a gate attempts to demote the document"
-    },
-    {
-      "given": "",
-      "key": "ac114",
-      "requirement": "only-the-operator-changes-rigor",
-      "then": "the demotion is applied and recorded with their attribution",
-      "when": "the operator demotes a document"
-    },
-    {
-      "given": "",
-      "key": "ac115",
-      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
-      "then": "it is refused, naming what is unresolved",
-      "when": "promotion is attempted on a document with an unresolved identifier"
-    },
-    {
-      "given": "",
-      "key": "ac116",
-      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
-      "then": "its requirement links, evidence and reviews are unchanged",
-      "when": "a `gate` document is demoted to `sketch`"
-    },
-    {
-      "given": "",
-      "key": "ac117",
-      "requirement": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
-      "then": "the demotion succeeds",
-      "when": "the operator demotes a document that does not currently parse"
-    },
-    {
-      "given": "",
-      "key": "ac225",
-      "requirement": "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco",
-      "then": "its view lists both changes, newest first, each with its levels, actor, reason and time",
-      "when": "a document's rigor has been changed twice"
-    },
-    {
-      "given": "",
-      "key": "ac226",
-      "requirement": "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco",
-      "then": "the interface asks why the change is not submitted until a reason is given the recorded change carries that reason",
-      "when": "the operator lowers a document's rigor in the app"
-    },
-    {
-      "given": "",
-      "key": "ac227",
-      "requirement": "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco",
-      "then": "the interface offers a reason field the change can be submitted with it left empty",
-      "when": "the operator raises a document's rigor in the app"
-    },
-    {
-      "given": "",
-      "key": "ac118",
-      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
-      "then": "neither requirement's live content changes exactly two pending proposals are recorded, each naming the requirement it targets",
-      "when": "an agent submits an edit against a document whose rigor is gate, changing two requirements"
-    },
-    {
-      "given": "",
-      "key": "ac119",
-      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
-      "then": "the live document is updated immediately, with no proposal recorded",
-      "when": "an agent submits the same shape of edit against a document whose rigor is `sketch`"
-    },
-    {
-      "given": "",
-      "key": "ac120",
-      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
-      "then": "no proposal is created the submission is not reported as a failure",
-      "when": "an agent submits a contract- or gate-rigor document's content unchanged from what is stored"
-    },
-    {
-      "given": "",
-      "key": "ac122",
-      "requirement": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
-      "then": "an operator can accept the FR-3 proposal without the metadata proposal changing state the metadata proposal remains pending and unapplied",
-      "when": "a document has one pending proposal against requirement FR-3 and another against its non-requirement content"
-    },
-    {
-      "given": "",
-      "key": "ac123",
-      "requirement": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
-      "then": "the live document's content is unchanged, and the section the proposal targeted shows no trace of it",
-      "when": "an operator rejects a pending proposal"
-    },
-    {
-      "given": "",
-      "key": "ac124",
-      "requirement": "an-accepted-proposal-is-attributed-to-both-its-proposer-and-",
-      "then": "a later read reports run-123 as the proposer and alex as the accepter, in separate fields",
-      "when": "a proposal created by agent run `run-123` is accepted by operator `alex`"
-    },
-    {
-      "given": "",
-      "key": "ac125",
-      "requirement": "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato",
-      "then": "the attempt is refused the proposal's status is unchanged",
-      "when": "an actor of kind `agent` attempts to accept a pending proposal, including one it created itself"
-    },
-    {
-      "given": "",
-      "key": "ac126",
-      "requirement": "a-proposal-that-no-longer-matches-the-document-s-current-con",
-      "then": "the attempt is refused with a stated reason, and the proposal is marked stale, not accepted",
-      "when": "an operator accepts a proposal whose recorded digest no longer matches the document's"
-    },
-    {
-      "given": "",
-      "key": "ac228",
-      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "then": "the second submission records no new proposal its response names the pending proposal that already holds each unit",
-      "when": "a proposer submits the same edit twice against a gate-rigor document whose content has not changed"
-    },
-    {
-      "given": "",
-      "key": "ac229",
-      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "then": "the new proposal is pending the earlier one is marked superseded, naming the new one",
-      "when": "a proposer submits a different edit to a requirement it already has a pending proposal for"
-    },
-    {
-      "given": "",
-      "key": "ac230",
-      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "then": "the proposal to remove it is marked superseded it is no longer offered for acceptance",
-      "when": "a proposer's earlier submission left a pending proposal to remove a requirement the proposer's next submission keeps that requirement exactly as it is stored"
-    },
-    {
-      "given": "",
-      "key": "ac231",
-      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "then": "the proposal stays accepted the other request is refused, or makes no change",
-      "when": "a proposal is accepted while another request that read it as pending tries to reject or withdraw it"
-    },
-    {
-      "given": "",
-      "key": "ac232",
-      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "then": "both proposals are pending",
-      "when": "a second proposer submits an edit to a requirement the first proposer has a pending proposal for"
-    },
-    {
-      "given": "",
-      "key": "ac233",
-      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "then": "it is marked withdrawn and no longer listed as pending no rejection is recorded for it the live document is unchanged",
-      "when": "the operator withdraws a pending proposal"
-    },
-    {
-      "given": "",
-      "key": "ac234",
-      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "then": "the attempt is refused the proposal's status is unchanged",
-      "when": "an agent-authenticated actor attempts to withdraw a pending proposal"
-    },
-    {
-      "given": "",
-      "key": "ac235",
-      "requirement": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "then": "the proposal is no longer offered for a decision in any open view of that document",
-      "when": "the operator rejects a pending proposal in one view"
     },
     {
       "given": "",
@@ -1361,13 +1137,6 @@
       "when": "the operator moves it back to intake and changes the size to large"
     },
     {
-      "given": "a complete exploring change document never marked complete",
-      "key": "a-spec-is-written-one-step-at-a-time-no-close",
-      "requirement": "a-spec-is-written-one-step-at-a-time-propose-without-close",
-      "then": "it moves to proposed; the bar offers no Exploration is complete control",
-      "when": "the operator proposes it"
-    },
-    {
       "given": "a copy of the trial database with exploring documents with and without requirements, an approved change and a roadmap",
       "key": "a-spec-is-written-one-step-at-a-time-migrated",
       "requirement": "a-spec-is-written-one-step-at-a-time-existing-documents",
@@ -1529,15 +1298,6 @@
     },
     {
       "checked_by": "agent",
-      "given": "a scratch Hub on :8101 with a fresh database, a project and two change documents, each with a MUST requirement that has no criterion and left at step intake (scripts/drive/d1012_approval_warnings.py)",
-      "how_to_check": "py -3.11 scripts/drive/d1012_approval_warnings.py",
-      "key": "approve-lists-what-is-missing-and-can-approve-anyway-drive",
-      "requirement": "approve-lists-what-is-missing-and-can-approve-anyw-approve-warns",
-      "then": "propose answers 200 proposed with requirement_without_criterion under warnings; the first approve answers 409 approval_warnings naming that requirement and steps_skipped, and the document is still proposed; the second answers 200 approved; the view's approval_warnings_overridden holds both; in Chromium the gap list shows, Approve anyway approves, and the phase bar shows the overridden gaps. Fails on today's Hub at the first check (propose answers blocking requirement_without_criterion).",
-      "when": "the drive proposes the first, approves it without approve_anyway, then with it, and reads GET /project/documents; then in Chromium proposes the second, clicks Approve and then Approve anyway"
-    },
-    {
-      "checked_by": "agent",
       "given": "a document whose only requirement without a criterion is a SHOULD",
       "how_to_check": "Hub unit test",
       "key": "approve-lists-what-is-missing-and-can-approve-any-should-not-gap",
@@ -1580,15 +1340,6 @@
       "requirement": "approve-lists-what-is-missing-and-can-approve-anyw-refusals-stay",
       "then": "the route answers 409 document_incomplete naming dependency_cycle and the document is still proposed",
       "when": "the operator approves it with approve_anyway"
-    },
-    {
-      "checked_by": "agent",
-      "given": "an exploring document with an unresolved question and an unknown field in one part",
-      "how_to_check": "Hub route test",
-      "key": "approve-lists-what-is-missing-and-can-approve-anyw-propose-lists",
-      "requirement": "approve-lists-what-is-missing-and-can-approv-propose-passes-gaps",
-      "then": "the first answer is not proposed with the unknown field under blocking and the question under warnings; the second is proposed with the question under warnings",
-      "when": "it is proposed, then the unknown field is removed and it is proposed again"
     },
     {
       "checked_by": "agent",
@@ -1807,15 +1558,6 @@
       "when": "the operator PUTs its content"
     },
     {
-      "checked_by": "agent",
-      "given": "a document at contract rigor",
-      "how_to_check": "pytest hub/tests/test_operator_authored_documents.py hub/tests/test_spec_edit_proposals.py",
-      "key": "the-operators-own-edit-applies-at-any-rigor-unit-agent",
-      "requirement": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
-      "then": "the live document is unchanged and proposals are recorded",
-      "when": "an agent submits changed content"
-    },
-    {
       "given": "a pending, an accepted and a rejected proposal",
       "key": "the-rest-of-what-the-hub-records-becomes-reachab-proposals-route",
       "requirement": "the-rest-of-what-the-hub-records-becomes-reac-resolved-proposals",
@@ -1954,6 +1696,294 @@
       "requirement": "a-fold-carries-algorithms-and-crit-fold-into-a-second-capability",
       "then": "the second fold writes and the change stays archived with both capabilities in fold_state; the other two are refused (fold_already_folded, fold_change_not_approved) writing nothing",
       "when": "it is folded into a second capability, then into the first again; and an archived change no merge names is folded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document being written with one blocking gap",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_exploring_ends_at_an_approved_plan.py -k check: call the operator Check route and the agent submit route on the same document; assert equal blocking lists, phase exploring, and the save succeeding after Check.",
+      "key": "exploring-ends-at-an-approved-plan-check-while-editing",
+      "requirement": "exploring-ends-at-an-approved-plan-check-never-moves",
+      "then": "Check shows the same blocking list the agent's save returned, the phase is still exploring, and the agent's save succeeds",
+      "when": "the operator presses Check, and then an agent saves a change to the document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of a database holding a document in proposed",
+      "how_to_check": "Hazard check: take a read-only backup of the :8000 database (sqlite backup API, mode=ro, never the live file), start a Hub from the branch on the copy with DATABASE_URL naming it (port 8010), read the formerly proposed documents and their events, then call the old propose route and assert it is refused; plus a migration test in hub/tests on a fixture holding a proposed document.",
+      "key": "exploring-ends-at-an-approved-plan-proposed-migrated",
+      "requirement": "exploring-ends-at-an-approved-plan-no-proposed-phase",
+      "then": "that document is in exploring with an event naming the retirement, and asking to move any document to proposed is refused",
+      "when": "the Hub starts on this slice's code"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a ready document in exploring",
+      "how_to_check": "Same test file: approve via the operator route from exploring; the document's events show exploring -> approved and nothing between.",
+      "key": "exploring-ends-at-an-approved-plan-approve-direct",
+      "requirement": "exploring-ends-at-an-approved-plan-approve-from-exploring",
+      "then": "it is approved without passing through any other phase",
+      "when": "the operator approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator loaded a ready document, and an agent then saved a change to it",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_exploring_ends_at_an_approved_plan.py -k stale, reading the document (its version), saving a change as an agent, approving with the old version (refused, with the sentence), reloading and approving (accepted); red on master, green on the branch; paste both outputs.",
+      "key": "exploring-ends-at-an-approved-plan-stale-approve-refused",
+      "requirement": "exploring-ends-at-an-approved-plan-approve-what-was-seen",
+      "then": "the approval is refused saying the document changed since it was loaded; after reloading, approving succeeds; fails on master 43301a6 (no version is checked)",
+      "when": "the operator approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a ready document whose delivery is a flow",
+      "how_to_check": "Same test file: approve, then assert tasks exist, no Loop row names the document, and no Run was created; red on master.",
+      "key": "exploring-ends-at-an-approved-plan-approve-starts-nothing",
+      "requirement": "exploring-ends-at-an-approved-plan-approval-is-a-plan",
+      "then": "its tasks exist on the board, no loop exists for it and no run started; fails on master 43301a6 (approval creates the flow)",
+      "when": "it is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the approved document above, an hour later",
+      "how_to_check": "Same test file with a frozen clock advanced an hour: call the Build route, assert the flow exists with the delivery's agent, reviewer and cron and has fired once, and the document's events list approval and build separately.",
+      "key": "exploring-ends-at-an-approved-plan-build-later",
+      "requirement": "exploring-ends-at-an-approved-plan-build-is-separate",
+      "then": "the flow its delivery describes exists and fires, and the event history shows approval and build as two events",
+      "when": "the operator presses Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a ready document whose delivery is a flow",
+      "how_to_check": "Same test file: one request to the approve-and-build route; assert approved and flow exists; repeat with a stale version and assert the same refusal as stale-approve-refused and that nothing was created.",
+      "key": "exploring-ends-at-an-approved-plan-one-action",
+      "requirement": "exploring-ends-at-an-approved-plan-approve-and-build",
+      "then": "it is approved and its flow exists, from one request; with a changed document it is refused like approving alone",
+      "when": "the operator uses Approve and build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose intake recorded 'already built at <commit>'",
+      "how_to_check": "Route test: record intake as already built at a fixture commit, approve, assert the approval response offers close-as-built naming the commit, take it, assert no task is pending (uses slice B's close route).",
+      "key": "exploring-ends-at-an-approved-plan-intake-already-built",
+      "requirement": "exploring-ends-at-an-approved-plan-already-built-at-intake",
+      "then": "they are offered to close its tasks as already built at that commit, and choosing it leaves no task pending",
+      "when": "the operator approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change document at the tasks step",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_spec_journey_words.py: read the tasks step's instructions from spec_journey and assert the wording.",
+      "key": "exploring-ends-at-an-approved-plan-tasks-step-text",
+      "requirement": "exploring-ends-at-an-approved-plan-coarse-tasks",
+      "then": "it asks for one task per independently demonstrable piece with files and dependencies, and does not suggest a task per layer",
+      "when": "the agent's brief for that step is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose last step recorded a recommended flow with an agent, a reviewer and reasons",
+      "how_to_check": "A vitest over the Build dialog fed the document read's real payload asserting the prefilled agent, reviewer and reasons; and a Hub test loading a journey.json fixture that names 'delivery' with no invalid-journey diagnostic.",
+      "key": "exploring-ends-at-an-approved-plan-recommendation-prefills",
+      "requirement": "exploring-ends-at-an-approved-plan-recommend-a-build",
+      "then": "those choices are filled in with their reasons; and a spec/journey.json naming 'delivery' loads without being reported invalid",
+      "when": "the operator opens Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub's step instructions, tool descriptions, readiness messages and bundled charters",
+      "how_to_check": "Same words test: collect spec_journey step texts, the MCP tool descriptions, spec_completeness messages and hub/hub/data/charters/*.md and assert no instruction to propose; red on master.",
+      "key": "exploring-ends-at-an-approved-plan-no-propose-words",
+      "requirement": "exploring-ends-at-an-approved-plan-nothing-says-propose",
+      "then": "it finds none; it fails on master 43301a6",
+      "when": "a test searches them for telling anyone to propose a document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with a running flow-driven build whose lead is L, in a git fixture",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_amendments_main_watch_and_the_next_slice.py -k lead_amendment -v, red on master and green on the branch; paste both",
+      "key": "amendments-main-watch-and-the-lead-amendment-joins-running-build",
+      "requirement": "amendments-main-watch-and-the-next-s-accepted-task-joins-a-build",
+      "then": "before acceptance the document and board are unchanged; after it the new task exists with the build's id and level and the flow's next firing stages it; on master L's call is refused 403 ('only a run testing a task of this document may amend it')",
+      "when": "L proposes add_task with a reason, the board is read, and then the operator accepts it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with no running build",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_after_approval.py -k next_build -v",
+      "key": "amendments-main-watch-and-the-next-sli-task-waits-for-next-build",
+      "requirement": "amendments-main-watch-and-the-next-s-accepted-task-joins-a-build",
+      "then": "the task is pending with no build until the start, then carries the new build and its level",
+      "when": "its author's add_task amendment is accepted, and later a build is started"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document written by Architect before approval, a running build led by L, and agent qa that neither wrote it nor leads",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_after_approval.py -k who -v",
+      "key": "amendments-main-watch-and-the-next-slice-only-author-and-lead",
+      "requirement": "amendments-main-watch-and-the-next-slice-author-and-lead-propose",
+      "then": "Architect's and L's are recorded as proposed with the document unchanged; qa's is refused 403 naming the author and the lead",
+      "when": "Architect, L and qa each propose add_criterion"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two proposals adding a criterion with the same key, and a third proposal",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_after_approval.py -k decide -v",
+      "key": "amendments-main-watch-and-the-next-slice-accept-stale-decline",
+      "requirement": "amendments-main-watch-and-the-next-operator-accepts-or-declines",
+      "then": "the first is applied and listed accepted; the second is refused as stale naming the existing key and the document is unchanged by it; the third is listed declined with the reason; each proposer has an input entry carrying its decision",
+      "when": "the operator accepts the first, accepts the second, and declines the third with a reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose amendments route returns one proposed and one accepted amendment",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/specAmendmentsPanel.test.tsx (fed the route's real payload)",
+      "key": "amendments-main-watch-and-the-next-slice-panel-shows-proposals",
+      "requirement": "amendments-main-watch-and-the-next-operator-accepts-or-declines",
+      "then": "the proposed one shows author, reason, how to check, the change and Accept and Decline (Decline asks for a reason); the accepted one shows who accepted it",
+      "when": "the amendments panel renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an exploring document whose row still says rigor gate",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rigor_retires.py -k save -v",
+      "key": "amendments-main-watch-and-the-next-sl-gate-document-save-applies",
+      "requirement": "amendments-main-watch-and-the-next-slice-exploring-saves-apply",
+      "then": "the save is applied (the stored content changes) and no spec_edit_proposals row is created; on master a proposal is created instead",
+      "when": "an agent submits a change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database at the previous head holding an open task of a gate document, an open task of a contract document, a pending edit proposal, and a task outside any build of a sketch document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_rigor_retires.py -v; plus the hazard check: a sqlite backup copy of :8000 (mode=ro) migrated on a branch Hub at :8010, counting rows changed (expected 0)",
+      "key": "amendments-main-watch-and-the-next-sli-rigor-gone-and-backfilled",
+      "requirement": "amendments-main-watch-and-the-next-slice-rigor-retires",
+      "then": "the first two tasks record gated and reviewed, the proposal is stale with the retirement reason, the routes answer 404, and approving the sketch task behaves as on master; a downgrade restores the nulls and the pending status",
+      "when": "the migration runs and the rigor and proposals routes are called"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a main branch in a git fixture, its tip already seen",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_main_watch_and_the_next_slice.py -k hand_commit -v",
+      "key": "amendments-main-watch-and-the-next-slice-hand-commit-raised",
+      "requirement": "amendments-main-watch-and-the-next-slice-main-move-raised",
+      "then": "an open main notice names that commit's sha, subject and author with the old and new tip, a notification event is broadcast, and the watch interval is at most 60 seconds; on master nothing is recorded",
+      "when": "a commit is made on main by hand and the watch looks once"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same fixture",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_main_watch.py -k rewrite -v",
+      "key": "amendments-main-watch-and-the-next-slice-rewrite-raised",
+      "requirement": "amendments-main-watch-and-the-next-slice-main-move-raised",
+      "then": "the notice says the history was rewritten, naming both tips; no task, check or integration is touched",
+      "when": "main is reset to an earlier commit and the watch looks"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub :8010 started from the branch, on a throwaway project with a main branch",
+      "how_to_check": "Drive: commit with git, time the notice appearing in the app (screenshot with clock), or poll the notices route; paste the timing",
+      "key": "amendments-main-watch-and-the-next-slice-drive-within-a-minute",
+      "requirement": "amendments-main-watch-and-the-next-slice-main-move-raised",
+      "then": "within 60 seconds the Overview shows the notice and a notification arrives",
+      "when": "a commit is made to its main by hand"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approvable task in a git fixture",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_main_watch.py -k own_merge -v",
+      "key": "amendments-main-watch-and-the-next-slice-own-merge-silent",
+      "requirement": "amendments-main-watch-and-the-next-sli-hub-merges-are-not-raised",
+      "then": "the integration record carries the merge commit's sha and no main notice exists",
+      "when": "the operator approves it (the Hub merges it) and the watch looks"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an unseen main notice for one commit",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_main_watch.py -k coalesce -v",
+      "key": "amendments-main-watch-and-the-next-slice-coalesced-and-persisted",
+      "requirement": "amendments-main-watch-and-the-next-slice-one-notice-until-seen",
+      "then": "there is one notice listing four commits, then none open; a fresh project's first look raises nothing",
+      "when": "two more commits land, the watch looks, the watch's in-memory state is cleared as by a restart, another commit lands and it looks again, then the operator marks it seen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved slice document whose roadmap's next slice no document claims, with one open task",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_amendments_main_watch_and_the_next_slice.py -k offer -v",
+      "key": "amendments-main-watch-and-the-next-slice-offer-not-queued",
+      "requirement": "amendments-main-watch-and-the-next-slice-next-slice-offered",
+      "then": "the offer is listed for the document and a notification sent, and no inbound entry exists for any agent; on master, with draft_next_slice requested, the turn is queued instead",
+      "when": "that task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same document, but another document already names the next slice in its roadmap link",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_next_slice_offer.py -k claimed -v",
+      "key": "amendments-main-watch-and-the-next-slice-no-offer-when-claimed",
+      "requirement": "amendments-main-watch-and-the-next-slice-next-slice-offered",
+      "then": "no offer is listed",
+      "when": "its last task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an offer whose document's writing conversation has been archived",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_next_slice_offer.py -k take -v",
+      "key": "amendments-main-watch-and-the-next-s-take-offer-new-conversation",
+      "requirement": "amendments-main-watch-and-the-next-slice-taking-the-offer",
+      "then": "one entry is queued to Architect in a new conversation named for the next slice, carrying each task's outcome; the second take queues nothing",
+      "when": "the operator takes it choosing agent Architect, then takes it again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approvable slice document, and a database holding a next_slice_requested event with no queued event for a built document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_next_slice_offer.py -k request -v",
+      "key": "amendments-main-watch-and-the-next-slic-approval-refuses-request",
+      "requirement": "amendments-main-watch-and-the-next-slice-taking-the-offer",
+      "then": "the approval is refused 400 naming the offer; the earlier request is listed as an offer",
+      "when": "approval is sent with draft_next_slice true, and the offers are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the pairs ('lib.py','./lib.py'), ('pkg/lib.py','pkg//lib.py'), ('.','lib.py') and ('pkg/lib.py','pkg/../pkg/lib.py')",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_spec_task_files.py -v",
+      "key": "every-same-file-overlap-reaches-the-operator-spellings-overlap",
+      "requirement": "every-same-file-overlap-reaches-the-oper-every-spelling-overlaps",
+      "then": "each returns the shared path; on master 0ff5d74 each returns None",
+      "when": "paths_overlap is asked about each pair"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a payload whose task declares files ['../x.py']",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_spec_task_files.py -v",
+      "key": "every-same-file-overlap-reaches-the-operat-climbing-path-refused",
+      "requirement": "every-same-file-overlap-reaches-the-oper-every-spelling-overlaps",
+      "then": "it is refused with a PayloadError naming the task and tasks[0].files[0]; on master it is accepted",
+      "when": "it is validated"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with two tasks that declare no files, at the build step",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_approval_warnings_routes.py -v",
+      "key": "every-same-file-overlap-reaches-the-check-and-approve-name-them",
+      "requirement": "every-same-file-overlap-reac-undeclared-files-reach-the-operator",
+      "then": "the check answer and the approval 409 (warnings or notes) both carry undeclared_task_files naming both tasks; on master neither does",
+      "when": "the operator presses Check and then Approve"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two unordered_file_overlap gaps, 't1'/'t2' on 'lib.py' and 't3'/'t4' on 'util.py'",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/specApprovalWarnings.test.tsx",
+      "key": "every-same-file-overlap-reaches-the-operator-two-pairs-on-screen",
+      "requirement": "every-same-file-overlap-reaches-the-operator-every-pair-is-named",
+      "then": "both 'lib.py' and 'util.py' appear on screen; on master only 'lib.py' does",
+      "when": "the approval gap list renders them"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a document with two same-file pairs and a task with no files, in the app",
+      "how_to_check": "Operator, on the spec page of a scratch document: press Approve and read the gap list.",
+      "key": "every-same-file-overlap-reaches-the-ope-operator-sees-both-pairs",
+      "requirement": "every-same-file-overlap-reaches-the-operator-every-pair-is-named",
+      "then": "the gap list names both pairs and the task with no files",
+      "when": "the operator presses Approve on the spec page"
     }
   ],
   "algorithms": [
@@ -1994,7 +2024,7 @@
       "FR-119": "a49906021942daa28f0b979ceb62d4bd9e8ab288bfe41a79cfe0f87ab5d90c4f",
       "FR-120": "39fc9bd28eeb41bef7b4165925278c54f8c711bc202a35be1e6290dfee1e8365",
       "FR-121": "e1b647a8713092f01611967bb97a86385f93d960e93dd1556b9082b0bad8a8a7",
-      "FR-122": "572046e9d6711fac75dd4998ab66837062d710775d68f75b129d81290c00d807",
+      "FR-122": "05c7f25586ccb8d38fb1bd646c9086e5668c12aa632af721f3056191adc3a931",
       "FR-123": "469639a2c833388117ac6a6126e31e19f49fe3d82b831b5348b4a1bc0190ed29",
       "FR-124": "9485f010dba39492f70d0d697c904f3cc0886c8596a1749d06a798776f152141",
       "FR-125": "0f8dbde966753d9277c52cff148cc424870271ebd5e7c1adbefe4d319bb9fb3c",
@@ -2063,14 +2093,38 @@
       "FR-188": "25afa5da76e0e2bb514ed8382a111d21e68029176118a5d7facc319c83a8738e",
       "FR-189": "13cd4c3bf2ca77cff50d424e93b4318d42e9ed206ef659c9f95b5294ae7f48b3",
       "FR-190": "f84635e6e66c34b2dae7a00c62dd99e0ad1b7276d833818d2fa59f9fd2175b9b",
+      "FR-191": "d57d9ad9f2bae842c2b596e38aac34f22c658d16edf9e509601dc211432e85d1",
+      "FR-192": "3506bcb71b70fd3aeabc610fb93af13ce488d1dfe39e8b721379b66431b4c119",
+      "FR-193": "2fbdec90cd29492ee9ea26d09b07f1588b4807743c3caa55c7a2644cf756b313",
+      "FR-194": "be3c7990f04fbcc744f961079c777900d6a10007f7311208ab564683b1070648",
+      "FR-195": "de8ed4d68a17843a36cd818b0c1a0ae9c3da6a0ec6afedc2b2144e53d76ce2ad",
+      "FR-196": "e6f8aa6c77123acb8c6027c61b058a8da1a36f9bc50230ee78fbe361e1e1f525",
+      "FR-197": "cd1f821ac0043ca6d8ab88b2e243a9644ec9833d01239a8635e0c6d13770c40e",
+      "FR-198": "94a7add92016677d40c35d20739f2e0b7c21949cf8fb4e92c39851016eb46fb3",
+      "FR-199": "86dc4565b996570e5630b466eb2e8f66b3fb3785dc6d7f08e3e6b5316b730029",
+      "FR-200": "b62baf5486cd366d7391ab47a3025059add73ce2fc60eae8e62e0a7c0f993598",
+      "FR-201": "8081c8f9385203a645c89b84e01a9e046b09cff2b4c75ce4d7340bd5a55aefb0",
+      "FR-202": "8d15b94c9246a230e51ae9c928ba6a30f5fb2eff677d6c7874fd623c0b4dcab0",
+      "FR-203": "1311af763a1308b09476ff1c6342eb9d1defa0701d39d066ee304c0bf26a3ec9",
+      "FR-204": "30f946cc4b5a72ede43c5a02e3217dbb47b0f9ba7ed8c5ec43a8fe3ebe419a0b",
+      "FR-205": "8209b48f3b6404545df69a4293f28afb6f45fc2e5e21403e7d83542e88ad9e73",
+      "FR-206": "83a0b4555a919830c8ce0db46468c620aab233e70b121859051dfb9707e934f2",
+      "FR-207": "e746d1141c974086ad0e89ec92969698b69f182cf577fe35abad05fab5ea33b3",
+      "FR-208": "cdd6569024eac63388157cc8ccd4be92310d4da6e9a866f407b595d9c0e3e94b",
+      "FR-209": "5d514c5a8d5c43e44bc659a326a71a526f537df0b69d743b910ec2a48ea278b7",
+      "FR-210": "bc208c137a0216ed797b655d425fad2124202bdcc70e631a78fec420604cffb9",
+      "FR-211": "337f1ea3bf7b638dbc598abd40783e4f24a77e06e7f5bc4302c8b1e43f8b36d2",
+      "FR-212": "2c51fdc9007e0d505235538a67df09b0a637a41e6c5ecaa6d1adbec63bfaaf5e",
+      "FR-213": "c1782ce0268cc5f749ec16e4405d52d7528cf8cd796b2a786096259dd9befdd0",
+      "FR-214": "acf148eac873286eab2ea4b561270322c06d141a5b55dd3f4e95c84d60b37475",
       "FR-39": "bbd4e97f468c77548f230f318d682f8d061e41f6cd8ddffd2863264e6715039b",
       "FR-40": "77600ef42b7181d6b33c20ea6a1a12f814e8d6dce4e32d030f372a46c4f58dce",
       "FR-41": "936b6c50917eaa5d2816907e84de1a332baf568b8313a5c9ef2594e7667a2b0a",
       "FR-42": "de7788e3c8b89139b17816b4bb6e5c37777868370aaa66055d76fd7fc37ea3b6",
       "FR-43": "38a10be366ee37ff5e771e17f2c3a4d3533de44bdbbe4c7291eddf01afd0446c",
-      "FR-44": "dc1444baf4c613d7f033b7cece72b52bc0926474b3db20685891f4112e951912",
+      "FR-44": "f689ffaa79a1a658df59a89bcea8b86ef2ae5a618895556e0bc8785a82c08cd4",
       "FR-45": "e063133897f2a4016c6430e9cb93d22ab5fbbdef0e9a95f6e2e8eba3a8e172f7",
-      "FR-46": "f829a72297984a044a5f34bf3ca8ca3b0a6b0004afaf89182c3164211986d3fb",
+      "FR-46": "c20e5e741edd6d50e0abd7ad4c091b77127ad0b77dcf7ac9204c6d58ac7f44f3",
       "FR-47": "199e787228af604f6a1111adca0e73b28544273c8e5dfe01a75e249413900231",
       "FR-48": "1a509ac6c82e4b68859813b84b34d173a583b403f39c1d5f11c2089ff84497dd",
       "FR-49": "9728f82ef31d86e8138b5a2506e4136cb3ebeb9de89e433da5b89cfecafa54fd",
@@ -2121,11 +2175,11 @@
       "FR-94": "e8f712ddd3720f1c07f2f8c1945a39eaa746144b679d713d4e650794e445e575",
       "FR-95": "4a0872cc657fdc78633d08382117f56a6ba571d6c60f7a6e0d7159b5b6a0e2b7",
       "FR-96": "4692c568c7056cb570ab30bb42f2f70161b35609a9e1357725f50fe0b06d4f08",
-      "FR-97": "c753d3d645ff28bc4212b24a681c020e2321373832fdd09b6f16d63b0b129b74",
+      "FR-97": "636717ec2a66dad8bc824415fb874e535f33bfb766697af70136ee566e909c69",
       "FR-98": "d60b4096b6e56a0ff6f7d32a686d005a80f72f0f5b082afe029f554d73291a76",
       "FR-99": "e7bbabeed4bb05de59733e94a0b7512c30c5784ba4fa62152dce7263fb048d91"
     },
-    "high_water": 190,
+    "high_water": 214,
     "requirements": {
       "a-capability-can-be-retired-app": "FR-137",
       "a-capability-can-be-retired-frozen": "FR-135",
@@ -2141,13 +2195,10 @@
       "a-change-is-reconciled-with-its-code-before-it-reconcile-record": "FR-179",
       "a-change-s-delta-is-absorbed-into-the-corpus-by-an-authored-": "FR-75",
       "a-declared-task-can-state-the-name-the-board-shows": "FR-58",
-      "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o": "FR-67",
-      "a-document-declares-how-strictly-it-is-enforced": "FR-64",
       "a-document-has-a-phase-and-the-hub-owns-its-transitions": "FR-44",
       "a-document-is-renamed-once-its-subject-is-established": "FR-62",
       "a-document-s-digest-is-stored-on-write-and-divergence-is-rep": "FR-48",
       "a-document-s-path-is-fixed-once-it-has-ever-been-approved": "FR-94",
-      "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco": "FR-102",
       "a-document-that-produced-nothing-can-be-archived": "FR-97",
       "a-finished-change-is-archived-by-the-operator": "FR-73",
       "a-finished-change-is-folded-into-its-capability-app": "FR-115",
@@ -2164,7 +2215,6 @@
       "a-materialised-task-carries-the-criteria-of-the-requirements": "FR-59",
       "a-multi-task-document-without-files-is-warned": "FR-110",
       "a-new-document-is-given-a-name-that-means-nothing": "FR-61",
-      "a-pending-proposal-is-discoverable-in-position-and-is-indivi": "FR-68",
       "a-project-orders-its-own-spec-steps-bar-shows-journey": "FR-165",
       "a-project-orders-its-own-spec-steps-builtins-fixed": "FR-160",
       "a-project-orders-its-own-spec-steps-invalid-reported": "FR-163",
@@ -2172,8 +2222,6 @@
       "a-project-orders-its-own-spec-steps-operator-edits": "FR-162",
       "a-project-orders-its-own-spec-steps-size-cap": "FR-161",
       "a-project-orders-its-own-spec-steps-step-gone": "FR-164",
-      "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r": "FR-103",
-      "a-proposal-that-no-longer-matches-the-document-s-current-con": "FR-71",
       "a-read-too-large-for-one-result-is-written-into-the-agent-s-": "FR-105",
       "a-renamed-document-carries-its-new-subject": "FR-57",
       "a-rendered-document-is-ordered-and-complete-for-a-reader": "FR-63",
@@ -2190,7 +2238,6 @@
       "a-spec-is-written-one-step-at-a-time-default-journey": "FR-145",
       "a-spec-is-written-one-step-at-a-time-existing-documents": "FR-150",
       "a-spec-is-written-one-step-at-a-time-operator-moves-journey": "FR-148",
-      "a-spec-is-written-one-step-at-a-time-propose-without-close": "FR-149",
       "a-spec-is-written-one-step-at-a-time-step-recorded": "FR-144",
       "a-specification-document-is-a-file-in-the-project-working-di": "FR-40",
       "a-specification-document-is-readable-by-the-id-tasks-carry": "FR-106",
@@ -2201,16 +2248,22 @@
       "a-tester-drives-the-built-product-and-keeps-the-spec-t-amend-ops": "FR-174",
       "a-tester-drives-the-built-product-and-keeps-the-spec-t-amend-who": "FR-173",
       "a-tester-drives-the-built-product-and-keeps-the-spec-true-page": "FR-178",
-      "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato": "FR-70",
-      "an-accepted-proposal-is-attributed-to-both-its-proposer-and-": "FR-69",
+      "amendments-main-watch-and-the-next-operator-accepts-or-declines": "FR-203",
+      "amendments-main-watch-and-the-next-s-accepted-task-joins-a-build": "FR-204",
+      "amendments-main-watch-and-the-next-sli-hub-merges-are-not-raised": "FR-208",
+      "amendments-main-watch-and-the-next-slice-author-and-lead-propose": "FR-202",
+      "amendments-main-watch-and-the-next-slice-exploring-saves-apply": "FR-205",
+      "amendments-main-watch-and-the-next-slice-main-move-raised": "FR-207",
+      "amendments-main-watch-and-the-next-slice-next-slice-offered": "FR-210",
+      "amendments-main-watch-and-the-next-slice-one-notice-until-seen": "FR-209",
+      "amendments-main-watch-and-the-next-slice-rigor-retires": "FR-206",
+      "amendments-main-watch-and-the-next-slice-taking-the-offer": "FR-211",
       "an-agent-can-read-a-specification-document": "FR-143",
       "an-agent-can-read-a-specification-document-in-results-that-f": "FR-104",
       "approval-creates-the-work-its-document-declares": "FR-138",
       "approval-is-the-operator-s-decision-and-no-agent-can-express": "FR-45",
       "approval-reports-what-it-created-and-what-it-could-not": "FR-139",
       "approve-lists-what-is-missing-and-can-app-anyway-only-at-approve": "FR-171",
-      "approve-lists-what-is-missing-and-can-approv-propose-passes-gaps": "FR-169",
-      "approve-lists-what-is-missing-and-can-approve-anyw-approve-warns": "FR-166",
       "approve-lists-what-is-missing-and-can-approve-anyw-refusals-stay": "FR-168",
       "approve-lists-what-is-missing-and-can-approve-anyway-gap-set": "FR-167",
       "approve-lists-what-is-missing-and-can-approve-anyway-page-shows": "FR-172",
@@ -2220,20 +2273,30 @@
       "document-state-changes-refresh-subscribers": "FR-53",
       "document-validity-is-checked-by-the-hub-not-asserted-by-its-": "FR-46",
       "every-change-to-a-document-is-recorded-as-an-attributed-even": "FR-47",
+      "every-same-file-overlap-reac-undeclared-files-reach-the-operator": "FR-213",
+      "every-same-file-overlap-reaches-the-oper-every-spelling-overlaps": "FR-212",
+      "every-same-file-overlap-reaches-the-operator-every-pair-is-named": "FR-214",
+      "exploring-ends-at-an-approved-plan-already-built-at-intake": "FR-198",
+      "exploring-ends-at-an-approved-plan-approval-is-a-plan": "FR-195",
+      "exploring-ends-at-an-approved-plan-approve-and-build": "FR-197",
+      "exploring-ends-at-an-approved-plan-approve-from-exploring": "FR-193",
+      "exploring-ends-at-an-approved-plan-approve-what-was-seen": "FR-194",
+      "exploring-ends-at-an-approved-plan-build-is-separate": "FR-196",
+      "exploring-ends-at-an-approved-plan-check-never-moves": "FR-191",
+      "exploring-ends-at-an-approved-plan-coarse-tasks": "FR-199",
+      "exploring-ends-at-an-approved-plan-no-proposed-phase": "FR-192",
+      "exploring-ends-at-an-approved-plan-nothing-says-propose": "FR-201",
+      "exploring-ends-at-an-approved-plan-recommend-a-build": "FR-200",
       "n1": "FR-121",
       "n2": "FR-122",
-      "n3": "FR-123",
       "n4": "FR-124",
       "n5": "FR-125",
       "n6": "FR-126",
-      "n7": "FR-127",
       "n8": "FR-128",
       "n9": "FR-129",
-      "only-the-operator-changes-rigor": "FR-65",
       "re-approving-an-amended-document-refreshes-its-open-task-refresh": "FR-140",
       "re-approving-an-amended-document-refreshes-its-open-tasks-app": "FR-142",
       "re-approving-an-amended-document-refreshes-its-open-tasks-report": "FR-141",
-      "rigor-is-only-raised-on-a-document-that-can-be-enforced": "FR-66",
       "the-agent-submits-a-structured-payload-and-the-hub-renders-t": "FR-41",
       "the-hub-mints-requirement-identifiers-and-they-are-stable": "FR-43",
       "the-operator-answers-a-cannot-satisfy-report-respond-route": "FR-187",
@@ -2250,16 +2313,27 @@
     "retired": {
       "a-change-document-declares-how-it-will-be-built-before-it-is": "FR-99",
       "a-declared-task-s-requirement-span-is-capped-and-the-hub-enf": "FR-39",
+      "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o": "FR-67",
+      "a-document-declares-how-strictly-it-is-enforced": "FR-64",
       "a-document-may-declare-a-dependency-on-another-document-s-wo": "FR-95",
       "a-document-may-enter-hub-tracking-without-being-created-thro": "FR-87",
       "a-document-s-delivery-is-checked-against-the-roster-when-it-": "FR-101",
+      "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco": "FR-102",
       "a-failure-to-write-the-index-does-not-abandon-the-requiremen": "FR-85",
       "a-hub-initiated-regeneration-is-not-an-authored-change": "FR-93",
+      "a-pending-proposal-is-discoverable-in-position-and-is-indivi": "FR-68",
+      "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r": "FR-103",
+      "a-proposal-that-no-longer-matches-the-document-s-current-con": "FR-71",
       "a-rendered-document-states-where-it-sits-not-only-what-it-sa": "FR-92",
+      "a-spec-is-written-one-step-at-a-time-propose-without-close": "FR-149",
       "a-specification-turn-is-announced-with-the-turn-not-only-bef": "FR-60",
+      "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato": "FR-70",
       "adoption-reports-rather-than-resolves": "FR-89",
+      "an-accepted-proposal-is-attributed-to-both-its-proposer-and-": "FR-69",
       "an-unreadable-or-absent-index-degrades-visibly": "FR-52",
       "approval-remains-the-operator-s-regardless-of-who-authored-t": "FR-91",
+      "approve-lists-what-is-missing-and-can-approv-propose-passes-gaps": "FR-169",
+      "approve-lists-what-is-missing-and-can-approve-anyw-approve-warns": "FR-166",
       "authoring-assistance-is-scoped-away-from-performing-discover": "FR-72",
       "both-index-implementations-agree-on-the-vocabulary": "FR-86",
       "coverage-distinguishes-rejected-evidence-from-work-that-has-": "FR-78",
@@ -2270,7 +2344,11 @@
       "n10": "FR-130",
       "n11": "FR-131",
       "n12": "FR-132",
+      "n3": "FR-123",
+      "n7": "FR-127",
+      "only-the-operator-changes-rigor": "FR-65",
       "rebuilding-the-index-preserves-what-the-operator-arranged": "FR-83",
+      "rigor-is-only-raised-on-a-document-that-can-be-enforced": "FR-66",
       "the-exploring-interview-asks-how-the-change-will-be-built": "FR-100",
       "the-file-is-authoritative-at-the-point-of-adoption": "FR-88",
       "the-hub-can-write-the-document-index-it-reads": "FR-81",
@@ -2303,7 +2381,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -2380,7 +2457,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "The status line in the file is a copy for its reader. Reading phase from a row the Hub alone writes is what makes approval impossible to forge by editing the file.",
-      "statement": "A document's phase SHALL be one of `exploring`, `proposed`, `approved`, `archived` or `current`, read from the Hub's database row and never from the file, and SHALL change only along exploring to proposed, proposed to approved, proposed to exploring, approved to exploring, approved to archived, exploring to archived and proposed to archived; any other move, a move to the phase the document already holds, and any move to or from `current` SHALL be refused naming why."
+      "statement": "A document's phase SHALL be one of `exploring`, `approved`, `archived` or `current`, read from the Hub's database row and never from the file, and SHALL change only along exploring to approved, approved to exploring, approved to archived, exploring to archived and current to archived; any other move, a move to the phase the document already holds, and any move to `current` SHALL be refused naming why. A move to the retired `proposed` phase SHALL be refused with `proposed_retired`."
     },
     {
       "key": "approval-is-the-operator-s-decision-and-no-agent-can-express",
@@ -2394,21 +2471,14 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "Whether an exploration is complete and whether a document is agreed are the operator's judgements. An agent writes and reads; it cannot move its own document forward.",
-      "statement": "Proposing, approving, reopening and archiving a document, and declaring its exploration closed, SHALL be reachable only through operator routes; an agent's tool surface SHALL offer no field or route that expresses any of them, and closing exploration SHALL also be refused to a non-operator actor in the service."
-    },
-    {
-      "key": "n3",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "\"Not yet\" is a normal answer, and a 200 alone cannot say whether the document moved (F528).",
-      "statement": "Proposing a document SHALL answer with a `proposed` field that is true only when the document moved to `proposed`; a document that cannot move yet SHALL be answered with `proposed: false` and every blocker, not with an error status."
+      "statement": "Approving, reopening and archiving a document SHALL be reachable only through operator routes; an agent's tool surface SHALL offer no field or route that expresses any of them, and the phase function SHALL refuse approval and archiving to a non-operator actor."
     },
     {
       "key": "document-validity-is-checked-by-the-hub-not-asserted-by-its-",
       "modal": "MUST",
       "party": null,
       "rationale": "A check the author reports passing is not a check. A proposed document can still be edited, and a document can be adopted at proposed, so having been proposed does not prove completeness at approval.",
-      "statement": "The Hub SHALL evaluate a document's completeness itself whenever it is moved to `proposed` or `approved`, inside the phase-transition function, and SHALL refuse the move listing every blocker in one answer (for `proposed`, including that exploration has not been closed); a move the phase map or the actor forbids SHALL be refused as such, not reported as incompleteness."
+      "statement": "The Hub SHALL evaluate a document's completeness itself, inside the phase-transition function when it is moved to `approved` and on Check at any time without moving it, and SHALL list every gap in one answer; a move the phase map or the actor forbids SHALL be refused as such, not reported as incompleteness."
     },
     {
       "key": "n4",
@@ -2432,13 +2502,6 @@
       "statement": "A field that a requirement, acceptance criterion, task or slice does not define SHALL be reported as a blocking `unknown_field` finding naming the field and saying nothing reads it, and, for acceptance criteria nested under a requirement, saying where they belong."
     },
     {
-      "key": "n7",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "A document under discussion is incomplete by definition, so findings do not refuse a save; but a saved document is not a ready one, and an agent read a bare success as \"ready\" (F502).",
-      "statement": "The answer to a submission SHALL carry its `blocking` findings and `ready_to_propose`, false while any blocking finding remains; a submission with findings is still written."
-    },
-    {
       "key": "n8",
       "modal": "SHALL",
       "party": null,
@@ -2457,7 +2520,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "A document created by mistake must be retirable through the phase machine, but archiving must never become a way to bury work that exists.",
-      "statement": "A document in `exploring` or `proposed` SHALL be archivable by the operator only while it has no requirements and no tasks; otherwise the move SHALL be refused naming that work exists."
+      "statement": "A document in `exploring` SHALL be archivable by the operator only while it has no requirements and no tasks; otherwise the move SHALL be refused naming that work exists."
     },
     {
       "key": "a-finished-change-is-folded-into-its-capability-archive-guard",
@@ -2542,76 +2605,6 @@
       "party": null,
       "rationale": "A reader should tell requirement strength by scanning, not by reading every word.",
       "statement": "A rendered requirement SHALL show its modal obligation with a treatment distinct for each obligation and consistent across requirements sharing it."
-    },
-    {
-      "key": "a-document-declares-how-strictly-it-is-enforced",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "Rigor is not phase: phase asks whether the operator agreed to the document, rigor what happens to work that does not satisfy it. `gate` refuses approval of work while a requirement it serves is unverified.",
-      "statement": "A document SHALL have a rigor of `sketch`, `contract` or `gate`, held by the Hub on the document's row, `sketch` by default and shown in the rendered document; each change SHALL be written against the document's current content digest and recorded append-only with the previous and new level, actor, reason and digest."
-    },
-    {
-      "key": "only-the-operator-changes-rigor",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "A gate the blocked party can lower is not a gate; an operator who needs past one has a visible, recorded way through.",
-      "statement": "Only the operator SHALL change a document's rigor, enforced in the rigor function itself; an agent SHALL have no argument, tool or route that expresses a promotion or demotion, and the operator's demotion SHALL be recorded and attributed."
-    },
-    {
-      "key": "rigor-is-only-raised-on-a-document-that-can-be-enforced",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "Rigor is a claim about enforceability; a demotion that destroyed the record would launder unverified work.",
-      "statement": "Promotion to `contract` or `gate` SHALL be refused while the document has unresolved identifiers, duplicate references or content that does not parse; demotion SHALL NOT be so conditioned and SHALL change enforcement only, keeping links, revisions, evidence and reviews."
-    },
-    {
-      "key": "a-document-s-rigor-history-is-on-its-screen-and-the-app-reco",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "A demotion is legitimate because it is recorded; a record nobody can read, or whose reason is always blank, is the unrecorded override in another form.",
-      "statement": "The document's view SHALL list every rigor change (levels, actor, reason, time, newest first), and the app SHALL ask for a reason whenever it changes rigor and SHALL NOT submit a demotion without one."
-    },
-    {
-      "key": "a-document-at-contract-or-gate-rigor-gates-edits-behind-an-o",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "The gate is on agents; the operator is the one who reviews.",
-      "statement": "At contract or gate rigor an agent's submission SHALL NOT change the live document; the Hub SHALL diff it against the stored payload and record one pending proposal per added, modified or removed requirement (matched by key) and one for all non-requirement content, recording nothing for an unchanged submission; at sketch an agent's submission applies immediately."
-    },
-    {
-      "key": "a-pending-proposal-is-discoverable-in-position-and-is-indivi",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "A pending change must be discoverable without leaving the document, yet kept apart from the live text so a proposed statement is not mistaken for the document's own.",
-      "statement": "Pending proposals SHALL be shown on the document's own view, one row per requirement key plus one for the summary and other non-requirement content, and deciding one SHALL NOT change the status of any other."
-    },
-    {
-      "key": "an-accepted-proposal-is-attributed-to-both-its-proposer-and-",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "The content event names who wrote the file; the proposal row keeps who proposed it, so neither identity is lost.",
-      "statement": "An accepted proposal's record SHALL name its proposer (actor and run) and the operator who accepted it in separate fields."
-    },
-    {
-      "key": "accepting-or-rejecting-a-proposal-is-reserved-to-the-operato",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "The same construction as approval: an agent cannot accept its own edit into a gated document.",
-      "statement": "Accepting, rejecting or withdrawing a proposal SHALL be refused to any actor but the operator, enforced in the functions that perform them."
-    },
-    {
-      "key": "a-proposal-that-no-longer-matches-the-document-s-current-con",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "A proposal must never be applied to content it was not compared against.",
-      "statement": "Accepting a proposal SHALL be refused, and the proposal marked `stale`, when the document's content digest has changed since the proposal was recorded, or since the digest the operator supplies."
-    },
-    {
-      "key": "a-proposal-leaves-the-queue-without-a-judgement-when-it-is-r",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "Retries and revisions are ordinary; without this the list fills with twins only a false rejection could clear. Different proposers' proposals are alternatives and never supersede each other.",
-      "statement": "A repeated identical submission from the same proposer SHALL record no new proposal and name the pending one; a proposer's newest submission SHALL supersede its own earlier pending proposal for any unit it now changes differently or leaves as stored; the operator MAY withdraw a pending proposal without judging it; a proposal SHALL leave `pending` at most once, and each decision SHALL be broadcast to the project's open views."
     },
     {
       "key": "document-state-changes-refresh-subscribers",
@@ -2852,13 +2845,6 @@
       "statement": "The document's phase bar MUST show the journey's steps, the current one and the size, and MUST let the operator move to any step, back or forward, and change the size, each change taking effect from the next turn."
     },
     {
-      "key": "a-spec-is-written-one-step-at-a-time-propose-without-close",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "The step pointer replaces the boolean; one fewer operator click.",
-      "statement": "Proposing a change document MUST NOT require the operator to have marked exploration complete; the Exploration is complete control and the explore_not_closed refusal MUST be removed."
-    },
-    {
       "key": "a-spec-is-written-one-step-at-a-time-existing-documents",
       "modal": "MUST",
       "party": null,
@@ -2971,13 +2957,6 @@
       "statement": "The documents view's journey field and the phase bar MUST show the project's journey for the document's size, custom steps included, in file order."
     },
     {
-      "key": "approve-lists-what-is-missing-and-can-approve-anyw-approve-warns",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "Approvals are scarce: say what is missing, never refuse the operator's judgement (operator, 2026-10-08).",
-      "statement": "Approving a proposed document in which the Hub finds gaps MUST answer 409 with code approval_warnings and the list of gaps (code, where, message) and leave the document proposed; the same request with approve_anyway set to true MUST approve it."
-    },
-    {
       "key": "approve-lists-what-is-missing-and-can-approve-anyway-gap-set",
       "modal": "MUST",
       "party": null,
@@ -2990,13 +2969,6 @@
       "party": null,
       "rationale": "Each makes approval's own work wrong: the board cannot be materialised, the writer is broken, or the roadmap link is false.",
       "statement": "Proposal and approval MUST still be refused, with approve_anyway or without, for an unresolved or cyclic task dependency, a field a part does not define, a slice whose roadmap is not approved or does not hold the slice, a roadmap with no slices, and a payload that is missing or invalid."
-    },
-    {
-      "key": "approve-lists-what-is-missing-and-can-approv-propose-passes-gaps",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "A gap that refused proposal could never reach the approval that warns about it.",
-      "statement": "Proposing MUST NOT be refused for a gap; propose's response MUST list the gaps under warnings and only refusals under blocking."
     },
     {
       "key": "approve-lists-what-is-missing-and-can-approve-overrides-recorded",
@@ -3144,6 +3116,174 @@
       "party": null,
       "rationale": "The default archives on the first fold, so a change touching two capabilities could reach the second only if the operator knew beforehand to pass archive:false. Its content was approved either way.",
       "statement": "A change archived after a fold MUST still be foldable into a capability no merge has folded it into, writing through the merge and staying archived; folding it into a capability it is already folded into, and folding an archived change that no merge names, MUST be refused before writing."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-check-never-moves",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Propose froze the document, so every finding meant reopening it; the operator wants the agent to keep implementing changes while they look (2026-10-26).",
+      "statement": "The operator can Check a document at any time while it is being written; Check reports exactly the blocking gaps and warnings the agent's own save returns, and never changes the document's phase or stops an agent from saving it."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-no-proposed-phase",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: move them back to exploring.",
+      "statement": "No document can enter a proposed phase, and every document in it when this ships is moved to exploring with a recorded event naming why."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-approve-from-exploring",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator approves a document directly from exploring when it is ready, or over its gaps with approve-anyway as today."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-approve-what-was-seen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With the document editable while the operator reads, an approval could otherwise accept text nobody read (operator, 2026-10-26: refuse).",
+      "statement": "An approval names the content version the operator loaded, and is refused, saying the document changed since it was loaded, when the stored content differs; after reloading it is accepted."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-approval-is-a-plan",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Approving a document creates its tasks and starts nothing: no flow is created or fired and no run begins, whatever the document's delivery says."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-build-is-separate",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An approved document has a Build action that starts building it as its recommended build says (in this slice: create and start the flow its delivery describes, or leave the tasks on the board), and the action can be taken later than approval."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-approve-and-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approvals are scarce (operator, 2026-10-08); splitting must not cost an extra click when none is wanted.",
+      "statement": "'Approve and build' approves and starts the build in one operator action, with the same refusal rules as approving alone."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-already-built-at-intake",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The intake step asks whether the work is already built and records the answer with the commits named; approving a document recorded as already built offers to close its tasks as already built (slice B) instead of laying them out for building."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-coarse-tasks",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "The 2026-10-25 flow paid a tick, a reviewer wait and a gate run per fine-grained task; the integrator who won used coarse units.",
+      "statement": "The tasks step's instructions ask for one task per independently demonstrable piece, built by one agent, naming the files it edits and the tasks it waits on, rather than one task per layer or per file."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-recommend-a-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "How it is built is now chosen when building starts (slice D); the spec suggests, the operator decides.",
+      "statement": "The last exploring step records a recommended build with a reason for each choice, Build and 'Approve and build' open with it filled in, and a project's spec/journey.json that names the old 'delivery' step still works."
+    },
+    {
+      "key": "exploring-ends-at-an-approved-plan-nothing-says-propose",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "No step text, tool description, readiness message or charter the Hub ships tells an agent or the operator to propose a document; the spec author charter's rule about when to ask in the reply and when to call ask_user refers to approval instead of proposal."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-slice-author-and-lead-propose",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26. 'Author' is every agent with a content save before first approval, not the creator: 159 of 180 documents on :8000 were created by the operator and written by an agent (read-only query of spec_document_events, 2026-10-27).",
+      "statement": "After a document is approved, an agent that wrote its content before approval, or the lead of its running build, can propose an amendment to it (add a task, add a requirement, add, change or remove a criterion) with a reason and how to check it; the proposal changes neither the document nor the board until the operator accepts it; any other agent's proposal is refused, naming who may propose."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-operator-accepts-or-declines",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Re-applying the structural operation at acceptance, rather than a stored whole-document diff, keeps two accepted amendments from overwriting each other.",
+      "statement": "The operator sees each proposed amendment on its document with its author, reason, how to check it and the change it makes; accepting applies it to the document as it stands then and records it as accepted by the operator, or is refused as stale, naming why, when the change no longer applies; declining records the operator's reason; the proposer receives the decision as input in either case."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-s-accepted-task-joins-a-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task added by an accepted amendment joins the document's running build at once, carrying that build and its level and its declared builder, and its driver hands it out like any other task of the build; with no build running it waits on the board and joins the next build started on the document."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-slice-exploring-saves-apply",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Before approval, every save of a document by an agent or the operator is applied directly, whatever rigor the document carried; no edit proposal is created."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-slice-rigor-retires",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The backfill keeps a stricter document's open work from loosening silently on another install; on :8000 it touches no row.",
+      "statement": "No route, tool or control in the app sets or shows a document's rigor; approval's evidence rule comes from the task's level (slice D), and a task outside any build is judged by sketch's rule unless it records a level; when this ships, each open task of a contract or gate document outside a build records reviewed or gated respectively, and each pending edit proposal is marked stale with a reason naming the retirement."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-slice-main-move-raised",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: notice and raise, never block. Hand merges by the operator and the orchestrator are raised too (design D5).",
+      "statement": "Within 60 seconds of a project's main branch tip moving by any commit other than a merge the Hub's own integration made, the operator receives a notification and sees an Overview notice naming the commits (short sha, subject, author) and the old and new tip; a move that rewrote history (the old tip no longer an ancestor) is raised as a rewrite; nothing is blocked, reverted or retried because of it."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-sli-hub-merges-are-not-raised",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A move made only of merge commits the Hub recorded making when it integrated approved work raises nothing."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-slice-one-notice-until-seen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator commits to master by hand most days; one notice per unseen stretch keeps that from becoming a pile.",
+      "statement": "Moves raised while a main notice is still unseen are added to it rather than raising another; marking it seen closes it; the tip last accounted for survives a Hub restart, so a move made while the Hub was down is raised at its first look, and the very first look after this ships records the tip without raising anything."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-slice-next-slice-offered",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the last open task of a document that specifies a roadmap slice closes and the roadmap's following slice is claimed by no document, the operator is notified and offered that slice's drafting on the Overview and the document's page; no drafting turn is queued until the operator takes the offer."
+    },
+    {
+      "key": "amendments-main-watch-and-the-next-slice-taking-the-offer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Keeps 5b40da0's behaviour (slice_drafting.py:203-218).",
+      "statement": "Taking the offer queues one drafting turn, carrying the slice's outcomes as today's turn does, to the agent the operator chooses (by default the document's author), in the conversation where the document was written while it is open and otherwise in a new one (F1047); declining it hides it for that slice; approval no longer accepts a request to draft the next slice, refusing it by name, and a request recorded before this ships shows as an offer."
+    },
+    {
+      "key": "every-same-file-overlap-reaches-the-oper-every-spelling-overlaps",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1013: the same-file warning compared raw strings, so tasks that edit one file under two spellings were built in parallel with no warning.",
+      "statement": "Two declared task paths that name the same file or directory once normalised (backslashes, './', doubled slashes, '..' segments, '.' as the repository root, and letter case where the checkout's filesystem ignores it) MUST be reported as overlapping, and a declared path that normalises outside the repository MUST be refused as invalid, naming the task and the path."
+    },
+    {
+      "key": "every-same-file-overlap-reac-undeclared-files-reach-the-operator",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1014: the warning lived only in the save result, which the app never reads, so the operator approved tasks the Hub could not order. F694 fixed its sibling unordered_file_overlap the same way.",
+      "statement": "When a document's tasks include one that declares no files, check (propose) and approval MUST report undeclared_task_files naming those tasks, on the operator's screen, as the save already does for the agent."
+    },
+    {
+      "key": "every-same-file-overlap-reaches-the-operator-every-pair-is-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1015: two same-file pairs read as one line naming only the first pair; the operator could not learn of the second from the screen.",
+      "statement": "The approval gap list, and the 'Approved over these gaps' list after approval, MUST show every finding's message when findings of one code differ in their message, so each same-file pair is named."
     }
   ],
   "schema_version": 1,

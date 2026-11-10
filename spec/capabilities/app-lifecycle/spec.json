@@ -230,6 +230,168 @@
       "requirement": "the-documented-command-form-is-the-one-that-works",
       "then": "The value after the subcommand is used.",
       "when": "The command runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app window open",
+      "how_to_check": "Covered by the acceptance drive.",
+      "key": "agentweave-is-its-own-app-on-windows-taskbar-button",
+      "requirement": "agentweave-is-its-own-app-on-windows-taskbar-identity",
+      "then": "It names AgentWeave and points at AgentWeave's icon file",
+      "when": "Its taskbar identity is read"
+    },
+    {
+      "checked_by": "operator",
+      "given": "The app open from the desktop shortcut",
+      "how_to_check": "Operator check on their own machine after the build lands.",
+      "key": "agentweave-is-its-own-app-on-windows-pin-by-hand",
+      "requirement": "agentweave-is-its-own-app-on-windows-pin-reopens-agentweave",
+      "then": "The pin shows AgentWeave's icon and name, and clicking it opens AgentWeave; clicking it again while open focuses the window",
+      "when": "The operator pins its taskbar button, closes the app, then clicks the pin"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app started from the shortcut's command",
+      "how_to_check": "The acceptance drive samples the window list during start and close.",
+      "key": "agentweave-is-its-own-app-on-windows-no-console",
+      "requirement": "agentweave-is-its-own-app-on-windows-no-terminal",
+      "then": "No console-host window belonging to any process the app started appears at any point",
+      "when": "It opens, a project is used, and it is closed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app window open and minimized",
+      "how_to_check": "Covered by the acceptance drive, plus a unit test of the launch decision.",
+      "key": "agentweave-is-its-own-app-on-windows-second-launch-focuses",
+      "requirement": "agentweave-is-its-own-app-on-windows-one-window",
+      "then": "The same window is restored and in front, one window and one Hub process exist, and the launching process exits",
+      "when": "The app is launched again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The Hub kept running in the background with an agent turn in progress",
+      "how_to_check": "Test of the launch decision against a running Hub, and a drive step with a real Haiku turn.",
+      "key": "agentweave-is-its-own-app-on-windows-reopen-keeps-work",
+      "requirement": "agentweave-is-its-own-app-on-windows-reopen-to-background-hub",
+      "then": "A window opens on the same Hub process (same process id), and the turn completes without interruption",
+      "when": "The app is launched"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The window closed maximized, and separately closed at 1200x800 at a position, and separately remembered at a position on a screen no longer connected",
+      "how_to_check": "Unit test of the stored geometry and its screen check, and a drive step for the maximized case.",
+      "key": "agentweave-is-its-own-app-on-windows-window-reopens-maximized",
+      "requirement": "agentweave-is-its-own-app-on-windows-window-memory",
+      "then": "It opens maximized; then at 1200x800 at that position; then on the primary screen at 1200x800",
+      "when": "The app is opened each time"
+    },
+    {
+      "checked_by": "agent",
+      "given": "This change installed on a Windows machine with the trial profile on a scratch port (not 8000 or 8010) and no Hub running there",
+      "how_to_check": "Acceptance drive, written and failing before the build: scripts/drive/d1105_own_app.py starts the app, reads the window's shell properties and the process list, sends the window a close, and checks the port.",
+      "key": "agentweave-is-its-own-app-on-windows-drive-own-app",
+      "requirement": "agentweave-is-its-own-app-on-windows-close-idle-stops",
+      "then": "The window's app identity is AgentWeave's, with a relaunch command that opens AgentWeave and AgentWeave's icon. The second launch focuses the same window and starts no second Hub. After the close, no Hub process remains and the port is free within 30 seconds. Before the change, the relaunch command is absent and the Hub survives the close.",
+      "when": "The drive starts the app through the desktop shortcut's command, waits for the window, reads the window's taskbar identity, launches again, then closes the window while idle"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app open with no work running",
+      "how_to_check": "Covered by the acceptance drive.",
+      "key": "agentweave-is-its-own-app-on-windows-close-idle",
+      "requirement": "agentweave-is-its-own-app-on-windows-close-idle-stops",
+      "then": "No prompt appears, and within 30 seconds no Hub process for the port remains and the port is free",
+      "when": "The window is closed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app open with one agent turn in progress",
+      "how_to_check": "Drive with a real Haiku turn, choosing through the window's page; a UI test of the prompt's wording.",
+      "key": "agentweave-is-its-own-app-on-windows-close-busy",
+      "requirement": "agentweave-is-its-own-app-on-windows-close-busy-asks",
+      "then": "The prompt names one agent turn. Cancel leaves the window open. Keep running closes the window and the turn completes. Stop it all ends the turn as `agentweave stop` does and leaves no Hub process.",
+      "when": "The window is closed and each of the three choices is taken in turn (reopening between)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A build (flow) between its firings with no agent turn or check run in progress, and separately an enabled recurring job that is not a build, with no turn in progress",
+      "how_to_check": "Test of the 'is work running' answer over each kind of work: an agent turn, a check run, a landing, a flow between firings, and a non-build job.",
+      "key": "agentweave-is-its-own-app-on-windows-work-between-firings",
+      "requirement": "agentweave-is-its-own-app-on-windows-what-counts-as-work",
+      "then": "With the build, the prompt appears and names the build. With only the recurring job, no prompt appears and the Hub stops.",
+      "when": "The window is closed in each case"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Two Hubs on two scratch ports, each with a window, one with an agent turn in progress",
+      "how_to_check": "A drive step in d1105_own_app.py reading the process list and the port of each Hub.",
+      "key": "agentweave-is-its-own-app-on-windows-other-hub-survives",
+      "requirement": "agentweave-is-its-own-app-on-window-close-stops-only-its-own-hub",
+      "then": "After the first close the busy Hub's process id and its turn are unchanged; after the second, only the busy Hub's processes are gone",
+      "when": "The idle one's window is closed, and then the busy one's with 'Stop it all'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The setting turned on in App settings, then the app restarted",
+      "how_to_check": "Drive step, plus a unit test that the launcher reads the stored choice before asking the Hub.",
+      "key": "agentweave-is-its-own-app-on-windows-setting-restores-old-close",
+      "requirement": "agentweave-is-its-own-app-on-windows-close-behaviour-setting",
+      "then": "The setting still reads on, no prompt appears, and the Hub process is still running and answering 60 seconds later",
+      "when": "The window is closed with no work running"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fake webview module and a start-up that takes 1.5 s",
+      "how_to_check": "py -3.11 -m pytest tests/test_splash.py (written first; fails on master 9a14b8c)",
+      "key": "agentweave-opens-on-the-thread-order-and-timing",
+      "requirement": "agentweave-opens-on-the-thread-window-first",
+      "then": "the window is created with the splash HTML before the start-up callable runs, the start-up runs on another thread, load_url gets the launch URL no earlier than 2.0 s after the splash loaded, and the sound player is called once with opening.wav",
+      "when": "the native path opens the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same fake, Hub already running",
+      "how_to_check": "tests/test_splash.py",
+      "key": "agentweave-opens-on-the-thread-warm-short",
+      "requirement": "agentweave-opens-on-the-thread-minimum-time",
+      "then": "load_url comes no earlier than 1.2 s and the short sound plays; with AGENTWEAVE_SOUND=0 no sound plays",
+      "when": "the app opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a start-up that fails",
+      "how_to_check": "tests/test_splash.py",
+      "key": "agentweave-opens-on-the-thread-failure",
+      "requirement": "agentweave-opens-on-the-thread-failure-said",
+      "then": "the splash is told the failure text, the window is destroyed, and the command returns 1",
+      "when": "the native path runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "splash.html in Chromium",
+      "how_to_check": "py -3.11 scripts/drive/d1023_splash.py (written first)",
+      "key": "agentweave-opens-on-the-thread-splash-page",
+      "requirement": "agentweave-opens-on-the-thread-shuttle-pass",
+      "then": "the thread's dash changes between frames during the intro, the glint is visible at 0.6 s, the name is visible by 2 s, awSplashLeave returns a delay under 2 s after which the thread is fully drawn; under reduced motion it is fully drawn at once",
+      "when": "it loads, then awSplashLeave() is called during the wait loop"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch profile on port 8161 (never :8000)",
+      "how_to_check": "scripts/drive/d1023_splash.py --real",
+      "key": "agentweave-opens-on-the-thread-real-launch",
+      "requirement": "agentweave-opens-on-the-thread-window-first",
+      "then": "a screen capture at about 1 s shows the splash in the AgentWeave window and one after the Hub is ready shows the app",
+      "when": "`py -3.11 -m agentweave --profile splash1 --port 8161` launches"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's next launch",
+      "how_to_check": "operator, by eye and ear",
+      "key": "agentweave-opens-on-the-thread-feels-right",
+      "requirement": "agentweave-opens-on-the-thread-opening-sound",
+      "then": "the sound and the thread feel like one moment and the wait does not feel long",
+      "when": "AgentWeave opens"
     }
   ],
   "algorithms": [],
@@ -245,20 +407,52 @@
       "FR-17": "3d971edb84a4d37427958e0b22372aa6ae12f30bdb4bfbdeb3b679d0ec9671ab",
       "FR-18": "464ae2b889edb3efef23be933e1782a32d7cabfb805249423067cd325d0b85f4",
       "FR-19": "24498e69742ae3865ca721383ec5ec5fca0976025853fe06d6d1bdc7c9c15566",
-      "FR-20": "8f3a80816f7edaf234720ea26ca9ecaef0192890229f43af8b06dcab40cf7483",
+      "FR-20": "6faacf6a10776d35deb79e59e60a7cc39d9a8a644e078f8908945702d31b0840",
       "FR-21": "7e77eb661b751eb0d98d6c049a91f86641203b23b0fdf3a06460d7ab861deb52",
       "FR-22": "0089559972bdf9401ad79f4fbe97d0320d8210be21ee124ac1694591b0f37457",
       "FR-23": "96599a51c28af924597d959d3662aa9f84d5d4b1d4e6f4b3968e42a7215277ef",
       "FR-24": "191f9439ee86acd840eb8c74fa3c2ed873486aaba5a312a9c5f215634ba12cff",
+      "FR-25": "232c62c40deadc35222ab06794d0a6a0eb59581a1215ae321d3a7d3105ab1e18",
+      "FR-26": "ceeb15f93b43f7ec70cd154783e7ebea71899e36e191b2a46bdaa64bc2ca61ad",
+      "FR-27": "83f5eed684bc3ffd40c221207ba4608602a85580035fb2fe3a50ad1ca499afb8",
+      "FR-28": "59a60edb3f2e578af3bfea9080ee0ea29e7ad4b9eab738fcf3885e72fd6e59ee",
+      "FR-29": "07a33c88cf7d388d985cc2c3d1df375bde3a037aaee2ca52ae14d746cf624847",
+      "FR-30": "712da6c271e99338876102d456f6790a002ccf10854e4bc602dc66ddcb5e6582",
+      "FR-31": "34069fefe864d905b044c944f1525a6ff33ab88260c3cb5f4573c291c7b385f7",
+      "FR-32": "8fac463a4873c6f9d2a40ebe78583d1ad6a4550beb55fb11f77397299eec1222",
+      "FR-33": "069e04d4dabdd2208fe285f69a8a6133bd759506a2e9cb1fec85aa74fc51c105",
+      "FR-34": "17d5f9c4d9bd64eec35ce21665295a1be67e2c7f2cc351d4e107139f6f52df90",
+      "FR-35": "e5d2506a68c6b70b5b96623f0cdab53ac33f89cf642caf5c6a6d3c85c560a341",
+      "FR-36": "6a7f1039ca485c398b238f75724369678b84d5a30e5127985cabbd2a11099362",
+      "FR-37": "4da5f3002b117bb47d10b9f523d4d351d7b98794583dc7bbdcbdb151f22eced9",
+      "FR-38": "065c3e01a4d4d04f8cb96f35715a8d1ab814a1db1484021d9d345fdde9f00cfa",
+      "FR-39": "e63c0d3d7ea534cce59a2a378b7871d4fbf74ee91bacad8d9df786a8e5286674",
+      "FR-40": "888aeb634b08dac216f5838a68613451140284a16478327e896137e7a02bac6e",
       "FR-7": "3f2ee0cfed53a41bb5fe5db3316c246e0e75f5355c8b1005ac00c7e17eddb7f0",
       "FR-8": "1aafcabc0a666698a0116772c159eaa48a18477e73367e0953894dd23dc2d334",
       "FR-9": "9396b4fb2a8b86de3c5cbdc3cb9acdd48f80b62c58698d737a4445b09d44ef48"
     },
-    "high_water": 24,
+    "high_water": 40,
     "requirements": {
       "a-database-connection-whose-driver-worker-is-gone-shall-be-r": "FR-14",
       "a-named-profile-selects-a-separate-deliberate-instance": "FR-12",
       "a-shutting-down-instance-shall-release-its-database-connecti": "FR-13",
+      "agentweave-is-its-own-app-on-window-close-stops-only-its-own-hub": "FR-34",
+      "agentweave-is-its-own-app-on-windows-close-behaviour-setting": "FR-35",
+      "agentweave-is-its-own-app-on-windows-close-busy-asks": "FR-32",
+      "agentweave-is-its-own-app-on-windows-close-idle-stops": "FR-31",
+      "agentweave-is-its-own-app-on-windows-no-terminal": "FR-27",
+      "agentweave-is-its-own-app-on-windows-one-window": "FR-28",
+      "agentweave-is-its-own-app-on-windows-pin-reopens-agentweave": "FR-26",
+      "agentweave-is-its-own-app-on-windows-reopen-to-background-hub": "FR-29",
+      "agentweave-is-its-own-app-on-windows-taskbar-identity": "FR-25",
+      "agentweave-is-its-own-app-on-windows-what-counts-as-work": "FR-33",
+      "agentweave-is-its-own-app-on-windows-window-memory": "FR-30",
+      "agentweave-opens-on-the-thread-failure-said": "FR-40",
+      "agentweave-opens-on-the-thread-minimum-time": "FR-38",
+      "agentweave-opens-on-the-thread-opening-sound": "FR-39",
+      "agentweave-opens-on-the-thread-shuttle-pass": "FR-37",
+      "agentweave-opens-on-the-thread-window-first": "FR-36",
       "app-mode-opens-a-dedicated-desktop-window-when-a-native-webv": "FR-11",
       "bare-invocation-is-the-only-entry-point": "FR-7",
       "n1-every-launcher-that-chooses-a-database-chooses-the-same-one": "FR-15",
@@ -288,7 +482,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -365,7 +558,7 @@
       "modal": "MUST",
       "party": null,
       "rationale": "Agents keep working when the operator closes the window.",
-      "statement": "Closing the app window MUST NOT stop the detached Hub process."
+      "statement": "Closing the app window SHALL stop the Hub on that window's port, and nothing else, when no work is running, and SHALL ask the operator first when work is running; with the keep-running setting on, closing the window SHALL leave the Hub running."
     },
     {
       "key": "n7-a-foreground-start-opens-no-native-window",
@@ -415,6 +608,118 @@
       "party": null,
       "rationale": "The documented form once reported a running Hub as stopped with no error.",
       "statement": "`--port` and `--profile` given before the subcommand SHALL take effect for `status`, `stop`, `doctor` and `reset`; given in both places, the value nearer the subcommand SHALL win; no accepted option MAY be silently ignored."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-taskbar-identity",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While the app window is open, its taskbar button shows the name AgentWeave and AgentWeave's icon, never Python's."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-pin-reopens-agentweave",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: pinning showed a Python symbol. A pin that relaunches Python is useless as a way to open the app.",
+      "statement": "Pinning the open window's taskbar button produces a pin with AgentWeave's name and icon. Clicking that pin with the app closed opens AgentWeave exactly as the desktop shortcut does, and with the app open it focuses the open window."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-no-terminal",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Opening, using and closing the app from the desktop shortcut or a pin never shows a console or terminal window."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-one-window",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A launch (shortcut, pin, or bare `agentweave`) while the app window is open for the same Hub opens no second window and starts no second Hub. It brings the open window to the front, restored if it was minimized."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-reopen-to-background-hub",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A launch while the Hub is running in the background with no window open opens a window on that Hub without restarting it, so work it is running continues uninterrupted."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-window-memory",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: having to maximize the window again on every start is part of the friction.",
+      "statement": "The window reopens at the size and position it had when last closed, and maximized if it was closed maximized. If that position is not on any connected screen, it opens on the primary screen at its remembered size."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-close-idle-stops",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: close means stop. Supersedes app-lifecycle n6-closing-the-window-leaves-the-hub-running.",
+      "statement": "Closing the window when no work is running stops the Hub without asking. Within 30 seconds no Hub process for that port remains and the port is free."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-close-busy-asks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: closing must never silently kill a build that was forgotten.",
+      "statement": "Closing the window while work is running does not close it at once. It names what is running (how many agent turns, check runs and builds) and offers three choices. Stop it all and close: the work is stopped as `agentweave stop` stops it today, then the Hub. Keep running in the background: the window closes and the Hub and its work continue. Cancel: nothing changes."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-what-counts-as-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: recurring jobs that are not builds just miss their firings while the Hub is stopped. Counting them would make closing nearly always ask, which defeats close-means-stop. A build counts even between firings because it holds tasks in flight.",
+      "statement": "Work is running when any of the following is in progress for any project on that Hub: an agent turn, a check run, a landing, or a build (flow) that has not ended, even between its firings. An enabled job or loop that is not a build, with no turn in progress, is not work."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-window-close-stops-only-its-own-hub",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's Hub on :8000 and the trial Hub on :8010 run side by side on this machine; a close of one must never reach the other.",
+      "statement": "Closing a window, with any choice, stops at most the Hub serving that window's port. A Hub on another port of the same machine keeps running, with its processes and its work untouched."
+    },
+    {
+      "key": "agentweave-is-its-own-app-on-windows-close-behaviour-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The rollback for the Tier 2 hazard, with no release needed.",
+      "statement": "The operator can turn on 'Closing the window leaves AgentWeave running' in the app's settings. It is off by default. While it is on, closing the window closes only the window, asks nothing and leaves the Hub and its work running, as before this change; the choice survives a restart of the app."
+    },
+    {
+      "key": "agentweave-opens-on-the-thread-window-first",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The buffer is the time the operator already waits; showing it is the point.",
+      "statement": "When `agentweave` opens the native app window, it MUST create the window showing the splash before it runs migrations or waits for the Hub, and MUST run that start-up work off the window's thread."
+    },
+    {
+      "key": "agentweave-opens-on-the-thread-shuttle-pass",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator's pick in the thread lab (https://claude.ai/artifact/GniK2BGBQJzh2ouG3boTpN).",
+      "statement": "The splash MUST draw the loop with the shuttle pass (the madder thread drawing the W from its left end with a light glint at its head), then show the name and the tagline 'Run your AI factory in the open.'; while the Hub has not answered after the intro it MUST keep the thread weaving through, and it MUST stand still, fully drawn, under reduced motion."
+    },
+    {
+      "key": "agentweave-opens-on-the-thread-minimum-time",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator: 'give it a buffer time to show the thread animation before opening'; warm open short version chosen 2026-10-23.",
+      "statement": "The window MUST switch to the app only when the launch URL is known and the splash has shown for at least 2.0 s on a cold start or 1.2 s when the Hub was already running, and only at a moment the thread is fully drawn."
+    },
+    {
+      "key": "agentweave-opens-on-the-thread-opening-sound",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator: 'A sound plays with the animation of the thread when opening agentweave.' The window's browser engine blocks sound before a click, so the CLI plays it.",
+      "statement": "The CLI MUST play the opening sound when the splash page has loaded, the full phrase on a cold start and the short one on a warm start, without blocking the window, and MUST play nothing when AGENTWEAVE_SOUND is 0 or no player exists."
+    },
+    {
+      "key": "agentweave-opens-on-the-thread-failure-said",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today a failed start prints and returns 1; the window must not hang on a splash.",
+      "statement": "If the Hub fails to start, the splash MUST say so in words naming the terminal for details, then the window MUST close and the command MUST return 1."
     }
   ],
   "schema_version": 1,

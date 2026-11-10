@@ -1,0 +1,491 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with PR landing off, and another with PR landing and the CI setting on",
+      "how_to_check": "Hub test through the project settings route.",
+      "key": "ac-setting",
+      "requirement": "ci-setting",
+      "then": "the first is refused with a reason naming PR landing, and the second reads the CI setting as off afterwards",
+      "when": "the operator turns the CI setting on in the first, and turns PR landing off in the second"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR build in a project with the setting on, and one in a project with it off, both with a landing-phase check configured",
+      "how_to_check": "Hub test with a fake GitHub CLI and a local bare remote; the acceptance drive confirms on a scratch GitHub repository.",
+      "key": "ac-no-local",
+      "requirement": "no-local-landing-checks",
+      "then": "the first starts no landing-phase check run and its commits reach the PR's branch; the second runs the landing-phase checks before pushing",
+      "when": "a task of each is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a repository with one required check and one other check",
+      "how_to_check": "Hub test with a fake GitHub CLI answering each case.",
+      "key": "ac-counted",
+      "requirement": "counted-checks",
+      "then": "the result is passed; with no required checks the listed names decide it; with neither, turning the setting on and starting a PR build are refused with a reason naming both",
+      "when": "the other check fails and the required one passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR where task B was pushed while task A's run was still pending",
+      "how_to_check": "Hub test with a fake GitHub CLI.",
+      "key": "ac-head",
+      "requirement": "head-only",
+      "then": "no task is sent back and A's result shows as superseded",
+      "when": "a failure is reported on A's commit"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open PR with a pending counted check, nobody acting on the build, and a cutoff of 30 minutes",
+      "how_to_check": "Hub test with a controllable clock and a fake GitHub CLI counting its calls; the drive checks the concluding case with a real run.",
+      "key": "ac-pending",
+      "requirement": "ask-while-pending",
+      "then": "the result shows within one interval; no interval asks follow until a new push; in the second case interval asks stop at 30 minutes and the build shows CI has not finished",
+      "when": "the check concludes, and in a second case never concludes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pushed task",
+      "how_to_check": "Acceptance drive on a scratch GitHub repository whose workflow passes.",
+      "key": "ac-passed",
+      "requirement": "ci-passed",
+      "then": "the build card and the pushed tasks show CI passed with the head commit",
+      "when": "every counted check on the head commit succeeds"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a ready PR whose head commit was made by task B's push, with main green",
+      "how_to_check": "Acceptance drive on a scratch GitHub repository whose workflow fails when a marker file is present.",
+      "key": "ac-failed",
+      "requirement": "ci-failed",
+      "then": "the PR is back to draft and task B is sent back with the failing check's name and link",
+      "when": "a counted check fails on it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "every task of the build pushed",
+      "how_to_check": "Acceptance drive, reading the PR's draft state from GitHub.",
+      "key": "ac-ready",
+      "requirement": "ready-on-green",
+      "then": "the PR stays a draft while pending and is marked ready when it passes",
+      "when": "CI is still pending, and then passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR with counted checks running",
+      "how_to_check": "UI test over the build card with fixtures in the order the build route returns; a screenshot in the drive.",
+      "key": "ac-shown",
+      "requirement": "ci-shown",
+      "then": "each counted check is listed as pending with a link to it on GitHub and the time of the last ask",
+      "when": "the operator opens the build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the setting on",
+      "how_to_check": "Hub test through the project settings route.",
+      "key": "ac-interval",
+      "requirement": "interval-setting",
+      "then": "0, 61, 4, 1441 and the cutoff of 3 under an interval of 5 are refused naming the rule; an interval of 5 and a cutoff of 90 are saved and read back; a new setting reads 2 and 60",
+      "when": "the operator saves an interval of 0, 61 and 5, and a cutoff of 4, 1441, 3 with an interval of 5, and 90"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a counted check that fails on the PR's head and also on main's latest commit",
+      "how_to_check": "Hub test with a fake GitHub CLI answering main's result as failed.",
+      "key": "ac-main-too",
+      "requirement": "fails-on-main-too",
+      "then": "the build shows the check as failing on main too, no task is sent back, and the PR stays a draft",
+      "when": "the Hub reads the result"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a counted check that fails on the PR's head while main's latest commit has it pending, and in a second case has no run of it",
+      "how_to_check": "Hub test with a fake GitHub CLI answering main's result as pending, then as absent.",
+      "key": "ac-main-none",
+      "requirement": "fails-on-main-too",
+      "then": "in both cases the latest task pushed is sent back, and the send-back names the check and says main had no result for it",
+      "when": "the Hub reads the result"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "10b6b748db762db5bc65b3ab30ec346eb54f938fc394d8e0599cc670e59fe215",
+      "FR-10": "0cfef8250537459abb29b8c571803e837b6deec05dec1fb80fde707217dfa871",
+      "FR-11": "d28dc9f5c6eeaf24a922298703ef5b2e710e0c30f9b50002a0b7684d4f5de8b1",
+      "FR-2": "c87309671834f90dcb4d605880406212d6facd9c1d67275fcb93ed8a4b6c5a22",
+      "FR-3": "f4caae50ca92512d9c3112f2be0decc6f4d0bc69f7db507764f4bb9295d51064",
+      "FR-4": "a79b84d6536b5afc78158520224e06e0964e1dfc94f7eb319924310ffe1c0eaf",
+      "FR-5": "3d0f83c896eb56f5704cf74d35f4841db07629e944a8254cf1fe8f55cca7cb7d",
+      "FR-6": "cacfdc9838d388f7861c770d1067384bc11b616c33a387e8a2875bcba1f867a1",
+      "FR-7": "e8100a2ac56f768ff3c41e882325afce73a6d4a9d45293da2286000e249d043f",
+      "FR-8": "7b1350cbc8d14b49ab32a02d941c49d8c9d678c7f9770d6924cc214c4af335a7",
+      "FR-9": "e8585f344498cf38590855856aedbed016ea6b5d15f00987ee22c14751062fdc"
+    },
+    "high_water": 11,
+    "requirements": {
+      "ask-while-pending": "FR-5",
+      "ci-failed": "FR-7",
+      "ci-passed": "FR-6",
+      "ci-setting": "FR-1",
+      "ci-shown": "FR-9",
+      "counted-checks": "FR-3",
+      "fails-on-main-too": "FR-11",
+      "head-only": "FR-4",
+      "interval-setting": "FR-10",
+      "no-local-landing-checks": "FR-2",
+      "ready-on-green": "FR-8"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Tier 2, outward-facing with a migration: an Opus builder, matching slice 1.",
+      "checker": "QA checks the Hub tasks and the drive; QA2 takes settings and the UI so two checkers share the load.",
+      "cron": "Every five minutes picks up the next task soon after the previous one is approved without firing idle turns often.",
+      "mode": "Five tasks chained by shared files; a flow runs them in order and staffs a checker for each. Start it only after slice 1 has landed on master, because read-ci and act-on-ci extend its pull_requests.py and landing path.",
+      "stop": "The flow has nothing to do once its five tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 2. Outward-facing: the Hub acts on a code host's CI result by drafting a PR and sending work back, and a red main must not bounce every build. Migration: adds project columns only (the CI setting, the list of check names, the interval, the cutoff) and build/task columns for the last CI result. Rollback: the columns are read only when the setting is on, so downgrading drops them and those projects fall back to slice 1's local landing checks.\n\nDecisions (operator, 2026-11-06):\n- An explicit project setting, not detection.\n- The checks that count: GitHub's required checks for the PR's base branch, else a list of check names the project sets. The setting cannot be turned on with nothing to wait for.\n- A failure returns the PR to draft and sends back the latest task pushed. With the squash setting, that is still the latest task pushed.\n- Only the result for the latest commit counts. A result for a superseded commit decides nothing.\n- A counted check that also fails on main's latest commit is not the task's fault: it is shown as 'fails on main too' and sends nothing back. A check with no concluded result on main counts as not failing there; the send-back says so. Test-level matching against the known-failing list, using a report CI uploads, is later work.\n- While a counted check is pending, the Hub asks GitHub at an interval the project sets (default 2 minutes, 1-60). It stops when the run finishes, or after a cutoff the project sets (default 60 minutes) with no conclusion, after which only slice 1's actions ask. Slice 1 lists 'a timer that asks GitHub' as a non-goal to reconsider in slices 2 and 3; this is that reconsideration, bounded to pending runs.\n- The PR is marked ready only when every task is pushed and CI passed. This replaces slice 1 FR-5's ready condition for these projects.\n\nCURRENT (slice 1)  approved -> local landing checks -> push -> draft PR ... all pushed -> ready\nPROPOSED           approved -> push (no local landing checks) -> CI pending -> ask every N minutes (stop at cutoff)\n                     passed               -> tasks read as checked; all pushed + passed -> PR ready\n                     failed, main green or no result -> PR back to draft; latest task pushed sent back with failing checks + links\n                     failed, main red too -> 'fails on main too', nothing sent back, PR stays draft",
+  "evidence": {
+    "checked": [
+      "hub/hub/landing_queue.py:332 runs configured_checks(project, PHASE_LANDING) for a landing batch: the local check this slice skips for PR builds.",
+      "hub/hub/project_checks.py:126-129 defines the review/landing/both check phases; review-phase checks are untouched by this slice.",
+      "Slice 1 (spec/changes/a-build-lands-as-one-pull-request) FR-3, FR-5 and FR-9 define the local landing check, the ready condition and asking on actions that this slice changes; its non-goals name a timer as something to reconsider in slices 2 and 3, so interval asking here does not contradict it. Slice 1 is still being built, so hub/hub/pull_requests.py does not exist on master yet."
+    ],
+    "limits": [
+      "Nothing demonstrates any requirement yet: the acceptance drive is proposed coverage, to be written and recorded failing before the build.",
+      "The scratch GitHub repository with its required check is created by the author for the drive; the drive depends on it staying in place.",
+      "Whether the user's GitHub CLI login can read branch protection's required checks on every repository is unverified; FR counted-checks falls back to the project's list when it cannot."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus2",
+          "DeveloperOpus",
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-07T12:05:42.053312+00:00",
+        "id": "build-d4cac93e48e1",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-07T10:13:45.851558+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "act-on-ci": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "drive": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "read-ci": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "settings": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "task-78e03a575910": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "ui": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Is a CI failure checked against the known-failing list? Answered (operator, 2026-11-06): check-level now; a counted check that also fails on main's latest commit is not the task's (FR fails-on-main-too). Test-level matching is later.",
+      "resolved": true
+    },
+    {
+      "question": "Interval and cutoff? Answered (operator, 2026-11-06): both are project settings; interval 1-60 minutes, 2 by default; cutoff 60 minutes by default (its 5-1440 range is the author's choice).",
+      "resolved": true
+    },
+    {
+      "question": "A superseded commit's result? Answered (operator, 2026-11-06): only the latest commit counts.",
+      "resolved": true
+    },
+    {
+      "question": "Nothing to wait for? Answered (operator, 2026-11-06): the setting cannot be turned on, nor a PR build start, with no required checks and an empty list.",
+      "resolved": true
+    },
+    {
+      "question": "Main has no result for the failing check? Answered (operator, 2026-11-06): the task is held responsible and sent back, and the send-back says main had no result.",
+      "resolved": true
+    }
+  ],
+  "problem": "With slice 1, an approved task of a PR build still runs the project's full landing-phase checks locally before it is pushed (slice 1 FR-3). Then the project's CI runs the same suite again on the PR. That duplicates the most expensive work on the machine the operator is using, which is the cost the roadmap 'Checks cost less on a machine that is in use' exists to cut. A team that works through PRs already trusts its CI as the gate. Today the local landing check is project_checks.configured_checks(project, PHASE_LANDING) run by the landing queue (hub/hub/landing_queue.py:332). The pre-review checks (PHASE_REVIEW) are a different thing: they gate the agent reviewer, not the landing, and this slice leaves them alone.",
+  "requirements": [
+    {
+      "key": "ci-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A project with PR landing on has a setting 'the PR's CI is the full check', off until the operator turns it on; it cannot be turned on while PR landing is off, and turning PR landing off turns it off."
+    },
+    {
+      "key": "no-local-landing-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a project with the setting on, an approved task of a PR build is pushed without running the project's landing-phase checks locally; its pre-review checks run as before, and a project with the setting off keeps slice 1's local landing checks."
+    },
+    {
+      "key": "counted-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The checks that count for a PR are the status checks GitHub marks required for the PR's base branch; when none are marked required, or the Hub cannot read them, they are the check names listed in the project's setting; the setting cannot be turned on, and a PR build cannot start, while the repository marks no required checks and the list is empty, and the refusal names both."
+    },
+    {
+      "key": "head-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Only the counted checks' results on the PR's current head commit decide anything; a result on a commit a later push has superseded is shown as superseded and neither passes nor sends back any task."
+    },
+    {
+      "key": "ask-while-pending",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While any counted check on an open PR's head commit is pending or has not yet reported, the Hub asks GitHub for the result at the project's interval, in addition to slice 1's actions; it stops asking on the interval once every counted check has concluded, the PR is merged or closed, or the project's cutoff has passed since the push with a counted check still unconcluded, in which case the build shows that CI has not finished and only slice 1's actions ask again until the next push."
+    },
+    {
+      "key": "ci-passed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When every counted check on the head commit succeeds, the build and each task pushed in that head read as checked by CI, naming the commit."
+    },
+    {
+      "key": "ci-failed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a counted check on the head commit fails and does not also fail on main, the PR is returned to draft and the latest task pushed is sent back to its builder as a landing failure, naming each such failing check with its link; with the squash setting the latest task pushed is chosen the same way."
+    },
+    {
+      "key": "ready-on-green",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a project with the setting on, the PR is marked ready for review only when every task of the build has been pushed and every counted check on the head commit has succeeded; until then it stays a draft."
+    },
+    {
+      "key": "ci-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build card and each of its tasks show CI's state on the head commit (pending, passed, failed, failing on main too, superseded, not finished), each counted check with its name, state and link, and when the Hub last asked; a failed ask is shown with GitHub's error."
+    },
+    {
+      "key": "interval-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator made the cutoff a setting (2026-11-06) because CI duration differs widely between projects; the cutoff's range is the author's choice: 5 minutes is the shortest that outlasts a fast CI run, 24 hours the longest a build should sit unnoticed.",
+      "statement": "The project's setting carries the interval between asks while CI is pending, in whole minutes from 1 to 60, 2 by default, and the cutoff after which interval asking stops, in whole minutes from 5 to 1440, 60 by default; a value out of its range, or a cutoff shorter than the interval, is refused on save with a reason naming the rule broken."
+    },
+    {
+      "key": "fails-on-main-too",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: with no result on main, the task is held responsible rather than the build waiting, so a build never hangs on main's CI; naming the missing result lets a wrong send-back be spotted.",
+      "statement": "Before sending anything back, the Hub reads each failing counted check's result on the latest commit of the project's main branch on GitHub; a check that also failed there is shown on the build as failing on main too and is not the task's; when every failing counted check also fails on main, no task is sent back and the PR stays a draft; a check with no concluded result on main (pending, or never run there) counts as not failing on main, and the send-back says main had no result for it."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/work-lands-through-pull-requests/spec.json",
+    "slice": "pr-ci-is-the-full-gate"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A project setting, 'the PR's CI is the full check', available when PR landing is on, with a list of check names, an interval and a cutoff",
+      "Pushing a PR build's approved tasks without local landing-phase checks in such a project",
+      "Choosing which checks count: required checks, else the project's list",
+      "Asking GitHub for CI's result on the interval while a counted check is pending, up to the project's cutoff, and on slice 1's actions",
+      "Comparing a failing counted check with the same check on main's latest commit",
+      "A failing result the task caused: PR back to draft, latest task pushed sent back",
+      "Marking the PR ready only when every task is pushed and CI passed",
+      "Showing CI's state and each counted check on the build and its tasks"
+    ],
+    "non_goals": [
+      "Changing the pre-review checks, which still run locally before agent review",
+      "Matching individual failing tests from CI against the known-failing list (later; needs a test report CI uploads)",
+      "Review comments coming back as send-backs (slice 3)",
+      "Hosts other than GitHub (slice 4)",
+      "The Hub re-running, cancelling or configuring CI on the host, or changing branch protection",
+      "Waiting for main's own CI run to conclude before judging a PR failure",
+      "Builds that land on main or nowhere: their checks are unchanged",
+      "PR builds in a project without the setting: slice 1's local landing checks still apply",
+      "Switching this repository to PR landing"
+    ]
+  },
+  "summary": "A project with PR landing on can set that its PR's CI is the full check. Its PR builds then push approved tasks without running the landing-phase checks locally. The Hub reads the result of the checks that count on the PR's head commit: the ones GitHub marks required, else a list the project names. While a run is pending, the Hub asks GitHub at an interval the project sets (2 minutes by default) and stops after a cutoff the project also sets (60 minutes by default) with no conclusion. A failure returns the PR to draft and sends back the latest task pushed, unless the same check also fails on main. The PR is marked ready only when every task is pushed and CI passed. Product, general, opt-in. Tier 2: outward-facing, plus a migration. Builds after slice 1 (a-build-lands-as-one-pull-request).",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "The acceptance check is written by someone other than the agent building the Hub code, so the builder cannot shape the check that judges it; it drives a real GitHub repository and a live build, which wants Opus. If DeveloperOpus2 is still busy with dashboards when this build starts, DeveloperOpus2 can be swapped for any free Opus developer except DeveloperOpus.",
+      "checker": "QA",
+      "checker_reason": "QA checks the Hub tasks this drive exercises (read-ci, act-on-ci), so one checker holds the drive and the behaviour it is meant to catch.",
+      "depends_on": [],
+      "description": "A drive on a scratch GitHub repository whose workflow has one required check that fails when a marker file is present. It builds a two-task spec with PR landing and the CI setting on. A passing first task leaves the PR a draft until the second; a second task adding the marker returns the PR to draft and sends that task back with the check's link; its fix makes CI pass and the PR ready. It is recorded failing before the build.",
+      "files": [
+        "scripts/drive/pr_ci_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "no-local-landing-checks",
+        "ci-passed",
+        "ci-failed",
+        "ready-on-green",
+        "ask-while-pending"
+      ],
+      "reviewer": null,
+      "title": "CI-gate acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "A migration plus the refusal on starting a PR build is Tier 2 work; DeveloperOpus builds the whole Hub chain (settings, read-ci, act-on-ci) so the columns and their readers come from one hand, matching slice 1's builder.",
+      "checker": "QA2",
+      "checker_reason": "A settings route and migration are self-contained, so QA2 takes them and the UI and QA keeps the CI logic; the load is split between two checkers without either needing the other's context.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Project columns and migration; the settings route accepts, validates and returns them; refusals when PR landing is off, when nothing would be waited for, for an interval or cutoff out of range, and for a cutoff shorter than the interval; a PR build start is refused when nothing would be waited for.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/builds.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "settings",
+      "requirements": [
+        "ci-setting",
+        "counted-checks",
+        "interval-setting"
+      ],
+      "reviewer": null,
+      "title": "The CI setting, its check names, interval and cutoff"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Extends slice 1's pull_requests.py with outward-facing reads and a timer, where a mistake sends real work back; Opus, and the same builder as slice 1's code and the settings it reads.",
+      "checker": "QA",
+      "checker_reason": "QA checks the drive and act-on-ci, which consume these results, so it can follow a CI result from GitHub to the send-back.",
+      "depends_on": [
+        "drive",
+        "settings"
+      ],
+      "description": "Reading the counted checks for a commit through the GitHub CLI, the head-only rule, the comparison with main's latest commit (including main having no concluded result), and the interval asking with its cutoff; results stored on the build and its tasks.",
+      "files": [
+        "hub/hub/pull_requests.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "read-ci",
+      "requirements": [
+        "counted-checks",
+        "head-only",
+        "ask-while-pending",
+        "fails-on-main-too"
+      ],
+      "reviewer": null,
+      "title": "The Hub reads CI on the PR's head and on main"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Changes the landing queue, where a bug skips checks or lands unchecked work; Opus, and the builder of read-ci whose results this acts on.",
+      "checker": "QA",
+      "checker_reason": "QA checked read-ci and owns the drive, so it can verify the full path from a red check to a drafted PR and a sent-back task.",
+      "depends_on": [
+        "drive",
+        "read-ci"
+      ],
+      "description": "The landing queue pushes a PR build's task without landing-phase checks when the setting is on; a pass reads as checked; a failure the task caused drafts the PR and sends back the latest task pushed; ready only when all pushed and CI passed.",
+      "files": [
+        "hub/hub/landing_queue.py",
+        "hub/hub/pull_requests.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "act-on-ci",
+      "requirements": [
+        "no-local-landing-checks",
+        "ci-passed",
+        "ci-failed",
+        "ready-on-green"
+      ],
+      "reviewer": null,
+      "title": "Pushes skip local landing checks and CI decides draft, ready and send-back"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Presenting fields and states the Hub tasks already return is routine UI work for Sonnet, which saves Opus quota; Developer is free of the other two builds.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checked the settings task whose fields and refusals this shows, so it can tell whether the UI matches the route.",
+      "depends_on": [
+        "drive",
+        "act-on-ci"
+      ],
+      "description": "The settings fields (CI is the full check, check names, interval, cutoff) with their refusals shown; the build card and task drawer list CI's state and each counted check with its link and the last ask; the UI bundle refreshed.",
+      "files": [
+        "hub/ui/src/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "ci-setting",
+        "interval-setting",
+        "ci-shown"
+      ],
+      "reviewer": null,
+      "title": "CI on the build card, its tasks and the project settings"
+    }
+  ],
+  "title": "The PR's CI is the full check"
+}

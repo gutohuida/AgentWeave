@@ -469,6 +469,132 @@
       "requirement": "n2-an-orphaned-marker-is-adopted-under-its-own-id",
       "then": "the implicit open is refused 409 deleted_project_marker with the marker bytes unchanged and nothing registered; the explicit open re-mints",
       "when": "a bare agentweave start opens it implicitly, then the operator opens it from the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a path to a folder that does not exist",
+      "how_to_check": "Hub test creating a project in a temporary path, then git log --name-only and the project settings route",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-ac-fresh-folder",
+      "requirement": "a-new-project-starts-as-a-git-repository-w-new-folder-repository",
+      "then": "`git log` shows one commit containing only AGENTS.md, and the project's main branch names that commit's branch",
+      "when": "a project is created there through the Hub"
+    },
+    {
+      "checked_by": "agent",
+      "given": "that fresh project with one writing agent on a Haiku runner",
+      "how_to_check": "Drive on a scratch Hub (temporary database, free port); read the run's working directory",
+      "key": "a-new-project-starts-as-a-git-repository-with-ac-first-worktree",
+      "requirement": "a-new-project-starts-as-a-git-repository-w-new-folder-repository",
+      "then": "it runs in its own worktree on its own branch",
+      "when": "the agent's first turn starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the fresh project after the Hub has written .agentweave/",
+      "how_to_check": "Same Hub test, after registration",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-agen-ac-ignored",
+      "requirement": "a-new-project-starts-as-a-git-repository-with-hub-files-ignored",
+      "then": "nothing under .agentweave/ is listed",
+      "when": "`git status --porcelain` runs in its folder"
+    },
+    {
+      "checked_by": "agent",
+      "given": "folders each holding one of CLAUDE.md, GEMINI.md, .github/copilot-instructions.md, AGENTS.md, or .agentweave/project.json",
+      "how_to_check": "Parametrised Hub test",
+      "key": "a-new-project-starts-as-a-git-repositor-ac-existing-instructions",
+      "requirement": "a-new-project-starts-as-a-git-repositor-agents-md-only-when-none",
+      "then": "no AGENTS.md is created or changed in any of them",
+      "when": "each is made a repository through the offered action"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a created AGENTS.md",
+      "how_to_check": "Hub test reading the file",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-agen-ac-content",
+      "requirement": "a-new-project-starts-as-a-git-repository-with-agents-md-content",
+      "then": "it opens with the AgentWeave section and has an empty project-instructions area",
+      "when": "it is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an existing folder with files and no .git",
+      "how_to_check": "Hub test comparing listings before and after",
+      "key": "a-new-project-starts-as-a-git-repository-with-a-ac-open-existing",
+      "requirement": "a-new-project-starts-as-a-git-reposito-existing-folder-untouched",
+      "then": "the folder's file listing is unchanged apart from .agentweave/, and it has no .git",
+      "when": "it is opened as a project"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an existing project folder with files, one of them matched by the Hub's ignore rules",
+      "how_to_check": "Hub route test for the preview and the confirm; UI check in the app",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-agen-ac-preview",
+      "requirement": "a-new-project-starts-as-a-git-repository-wi-make-it-a-repository",
+      "then": "the list shown names every file except the ignored one, and nothing is created until they confirm",
+      "when": "the operator starts 'Make this a git repository'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose folder already has its own AGENTS.md, with the option off",
+      "how_to_check": "Hub test on the context route plus a UI check",
+      "key": "a-new-project-starts-as-a-git-reposit-ac-own-agents-md-unchanged",
+      "requirement": "a-new-project-starts-as-a-agents-md-is-instructions-when-chosen",
+      "then": "the turn's context carries no AGENTS.md text, Instructions shows the Hub's own instructions, and the option to use AGENTS.md is offered",
+      "when": "an agent turn runs and Settings → Instructions is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose AGENTS.md is its instructions",
+      "how_to_check": "Hub route test plus app click-through",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-agents-ac-edit",
+      "requirement": "a-new-project-starts-as-a-git-reposit-instructions-are-agents-md",
+      "then": "AGENTS.md on disk holds the new text, and reopening settings shows it",
+      "when": "Instructions are edited and saved in settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "such a project, its checkout on the main branch with a clean AGENTS.md",
+      "how_to_check": "Hub test: save, then git log -1 --name-only on main",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-ag-ac-committed",
+      "requirement": "a-new-project-starts-as-a-git-repository-instructions-committed",
+      "then": "main gains one commit touching only AGENTS.md",
+      "when": "Instructions are saved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "AGENTS.md with uncommitted edits in the project checkout",
+      "how_to_check": "Hub test",
+      "key": "a-new-project-starts-as-a-git-repository-with-a-ac-dirty-refused",
+      "requirement": "a-new-project-starts-as-a-git-repository-instructions-committed",
+      "then": "the save is refused naming the uncommitted change, and the file on disk is unchanged",
+      "when": "Instructions are saved from settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with database instructions and its own AGENTS.md",
+      "how_to_check": "Hub test seeding a database row and an AGENTS.md",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-agents-ac-moved",
+      "requirement": "a-new-project-starts-as-a-git-repository-with-instructions-moved",
+      "then": "AGENTS.md holds those instructions in one new commit, turns carry them once, and the database row is unchanged",
+      "when": "the operator switches on 'Use AGENTS.md as this project's instructions'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose AGENTS.md is its instructions and holds a unique marker sentence",
+      "how_to_check": "Hub test over the context each runner kind is handed, plus a scratch-Hub drive with a Haiku Claude runner",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-agents-ac-once",
+      "requirement": "a-new-project-starts-as-a-git-repository-with-instructions-once",
+      "then": "the marker appears exactly once in what each turn received",
+      "when": "a turn runs on a runner that reads AGENTS.md natively and on one that does not"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built slice",
+      "how_to_check": "Operator click-through",
+      "key": "a-new-project-starts-as-a-git-repository-with-an-age-ac-operator",
+      "requirement": "a-new-project-starts-as-a-git-repository-w-new-folder-repository",
+      "then": "it opens as a git repository with AGENTS.md, and Instructions shows the AgentWeave section",
+      "when": "the operator adds a project in a new folder from the app"
     }
   ],
   "algorithms": [],
@@ -498,16 +624,38 @@
       "FR-41": "987353a723002c5f9f0dd6edd2387eb34591aca2a7b39f2b20e1425e555e881b",
       "FR-42": "f7616463725293dafa17cc154da804b96c21618bd626ae27c9ec228ffc2e2cc6",
       "FR-43": "a869b67c9652553f6f332c7e66a09b63ea15d990df7c65731b32fb1e9e989040",
-      "FR-44": "bb41a05ca1a46f5d70d2517139f6dd2859dee5544a2d5614e2cc2f991f4b8e53",
+      "FR-44": "71a4cb2b3dfcbe252501611a22eb1c05ca5ecc12a9d705f44565235aa00eeb69",
       "FR-45": "bcce20ff07decb236d8405cad38c62b4064efe5e1a1df200d07e93f35240462a",
       "FR-46": "57ef5080eb25d2f5455cc8fc08cbd861acc4d6db48cff869917c365930865fae",
       "FR-47": "eb246305ec48197eb5dcd8234117533cf30fe0c68a546bc565c233c17cd25d8e",
       "FR-48": "7a16c54580f39a4c483b130e06dc003eb1e6b8eedbd8163bd481146975a704dc",
       "FR-49": "7ac02a4de22d3bba6c1caa7882256549b37f694455fe5407dde136b90469558b",
-      "FR-50": "2c71ae58cf6118455e9f0796d9db49e6062d2e2ceca98d9433a5fbaa11e78156"
+      "FR-50": "2c71ae58cf6118455e9f0796d9db49e6062d2e2ceca98d9433a5fbaa11e78156",
+      "FR-51": "1b791cbedf9e825f91ac236ffe16e14bf6794d4f126e746e332c477185673fce",
+      "FR-52": "0acc3df5e816a9b5a25dd9bcc1b21bf37de7de5605d422fa882164e856e24764",
+      "FR-53": "3f5b64f2abceb0389bfdb09964b390dd73a6b7e1ef7157ee6af3dfb7c2e9e84b",
+      "FR-54": "a38db45c2569c9bbc8a9b41df345ae8561a4f076385f710c76317adf83b0c605",
+      "FR-55": "99a79694cce0ebf006a722c85057e323c85d8677d17651a1aa9dde06e09f07a7",
+      "FR-56": "37961bd68f582c1bf4e35248e623352572356f3e17acd2296dc23a0f8c645325",
+      "FR-57": "a1d749d402053723f5e010d1bf0b1a1ca875a1447a45eec04791f203680dda1b",
+      "FR-58": "7a1f3423cd1ac92b30490f375007f8fd1d56853370bcf2bcb04d5b69ef6ffc86",
+      "FR-59": "a7e1e81405f061f40cf0eed1ea183acb75ef0d584e9560d0392cf982c1b168e8",
+      "FR-60": "1fe82e884c733f04ae344751b372e17ef6c77c17635ef89add2d6b241f56701f",
+      "FR-61": "f93058f5e649bc6058f99349c338fac25afbb87744c47acaaf6e531f313fcc76"
     },
-    "high_water": 50,
+    "high_water": 61,
     "requirements": {
+      "a-new-project-starts-as-a-agents-md-is-instructions-when-chosen": "FR-57",
+      "a-new-project-starts-as-a-git-reposit-instructions-are-agents-md": "FR-58",
+      "a-new-project-starts-as-a-git-reposito-existing-folder-untouched": "FR-55",
+      "a-new-project-starts-as-a-git-repositor-agents-md-only-when-none": "FR-53",
+      "a-new-project-starts-as-a-git-repository-instructions-committed": "FR-59",
+      "a-new-project-starts-as-a-git-repository-w-new-folder-repository": "FR-51",
+      "a-new-project-starts-as-a-git-repository-wi-make-it-a-repository": "FR-56",
+      "a-new-project-starts-as-a-git-repository-with-agents-md-content": "FR-54",
+      "a-new-project-starts-as-a-git-repository-with-hub-files-ignored": "FR-52",
+      "a-new-project-starts-as-a-git-repository-with-instructions-moved": "FR-60",
+      "a-new-project-starts-as-a-git-repository-with-instructions-once": "FR-61",
       "a-project-can-be-deleted-from-the-hub-without-touching-its-w": "FR-38",
       "a-project-directory-can-be-chosen-through-the-host-s-own-fol": "FR-34",
       "a-project-ignores-what-the-system-creates-in-every-checkout-": "FR-37",
@@ -559,7 +707,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -615,7 +762,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "A half-registered project that looks ready but has no marker cannot be resolved later.",
-      "statement": "Registration SHALL create the project row, its default runners and starter charters, and its marker as one unit, rolling back the row and restoring the marker if the marker cannot be written, and SHALL NOT initialise git, start an agent, create a specification or modify project source."
+      "statement": "Registration SHALL create the project row, its default runners and starter charters, and its marker as one unit, rolling back the row and restoring the marker if the marker cannot be written. Registering an existing folder SHALL NOT initialise git, start an agent, create a specification or modify project source; creating a project in a new folder SHALL also make it a git repository with an AGENTS.md and a first commit."
     },
     {
       "key": "n5-relocation-is-a-guarded-action",
@@ -749,6 +896,83 @@
       "party": null,
       "rationale": "Deletion is irreversible; a running process must not lose its project underneath it.",
       "statement": "Deletion MUST be refused with `project_has_active_run` while any of the project's runs is running, SHALL NOT be blocked by any other record, SHALL require the operator to type the project's current name, and deleting the last project SHALL leave the app in a non-error state that still offers adding one."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-repository-w-new-folder-repository",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Writing agents get their own worktrees only once a commit exists; a repository with no commit leaves them all sharing one checkout.",
+      "statement": "Creating a project in a folder that does not yet exist leaves that folder a git repository with exactly one commit, which holds AGENTS.md and nothing else, and sets the project's main branch to the branch that commit is on."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-repository-with-hub-files-ignored",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a repository AgentWeave creates, the Hub's own working files (.agentweave/) are ignored from the start and never appear in the first commit or as untracked changes."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-repositor-agents-md-only-when-none",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A folder that already instructs its agents belongs to someone who chose that; AgentWeave adding a second file would contradict or duplicate it.",
+      "statement": "AgentWeave creates AGENTS.md only when the folder holds none of AGENTS.md, CLAUDE.md, GEMINI.md or .github/copilot-instructions.md and is not already an AgentWeave project; otherwise it writes no instruction file."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-repository-with-agents-md-content",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A created AGENTS.md begins with a short AgentWeave section saying the project is worked on through AgentWeave and where its specifications live, followed by an empty place for the project's own instructions."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-reposito-existing-folder-untouched",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Opening an existing folder that is not a git repository creates no repository, no commit and no file in it."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-repository-wi-make-it-a-repository",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An unasked first commit could publish secrets or bulk files into history; showing them first is what makes the one-click action safe.",
+      "statement": "For a project whose folder is not a git repository, the operator can make it one in a single action that first shows every file the first commit would hold (with ignored files left out) and creates the repository and commit only on confirmation; AGENTS.md is added by the same rule as a new folder."
+    },
+    {
+      "key": "a-new-project-starts-as-a-agents-md-is-instructions-when-chosen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Repositories that already arrange their own instruction files keep working as they do; a new project gets one source of instructions from the start.",
+      "statement": "AGENTS.md is the project's instructions when AgentWeave created it, or when the operator has switched on 'Use AGENTS.md as this project's instructions' (offered in Settings → Instructions only when the folder holds an AGENTS.md). For any other project, instructions come from the Hub exactly as before and the Hub carries no instruction file."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-reposit-instructions-are-agents-md",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Instructions in the repository are versioned with the code and read by tools outside AgentWeave.",
+      "statement": "While AGENTS.md is the project's instructions, Settings → Instructions shows that file's content and saving writes it to the file; the 40,000-character limit still applies."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-repository-instructions-committed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents work in their own worktrees and see main's committed state; an uncommitted edit would never reach them, and overwriting the operator's own unsaved edit would lose work.",
+      "statement": "Saving Instructions to AGENTS.md commits AGENTS.md, and only AGENTS.md, on the project's main branch. If AGENTS.md has uncommitted changes in the project checkout, or the checkout is not on the main branch, the save is refused saying which, and nothing is overwritten; if the project has no main branch set, the file is written and the operator is told it was not committed."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-repository-with-instructions-moved",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One copy: two sources of instructions drift, and an agent cannot tell which one is meant.",
+      "statement": "When AGENTS.md becomes the instructions of a project that holds instructions in the Hub's database, those instructions are added to AGENTS.md's instructions area once, committed as a save is; from then on the file is the only source, and the database copy is kept but not read."
+    },
+    {
+      "key": "a-new-project-starts-as-a-git-repository-with-instructions-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Codex, Kimi and OpenCode read AGENTS.md themselves; carrying it twice pays for it twice on every turn.",
+      "statement": "Every agent turn carries the project's instructions exactly once, whether or not the agent's runner also reads AGENTS.md on its own."
     }
   ],
   "schema_version": 1,

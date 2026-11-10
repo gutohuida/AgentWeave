@@ -1,0 +1,313 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a spec with two builds and four tasks: one sent back for merge-needed, one for defect, one for merge-needed twice, one never sent back",
+      "how_to_check": "Hub test over seeded transitions asserting the spec row and each build row; hub/tests/test_the_tally_counts_conflict_send_backs.py",
+      "key": "ac-count",
+      "requirement": "count-conflict-send-backs",
+      "then": "the spec's row reads conflicts 3 and each build's row counts only its own tasks' conflicts",
+      "when": "the tally is read for the project"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three merge-needed send-backs: one by a reviewer through update_task, one made by the checks gate from completed, one made by a landing batch from approved",
+      "how_to_check": "Hub test seeding the three origins; the drive produces the Hub-found cases by really conflicting two tasks (see the drive task)",
+      "key": "ac-split",
+      "requirement": "split-by-finder",
+      "then": "conflicts is 3 with reported 1 and found_by_hub 2",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "approved work whose landing batch conflicts and is sent back from approved",
+      "how_to_check": "Hub test whose transition has from_status approved and origin checks; fails on today's tally, which returns no conflicts block",
+      "key": "ac-hub-found",
+      "requirement": "hub-found-are-counted",
+      "then": "found_by_hub is 1 although send_backs.made is 0",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec whose tasks went through reviewer, checks and landing conflicts",
+      "how_to_check": "Hub test that reads both routes for one seeded project; the drive repeats it on a live trial Hub",
+      "key": "ac-agree",
+      "requirement": "agrees-with-history",
+      "then": "the totals and both parts are equal",
+      "when": "the tally's count is compared with GET /tasks/{id}/history for each of its tasks, filtered to revision_needed and merge-needed and grouped by origin"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the existing work-tally test fixtures",
+      "how_to_check": "The existing tally tests run unmodified and pass",
+      "key": "ac-unchanged",
+      "requirement": "unchanged-figures",
+      "then": "every figure other than send_backs.conflicts is identical to the stored expectation",
+      "when": "the tally is computed with the change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a finished build with one reported conflict and two found by the Hub, and one with none",
+      "how_to_check": "UI test over SpecBuilds and ProjectWork; screenshot in the drive",
+      "key": "ac-shown",
+      "requirement": "shown-on-build-card",
+      "then": "the first shows '3 conflicts (1 reported, 2 found by the Hub)', the second '0 conflicts'",
+      "when": "the spec page and the project view are opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec with two send-backs recorded with no reason class and one merge-needed",
+      "how_to_check": "Hub test seeding null reason_class rows",
+      "key": "ac-unclassified",
+      "requirement": "older-send-backs",
+      "then": "conflicts is 1 and the figure reports 2 send-backs without a class",
+      "when": "the figure is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "287d34b96822cba992e1ea445ca969fb58adbbd70af440fe1dae6826caab1b37",
+      "FR-2": "86b4bff32171c4d0cc8fee7227aa58a192609e7449b9397be0b40293db79d97e",
+      "FR-3": "301ea7333ca10cc5f645b11136bdad3c6ab0e2b75f5e9df937d36a570fc3194c",
+      "FR-4": "72af21c1a9f76ff3e718e877a1ba846a506c9d42c6b02f7b32290a8eb946619f",
+      "FR-5": "bfd4652e28e3884451aa36e5e46dce2986fcbcd6aef207c169698e9e2a3a00b1",
+      "FR-6": "3c52c14a65d4525ee7814b3a8daaf44cf134fe289443bb13f255372c6070de92",
+      "FR-7": "37ecfb878ceb4a5e272685745f307a995581371f00f679b3f795a0d7e0963950"
+    },
+    "high_water": 7,
+    "requirements": {
+      "agrees-with-history": "FR-4",
+      "count-conflict-send-backs": "FR-1",
+      "hub-found-are-counted": "FR-3",
+      "older-send-backs": "FR-7",
+      "shown-on-build-card": "FR-6",
+      "split-by-finder": "FR-2",
+      "unchanged-figures": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Read-only Hub tally plus two UI renderings, no migration: Sonnet work, and Developer is not named busy.",
+      "builder": "Same as the agent; the tally task names DeveloperSonnet2 and falls back to Developer if it is busy.",
+      "checker": "QA is a different agent from the builder and is not named busy.",
+      "cron": "Every five minutes picks up the next task soon after the previous one is approved without firing idle turns often.",
+      "mode": "Four tasks; the tally and the UI run in order, the drive runs first and last.",
+      "stop": "Nothing to do once its tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 1: read-only over rows that exist; no migration, no new column, no Hub-restart hazard beyond the ordinary one for a code change.\n\nDecisions:\n- Count from task_transitions rows (to_status revision_needed, reason_class merge-needed), the same rows the task history route returns, so the number agrees with the history by construction. No new store.\n- The split is by the row's origin: 'checks' means the Hub found it (checks at completion, or the landing batch); any other origin means a person or agent reported it. Both land in one new block, send_backs.conflicts = {reported, found_by_hub}, in the work tally's row, so every grouping the tally has (spec, build, agent, model, level) carries it.\n- Scope is the tally's existing scope: a 'slice' is a spec document (its change document) and its builds. The roadmap's slice 'measure-conflict-rounds' and the document of that slice are the same unit in the app.\n- Author's choice: made/received are NOT changed. Widening 'made' to include Hub-found send-backs would silently move numbers the project view already shows. The new block is the only addition. The wider inconsistency (Hub send-backs for broken-check/flaky are also absent from made) is left for the backlog.\n- Author's choice: 'rejected' moves are not counted; only revision_needed carries a reason class.\n- Where it shows: the build card (build_figures) and the project view row. The retrospective is left alone.\n\nCURRENT   work tally row: send_backs {made, received}; Hub-found send-backs absent; no conflict count anywhere per spec/build\nPROPOSED  work tally row: send_backs {made, received, conflicts {reported, found_by_hub}}; build card and project view show 'N conflicts (R reported, H found by the Hub)'\n\nThe contract (names a drive and the tests assert; follows the existing snake_case of work_tally.py rows):\n- Work tally row (hub/hub/work_tally.py `_Acc.row`, served by `GET /api/v1/stats` in hub/hub/api/v1/stats.py, in every row of `specs`/`builds`/agent/model/level groups): `send_backs` becomes `{\"made\": int, \"received\": int, \"conflicts\": {\"reported\": int, \"found_by_hub\": int, \"unclassified\": int}}`. `conflicts.reported + conflicts.found_by_hub` is the conflict count; there is no separate total field. `unclassified` is the number of revision_needed moves of that scope with reason_class null (FR-7). Accumulator keys: `sendbacks.conflicts.reported`, `sendbacks.conflicts.found_by_hub`, `sendbacks.unclassified`, read with the same `g(...)` helper as `sendbacks.made`.\n- Build figures (`work_tally.build_figures`, served by `GET /project/builds/{id}/figures`, hub/hub/api/v1/spec.py:4316): a new top-level field `conflicts`, the same `{\"reported\": int, \"found_by_hub\": int, \"unclassified\": int}` object taken from the build's row. UI: `BuildFigures.conflicts` in hub/ui/src/api/buildFigures.ts and `WorkRow.send_backs.conflicts` in hub/ui/src/api/stats.ts.\n- Source rows: task_transitions with to_status 'revision_needed' and reason_class 'merge-needed' (constant `SEND_BACK_MERGE_NEEDED`, hub/hub/task_transitions.py:172); the finder is `origin == 'checks'` (Hub) versus any other origin (reported). Task history route: `GET /api/v1/tasks/{id}/history`, fields `to_status`, `reason_class`, `origin` (tasks.py:2610-2636).\n- Task status path the drive walks: in_progress -> completed -> (checks conflict: completed -> revision_needed, origin checks) and completed -> under_review -> revision_needed (reviewer, origin actor, reason_class merge-needed through update_task), and approved -> revision_needed (landing batch, origin checks).\n- No event name is added; no setting or route is added.\n- Guards to relax: none. The existing tally tests (FR-5) must pass unmodified, and any test that compares a whole `send_backs` dict for equality (grep hub/tests and hub/ui/src/__tests__ for `send_backs`) must be updated in the task that adds the field, because adding `conflicts` changes that dict's shape; that is a fixture update, not a change to made/received.\n\nThe drive's conflicts: because slice 1 now orders same-file tasks of a document, a document's tasks will not conflict by themselves. The drive therefore creates its tasks directly on the board (not from a document's plan), so no ordering applies, and edits the same file on each.",
+  "evidence": {
+    "checked": [
+      "hub/hub/model_record.py:161-167 counts send-backs per reason class but per model; it does not group by spec or build.",
+      "hub/hub/work_tally.py:573 skips send-backs not from under_review; :581-590 books only made/received; build_figures (:927-950) returns no send-back figure.",
+      "hub/hub/project_checks.py:2669-2677 and hub/hub/landing_queue.py:1126-1137,2031-2072 send work back as merge-needed with origin checks, from completed and approved.",
+      "hub/hub/api/v1/tasks.py:2610-2636 returns reason_class and origin per transition.",
+      "hub/hub/db/models.py:1003-1004 reason_class is null for send-backs before migration 0157."
+    ],
+    "limits": [
+      "Not run against the operator's database: how many conflict rounds slice 1 removed is exactly what this will measure, and no figure is claimed here.",
+      "No requirement is demonstrated yet: the acceptance drive is proposed coverage, to be written and recorded failing before the build.",
+      "origin 'checks' is also used for non-conflict Hub send-backs; this change filters on reason class merge-needed first, and that the Hub sets merge-needed only for conflicts is read from the two call sites above, not from a test."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Should the Hub-found conflicts also be added to send_backs.made (and received)? Options: (a) leave made/received untouched and add the new block only (what this document does); (b) include every Hub-made send-back in made/received, which would change numbers the project view already shows. Recommendation: (a), then raise (b) as its own backlog finding.",
+      "resolved": false
+    },
+    {
+      "question": "Slice 1 orders same-file tasks of a document, so a document's own tasks no longer conflict by themselves and a drive cannot rely on them to produce Hub-found conflicts. The drive creates its tasks directly on the board instead. Recommendation: keep that; confirm the Hub's checks and landing batch still run for directly created tasks in a trial Hub.",
+      "resolved": false
+    }
+  ],
+  "problem": "The roadmap's measure of success is fewer review rounds spent on merge conflicts, but nothing reports that number. What exists: every move to revision_needed records a reason_class, one of defect/regression/broken-check/merge-needed/evidence-only/flaky, and a sentence (hub/hub/db/models.py:1003-1004, task_transitions.py:169-175); the task history route returns reason_class and origin per move (hub/hub/api/v1/tasks.py:2610-2636); read_model_record counts send-backs per reason class but per MODEL, not per spec or build (hub/hub/model_record.py:161-167); the work tally counts send-backs per spec, build, agent, model and level but only as a bare made/received pair (hub/hub/work_tally.py:123, :581-590); the build retrospective lists each send-back with its class (hub/hub/build_retrospective.py:619-640) but is a model-written report requested per document, not a count. Two things are missing. (1) No view splits the conflict send-backs by who found the conflict. A merge-needed send-back comes from three places: a reviewer or builder passing reason_class=merge-needed through update_task (hub/hub/mcp_server.py:472-516, origin 'actor'), the Hub's checks finding that completed work does not merge onto main (hub/hub/project_checks.py:2669-2677, from 'completed', origin 'checks'), and the Hub's landing batch finding that approved work conflicts with work ahead of it (hub/hub/landing_queue.py:1126-1137, 2031-2072, from 'approved', origin 'checks'). The first costs a review turn plus a rework turn; the second and third are found by the Hub before or after a review. They are different costs and the roadmap's claim ('review rounds were merge conflicts', F504/F506) is about the first. (2) The tally cannot see the Hub-found ones at all: it counts a send-back only when it moves from under_review (hub/hub/work_tally.py:573), and the Hub's own send-backs move from completed or approved, so they are in neither made nor received.",
+  "requirements": [
+    {
+      "key": "count-conflict-send-backs",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the number the roadmap exists to move: conflict-caused rounds per slice.",
+      "statement": "For every spec and every build of it, the work tally reports how many moves to revision_needed carried reason class merge-needed, as send_backs.conflicts, and the same count for each of its agent, model and level groupings."
+    },
+    {
+      "key": "split-by-finder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A conflict a reviewer had to catch cost a review turn; one the Hub found before or after review did not cost the same.",
+      "statement": "send_backs.conflicts has two parts that add up to the count: 'reported', moves whose origin is not 'checks', and 'found_by_hub', moves whose origin is 'checks', whether the Hub's checks found the conflict on completed work or its landing batch found it on approved work."
+    },
+    {
+      "key": "hub-found-are-counted",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "work_tally.py:573 skips every send-back not from under_review, so today the Hub-found conflicts are invisible.",
+      "statement": "A merge-needed send-back the Hub made from completed or approved is counted in send_backs.conflicts although it did not move from under_review."
+    },
+    {
+      "key": "agrees-with-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "For any spec, the count equals the number of rows the task history route returns for that spec's tasks with to_status revision_needed and reason_class merge-needed, and each part equals those rows grouped by origin; a task sent back for a conflict twice counts twice."
+    },
+    {
+      "key": "unchanged-figures",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "send_backs.made and send_backs.received, and every other figure in the tally, are the same before and after this change for the same records."
+    },
+    {
+      "key": "shown-on-build-card",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build card for a build, and the project view's row for a spec, show the conflict count with its two parts, and show '0 conflicts' rather than nothing when a finished build had none."
+    },
+    {
+      "key": "older-send-backs",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "Migration 0157 left earlier send-backs null (models.py:1003 comment).",
+      "statement": "A send-back recorded before reason classes existed (reason_class null) is not counted as a conflict, and the figure says how many send-backs of the spec have no class, so the operator can tell a low count from an unclassified history."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/same-file-tasks-run-in-order-roadmap/spec.json",
+    "slice": "measure-conflict-rounds"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A count of merge-needed send-backs per spec, per build, per agent, model and level, in the work tally the build card and project view already read",
+      "The count split into conflicts reported by an agent or the operator and conflicts found by the Hub's checks or landing",
+      "Showing the count on the build card and in the project view",
+      "Agreement with the task history route for the same tasks"
+    ],
+    "non_goals": [
+      "Counting other reason classes per spec (read_model_record already counts every class per model)",
+      "Changing made/received or which transitions they count",
+      "Preventing or resolving conflicts (slice 1 orders tasks; slice 3 flags overlaps)",
+      "Comparing against a time before slice 1 shipped",
+      "A migration, or a stored per-task conflict flag",
+      "Counting conflicts that a builder resolved without a send-back"
+    ]
+  },
+  "summary": "For a spec and for each build of it, the operator sees how many send-backs were merge conflicts, split into conflicts a reviewer or builder reported and conflicts the Hub's own checks and landing found, so whether ordering same-file tasks (slice 1) worked is a number. Almost all the data already exists: this reads it, fixes a gap in what the tally counts, and shows it on the build card and the project view. Slice 2 of 'Same-file tasks of a slice run in order'.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Routine drive scripting on the existing scripts/drive pattern; Sonnet is enough and Developer is not named busy.",
+      "checker": "QA",
+      "checker_reason": "QA can run the drive and tell a really-failing drive from one failing for a script reason.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the contract named in the design (send_backs.conflicts {reported, found_by_hub, unclassified} in GET /api/v1/stats, conflicts in GET /project/builds/{id}/figures, GET /api/v1/tasks/{id}/history), and record it failing. It runs on a dedicated trial Hub (its own port and database): a project with three tasks created directly on the board (no document, so slice 1's ordering does not apply) editing the same file, built so the first lands and the others hit conflicts; one conflict is reported by a Haiku reviewer's merge-needed send-back, the others are found by the Hub's checks or landing. It reads the tally for the spec and each build, reads each task's history, and fails unless the conflict count and its two parts equal the history grouped by origin; it opens the build card and the project view and screenshots them. Recorded failing on today's code, where no conflicts figure exists.",
+      "files": [
+        "scripts/drive/d1107_conflict_rounds.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "count-conflict-send-backs",
+        "split-by-finder",
+        "agrees-with-history"
+      ],
+      "reviewer": null,
+      "title": "Conflict-count acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "A bounded addition to one Hub module with a clear test; Sonnet-sized and no migration. DeveloperSonnet2 is building the conversation-trace slice now, so Developer is the alternative if it is still busy.",
+      "checker": "QA",
+      "checker_reason": "QA reads the tally against real rows and can reproduce the history comparison.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "In hub/hub/work_tally.py add send_backs.conflicts {reported, found_by_hub, unclassified}, read from task_transitions with to_status revision_needed, whatever the from_status, booked to the same spec/build/agent/model/level scopes as made/received, which stay untouched. Carry it through build_figures as the top-level `conflicts` field. The test and the code are one task: Hub tests for each criterion, the history agreement test reading the task history route, the existing tally tests unmodified, and any fixture that compares a whole send_backs dict updated for the new key.",
+      "files": [
+        "hub/hub/work_tally.py",
+        "hub/tests/test_the_tally_counts_conflict_send_backs.py"
+      ],
+      "from": null,
+      "key": "tally",
+      "requirements": [
+        "count-conflict-send-backs",
+        "split-by-finder",
+        "hub-found-are-counted",
+        "agrees-with-history",
+        "unchanged-figures",
+        "older-send-backs"
+      ],
+      "reviewer": null,
+      "title": "The tally counts conflict send-backs by finder"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Two small UI renderings of one new field; Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "QA2 differs from the builder and from the tally task's checker, and checks UI against a live Hub.",
+      "depends_on": [
+        "tally"
+      ],
+      "description": "Add `conflicts` to the BuildFigures type (buildFigures.ts) and `send_backs.conflicts` to the WorkRow type (stats.ts), and render it on the build card (SpecBuilds) and in the project view row (ProjectWork) as 'N conflicts (R reported, H found by the Hub)', with '0 conflicts' for none and a note when the spec has unclassified send-backs. UI tests for the criteria; UI bundle refreshed per .claude/rules (commit hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/ui/src/api/buildFigures.ts",
+        "hub/ui/src/api/stats.ts",
+        "hub/ui/src/components/spec/page/SpecBuilds.tsx",
+        "hub/ui/src/components/activity/ProjectWork.tsx",
+        "hub/ui/src/__tests__/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "show",
+      "requirements": [
+        "shown-on-build-card",
+        "older-send-backs"
+      ],
+      "reviewer": null,
+      "title": "The build card and project view show the conflict count"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Running an existing drive and recording its output is routine; Sonnet is enough.",
+      "checker": "QA",
+      "checker_reason": "QA can tell a drive that passes for the right reason from one that passes because it read nothing.",
+      "depends_on": [
+        "drive",
+        "tally",
+        "show"
+      ],
+      "description": "Run the acceptance drive from the first task against the built feature on a dedicated trial Hub, with the UI bundle built, and record its evidence (the run output, the tally and history readings it compared, and the screenshots of the build card and project view) against every requirement of this document. A failure here sends the task that builds the behaviour back, not this one.",
+      "from": null,
+      "key": "accept",
+      "requirements": [
+        "count-conflict-send-backs",
+        "split-by-finder",
+        "hub-found-are-counted",
+        "agrees-with-history",
+        "shown-on-build-card",
+        "older-send-backs"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive and record its evidence"
+    }
+  ],
+  "title": "Conflict-caused review rounds are counted per slice"
+}

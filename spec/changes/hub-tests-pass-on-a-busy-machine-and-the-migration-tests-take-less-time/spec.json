@@ -1,0 +1,399 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "Today's master and the steady-set list",
+      "how_to_check": "py -3.11 scripts/drive/d1105_steady_under_load.py --repeat 10 --load, on master before the build",
+      "key": "drive-fails-today",
+      "requirement": "steady-under-load",
+      "then": "It reports at least one failing test id, with how often it failed. If it reports none, the drive is not yet a measurement and the build stops to say so.",
+      "when": "The acceptance drive runs the steady set 10 times with every logical CPU kept busy"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The built change",
+      "how_to_check": "py -3.11 scripts/drive/d1105_steady_under_load.py --repeat 10 --load, then without --load",
+      "key": "drive-passes-after",
+      "requirement": "steady-under-load",
+      "then": "0 failures in both, and the output lists every steady-set id with 10 of 10 passes",
+      "when": "The same drive runs, under load and then idle"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The list and the 'Fix flaky test' task titles on :8000 (mode=ro) filed 2026-10-28 to 2026-11-04",
+      "how_to_check": "Read-only query of tasks.title on the operator's database against the list",
+      "key": "list-matches-records",
+      "requirement": "steady-set-named",
+      "then": "Every test id in those titles is in the list, and every entry names its source",
+      "when": "They are compared"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A 250 ms blocking call injected on the loop in each guarded path",
+      "how_to_check": "The drive's --inject-freeze mode",
+      "key": "freeze-still-fails",
+      "requirement": "still-catches-a-freeze",
+      "then": "Each fails every time",
+      "when": "Each never-freezes test runs 10 times idle and 10 times under load"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The six assertions named under evidence",
+      "how_to_check": "Read the six sites; drive output",
+      "key": "wall-clock-reviewed",
+      "requirement": "wall-clock-asserts-load-proof",
+      "then": "Each is rewritten, or carries the comment, and is in the steady set the drive runs",
+      "when": "The change is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The diff",
+      "how_to_check": "git diff master -- hub/tests | grep for those markers and for removed 'def test_' lines",
+      "key": "nothing-skipped",
+      "requirement": "no-test-weakened-silently",
+      "then": "None appear, except merges listed in the evidence with their replacement",
+      "when": "It is searched for removed test functions, skip, xfail, flaky or rerun markers in the steady set's files"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A steady-set test that still fails under load after the change",
+      "how_to_check": "Read FINDINGS.md and the test's diff",
+      "key": "real-stall-filed",
+      "requirement": "real-stall-becomes-a-finding",
+      "then": "A finding naming that code path is in scripts/drive/FINDINGS.md and the test is unchanged",
+      "when": "Its failure is traced to Hub code blocking the loop"
+    },
+    {
+      "checked_by": "agent",
+      "given": "master and the built change, on the same machine in one session",
+      "how_to_check": "That command twice, summing the durations lines",
+      "key": "migration-time",
+      "requirement": "migrations-faster",
+      "then": "The summed durations of the change are at most 40% of master's",
+      "when": "py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_migration_*.py -q -p no:cacheprovider -n 4 --durations=0 runs on each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The revisions exercised before and after",
+      "how_to_check": "List the revisions each test upgrades or downgrades to, before and after; break one downgrade in a scratch worktree and run the family",
+      "key": "migration-coverage",
+      "requirement": "migrations-coverage-kept",
+      "then": "The same revisions are exercised after as before, and the broken downgrade fails at least one test",
+      "when": "One revision's downgrade is broken deliberately in a scratch copy"
+    },
+    {
+      "checked_by": "agent",
+      "given": "An idle machine",
+      "how_to_check": "py -3.11 scripts/checks/hub_suite.py --durations=0 on each, summed",
+      "key": "suite-time",
+      "requirement": "suite-not-slower",
+      "then": "The change's summed test-seconds are lower",
+      "when": "The full suite runs on master and on the change"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "85db352d6e8a853a06314fac5cbddb71dad220b6546c47e97f6ddf5a18ae45a1",
+      "FR-2": "ca56863f6784396fec9b84f526feca17db70224db6bdc17aee73c12a7393f8b7",
+      "FR-3": "675259d4fa7b1e96c111ebd79131b54cf24478a718fba9cf98575effe5ae0f1c",
+      "FR-4": "d1a267f9d25fa4db5c772a5a88c28a825fa13330c10138a22a1259e0c8af5eec",
+      "FR-5": "8690c10716da77bc106bf136971734e92e3708689d89819d734fd39732f24478",
+      "FR-6": "5dca8f143b979ed3e881d0d30195686ea2c0c2529d563e1f856b42dac1b62c27",
+      "FR-7": "b7a5b903cdba8d2655038cdaf02170c003bdfe7bc94662e67f2d8c80cf0bbd94",
+      "FR-8": "35c285e27fe5e96143ebb9af098202a1432c242ac6f4b97eeaa433236bc262e1",
+      "FR-9": "9a760c77c40b15f4477185f8958037c54118c5cc66a268ebe87edc6736eda9f1"
+    },
+    "high_water": 9,
+    "requirements": {
+      "migrations-coverage-kept": "FR-8",
+      "migrations-faster": "FR-7",
+      "no-test-weakened-silently": "FR-5",
+      "real-stall-becomes-a-finding": "FR-6",
+      "steady-set-named": "FR-1",
+      "steady-under-load": "FR-2",
+      "still-catches-a-freeze": "FR-3",
+      "suite-not-slower": "FR-9",
+      "wall-clock-asserts-load-proof": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer by default; the steady task names DeveloperOpus.",
+      "builder": "Developer builds the drive and the migration work; DeveloperOpus the steady task.",
+      "checker": "QA2 checks all three, leaving QA and DeveloperOpus2 to the desktop-app build this afternoon.",
+      "cron": "Every five minutes so finished work is checked promptly.",
+      "mode": "Three tasks; steady and migrations touch different files and run in parallel once the drive is in.",
+      "stop": "Stop when the queue empties."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Steady means the verdict does not depend on how busy the machine is. It does not mean the test got weaker, so every change to a guard test is paired with proof that the guard still fires when the defect it guards is introduced (FR on still-catching).\n\nLoad, for this document, means every logical CPU kept busy by a load generator the acceptance drive starts, for the whole measurement. It is a fixed, repeatable stand-in for 'the operator is gaming and two agents run suites'.\n\nThe steady set is a named list in the repository, one test id per line with the record that put it there (a Fix flaky test task, a wall-clock assert, or membership of the never-freezes family). The drive reads it, so the list and the measurement cannot drift apart.\n\nProposed numbers, to be confirmed by the operator: 10 repetitions under load, 0 failures; migration family at most 40% of its baseline test-seconds.",
+  "evidence": {
+    "checked": [
+      "Check runs on :8000 (task_check_runs, mode=ro, 2026-10-24 to 2026-11-05): 338 runs; 30 failed runs failed only on tests already failing on master; 1 hub-tests failure did not reproduce on its confirm run.",
+      "Tasks on :8000 titled 'Fix flaky test ...' (mode=ro): 19 from 2026-10-28 to 2026-11-04; test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop appears 4 times.",
+      "Project check settings on :8000 after the operator's change, 2026-11-05: hub-tests phase landing, fast off, timeout 3600, command scripts/checks/hub_suite.py; sweep fast.",
+      "hub/tests/_loop_lag.py:26-30: GIT_DELAY 0.25 s, SAMPLE 10 ms, STALL_LIMIT 100 ms; its _set_process_priority note records 110-196 ms pauses with no CPU spent (F1119). Used by 5 test files.",
+      "Wall-clock assertions found by grep: test_a_task_waits_while_its_run_waits.py:507, test_checks_reuse_a_pass_and_confirm_a_failure.py:540, test_checks_run_before_review.py:296, test_copilot_acp_refusal_continuation.py:645, test_project_checks_run.py:99, test_scheduler_store_is_in_memory.py:92.",
+      "Migration family, measured 2026-11-05 in the Architect worktree at -n 4: 170 passed, 1 skipped, 154 s wall, 580 summed test-seconds; slowest 9.4-11.8 s each, the downgrade/upgrade round trips."
+    ],
+    "limits": [
+      "The drive has not been run yet; that today's master fails it under load is expected from the records, not shown.",
+      "The grep for wall-clock asserts matched assert lines only; a limit held in a helper or a wait_for timeout is not counted.",
+      "The migration baseline was taken on a machine with other agents running; the build re-measures both sides in one session.",
+      "Two 'Fix 2 tests the approval checks found failing on main or flaky' tasks do not name their tests; their tests are not in the list unless the builder finds them in those tasks' notes."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer",
+          "DeveloperOpus"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-05T16:18:01.245387+00:00",
+        "id": "build-eef4348a69dc",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-05T10:59:17.633315+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "migrations": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "steady": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Take slice 5 ahead of slice 4 (tiered tests)? Operator, 2026-11-05: yes, because hub-tests now runs at landing only, so flaky tests at landing are what is left.",
+      "resolved": true
+    }
+  ],
+  "problem": "Since 2026-11-05 this project's hub-tests check runs at landing only (operator's settings change, read back mode=ro). So what is left of the check cost is landing batches held by tests that fail for reasons outside the work:\n- 19 'Fix flaky test' tasks were filed between 2026-10-28 and 2026-11-04. test_turn_starts_never_freeze_the_hub.py::test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop was 'fixed' four times (10-31, 11-02, 11-03 twice) and still fails under load.\n- On 2026-11-04 one test failing on master showed in 15 check runs, including the runs of the tasks written to fix it.\n- The never-freezes family decides from a loop-lag probe with a 100 ms limit (hub/tests/_loop_lag.py:30). Its own notes record 110-196 ms pauses with no CPU spent when a busy machine preempts the thread holding the GIL (F1119), which is a stall the code under test did not cause.\n- Six more tests compare elapsed real time against a fixed limit (listed under evidence).\n- The migration family (test_migrations.py and test_migration_*.py, 170 tests) took 580 test-seconds, 154 s wall at -n 4, measured 2026-11-05 in the Architect worktree. That is about 9% of a full suite's ~6,600 test-seconds. Its slowest tests are downgrade/upgrade round trips at 9-12 s each, each building its database from nothing.",
+  "requirements": [
+    {
+      "key": "steady-set-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The drive measures from this list, so the list is the definition of 'steady' and cannot drift from what is measured.",
+      "statement": "The repository holds a list of the steady set: every test in the never-freezes family, every test named by a 'Fix flaky test' task filed from 2026-10-28 to 2026-11-04, and the six wall-clock assertions named under evidence. Each entry gives its test id and the record that put it there."
+    },
+    {
+      "key": "steady-under-load",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today these tests fail under load for reasons the work did not cause, and each failure holds a landing batch.",
+      "statement": "Every test in the steady set passes 10 consecutive repetitions while every logical CPU is kept busy for the whole run, with 0 failures, and also passes 10 consecutive repetitions on an otherwise idle machine."
+    },
+    {
+      "key": "still-catches-a-freeze",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A guard made steady by making it unable to fail is worse than a flaky one: it reports safety that is not there.",
+      "statement": "For each never-freezes test, when a blocking call of at least 250 ms is placed on the Hub's event loop in the path that test guards, the test fails on every one of 10 repetitions, idle and under load."
+    },
+    {
+      "key": "wall-clock-asserts-load-proof",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "None of the six wall-clock assertions named under evidence fails because the machine is slow: each is rewritten so its verdict does not depend on how long real work takes, or it stays, with a comment beside it saying why load cannot move the time it measures, and passes the under-load repetitions."
+    },
+    {
+      "key": "no-test-weakened-silently",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "No test in the steady set is deleted, skipped, marked expected-to-fail or retried to make it pass. A test merged into another is listed in the change's evidence beside the test that now catches what it caught."
+    },
+    {
+      "key": "real-stall-becomes-a-finding",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Non-goal: product fixes. The test's job is to report a real stall.",
+      "statement": "When a steady-set test fails under load because the Hub code it guards really does block the loop or hold a lock, the test is left failing and a finding naming the code path is recorded in scripts/drive/FINDINGS.md, rather than the test being changed to pass."
+    },
+    {
+      "key": "migrations-faster",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured 2026-11-05: 580 test-seconds, 154 s wall at -n 4, about 9% of a full suite.",
+      "statement": "The migration family takes at most 40% of its baseline test-seconds (sum of setup, call and teardown durations), with the baseline and the new figure measured by the same command, on the same machine, in the same session."
+    },
+    {
+      "key": "migrations-coverage-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every migration revision whose upgrade or downgrade the family exercises today is still exercised, and a downgrade deliberately broken in one revision still fails at least one migration test."
+    },
+    {
+      "key": "suite-not-slower",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The full Hub suite's total test-seconds on an idle machine is lower after the change than before, measured the same way."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-cost-less-on-a-machine-that-is-in-use/spec.json",
+    "slice": "faster-steadier-tests"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The never-freezes-the-hub family: the tests built on hub/tests/_loop_lag.py, and the slow-share, main-watch and no-write-lock-across-git tests",
+      "The tests the gate filed Fix flaky test tasks for since 2026-10-28, and the six wall-clock assertions found by reading",
+      "The migration test family: hub/tests/test_migrations.py and hub/tests/test_migration_*.py",
+      "An acceptance drive that repeats the steady set under load and reports each failing test"
+    ],
+    "non_goals": [
+      "Changing Hub product code. If a test is flaky because the Hub really does stall under load, that is recorded as a finding, not hidden by the test",
+      "Deleting a test, marking it skip or xfail, or adding retries, to make it pass",
+      "Tiered or change-sized test selection, and idle-time runs: slice 4",
+      "Changing the project's check settings, the suite entry point or its one-at-a-time lock: slice 3",
+      "Speeding up tests outside the migration family"
+    ]
+  },
+  "summary": "Slice 5 of 'Checks cost less on a machine that is in use', for this repository only, taken ahead of slice 4 (tiered tests) at the operator's agreement on 2026-11-05. The Hub tests that fail when the machine is busy, the never-freezes-the-hub family and the tests the gate has filed 'Fix flaky test' tasks for, pass on a loaded machine and still fail when the freeze they guard against is really there. The migration tests take well under half their current time while exercising every migration they exercise today.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet: a script and a list, no judgement about test semantics.",
+      "checker": "QA2",
+      "checker_reason": "Opus: has to judge whether the drive really loads the machine and really fails today.",
+      "depends_on": [],
+      "description": "Write scripts/checks/steady_tests.txt (the steady set, each line a test id and its source) and scripts/drive/d1105_steady_under_load.py: it repeats the set N times, optionally with every logical CPU kept busy (--load) and optionally with a 250 ms blocking call injected on the loop (--inject-freeze), and reports each test's pass count. Record it failing on today's master under load before anything else changes.",
+      "files": [
+        "scripts/checks/steady_tests.txt",
+        "scripts/drive/d1105_steady_under_load.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "steady-set-named"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive and the steady-set list, failing first"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus: telling a scheduling pause from a real stall, without making the guard unable to fail, is the subtle part of this slice; four earlier fixes of one test did not hold.",
+      "checker": "QA2",
+      "checker_reason": "Opus: must check that every guard still fires, which a reading alone misses.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Make every steady-set test pass under the drive's load without weakening it: decide from where blocking work ran rather than from a wall-clock limit where the probe allows it, rewrite or justify the six wall-clock asserts, and show with --inject-freeze that each never-freezes test still fails on a real freeze. A failure traced to Hub code is left failing and filed in FINDINGS.md.",
+      "files": [
+        "hub/tests/_loop_lag.py",
+        "hub/tests/test_loop_lag_probe.py",
+        "hub/tests/test_turn_starts_never_freeze_the_hub.py",
+        "hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py",
+        "hub/tests/test_a_slow_share_does_not_freeze_the_hub.py",
+        "hub/tests/test_main_watch_does_not_freeze_the_hub.py",
+        "hub/tests/test_approval_holds_no_write_lock_across_git.py",
+        "hub/tests/test_spec_lists_reuse_parsed_documents.py",
+        "hub/tests/test_streamed_lines_are_recorded_in_batches.py",
+        "hub/tests/test_checks_run_before_review.py",
+        "hub/tests/test_the_shell_judge_reads_a_word_whole.py",
+        "hub/tests/test_ui_staleness.py",
+        "hub/tests/test_checks_reuse_a_pass_and_confirm_a_failure.py",
+        "hub/tests/test_a_spec_is_done_when_its_work_has_landed.py",
+        "hub/tests/test_suite_carries_no_run_credentials.py",
+        "hub/tests/test_mcp_call_mode.py",
+        "hub/tests/test_scheduler.py",
+        "hub/tests/test_pty_runner.py",
+        "hub/tests/test_a_task_waits_while_its_run_waits.py",
+        "hub/tests/test_copilot_acp_refusal_continuation.py",
+        "hub/tests/test_project_checks_run.py",
+        "hub/tests/test_scheduler_store_is_in_memory.py",
+        "scripts/drive/FINDINGS.md"
+      ],
+      "from": null,
+      "key": "steady",
+      "requirements": [
+        "steady-under-load",
+        "still-catches-a-freeze",
+        "wall-clock-asserts-load-proof",
+        "no-test-weakened-silently",
+        "real-stall-becomes-a-finding"
+      ],
+      "reviewer": null,
+      "title": "Never-freezes and flaky tests steady under load, and still catching freezes"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet: a fixture refactor with a measured target and a mechanical coverage check.",
+      "checker": "QA2",
+      "checker_reason": "Opus: has to confirm no revision quietly stopped being exercised.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Cut the migration family's time to at most 40% of its baseline by not building each test's database from nothing, while every revision exercised today is still exercised and a broken downgrade still fails. Measure before and after in one session and record both figures.",
+      "files": [
+        "hub/tests/test_migrations.py",
+        "hub/tests/test_migration_0137_trace_tables.py",
+        "hub/tests/test_migration_0138_trace_hub_wide.py",
+        "hub/tests/test_migration_0139_footprint_commit_named.py",
+        "hub/tests/test_migration_0143_a_check_run_may_be_superseded.py",
+        "hub/tests/test_migration_0145_trace_retention.py",
+        "hub/tests/test_migration_0151_the_hub_may_override_checks.py",
+        "hub/tests/test_migration_0155_landing_queue.py",
+        "hub/tests/test_migration_0162_runs_that_did_not_judge_the_work.py",
+        "hub/tests/test_migration_builds.py",
+        "hub/tests/_migration_fixtures.py"
+      ],
+      "from": null,
+      "key": "migrations",
+      "requirements": [
+        "migrations-faster",
+        "migrations-coverage-kept",
+        "suite-not-slower"
+      ],
+      "reviewer": null,
+      "title": "Migration tests share prepared databases"
+    }
+  ],
+  "title": "Hub tests pass on a busy machine, and the migration tests take less time"
+}

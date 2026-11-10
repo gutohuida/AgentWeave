@@ -743,20 +743,6 @@
       "when": "one loop is fetched by id"
     },
     {
-      "given": "two loops each with events",
-      "key": "ac119",
-      "requirement": "a-loop-s-history-is-answerable-for-that-loop-alone",
-      "then": "only that loop's events are returned, newest first, each with actor and time",
-      "when": "one loop is fetched"
-    },
-    {
-      "given": "",
-      "key": "ac120",
-      "requirement": "a-loop-s-history-is-answerable-for-that-loop-alone",
-      "then": "a `loop_control_changed` event is recorded against it",
-      "when": "a loop's control is delegated"
-    },
-    {
       "given": "a loop that has fired",
       "key": "ac136",
       "requirement": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
@@ -965,6 +951,96 @@
       "requirement": "a-firing-s-briefing-names-how-its-claimed-task-is-finished",
       "then": "the briefing names no task, no transition and no requirement",
       "when": "a firing proceeds with no task claimed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8104 with a fresh database, a project with agent alice bound to a Claude runner on claude-haiku-4-5 (scripts/drive/d1018_loop_history.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1018_loop_history.py",
+      "key": "a-loops-history-records-its-creation-and-queue-additions-drive",
+      "requirement": "a-loops-history-records-its-creation-and-queue-add-history-shows",
+      "then": "the first loop's events read loop_created (operator, POST /jobs) and three loop_tasks_added entries (operator initial tasks, operator create, alice with her run id); the flow's loop reads loop_created (operator, approval, the document) and one loop_tasks_added with the document's tasks; the firing adds a job run and no loop event; the tab's History section shows each as a sentence. Fails on today's Hub at the first check (no loop_created).",
+      "when": "the operator creates a loop for alice with two initial tasks, adds a third with the loop's id, a real Haiku turn of alice is asked to create_task with the loop's id, the operator approves a change document whose delivery starts a flow for alice, the first loop is fired once by hand, and in Chromium the first loop's tab is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with agent a",
+      "how_to_check": "Hub route test",
+      "key": "a-loops-history-records-its-creation-and-queue-created-by-route",
+      "requirement": "a-loops-history-records-its-creation-and-queue-ad-creation-entry",
+      "then": "each loop has one loop_created event naming its creator (operator; a with the run id), door jobs, agent, purpose and document",
+      "when": "the operator creates a loop for a through POST /jobs, and a run of a creates one through the agent route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change document with tasks and a delivery that starts a flow",
+      "how_to_check": "Hub route test",
+      "key": "a-loops-history-records-its-creation-and-que-created-by-approval",
+      "requirement": "a-loops-history-records-its-creation-and-queue-ad-creation-entry",
+      "then": "the flow's loop has a loop_created event with creator operator, door approval and the document's path, and a loop_tasks_added event listing the document's tasks; an approval whose flow is not created leaves neither",
+      "when": "the operator approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a POST /jobs whose second initial task names an unknown requirement",
+      "how_to_check": "Hub route test",
+      "key": "a-loops-history-records-its-creation-and-que-refused-leaves-none",
+      "requirement": "a-loops-history-records-its-creation-and-queue-ad-creation-entry",
+      "then": "no loop_created or loop_tasks_added event exists",
+      "when": "it is refused"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop over an approved document",
+      "how_to_check": "Hub route test",
+      "key": "a-loops-history-records-its-creation-and-queue-ad-added-each-way",
+      "requirement": "a-loops-history-records-its-creation-and-queue-ad-addition-entry",
+      "then": "there is one loop_tasks_added per call, each with the task ids and titles, the actor and the source; the run's entry names its run id",
+      "when": "tasks join it through initial_tasks, POST /tasks with its loop_id, a run of its agent calling create_task with the loop_id, and an add_task amendment of its document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an archived loop holding an unfinished task of a document, and that document's new flow",
+      "how_to_check": "Hub route test",
+      "key": "a-loops-history-records-its-creation-and-queue-adopted-not-added",
+      "requirement": "a-loops-history-records-its-creation-and-queue-ad-addition-entry",
+      "then": "both loops carry loop_tasks_adopted and neither carries loop_tasks_added for that task",
+      "when": "the new loop is created and takes the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop with a queued task",
+      "how_to_check": "Hub route test",
+      "key": "a-loops-history-records-its-creation-and-que-firing-not-recorded",
+      "requirement": "a-loops-history-records-its-creation-and-queue-a-history-records",
+      "then": "the job's run history gains a run and the loop's events gain nothing",
+      "when": "its job fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop with twelve events after its creation",
+      "how_to_check": "Hub route test",
+      "key": "a-loops-history-records-its-creation-and-queue-add-creation-kept",
+      "requirement": "a-loops-history-records-its-creation-and-queue-add-history-shows",
+      "then": "events holds the ten newest and the loop_created entry",
+      "when": "GET /loops/{id} is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a loop detail with loop_created, loop_tasks_added from an agent and loop_stopped, and one with no loop_created",
+      "how_to_check": "vitest",
+      "key": "a-loops-history-records-its-creation-and-queue-additions-tab",
+      "requirement": "a-loops-history-records-its-creation-and-queue-add-history-shows",
+      "then": "the first lists three sentences newest first, the addition naming the agent and the task titles; the second also says its creation was not recorded",
+      "when": "the loop's tab renders each"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a loop on the operator's own project after a few firings",
+      "how_to_check": "operator reads the loop's tab",
+      "key": "a-loops-history-records-its-creation-and-queue-additi-reads-well",
+      "requirement": "a-loops-history-records-its-creation-and-queue-add-history-shows",
+      "then": "they can tell who made it and who put each task in its queue",
+      "when": "they open its tab"
     }
   ],
   "algorithms": [],
@@ -1026,9 +1102,13 @@
       "FR-79": "df7e123f4b2aa3edb6c667b5c69b8020710984bd1fe14af0ad305b3b0d7c363a",
       "FR-80": "617182df4cdbf0a2af56bb54c9e0737171c1e9ab2e4988c1a392fc1dc5c52ef6",
       "FR-81": "6fac79772a7be05744f3c3ba849eeb737bba3dad42dad5b89560b46388a4aeb2",
-      "FR-82": "7fc6e1231600b52870532e13ee0bb837ec6d3194f33a4d939c5a1fd5305c1137"
+      "FR-82": "7fc6e1231600b52870532e13ee0bb837ec6d3194f33a4d939c5a1fd5305c1137",
+      "FR-83": "74619f3ed647eb373092b00e5c7af5bbc037734c9dcaeaacd070019a6d0853da",
+      "FR-84": "a3cad06f6e4eee8bf0c3e2a93c864d6878543a7f27928c1d4d2ab79d2f07e7df",
+      "FR-85": "7a7c66cbde83eee647acffb5e0b1a02e0a6cd227551ba61e9016b0231b8d9542",
+      "FR-86": "12700cedddda2beec907999dd1df5be70d6a8439cd3e18c6a210440cb7c4ec55"
     },
-    "high_water": 82,
+    "high_water": 86,
     "requirements": {
       "a-change-of-a-job-s-agent-does-not-resume-the-old-agent-s-se": "FR-73",
       "a-claimed-task-is-still-the-loop-s-current-item": "FR-46",
@@ -1048,12 +1128,15 @@
       "a-loop-has-a-controller-defaulting-to-the-operator-which-may": "FR-38",
       "a-loop-may-declare-one-specification-document-as-its-queue-s": "FR-31",
       "a-loop-s-continuity-across-firings-is-by-checkpoint-not-by-r": "FR-34",
-      "a-loop-s-history-is-answerable-for-that-loop-alone": "FR-41",
       "a-loop-s-own-view-offers-the-operator-s-actions-on-that-loop": "FR-70",
       "a-loop-s-queue-is-the-tasks-that-name-it-and-each-write-name": "FR-27",
       "a-loop-s-stop-condition-can-only-ever-prevent-a-firing-that-": "FR-30",
       "a-loop-surfaces-its-current-state-without-a-caller-assemblin": "FR-29",
       "a-loop-that-is-still-running-cannot-be-archived": "FR-44",
+      "a-loops-history-records-its-creation-and-queue-a-history-records": "FR-83",
+      "a-loops-history-records-its-creation-and-queue-ad-addition-entry": "FR-85",
+      "a-loops-history-records-its-creation-and-queue-ad-creation-entry": "FR-84",
+      "a-loops-history-records-its-creation-and-queue-add-history-shows": "FR-86",
       "a-project-s-loops-are-listable-and-individually-inspectable": "FR-47",
       "a-queue-gated-on-unapproved-work-is-stalled-never-stopped": "FR-52",
       "a-recurring-job-may-be-named-as-a-loop-with-a-purpose-and-a-": "FR-26",
@@ -1081,6 +1164,7 @@
       "a-job-firing-into-a-held-queue-is-coalesced": "FR-67",
       "a-loop-s-approved-work-is-landed-in-one-operator-action": "FR-63",
       "a-loop-s-firing-is-traceable-to-what-it-produced": "FR-28",
+      "a-loop-s-history-is-answerable-for-that-loop-alone": "FR-41",
       "a-row-s-status-word-shall-be-its-own-status": "FR-58",
       "a-self-created-loop-s-queue-accepts-additions-from-its-creat": "FR-37",
       "a-surfaced-step-is-recorded-once-not-once-per-tick": "FR-66",
@@ -1108,7 +1192,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -1335,13 +1418,6 @@
       "statement": "The Hub SHALL list a project's loops without any conversation id, excluding archived loops unless asked to include them, and SHALL return any single loop by id, archived or not, with its recent firings and its recent events."
     },
     {
-      "key": "a-loop-s-history-is-answerable-for-that-loop-alone",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "A loop's story should be answerable without filtering a project-wide log by hand.",
-      "statement": "The Hub SHALL record against a loop, each with its actor and time, every staged and applied edit, change of control, stop, archiving, task adoption and stalled firing, and SHALL return those events scoped to that loop alone; the loop's firings SHALL be retrievable from its job's run history."
-    },
-    {
       "key": "a-conversation-a-loop-firing-created-names-the-loop-that-cre",
       "modal": "SHALL",
       "party": null,
@@ -1410,6 +1486,34 @@
       "party": null,
       "rationale": "Measured: agents call the tool the briefing names, not one listed only in the tool inventory. An instruction to record evidence against a requirement that does not exist is refused when followed. A rework brief that carried only the description sent an author back over a merge conflict to complete the same commit again.",
       "statement": "Every firing that claims a task for work SHALL name in its briefing the `update_task` calls that finish it, legal from the task's current status, and what a turn that ends with the task unmoved costs. Where the task serves requirements of record the briefing SHALL name them and `record_evidence`; where it serves none it SHALL say nothing about evidence. A flow's briefing SHALL say that notes for the reviewer are delivered only when the task reaches `completed`. For a task returned for revision it SHALL say who sent it back and quote their notes, and, measured when composed, whether the task's branch still merges into the main branch, naming conflicting paths and the remedy; a failed measurement SHALL NOT withhold the briefing."
+    },
+    {
+      "key": "a-loops-history-records-its-creation-and-queue-a-history-records",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Replaces agent-loops' a-loop-s-history-is-answerable-for-that-loop-alone at fold (same key kept): its list gains the creation and the queue additions (overhaul-loop-history, F570).",
+      "statement": "The Hub SHALL record against a loop, each with its actor and time, its creation, every addition to its queue, every staged and applied edit, change of control, stop, archiving, task adoption and stalled firing, and SHALL return those events scoped to that loop alone; an ordinary firing SHALL NOT be recorded there, and the loop's firings SHALL be retrievable from its job's run history."
+    },
+    {
+      "key": "a-loops-history-records-its-creation-and-queue-ad-creation-entry",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Who made a loop is the first question asked of one found running; a project-level job_created carries no loop id and is not in the loop's history.",
+      "statement": "When a loop is created the Hub MUST record a loop_created event against it in the same transaction, carrying who created it (the operator, or the agent and its run), the door it came through (a job created by POST /jobs or create_job, or the operator's approval of a document whose delivery starts a flow, naming that document), and the loop's agent, purpose and document; a creation that is refused or rolled back MUST leave no such event."
+    },
+    {
+      "key": "a-loops-history-records-its-creation-and-queue-ad-addition-entry",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One entry per adding call keeps a materialised flow's tasks from pushing every other entry out of the ten-event window (D1).",
+      "statement": "Each call that adds tasks to a loop's queue MUST record one loop_tasks_added event against that loop in the same transaction, carrying the added tasks' ids and titles, who added them (the operator, or the agent and its run) and through what: the loop's initial tasks, a task created with the loop's id, the loop's document's tasks materialised at approval or by an amendment, or the document's unowned tasks taken when its flow was built. A move out of an archived loop MUST stay a loop_tasks_adopted event and MUST NOT also be recorded as an addition."
+    },
+    {
+      "key": "a-loops-history-records-its-creation-and-queue-add-history-shows",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The history was returned but never shown (LoopTab.tsx renders history, not events).",
+      "statement": "The loop detail MUST return the loop's creation entry with its ten newest events even when the creation is older than all ten, and the loop's tab MUST show a History section listing the loop's events newest first, each as a sentence naming who did what and when; a loop with no creation entry MUST say its creation was not recorded."
     }
   ],
   "schema_version": 1,

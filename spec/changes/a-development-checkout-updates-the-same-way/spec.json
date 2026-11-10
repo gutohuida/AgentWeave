@@ -1,0 +1,400 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "A scratch clone with a Hub started from it",
+      "how_to_check": "Compare the `commit` and `branch` fields of GET /health with `git rev-parse HEAD` and the branch in the clone.",
+      "key": "c-reports-commit",
+      "requirement": "reports-commit",
+      "then": "Both name the clone's commit and branch",
+      "when": "The drive reads the Hub's health answer and App settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The scratch Hub running and two commits then added to the clone's master",
+      "how_to_check": "Drive commits twice, queries `update_status`, then makes the git directory unreadable.",
+      "key": "c-knows-behind",
+      "requirement": "knows-behind",
+      "then": "It reports the Hub is 2 commits behind; with the repository unreadable it reports nothing and raises no error",
+      "when": "The app checks"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Behind by one commit, nothing running, and automatic restart switched on for this checkout (the default for a checkout may be off; see open question 4)",
+      "how_to_check": "Read the reported commit in the window; list console hosts.",
+      "key": "c-launch-restarts-idle",
+      "requirement": "launch-restarts-when-idle",
+      "then": "The window opens on the new commit and no console window appeared",
+      "when": "The drive launches the app as the shortcut does"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Behind by one commit with an agent turn running",
+      "how_to_check": "Drive compares pid and run state before and after.",
+      "key": "c-never-interrupts",
+      "requirement": "never-interrupts-work",
+      "then": "The Hub pid and the turn are unchanged and the Update button names the turn",
+      "when": "A launch happens, then Update is pressed and cancelled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A new commit whose migration raises",
+      "how_to_check": "Drive with a deliberately failing migration; checksum and pid before and after.",
+      "key": "c-rehearsal",
+      "requirement": "rehearse-migrations",
+      "then": "The old Hub is still running with the same pid, the database checksum is unchanged and the failure is shown",
+      "when": "Update is applied"
+    },
+    {
+      "checked_by": "operator",
+      "given": "Work ended, button shown, window maximized",
+      "how_to_check": "Operator presses it once on the scratch Hub and looks; the drive checks commit, geometry file and row counts.",
+      "key": "c-apply-reload",
+      "requirement": "apply-and-reload",
+      "then": "The same window returns maximized on the new commit with the same projects",
+      "when": "The operator presses Update on the scratch clone"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A new commit that passes migrations but whose Hub will not start",
+      "how_to_check": "Drive reads the reported commit and a database checksum equal to the copy.",
+      "key": "c-failed-start",
+      "requirement": "failed-start-restores",
+      "then": "The previous commit's Hub is running again on the restored database and the window says so",
+      "when": "Update is applied"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A clone with an uncommitted file, and another on a feature branch, each behind master",
+      "how_to_check": "Drive both clones; confirm the Hub pids are unchanged.",
+      "key": "c-dirty",
+      "requirement": "dirty-or-off-master",
+      "then": "Neither restarts automatically; each shows its commit, branch and what differs",
+      "when": "The app is launched on each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Two scratch Hubs on different ports from one clone",
+      "how_to_check": "Drive checks the second Hub afterwards.",
+      "key": "c-own-hub",
+      "requirement": "only-its-own-hub",
+      "then": "The other's pid, health and running turn are untouched",
+      "when": "One is updated"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1f566869b22a442a49fd7a9fc407d574243d8e4c9fde887798c88e46d43e67f1",
+      "FR-2": "57d8794693a1afad84e88a258b58f90e362aae5e5a7317bf9a56e2460037fe06",
+      "FR-3": "2b40eb1be827d7bfc67e67e70a6ba27d838189ecf818fea346e1f252a5072927",
+      "FR-4": "2df0b5b7bc189323e20ff36c9a34f1160be79221d80a523fa71c151d74d371d0",
+      "FR-5": "4503ea40e303023e8733d80099c89821e66e42c0fb0ae591d17f13a0623f8ed0",
+      "FR-6": "55589f361d398d6d71424390a01ccea1cdba4886a32c38a7a2dd92bd83d8be5c",
+      "FR-7": "b39e716fe67564a6dd8ed6aee686362c0311c03a7c3309ce64b719d557e5ee69",
+      "FR-8": "7c4e439e4d63442e9844ce5e50c45f02ec0b1d23d355e9a91a209ec1555b75d7",
+      "FR-9": "6d9c2aa85791c76f29c7d77a4c940f54f087441fb090e831db42eea3a7bf9fc3"
+    },
+    "high_water": 9,
+    "requirements": {
+      "apply-and-reload": "FR-6",
+      "dirty-or-off-master": "FR-8",
+      "failed-start-restores": "FR-7",
+      "knows-behind": "FR-2",
+      "launch-restarts-when-idle": "FR-3",
+      "never-interrupts-work": "FR-4",
+      "only-its-own-hub": "FR-9",
+      "rehearse-migrations": "FR-5",
+      "reports-commit": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus is the Tier 2 default.",
+      "builder": "Opus builders for a restart-and-migrate change.",
+      "checker": "QA is an Opus checker.",
+      "cron": "The usual five minutes.",
+      "mode": "A flow, because the operator is dogfooding builds.",
+      "stop": "Stop when the queue empties."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "TIER 2. Hazard: restart kills runs in flight; the checkout's migrations run on the operator's real database; a broken master breaks the live app. Mitigations (requirements): never restart with work running unless the operator confirms (shared with the previous slice); rehearse the migrations on a copy of the database before anything is stopped, so a failing migration stops the update with the old Hub untouched; keep a database copy and bring back the previous commit's Hub if the new one does not come up healthy; offer an update only when the checkout is in a state the operator would expect. Rollback of a merged bad commit stays the operator's git revert.\n\nDECISIONS (author's choices unless marked)\nD1. This slice reuses the previous slice's launcher machinery (the check on launch, the decision using the instance-wide work check, the Update button, one update at a time) and replaces only what 'newer' means and how the new version is brought up. It builds after updates-itself.\nD2. The Hub records the commit of the checkout at its own start and reports it (and the branch) beside its version in /health. Comparing against the checkout's master tip at check time answers 'does master hold commits this Hub lacks?'. The tip is read from the local repository: the app does not fetch or pull (open question).\nD3. There is nothing to install for a checkout: 'apply' is stop, rehearse, start. The working tree already holds the code, because the operator merged it there.\nD4. Rehearsal: before anything is stopped, run the checkout's migrations against a copy of the database in a throwaway process; only a pass lets the update go on. Rejected: rehearsing after the stop, which has already cost the operator their runs.\nD5. Previous-commit restart on failure needs the old code, which the working tree no longer holds. The author's choice is a throwaway `git worktree` of the previous commit outside the checkout, started on the restored database; it is not spiked, so the first build task spikes it (see limits).\nD6. Drives run a scratch clone of the repository with a scratch profile and port.\n\nCONTRACT (names a task builds and a drive walks; builds on the contract of agentweave-updates-itself, which lands first)\n- GET /health (hub/hub/main.py:830, `health()`), already extended by updates-itself with `version` and `install` (\"pip\" | \"editable\" | \"checkout\"), gains for `install` == \"checkout\": `commit` (string, the full 40-hex HEAD sha read once at Hub start) and `branch` (string, the checked-out branch name, or null when detached). Both are absent (not null) for other installs. The checkout is found the way the UI-bundle check finds it (hub/hub/main.py:212-262: hub/ui/src present beside the package); a Hub whose git call fails reports `install` \"checkout\" with `commit` null, and the launcher then offers nothing.\n- Launcher (src/agentweave/updater.py from updates-itself) adds, all read-only git against the local repository, never a network call: master tip = `git rev-parse refs/heads/master`; behind = `git rev-list --count <commit>..refs/heads/master`; dirty = `git status --porcelain` paths. The bridge answer `update_status()` of updates-itself gains `kind` (\"checkout\"), `commit`, `branch`, `master_tip`, `behind` (int), `dirty` (list of repo-relative paths), and `message` carries the display text (so the UI needs no new component: the same UpdateButton and App settings render it). `apply_update(confirmed)` keeps the states \"needs_confirm\" | \"applied\" | \"failed\" | \"blocked\" and adds none; a failed rehearsal is \"failed\" with the old Hub untouched, a restored one is \"failed\" with the previous commit running.\n- Rehearsal: the sqlite3 backup API copy to HUB_DIR/update-backups/<UTC stamp>/ (shared with updates-itself), then the same Alembic upgrade to head that Hub start runs (src/agentweave/cli.py:927-952) pointed at the copy via a throwaway process with its own DATABASE_URL. The previous-commit worktree goes under HUB_DIR/previous-commit/<sha>, removed after a healthy start.\n- Auto-restart setting: the update.json file of updates-itself (HUB_DIR/app-window/update.json) gains a second key `auto_checkout` (bool, default false); `auto` stays the pip key, default true (open question 4).\n- Task status path the drive walks: none; real agent turns only make `turns` > 0.\n- Existing guards: hub/tests/test_ui_staleness.py and the build stamp (hub/tests/test_ui_build_stamp.py) require hub/ui/src and hub/hub/static/ui to be committed together; the stdlib-only CLI rule (tests/test_package_exports.py) holds for updater.py, git being called as a subprocess. No existing test pins the exact /health body. Nothing is relaxed.\n\nCURRENT: master moves, :8000 keeps old code until the operator stops and starts it.\nPROPOSED: launch -> Hub commit vs checkout master tip -> behind and idle: rehearse, stop, start, verify -> window; behind and busy: window + Update button.",
+  "evidence": {
+    "checked": [
+      "hub/hub/main.py:830-837: /health carries no version or commit.",
+      "hub/hub/version.py:12-19: version is installed metadata or 0.0.0+dev for a source checkout.",
+      "src/agentweave/cli.py:927-952: migrations are run with Alembic upgrade at Hub start.",
+      "hub/hub/main.py:212-262: the Hub already inspects its checkout (UI bundle vs source) and treats the source directory as present only in a checkout.",
+      ".claude/reference/hubs.md: :8000 runs this checkout by intent, without --reload; a restart runs migrations on the real database.",
+      "hub/hub/api/v1/status.py:133-175: the instance-wide work check built in slice 1 (route /api/v1/work/running).",
+      "spec/changes/agentweave-updates-itself/spec.json: the pip slice, whose launcher machinery and contract (version, install, update_status, apply_update) this reuses (proposed, not yet built)."
+    ],
+    "limits": [
+      "The acceptance drive is proposed coverage; none of it has run.",
+      "Not spiked: restarting the previous commit from a temporary worktree (D5); the spike task comes first.",
+      "Not checked: how the operator's :8000 is launched each time (shortcut or terminal) and whether the restart can reproduce its interpreter and environment; the updater must restart it the way the launcher starts a Hub, which the drive must prove.",
+      "Python or UI dependency changes on master are not installed by this slice."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "large",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Should 'master has commits the Hub lacks' include commits on the remote the checkout has not fetched? Options: local master only (the operator merges by hand into this checkout); or fetch first. Recommendation: local only; the app should not run git against the network or change the checkout, and the operator already merges there by hand.",
+      "resolved": false
+    },
+    {
+      "question": "A checkout with uncommitted changes: with the Update button pressed, restart anyway, or refuse? Options: restart anyway (the operator pressed it, and a restart does not touch files), or refuse and say what is dirty. Recommendation: restart anyway but only on button, never at launch, and name the dirty files in the prompt.",
+      "resolved": false
+    },
+    {
+      "question": "A checkout whose branch is not master: offer an update at all? Options: never; compare against master anyway; compare against that branch's own tip. Recommendation: never offer, just show the branch, since 'newer' is defined as master.",
+      "resolved": false
+    },
+    {
+      "question": "May auto-restart at launch be turned off for checkouts? Recommendation: yes, one setting shared with the pip slice, but default off for a checkout (the operator's real instance), on for pip installs; the asymmetry is because a bad master is likelier than a bad release.",
+      "resolved": false
+    },
+    {
+      "question": "If the previous commit cannot be started (spike fails), what then? Options: leave no Hub running and say how to start it; or refuse to update unless a worktree can be made. Recommendation: refuse the update up front when the previous commit cannot be made available.",
+      "resolved": false
+    },
+    {
+      "question": "Requirement launch-restarts-when-idle says a launch behind and idle restarts the Hub, but the recommended answer to the auto-restart question above defaults it off for a checkout, so with that default a bare launch never restarts and the requirement's criterion is reachable only with the setting switched on. Should launch-restarts-when-idle be read as 'when the setting is on'? Recommendation: yes; the criterion is written with the setting on, and the operator turns it on for :8000 deliberately.",
+      "resolved": false
+    }
+  ],
+  "problem": "The operator's real Hub on :8000 runs this checkout, not a pip release (.claude/reference/hubs.md, 'The operator's real instance'), so the previous slice's pip update does not reach it. After a merge to master the operator must stop it and start it by hand, which is the manual step the roadmap exists to remove.\n- The running Hub does not know which commit it started from; /health has no version or commit (hub/hub/main.py:830-837), and the version reads as the installed metadata or 0.0.0+dev (hub/hub/version.py:12-19).\n- A checkout's code changes under a running Hub without notice: it runs without --reload, so a merge reaches it only at its next restart (.claude/reference/hubs.md). Nothing says 'you are behind'.\n- A restart runs the checkout's migrations on the operator's real database (src/agentweave/cli.py:927-952 runs Alembic upgrade head at start), and a committed UI bundle is served straight from the checkout (hub/hub/static/ui), so a restart onto a bad commit breaks the live app.\n- The Hub can already tell a UI bundle from its source in a checkout (hub/hub/main.py:212-262), so checkout detection has precedent.\nHAZARD (Tier 2): this slice restarts the operator's own live Hub. It kills runs in flight and runs new migrations on the real database, and a bad commit on master becomes a broken app at the next press. The drive runs on a scratch ports and a scratch clone of the repository only, never on :8000 or :8010.",
+  "requirements": [
+    {
+      "key": "reports-commit",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "'Behind' needs a stated 'where I am'; the working tree can change after the Hub started.",
+      "statement": "A Hub run from a git checkout SHALL report the commit it started from and the branch name of that checkout, and App settings SHALL show them beside the version."
+    },
+    {
+      "key": "knows-behind",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Merging to master is the event the operator cares about.",
+      "statement": "The app SHALL know the Hub is behind when the checkout's master branch holds commits that the running Hub's commit does not contain, and SHALL say how many, at a launch and at most once an hour while it runs. A read of the repository that fails SHALL end quietly and offer nothing."
+    },
+    {
+      "key": "launch-restarts-when-idle",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: the same launch rules as pip installs.",
+      "statement": "A launch that finds the Hub behind and no work running SHALL restart the Hub onto the checkout's current code and then open the window, with no terminal shown. A Hub that does not answer the work check is not idle."
+    },
+    {
+      "key": "never-interrupts-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The live-data hazard; same rule as the pip slice.",
+      "statement": "A launch or any other automatic path MUST NOT stop or restart a checkout Hub that is running work, or that does not answer the work check; it SHALL open the window as it is and show the Update button, which names the running work and restarts only after the operator confirms."
+    },
+    {
+      "key": "rehearse-migrations",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A failing migration discovered after the stop has already cost the operator their runs.",
+      "statement": "Before the Hub is stopped, the update MUST run the checkout's database migrations against a copy of the Hub's database. If the rehearsal fails, the Hub SHALL be left running untouched, the real database unchanged, and the window SHALL show the failure."
+    },
+    {
+      "key": "apply-and-reload",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Same experience as the pip update.",
+      "statement": "Applying SHALL stop the Hub of this window's port only, start it from the checkout on the same port and profile, wait until it reports the new commit as healthy, and reload the same window at its size, place and maximized state, with the projects and history that were there."
+    },
+    {
+      "key": "failed-start-restores",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A master that passes migrations but will not start must not leave the operator without an app.",
+      "statement": "If the restarted Hub does not report healthy within 120 seconds, the update MUST restore the database from the copy taken before the stop and start the Hub from the previous commit, and the window SHALL say it failed and why."
+    },
+    {
+      "key": "dirty-or-off-master",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A restart onto a half-edited or unexpected tree is the surprising kind; the exact rule is the operator's to decide.",
+      "statement": "For a checkout that has uncommitted changes, or whose checked-out branch is not master, the app SHALL show the Hub's commit and branch and what is different, and SHALL NOT restart automatically at launch. What the Update button does in those states is set by the open questions below."
+    },
+    {
+      "key": "only-its-own-hub",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": ":8000 and :8010 run side by side from the same checkout.",
+      "statement": "An update SHALL stop at most the Hub serving that window's port; Hubs on other ports of the same machine keep running with their work untouched."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/agentweave-feels-like-a-desktop-app/spec.json",
+    "slice": "updates-a-checkout"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The commit a checkout Hub runs and whether the checkout's master holds more.",
+      "Automatic restart onto it at a launch with nothing running, and the Update button otherwise, with the same prompts as the previous slice.",
+      "Rehearsing migrations on a copy first, and putting the previous commit back when the new one fails to come up.",
+      "What the app does for a checkout that is dirty or not on master."
+    ],
+    "non_goals": [
+      "Pip installs (previous slice).",
+      "Fetching, pulling, merging or checking out anything on the operator's behalf.",
+      "Building the UI bundle or Python dependencies after a merge.",
+      "Docker mode, macOS, Linux.",
+      "Updating a Hub that is not the one serving the window's port."
+    ]
+  },
+  "summary": "Slice 3 of 'AgentWeave feels like a desktop app'. For a Hub run from a git checkout, the app knows which commit it is running and when the checkout's master holds commits it lacks. The same rules as pip installs apply: a launch with nothing running restarts onto it and opens; with work running the Update button names the work and restarts when chosen. The new code's migrations are first rehearsed on a copy of the database, so a migration that fails changes nothing.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Tier 2, live-data hazard; Opus. May be busy with PR slice 2.",
+      "checker": "QA",
+      "checker_reason": "Opus checker confirms the drive fails for the right reason before the build.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the CONTRACT in the design (GET /health `commit` and `branch`, `update_status` fields, `apply_update` states, update-backups) and record it failing, before anything is built. It makes a scratch clone of the repository, a dedicated port and database of its own, commits changes to the clone's master (including one migration that fails and one commit whose Hub will not start), uses real agent turns on Haiku where work is needed, and covers every criterion above. It never touches :8000 or :8010.",
+      "files": [
+        "scripts/drive/d1107_updates_a_checkout.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "reports-commit",
+        "knows-behind",
+        "launch-restarts-when-idle",
+        "never-interrupts-work",
+        "rehearse-migrations",
+        "apply-and-reload",
+        "failed-start-restores",
+        "dirty-or-off-master",
+        "only-its-own-hub"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive: restart onto master in a scratch clone"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Unclear approach: a spike before the build. May be busy.",
+      "checker": "QA2",
+      "checker_reason": "Different agent from the builder; QA2 may be busy with the trace change.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Prove that a Hub can be started from a temporary git worktree of the previous commit on the restored database, and what it needs (dependencies, UI bundle). Report in the commit message; the checkout-updater task builds on the result. If it cannot, record a finding and ask the operator. This task builds no product behaviour; its link to failed-start-restores is only so it is not work nobody asked for, and its checker verifies the spike report, not criterion c-failed-start (the checkout-updater task and the final run do).",
+      "files": [
+        "testbed/previous_commit_spike.md"
+      ],
+      "from": null,
+      "key": "spike-previous-commit",
+      "requirements": [
+        "failed-start-restores"
+      ],
+      "reviewer": null,
+      "title": "Spike: start the previous commit from a throwaway worktree"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Small routine change; Sonnet.",
+      "checker": "QA",
+      "checker_reason": "Different agent from the builder.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Record the checkout's commit and branch at Hub start and serve them as `commit` and `branch` in /health beside `version` and `install` (see CONTRACT); show them in App settings. A test fails before and passes after, including a Hub that is not in a checkout (fields absent). Edits the same files as updates-itself's hub-version, which lands first.",
+      "files": [
+        "hub/hub/main.py",
+        "hub/tests/test_health_commit.py",
+        "hub/ui/src/components/settings/AppSettingsScreen.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "hub-commit",
+      "requirements": [
+        "reports-commit"
+      ],
+      "reviewer": null,
+      "title": "The Hub reports its commit and branch"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Restart of the live Hub and migrations: Opus.",
+      "checker": "QA",
+      "checker_reason": "Opus checker for a Tier 2 change.",
+      "depends_on": [
+        "spike-previous-commit",
+        "hub-commit"
+      ],
+      "description": "In the previous slice's updater: read master's tip, count commits behind, the dirty/off-master states, the migration rehearsal on a database copy, the restart from the checkout, and the restore with the previous commit (using what the spike found). Adds the `auto_checkout` key and the `update_status` fields in the CONTRACT. Tests at each seam, including a git call that fails.",
+      "files": [
+        "src/agentweave/updater.py",
+        "src/agentweave/cli.py",
+        "tests/test_updater_checkout.py"
+      ],
+      "from": null,
+      "key": "checkout-updater",
+      "requirements": [
+        "knows-behind",
+        "launch-restarts-when-idle",
+        "never-interrupts-work",
+        "rehearse-migrations",
+        "apply-and-reload",
+        "failed-start-restores",
+        "dirty-or-off-master",
+        "only-its-own-hub"
+      ],
+      "reviewer": null,
+      "title": "Behind check, rehearsal, restart and restore for a checkout"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Running a Tier 2 restart-and-migrate drive and judging its evidence needs Opus; it is bounded work, not new design.",
+      "checker": "QA",
+      "checker_reason": "Opus checker reads the recorded evidence against each criterion.",
+      "depends_on": [
+        "drive",
+        "hub-commit",
+        "checkout-updater"
+      ],
+      "description": "Run the drive from the first task against the built feature in a scratch clone on a scratch port and profile (never :8000 or :8010), fix nothing in product code, and record the evidence: each criterion's result, Hub pids and database checksums before and after, the commits reported, and the console-host listing. A failing criterion sends the task that builds it back.",
+      "files": [
+        "scripts/drive/d1107_updates_a_checkout.py"
+      ],
+      "from": null,
+      "key": "acceptance-run",
+      "requirements": [
+        "reports-commit",
+        "knows-behind",
+        "launch-restarts-when-idle",
+        "never-interrupts-work",
+        "rehearse-migrations",
+        "apply-and-reload",
+        "failed-start-restores",
+        "dirty-or-off-master",
+        "only-its-own-hub"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive on the built checkout update"
+    }
+  ],
+  "title": "A development checkout updates the same way"
+}

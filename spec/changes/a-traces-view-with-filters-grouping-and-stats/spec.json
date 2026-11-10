@@ -1,0 +1,642 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "A trial Hub (:8010) on this change, with two agents bound to Haiku, each having finished at least one run, one of them on a task, and one run that failed",
+      "how_to_check": "Acceptance drive, written and failing before the build: a scripted drive against :8010 with real Haiku turns, asserting through the Hub's routes and the rendered view.",
+      "key": "drive-traces-end-to-end",
+      "requirement": "traces-view-in-navigation",
+      "then": "The view first lists only runs; the filter leaves only the first agent's runs; the group shows the run count, total cost equal to the sum of those runs' recorded costs, total and average duration, and the failed run counted as an error; the opened run and both entry points show that run's trace. Before this change the drive fails at the first step: Activity has no Traces view.",
+      "when": "The operator opens Activity → Traces, filters to the first agent over the last hour, groups by agent, opens a listed run, then goes to that agent's conversation and opens the trace of its latest run from the conversation's controls, and to the task and opens its run's trace"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A project holding run traces and the Hub's worker, request, work and event traces",
+      "how_to_check": "Hub route test and UI test.",
+      "key": "default-is-runs",
+      "requirement": "runs-by-default",
+      "then": "At first only run traces are listed and counted, and the Hub's kinds are offered only inside the Hub internals choice, not beside the run filters; after choosing Requests, requests are listed and no runs, and the choice shows which internal kind is in force with a way back to agent runs",
+      "when": "The traces view is opened, then 'Requests' is chosen from Hub internals"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Runs from agents A and B, across two conversations and two tasks, spread over three days",
+      "how_to_check": "Hub route test for each filter and the combination (agent and time range are new on the route), and a UI test fed the route's response in the order the route returns it; the UI test fails if that order is reversed.",
+      "key": "every-filter-and-combined",
+      "requirement": "filters-combine",
+      "then": "Each filter alone leaves exactly the matching runs; combined, only A's runs on that task on that day remain, and the statistics change to match",
+      "when": "Each filter is applied alone, then agent A, one task and one day together"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A run with an agent, model, task, start, end, recorded cost and a failed outcome; a conversation turn with no task; and a run whose task no longer exists",
+      "how_to_check": "UI test on the rows.",
+      "key": "row-fields",
+      "requirement": "row-shows-a-run",
+      "then": "The first row shows all of those, the error visibly; the second shows its conversation, marked as a conversation turn, rather than a blank or a placeholder id; the third reads as a task that no longer exists and shows no raw task id",
+      "when": "All three are listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A filtered set of runs across two agents, two models, two tasks and two days",
+      "how_to_check": "Hub test of grouped totals and a UI test of the switch.",
+      "key": "grouping-switches",
+      "requirement": "switchable-grouping",
+      "then": "Each switch regroups the same runs, every group's count adds up to the filtered total, and each group shows its statistics",
+      "when": "The grouping is switched through agent, model, task, conversation, kind and day"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Five runs with known recorded costs and durations: one completed, one failed, one stopped, one whose trace ended in error, and one completed with a failed tool call inside",
+      "how_to_check": "Hub test on the totals and a UI test on their order.",
+      "key": "headline-numbers",
+      "requirement": "headline-stats",
+      "then": "Total cost equals the sum of the five, total and average duration match, errors count three (failed, stopped, trace error) and not the completed run with the failed tool call, and those three statistics appear before any other",
+      "when": "The view shows them, ungrouped and grouped"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Runs with recorded tokens, model calls, tool calls and a permission wait",
+      "how_to_check": "Hub test and UI test.",
+      "key": "secondary-numbers",
+      "requirement": "secondary-stats",
+      "then": "Tokens, model and tool call counts and waiting time are available and match the recorded values",
+      "when": "The view shows them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "More matching runs than one page of the list holds",
+      "how_to_check": "Hub test with more runs than the page size.",
+      "key": "stats-beyond-the-page",
+      "requirement": "stats-cover-the-whole-filter",
+      "then": "The statistics count every matching run, not just the page",
+      "when": "The first page is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The traces view filtered and grouped",
+      "how_to_check": "UI test.",
+      "key": "open-and-return",
+      "requirement": "opens-the-run",
+      "then": "That run's trace was shown, no filter was added by the choice, and the view returns with the same filters and grouping",
+      "when": "A run is opened by choosing its row (including on its task or conversation text), and then closed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Every screen that names or lists a specific agent run, found by searching the UI and recorded with the evidence; today at least a conversation turn, a task story's run row, a task's transition history, an evidence piece still being recorded by a run, a spec retrospective's list of transcripts read, and loop and job firing history where a firing has a run",
+      "how_to_check": "A UI test per entry point, plus the recorded search showing no other screen names a run without offering its trace.",
+      "key": "audit-run-mentions",
+      "requirement": "every-run-opens-its-trace",
+      "then": "Each opens that run's trace",
+      "when": "The operator follows the trace from each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A conversation with three finished runs",
+      "how_to_check": "UI test; also asserted by the acceptance drive.",
+      "key": "latest-from-conversation",
+      "requirement": "conversation-latest-trace",
+      "then": "The third run's trace opens, and each turn's own trace link still opens its own run",
+      "when": "The operator opens the latest trace from the conversation's own controls"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A build showing '7 runs' and a task with runs",
+      "how_to_check": "UI test.",
+      "key": "count-opens-filtered",
+      "requirement": "counts-open-filtered",
+      "then": "Activity → Traces opens filtered to exactly those runs",
+      "when": "The operator follows the run count"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A copy of the operator's database taken with the backup API",
+      "how_to_check": "Timed route calls against a trial Hub serving the copy.",
+      "key": "fast-on-real-data",
+      "requirement": "responsive-on-real-data",
+      "then": "Both return within 2 seconds",
+      "when": "The default traces list and statistics are requested"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Four runs: two finished with a measured cost, one finished whose cost could not be measured, and one still running",
+      "how_to_check": "Hub test on the totals and UI test on the rows and totals.",
+      "key": "unpriced-shown",
+      "requirement": "unpriced-is-not-zero",
+      "then": "The unmeasured run's row says unpriced, not $0.00; the running run's row shows no cost and is not counted as unpriced; the total is the sum of the two and says one run is left out; a group of only unpriced runs shows no cost figure rather than $0.00",
+      "when": "They are listed and totalled, ungrouped and grouped"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Project Settings' traces section on this change",
+      "how_to_check": "UI test on the section; the existing traces.test.tsx retention, export and clear tests still pass.",
+      "key": "settings-shows-link",
+      "requirement": "settings-links-to-view",
+      "then": "It has no list of traces, its link opens Activity → Traces, and retention, collector export, download and clear are all still there and still work",
+      "when": "It is opened and its link followed"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "0a69a2aba2b5122d3457c83e96d73389b3ed585ab54a4696d6f8c409ca62f873",
+      "FR-10": "1ec0d67536c7a50276d7a74a597fc4e68a7cd80d915346d7c8fb2e9b9bdb29fc",
+      "FR-11": "3e78d94f49f507631e9aab5230e8f61ede05698884f9caec568cd91ed04c4695",
+      "FR-12": "19cb0d0c190335ebae1da9a63ff1daf370d122b185a399c02c4668343a69b4d4",
+      "FR-13": "8cf598fcb48ae23c4fb733a1178000d9ba57be963966796275b3c3f760631c18",
+      "FR-14": "50972363e7d64a0da30194a5788f271f673109a829df6cd4dd1efe00da917c57",
+      "FR-15": "9adc85a82efdff53ba968a33a3aa610477907fac03a6810ec7fb5ac179d96c95",
+      "FR-2": "f240f8d7fc2b118a48c2c57311fe32136213523336d27bbfbc6aa6b140332707",
+      "FR-3": "5ba0e59943868fd7be8ea9254748dbbb0935f4948835e5ce55b88a019216bf62",
+      "FR-4": "c1fc190a6d5042dde125194cf6084b7dc073a9593a0d818a177da1faf3a364e7",
+      "FR-5": "44673a0f63b455403caa6b9850f98504f5e9e5b5b0f74b2a8d36883176d3ecc2",
+      "FR-6": "111dc372ce3fa1c6764f67e6551fab779ecf06fe487cb0f0383452074b6f4a05",
+      "FR-7": "74d671ef37f3ac644040ff591eb2c49105ca10a5ef5958827143e0322e5ddaf7",
+      "FR-8": "bfe5e04564fa6f9bf1f32045ff5ed731f310bb363fbeea5619bf5a1741eb78a7",
+      "FR-9": "9a5db750a9ef30ccf6a0760944bf4dbea968f15b9e189fa8bef2e118204c39ab"
+    },
+    "high_water": 15,
+    "requirements": {
+      "conversation-latest-trace": "FR-11",
+      "counts-open-filtered": "FR-12",
+      "every-run-opens-its-trace": "FR-10",
+      "filters-combine": "FR-3",
+      "headline-stats": "FR-6",
+      "opens-the-run": "FR-9",
+      "responsive-on-real-data": "FR-13",
+      "row-shows-a-run": "FR-4",
+      "runs-by-default": "FR-2",
+      "secondary-stats": "FR-7",
+      "settings-links-to-view": "FR-15",
+      "stats-cover-the-whole-filter": "FR-8",
+      "switchable-grouping": "FR-5",
+      "traces-view-in-navigation": "FR-1",
+      "unpriced-is-not-zero": "FR-14"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer (Sonnet) by default: most of this is well-specified UI work, where Sonnet's lower cost matters more than Opus's extra depth.",
+      "builder": "Developer (Sonnet) builds every task that names no builder, for the same cost reason.",
+      "checker": "QA (Opus) checks every task that names no checker, since checking is where a missed defect is cheapest to catch.",
+      "cron": "Every five minutes, so a finished task is picked up for checking promptly.",
+      "mode": "A flow: after the view exists, grouping-and-stats and the run entry points touch different files and can run in parallel.",
+      "stop": "Stop when the queue empties; the slice is small and there is no reason to keep the flow firing."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Settled in the mock the operator drove on 2026-11-02 (hub/ui/mock, `#traces`; components src/components/traces/TracesPage.tsx and tracesModel.ts, styles src/styles/traces.css, fixtures recorded read-only from the operator's Hub by mock/record_traces.py). The components are the deliverable: building this slice wires them to the Hub's routes rather than redrawing them.\n\n- Placement: a fourth view of the Activity tab, beside Ledger, Activity and Logs (operator: 'lives inside Activity'). An own top-bar tab was shown beside it and not chosen.\n- Filter row: agent and time range as selects on the left; on the right a quiet 'Hub internals' menu (worker calls, requests, background work, events, with counts, and 'Back to agent runs'). Task, conversation and run filters show as removable chips; a row's task or conversation is narrowed to from a small control that appears on the row's hover, so a click anywhere else on the row opens its trace instead of filtering by accident (found while driving the mock).\n- Totals: three tiles, cost (with unpriced runs left out and counted), duration (total, average, still running) and errors (by why: failed, stopped, ended in error); one quieter line below with tokens, model calls, tool calls and time waiting on the operator.\n- Grouping: a switch (None, Agent, Model, Task, Conversation, Day; Kind applies within Hub internals). Each group is a row with its count, cost with a bar for its share of the total, total and average time, errors, and 'Only this'; it expands to its runs.\n- A row: started, agent, model, task (reference and title) or conversation (marked as a conversation turn), took, cost or 'unpriced' ('—' while running), outcome. A run still running is neither priced nor unpriced until it ends.\n- Opening a row opens the existing trace drawer, now also usable controlled by the screen that lists runs (TraceDrawer); the drawer itself is unchanged.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/environment/TracesSection.tsx: the only trace list, in Project Settings, kind filter only, 10 rows per page.",
+      "Trace entry points on screen today, by searching every use of TraceButton: a conversation turn (AgentTimeline.tsx:489, by run), a run row in the task story inside the task detail drawer (TaskStory.tsx:344, by run), and the Settings list (TracesSection.tsx:129, by trace). ConversationBar.tsx:201 declares 'Trace of the last turn', but no caller passes onOpenTrace.",
+      "Screens that name or count runs with no trace link, by searching the UI for run references: EvidencePieces.tsx:107 ('still being recorded by run …'), SpecRetrospective.tsx:317 (transcripts read, by run id), TaskTransitionHistory.tsx, LoopTab.tsx:452 (loop firing history), JobDetails.tsx:30 (job firing dots), SpecBuilds.tsx:206 ('N runs'), activity/ProjectWork.tsx:61 ('N runs').",
+      "hub/hub/api/v1/traces.py:41-75: the list route filters by run_id, task_id, conversation_id and operation; no agent or time range; no aggregate route.",
+      "hub/ui/src/api/traces.ts:18-36: each listed trace carries agent, conversation, task, run status, start and end time, span count; no cost or tokens.",
+      "Read-only queries on the operator's :8000 database, 2026-11-02: run root spans (invoke_agent) carry agent, model, task, conversation, cost (aw.usage.api_equivalent_usd_micros), usage status and token counts as attributes; root operations are invoke_agent 1,170, chat (worker) 1,015, aw.request 20,438, aw.work 4,280, aw.event 342 (git commands are spans inside other traces, not traces of their own); runs table statuses completed 1,211, failed 12, stopped 5, running 3; 136,761 spans in total.",
+      "The mock (hub/ui/mock #traces), fed every run trace of the operator's Hub recorded read-only by mock/record_traces.py and driven by the operator on 2026-11-02: totals $734 over 1,170 runs, 16 finished runs unpriced, 17 errors (12 failed, 5 stopped); grouping by task showed six tasks that no longer exist and one task (VSCBE-4) with 311 runs. Typecheck (tsconfig.mock.json) and lint clean on the new files.",
+      "People, judged only by what the Architect already knows (the operator's chosen source, 2026-11-02): Opus 5.5 is the stronger model for multi-file reasoning and spotting subtle defects and costs several times more than Sonnet 5.5; Sonnet 5.5 is reliable on well-specified UI and route work. The operator's standing preference (2026-10-27) is Sonnet by default, Opus where a mistake is costly. No sample sizes: this source is general knowledge, not a measurement."
+    ],
+    "limits": [
+      "The mock computes totals in the browser from a recording; the Hub route that must compute them over the whole filter within 2 seconds is not built or measured.",
+      "The mock's Hub-internals kinds are a sample (newest 200 of each); their totals in the app are not yet shown on real data.",
+      "Whether loop and job firing history records a run for each firing is not yet checked.",
+      "The run entry points (FR-10 to FR-12) and the Settings link were not part of the mock.",
+      "The acceptance criteria are proposed coverage; none has run.",
+      "The people were not judged against this project's per-model record or any current external comparison; the operator chose prior knowledge only, so how each model actually performs on this codebase is not reflected."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-03T11:19:24.911044+00:00",
+        "id": "build-f10cf7028dff",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-02T22:47:10.914009+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-drive": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "firing-history-traces": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "grouping-and-stats": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "run-entry-points": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "ship": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "totals-fast-on-real-data": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "view-and-filters": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Where it lives. Operator 2026-11-02, after driving the mock: inside Activity, as a fourth view beside Ledger, Activity and Logs.",
+      "resolved": true
+    },
+    {
+      "question": "Where the Hub's own traces go. Operator 2026-11-02, after driving the mock: behind a quieter 'Hub internals' choice, not beside agent runs.",
+      "resolved": true
+    },
+    {
+      "question": "A task with no reference. Operator 2026-11-02: shown by its title; a task that no longer exists is named as such, never by its raw id (six such tasks on the operator's Hub).",
+      "resolved": true
+    },
+    {
+      "question": "What counts as an error. Operator 2026-11-02: failed, plus cancelled or interrupted (stopped), plus a trace ended in error; not a failed tool call inside a completed run.",
+      "resolved": true
+    },
+    {
+      "question": "Unpriced runs. Operator 2026-11-02: shown as unpriced, never as zero.",
+      "resolved": true
+    },
+    {
+      "question": "The Settings 'Recent traces' list. Operator 2026-11-02: replaced by a link to the view.",
+      "resolved": true
+    },
+    {
+      "question": "Which statistics. Operator 2026-11-02: cost, duration and errors are what they want to see most; the others (tokens, call counts, waits) matter too but come second.",
+      "resolved": true
+    },
+    {
+      "question": "Which groupings. Operator 2026-11-02: switchable (between agent, model, task, conversation, kind, day).",
+      "resolved": true
+    },
+    {
+      "question": "Default contents. Operator 2026-11-02: agents' runs by default.",
+      "resolved": true
+    },
+    {
+      "question": "Size. Operator 2026-11-02 left it to the Architect: small.",
+      "resolved": true
+    },
+    {
+      "question": "Already built. Operator 2026-11-02: none of it is built.",
+      "resolved": true
+    }
+  ],
+  "problem": "The operator finds the trace drawer good but 'not quite', and hard to reach: it opens only after a run, from a faint 'trace' link beside 'fold' above each turn (AgentTimeline.tsx:487-496) or from a run row in a task's story (TaskStory.tsx:344, inside the task detail drawer), and shows one run at a time. The conversation menu declares a 'Trace of the last turn' item (ConversationBar.tsx:201) that no caller wires up, so it never appears. The only list of traces is a ten-row panel inside Project Settings → Traces (TracesSection.tsx:319), mixed in with retention, OTLP export and clearing, and filtered by kind only. The Hub's list route already filters by run, task and conversation (hub/hub/api/v1/traces.py:41-75), but nothing on screen uses those filters, and the route has no agent or time-range filter. Nothing groups traces or gives statistics over them, so questions like 'what did this agent cost this week' or 'which runs failed' have no answer on screen. Most of the 136,761 recorded spans on the operator's Hub (2026-11-02) are the Hub's own git commands (58k) and requests (32k); about 1,170 traces are agent runs, and those are what the operator wants to see first.",
+  "requirements": [
+    {
+      "key": "traces-view-in-navigation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02, after driving the mock: 'lives inside Activity'.",
+      "statement": "The Activity tab has a Traces view for the selected project, beside Ledger, Activity and Logs, which the operator reaches without going through Settings."
+    },
+    {
+      "key": "runs-by-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: agents by default, and the Hub's internals behind a quieter choice. About 1,170 of the operator's traces are runs, beside tens of thousands of the Hub's own; unfiltered, the runs are buried.",
+      "statement": "The traces view opens showing agents' runs only. The Hub's own traces (worker calls, requests, background work, events) are reached through a separate 'Hub internals' choice that is less prominent than the filters on runs, and appear only once one of them is chosen."
+    },
+    {
+      "key": "filters-combine",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The traces view can be filtered by agent, conversation, task, run, kind and time range, any of them together, and the list and the statistics both show only what matches every filter in force."
+    },
+    {
+      "key": "row-shows-a-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02. Six tasks behind runs on the operator's Hub no longer exist; the mock showed one as 'task-b9bf0f35c2c5'.",
+      "statement": "Each listed run shows its agent, model, task (its reference and title, when it worked one) or the conversation it was a turn of, when it started, how long it took, what it cost, and whether it counts as an error. A task with no reference and no title is shown as a task that no longer exists, never by its raw id."
+    },
+    {
+      "key": "switchable-grouping",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: switchable grouping.",
+      "statement": "The filtered traces can be grouped by agent, model, task, conversation, kind or day, switchable from the view, and each group shows how many traces it holds and its statistics."
+    },
+    {
+      "key": "headline-stats",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: cost, duration and errors are what they want to see most; cancelled and interrupted runs count as errors, routine failed tool calls inside a finished run do not. On the operator's Hub runs are completed 1,211, failed 12, stopped 5, running 3.",
+      "statement": "The view shows, over everything the current filter matches and for each group, the total cost, the total and average duration, and the number of errors, and these three are shown before any other statistic. A run counts as an error when it failed, when it was stopped (cancelled or interrupted), or when its trace ended in error; a run that completed with a failed tool call inside it does not."
+    },
+    {
+      "key": "secondary-stats",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The view also offers, less prominently, token counts, the number of model calls and tool calls, and time spent waiting for a permission or an answer, over the same filter and groups."
+    },
+    {
+      "key": "stats-cover-the-whole-filter",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The list is paged (the Settings list shows 10 at a time); totals over one page would understate cost and errors without saying so.",
+      "statement": "The statistics count every trace the filter matches, not only the page of rows currently loaded."
+    },
+    {
+      "key": "opens-the-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Driving the mock, a click in the middle of a row landed on its task and filtered instead of opening the run.",
+      "statement": "Choosing a listed trace opens it in the existing trace view, and closing it returns to the traces view with the same filters and grouping. Narrowing to a row's task or conversation is a control of its own, so choosing the row anywhere else opens its trace."
+    },
+    {
+      "key": "every-run-opens-its-trace",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: check every screen a trace can be reached from; the task story's run row already does this and is the model.",
+      "statement": "Every screen that names or lists a specific agent run offers that run's trace, and following it opens that run's trace, not another run's or a list."
+    },
+    {
+      "key": "conversation-latest-trace",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The per-turn link is faint and the 'Trace of the last turn' menu item exists but is never shown (ConversationBar.tsx:201).",
+      "statement": "From a conversation, the operator opens the trace of its most recent run from the conversation's own controls, without finding the per-turn link, and each turn's own trace link stays."
+    },
+    {
+      "key": "counts-open-filtered",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A run count shown elsewhere (a build's runs, a task's runs, the project's work summary) opens the traces view filtered to exactly those runs."
+    },
+    {
+      "key": "responsive-on-real-data",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "On the operator's Hub (about 137k spans, 1,170 runs on 2026-11-02), the traces view's default list and statistics appear within 2 seconds."
+    },
+    {
+      "key": "unpriced-is-not-zero",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02. 16 finished runs on the operator's Hub have no measured cost; counting them as zero would make a total look complete when it is not. The project's model record already reports them this way. A running run has not reported its cost yet, which is not the same as the Hub failing to measure it (found driving the mock).",
+      "statement": "A finished run whose cost the Hub could not measure is shown as unpriced, never as a zero cost, and a cost total that leaves such runs out says how many it left out. A run still running is shown with no cost yet and is not counted as unpriced."
+    },
+    {
+      "key": "settings-links-to-view",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-02: one place to look for traces.",
+      "statement": "Project Settings' traces section no longer lists traces itself; in place of its 'Recent traces' list it links to the traces view in Activity. Retention, export to a collector, download and clearing stay where they are."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checkpoints-and-traces-you-can-find-and-use/spec.json",
+    "slice": "traces-you-can-browse"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A traces view inside the Activity tab, beside Ledger, Activity and Logs, reachable without going through Settings.",
+      "Agents' runs shown by default; the Hub's own worker calls, requests, background work and events reachable through a separate, quieter 'Hub internals' choice.",
+      "Filtering traces by agent, conversation, task, run, kind and time range, in combination.",
+      "Grouping the filtered traces, switchable between agent, model, task, conversation, kind and day.",
+      "Statistics over the traces the current filter shows: cost, duration and errors foremost; tokens, model and tool call counts and waiting time available but secondary. Unpriced runs shown as unpriced.",
+      "Opening any listed trace in the existing run trace view.",
+      "Every screen that shows a specific run opening that run's trace: checking the existing entry points (a conversation turn, a task's story) and the dead 'Trace of the last turn' menu item, and making the conversation's entry point easy to find.",
+      "Replacing the Settings 'Recent traces' list with a link to the view."
+    ],
+    "non_goals": [
+      "A trace of a whole conversation (slice 'conversation-trace').",
+      "The woven view (slice 'woven-traces').",
+      "Trace retention, OTLP export, download and clearing; they stay in Project Settings.",
+      "What the Hub records as spans.",
+      "Changes to the single-run trace drawer itself (waterfall and span detail); only a way for a list to open and close it.",
+      "Checkpoints (slices 'checkpoints-you-can-read' and 'start-from-a-checkpoint'); their entry points are covered there.",
+      "A top-bar tab of its own for traces (shown in the mock, not chosen)."
+    ]
+  },
+  "summary": "The first slice built of 'Checkpoints and traces you can find and use' (operator, 2026-11-02: traces first). Traces get a view of their own inside Activity, beside Ledger, Activity and Logs, showing agents' runs by default, with the Hub's own traces behind a quieter 'Hub internals' choice. The operator filters them by agent, conversation, task, run and time range, switches between groupings, and reads statistics over what is shown, with cost, duration and errors foremost. Every screen that shows a specific run opens that run's trace, and the Settings list gives way to a link to the view. The design was settled in a mock the operator drove on 2026-11-02 (hub/ui/mock, #traces).",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet is cheap and reliable at a well-specified scripted drive whose every assertion is already written in the criterion.",
+      "checker": "QA2",
+      "checker_reason": "Opus is better at judging whether a failing drive fails for the right reason, and this drive is what every later task is measured against.",
+      "depends_on": [],
+      "description": "Write the scripted acceptance drive 'drive-traces-end-to-end' against a trial Hub (:8010) with two Haiku agents, a task, and a failed run, asserting every step through the Hub's routes and the rendered view. Run it on today's code and record it failing at the first step (Activity has no Traces view).",
+      "files": [
+        "scripts/drive/traces_view_drive.py"
+      ],
+      "from": null,
+      "key": "acceptance-drive",
+      "requirements": [
+        "traces-view-in-navigation",
+        "runs-by-default",
+        "filters-combine",
+        "switchable-grouping",
+        "headline-stats",
+        "every-run-opens-its-trace",
+        "conversation-latest-trace"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, failing first"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet handles wiring an already-built view plus two added route filters well at a fraction of Opus's cost; the mock settled the design.",
+      "checker": "QA",
+      "checker_reason": "Opus checks this one because it extends a Hub route other screens read, where a missed consequence costs more than the review.",
+      "depends_on": [
+        "acceptance-drive"
+      ],
+      "description": "Wire the mock's TracesPage (src/components/traces/TracesPage.tsx, tracesModel.ts, src/styles/traces.css) into Activity as a fourth view, Traces, beside Ledger, Activity and Logs: opening on agents' runs only, with the Hub's own kinds behind the Hub internals menu; combinable filters by agent, conversation, task, run, kind and time range (agent and time range added to the Hub's list route); each row carrying the fields TraceRow names (model, task reference and title, conversation title, cost or unpriced, outcome), with a task that no longer exists named as such; opening a run and returning keeps the filters. Project Settings' 'Recent traces' list is replaced by a link to Activity → Traces. Tests: Hub route tests for the new filters and the run fields, UI tests fed the route's actual order.",
+      "files": [
+        "hub/hub/traces.py",
+        "hub/hub/api/v1/traces.py",
+        "hub/tests/test_traces_view.py",
+        "hub/ui/src/api/traces.ts",
+        "hub/ui/src/components/traces/TracesPage.tsx",
+        "hub/ui/src/components/traces/tracesModel.ts",
+        "hub/ui/src/styles/traces.css",
+        "hub/ui/src/components/activity/ActivityScreen.tsx",
+        "hub/ui/src/App.tsx",
+        "hub/ui/src/components/environment/TracesSection.tsx",
+        "hub/ui/src/__tests__/tracesView.test.tsx",
+        "hub/ui/src/__tests__/traces.test.tsx"
+      ],
+      "from": null,
+      "key": "view-and-filters",
+      "requirements": [
+        "traces-view-in-navigation",
+        "runs-by-default",
+        "filters-combine",
+        "row-shows-a-run",
+        "opens-the-run",
+        "settings-links-to-view",
+        "unpriced-is-not-zero"
+      ],
+      "reviewer": null,
+      "title": "Traces view with filters"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus suits the slice's subtlest logic (totals over the whole filter, the error rule, unpriced runs, grouped sums over 137k spans) where a wrong number would look right, and it runs in parallel with the cheaper entry-points task.",
+      "checker": "QA",
+      "checker_reason": "Opus checks numbers that must be exactly right and an aggregate query that must stay fast on real data.",
+      "depends_on": [
+        "view-and-filters"
+      ],
+      "description": "Switchable grouping (agent, model, task, conversation, kind, day) and statistics over everything the filter matches, not just the loaded page: cost (finished unpriced runs left out and counted, running runs neither), total and average duration, and errors (failed, stopped, or trace ended in error) first; tokens, model and tool calls and waiting time second. A Hub totals route or extension computing what tracesModel.ts's totals and groupRows compute in the mock, and the view fed from it, with tests over more runs than a page.",
+      "files": [
+        "hub/hub/traces.py",
+        "hub/hub/api/v1/traces.py",
+        "hub/tests/test_traces_view.py",
+        "hub/ui/src/api/traces.ts",
+        "hub/ui/src/components/traces/TracesPage.tsx",
+        "hub/ui/src/components/traces/tracesModel.ts",
+        "hub/ui/src/__tests__/tracesView.test.tsx"
+      ],
+      "from": null,
+      "key": "grouping-and-stats",
+      "requirements": [
+        "switchable-grouping",
+        "headline-stats",
+        "secondary-stats",
+        "stats-cover-the-whole-filter",
+        "unpriced-is-not-zero"
+      ],
+      "reviewer": null,
+      "title": "Grouping and statistics"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet is the cheap fit for routine UI wiring that reuses the existing trace button across many small, independent places.",
+      "checker": "mender",
+      "checker_reason": "Sonnet is enough to check each entry point opens the right run against a per-entry-point test, and keeps the Opus checkers free for the riskier tasks running alongside.",
+      "depends_on": [
+        "view-and-filters"
+      ],
+      "description": "Search the UI for every screen that names or lists a specific agent run and record the list. Give each one that lacks it a way to open that run's trace (task transition history, evidence pieces, spec retrospective transcripts, loop and job firing history where a firing has a run). Wire the conversation's 'trace of the latest run' control so it appears. Make run counts on builds, tasks and the project work summary open Activity → Traces filtered to those runs. A UI test per entry point.",
+      "files": [
+        "hub/ui/src/components/conversation/ConversationBar.tsx",
+        "hub/ui/src/components/agents/AgentOutputPanel.tsx",
+        "hub/ui/src/components/tasks/TaskTransitionHistory.tsx",
+        "hub/ui/src/components/spec/EvidencePieces.tsx",
+        "hub/ui/src/components/spec/page/SpecRetrospective.tsx",
+        "hub/ui/src/components/spec/LoopTab.tsx",
+        "hub/ui/src/components/jobs/JobDetails.tsx",
+        "hub/ui/src/components/spec/page/SpecBuilds.tsx",
+        "hub/ui/src/components/activity/ProjectWork.tsx",
+        "hub/ui/src/__tests__/runTraceEntryPoints.test.tsx"
+      ],
+      "from": null,
+      "key": "run-entry-points",
+      "requirements": [
+        "every-run-opens-its-trace",
+        "conversation-latest-trace",
+        "counts-open-filtered"
+      ],
+      "reviewer": null,
+      "title": "Every run opens its trace"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet is cheap and adequate for running an existing drive, timing two routes and a scripted bundle rebuild.",
+      "checker": "QA2",
+      "checker_reason": "Opus checks the final gate, where the committed bundle reaches the operator's live app on its next reload and the timing is taken on a copy of their real data.",
+      "depends_on": [
+        "grouping-and-stats",
+        "run-entry-points"
+      ],
+      "description": "Run the acceptance drive to green on :8010; time the default list and statistics on a backup-API copy of the operator's database (within 2 seconds); rebuild the UI bundle with scripts/refresh_ui_bundle.py and commit it with the source.",
+      "files": [
+        "scripts/drive/traces_view_drive.py",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ship",
+      "requirements": [
+        "traces-view-in-navigation",
+        "responsive-on-real-data"
+      ],
+      "reviewer": null,
+      "title": "Drive passes, bundle rebuilt"
+    },
+    {
+      "depends_on": [],
+      "description": "audit-run-mentions names 'loop and job firing history where a firing has a run'. TVFGS-4 left it out, saying the firing record names no run. But JobRun carries conversation_id (models.py JobRun.conversation_id), and the Hub already pairs a firing with its run: scheduler.py:3524 finalize_job_run_for_conversation flips the firing when that run ends, and the firing's InboundQueueEntry carries delivered_in_run_id. Expose the run a firing started on GET /jobs/{id}/history (e.g. run_id, from the delivered entry or the conversation's run started at or after fired_at). Then give RunHistory (hub/ui/src/components/jobs/JobDetails.tsx) and the loop firing rows (LoopFiringGroup.tsx) a trace link that opens that run's trace. A firing with no run (skipped, refused) shows none. Write a Hub test that fails when the history's order is reversed, and a UI test per entry point.",
+      "files": [
+        "hub/hub/api/v1/jobs.py",
+        "hub/ui/src/api/jobs.ts",
+        "hub/ui/src/components/jobs/JobDetails.tsx",
+        "hub/ui/src/components/layout/LoopFiringGroup.tsx"
+      ],
+      "from": null,
+      "key": "firing-history-traces",
+      "requirements": [
+        "every-run-opens-its-trace"
+      ],
+      "reviewer": null,
+      "title": "Loop and job firing history opens each firing's trace"
+    },
+    {
+      "depends_on": [],
+      "description": "GET /projects/{id}/traces/totals (hub/hub/traces.py trace_totals, ~line 2205) takes 2.6-4.0 s on a backup-API copy of the operator's database for proj-d85a82bf4216 (default and group_by=agent, operation=invoke_agent), while the list returns in ~0.1 s. Make the default statistics (and group_by=agent) return within 2 s on that copy under ordinary machine load: e.g. avoid re-running the _roots subquery once per auxiliary table (turn_usage, runs, chat/execute_tool counts, waits), avoid JSON-attribute extraction over every root span where a column or index would do, and check EXPLAIN QUERY PLAN for full scans of trace_spans. Record timings (several calls, with CPU load noted) as FR-13 evidence.",
+      "files": [
+        "hub/hub/traces.py"
+      ],
+      "from": null,
+      "key": "totals-fast-on-real-data",
+      "requirements": [
+        "responsive-on-real-data"
+      ],
+      "reviewer": null,
+      "title": "Traces statistics within 2 s on the operator's data"
+    }
+  ],
+  "title": "A traces view with filters, grouping and stats"
+}

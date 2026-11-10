@@ -1,0 +1,446 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project whose checks were saved before this change",
+      "how_to_check": "Run a new test in hub/tests/test_checks_have_a_phase.py that stores checks without a phase key, reads them through GET on the project route, and runs a pre-review and a landing check run; it must fail on master (no phase field returned) and pass after. Plus a vitest test in hub/ui/src/__tests__/ rendering the settings with such checks showing 'both'.",
+      "key": "ac-phase-default",
+      "requirement": "phase-setting",
+      "then": "every check reports phase both, and a pre-review run and a landing run each run every check, as before",
+      "when": "the check settings are read through the project route and shown in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with two checks",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py: PATCH the project's checks with one phase landing, GET them back; and a vitest test that changes the phase control and asserts the saved payload. Both fail on master.",
+      "key": "ac-phase-set",
+      "requirement": "phase-setting",
+      "then": "re-reading the settings returns landing for that check and both for the other",
+      "when": "the operator sets one to landing in the check settings and saves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a review-phase check A and a landing-phase check B, and a task that completes",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py with real check commands that write a marker file when they run: complete a task, wait for its run, assert B's marker is absent, GET /tasks/{id}/checks lists B as runs-at-landing, and the move to under_review and approved is not refused. Plus the acceptance drive in the design, red on master.",
+      "key": "ac-landing-only",
+      "requirement": "landing-only-skipped-before-review",
+      "then": "only A ran, the task's checks list B as 'runs at landing', and the task can be handed to review and approved without B having run",
+      "when": "its pre-review check run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same task approved",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py: approve the task, let landing_queue check the batch, assert B's marker exists with the merged tree's sha; with B made to fail, assert the landing is held and the task not landed.",
+      "key": "ac-landing-runs-it",
+      "requirement": "landing-only-skipped-before-review",
+      "then": "B runs on the merged tree and a failure of B holds the landing as any landing check failure does today",
+      "when": "its landing batch is checked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a review-phase check A and a both-phase check C",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py: markers show A did not run in the landing batch's run, C did, and the task is recorded landed.",
+      "key": "ac-review-only",
+      "requirement": "review-only-skipped-at-landing",
+      "then": "only C runs in the batch, and the batch lands when C passes",
+      "when": "an approved task's landing batch is checked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the check settings",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py: PATCH such a check, assert a 4xx naming the reason and that GET returns the previous settings; plus a vitest test that the settings show the refusal's message.",
+      "key": "ac-fast-refused",
+      "requirement": "fast-not-landing-only",
+      "then": "the save is refused with the stated reason and the stored settings are unchanged",
+      "when": "the operator saves a check marked fast with phase landing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the setting turned on and a check whose command starts a child process that reports its own scheduling priority",
+      "how_to_check": "Test in hub/tests/test_checks_give_way.py whose check command runs a Python script that starts a child, and each writes its own priority (Windows GetPriorityClass via ctypes, POSIX os.nice(0)) to a file; assert both are below normal. Fails on master (no setting, normal priority).",
+      "key": "ac-priority",
+      "requirement": "below-user-priority",
+      "then": "the reported priority of the check's process and of its child are both below normal (Windows: below-normal or idle priority class; POSIX: niceness of at least 10)",
+      "when": "the check runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project that existed before this change, and a newly created project, neither of which has changed the setting",
+      "how_to_check": "Test in hub/tests/test_checks_give_way.py: a project row without the setting and one created through the route both read off, and the same priority-reporting check reports normal priority in each.",
+      "key": "ac-priority-default-off",
+      "requirement": "priority-opt-out",
+      "then": "both report the setting off and the child reports normal priority",
+      "when": "their settings are read and the same check runs in each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose branch conflicts with the main branch in file f",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py with a real git repo where the task branch and main both edit f: complete the task, assert status revision_needed, reason class merge-needed, notes containing f, a builder turn requested, and task_check_runs gains no row until a commit is added to the branch. Fails on master, where the run records error and the task stays completed.",
+      "key": "ac-conflict",
+      "requirement": "conflict-goes-to-builder",
+      "then": "the task moves to revision_needed with reason class merge-needed, the notes name f, the builder is given the task back, and no new check run is recorded for it until a commit is added to its branch",
+      "when": "its pre-review check run is attempted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose pre-review check run is running",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py: leave a run row running, call the startup reconcile (interrupt_leftover_runs) and the startup hook, assert the old row is interrupted and a new run is requested for the task without a refresh or approval. Fails on master.",
+      "key": "ac-hub-stop",
+      "requirement": "hub-stop-reruns",
+      "then": "the old run reads interrupted and a new run for the task is requested within one minute of startup",
+      "when": "the Hub is stopped and started again with the main branch unchanged"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check run ends in error for a reason that is not a conflict (forced in the test)",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py forcing build_merged_commit (or the checkout) to raise: assert two runs total, both error, the Needs-you route lists the second with its error text and task, and the task is still completed.",
+      "key": "ac-fault-once",
+      "requirement": "hub-fault-retried-once",
+      "then": "exactly one new run is requested on the current tip; if that also ends in error, no third run is requested, the operator's Needs-you list shows the error and the task, and the task's status is unchanged",
+      "when": "the run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check whose command sleeps past its time limit and prints no test failures",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py with a check of timeout_seconds 2 that sleeps 10: assert the task is not revision_needed, exactly two runs, and the Needs-you item. Fails on master, where the task is sent back as broken-check.",
+      "key": "ac-timeout",
+      "requirement": "timeout-not-the-tasks",
+      "then": "the task is not sent back; one retry is requested and, if it also runs out of time, the operator's Needs-you list shows it",
+      "when": "the task's check run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pytest check that names a failing test, passing on main, and then runs past its limit",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py whose check prints a pytest 'FAILED tests/x.py::t' line and then sleeps past its limit, with main passing: assert the task is sent back and the notes name tests/x.py::t. Passes on master and after (guards the boundary).",
+      "key": "ac-timeout-named",
+      "requirement": "timeout-not-the-tasks",
+      "then": "the task is sent back as today, naming that test",
+      "when": "the run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check with at least three passing results in the project",
+      "how_to_check": "Test in hub/tests/test_checks_give_way.py seeding passing run results with known durations and asserting the route's median and longest; plus a vitest test rendering both cases. Fails on master.",
+      "key": "ac-duration",
+      "requirement": "usual-duration-shown",
+      "then": "the check shows the median and longest of its last 20 passing durations beside its time limit; a check with none shows 'no passing runs yet'",
+      "when": "the operator opens the check settings"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "A check run that did not judge the work",
+      "steps": [
+        "When a pre-review run ends, take what ended it.",
+        "Merge conflict: send the task back to its builder as merge-needed, naming the files. Start no new run until the branch changes.",
+        "The Hub stopped: at the next start, request a new run for every task still waiting for its pre-review result.",
+        "Error of any other kind, or a check that ran out of time with no failing test of the task's own named: if the previous run on the same task work was not itself such a retry, request one run on the current main tip.",
+        "Otherwise (the retry ended the same way): request nothing more, put the run and its error on the operator's Needs-you list, and leave the task's status unchanged.",
+        "Any other failure: the task's own failure, as today (sent back as broken-check or flaky)."
+      ]
+    }
+  ],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "737c81ada66a3f3831fc4ee6793418d3792cf317b2521f91e30807033f665c83",
+      "FR-10": "4e09649b7c23e5609c3f18df9b99c58147b81bd65f50789ccaac17caeba80740",
+      "FR-11": "96e4770515ea32b1008054043eaa802ebf68a2cca9927a43754aa15a545bb5cd",
+      "FR-2": "5dc61af00ae543b9b549e83be02457e3186fbcedd64ff51be548e745c4b66a8a",
+      "FR-3": "55526ddd24b7b327e160aca0f28a593b2699c292104ea636cc00365060160e05",
+      "FR-4": "7efea327c166b9e460d34df41f18ffe5b84a43af1cb7c7a05d37ce2379a8dc21",
+      "FR-5": "f22692c7579902fffdb197f47605b853bd7c22b86aa6a65e640533d1a29bb9df",
+      "FR-6": "b30593164b12b18b1970189b324411597e0d2104f0a5b9f7afb3fae30b70e421",
+      "FR-7": "bdf58f4b540e58e8afc5e4256aa2af5b3b19cd9179901e67281ae0904c0a287c",
+      "FR-8": "58c4535e7ec0c4bc4ca1e13a80c1eda6a0343f8d348d10bc6b72dfcf53eac8dd",
+      "FR-9": "1f76e33af5b7ffd4740a65adc60526f58bf550f2d6c73d77b305e99963625279"
+    },
+    "high_water": 11,
+    "requirements": {
+      "below-user-priority": "FR-5",
+      "conflict-goes-to-builder": "FR-7",
+      "fast-not-landing-only": "FR-4",
+      "hub-fault-retried-once": "FR-9",
+      "hub-stop-reruns": "FR-8",
+      "landing-only-skipped-before-review": "FR-2",
+      "phase-setting": "FR-1",
+      "priority-opt-out": "FR-6",
+      "review-only-skipped-at-landing": "FR-3",
+      "timeout-not-the-tasks": "FR-10",
+      "usual-duration-shown": "FR-11"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "builder": "DeveloperOpus built CRFWM, the slice before this one, cleanly in project_checks.py.",
+      "checker": "QA2 checked CRFWM and knows the check-run tests and their file-released gates.",
+      "cron": "Every five minutes, as previous flows.",
+      "mode": "Three chained tasks on the same files; a flow runs them in order unattended.",
+      "stop": "Stop when the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "The phase is a per-check property the operator sets in the project's check settings: `review`, `landing` or `both`. A check saved before this change reads as `both`, so behaviour changes only for a project that opts in. A fast check gates an agent's completion, which happens before review, so it cannot be landing-only. Three values are enough for this slice (operator, 2026-11-04); running only when the machine is idle is slice 4.\n\nGiving way means the operating system schedules every process a check starts, the check's whole process tree, below the user's interactive work. On a quiet machine the checks still get the whole processor, so nothing is slower unless the user is using the machine. It is a property of how the Hub starts the check, not of the check's command, so it works for any project's commands. It is a project setting, off by default (operator, 2026-11-04): no existing project's checks change speed without its say. The operator turns it on for this project.\n\nWhat ended a run decides what happens next (see algorithms). The rule underneath: only a result that judged the work may count against the task. Everything else either goes to whoever can fix it (a conflict goes to the builder, operator 2026-11-04) or is retried a bounded number of times and then reaches the operator. The bound matters for other projects, whose checks may be long builds or paid CI time.\n\nSupersedes: the vault fact fct-c1dfbea42f5e (from the CRFWM retrospective, src-518e204db0f2) records that, after CRFWM, an `error` or `interrupted` run on an older tip is retried only at the next refresh or approval. That is the behaviour this slice replaces, deliberately: FR-8 re-runs after a Hub stop at the next start, and FR-9 retries any other error once at once. The fact stays true of the system until this slice lands; once it does, the vault source is to be annotated as superseded by this document.\n\nAcceptance drive (written before the build, failing on master): on a scratch Hub with a scratch git project whose checks are a quick 'lint' (review), a 'suite' (landing) whose command prints its own priority, and a 'slow' check that sleeps past its limit, complete a task and read GET /tasks/{id}/checks and the project settings route. On master the suite runs before review at normal priority and the slow check sends the task back; after the build the suite reads 'runs at landing', the slow check is retried once and lands on Needs-you, and with giving way on the suite reports below-normal priority at landing.",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_checks.py: configured_checks (line ~111) has name, command, timeout_seconds, paths and fast, but no phase; failed() counts timed_out as failure (918-921); merge-conflict errors are raised at 244; MAX_CONCURRENT_RUNS = 2 and auto_workers share CPUs (335-351). No process priority is set anywhere in the file.",
+      "hub/hub/landing_queue.py:1143 sends back merge-needed only at landing; requirement_gate.py:356 refuses approval on a conflict.",
+      ":8000 read-only: proj-d85a82bf4216 task_check_runs states are passed 201, failed 40, superseded 36, error 13, interrupted 1. All 13 errors are 'does not merge cleanly' and the one interrupted is 'the Hub stopped'.",
+      "Retrospective events evt-6c6d19e61f20 and evt-dc38021f39ec (3-4 Nov builds).",
+      "Vault check flagged FR-8 and FR-9 against fct-c1dfbea42f5e; the conflict is the intended change and is recorded in the design and both rationales."
+    ],
+    "limits": [
+      "How much below-normal priority helps the user's applications is not measured here; the requirement asserts the priority, not responsiveness.",
+      "No acceptance drive has been run yet; the criteria and tests named above are proposed coverage, not passing tests."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-04T13:11:34.498336+00:00",
+        "id": "build-cee3d25c14bf",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-04T09:56:26.944787+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "give-way": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "phases": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "unjudged-runs": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "A merge conflict found before review: send the task back to its builder as merge-needed, or show it to the operator first? Answered (operator, 2026-11-04): back to the builder.",
+      "resolved": true
+    },
+    {
+      "question": "Should 'checks give way to the user' be on by default? Answered (operator, 2026-11-04): off by default for every project; the operator turns it on for this one.",
+      "resolved": true
+    },
+    {
+      "question": "Are three phases (review, landing, both) enough, or is a fourth such as 'only when idle' needed now? Answered (operator, 2026-11-04): three are enough; idle is slice 4.",
+      "resolved": true
+    }
+  ],
+  "problem": "Every configured check runs both before review and again in the landing batch. A project cannot keep a slow suite for landing only, so on this project hub-tests runs about 4.7 times per task (roadmap baseline, 1-3 Nov 2026). Check processes run at normal priority beside the user's own applications. On the night of 3-4 Nov two full suites ran side by side, both crashed their test workers after about 45 minutes, and each re-ran for another 32 (retrospectives of a-check-run-finishes-when-master-moves and the-build-dialog-redesigned, chk-b163130f844c and chk-e00281f3f705).\n\nA run that ends without judging the work is handled badly:\n- All 13 `error` runs on proj-d85a82bf4216 are merge conflicts ('X does not merge cleanly onto Y', hub/hub/project_checks.py:244). Before review nothing sends that task back: only landing does (landing_queue.py:1143, merge-needed), and approval is refused (requirement_gate.py:356) while the task sits.\n- A run whose time limit ends it is recorded as failed (`failed()` treats `timed_out` as failure, project_checks.py:918-921). Unless the same check fails on master too, it is the task's own failure and sends the work back as broken-check, although running out of time on a busy machine says nothing about the work.\n- After CRFWM, an `error` or `interrupted` run on an older master tip waits for the next refresh or an approval before it is run again (CRFWM retrospective, lesson 1; vault fact fct-c1dfbea42f5e). This slice changes that on purpose (FR-8, FR-9).\n- A project chooses each check's time limit without seeing how long that check normally takes.",
+  "requirements": [
+    {
+      "key": "phase-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Opt-in: no project's gates change unless it chooses.",
+      "statement": "Each check in a project's check settings carries a phase of review, landing or both. The operator can set it per check, and a check saved before this change reads and behaves as both."
+    },
+    {
+      "key": "landing-only-skipped-before-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A check whose phase is landing does not run in a task's pre-review check run. The task's checks show it as 'runs at landing', not as passed or skipped, and review and approval are not held waiting for it."
+    },
+    {
+      "key": "review-only-skipped-at-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A check whose phase is review does not run in a landing batch's check run, and a landing batch is not held waiting for it."
+    },
+    {
+      "key": "fast-not-landing-only",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "Saving a check that is both fast and landing-only is refused with a message saying a fast check gates an agent's completion before review, so it cannot be landing-only."
+    },
+    {
+      "key": "below-user-priority",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While the project's 'checks give way to the user' setting is on, every process a check run starts, including the processes those start, runs at a scheduling priority below the priority of a normally started user application on the same machine."
+    },
+    {
+      "key": "priority-opt-out",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: no project's checks change speed without its say.",
+      "statement": "The 'checks give way to the user' setting is off for every project until the operator turns it on, including projects that existed before this change. While it is off, check processes run at the priority they run at today."
+    },
+    {
+      "key": "conflict-goes-to-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "All 13 error runs on this project were conflicts; re-running one on the same tips repeats it. The builder can resolve it; the operator chose the builder over themselves (2026-11-04).",
+      "statement": "When a pre-review check run cannot merge the task's work onto the main branch, the task is sent back to its builder with reason class merge-needed and notes naming the conflicting files. No further check run starts for that task until its branch has new commits."
+    },
+    {
+      "key": "hub-stop-reruns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Deliberately replaces today's behaviour, recorded in vault fact fct-c1dfbea42f5e (an interrupted run waits for the next refresh or approval): nothing about the work was judged, so the task should not wait on an unrelated event to be checked.",
+      "statement": "A check run ended because the Hub stopped is requested again when the Hub next starts, for every task still waiting for its pre-review result, without waiting for a main-branch move or an approval."
+    },
+    {
+      "key": "hub-fault-retried-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Deliberately replaces today's behaviour, recorded in vault fact fct-c1dfbea42f5e (an errored run waits for the next refresh or approval). Bounded at one retry so a project whose checks are long builds or paid time is not charged for a loop.",
+      "statement": "A check run that ends in error for any reason other than a merge conflict is requested once more automatically on the current main tip. A second consecutive error on the same task work is not retried: it appears in the operator's Needs-you list with the error text and the task, and the task is not sent back to its builder."
+    },
+    {
+      "key": "timeout-not-the-tasks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Running out of time on a busy machine says nothing about the work; a named failing test does.",
+      "statement": "A check that runs past its time limit, and whose output names no failing test as the task's own, does not count as the task's failure: it is retried and surfaced like a Hub fault (hub-fault-retried-once). A check whose output names failing tests that are not failing on main still counts as the task's failure, as today."
+    },
+    {
+      "key": "usual-duration-shown",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Beside each check's time limit, the check settings show how long that check usually takes: the median and the longest of its last 20 passing results in this project, or 'no passing runs yet'."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-cost-less-on-a-machine-that-is-in-use/spec.json",
+    "slice": "checks-know-their-phase"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A per-check phase setting (review, landing, both) in the project's check settings, and the check runs and gates obeying it",
+      "A project setting, off by default, under which check processes and everything they start run below normal scheduling priority",
+      "Routing of check runs that did not judge the work: merge conflict, Hub stopped, Hub fault, check out of time",
+      "Each check's usual duration shown beside its time limit in the check settings"
+    ],
+    "non_goals": [
+      "Changing the Hub's limit of two concurrent check runs (roadmap non-goal); one full suite at a time for this repository is slice 3, project-only",
+      "Changing what the landing check requires: every check whose phase includes landing runs on the exact merged tree, as today",
+      "Running checks in the project's CI: that belongs to the pull-request landing roadmap (work-lands-through-pull-requests), not this one",
+      "Choosing check time limits automatically; the project still sets them",
+      "Changing this repository's own check configuration (for example lowering hub-tests' 3600s limit, or turning giving way on): that is the operator's setting, not product work",
+      "A fourth phase such as 'only when idle', or detecting whether the user is at the machine: slice 4"
+    ]
+  },
+  "summary": "Slice 2 of 'Checks cost less on a machine that is in use'. A project can say whether each check runs before review, at landing, or both. A project can turn on 'checks give way to the user' (off by default), which runs every check below the user's own work in priority. A check run that ends without judging the work is handled by what ended it: a merge conflict goes back to the builder, a Hub stop is re-run, a Hub fault or a check that ran out of time is retried once and then shown to the operator. None of these counts as the task's own failure. Each check's usual duration is shown beside its time limit. Product, general: nothing here is specific to AgentWeave's own repository.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Built the previous slice of this roadmap (CRFWM) cleanly in project_checks.py and the landing queue.",
+      "checker": "QA2",
+      "checker_reason": "Checked CRFWM and knows the check-run tests and their file-released gates.",
+      "depends_on": [],
+      "description": "Add the per-check phase setting (review, landing, both; default both) to the project's check settings route and UI. Obey it in pre-review and landing check runs, show a landing-only check as 'runs at landing' on the task, and refuse fast plus landing-only. Rebuild the UI bundle.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/landing_queue.py",
+        "hub/ui/src/components/settings/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "phases",
+      "requirements": [
+        "phase-setting",
+        "landing-only-skipped-before-review",
+        "review-only-skipped-at-landing",
+        "fast-not-landing-only"
+      ],
+      "reviewer": null,
+      "title": "Checks have a phase"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Same files as 'phases', built straight after it by the same builder.",
+      "checker": "QA2",
+      "checker_reason": "Same checker as the rest of the slice, so one agent sees how the three tasks fit.",
+      "depends_on": [
+        "phases"
+      ],
+      "description": "Add the project setting 'checks give way to the user', off by default for new and existing projects. While it is on, start every check process and its descendants below normal priority. Show each check's usual duration beside its time limit in the check settings.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/ui/src/components/settings/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "give-way",
+      "requirements": [
+        "below-user-priority",
+        "priority-opt-out",
+        "usual-duration-shown"
+      ],
+      "reviewer": null,
+      "title": "Checks give way to the user"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Touches the same run-ending code CRFWM changed; its builder knows it best.",
+      "checker": "QA2",
+      "checker_reason": "CRFWM's checker; this task changes what happens after the runs that slice made finish.",
+      "depends_on": [
+        "give-way"
+      ],
+      "description": "Route pre-review check runs that did not judge the work: send a merge conflict back to its builder as merge-needed; re-run after a Hub stop; retry a Hub fault or a time-limit run with no named failure once, then put it on Needs-you. A timeout with no named failure no longer counts as the task's own failure. Once landed, append to vault source src-518e204db0f2 a note that its lesson on error/interrupted retries is superseded by this document.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/task_transition_service.py"
+      ],
+      "from": null,
+      "key": "unjudged-runs",
+      "requirements": [
+        "conflict-goes-to-builder",
+        "hub-stop-reruns",
+        "hub-fault-retried-once",
+        "timeout-not-the-tasks"
+      ],
+      "reviewer": null,
+      "title": "Runs that did not judge the work"
+    }
+  ],
+  "title": "Checks know their phase and give way to the user"
+}

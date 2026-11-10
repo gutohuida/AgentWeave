@@ -1,0 +1,442 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a path to a folder that does not exist",
+      "how_to_check": "Hub test creating a project in a temporary path, then git log --name-only and the project settings route",
+      "key": "ac-fresh-folder",
+      "requirement": "new-folder-repository",
+      "then": "`git log` shows one commit containing only AGENTS.md, and the project's main branch names that commit's branch",
+      "when": "a project is created there through the Hub"
+    },
+    {
+      "checked_by": "agent",
+      "given": "that fresh project with one writing agent on a Haiku runner",
+      "how_to_check": "Drive on a scratch Hub (temporary database, free port); read the run's working directory",
+      "key": "ac-first-worktree",
+      "requirement": "new-folder-repository",
+      "then": "it runs in its own worktree on its own branch",
+      "when": "the agent's first turn starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the fresh project after the Hub has written .agentweave/",
+      "how_to_check": "Same Hub test, after registration",
+      "key": "ac-ignored",
+      "requirement": "hub-files-ignored",
+      "then": "nothing under .agentweave/ is listed",
+      "when": "`git status --porcelain` runs in its folder"
+    },
+    {
+      "checked_by": "agent",
+      "given": "folders each holding one of CLAUDE.md, GEMINI.md, .github/copilot-instructions.md, AGENTS.md, or .agentweave/project.json",
+      "how_to_check": "Parametrised Hub test",
+      "key": "ac-existing-instructions",
+      "requirement": "agents-md-only-when-none",
+      "then": "no AGENTS.md is created or changed in any of them",
+      "when": "each is made a repository through the offered action"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a created AGENTS.md",
+      "how_to_check": "Hub test reading the file",
+      "key": "ac-content",
+      "requirement": "agents-md-content",
+      "then": "it opens with the AgentWeave section and has an empty project-instructions area",
+      "when": "it is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an existing folder with files and no .git",
+      "how_to_check": "Hub test comparing listings before and after",
+      "key": "ac-open-existing",
+      "requirement": "existing-folder-untouched",
+      "then": "the folder's file listing is unchanged apart from .agentweave/, and it has no .git",
+      "when": "it is opened as a project"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an existing project folder with files, one of them matched by the Hub's ignore rules",
+      "how_to_check": "Hub route test for the preview and the confirm; UI check in the app",
+      "key": "ac-preview",
+      "requirement": "make-it-a-repository",
+      "then": "the list shown names every file except the ignored one, and nothing is created until they confirm",
+      "when": "the operator starts 'Make this a git repository'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose folder already has its own AGENTS.md, with the option off",
+      "how_to_check": "Hub test on the context route plus a UI check",
+      "key": "ac-own-agents-md-unchanged",
+      "requirement": "agents-md-is-instructions-when-chosen",
+      "then": "the turn's context carries no AGENTS.md text, Instructions shows the Hub's own instructions, and the option to use AGENTS.md is offered",
+      "when": "an agent turn runs and Settings → Instructions is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose AGENTS.md is its instructions",
+      "how_to_check": "Hub route test plus app click-through",
+      "key": "ac-edit",
+      "requirement": "instructions-are-agents-md",
+      "then": "AGENTS.md on disk holds the new text, and reopening settings shows it",
+      "when": "Instructions are edited and saved in settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "such a project, its checkout on the main branch with a clean AGENTS.md",
+      "how_to_check": "Hub test: save, then git log -1 --name-only on main",
+      "key": "ac-committed",
+      "requirement": "instructions-committed",
+      "then": "main gains one commit touching only AGENTS.md",
+      "when": "Instructions are saved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "AGENTS.md with uncommitted edits in the project checkout",
+      "how_to_check": "Hub test",
+      "key": "ac-dirty-refused",
+      "requirement": "instructions-committed",
+      "then": "the save is refused naming the uncommitted change, and the file on disk is unchanged",
+      "when": "Instructions are saved from settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with database instructions and its own AGENTS.md",
+      "how_to_check": "Hub test seeding a database row and an AGENTS.md",
+      "key": "ac-moved",
+      "requirement": "instructions-moved",
+      "then": "AGENTS.md holds those instructions in one new commit, turns carry them once, and the database row is unchanged",
+      "when": "the operator switches on 'Use AGENTS.md as this project's instructions'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose AGENTS.md is its instructions and holds a unique marker sentence",
+      "how_to_check": "Hub test over the context each runner kind is handed, plus a scratch-Hub drive with a Haiku Claude runner",
+      "key": "ac-once",
+      "requirement": "instructions-once",
+      "then": "the marker appears exactly once in what each turn received",
+      "when": "a turn runs on a runner that reads AGENTS.md natively and on one that does not"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built slice",
+      "how_to_check": "Operator click-through",
+      "key": "ac-operator",
+      "requirement": "new-folder-repository",
+      "then": "it opens as a git repository with AGENTS.md, and Instructions shows the AgentWeave section",
+      "when": "the operator adds a project in a new folder from the app"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1b791cbedf9e825f91ac236ffe16e14bf6794d4f126e746e332c477185673fce",
+      "FR-10": "1fe82e884c733f04ae344751b372e17ef6c77c17635ef89add2d6b241f56701f",
+      "FR-11": "a1d749d402053723f5e010d1bf0b1a1ca875a1447a45eec04791f203680dda1b",
+      "FR-2": "0acc3df5e816a9b5a25dd9bcc1b21bf37de7de5605d422fa882164e856e24764",
+      "FR-3": "3f5b64f2abceb0389bfdb09964b390dd73a6b7e1ef7157ee6af3dfb7c2e9e84b",
+      "FR-4": "a38db45c2569c9bbc8a9b41df345ae8561a4f076385f710c76317adf83b0c605",
+      "FR-5": "99a79694cce0ebf006a722c85057e323c85d8677d17651a1aa9dde06e09f07a7",
+      "FR-6": "37961bd68f582c1bf4e35248e623352572356f3e17acd2296dc23a0f8c645325",
+      "FR-7": "7a1f3423cd1ac92b30490f375007f8fd1d56853370bcf2bcb04d5b69ef6ffc86",
+      "FR-8": "f93058f5e649bc6058f99349c338fac25afbb87744c47acaaf6e531f313fcc76",
+      "FR-9": "a7e1e81405f061f40cf0eed1ea183acb75ef0d584e9560d0392cf982c1b168e8"
+    },
+    "high_water": 11,
+    "requirements": {
+      "agents-md-content": "FR-4",
+      "agents-md-is-instructions-when-chosen": "FR-11",
+      "agents-md-only-when-none": "FR-3",
+      "existing-folder-untouched": "FR-5",
+      "hub-files-ignored": "FR-2",
+      "instructions-are-agents-md": "FR-7",
+      "instructions-committed": "FR-9",
+      "instructions-moved": "FR-10",
+      "instructions-once": "FR-8",
+      "make-it-a-repository": "FR-6",
+      "new-folder-repository": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus, so this slice runs beside slice 1 without queueing behind Developer.",
+      "builder": "Opus for the build: Tier 2 — disk writes at project creation, Hub commits on main, a migration, and what every turn receives.",
+      "checker": "QA (Opus) checks for the same Tier 2 reasons.",
+      "cron": "Every five minutes.",
+      "mode": "Three chained tasks; a flow carries them in order without hand-offs.",
+      "stop": "Stops when the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decisions (operator, 2026-11-10):\n- New folder → repository plus a first commit holding AGENTS.md. Not only `git init`: a repository with no commit cannot give agents worktrees.\n- Existing folder without git → never committed unasked. A first commit would include whatever is already there (secrets, large files); the operator is offered it with the list of what it would hold.\n- AGENTS.md becomes the project's instructions only where the operator has chosen it: automatically when AgentWeave created the file (a new folder, or \"Make this a git repository\"), and otherwise only when the operator switches on \"Use AGENTS.md as this project's instructions\". A project with its own AGENTS.md (this repository has one: a hand-written 2.9 KB pointer to CLAUDE.md) keeps exactly today's behaviour until then. (Narrowed after the operator asked how instructions reach agents today: carrying an existing AGENTS.md into every turn would have added a redundant copy for Claude agents in repositories that already arrange their own instruction files.)\n- A created AGENTS.md starts with a short AgentWeave section.\n- AGENTS.md is not created when the folder already holds AGENTS.md, CLAUDE.md, GEMINI.md or .github/copilot-instructions.md, or is already an AgentWeave project.\n- Saving Instructions to AGENTS.md commits it on the project's main branch, so agents' worktrees pick it up when they next merge main.\n- Instructions already in the Hub's database move into AGENTS.md when AGENTS.md becomes the project's instructions, so there is one copy.\n\nHazard (Tier 2): project creation writes to disk; the Hub commits on the main branch; the instructions' source reaching every turn changes for opted-in projects; and recording whether a project uses AGENTS.md is a stored project setting, so a migration is likely — the operator's :8000 runs this checkout's migrations on its next restart, so the migration follows the repository's migration checklist and is additive with a default that preserves today's behaviour. Rollback: the database instructions row is kept (not read while AGENTS.md is in use), so reverting returns to it unchanged.\n\nDrives (readiness review, 2026-11-10): run on a Hub started from the checkout's source on a temporary database (DATABASE_URL to a temp file, a free port). Never :8000. Not the trial Hub :8010 either: its database holds enabled jobs that would fire. A real agent turn in a drive binds a Haiku runner.",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_lifecycle.py:174 create_new makes an empty folder; :66 open_existing registers an existing one",
+      "hub/hub/repo_hygiene.py:98 seed_repo_excludes writes .git/info/exclude and returns when there is no .git",
+      "hub/hub/api/v1/instructions.py: instructions are a ProjectInstructions row, 40,000-character limit (F686)",
+      "hub/hub/api/v1/agents.py:2903: that row becomes the context's 'Project Instructions' section; runner_commands.py:270 hands the context to Claude Code with --append-system-prompt-file",
+      "Operator's real Hub database, read-only: project_instructions holds no rows (2026-11-10)",
+      "This repository has a hand-written AGENTS.md of 2,901 bytes",
+      "Trial Hub database: 10 enabled ai_jobs (2026-11-10) — why drives use a scratch Hub"
+    ],
+    "limits": [
+      "Which runners read AGENTS.md natively is stated from their documentation, not verified on this machine",
+      "Not driven: no project was created in a fresh folder for this document"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-10T14:24:29.740334+00:00",
+        "id": "build-b34e6cb3e56c",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-10T12:50:51.931029+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "fresh-folder-repository": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "instructions-in-agents-md": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "make-it-a-repository": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": null,
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "When Instructions are saved to AGENTS.md, should the Hub also commit it on the main branch?",
+      "resolved": true
+    },
+    {
+      "question": "Move database instructions into AGENTS.md?",
+      "resolved": true
+    },
+    {
+      "question": "Should an existing AGENTS.md become the instructions automatically, or only by opt-in?",
+      "resolved": true
+    }
+  ],
+  "problem": "Operator, 2026-11-10: git should be a more default behaviour for AgentWeave, and a new project should start with an AGENTS.md carrying AgentWeave's guidance. Today (code, 2026-11-10) creating a project in a new folder makes an empty folder (hub/hub/project_lifecycle.py create_new) and opening one only registers it, so a new project has no repository, its writing agents cannot get their own worktrees (they need a commit), and the Hub's ignore rules are not written (repo_hygiene.seed_repo_excludes returns when there is no .git). Project instructions are a database row (hub/hub/api/v1/instructions.py) put into the context file the Hub hands each run (hub/hub/api/v1/agents.py:2903; for Claude Code via --append-system-prompt-file, runner_commands.py:270). The Hub reads neither CLAUDE.md nor AGENTS.md; each CLI reads its own file from the folder it runs in (Claude Code reads CLAUDE.md; Codex, Kimi and OpenCode read AGENTS.md).",
+  "requirements": [
+    {
+      "key": "new-folder-repository",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Writing agents get their own worktrees only once a commit exists; a repository with no commit leaves them all sharing one checkout.",
+      "statement": "Creating a project in a folder that does not yet exist leaves that folder a git repository with exactly one commit, which holds AGENTS.md and nothing else, and sets the project's main branch to the branch that commit is on."
+    },
+    {
+      "key": "hub-files-ignored",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a repository AgentWeave creates, the Hub's own working files (.agentweave/) are ignored from the start and never appear in the first commit or as untracked changes."
+    },
+    {
+      "key": "agents-md-only-when-none",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A folder that already instructs its agents belongs to someone who chose that; AgentWeave adding a second file would contradict or duplicate it.",
+      "statement": "AgentWeave creates AGENTS.md only when the folder holds none of AGENTS.md, CLAUDE.md, GEMINI.md or .github/copilot-instructions.md and is not already an AgentWeave project; otherwise it writes no instruction file."
+    },
+    {
+      "key": "agents-md-content",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A created AGENTS.md begins with a short AgentWeave section saying the project is worked on through AgentWeave and where its specifications live, followed by an empty place for the project's own instructions."
+    },
+    {
+      "key": "existing-folder-untouched",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Opening an existing folder that is not a git repository creates no repository, no commit and no file in it."
+    },
+    {
+      "key": "make-it-a-repository",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An unasked first commit could publish secrets or bulk files into history; showing them first is what makes the one-click action safe.",
+      "statement": "For a project whose folder is not a git repository, the operator can make it one in a single action that first shows every file the first commit would hold (with ignored files left out) and creates the repository and commit only on confirmation; AGENTS.md is added by the same rule as a new folder."
+    },
+    {
+      "key": "agents-md-is-instructions-when-chosen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Repositories that already arrange their own instruction files keep working as they do; a new project gets one source of instructions from the start.",
+      "statement": "AGENTS.md is the project's instructions when AgentWeave created it, or when the operator has switched on 'Use AGENTS.md as this project's instructions' (offered in Settings → Instructions only when the folder holds an AGENTS.md). For any other project, instructions come from the Hub exactly as before and the Hub carries no instruction file."
+    },
+    {
+      "key": "instructions-are-agents-md",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Instructions in the repository are versioned with the code and read by tools outside AgentWeave.",
+      "statement": "While AGENTS.md is the project's instructions, Settings → Instructions shows that file's content and saving writes it to the file; the 40,000-character limit still applies."
+    },
+    {
+      "key": "instructions-committed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents work in their own worktrees and see main's committed state; an uncommitted edit would never reach them, and overwriting the operator's own unsaved edit would lose work.",
+      "statement": "Saving Instructions to AGENTS.md commits AGENTS.md, and only AGENTS.md, on the project's main branch. If AGENTS.md has uncommitted changes in the project checkout, or the checkout is not on the main branch, the save is refused saying which, and nothing is overwritten; if the project has no main branch set, the file is written and the operator is told it was not committed."
+    },
+    {
+      "key": "instructions-moved",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One copy: two sources of instructions drift, and an agent cannot tell which one is meant.",
+      "statement": "When AGENTS.md becomes the instructions of a project that holds instructions in the Hub's database, those instructions are added to AGENTS.md's instructions area once, committed as a save is; from then on the file is the only source, and the database copy is kept but not read."
+    },
+    {
+      "key": "instructions-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Codex, Kimi and OpenCode read AGENTS.md themselves; carrying it twice pays for it twice on every turn.",
+      "statement": "Every agent turn carries the project's instructions exactly once, whether or not the agent's runner also reads AGENTS.md on its own."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/settings-that-are-easy-to-find-and-match-the-app/spec.json",
+    "slice": "a-new-project-starts-in-git"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Creating a project in a new folder: repository, first commit, AGENTS.md, the Hub's ignore rules",
+      "Opening an existing folder without git: an offered, previewed first commit",
+      "Using AGENTS.md as the project's instructions where AgentWeave created it or the operator opts in: read, saved, committed on the main branch, carried into agent turns",
+      "Moving database instructions into AGENTS.md when it becomes the instructions"
+    ],
+    "non_goals": [
+      "Creating AGENTS.md in a folder that already has any agent instruction file or is already an AgentWeave project",
+      "Changing anything for a project with its own AGENTS.md until the operator opts in",
+      "Committing anything in an existing folder without the operator's action, other than AGENTS.md when the operator saves Instructions or opts in",
+      "Pushing, adding remotes or choosing a hosting service",
+      "The set-up list that surfaces the offer — slice a-project-says-what-it-needs; this slice provides the action it links to",
+      "Reading or editing CLAUDE.md, GEMINI.md or other tools' files"
+    ]
+  },
+  "summary": "Git becomes AgentWeave's default. A project created in a new folder becomes a repository whose first commit holds an AGENTS.md; an existing folder without git can be made one in a single action after seeing what the first commit would hold. An AGENTS.md that AgentWeave created — or one the operator chooses to adopt — becomes the project's instructions: edited from Settings → Instructions, committed on the main branch when saved, and carried once into every agent turn. A project with its own instruction files keeps today's behaviour until the operator opts in.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus for Hub code that writes to disk and runs git at project creation (Tier 2); DeveloperOpus is free while Developer builds slice 1.",
+      "checker": "QA",
+      "checker_reason": "QA (Opus) runs the new test and creates a real project in a temp folder; a different agent from the builder, at the same tier.",
+      "depends_on": [],
+      "description": "Acceptance drive first: a Hub test that creates a project in a non-existent temporary folder and fails until the folder is a repository with one commit holding only AGENTS.md (AgentWeave section + empty instructions area), .agentweave/ ignored, and the main branch set. Then make it pass. Includes the 'only when no instruction file exists' rule as a reusable piece.",
+      "files": [
+        "hub/hub/project_lifecycle.py",
+        "hub/hub/repo_hygiene.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "fresh-folder-repository",
+      "requirements": [
+        "new-folder-repository",
+        "hub-files-ignored",
+        "agents-md-only-when-none",
+        "agents-md-content"
+      ],
+      "reviewer": null,
+      "title": "New folder becomes a repository"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Same builder as the task before: it extends the same lifecycle code, and committing someone's existing files is the riskiest action in the slice.",
+      "checker": "QA",
+      "checker_reason": "QA checks that nothing is written before confirmation and that ignored files stay out of the preview, by running it on real folders.",
+      "depends_on": [
+        "fresh-folder-repository"
+      ],
+      "description": "Opening an existing folder writes nothing into it. Add the preview-then-confirm action that makes a non-repository project folder a repository: the preview lists every file the first commit would hold (ignored files excluded); confirm creates the repository and commit, adding AGENTS.md by the same rule. Expose it in project settings beside the folder, where the set-up slice can link to it.",
+      "files": [
+        "hub/hub/project_lifecycle.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/tests/",
+        "hub/ui/src/components/settings/GeneralSettings.tsx",
+        "hub/ui/src/api/"
+      ],
+      "from": null,
+      "key": "make-it-a-repository",
+      "requirements": [
+        "existing-folder-untouched",
+        "make-it-a-repository",
+        "agents-md-only-when-none"
+      ],
+      "reviewer": null,
+      "title": "Offer a repository to an existing folder"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus for a migration the operator's live Hub will run, a Hub commit on main, and a change to what every agent turn receives.",
+      "checker": "QA",
+      "checker_reason": "QA drives a real turn on a scratch Hub to confirm the instructions arrive exactly once, and that a project with its own AGENTS.md is unchanged.",
+      "depends_on": [
+        "make-it-a-repository"
+      ],
+      "description": "Record per project whether AGENTS.md is its instructions (on when AgentWeave created it; otherwise an opt-in offered in Settings → Instructions when the folder has one; additive migration defaulting to today's behaviour). While on: Instructions reads and writes the file (40,000-character limit kept); a save commits only AGENTS.md on the main branch, refused when the file has uncommitted edits or the checkout is off main; database instructions move into the file once on switching on; every agent turn carries the instructions exactly once, including on runners that read AGENTS.md themselves. While off: exactly today's behaviour.",
+      "files": [
+        "hub/hub/api/v1/instructions.py",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/db/",
+        "hub/tests/",
+        "hub/ui/src/components/settings/sections/InstructionsSection.tsx",
+        "hub/ui/src/api/"
+      ],
+      "from": null,
+      "key": "instructions-in-agents-md",
+      "requirements": [
+        "agents-md-is-instructions-when-chosen",
+        "instructions-are-agents-md",
+        "instructions-committed",
+        "instructions-moved",
+        "instructions-once"
+      ],
+      "reviewer": null,
+      "title": "AGENTS.md as the instructions, where chosen"
+    }
+  ],
+  "title": "A new project starts as a git repository with an AGENTS.md"
+}

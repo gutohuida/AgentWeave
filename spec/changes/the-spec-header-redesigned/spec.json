@@ -187,13 +187,13 @@
         "checkers": [],
         "chosen_by": "operator",
         "driver": "flow",
-        "ended_at": null,
+        "ended_at": "2026-11-03T03:24:57.811575+00:00",
         "id": "build-42ad89960ea5",
         "landing": "main",
         "lead": null,
         "level": "reviewed",
         "started_at": "2026-11-02T18:59:25.511763+00:00",
-        "state": "running",
+        "state": "finished",
         "stop_reason": null,
         "tasks": {
           "acceptance-drive": {
@@ -215,6 +215,11 @@
           "ship-and-drive": {
             "builder": "Developer",
             "checker": "QA"
+          },
+          "task-c24ef7bbfec5": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
           }
         },
         "window_end": null,

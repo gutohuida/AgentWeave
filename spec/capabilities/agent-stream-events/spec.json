@@ -610,13 +610,6 @@
       "when": "it is rendered in the conversation"
     },
     {
-      "given": "a turn emitted thinking and then text",
-      "key": "ac116",
-      "requirement": "thinking-presentation",
-      "then": "the thinking sits in a collapsed work block before the text, and expands on demand",
-      "when": "the turn is rendered"
-    },
-    {
       "given": "a work block holds a diagnostic and an error from the same run",
       "key": "ac117",
       "requirement": "tool-and-diagnostic-presentation",
@@ -868,6 +861,42 @@
       "requirement": "a-github-token-in-prose-is-redacted-prose-kept",
       "then": "the SHA and the inner-word text are unchanged",
       "when": "it is redacted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8108 with a fresh database and one project with a Claude runner and a Haiku agent alice (scripts/drive/d1022_thinking_ui.py); no real Claude turn emits thinking text (non_goals), so the drive posts one thinking event on alice's live run through POST /agents/alice/output, the route a runner's output reaches",
+      "how_to_check": "py -3.11 scripts/drive/d1022_thinking_ui.py",
+      "key": "live-thinking-stays-open-and-diagnostics-can-be-hidden-drive",
+      "requirement": "live-thinking-stays-open-and-live-thinking-opens-then-collapses",
+      "then": "1) within five seconds the turn's last work block is open and shows the thinking text; 2) once done is shown, that block is closed and the thinking text is not visible; 3) both the diagnostic and the error are shown, Hide diagnostics removes the diagnostic and leaves the error, the reload keeps it hidden, and Show diagnostics brings it back. Fails on today's Hub at check 1 (the block is closed).",
+      "when": "in Chromium the operator sends alice a message asking her to run a command that takes about twenty seconds and then reply with the single word done, and while her run is started the drive posts a thinking event with that run's id; then, after her reply, the drive posts a diagnostic and an error event on the same run and the operator clicks Hide diagnostics, reloads, and clicks Show diagnostics"
+    },
+    {
+      "checked_by": "agent",
+      "given": "AgentTimeline rendered with a live run whose turn ends in a work block holding a thinking event",
+      "how_to_check": "vitest (hub/ui)",
+      "key": "live-thinking-stays-open-and-diagnostics-can-be-hidden-live",
+      "requirement": "live-thinking-stays-open-and-live-thinking-opens-then-collapses",
+      "then": "the block is open; it is closed after the text; it is closed after the completed status; the history block is closed; the operator's toggles are kept over the automatic rule each time",
+      "when": "it renders, then a text entry is appended, then (separately) the run's completed status entry is appended instead, then a history turn of an ended run is rendered, then the operator closes the live block before text arrives and opens it again after"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation whose turn holds a diagnostic entry, an error entry and a work block with a failed tool result",
+      "how_to_check": "vitest (hub/ui)",
+      "key": "live-thinking-stays-open-and-diagnostics-can-be-hidden-hide",
+      "requirement": "live-thinking-stays-open-and-diagnosti-diagnostics-can-be-hidden",
+      "then": "the diagnostic card is gone while the error message and the failed-call count stay; the remount keeps it hidden; the unreadable value shows diagnostics",
+      "when": "the operator clicks Hide diagnostics, the component is mounted again, the stored value is replaced with an unreadable one and the component is mounted again"
+    },
+    {
+      "checked_by": "operator",
+      "given": "an agent on a runner that streams thinking text (a Copilot agent today)",
+      "how_to_check": "operator, in the app",
+      "key": "live-thinking-stays-open-and-diagnostics-can-be-hidden-watch",
+      "requirement": "live-thinking-stays-open-and-live-thinking-opens-then-collapses",
+      "then": "the reasoning is readable as it arrives and folds away when the answer starts",
+      "when": "they send it a question that makes it reason before answering and watch the turn"
     }
   ],
   "algorithms": [],
@@ -916,9 +945,11 @@
       "FR-60": "dd8ba7911a7160efd714ac10ffacfef351d63c81f48df86793e9f2bad68f69a4",
       "FR-61": "4ed4018830e85e3878193b7b061d00f7c4830d7dc0c91327c612478a5a50482e",
       "FR-62": "1740d99459984409c5e07883a6d806b515df691e3d45d63a1ad7d265b823b5bd",
-      "FR-63": "bc5bdcea1f98659999809fdc6e1c6799c21dd516487e3c29fe8b15833cbb0ecb"
+      "FR-63": "bc5bdcea1f98659999809fdc6e1c6799c21dd516487e3c29fe8b15833cbb0ecb",
+      "FR-64": "df534297a0fb34f6d12c9275b64490a509f5ae372599516eafe25f701ee4cce9",
+      "FR-65": "393fb87b5f650943531c1fe7817d911df68db577ce812e89d49ee7c397bd7715"
     },
-    "high_water": 63,
+    "high_water": 65,
     "requirements": {
       "a-copilot-run-s-compaction-errors-and-subagents-reach-its-st": "FR-50",
       "a-github-token-in-prose-is-redacted-github-tokens": "FR-62",
@@ -941,6 +972,8 @@
       "closed-event-kind-taxonomy": "FR-21",
       "cross-version-compatibility": "FR-29",
       "each-work-block-carries-independent-state": "FR-38",
+      "live-thinking-stays-open-and-diagnosti-diagnostics-can-be-hidden": "FR-65",
+      "live-thinking-stays-open-and-live-thinking-opens-then-collapses": "FR-64",
       "message-level-conversation-entries-render-markdown-safely": "FR-52",
       "n1": "FR-51",
       "payload-shaped-model-functions-are-tested-against-real-route": "FR-44",
@@ -954,7 +987,6 @@
       "supported-runner-normalization": "FR-25",
       "the-run-facts-cover-every-run-the-events-name": "FR-41",
       "the-timeline-carries-each-run-s-own-facts": "FR-40",
-      "thinking-presentation": "FR-33",
       "tool-and-diagnostic-presentation": "FR-34",
       "tool-call-correlation": "FR-23",
       "unknown-provider-events-degrade-safely": "FR-26",
@@ -965,7 +997,8 @@
       "a-run-ending-refreshes-the-conversation-that-renders-it": "FR-46",
       "a-run-s-facts-shall-carry-the-error-its-row-recorded": "FR-43",
       "a-run-s-terminal-outcome-is-visible": "FR-39",
-      "independent-context-usage-boundary": "FR-36"
+      "independent-context-usage-boundary": "FR-36",
+      "thinking-presentation": "FR-33"
     }
   },
   "design": "D1. Normalize in the Hub. Adapters emit RunEvents (kind, content, versioned payload); the Hub re-implements the CLI's taxonomy rather than importing it, because the Hub does not depend on agentweave-ai. Stream transports return a ParsedLine per line; RPC transports (Codex app-server, Copilot ACP) return events directly.\nD2. Safety at the write. record_agent_output is the single writer for self-reported and Hub-spawned output: it scrubs the run's registered secrets from content and payload, stores the row and broadcasts agent_output. Values split across text/thinking events are joined and scrubbed at the executors (run_secrets.scrub_stream), not in the writer, because the writer is retried on lock.\nD3. Observational writes never fail a run. Streamed rows and the closing status row go through _record_observation: a lock is retried, then dropped with a warning naming the run.\nD4. Run facts come from the run row, looked up by the ids the response returns, after truncation, scoped to the project, with no ORDER BY or LIMIT. Status `running` is renamed `started` at the boundary; the error is truncated, not redacted, to match the run_failed broadcast.\nD5. The closing status row (`phase: completed`, exit code) is the stream's durable end marker for every runner, since Codex and Copilot emit no completion sentinel.\nD6. The conversation groups entries into turns by run_id and into blocks in execution order; consecutive thinking/tool entries form one collapsed work block with its own state and duration.\nD7. Announce after commit. A write's event is staged with the transaction and published from the session's `after_commit` hook; a full subscriber queue counts its drops and the stream reports them once as `stream_gap`.",
@@ -983,7 +1016,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -1082,13 +1114,6 @@
       "party": null,
       "rationale": "Classifying by kind is what makes every runner's output render the same way.",
       "statement": "The conversation view SHALL classify each agent-output entry by its structured `kind` (message, work or result) and SHALL NOT inspect content prefixes to decide how an entry renders; an entry with no kind renders as message text."
-    },
-    {
-      "key": "thinking-presentation",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "Reasoning is useful on demand but would otherwise bury the answer the operator is reading.",
-      "statement": "Thinking events SHALL be presented as work, grouped with adjacent tool activity into a work block that is collapsed until the operator expands it, rather than as conversational text."
     },
     {
       "key": "tool-and-diagnostic-presentation",
@@ -1264,6 +1289,20 @@
       "party": null,
       "rationale": "F602: replies name commit SHAs, paths and identifiers.",
       "statement": "A 40-character commit SHA, a path, and a word that only contains one of those prefixes inside it (not at a word start), MUST be stored as written."
+    },
+    {
+      "key": "live-thinking-stays-open-and-live-thinking-opens-then-collapses",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "overhaul-thinking-ui (F572): the reasoning is worth reading while the agent is still working and is noise once the answer is there; a block that is always closed hides it exactly when it matters.",
+      "statement": "Thinking events SHALL be presented as work, not as conversational text. A work block that holds a thinking event SHALL be shown open while it is the last block of the turn whose run is live, and SHALL collapse when a text entry or the run's end follows it; a work block in a turn whose run has ended SHALL render collapsed. Once the operator opens or closes a block themselves, that choice MUST be kept over both rules."
+    },
+    {
+      "key": "live-thinking-stays-open-and-diagnosti-diagnostics-can-be-hidden",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "overhaul-thinking-ui (F572): diagnostics are for the operator who is debugging a runner, not for one reading the conversation; errors and failed calls are what the reader must never lose.",
+      "statement": "The conversation SHALL offer a control that hides diagnostic entries and shows them again. While diagnostics are hidden, error entries and failed tool results MUST remain visible. The choice SHALL persist across reloads in the same browser and default to shown; a stored value that cannot be read SHALL mean shown."
     }
   ],
   "schema_version": 1,

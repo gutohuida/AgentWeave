@@ -1,0 +1,1288 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an approved two-task document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k recorded -v",
+      "key": "a-build-has-a-driver-a-level-and-its-people-build-recorded",
+      "requirement": "a-build-has-a-driver-a-level-and-its-people-start-a-build",
+      "then": "reading the document's builds returns one running build with exactly those settings, and the second start is refused 409 naming the running build",
+      "when": "the operator starts a build with driver flow, level gated, builders [dev], reviewers [qa], a $5 cap, a window ending tomorrow and landing main, and then starts a second build of it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two copies of the same two-task spec on the trial Hub :8010, Haiku agents dev, qa and lead",
+      "how_to_check": "Drive on :8010 started from the branch (DATABASE_URL naming the trial profile): POST each build, wait, GET each document's builds and tasks; paste the reads.",
+      "key": "a-build-has-a-driver-a-level-and-its-people-slice-done-drive",
+      "requirement": "a-build-has-a-driver-a-level-and-its-people-start-a-build",
+      "then": "both builds read back with their driver and level, every task of the first records fast and of the second gated, and the first's tasks were approved with no reviewer turn",
+      "when": "one copy is built at Fast with driver lead and the other at Gated with driver flow, and both run to their end"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose recommended build names driver lead, level fast, builders and a cap",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/buildDialog.test.tsx (fed the document read's real payload)",
+      "key": "a-build-has-a-driver-a-level-and-its-peop-build-dialog-prefilled",
+      "requirement": "a-build-has-a-driver-a-level-and-its-people-start-a-build",
+      "then": "each setting is filled in from the recommendation, each task shows its declared builder, and submitting sends exactly the shown settings",
+      "when": "the operator opens Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running Fast build and a task created with create_task outside any build",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k level -v",
+      "key": "a-build-has-a-driver-a-level-and-it-level-on-task-and-transition",
+      "requirement": "a-build-has-a-driver-a-level-and-its-peop-task-records-its-level",
+      "then": "the build's task reads build id and level fast and each of its transitions carries fast; the outside task reads no build and no level and its approval behaves as on master",
+      "when": "a task of the build is completed and approved, and the outside task is completed and approved by another agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose task t1 declares builder dev (an open agent) and t2 declares builder ghost (no such agent)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k builder -v",
+      "key": "a-build-has-a-driver-a-level-and-its-p-builder-assigned-at-start",
+      "requirement": "a-build-has-a-driver-a-level-and-its-pe-a-task-names-its-builder",
+      "then": "t1's assignee is dev, t2 has no assignee and keeps builder ghost, and the start response names ghost as unresolved; no run is started",
+      "when": "a hand-driven build starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow-driven Gated build with builders [dev] and reviewers [qa], and a free agent architect with a runner",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k staffs -v, red on master, green on the branch; paste both",
+      "key": "a-build-has-a-driver-a-level-and-its-p-flow-staffs-only-builders",
+      "requirement": "a-build-has-a-driver-a-level-a-the-flow-staffs-the-builds-people",
+      "then": "architect is never selected; the task waits while dev is busy and goes to dev when free; its review goes to qa; on master the same document's flow selects architect",
+      "when": "the flow fires with dev busy, then with dev free, and a task is completed by dev"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a lead-driven build with lead L and builders [dev]",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_lead_hands_out_the_work.py -v",
+      "key": "a-build-has-a-driver-a-level-and-its-lead-briefed-and-hands-out",
+      "requirement": "a-build-has-a-driver-a-level-and-its-p-a-lead-hands-out-the-work",
+      "then": "L received one brief at start and one after the completion (none stacked while unread), dev's turn is bound to t1, and qa's call is refused 403",
+      "when": "it starts, L calls hand_out_task for t1 to dev, dev completes t1, and qa (not the lead) calls hand_out_task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k hand -v",
+      "key": "a-build-has-a-driver-a-level-and-its-people-hand-starts-nothing",
+      "requirement": "a-build-has-a-driver-a-level-and-its-p-a-lead-hands-out-the-work",
+      "then": "no loop, run or queued entry is created for it",
+      "when": "a hand-driven build starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task of a hand-driven Fast build, built by dev, with passing checks",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k fast -v",
+      "key": "a-build-has-a-driver-a-level-and-its-peopl-fast-builder-approves",
+      "requirement": "a-build-has-a-driver-a-level-an-fast-approves-without-a-reviewer",
+      "then": "the Fast task is approved with no review turn and its transition records fast; the Gated call is refused naming the level; on master the Fast call is refused (no completed->approved edge)",
+      "when": "dev calls update_task(status='approved'), and on a Gated build's task the same call is made"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow-driven Fast build whose task dev completed, with a check run in progress",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k flow_fast -v",
+      "key": "a-build-has-a-driver-a-level-and-fast-flow-approves-after-checks",
+      "requirement": "a-build-has-a-driver-a-level-an-fast-approves-without-a-reviewer",
+      "then": "the flow approves the task (origin job, level fast) without staging any review turn",
+      "when": "the check run passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with open tasks whose work is on main",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k already_built -v",
+      "key": "a-build-has-a-driver-a-level-and-its-people-fast-close-as-built",
+      "requirement": "a-build-has-a-driver-a-level-an-fast-approves-without-a-reviewer",
+      "then": "every task is approved at once, with its evidence recorded and accepted and its history naming the action and commit",
+      "when": "the operator closes them as already built at level fast"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task of a Reviewed build serving FR-1 and FR-2, with evidence recorded only for FR-1",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k reviewed -v",
+      "key": "a-build-has-a-driver-a-level-and-its-peopl-reviewed-reports-gaps",
+      "requirement": "a-build-has-a-driver-a-level-reviewed-is-anyone-but-the-builder",
+      "then": "the builder is refused; qa's approval succeeds and its response lists FR-2 under reported",
+      "when": "the builder tries to approve it, and then qa approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same task in a Gated build of a sketch-rigor document",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_build_levels.py -k gated -v",
+      "key": "a-build-has-a-driver-a-level-and-its-people-gated-needs-evidence",
+      "requirement": "a-build-has-a-driver-a-level-and-its-people-gated-is-todays-gate",
+      "then": "the approval is refused naming FR-2 as unverified; once FR-2's evidence is recorded and accepted the approval succeeds",
+      "when": "qa approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow-driven build with a $1 cap whose bound runs' turn_usage sums to $1.20, one of them still running",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_lead_hands_out_the_work.py -k budget -v",
+      "key": "a-build-has-a-driver-a-level-and-its-people-cap-stops-new-turns",
+      "requirement": "a-build-has-a-driver-a-level-and-its-people-budget-and-window",
+      "then": "nothing new is staged, the running turn is untouched, the build is stopped with a reason naming $1.20 of $1.00 and the operator is notified; after the cap is raised to $5 the next firing stages work",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a lead-driven build whose window opens in an hour",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_lead_hands_out_the_work.py -k window -v",
+      "key": "a-build-has-a-driver-a-level-and-its-people-window-closed",
+      "requirement": "a-build-has-a-driver-a-level-and-its-people-budget-and-window",
+      "then": "the first firing briefs nobody; the second briefs the lead",
+      "when": "its loop fires now and again after the window opens (frozen clock)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build landing nowhere in a git fixture with main set, and an approvable task on it",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_build_has_a_driver_a_level_and_its_people.py -k lands -v",
+      "key": "a-build-has-a-driver-a-level-and-its-people-lands-nowhere",
+      "requirement": "a-build-has-a-driver-a-level-and-its-people-landing",
+      "then": "the task is approved, main's tip is unchanged, and its integration record is skipped with the reason that the build lands nowhere",
+      "when": "the task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "slice B's invariant test",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_every_task_state_has_a_mover.py -v",
+      "key": "a-build-has-a-driver-a-level-and-its-peopl-invariant-over-levels",
+      "requirement": "a-build-has-a-driver-a-level-and-its-peo-no-level-strands-a-task",
+      "then": "every pair other than blocked has a mover at every level",
+      "when": "it is parametrised over fast, reviewed, gated and no build, with the lead added to the holders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent on the tasks step of a change document",
+      "how_to_check": "A Hub test asserting on the assembled tasks-step and Build-step prompt text.",
+      "key": "every-task-comes-with-a-recommended-builder-and-checker-ac-asked",
+      "requirement": "every-task-comes-with-a-recommended-build-every-task-recommended",
+      "then": "it asks for a builder, a checker and a reason for each on every task, lists the open agents, and no longer asks for reasons keyed reviewer or tester",
+      "when": "its turn prompt is assembled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a roster of one Opus and one Sonnet agent, and a document with a migration task and a copy-change task",
+      "how_to_check": "A Hub test on the prompt's model names, plus the drive's real Haiku authoring turn, reading the document it submits.",
+      "key": "every-task-comes-with-a-recommended-builder-and-checke-ac-models",
+      "requirement": "every-task-comes-with-a-recommended-weighs-model-cost-complexity",
+      "then": "the prompt named both models, the two tasks hold different builders, and each reason names model cost or performance and the task's complexity",
+      "when": "the author writes the tasks"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a large document, then a fix-size one",
+      "how_to_check": "A Hub test on both prompts, plus the drive answering the real Haiku author 'review the project record' and reading the document's evidence.",
+      "key": "every-task-comes-with-a-recommended-builder-and-check-ac-sources",
+      "requirement": "every-task-comes-with-a-recommended-builder-an-asks-how-to-judge",
+      "then": "the prompt for the first requires stating its view and asking for the three sources, and the operator's choice governs what it does and what its evidence records; the prompt for the second does not ask",
+      "when": "the author reaches the tasks step of each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "tasks built under two models, one agent rebound from one model to the other between tasks, some send-backs and an unpriced turn",
+      "how_to_check": "A Hub test calling the agent tool against these rows, in hub/tests/test_per_model_record.py.",
+      "key": "every-task-comes-with-a-recommended-builder-and-checke-ac-record",
+      "requirement": "every-task-comes-with-a-recommended-builder-and-per-model-record",
+      "then": "each task counts under the model that ran it, send-backs are split by reason class, sample sizes match the rows, and the unpriced turn is reported as unpriced",
+      "when": "an agent reads the record through its tool"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task naming the same agent as builder and checker, then a one-agent project",
+      "how_to_check": "A Hub test submitting the first document and reading `warnings`, and a test that the one-agent project's prompt says to leave the checker empty and give the reason.",
+      "key": "every-task-comes-with-a-recommended-builder-and-chec-ac-not-self",
+      "requirement": "every-task-comes-with-a-recommended-build-checker-is-not-builder",
+      "then": "the first draws a warning naming the task; the second has an empty checker with a reason",
+      "when": "the document is submitted, then authored"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose tasks hold different picks and reasons, fed as the route returns them",
+      "how_to_check": "A UI test on BuildDialog fed the route's real payload, plus the drive opening Build in a browser and reading the resulting build record.",
+      "key": "every-task-comes-with-a-recommended-builder-and-checke-ac-dialog",
+      "requirement": "every-task-comes-with-a-recommended-build-build-opens-with-picks",
+      "then": "each row shows its pick and reasons, and the changed task is built by the operator's choice while the others keep theirs",
+      "when": "the operator opens Build, changes one row and builds"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with one task with no checker and one with no reason",
+      "how_to_check": "A Hub test submitting and approving the document over the routes.",
+      "key": "every-task-comes-with-a-recommended-builder-and-checker-ac-warns",
+      "requirement": "every-task-comes-with-a-recommended-builder-a-missing-pick-warns",
+      "then": "the response warns naming both tasks, blocking is empty, and approval succeeds",
+      "when": "it is submitted and approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pick whose agent has been closed, and an older document with no picks",
+      "how_to_check": "UI tests on BuildDialog fed each route payload.",
+      "key": "every-task-comes-with-a-recommended-builder-and-ac-closed-agent",
+      "requirement": "every-task-comes-with-a-recommended-builder-pick-no-longer-open",
+      "then": "the first row says the agent is not open and selects nothing; the second opens as it does on master",
+      "when": "Build opens on each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build with default builder DeveloperOpus and checker QA",
+      "how_to_check": "A Hub test filing both through the task route and reading each task's builder and resolved checker.",
+      "key": "every-task-comes-with-a-recommended-builder-and-check-ac-running",
+      "requirement": "every-task-comes-with-a-recomme-follow-up-takes-the-build-people",
+      "then": "the first is built by DeveloperOpus and the second by Developer, and QA checks both",
+      "when": "an agent files one task naming nobody and one naming builder Developer"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build finished an hour ago, and another finished 30 days ago, each at level reviewed with a cap",
+      "how_to_check": "A Hub test in hub/tests/test_recommended_people.py filing through the route and reading the build and document routes, with the finish times set in the fixture.",
+      "key": "every-task-comes-with-a-recommended-builder-and-checke-ac-reopen",
+      "requirement": "every-task-comes-with-a-recom-follow-up-reopens-a-finished-build",
+      "then": "each same build id reads running at the same level, landing and cap, its record shows the reopening, and its spec stops reading as done until the task lands",
+      "when": "an agent files a follow-up against each spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build that finished 30 days ago",
+      "how_to_check": "The drive opens Overview in a browser, reads the warning and clicks stop; a Hub test covers the age and the clearing when the build ends; a UI test fed the route's real payload covers the dismissal.",
+      "key": "every-task-comes-with-a-recommended-builder-and-check-ac-warning",
+      "requirement": "every-task-comes-with-a-recommended-builder-and-reopening-warns",
+      "then": "the warning names the spec, task, filer and 30 days, the build reads stopped and its flow starts nothing further; and a warning left alone clears when the build ends",
+      "when": "a follow-up reopens it and the operator opens the Overview screen, then stops the build from the warning"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow build whose loop ended on an empty queue, and separately a finished hand build",
+      "how_to_check": "The drive runs the flow case with a real Haiku turn on a live scheduler; a Hub test covers the hand case.",
+      "key": "every-task-comes-with-a-recommended-builder-and-checker-ac-flow",
+      "requirement": "every-task-comes-with-a-recommended-builder-and-flow-picks-it-up",
+      "then": "the flow build's task starts within two firings with no other call; the hand build's task is assigned to its builder and no run starts",
+      "when": "a follow-up is filed against each and the scheduler fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one build stopped by the operator, one stopped by its cap, and an archived spec",
+      "how_to_check": "A Hub test filing against each case and then calling Build on the stopped spec over the routes.",
+      "key": "every-task-comes-with-a-recommended-builder-and-check-ac-stopped",
+      "requirement": "every-task-comes-with-a-recommended-builde-stopped-stays-stopped",
+      "then": "no build reopens, no flow starts, no warning shows, each task has no build, the filer's answer says why, and pressing Build on a stopped spec takes its task in",
+      "when": "a follow-up is filed against each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a finished flow build",
+      "how_to_check": "A Hub test filing concurrently over the routes, then counting builds, flows and warnings and calling create_flow.",
+      "key": "every-task-comes-with-a-recommended-builder-and-ac-simultaneous",
+      "requirement": "every-task-comes-with-a-recommended-build-one-driver-still-holds",
+      "then": "one build, one active flow and one warning exist covering both tasks, and create_flow is refused naming the build",
+      "when": "two follow-ups are filed simultaneously and an agent then calls create_flow on the spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change document whose task t1 names builder DeveloperOpus and checker QA, and whose default checker is QA2",
+      "how_to_check": "Hub test: submit, then read_spec_document; assert the fields round-trip",
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-g-ac-one-checker",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-task-goes-one-checker",
+      "then": "t1 carries exactly one builder and one checker, and the document carries one default builder and one default checker",
+      "when": "it is saved and read back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a stored document whose delivery names reviewer QA and tester QA2, and whose task t2 names its own reviewer Architect",
+      "how_to_check": "Hub test seeded with the old payload shape; assert the checker staffed for each task",
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-ac-old-reviewer",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-old-names-still-build",
+      "then": "t2's check goes to Architect and every other task's check goes to QA2",
+      "when": "it is built as a flow at Reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose delivery names default builder Developer and default checker QA, and whose task t1 names builder DeveloperOpus and checker QA2",
+      "how_to_check": "UI test on BuildDialog, fed the payload shape the Hub returns for a recommended build; run-drive also opens the dialog on the trial Hub",
+      "key": "the-build-plan-lives-in-the-spec-and-every-tas-ac-dialog-prefill",
+      "requirement": "the-build-plan-lives-in-the-spec-and-dialog-opens-with-the-spec",
+      "then": "Developer and QA are selected as the defaults, t1 shows DeveloperOpus and QA2, and confirming without changes sends exactly those people",
+      "when": "the operator opens Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose recommendation is a flow with Developer",
+      "how_to_check": "Hub test: POST the build, then read the document's file and its read route",
+      "key": "the-build-plan-lives-in-the-spec-and-every-ta-ac-choices-written",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-t-choices-in-the-spec",
+      "then": "the document shows a build marked as the operator's, with driver hand, builder Architect and landing main, and its delivery still reads flow with Developer",
+      "when": "the operator builds it by hand with builder Architect and landing main"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the hand build from ac-choices-written",
+      "how_to_check": "Hub test over the MCP read and the rendered turn context",
+      "key": "the-build-plan-lives-in-the-spec-and-every-ac-agent-reads-build",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-agents-read-the-build",
+      "then": "the read returns the build with driver hand and the operator's people, apart from delivery, and Architect's turn prompt names driver hand and t1's builder and checker",
+      "when": "an agent calls read_spec_document, and when Architect is started on t1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build of a document",
+      "how_to_check": "Hub test: call the stop route, then read",
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-g-ac-build-ended",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-task-build-end-shown",
+      "then": "the document shows the build as stopped, with the time, and read_spec_document reports no running build",
+      "when": "the operator stops it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document whose first build was stopped and whose second build was then started and stopped, and a third build started",
+      "how_to_check": "Hub test: three builds in sequence, then read the document and the builds table",
+      "key": "the-build-plan-lives-in-the-spec-and-every-ta-ac-two-builds-kept",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-task-build-end-shown",
+      "then": "it shows the third build as running and the second as stopped, and the first is not in the document but its build record still exists",
+      "when": "the document is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with a running hand build whose two tasks have no loop",
+      "how_to_check": "Hub test reproducing F1083",
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-go-ac-one-driver",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-task-goes-one-driver",
+      "then": "the call is refused with 409 naming the build and driver hand, no loop or job is created, and both tasks still have no loop",
+      "when": "an agent calls create_flow on that document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with no running build",
+      "how_to_check": "Hub test: POST the build with driver flow; assert the loop exists",
+      "key": "the-build-plan-lives-in-the-spec-and-ev-ac-build-flow-still-made",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-task-goes-one-driver",
+      "then": "the build's flow is created and its tasks carry its loop",
+      "when": "the operator builds it with driver flow"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow build with builders [Developer], whose task t1 names builder DeveloperOpus, with both agents having runners",
+      "how_to_check": "Hub test in the style of test_the_flow_staffs_only_the_builds_people",
+      "key": "the-build-plan-lives-in-the-spec-an-ac-flow-builder-outside-list",
+      "requirement": "the-build-plan-lives-in-the-spec-flow-gives-task-to-its-builder",
+      "then": "the first firing gives t1 to nobody, and the second gives t1 to DeveloperOpus",
+      "when": "the flow fires with DeveloperOpus busy, then again with DeveloperOpus free"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow build whose task t4 names builder Ghost, who is not an agent, and whose builders list holds a free Developer",
+      "how_to_check": "Hub test on the flow's staffing decision",
+      "key": "the-build-plan-lives-in-the-spec-and-every-t-ac-builder-not-open",
+      "requirement": "the-build-plan-lives-in-the-spec-flow-gives-task-to-its-builder",
+      "then": "t4 is given to nobody and says its builder Ghost is not an open agent",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub :8010 with Haiku-bound agents, and a small approved document whose t1 names a checker and a builder outside the build-wide builders list",
+      "how_to_check": "Acceptance drive on the trial Hub, written before the build (task write-drive); it fails on master at the create_flow and staffing steps",
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-goes-to-ac-drive",
+      "requirement": "the-build-plan-lives-in-the-spec-flow-gives-task-to-its-builder",
+      "then": "t1 is worked by its builder and checked by its checker, the spec page shows the build as the operator's, and an agent's create_flow on the document is refused, naming the build",
+      "when": "the operator builds it as a flow at Reviewed from the app and lets it run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Reviewed flow build where t1 names checker QA2, t2 names no checker, the default checker is QA, and t3 names checker Ghost, who is not an agent",
+      "how_to_check": "Hub test on the flow's staffing decision",
+      "key": "the-build-plan-lives-in-the-spec-and-every-t-ac-check-to-checker",
+      "requirement": "the-build-plan-lives-in-the-spec-and-e-check-goes-to-its-checker",
+      "then": "t1's check goes to QA2, t2's to QA, and t3's to nobody, with the task saying its checker Ghost is not an open agent",
+      "when": "each task is completed by its builder and the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Fast flow build whose t1 names checker QA",
+      "how_to_check": "Hub test on the flow's staffing decision",
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-ac-fast-no-check",
+      "requirement": "the-build-plan-lives-in-the-spec-and-e-check-goes-to-its-checker",
+      "then": "no check is handed to QA or anyone else",
+      "when": "t1 is completed and the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose t1 names builder Developer and checker QA",
+      "how_to_check": "Hub test: the runs, inbound queue and messages are all empty after the build and after completion",
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-go-ac-hand-board",
+      "requirement": "the-build-plan-lives-in-the-spec-a-hand-only-places-on-the-board",
+      "then": "the board shows t1 in Pending with Developer as its builder and QA as its checker; after completion there is still no run, queued input or message for QA",
+      "when": "the operator builds it by hand, and later Developer completes t1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a lead build with lead Architect whose t1 names builder Developer and checker QA",
+      "how_to_check": "Hub test on the brief text and task_history",
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-go-ac-lead-brief",
+      "requirement": "the-build-plan-lives-in-the-spec-and-every-lead-told-the-people",
+      "then": "the brief names Developer and QA for t1, and t1's history records that it went to DeveloperOpus",
+      "when": "the lead is briefed, and the lead hands t1 to DeveloperOpus"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document with three declared tasks and a recommended build",
+      "how_to_check": "hub/ui/src/__tests__/buildPlanDialog.test.tsx, test 'one row per declared task, by title', rendered through useSpecPhaseControls (the container), not the component alone.",
+      "key": "the-build-dialog-redesigned-ac-sections-and-rows",
+      "requirement": "the-build-dialog-redesigned-one-plan-two-sections",
+      "then": "the dialog shows both sections and three rows, each naming its task's title (not its key) with a builder and a checker control",
+      "when": "the operator presses Build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a recommendation naming a builder and checker for each task, with reasons for some",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'opens on the recommendation with its reasons'.",
+      "key": "the-build-dialog-redesigned-ac-prefilled-with-reasons",
+      "requirement": "the-build-dialog-redesigned-opens-on-the-recommendation",
+      "then": "each control shows the recommended agent, each given reason is visible beside it, and each pick without a reason reads 'No reason given'",
+      "when": "the dialog opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog open on a recommendation",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'a changed pick names the recommendation and puts it back'.",
+      "key": "the-build-dialog-redesigned-ac-put-back",
+      "requirement": "the-build-dialog-redesigned-a-change-is-visible-and-undoable",
+      "then": "that row reads 'Recommended <agent>' with Put back, the footer reads 'One task differs from the recommendation', and Put back restores the agent and the footer reads 'As the document recommends.'",
+      "when": "the operator changes one task's builder"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a recommendation naming an agent that is archived for one task's builder",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'a recommended agent that is not open is not chosen'.",
+      "key": "the-build-dialog-redesigned-ac-closed-agent",
+      "requirement": "the-build-dialog-redesigned-a-closed-agent-is-not-chosen",
+      "then": "that task's builder control shows the default, the row says the recommended agent is not open here, and confirming sends an empty builder for that task",
+      "when": "the dialog opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog at the Reviewed level",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'a task cannot check its own work'.",
+      "key": "the-build-dialog-redesigned-ac-own-work",
+      "requirement": "the-build-dialog-redesigned-no-task-checks-its-own-work",
+      "then": "that row reads 'Checks its own work', the footer names one task, and Build is disabled until it is changed",
+      "when": "the operator makes one task's checker the same agent as its builder"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog open on a recommendation",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'confirming unchanged sends the recommendation', asserting the request body the mocked build route receives.",
+      "key": "the-build-dialog-redesigned-ac-sent-unchanged",
+      "requirement": "the-build-dialog-redesigned-what-is-shown-is-sent",
+      "then": "the build route receives the recommended driver, level, landing, defaults and per-task people, and no delivery_agent",
+      "when": "the operator confirms without changing anything"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub on :8010 with a scratch project and an approved document whose tasks name builders and checkers",
+      "how_to_check": "py -3.11 scripts/drive/d1029_build_dialog_browser.py, updated to the new dialog's controls; it fails while the app still serves BuildDialog and passes once the bundle is refreshed.",
+      "key": "the-build-dialog-redesigned-ac-drive-recorded",
+      "requirement": "the-build-dialog-redesigned-what-is-shown-is-sent",
+      "then": "the build the Hub records carries every task's builder and checker as the dialog showed them, labelled the operator's",
+      "when": "a browser opens the served app, presses Build and confirms"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog open",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'Fast hides the checkers'.",
+      "key": "the-build-dialog-redesigned-ac-fast",
+      "requirement": "the-build-dialog-redesigned-fast-has-no-checker",
+      "then": "the checker column and the default checker are gone and confirming sends no checkers",
+      "when": "the operator chooses Fast"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dialog rendered in the app",
+      "how_to_check": "buildPlanDialog.test.tsx, test 'themed controls only'.",
+      "key": "the-build-dialog-redesigned-ac-no-native-controls",
+      "requirement": "the-build-dialog-redesigned-agents-as-everywhere-else",
+      "then": "it contains no select element, no checkbox input and no date or datetime input, and each agent option carries its colour dot",
+      "when": "its controls are inspected"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the operator's :8000 after the refreshed bundle is merged and reloaded",
+      "how_to_check": "The operator opens Build on any approved change and compares it with the mock (hub/ui/mock, #tab/spec?state=approved, then Build).",
+      "key": "the-build-dialog-redesigned-ac-operator-compares",
+      "requirement": "the-build-dialog-redesigned-matches-the-mock",
+      "then": "the dialog is the one they approved in the mock",
+      "when": "they press Build on an approved change document"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with no row for the build retrospective job",
+      "how_to_check": "hub test over GET /manager/jobs and the approval path",
+      "key": "a-finished-spec-gets-a-build-retro-job-listed-and-off-by-default",
+      "requirement": "a-finished-spec-gets-a-build-retrospecti-job-on-the-manager-page",
+      "then": "the page lists 'Build retrospective' turned off with no runner, and no manager_job_fired event for it is recorded",
+      "when": "the operator opens the Manager page and a document's last task is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub on :8020 with its own database, started from the task's own checkout, serving a throwaway project in testbed/ that is not AgentWeave's repository, the build retrospective job on with a Haiku-bound runner, and a two-task document built by a flow where the first task was sent back once",
+      "how_to_check": "scripts/drive/ acceptance drive against a Hub on :8020, real Haiku turns",
+      "key": "a-finished-spec-gets-a-build-retrospective-acceptance-drive",
+      "requirement": "a-finished-spec-gets-a-buil-fires-when-the-last-task-is-approved",
+      "then": "within the drive's timeout one retrospective of that document appears on its spec page, its send-backs section names the real sent-back task id, its transcripts list includes the sent-back run, and that project's vault gains one tracked source naming the document; the drive fails at any step that does not fire for real, and refuses to run if :8020 already answers",
+      "when": "the operator approves the document's last task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the job on with automatic firing and a document with three tasks",
+      "how_to_check": "hub test on the approval transition",
+      "key": "a-finished-spec-gets-a-build-retrospective-fires-exactly-once",
+      "requirement": "a-finished-spec-gets-a-buil-fires-when-the-last-task-is-approved",
+      "then": "no retrospective fires after the first two, and exactly one fires after the third",
+      "when": "the first two tasks are approved, then the third"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with one task approved and one stuck in revision_needed, the job with a runner but automatic firing off",
+      "how_to_check": "hub test on the run route",
+      "key": "a-finished-spec-gets-a-build-retrosp-request-on-unfinished-build",
+      "requirement": "a-finished-spec-gets-a-build-retrospective-operator-asks-for-one",
+      "then": "one retrospective fires covering both tasks, and the second press starts nothing and answers that one is in progress",
+      "when": "the operator presses Review this build, then presses it again before the first finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded build with a transition, run, note, evidence decision, gate run, stall, checkpoint, amendment, reconcile gap and ask_user question for its tasks",
+      "how_to_check": "hub test on the input builder with seeded rows",
+      "key": "a-finished-spec-gets-a-build-retrospect-input-holds-every-record",
+      "requirement": "a-finished-spec-gets-a-build-retrospectiv-reads-the-whole-record",
+      "then": "each seeded record appears in the input under its id, and the ask_user question carries its wait time",
+      "when": "the retrospective's input is assembled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded build whose task transitions and usage rows give known durations and costs",
+      "how_to_check": "hub test with a stubbed model answer carrying wrong numbers",
+      "key": "a-finished-spec-gets-a-build-retrospective-figures-equal-records",
+      "requirement": "a-finished-spec-gets-a-build-retro-figures-come-from-the-records",
+      "then": "the report's per-task times, per-agent and per-task costs and totals equal the values computed from the seeded rows",
+      "when": "a retrospective is written, whatever figures the model's answer contains"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a retrospective written from a stubbed answer",
+      "how_to_check": "hub test on the stored report plus UI component test",
+      "key": "a-finished-spec-gets-a-build-retrospective-sections-present",
+      "requirement": "a-finished-spec-gets-report-covers-what-worked-and-what-did-not",
+      "then": "every listed section is present, empty ones saying there was nothing, each send-back carries one of the three causes, and each improvement carries one of the four labels",
+      "when": "it is shown on the spec page"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a retrospective of a real finished build on one of the operator's projects",
+      "how_to_check": "operator reads the first real retrospective",
+      "key": "a-finished-spec-gets-a-build-retrospectiv-useful-to-the-operator",
+      "requirement": "a-finished-spec-gets-report-covers-what-worked-and-what-did-not",
+      "then": "the operator judges that it names at least one thing they would change in how the project's next build is specced or run",
+      "when": "the operator reads it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a stubbed answer whose report has one finding citing a real task id of the build, one citing a task id of another document, and one citing nothing",
+      "how_to_check": "hub test",
+      "key": "a-finished-spec-gets-a-build-retrospective-ungrounded-dropped",
+      "requirement": "a-finished-spec-gets-a-build-retrospecti-every-claim-is-grounded",
+      "then": "only the first finding is kept and the report says two were dropped",
+      "when": "the retrospective is stored"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with two written retrospectives and a third firing that failed",
+      "how_to_check": "UI component test fed real route payloads, in the order the route returns them",
+      "key": "a-finished-spec-gets-a-build-spec-page-shows-newest-and-failures",
+      "requirement": "a-finished-spec-gets-a-build-retrospec-readable-on-the-spec-page",
+      "then": "the page shows the failure with its reason and a run-again action, the newer written retrospective with its time, trigger, model, part count and cost, and the older one reachable",
+      "when": "the operator opens its spec page"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the distillation job on",
+      "how_to_check": "hub test over the vault map",
+      "key": "a-finished-spec-gets-a-build-retrospective-vault-source-added",
+      "requirement": "a-finished-spec-gets-a-build-retrospecti-lessons-go-to-the-vault",
+      "then": "exactly one dated vault source with tracked visibility naming the document appears in that project's vault map and is queued for distillation; a failed or empty firing adds none",
+      "when": "a retrospective is written"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the job on with a runner whose spawn fails",
+      "how_to_check": "hub test with a failing worker",
+      "key": "a-finished-spec-gets-a-build-retrospectiv-failure-does-not-block",
+      "requirement": "a-finished-spec-gets-a-build-retrospective-never-blocks-the-work",
+      "then": "both succeed with no added delay waiting on the job, and a manager_job_fired event with outcome failed is recorded",
+      "when": "the last task is approved and the document is then archived"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with one run per flag (send-back, stall, failed, mender, over twice the median) and three ordinary runs",
+      "how_to_check": "hub test on the input builder",
+      "key": "a-finished-spec-gets-a-build-re-only-and-all-flagged-transcripts",
+      "requirement": "a-finished-spec-gets-a-build-retrosp-transcripts-of-flagged-runs",
+      "then": "all five flagged runs' transcripts are included, no ordinary run's transcript is, and the report lists exactly the five",
+      "when": "the input is assembled"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded four-task build whose input is larger than the model's limit (a test limit set low) but each task's records fit, and a second build that fits",
+      "how_to_check": "hub test with a stubbed worker recording its inputs",
+      "key": "a-finished-spec-gets-a-build-retrospective-split-when-too-large",
+      "requirement": "a-finished-spec-gets-a-build-large-builds-are-reviewed-in-parts",
+      "then": "the first makes more than one part call, no task's records appear in two parts, then one final call whose input holds the part reviews, and its report states the number of parts; the second makes exactly one call",
+      "when": "each is reviewed with a stubbed worker"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two task check runs and one landing-batch run queued while two other runs hold both slots",
+      "how_to_check": "hub tests at the slot-acquire seams in project_checks.py and landing_queue.py; fail on master (no column)",
+      "key": "the-build-card-shows-where-check-time-went-slot-survives-restart",
+      "requirement": "the-build-card-shows-where-check-time-went-slot-time-recorded",
+      "then": "each run's stored row has a slot time later than its started_at, including the landing-batch run, and a run cancelled while waiting has none",
+      "when": "slots free and the waiting runs start their checks, and the modules' in-memory state is then cleared as a restart would"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build whose three tasks build in parallel for 1 h while their check runs total 2 h, one of which timed out, with rows in the order the tally's queries return them",
+      "how_to_check": "hub test through the build figures route, modelled on AWOAW 2026-11-05",
+      "key": "the-build-card-shows-where-check-time-went-awoaw-shape",
+      "requirement": "the-build-card-shows-where-check-time-w-check-time-counted-whole",
+      "then": "check running plus waiting totals 2 h, the timed-out count is 1 and that run is not in failed, and the wall bar's parts still sum to the build's wall time. On master the route gives no running/waiting/timed-out figures",
+      "when": "the build card's figures are read through the route the spec page calls"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build whose check runs have no slot time, and one mixing old and new runs",
+      "how_to_check": "hub test through the same route",
+      "key": "the-build-card-shows-where-check-time-went-old-rows",
+      "requirement": "the-build-card-shows-where-check-time-went-old-runs-unknown-wait",
+      "then": "the first reports waiting as null with its runs counted as running; the second reports the new runs' waiting and the count of runs with no slot time",
+      "when": "its figures are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with one task approved at 11:40 and landed at 16:58, one landed within 10 min, and one approved and not yet landed",
+      "how_to_check": "hub test through the same route",
+      "key": "the-build-card-shows-where-check-time-went-landing-wait-figures",
+      "requirement": "the-build-card-shows-where-check-time-went-landing-wait",
+      "then": "longest landed wait is 5 h 18 m, the total is their sum, and one task is reported still waiting with its wait so far",
+      "when": "its figures are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the build figures from the AWOAW-shaped fixture, and one with unknown waiting",
+      "how_to_check": "vitest on SpecBuilds with the route's payload",
+      "key": "the-build-card-shows-where-check-time-went-card-renders",
+      "requirement": "the-build-card-shows-where-check-time-went-card-shows-checks",
+      "then": "the Checks meter shows running and waiting with a 2 h total, the timed-out count and the landing wait appear, and the unknown waiting reads as unknown",
+      "when": "the spec page's build card renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fresh build on the trial Hub :8010 with two tasks whose checks run while both are still building",
+      "how_to_check": "scripts/drive drive written first and failing on master",
+      "key": "the-build-card-shows-where-check-time-went-drive-live",
+      "requirement": "the-build-card-shows-where-check-time-went-card-shows-checks",
+      "then": "the card's Checks total equals the sum of the build's check-run durations read from the check-run route, and the landing wait is shown",
+      "when": "both tasks are approved and land"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "f9869f35bff2b1cf43094eff6aec1d3e2418750e51b83ae4dc0dd6fdcef27df8",
+      "FR-10": "e52be1cf3553987eafde55cd184d25209912d906611a8c72f41b783694c2665b",
+      "FR-11": "9b6b8d760ef3bd95d52af8fa2b628efbf654082e1a50c862b6728b07e9cf1474",
+      "FR-12": "c4248e3e2987b7e024a07022ec529c3af8ae6a0cc7b59252ec2a45a34e73453d",
+      "FR-13": "c35d341591d7fe94f52c05910ad88631ff99c72765c52caf4c9f7900cccc5274",
+      "FR-14": "11e48ea318bc3774230b3d2289bb533b1864316aae85780bf0df7eaae4862b6d",
+      "FR-15": "8c7a92bed36a42004f57678f941adda5c739eab7481a435caf9c1ceac042066e",
+      "FR-16": "179eaa2eace05ce8d3cf1d1eb5eb4fcb0ce00b247a5a15e49e1089f7a8c2e972",
+      "FR-17": "d0bbc0bc42739adbcc24209ba6d30e02856c0f92345ea43f72caa24ed590a82e",
+      "FR-18": "89241bb53d85855e1d6302e74577b9552127dda96c4b990dd6203848af60a780",
+      "FR-19": "b40d230db499c834e87eb56ca6e02d03e6ad6a3131a291d81ac43c61a1e77a12",
+      "FR-2": "38ab6f3788d6e9a1425e0941fb07702e6e0aee11f1a6aa421d3a4ad648c6fc55",
+      "FR-20": "50b9f9f8138ca7d29e862ab9ae06cbdb812688d8ffaf4368f53167f584f3c1d2",
+      "FR-21": "b758aab13cbd8f9ac2a49c2c50b5e34c9238eaf5315c403b7ef090a734e749b9",
+      "FR-22": "fedf19ba8b4813153cf250169166bf94cc3f1dc2d22f630ad24c1792ac34061a",
+      "FR-23": "d3ab45d47987711d18857fd888dfc67af661408d83aff4ec9ed49b205461015b",
+      "FR-24": "c1ad8b69fb9e754d2946d7a1bec730115d7877bf378fdb13827c27fed5dbede8",
+      "FR-25": "752154feac63495ada8eedc9d87015e755e342a6c731529608be3c0c91c193be",
+      "FR-26": "1115789c4012da4ad31ccd7aa9d384670336ae0a9222f651b2571b806c33d0c6",
+      "FR-27": "09e8edbf5aa2f14de686e37ea86cb53fbb16a986ebb5950b9e88fc7cfce67226",
+      "FR-28": "0f6a819a038ece3659026b13ae1decc17bc12d868d52c826456ee7639aa70332",
+      "FR-29": "641e8448018a61709a6015ebd9f2b57b9acb087dd832389ca546c72233ad60ea",
+      "FR-3": "d7c40de879c3c9eef028d9dbfb3fe8dc6086a26a56cd102588cfaa53beaa03f0",
+      "FR-30": "8687c6880e5203535233ce64232a7f4b8abf2c815b77339e1cf91e2fdf53b806",
+      "FR-31": "02d3e14adeafef1381b54b2c3d0390ab4ffdc8b47d4fd1d4c87cc5d550c417d7",
+      "FR-32": "faf826c3247e58b33388d6e89fd5b85179ce77c0a5cafaf96791fe5bc79e5769",
+      "FR-33": "a0a3154872fab5b8a74d86adba630b0721d1c0ad5c9bf98d0fbdb8907a50313d",
+      "FR-34": "72def55e2dfa02cfec00ff965c1631b64afda71298891db76d57e850b7b25587",
+      "FR-35": "bb7ff7ce194fe897f901ba92f4c340ba59f1f813c5217b45ecf6e3525856bad7",
+      "FR-36": "52156755c4ae365b6d399b020dd93aa941b7528c9b25e5b033aea6f151a7dbc6",
+      "FR-37": "4a1c80b313f1e3e3da771e44fa7d9a83c9cd21dfadbe999cf91662fc89768542",
+      "FR-38": "85a961e383ff03d804ca8523c07cf9d94a3d780a898d101b5b67898a3ccd62f4",
+      "FR-39": "bcc2c5082675db22d13372c55c9beb0c609e2971d9cf85c14dcf04e87ca94ced",
+      "FR-4": "0510d750f5e409d1f88ae2f9705adaf3d2afa96fa0eec58819408aa75f17396f",
+      "FR-40": "add9ee2c038865aa83105406f6b96d7c854abb07171d17a66124d26342c67a00",
+      "FR-41": "3071523d7ddf9ef53790fa29ce11f57eaff938c4c8d8112cfc22887db4f07190",
+      "FR-42": "2152ab80799519e4d553b111eebd8ff108033ef50442b265e9682a54f6136393",
+      "FR-43": "6d41ad73058705c79f640b8a5a1d84f1e8b835f845b70b319db6d205358a5017",
+      "FR-44": "78cd59aa6e6947d3f5fdd8ee3ef36c7b7ffa51ac6364242e62e2ed5c1389dd55",
+      "FR-45": "6ba8ea4cef7ff240bfb79c613739d8f932c6df75a4a850a88b61ffc0d0d85fdf",
+      "FR-46": "853e09096e2d4bc1c4fa4585643493bd6a4bee9e64c46afe44c45797cbe861ee",
+      "FR-47": "4c056ceff9acf8dcce99c3c49057dc3d9ffe0e551ed267cd80cf462e49ad3d7b",
+      "FR-48": "e9881b1cd920b90d63775e4f94e45ae077401980ce56435295b96fa203010c71",
+      "FR-49": "6675e0508c5850aa6fdece4cacfd0e330cd2620d84ec7888eceb7edf5d11bd2f",
+      "FR-5": "ee4597d7c9842699be248bdd0c68f8d3575aae50147073042b8985da1c373c74",
+      "FR-50": "822301fd92b43096baa7894da9693b1cdf187613dd27db325ef42fd238b58b65",
+      "FR-51": "d6b3de66d62c728a2ed97c37abd0a7d97a5614406009eeeb77402731f78b2766",
+      "FR-52": "7776b6ac1956cd36b00fdc9cf591c45134016654fd6ecf521f5a2688f829f76b",
+      "FR-53": "2685e2e85ba4f4734aacfca53ce99dbdde9714bdd8fdb28379ee22f4867348b5",
+      "FR-54": "346dc18f670506349fed850047c34a3ab3a259b3083c1df0d601841a3a793ef2",
+      "FR-55": "6a3c8a1174098ed010ae29d57af3b167cfc2313e0a59d716fb23198eb854f913",
+      "FR-56": "597e0d637d3004e5afbae5a3ba0969e399b5e6db3277fa40dfb411c6a95f2e28",
+      "FR-57": "8c6d50b775a230755700aac6330f0cd960debf78682d829c401c7b03c1168a61",
+      "FR-58": "bcbed1da9bcf6859a3238d7894e7c344a14c606318ce2b92c89d5436d50bd7f2",
+      "FR-59": "8d6b72a247523e3a4118510c8de773e971cb6cec04a30723c68591c11cb27ed3",
+      "FR-6": "dcbeeaac2eba46291148ea6c2d3d9ad2f3b6f1c3369c3ad63dd548612ba9f389",
+      "FR-60": "a84a1000bc9bed9c14318c36e9960d68f5e640d12fb558af395e02123aba1927",
+      "FR-61": "7ebda382d57f162f76e2ffa4e53a18776bc7ff74b2a0fd0a7e9cb6147126f1d4",
+      "FR-62": "4150c16ac123f687a468902a38698418c3f051be33f79df5d182b50be48d5710",
+      "FR-7": "51d7b65a9c60ceaee9937b1b424e4ae6796b56b0333d49861ea5d46ea7fa8e1c",
+      "FR-8": "d5756a46723c8efcba6a27e60ae3d08bde40908843e7fc098bdea25713123d24",
+      "FR-9": "5c1d1edf1a313bace9371387133d5c0f1be16d112d91973cc43639506e409e95"
+    },
+    "high_water": 62,
+    "requirements": {
+      "a-build-has-a-driver-a-level-a-the-flow-staffs-the-builds-people": "FR-4",
+      "a-build-has-a-driver-a-level-an-fast-approves-without-a-reviewer": "FR-6",
+      "a-build-has-a-driver-a-level-and-its-p-a-lead-hands-out-the-work": "FR-5",
+      "a-build-has-a-driver-a-level-and-its-pe-a-task-names-its-builder": "FR-3",
+      "a-build-has-a-driver-a-level-and-its-peo-no-level-strands-a-task": "FR-11",
+      "a-build-has-a-driver-a-level-and-its-peop-task-records-its-level": "FR-2",
+      "a-build-has-a-driver-a-level-and-its-people-budget-and-window": "FR-9",
+      "a-build-has-a-driver-a-level-and-its-people-gated-is-todays-gate": "FR-8",
+      "a-build-has-a-driver-a-level-and-its-people-landing": "FR-10",
+      "a-build-has-a-driver-a-level-and-its-people-start-a-build": "FR-1",
+      "a-build-has-a-driver-a-level-reviewed-is-anyone-but-the-builder": "FR-7",
+      "a-finished-spec-gets-a-buil-fires-when-the-last-task-is-approved": "FR-47",
+      "a-finished-spec-gets-a-build-large-builds-are-reviewed-in-parts": "FR-57",
+      "a-finished-spec-gets-a-build-retro-figures-come-from-the-records": "FR-50",
+      "a-finished-spec-gets-a-build-retrosp-transcripts-of-flagged-runs": "FR-56",
+      "a-finished-spec-gets-a-build-retrospec-readable-on-the-spec-page": "FR-53",
+      "a-finished-spec-gets-a-build-retrospecti-every-claim-is-grounded": "FR-52",
+      "a-finished-spec-gets-a-build-retrospecti-job-on-the-manager-page": "FR-46",
+      "a-finished-spec-gets-a-build-retrospecti-lessons-go-to-the-vault": "FR-54",
+      "a-finished-spec-gets-a-build-retrospectiv-reads-the-whole-record": "FR-49",
+      "a-finished-spec-gets-a-build-retrospective-never-blocks-the-work": "FR-55",
+      "a-finished-spec-gets-a-build-retrospective-operator-asks-for-one": "FR-48",
+      "a-finished-spec-gets-report-covers-what-worked-and-what-did-not": "FR-51",
+      "every-task-comes-with-a-recom-follow-up-reopens-a-finished-build": "FR-21",
+      "every-task-comes-with-a-recomme-follow-up-takes-the-build-people": "FR-20",
+      "every-task-comes-with-a-recommended-build-build-opens-with-picks": "FR-17",
+      "every-task-comes-with-a-recommended-build-checker-is-not-builder": "FR-16",
+      "every-task-comes-with-a-recommended-build-every-task-recommended": "FR-12",
+      "every-task-comes-with-a-recommended-build-one-driver-still-holds": "FR-25",
+      "every-task-comes-with-a-recommended-builde-stopped-stays-stopped": "FR-24",
+      "every-task-comes-with-a-recommended-builder-a-missing-pick-warns": "FR-18",
+      "every-task-comes-with-a-recommended-builder-an-asks-how-to-judge": "FR-14",
+      "every-task-comes-with-a-recommended-builder-and-flow-picks-it-up": "FR-23",
+      "every-task-comes-with-a-recommended-builder-and-per-model-record": "FR-15",
+      "every-task-comes-with-a-recommended-builder-and-reopening-warns": "FR-22",
+      "every-task-comes-with-a-recommended-builder-pick-no-longer-open": "FR-19",
+      "every-task-comes-with-a-recommended-weighs-model-cost-complexity": "FR-13",
+      "the-build-card-shows-where-check-time-w-check-time-counted-whole": "FR-59",
+      "the-build-card-shows-where-check-time-went-card-shows-checks": "FR-62",
+      "the-build-card-shows-where-check-time-went-landing-wait": "FR-61",
+      "the-build-card-shows-where-check-time-went-old-runs-unknown-wait": "FR-60",
+      "the-build-card-shows-where-check-time-went-slot-time-recorded": "FR-58",
+      "the-build-dialog-redesigned-a-change-is-visible-and-undoable": "FR-39",
+      "the-build-dialog-redesigned-a-closed-agent-is-not-chosen": "FR-40",
+      "the-build-dialog-redesigned-agents-as-everywhere-else": "FR-44",
+      "the-build-dialog-redesigned-fast-has-no-checker": "FR-43",
+      "the-build-dialog-redesigned-matches-the-mock": "FR-45",
+      "the-build-dialog-redesigned-no-task-checks-its-own-work": "FR-41",
+      "the-build-dialog-redesigned-one-plan-two-sections": "FR-37",
+      "the-build-dialog-redesigned-opens-on-the-recommendation": "FR-38",
+      "the-build-dialog-redesigned-what-is-shown-is-sent": "FR-42",
+      "the-build-plan-lives-in-the-spec-a-hand-only-places-on-the-board": "FR-35",
+      "the-build-plan-lives-in-the-spec-and-dialog-opens-with-the-spec": "FR-28",
+      "the-build-plan-lives-in-the-spec-and-e-check-goes-to-its-checker": "FR-34",
+      "the-build-plan-lives-in-the-spec-and-every-agents-read-the-build": "FR-30",
+      "the-build-plan-lives-in-the-spec-and-every-lead-told-the-people": "FR-36",
+      "the-build-plan-lives-in-the-spec-and-every-old-names-still-build": "FR-27",
+      "the-build-plan-lives-in-the-spec-and-every-t-choices-in-the-spec": "FR-29",
+      "the-build-plan-lives-in-the-spec-and-every-task-build-end-shown": "FR-31",
+      "the-build-plan-lives-in-the-spec-and-every-task-goes-one-checker": "FR-26",
+      "the-build-plan-lives-in-the-spec-and-every-task-goes-one-driver": "FR-32",
+      "the-build-plan-lives-in-the-spec-flow-gives-task-to-its-builder": "FR-33"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "a-build-has-a-driver-a-level-and-its-people-start-a-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: how a spec is built is chosen when building starts, not inside the spec; the record is what slices F and G read.",
+      "statement": "Starting a build of an approved document records a build with its driver (flow, lead or hand), level (fast, reviewed or gated), builders, reviewer pool, lead, budget cap, window and landing, readable afterwards from the document; Build and 'Approve and build' open with the recommended build filled in; a second build of the same document is refused while one is running, naming it."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-and-its-peop-task-records-its-level",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "'Every task records the level it was built under' (roadmap); a null level keeps every flow and task created before this change behaving as it does now.",
+      "statement": "Every task a build covers records that build and its level when the build starts (or when it joins a running build), and every transition of that task records the level that governed it; a task outside any build records none and is governed exactly as today."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-and-its-pe-a-task-names-its-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1046. Kept rather than refused for the reason `reviewer` is (spec_payload.py:164-167): an author cannot know which agents the running machine has. Applied at build start, not approval, because slice C makes approval a plan.",
+      "statement": "A spec task may declare a builder by agent name; when a build starts, a declared builder that is an open agent becomes the task's assignee unless the operator changed it in the Build dialog, and one that is not is kept on the task, reported in the start's response, and the task left for the driver to hand out."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-a-the-flow-staffs-the-builds-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-27: T3 went to the Architect (Opus) only because it was free.",
+      "statement": "A flow-driven build hands fresh work only to its builders and staffs reviews only from its reviewer pool (each list, when empty, meaning any free agent as today); a task's own declared builder or reviewer still takes precedence; no other agent is given a turn on the build's tasks."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-and-its-p-a-lead-hands-out-the-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The lead exercises the judgement the 2026-10-25 retrospective found missing in the middle; its authority is scoped to one build (roadmap non-goal: no project-wide god agent).",
+      "statement": "A lead-driven build gives its lead a turn when it starts and whenever one of its tasks is completed, sent back, approved or rejected, without stacking a second brief on an unread one; the lead hands a task to one of the build's builders, or a review to one of its reviewer pool, with a tool answered only for the lead of that task's running build; a hand-driven build starts no turn at all."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-an-fast-approves-without-a-reviewer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice B's non-goal names Fast as where author-may-not-approve becomes a choice; slice B's resolved question says already-built tasks close at once at Fast.",
+      "statement": "At Fast, a completed task is approved without a reviewer turn: by its builder or its build's lead directly from completed, or, in a flow-driven build, by the flow once the task's check run has passed; and closing a document's tasks as already built (slice B) at Fast approves them at once."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-reviewed-is-anyone-but-the-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "At Reviewed, any agent other than the task's builder (the lead included) or the operator approves it, and requirements the task serves that lack accepted evidence are reported in the approval's response, never refused."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-and-its-people-gated-is-todays-gate",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "At Gated, the builder cannot approve, and approval is refused until every requirement the task serves has evidence accepted, as a `gate`-rigor document's tasks are today."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-and-its-people-budget-and-window",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The night of 2026-10-26/27 cost ~$44 with nothing to stop it; turn_usage carries api_equivalent_usd_micros on 428 of 436 turns on :8000 (read-only query, 2026-10-27).",
+      "statement": "A flow- or lead-driven build hands out no new turn before its window opens, after it closes, or once the API-equivalent cost of its runs reaches its cap; turns already running finish; reaching the cap stops the build with the spend and the cap in its reason and notifies the operator, and raising the cap or extending the window resumes it."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-and-its-people-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A build lands its approved work on the project's main branch as today, or nowhere: a task of a build that lands nowhere is approved with nothing merged and its integration record says the build lands nowhere."
+    },
+    {
+      "key": "a-build-has-a-driver-a-level-and-its-peo-no-level-strands-a-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice B's invariant, extended: levels and a lead are new inputs to its one decision, and must not add a dead end.",
+      "statement": "For every level, every non-terminal status and every holder (none, the builder, another agent, the mender, the build's lead), at least one actor can move the task on with the tools it is offered, blocked excepted (its mover is the operator)."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-build-every-task-recommended",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Naming people only where they differ from the default is why the split reaches the operator undone.",
+      "statement": "An author writing a change document is asked to name a builder and a checker on every task, chosen from the open agents, each with a one-sentence reason."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-weighs-model-cost-complexity",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The author is told each open agent's model, and each reason states the pick in terms of that model's cost and performance and the task's complexity, and nothing else. Within one document, a hazardous task and a routine task can receive different agents."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-builder-an-asks-how-to-judge",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A search or review costs quota, and the operator knows whether the author's view is current.",
+      "statement": "Before naming people on a document larger than a fix, the author states its current view of the roster's models and asks the operator which sources to use, in any combination: what it already knows, a web search, or a review of this project's record. It uses only those chosen, and records what it found in the document's evidence. If a chosen source is unavailable, it says so rather than presenting a guess as the finding."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-builder-and-per-model-record",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The review needs figures an agent cannot otherwise reach. An agent's model can change, so attributing by agent would credit the wrong model.",
+      "statement": "Any agent can read this project's record per model: tasks built, send-backs by reason class, and API-equivalent cost, each with its sample size. A task counts under the model that actually ran its build turns, and unpriced turns are reported as unpriced, not counted as zero."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-build-checker-is-not-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A builder cannot check their own work at the Reviewed level, so such a pick could never be carried out.",
+      "statement": "A task's recommended checker is never its recommended builder. When a project has one open agent, the checker is left empty and the reason says why."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-build-build-opens-with-picks",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "Build opens with each task's recommended builder and checker selected and its reasons visible beside that task's row. The operator can change any of them, and the choice made is what is built."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-builder-a-missing-pick-warns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approvals are scarce: warn, do not gate (operator, 2026-10-08).",
+      "statement": "A task with no recommended builder or checker, or a pick with no reason, draws a warning on the document naming the task, and never blocks approval."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-builder-pick-no-longer-open",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a recommended agent is no longer open at Build, the dialog says so on that task's row and does not select them. Documents with no recommendations open Build as they do today."
+    },
+    {
+      "key": "every-task-comes-with-a-recomme-follow-up-takes-the-build-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task filed against a spec whose build is running goes to that build's default builder and is checked by its default checker, unless the task names its own."
+    },
+    {
+      "key": "every-task-comes-with-a-recom-follow-up-reopens-a-finished-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task filed against a spec whose latest build finished by running out of work reopens that build, however long ago it finished, at the same level, landing and budget cap, and takes its people as a running build's follow-up does. The build record shows that it reopened, and the spec stops reading as done until the task has landed."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-builder-and-reopening-warns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator chose to manage unwanted restarts themselves (2026-11-01), which works only if they learn of a restart while they can still stop it.",
+      "statement": "Every reopening shows the operator a warning on the Overview screen, naming the spec, the task, who filed it, and how long ago the build had finished, with a way to stop the build from the warning. The warning stays until the operator dismisses it or the build ends."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-builder-and-flow-picks-it-up",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a flow-driven build, a follow-up is started by a flow within two firings of being filed, including when the build's earlier flow had already stopped on an empty queue, with no operator or agent action. A hand-driven build's follow-up waits on the board under its builder for the operator to start."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-builde-stopped-stays-stopped",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A stop is a decision; a finish is only the absence of work. Reopening a stopped build would spend what someone chose to stop spending.",
+      "statement": "A follow-up filed against a spec whose latest build was stopped, whether by the operator, its budget cap or its window, or against an archived spec, restarts nothing and shows no reopening warning. It stays on the board with no build, the filer is told why, and on a non-archived spec the operator's next Build takes it in."
+    },
+    {
+      "key": "every-task-comes-with-a-recommended-build-one-driver-still-holds",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Two follow-ups filed together reopen one build and one flow and show one warning naming both, and a second driver on the reopened build is refused as on any running build."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-goes-one-checker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: one person checks it. Having two roles that each judge the work is what left the dialog with fields nobody filled.",
+      "statement": "A change document names, for each task, at most one builder and at most one checker, plus a build-wide default builder and default checker; the checker of a task is the single agent who both tests it and records its verdict."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-every-old-names-still-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approved documents are not reopened just to rename a field, and a build of one must not lose its reviewer. The tester wins because the single checker drives the product (operator, 2026-10-29).",
+      "statement": "A document saved before this change that names `reviewer`, `tester` or a task's own `reviewer` builds with those agents as its checkers, without the document being edited. A task's own reviewer is that task's checker; otherwise the tester, if named, is the default checker, else the reviewer."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-dialog-opens-with-the-spec",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "The Build dialog opens with every person the document names already selected: the default builder, the default checker, and each task's builder and checker. No person the document names is shown only as text, or left out."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-every-t-choices-in-the-spec",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Starting a build writes the operator's choices into the spec document: the driver, the level, the default builder and checker, each task's builder and checker, the lead, the budget cap, the window and the landing. They sit beside the author's recommendation, labelled as the operator's, and the recommendation is left unchanged."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-every-agents-read-the-build",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "`read_spec_document` returns the document's running build, with every choice listed in choices-in-the-spec, marked as the operator's choice and kept apart from `delivery`. A turn started to work on or check one of the build's tasks names the build's driver and that task's builder and checker."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-build-end-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: the last ended build explains the latest change of plan; a full history would grow the tracked file on every restart.",
+      "statement": "When a build stops or finishes, the spec document shows that build as ended, stopped or finished, with when, and `read_spec_document` no longer reports it as running. The document holds at most the running build and the most recent ended build; an older ended build leaves the document and stays on the build record."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-every-task-goes-one-driver",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1083: a second driver re-pointed a hand build's tasks at a flow the operator never chose.",
+      "statement": "Creating a flow or a loop for a document whose build is running is refused with 409, and the refusal names the build and its driver. No task's flow or loop changes as a result. Starting a build that is driven by a flow still creates that flow."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-flow-gives-task-to-its-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: hold rather than hand to someone else, so a broken plan shows instead of being quietly substituted.",
+      "statement": "In a flow-driven build, a task whose builder is an open agent is worked only by that agent, whether or not the agent is in the build-wide builders list or is named as a checker elsewhere. While that builder is busy, the task waits for them and is not given to anyone else. A task whose builder is not an open agent is held, given to nobody, and says on the task that its builder is not an open agent."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-e-check-goes-to-its-checker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a flow- or lead-driven build at Reviewed or Gated, a finished task's check goes to that task's checker, or to the default checker when the task names none, and never to the agent that built it. A checker that is not an open agent holds the check and says so on the task, rather than passing the check to someone else. At Fast no check is handed out."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-a-hand-only-places-on-the-board",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: by hand is for me to start it, and I send the check myself. Pending rather than Assigned, because a move to Assigned starts the agent today.",
+      "statement": "In a hand-driven build, every task whose builder is an open agent shows on the board in Pending with that agent named as its builder, and its checker named. No run is started and no message or queued input reaches any agent until the operator asks one to pick up a task or a check."
+    },
+    {
+      "key": "the-build-plan-lives-in-the-spec-and-every-lead-told-the-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a lead-driven build, the lead's brief names each task's builder and checker, and a task the lead hands to anyone other than its named builder is recorded with who it went to."
+    },
+    {
+      "key": "the-build-dialog-redesigned-one-plan-two-sections",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The build plan is one plan: the operator reads and changes it in one place, task by task, as the agents will be given it.",
+      "statement": "Build and Approve and build on a change document MUST open one dialog with two sections: 'How it runs' (who hands out the work, the level, the lead when the driver is a lead, the flow's stop rule and schedule in words when it is a flow, where the work lands, the budget cap, and when the build stops handing out work) and 'Who builds and checks' (the default builder, the default checker, and one row per declared task, in the document's order and by its title, with that task's builder and checker)."
+    },
+    {
+      "key": "the-build-dialog-redesigned-opens-on-the-recommendation",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator decides; the recommendation and its reason are what they decide from, and a missing reason is a gap in the spec they should see.",
+      "statement": "Every choice in the dialog MUST open on the document's recommendation, with the reason the document gives for it shown beside the control; a task's builder or checker that is recommended without a reason MUST read 'No reason given', and one with no recommendation MUST read 'No recommendation'."
+    },
+    {
+      "key": "the-build-dialog-redesigned-a-change-is-visible-and-undoable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task's builder or checker changed from its recommendation MUST name the recommended agent and offer to put it back, and the dialog MUST say how many tasks differ from the recommendation, or that the plan is as the document recommends."
+    },
+    {
+      "key": "the-build-dialog-redesigned-a-closed-agent-is-not-chosen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "What is shown is what is sent: a closed agent selected silently would be sent and refused, or worse, sent and stall.",
+      "statement": "A recommended agent that is not an open agent of the project MUST NOT be selected; its row MUST say that the recommended agent is not open, and the task falls to the default."
+    },
+    {
+      "key": "the-build-dialog-redesigned-no-task-checks-its-own-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub refuses a task whose builder would be its checker; the dialog says so before the operator presses Build, on the row that causes it.",
+      "statement": "At the Reviewed and Gated levels, a task whose builder (its own, else the default) is also its checker (its own, else the default) MUST be marked in its row, and the dialog MUST NOT confirm until no task is."
+    },
+    {
+      "key": "the-build-dialog-redesigned-what-is-shown-is-sent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The build the Hub records is the operator's decision (a-build-has-a-driver-a-level-and-its-people); the dialog must not add or drop a choice between screen and record.",
+      "statement": "Confirming MUST send exactly what the dialog shows: driver, level, landing, default builder and checker, each task's builder and checker (empty where it falls to the default), the lead for a lead, the cap when one is given, the window end chosen, and as builders the distinct agents that build some task. The flow's agent MUST be sent only when the default builder differs from the recommended flow agent."
+    },
+    {
+      "key": "the-build-dialog-redesigned-fast-has-no-checker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "At the Fast level the dialog MUST NOT show the default checker or any task's checker, and MUST NOT send checkers."
+    },
+    {
+      "key": "the-build-dialog-redesigned-agents-as-everywhere-else",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The mock rules (hub/ui/mock/README.md, rules 2 and 5); today's dialog breaks both.",
+      "statement": "Every agent the dialog lists MUST carry its colour as the rest of the app shows it and, where the Hub reports one, its model; the dialog MUST use the app's themed controls only, with no native select, checkbox or date input."
+    },
+    {
+      "key": "the-build-dialog-redesigned-matches-the-mock",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The dialog the app ships MUST match the mock the operator approved on 2026-11-03, in dark and in light."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retrospecti-job-on-the-manager-page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Every model the Hub spawns on its own is the operator's to switch on and pay for; the manager registry is where that choice lives today (hub/hub/manager.py JOBS).",
+      "statement": "The Manager page lists a 'Build retrospective' job that the operator can turn on or off and give a runner and a model per project, like the other manager jobs; it needs a runner, and with no row or turned off it never fires automatically."
+    },
+    {
+      "key": "a-finished-spec-gets-a-buil-fires-when-the-last-task-is-approved",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub already detects this moment for the chapters job (chapters_job.py LAST_TASK_APPROVED); a build that finished is the one whose lessons are cheapest to miss.",
+      "statement": "While the job is on with automatic firing, approving the last open task of a spec document in any project fires exactly one retrospective of that document's build."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retrospective-operator-asks-for-one",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The builds most worth reviewing are often the ones that stalled and never finished, like the 2026-10-25 flow.",
+      "statement": "A 'Review this build' action on a spec document's page fires a retrospective of that document's build whenever the job has a runner, whether or not every task is approved and whatever the automatic choice; while one is running for that document a second request starts nothing and says one is in progress."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retrospectiv-reads-the-whole-record",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A retrospective's input holds, for every task of the document: its status transitions with who and when, its runs with agent, model, duration, outcome and cost, its notes, its evidence and every decision on it, its check-gate runs and results, the stalls and mender interventions naming it, the checkpoint summaries of its runs, and the document's amendments, reconcile gaps and the ask_user questions raised in its runs with how long each waited for an answer."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retro-figures-come-from-the-records",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A model's arithmetic over dozens of runs is a guess, and in a build reviewed in parts no single call sees every run.",
+      "statement": "Every time and cost figure in the report (per task: time building, waiting for review, in the check gate, and waiting to be started; per agent and per task: cost and tokens; build totals) is computed by the Hub from the records, not estimated by the model, and equals what the records give."
+    },
+    {
+      "key": "a-finished-spec-gets-report-covers-what-worked-and-what-did-not",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The report has these sections: where the time went; send-backs, each classified as a defect in the work, caused by the tooling or process, or a spec that was wrong; what the spec missed (amended or added criteria, tasks added mid-build, criteria reported as unsatisfiable, requirements without accepted evidence, reconcile gaps); staffing; cost; friction (stalls, flaky gate tests, operator waits); what worked; what to improve, each improvement labelled as about the project's code and checks, how its specs are written, how its builds are staffed and run, or the tooling itself; and the runs whose transcripts it read."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retrospecti-every-claim-is-grounded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An ungrounded review finding cannot be checked or acted on; the Hub checking ids is how spec-vault-check already keeps a model honest.",
+      "statement": "Every finding, lesson and improvement in a retrospective, whether from a part review or the final report, cites at least one task, run, event or evidence id belonging to that document's build; the Hub drops any that cites none or cites an id outside the build, and the report shows how many were dropped."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retrospec-readable-on-the-spec-page",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The document's spec page shows its newest retrospective with when it was made, what triggered it, the model, how many parts it was reviewed in and its cost; earlier retrospectives of the same document stay reachable; a failed firing shows as failed with the reason and a way to run it again."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retrospecti-lessons-go-to-the-vault",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents writing the next spec read the vault, not old spec pages; tracked so every machine working the project gets the same lessons (operator, 2026-10-29).",
+      "statement": "Each retrospective that is written adds one dated, tracked source to that project's vault holding its lessons, naming the document it reviewed, so the project's later turns on any machine find it through the vault map; it is queued for distillation when the distillation job is on."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retrospective-never-blocks-the-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A retrospective that is off, running, failed or empty never delays or refuses approving a task or approving or archiving a document; each firing, and each part of a firing, is recorded as a manager_job_fired event with its outcome and usage, like the other jobs."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-retrosp-transcripts-of-flagged-runs",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Transcripts are needed to explain why a flagged event happened; unflagged transcripts are mostly file reads and test runs. The operator chose no budget on flagged transcripts (2026-10-29).",
+      "statement": "A run's full transcript is included exactly when the run is flagged: it ended in a send-back, a stall names it, it failed or was stopped, it is a mender run, or its duration is more than twice the median of the build's runs. Every flagged run's transcript is included, with no budget, and the report lists the runs whose transcripts it read."
+    },
+    {
+      "key": "a-finished-spec-gets-a-build-large-builds-are-reviewed-in-parts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With no transcript budget, the builds most worth reviewing (long, troubled ones) are the ones that will not fit; a retrospective that fails on exactly those is worth little (operator, 2026-10-29).",
+      "statement": "When a build's input does not fit one call to the chosen model, the Hub splits it into parts that each fit, with no task's records divided across parts, reviews each part separately, and then writes one report from the part reviews and the build-wide figures; the report says how many parts it was reviewed in. A build that fits is reviewed in one call."
+    },
+    {
+      "key": "the-build-card-shows-where-check-time-went-slot-time-recorded",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "Each check run, whether a task's or a landing batch's, records the time it got a check slot, and the record survives a Hub restart. A run that never got a slot (cancelled or superseded while waiting) records none."
+    },
+    {
+      "key": "the-build-card-shows-where-check-time-w-check-time-counted-whole",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": "AWOAW's 2 h of check runs showed as 17 min because the wall bar gives overlapping instants to building first.",
+      "statement": "A build's check figures count every check run for the build's tasks, including landing-batch runs, for its full duration, whether or not building or reviewing happened at the same time. The figures are: time running, time waiting for a slot, number of runs, number passed, number failed, and number timed out. A run in which any check ended by its time limit is counted as timed out and not as failed."
+    },
+    {
+      "key": "the-build-card-shows-where-check-time-went-old-runs-unknown-wait",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "A check run with no recorded slot time counts its whole duration as running. When every run of a build lacks a slot time, the build's waiting figure is unknown (null), not zero. When only some runs lack one, the figure covers the runs that have one, and the build reports how many runs had no slot time."
+    },
+    {
+      "key": "the-build-card-shows-where-check-time-went-landing-wait",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "A build's figures include, over its tasks that have landed on main, the total and the longest time from a task's last approval to its landing. They also give the number of approved tasks still waiting to land, and the longest wait among those so far."
+    },
+    {
+      "key": "the-build-card-shows-where-check-time-went-card-shows-checks",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "The build card shows a Checks meter with check running time and slot-waiting time as its parts, and its total. Beside it, the card shows the timed-out count and the landing wait (total, longest, and any still waiting). The wall-time bar is unchanged. An unknown figure reads as unknown, not as 0."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Builds"
+}

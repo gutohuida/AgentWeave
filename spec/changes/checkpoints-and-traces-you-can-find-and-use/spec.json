@@ -1,0 +1,100 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which statistics and groupings the traces view offers. Settled in slice 'traces-you-can-browse' (operator, 2026-11-02, then confirmed in the mock): cost, duration and errors first; tokens, model and tool calls and waiting time second; grouping switchable between agent, model, task, conversation, kind and day; the view lives inside Activity, with the Hub's own traces behind a quieter 'Hub internals' choice.",
+      "resolved": true
+    },
+    {
+      "question": "What the woven view weaves. Operator 2026-11-02: the agents working one task or build, one lane per agent, with hand-off links (the recommendation).",
+      "resolved": true
+    },
+    {
+      "question": "Slice order. Operator 2026-11-02: traces first.",
+      "resolved": true
+    }
+  ],
+  "problem": "Checkpoints are generated well (75 on the operator's Hub on 2026-11-02, 73 passed their probe), but the only screen for them is a modal limited to one conversation, reached from an overflow menu. 75 checkpoints are spread across 74 conversations, so it rarely shows more than one, and a conversation that was carried over from a checkpoint shows none. Bodies are raw markdown, labels are internal vocabulary, and nothing tells one checkpoint from another at a glance. A checkpoint can only be used through the one-time cut-over offer, which keeps the same agent and archives the old conversation.\n\nTraces open one run at a time, from a faint per-turn link or a task story row. The only list is ten rows inside Project Settings, filtered by kind only. There is no trace of a whole conversation, no agent or time filter, no grouping, and no statistics.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Traces: a project-level traces view with filters, grouping and statistics, as a view inside Activity.",
+      "Traces: a trace of a whole conversation, choosing which runs and from when.",
+      "Traces: a woven view of the agents working one task or build, one lane per agent on a shared time axis, with the hand-offs between them drawn as links.",
+      "Checkpoints: a project-level view and links from where work happens; each checkpoint's trigger, agent, conversation and runs shown; a readable body; a title and summary written by the checkpoint itself, and filled once for existing checkpoints.",
+      "Checkpoints: starting a new conversation from any checkpoint, older ones included, with any agent."
+    ],
+    "non_goals": [
+      "A separate, ongoing distillation or manager run over checkpoints. The checkpoint generation is already that run; it is asked for a title and summary instead (operator, 2026-11-02).",
+      "How checkpoints are probed.",
+      "Trace retention, OTLP export, download and clearing; they stay in Project Settings.",
+      "What the Hub records as spans."
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "From Activity → Traces the operator narrows to one agent's runs over a chosen time range, groups them by another dimension, and sees statistics that change with the filter.",
+      "intent": "Traces get a view of their own inside Activity, rather than a list in Settings, where the operator filters by agent, conversation, task, run, kind and time range, groups them in different ways, and reads statistics over what is shown.",
+      "key": "traces-you-can-browse",
+      "title": "A traces view with filters, grouping and stats"
+    },
+    {
+      "builds_after": [
+        "traces-you-can-browse"
+      ],
+      "done": "Opening a conversation's trace shows all its runs on one timeline, and narrowing to a run range or start time redraws it.",
+      "intent": "From a conversation the operator opens one trace covering its runs, choosing which runs and from when, instead of one run at a time.",
+      "key": "conversation-trace",
+      "title": "A trace of a whole conversation"
+    },
+    {
+      "builds_after": [
+        "conversation-trace"
+      ],
+      "done": "For a build with several agents, the woven view shows each agent's runs in its own lane in the order they happened, and the hand-off that started each run is drawn from the lane it came from.",
+      "intent": "For one task or build, the operator sees the agents who worked it as lanes on a shared time axis, each run a block that opens its trace, with the hand-offs between agents (an assignment or message that started a run, a completion, a review, a send-back) drawn as links between lanes.",
+      "key": "woven-traces",
+      "title": "Woven traces"
+    },
+    {
+      "builds_after": [],
+      "done": "On the operator's Hub, the checkpoints view lists all checkpoints across agents and conversations, filterable by agent and trigger, and every checkpoint, old and new, shows a title and summary.",
+      "intent": "The operator opens one place and sees every checkpoint in the project. Each is identifiable at a glance by its title, agent, trigger and date, and opens as readable text with the runs it covers. A carried-over conversation shows the checkpoint it started from.",
+      "key": "checkpoints-you-can-read",
+      "title": "Every checkpoint, findable and readable"
+    },
+    {
+      "builds_after": [
+        "checkpoints-you-can-read"
+      ],
+      "done": "Starting from a checkpoint that was already carried over, with a different agent than the one that produced it, opens a new conversation for that agent whose first input is that checkpoint, and the original conversation is not archived.",
+      "intent": "The operator picks any checkpoint, including an older or already carried-over one, chooses any agent, and a new conversation for that agent starts from it, leaving the original conversation as it was.",
+      "key": "start-from-a-checkpoint",
+      "title": "Start a conversation from any checkpoint"
+    }
+  ],
+  "summary": "Rework the checkpoint and trace screens so they serve how AgentWeave is used: picking up where an agent left off (checkpoints), and debugging a run or auditing a task or build (traces). Each gets a project-level view and links from the screens where the work happens. Traces are built first (operator, 2026-11-02). Each slice is mocked interactively once it is specified, then approved and built against that mock.",
+  "tasks": [],
+  "title": "Checkpoints and traces you can find and use"
+}

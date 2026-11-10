@@ -1,0 +1,315 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "two task check runs and one landing-batch run queued while two other runs hold both slots",
+      "how_to_check": "hub tests at the slot-acquire seams in project_checks.py and landing_queue.py; fail on master (no column)",
+      "key": "slot-survives-restart",
+      "requirement": "slot-time-recorded",
+      "then": "each run's stored row has a slot time later than its started_at, including the landing-batch run, and a run cancelled while waiting has none",
+      "when": "slots free and the waiting runs start their checks, and the modules' in-memory state is then cleared as a restart would"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build whose three tasks build in parallel for 1 h while their check runs total 2 h, one of which timed out, with rows in the order the tally's queries return them",
+      "how_to_check": "hub test through the build figures route, modelled on AWOAW 2026-11-05",
+      "key": "awoaw-shape",
+      "requirement": "check-time-counted-whole",
+      "then": "check running plus waiting totals 2 h, the timed-out count is 1 and that run is not in failed, and the wall bar's parts still sum to the build's wall time. On master the route gives no running/waiting/timed-out figures",
+      "when": "the build card's figures are read through the route the spec page calls"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build whose check runs have no slot time, and one mixing old and new runs",
+      "how_to_check": "hub test through the same route",
+      "key": "old-rows",
+      "requirement": "old-runs-unknown-wait",
+      "then": "the first reports waiting as null with its runs counted as running; the second reports the new runs' waiting and the count of runs with no slot time",
+      "when": "its figures are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with one task approved at 11:40 and landed at 16:58, one landed within 10 min, and one approved and not yet landed",
+      "how_to_check": "hub test through the same route",
+      "key": "landing-wait-figures",
+      "requirement": "landing-wait",
+      "then": "longest landed wait is 5 h 18 m, the total is their sum, and one task is reported still waiting with its wait so far",
+      "when": "its figures are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the build figures from the AWOAW-shaped fixture, and one with unknown waiting",
+      "how_to_check": "vitest on SpecBuilds with the route's payload",
+      "key": "card-renders",
+      "requirement": "card-shows-checks",
+      "then": "the Checks meter shows running and waiting with a 2 h total, the timed-out count and the landing wait appear, and the unknown waiting reads as unknown",
+      "when": "the spec page's build card renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fresh build on the trial Hub :8010 with two tasks whose checks run while both are still building",
+      "how_to_check": "scripts/drive drive written first and failing on master",
+      "key": "drive-live",
+      "requirement": "card-shows-checks",
+      "then": "the card's Checks total equals the sum of the build's check-run durations read from the check-run route, and the landing wait is shown",
+      "when": "both tasks are approved and land"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "bcbed1da9bcf6859a3238d7894e7c344a14c606318ce2b92c89d5436d50bd7f2",
+      "FR-2": "8d6b72a247523e3a4118510c8de773e971cb6cec04a30723c68591c11cb27ed3",
+      "FR-3": "a84a1000bc9bed9c14318c36e9960d68f5e640d12fb558af395e02123aba1927",
+      "FR-4": "7ebda382d57f162f76e2ffa4e53a18776bc7ff74b2a0fd0a7e9cb6147126f1d4",
+      "FR-5": "4150c16ac123f687a468902a38698418c3f051be33f79df5d182b50be48d5710"
+    },
+    "high_water": 5,
+    "requirements": {
+      "card-shows-checks": "FR-5",
+      "check-time-counted-whole": "FR-2",
+      "landing-wait": "FR-4",
+      "old-runs-unknown-wait": "FR-3",
+      "slot-time-recorded": "FR-1"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "builder": "Default only: each task names its own. The migration goes to DeveloperOpus; the rest go to Developer on Sonnet for quota.",
+      "checker": "QA2: the migration warrants an Opus check, and one checker through the slice sees how the pieces fit.",
+      "mode": "Four chained tasks; a flow staffs each as the one before it is approved.",
+      "stop": "Stops when its tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decision 1: a separate Checks meter; the wall-time bar is not changed. The wall bar answers 'what was the build doing at each moment' and must still add up to the build's wall time. Check time overlaps other work, so it needs its own meter. Changing the bar's precedence would only hide building time instead.\n\nDecision 2: each check run records when it got its slot. Waiting is slot time minus queued time, and running is end minus slot time. This is one stored timestamp, not a second tally.\n\nDecision 3: a run recorded before this change has no slot time. Its whole time counts as running, and its waiting time is unknown (null), never 0, following the tally's rule (work_tally.py:15-17).\n\nDecision 4: the landing wait is read from records that already exist: the approval transition and the landing, per task.\n\nHazard: one migration adds a nullable column to task_check_runs. It needs no backfill, and rollback drops the column. The operator's :8000 Hub runs it on its next restart.",
+  "evidence": {
+    "checked": [
+      "hub/hub/work_tally.py:52 WALL_PARTS order; :481-494 checks.seconds already summed per check run, booked by task_scope(check.task_id); :751-850 _partition gives an instant to the first part running",
+      "hub/hub/project_checks.py:73 MAX_CONCURRENT_RUNS = 2; :1534-1539 slot wait held in memory only; :1808-1811 task runs take the slot; started_at is queue time",
+      "hub/hub/landing_queue.py:1313 and :1833: landing-batch runs take the same semaphore and record no wait",
+      "hub/hub/db/models.py TaskCheckRun: started_at, ended_at, ended_by, state, results; no slot column",
+      "hub/ui/src/components/spec/page/SpecBuilds.tsx:155-180: Tasks, Wall time and Cost meters; no Checks meter",
+      "Operator's Hub, read-only, 2026-11-05: AWOAW check runs about 2 h while the card's checks slice showed 17 min; AWOAW-1 waited 5 h 18 m from approval to main"
+    ],
+    "limits": [
+      "Which route the spec page reads build figures from was not traced here; the tally task names it",
+      "Whether landing batch rows tie cleanly to a task's landing time is for the tally task to confirm against task_landings",
+      "A landing batch's run is booked under the one task its row names, so a batch spanning two builds counts in one of them"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer",
+          "DeveloperOpus"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-05T23:10:14.984576+00:00",
+        "id": "build-efa66b3f8252",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-05T21:38:33.794078+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "card": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "drive": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "slot-time": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "tally": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "Exploring until the operator approves it. It builds after slice 1 has landed: both edit hub/hub/project_checks.py and hub/hub/landing_queue.py. Slice 1 changes how runs are judged and re-run, and this slice changes where a run takes its slot.",
+  "open_questions": [],
+  "problem": "The card's wall-time bar (hub/hub/work_tally.py:751-850, WALL_PARTS at :52) gives each instant to the first part that applies: building, then reviewing, then checks. With three tasks building in parallel, check time is almost all hidden behind building. The tally already sums check-run seconds (checks.seconds, :481-494), but the card does not show that figure.\n\nHow long a run waited for one of the MAX_CONCURRENT_RUNS = 2 check slots (project_checks.py:73) is held only in memory (_slot_waited, project_checks.py:1534-1539). A row's started_at is when it was queued, so waiting and running are summed together, and the split is lost when the Hub restarts. Task check runs take their slot in project_checks.py:1809; landing-batch runs take the same slot in landing_queue.py:1313 and :1833, and record no wait at all.\n\nA timeout counts as an ordinary failure (checks.failed). Time from approval to landing on main, which reached 5 h 18 m for AWOAW-1 on 2026-11-05, appears nowhere on the card.",
+  "requirements": [
+    {
+      "key": "slot-time-recorded",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "Each check run, whether a task's or a landing batch's, records the time it got a check slot, and the record survives a Hub restart. A run that never got a slot (cancelled or superseded while waiting) records none."
+    },
+    {
+      "key": "check-time-counted-whole",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": "AWOAW's 2 h of check runs showed as 17 min because the wall bar gives overlapping instants to building first.",
+      "statement": "A build's check figures count every check run for the build's tasks, including landing-batch runs, for its full duration, whether or not building or reviewing happened at the same time. The figures are: time running, time waiting for a slot, number of runs, number passed, number failed, and number timed out. A run in which any check ended by its time limit is counted as timed out and not as failed."
+    },
+    {
+      "key": "old-runs-unknown-wait",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "A check run with no recorded slot time counts its whole duration as running. When every run of a build lacks a slot time, the build's waiting figure is unknown (null), not zero. When only some runs lack one, the figure covers the runs that have one, and the build reports how many runs had no slot time."
+    },
+    {
+      "key": "landing-wait",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "A build's figures include, over its tasks that have landed on main, the total and the longest time from a task's last approval to its landing. They also give the number of approved tasks still waiting to land, and the longest wait among those so far."
+    },
+    {
+      "key": "card-shows-checks",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "The build card shows a Checks meter with check running time and slot-waiting time as its parts, and its total. Beside it, the card shows the timed-out count and the landing wait (total, longest, and any still waiting). The wall-time bar is unchanged. An unknown figure reads as unknown, not as 0."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-any-project-can-use-judged-against-a-known-failing-list/spec.json",
+    "slice": "the-build-card-shows-where-check-time-went"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Recording when a check run got its slot, for task runs and landing-batch runs",
+      "The tally's check figures for a build: running, waiting for a slot, timed out, and landing wait",
+      "A Checks meter on the build card showing them"
+    ],
+    "non_goals": [
+      "Changing the wall-time bar's parts or their precedence",
+      "Changing MAX_CONCURRENT_RUNS or how slots are shared",
+      "The project view and Activity tab: they read the same tally rows, but showing the new figures there is not part of this slice",
+      "Backfilling slot times for runs recorded before the change",
+      "Splitting a landing batch's run across the several tasks it carries: it stays booked as the tally books it today",
+      "Making checks faster"
+    ]
+  },
+  "summary": "The spec page's build card gets a Checks meter that counts every check run for the build's work, whether or not other work was going on at the same time. It splits that time into running and waiting for a check slot, counts timed-out runs on their own, and shows how long approved work waited to reach main. Today a build like AWOAW (2026-11-05) had about 2 h of check runs, but its card showed 17 minutes, because the wall-time bar gives each instant to building or reviewing before checks. This is slice 4 of 'Checks any project can use, judged against a known-failing list'.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: a drive script following the existing scripts/drive pattern.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checks the whole slice, so the agent that judges the evidence runs this drive first.",
+      "depends_on": [],
+      "description": "Write a drive under scripts/drive/ against the trial Hub :8010: a fresh build with two tasks whose checks overlap building, then approval and landing. It asserts the card's Checks total equals the sum of the check-run durations, and that a landing wait is shown. Clean up what it creates. Show it failing on master.",
+      "files": [
+        "scripts/drive/d1105_build_card_check_time.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "card-shows-checks",
+        "check-time-counted-whole"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive: the card accounts for a parallel build's checks"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus: a migration the operator's live Hub runs on restart (Tier 2), and edits to the landing queue that slice 1's retire task has just reshaped.",
+      "checker": "QA2",
+      "checker_reason": "Same checker through the slice; Opus for a migration on live data.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add a nullable slot time column to task_check_runs (migration, following the migration checklist in .claude/rules/). Set it at every place a run acquires the check semaphore: project_checks.py (~1809, task runs) and landing_queue.py (~1313 and ~1833, landing-batch runs). Leave it null for a run that never gets a slot. The in-memory _slot_waited may then read from the row. Failing hub tests first at each acquire seam.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/hub/project_checks.py",
+        "hub/hub/landing_queue.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "slot-time",
+      "requirements": [
+        "slot-time-recorded"
+      ],
+      "reviewer": null,
+      "title": "Record when a check run got its slot"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: additive figures in one module, read-only over existing records.",
+      "checker": "QA2",
+      "checker_reason": "Same checker through the slice; it must confirm the route's row order matches the test fixtures (CLAUDE.md, F190).",
+      "depends_on": [
+        "slot-time"
+      ],
+      "description": "In work_tally.py add check running and waiting seconds, the timed-out count (kept out of failed), the count of runs with no slot time, and the landing wait figures (total, longest landed, still waiting count and longest so far). Expose them through build_figures and the route the spec page reads. Leave _partition and WALL_PARTS unchanged. Hub tests go through the route, with rows in the order its queries return them.",
+      "files": [
+        "hub/hub/work_tally.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "tally",
+      "requirements": [
+        "check-time-counted-whole",
+        "old-runs-unknown-wait",
+        "landing-wait"
+      ],
+      "reviewer": null,
+      "title": "The tally counts check time whole, timeouts and landing wait"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: one more Meter beside the three the card already draws.",
+      "checker": "QA2",
+      "checker_reason": "Same checker through the slice; it runs the drive that checks the card against real check runs.",
+      "depends_on": [
+        "tally"
+      ],
+      "description": "Add a Checks meter to SpecBuilds.tsx (running and waiting parts, total), and show the timed-out count and the landing wait beside it, with unknown shown as unknown. Update the page model types and add a vitest using the route's payload. Rebuild the UI bundle (make ui / scripts/refresh_ui_bundle.py) and commit hub/ui/src with hub/hub/static/ui.",
+      "files": [
+        "hub/ui/src/components/spec/page/SpecBuilds.tsx",
+        "hub/ui/src/components/spec/page/model.ts",
+        "hub/ui/src/__tests__/",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "card",
+      "requirements": [
+        "card-shows-checks"
+      ],
+      "reviewer": null,
+      "title": "The build card's Checks meter"
+    }
+  ],
+  "title": "The build card shows where check time went"
+}

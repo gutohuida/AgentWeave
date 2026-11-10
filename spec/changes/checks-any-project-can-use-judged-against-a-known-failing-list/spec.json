@@ -1,0 +1,84 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "task_check_runs, landing_batches, task_landings, task_transitions on the operator's database (mode=ro), 2026-10-22 to 2026-11-05",
+      "Check-rule inventory of hub/hub/project_checks.py, landing_queue.py, flaky_tests.py and requirement_gate.py, with file:line references (subagent report, 2026-11-05)",
+      "The sweep check is marked fast with a 120 s limit and has a median of 121 s, timing out on 7 of 13 runs: a settings fix for the operator, not product work"
+    ],
+    "limits": [
+      "The known-failing list is designed from practice elsewhere, not yet tried here; slice 2's acceptance drive is the first test of it",
+      "Only Python and the UI's vitest are installed on this machine; other runners are proven by their report format, not run here"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Measured on the operator's Hub (read-only), 2026-10-28 to 2026-11-05: 110 landings had a median of 14 minutes from approval to main, so the queue works. But the full suite cost 80.5 h for 115 approved tasks. On 2026-11-05, five landings waited 1.5 to 5 h: batches were held because the Hub could not attribute failures. In one batch, main's run ended with pytest exit 3 and named no tests; in another, a check timed out. And one timeout was blamed on a task (Tier 0 fix AW-39).\n\nCode (hub/hub/project_checks.py:808-1190, hub/hub/landing_queue.py:1414-1516):\n- Attribution parses pytest's summary lines, rewrites pytest commands, and keeps a hard-coded list of about 30 pytest options.\n- A check that is not pytest can only be judged as a whole, and is never overridden.\n- Every batch failure is re-run on master and serially, then routed through override, hold or fix-task rules.\n- Each new shape of failure (an exit code, a truncated summary, a timeout) has needed another rule.\n\nBest practice in CI (merge queues such as bors, GitHub merge queue and Zuul; flaky-test quarantine at large CI shops):\n- Tools read structured results, not console output.\n- Failures already known on main, and flaky tests, are kept on a quarantine list with an owner, maintained by runs of main, and the merge gate ignores them.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "How a check reports which tests failed and how named tests are re-run, for any language or test runner",
+      "A per-project known-failing list (failing on main, flaky), with an owner task per entry, kept current by runs on main, consulted by the pre-review and landing gates",
+      "Retiring the pytest-specific parsing and the per-failure re-run, override and hold rules that the list replaces",
+      "Quick checks running at normal priority",
+      "The build card's check and queue time"
+    ],
+    "non_goals": [
+      "Making this repository's suite smaller or faster: that is the 'Checks cost less on a machine that is in use' roadmap (its tiered-tests slice)",
+      "Changing the merge queue's shape: test the merged result, move main to exactly what was tested, split a failing batch",
+      "Landing once per build: deferred until measured with the known-failing list in place",
+      "Time limits based on CPU time",
+      "Running checks on another machine or in CI"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "A non-Python testbed project whose check fails one test shows that test named in the check result, and its confirmation re-runs only that test through the check's own re-run command; this repository's checks are judged the same way through their report.",
+      "intent": "A check can name the structured test report it writes and a command that re-runs named tests. The Hub reads failing tests from the report, not from console output, so a JavaScript, Go or Rust project's check gets the same per-test judgement a pytest check gets today. The pytest-specific output parsing and command rewriting are retired.",
+      "key": "checks-report-their-tests",
+      "title": "Checks report which tests failed, in any language"
+    },
+    {
+      "builds_after": [
+        "checks-report-their-tests"
+      ],
+      "done": "A drive where main has a known-failing test and a task adds an unrelated failing test shows the task's batch landing past the known test and the new failure sent back to its author, with no per-batch re-run on main and no batch held.",
+      "intent": "The project has a list of tests known to fail on main or known to be flaky, each with an owner task. Runs on main keep it current, adding new failures and removing tests that pass again. A gate treats a failure on the list as not the work's, and a failure not on the list as the work's, without re-running it on main. A held batch waiting for the operator over an unattributable failure no longer happens.",
+      "key": "a-known-failing-list",
+      "title": "Failures already known are on a list, not re-argued"
+    },
+    {
+      "builds_after": [],
+      "done": "With 'give way' on and the machine loaded, a fast check's process runs at normal priority and a non-fast check's runs below it.",
+      "intent": "Checks marked fast, which an agent's completion waits for, run at normal priority even when the project's checks give way to the user; only the longer checks give way.",
+      "key": "quick-checks-do-not-give-way",
+      "title": "Quick checks run at normal priority"
+    },
+    {
+      "builds_after": [],
+      "done": "For a build like AWOAW (2026-11-05), the card accounts for its 2 h of check runs, where today it shows 17 minutes.",
+      "intent": "The build card shows check time that overlapped other work, time waiting for a check slot, time a landing was waiting, and timed-out runs as their own count.",
+      "key": "the-build-card-shows-where-check-time-went",
+      "title": "The build card shows where check time went"
+    }
+  ],
+  "summary": "AgentWeave's merge queue is the right design, but deciding whose a failure is relies on parsing pytest's console output plus about 25 interlocking rules (re-running each failure on master and serially, overrides, held batches, fix-task exclusions). That ties the product to Python and keeps adding a rule for each new failure shape. This roadmap replaces that machinery with two generic pieces any project can use. First, checks report their test results in a standard structured format, and say how to re-run named tests. Second, the project keeps a known-failing list of tests seen failing on main or flaky, each with an owner task, which the gates consult instead of re-arguing each failure. Then quick checks stop giving way, and the build card shows where check time went. Operator, 2026-11-05: 'AgentWeave should be usable to build any type of project'; the known-failing list replaces rules approved in late October.",
+  "tasks": [],
+  "title": "Checks any project can use, judged against a known-failing list"
+}

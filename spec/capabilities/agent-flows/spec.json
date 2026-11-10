@@ -932,69 +932,6 @@
       "when": "a flow is started from it"
     },
     {
-      "given": "a proposed document whose delivery is a flow with agent dev, stopping when its queue empties, every 5 minutes",
-      "key": "ac142",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "a flow declaring the document exists, naming dev, and holds the tasks the approval created it has not fired; its next run is the next 5-minute boundary",
-      "when": "the operator approves it"
-    },
-    {
-      "given": "a proposed document whose delivery names an agent that has since been archived",
-      "key": "ac143",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "the document is approved and its board is created no flow is created, and the approval reports that the agent is archived",
-      "when": "the operator approves it without choosing another agent"
-    },
-    {
-      "given": "a proposed document whose delivery names an agent that is not one of the project's agents",
-      "key": "ac144",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "the document is approved and no flow is created the approval reports that the agent is not on the project",
-      "when": "the operator approves it"
-    },
-    {
-      "given": "a proposed document whose delivery names an archived agent",
-      "key": "ac145",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "the flow is created naming dev the document still names the archived agent, and the approval records the replacement",
-      "when": "the operator approves it choosing agent dev"
-    },
-    {
-      "given": "an approved document whose delivery created flow F, reopened and proposed again",
-      "key": "ac146",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "no second flow is created, and the tasks the approval created belong to F the approval reports that F already builds the document",
-      "when": "the operator approves it"
-    },
-    {
-      "given": "an approved document whose flow F stopped when its queue emptied and is not archived",
-      "key": "ac147",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "no second flow is created the approval reports that F has ended and that the new task waits for it",
-      "when": "the document is reopened, revised with a new task, proposed and approved"
-    },
-    {
-      "given": "an approved document whose flow F names agent dev, reopened and proposed again, whose delivery now names an archived agent",
-      "key": "ac148",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "no flow is created and F still names dev the approval reports that qa was not applied because F already declares the document",
-      "when": "the operator approves it choosing agent qa"
-    },
-    {
-      "given": "a proposed document whose delivery is a flow, and whose board cannot be created",
-      "key": "ac149",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "the document is approved and no flow is created the approval reports that no flow was started because the approval gave it no tasks",
-      "when": "the operator approves it"
-    },
-    {
-      "given": "a proposed document whose delivery says no flow",
-      "key": "ac150",
-      "requirement": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "then": "its board is created and no flow is created",
-      "when": "the operator approves it"
-    },
-    {
       "given": "",
       "key": "ac151",
       "requirement": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
@@ -1105,27 +1042,6 @@
       "requirement": "a-review-turn-is-told-the-task-s-check-result",
       "then": "both channels say the checks have not finished and `approved` will be refused until they pass",
       "when": "a review turn is given for the task"
-    },
-    {
-      "given": "a flow-delivered document whose delivery names critic and whose tasks name none, and a free agent sorting before critic",
-      "key": "a-document-names-its-default-reviewer-staffs",
-      "requirement": "a-document-names-its-default-reviewer",
-      "then": "critic reviews it",
-      "when": "a completed task's review is staffed"
-    },
-    {
-      "given": "a default reviewer that is archived or not on the roster",
-      "key": "a-document-names-its-default-reviewer-unresolved",
-      "requirement": "a-document-names-its-default-reviewer",
-      "then": "nobody is staffed; the reason names the document's default reviewer",
-      "when": "a completed task's review is staffed"
-    },
-    {
-      "given": "a proposed flow-delivered document",
-      "key": "a-document-names-its-default-reviewer-bar",
-      "requirement": "a-document-names-its-default-reviewer",
-      "then": "the approval bar reads 'Reviewed by @X', 'Reviewed by any free agent', or an amber line for a default that is no open agent",
-      "when": "the operator opens it"
     },
     {
       "given": "a flow with a startable unassigned task, whose only free agent is read-only",
@@ -1308,34 +1224,6 @@
       "requirement": "a-decided-task-withdraws-its-waiting-reviews",
       "then": "the first two are unchanged and the work entry stays queued with its task released",
       "when": "the task is approved"
-    },
-    {
-      "given": "a payload whose task names a reviewer",
-      "key": "td-ac25",
-      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
-      "then": "the recovered payload names the same reviewer",
-      "when": "it is rendered and read back"
-    },
-    {
-      "given": "a payload whose tasks name no reviewer",
-      "key": "td-ac26",
-      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
-      "then": "it validates and materialises as one without the field",
-      "when": "it is submitted and approved"
-    },
-    {
-      "given": "an approved document whose task names a reviewer that is not on the roster or is archived",
-      "key": "td-ac27",
-      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
-      "then": "no other agent is substituted; the review falls back to the operator with a reason naming the declared reviewer",
-      "when": "that task's review is staffed"
-    },
-    {
-      "given": "a document naming a reviewer",
-      "key": "td-ac28",
-      "requirement": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
-      "then": "no task is assigned to an agent as a result of the name alone",
-      "when": "it is materialised"
     },
     {
       "given": "a loop that declares no document and fires only its own agent",
@@ -1607,7 +1495,6 @@
       "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a": "FR-26",
       "a-decided-task-withdraws-its-waiting-reviews": "FR-39",
       "a-dispatched-review-leaves-the-reviewable-pool": "FR-11",
-      "a-document-names-its-default-reviewer": "FR-29",
       "a-document-s-delivery-is-checked-against-the-roster-when-it-": "FR-47",
       "a-firing-determines-both-the-task-and-the-agent": "FR-2",
       "a-flow-adopts-the-tasks-already-materialised-from-the-docume": "FR-45",
@@ -1631,7 +1518,6 @@
       "a-reviewer-is-briefed-by-the-author-of-the-work-it-is-review": "FR-14",
       "a-surfaced-step-is-recorded-once-not-once-per-tick": "FR-43",
       "a-task-a-flow-declines-to-staff-for-review-is-named-to-the-o": "FR-15",
-      "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint": "FR-40",
       "a-task-reported-as-in-flight-is-one-an-agent-is-actually-wor": "FR-42",
       "a-tester-drives-the-built-product-and-keeps-the-s-tester-default": "FR-49",
       "a-tester-drives-the-built-product-and-keeps-the-spec-test-brief": "FR-50",
@@ -1639,7 +1525,6 @@
       "an-agent-attributed-to-a-task-shall-be-attributed-in-a-state": "FR-44",
       "an-agent-fired-to-review-a-completed-task-is-given-a-review-": "FR-7",
       "an-approved-document-offers-the-operator-its-flow-or-a-way-t": "FR-24",
-      "approving-a-document-creates-the-flow-its-delivery-declares": "FR-25",
       "creating-a-flow-is-a-distinct-tool-from-creating-a-loop": "FR-41",
       "dispatching-a-review-staffs-the-task-whichever-path-dispatch": "FR-37",
       "n1": "FR-30",
@@ -1651,8 +1536,11 @@
       "n6": "FR-35"
     },
     "retired": {
+      "a-document-names-its-default-reviewer": "FR-29",
       "a-firing-s-briefing-names-how-its-claimed-task-is-finished": "FR-17",
-      "a-firing-s-briefing-states-which-tier-the-agent-is-working-i": "FR-10"
+      "a-firing-s-briefing-states-which-tier-the-agent-is-working-i": "FR-10",
+      "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint": "FR-40",
+      "approving-a-document-creates-the-flow-its-delivery-declares": "FR-25"
     }
   },
   "design": "D1 A flow is a loop with `spec_document_id` set. No separate table or job kind; the scheduler branches on that column (`scheduler.decide_firing`, `_agents_a_loop_may_staff`).\n\nD2 One walk decides a firing. `decide_firing` walks the queue once, in `_loop_queue_order`, and returns selections, in-flight rows, unstaffed and deferred outcomes. The firing and the board both read it, so they cannot disagree about what a flow is doing.\n\nD3 Refuse to offer, permit to act. Claimability withholds work whose author cannot be ruled out; the transition guards permit when attribution is unknown. Each is the safe direction for its job, and both call the same attribution functions (`task_transition_service.completion_attribution`, `agents_that_may_have_authored`, `agents_that_recorded_evidence_for`).\n\nD4 The reviewer ladder is one function (`scheduler.resolve_reviewer`) used for first staffing and for re-staffing after a silent review (`run_divergence._answer_failed_review`). Declared names are never substituted; `exclude` carries a per-agent reason so the surfaced sentence is true for every excluded agent; `unavailable` (taken by this firing) yields `deferred`, which is never surfaced.\n\nD5 Availability is one read (`_roster_availability`) from which both the pool and the unstaffed sentence are derived, so the sentence cannot name an agent the resolution counted free.\n\nD6 A flow's review is staged at the dispatch, not the firing. The firing queues a review entry; the dispatch moves `completed -> under_review` and sets the holder under its own rollback. A waiting review entry is what keeps the task out of the pool meanwhile.\n\nD7 Width has no setting: a firing starts every ready task an agent resolves for, one task per agent per firing.\n\nD8 Review briefings state the contract. Agents follow what the briefing names over the tool inventory, so a review briefing names the verdicts and the gates that can refuse them; the two review channels (loop briefing, turn context) share their gate sentences through `review_turn.verdict_evidence_sentence` so they cannot disagree.\n\nD9 One wedged-review predicate. `assignee_produced_the_work` is shared by the flow's recovery and the dispatch's holder check, so they cannot disagree about whether a review is held.",
@@ -1676,7 +1564,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -1847,13 +1734,6 @@
       "statement": "Where the app shows an approved change document, it SHALL show the unarchived flow that declares it, ended or not, and let the operator open it; when none exists it SHALL offer Start a flow, asking for name, agent, message, schedule (default every 5 minutes) and stop condition (default when the queue empties), saying the first firing is at the next schedule tick, and SHALL refuse to send with no stop condition."
     },
     {
-      "key": "approving-a-document-creates-the-flow-its-delivery-declares",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "The operator is the actor, so creation does not depend on the project letting agents create scheduled work. A flow whose queue was never filled fires every tick and never stops. An agent chosen at approval applies to the flow only and never edits the document.",
-      "statement": "When the operator approves a change document whose delivery is a flow, the Hub SHALL create a flow declaring that document, named after it, using the delivery's agent (or the agent the operator chose at approval), stop condition and schedule, owning the approval's tasks, first firing at the next tick, and SHALL report the outcome in the approval. It SHALL NOT create one where an unarchived flow already declares the document (reporting that flow and whether it is running, disabled or ended), where the agent is archived or not on the project, where no stop condition is set or the stop time has passed, or where the flow would own no open task; the document is approved and its board created regardless."
-    },
-    {
       "key": "a-copilot-reviewer-may-be-told-to-consult-copilot-s-review-a",
       "modal": "SHALL",
       "party": null,
@@ -1873,13 +1753,6 @@
       "party": null,
       "rationale": "The reviewer reads what is recorded and starts nothing; a briefing never fails over reading checks.",
       "statement": "Where the project has checks that apply to the work approval would merge, both review channels SHALL state the task's check result: passed; failed, naming the failing checks with the last output, that `approved` will be refused and that `revision_needed` with that output returns the task; could not run; or not finished (running, stale or not yet run), with `approved` refused until they pass. Where no check applies they SHALL say nothing about checks."
-    },
-    {
-      "key": "a-document-names-its-default-reviewer",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "A planner promised a reviewer in prose with no field naming it, and the flow gave the review to whichever free agent sorted first.",
-      "statement": "A change document's delivery MAY name a default reviewer, which SHALL count as the declaration for every task whose own entry names none: resolved by the declared-reviewer rule, surfaced and never substituted when it is not an open agent, and overridden by a task's own reviewer. For a flow delivery not yet approved, the app SHALL state who reviews (the default by name, or any free agent) and flag a default that is not an open agent."
     },
     {
       "key": "n2",
@@ -1943,13 +1816,6 @@
       "party": null,
       "rationale": "A review of a decided task can only be refused; left queued it would be delivered, refused up to the delivery limit, and book its reviewer meanwhile.",
       "statement": "When a task moves to approved, rejected or revision_needed, the system SHALL withdraw, in the same transaction as the move, every queued inbound entry that asks for a review of that task, recording the verdict as its reason and announcing each withdrawal; a delivered entry, an entry naming another task, and a work entry's queued state SHALL be left unchanged."
-    },
-    {
-      "key": "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint",
-      "modal": "MAY",
-      "party": null,
-      "rationale": "A committed document must reproduce on a machine whose roster differs from its author's, so an unresolvable name is routine, not an error. Substituting a different reviewer would misreport who checked the work; the review falls back to the operator and says why.",
-      "statement": "A document's task entry MAY name a `reviewer`; the name SHALL be kept in the document and resolved against the project's roster only when the task's review is staffed, and a name that matches no open agent SHALL NOT make the document invalid or cause another agent to be substituted."
     },
     {
       "key": "creating-a-flow-is-a-distinct-tool-from-creating-a-loop",

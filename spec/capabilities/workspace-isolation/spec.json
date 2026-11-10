@@ -106,13 +106,6 @@
       "when": "the Hub snapshots or integrates work"
     },
     {
-      "given": "the project checkout has a `node_modules` directory",
-      "key": "ac16",
-      "requirement": "expensive-shared-dependency-directories-are-linked-not-rebui",
-      "then": "`node_modules` is reachable from the new checkout without being reinstalled",
-      "when": "a checkout is provisioned"
-    },
-    {
       "given": "a project has an agent checkout and a task checkout",
       "key": "ac17",
       "requirement": "a-reported-workspace-says-which-namespace-it-belongs-to",
@@ -499,6 +492,66 @@
       "requirement": "provisioning-a-task-checkout-is-idempotent-and-all-or-nothin",
       "then": "the merge is abandoned, the branch tip and working files are unchanged, and the turn starts with the merge instruction",
       "when": "the dependent is provisioned"
+    },
+    {
+      "given": "a Hub-created worktree containing a directory junction (and, separately, a directory symlink) to a directory outside it that holds a file",
+      "key": "worktrees-never-destroy-or-strand-junction-survives-each-removal",
+      "requirement": "worktrees-never-destroy-or-strand-an-removal-never-follows-links",
+      "then": "the file outside still exists with its content; the test fails on master 43301a6",
+      "when": "each of the Hub's removal paths removes that worktree, including the fallback used when git's removal fails"
+    },
+    {
+      "given": "the same worktree with a junction",
+      "key": "worktrees-never-destroy-or-strand-anythi-linked-worktree-is-gone",
+      "requirement": "worktrees-never-destroy-or-strand-anythi-removal-still-completes",
+      "then": "the worktree directory no longer exists and `git worktree list` no longer shows it",
+      "when": "it is removed"
+    },
+    {
+      "given": "a task whose branch conflicts, mended through mend_task_branch with a resolution commit that is merged into main",
+      "key": "worktrees-never-destroy-or-strand-anythin-mender-runs-after-mend",
+      "requirement": "worktrees-never-destroy-or-strand-an-mend-leaves-mender-runnable",
+      "then": "preparation succeeds and the checkout is on agentweave/mender; the test fails on master 43301a6",
+      "when": "the mender's workspace is prepared for its next turn"
+    },
+    {
+      "given": "an agent's registered worktree switched to another branch holding commits not in main",
+      "key": "worktrees-never-destroy-or-strand-anythin-refusal-names-branches",
+      "requirement": "worktrees-never-destroy-or-wrong-branch-refusal-names-the-branch",
+      "then": "the refusal text contains both the current branch name and agentweave/<agent>, and does not contain 'not the registered git worktree'",
+      "when": "its workspace is prepared"
+    },
+    {
+      "given": "a git project on master whose main_branch the operator set to empty, with one approved task that skipped merging",
+      "key": "worktrees-never-destroy-or-strand-anything-reopen-keeps-null",
+      "requirement": "worktrees-never-destroy-or-s-cleared-main-branch-survives-reopen",
+      "then": "GET settings returns main_branch empty and the approved task's work is not on master; fails on master 43301a6",
+      "when": "POST /projects/open is called for its folder again"
+    },
+    {
+      "given": "a newly registered git project with no main branch chosen",
+      "key": "worktrees-never-destroy-or-strand-anything-adoption-is-an-event",
+      "requirement": "worktrees-never-destroy-or-stra-hub-setting-changes-are-recorded",
+      "then": "the project's event history holds a settings change from empty to that branch",
+      "when": "the Hub adopts the detected branch"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a repository whose main checkout has hub/ui/node_modules (beside a tracked hub/ui/package.json) and .venv, with Path.symlink_to patched to raise OSError as it does on this machine",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_dependency_links_fall_back_to_junctions.py -v (junction case skipped off Windows)",
+      "key": "worktrees-never-destroy-or-strand-junction-when-symlink-refused",
+      "requirement": "worktrees-never-destr-dependencies-linked-without-symlink-rights",
+      "then": "both directories are reachable inside the checkout through junctions (off Windows: through symlinks, the patch removed), no DependencyLinkFailure is returned, and removing the checkout afterwards leaves both originals intact; fails on master because nested node_modules is never linked and a refused symlink is only reported",
+      "when": "the Hub prepares an agent's task checkout"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conflicting task mended through mend_task_branch, once landing and once abandoned before its commit",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_mend_leaves_mender_runnable.py -v",
+      "key": "worktrees-never-destroy-or-strand-abandoned-mend-leaves-nothing",
+      "requirement": "worktrees-never-destroy-or-strand-any-mend-in-a-scratch-checkout",
+      "then": "the mender's own checkout is on agentweave/mender both times and no scratch checkout or mend worktree registration remains",
+      "when": "each mend ends"
     }
   ],
   "algorithms": [],
@@ -528,6 +581,14 @@
       "FR-29": "981fb6f795d75375ad833855062b94d71dd3c6e1958d5d2338897ed95400f1c5",
       "FR-3": "0c6cfc7027e0115bff28985ff293bea2b5000d3a44042ff23dfc2b329d597f5a",
       "FR-30": "4c3f0720eda2703c5ee76a37aa3b8a16d55b8c2ec5ab4916be23da575a03af96",
+      "FR-31": "8c34c21adf037fd5eb4091d0cdbcd49d5e784b7e02645157351441e7dbb54746",
+      "FR-32": "da8576856b6999b4893db7ff3c8f74e29edfd664a808586f0f7b6fc402e96d3c",
+      "FR-33": "8467899749e349092e55e23799c4b212673b525b4fd80722fc08a02e65ffbb04",
+      "FR-34": "28e3cfdec34169f068eea65c97a16d7c659406e4b3dd8c54f87b8d9cd9287e5f",
+      "FR-35": "e54a4eddc0f469d53a2ac6d7b66413273163e3ea2de21c3dd3431da7c212d989",
+      "FR-36": "aa503fbd172a7b144a0072bcaf2c1ce6654e311c52fff8c82fc911e4a4c1fdd4",
+      "FR-37": "fd702dab5abf543a234c646c3ea9b3e3432770ab7dc690485c3d64718996a0e0",
+      "FR-38": "b0b042c431ab24abeb78df639b55fa993dded8b2565c0cf1fe3be81363f5b378",
       "FR-4": "779c4ad1e9e50a999c045132129fb97926b8a2e6f3f0bbb6b9fe353dfb87913b",
       "FR-5": "06f5abef393dd426ff6c95abe633ce57112c8f62672e60577c0118d2a5dffb09",
       "FR-6": "a72a8e0e1823e288f65cbbb6de4f70d6ea454b337e540023efe7d46da14c6426",
@@ -535,7 +596,7 @@
       "FR-8": "fe2379d83fa6d75cf1038e6cb5dd13e7668a0d84166b3b9902b18318360de9a9",
       "FR-9": "8e45d687d7b57ccd3956b9d857a30802194af946eeb690fa3ec188a9921496c0"
     },
-    "high_water": 30,
+    "high_water": 38,
     "requirements": {
       "a-conflict-is-reported-between-workspaces-not-between-agents": "FR-8",
       "a-finished-task-s-checkout-is-released-and-its-branch-is-not": "FR-20",
@@ -551,7 +612,6 @@
       "an-agent-checkout-catches-up-with-main-never-destructive": "FR-26",
       "an-agent-checkout-catches-up-with-main-scope": "FR-27",
       "asking-where-work-happens-never-causes-it-to-happen": "FR-2",
-      "expensive-shared-dependency-directories-are-linked-not-rebui": "FR-6",
       "n1": "FR-17",
       "n2": "FR-12",
       "n3": "FR-13",
@@ -566,9 +626,19 @@
       "work-already-under-way-keeps-the-checkout-it-started-in": "FR-22",
       "work-from-a-mid-turn-claim-reaches-the-task-carried": "FR-28",
       "work-from-a-mid-turn-claim-reaches-the-task-never-destructive": "FR-29",
-      "work-from-a-mid-turn-claim-reaches-the-task-scope": "FR-30"
+      "work-from-a-mid-turn-claim-reaches-the-task-scope": "FR-30",
+      "worktrees-never-destr-dependencies-linked-without-symlink-rights": "FR-37",
+      "worktrees-never-destroy-or-s-cleared-main-branch-survives-reopen": "FR-35",
+      "worktrees-never-destroy-or-stra-hub-setting-changes-are-recorded": "FR-36",
+      "worktrees-never-destroy-or-strand-an-mend-leaves-mender-runnable": "FR-33",
+      "worktrees-never-destroy-or-strand-an-removal-never-follows-links": "FR-31",
+      "worktrees-never-destroy-or-strand-any-mend-in-a-scratch-checkout": "FR-38",
+      "worktrees-never-destroy-or-strand-anythi-removal-still-completes": "FR-32",
+      "worktrees-never-destroy-or-wrong-branch-refusal-names-the-branch": "FR-34"
     },
-    "retired": {}
+    "retired": {
+      "expensive-shared-dependency-directories-are-linked-not-rebui": "FR-6"
+    }
   },
   "design": "D1 Namespaces by construction. Agent checkouts live under `.agentweave/worktrees/`, task checkouts under `.agentweave/tasks/` on `agentweave/task/<id>`, review checkouts under `.agentweave/reviews/` detached. The `task/` branch segment cannot be produced by an agent name, so the namespaces cannot collide.\n\nD2 Git's registration is the truth. Whether a checkout exists is decided from `git worktree list --porcelain`, never from a directory existing: git run inside an untracked directory answers about the enclosing repository. Path functions are pure; only the `ensure_*` functions provision.\n\nD3 Never destroy work. Release removes the directory and keeps the branch, snapshotting first. Catch-up on an existing branch merges with `--no-ff` and aborts on any failure. Only a branch seconds old (creation path) is ever deleted, by the unwind.\n\nD4 The Hub commits as itself (`COMMIT_IDENTITY`) with `--no-verify` on snapshots, so neither a missing git identity nor a project hook can strand work.\n\nD5 No repository, no isolation. A project that is not a git repository (or a machine without git) runs writers in place; a repository whose provisioning fails refuses the turn rather than falling back to the operator's checkout.\n\nD6 Refusals name scope and remedy. The trigger prefixes the scope (agent's own workspace or task checkout) using the same predicate the resolver obeys (`takes_task_workspace`); the module writes one remedy per obstruction.\n\nD7 Isolation is per task. Which checkout a turn is entitled to is decided from the database; `Task.workspace_scheme` is never written by the Hub, and migration 0095 stamped the grandfathered per-agent set once, so it can only shrink.",
   "evidence": {
@@ -587,7 +657,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -637,13 +706,6 @@
       "party": null,
       "rationale": "A project with no configured git identity is ordinary, and git refuses to commit there; relying on configuration lets the Hub snapshot work and then fail to merge it. Snapshots also skip the project's commit hooks, so a project hook cannot strand an agent's work uncommitted.",
       "statement": "Every commit the Hub creates itself - a turn or release snapshot, a prerequisite merge, or the merge that integrates approved work - SHALL carry the Hub's own author identity (`AgentWeave <agentweave@localhost>`) and SHALL NOT rely on the repository's configured identity."
-    },
-    {
-      "key": "expensive-shared-dependency-directories-are-linked-not-rebui",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "Provisioning is on the path of an agent's first writing turn, so a dependency install there is paid at the worst moment. The set stays explicit and grows only for directories that are expensive to regenerate and safe to share across concurrent checkouts. A Windows host without symlink privilege degrades to no shared dependencies rather than to no checkout.",
-      "statement": "A newly provisioned agent, task or review checkout SHALL have the project checkout's `node_modules`, `.venv` and `venv` directories, where present, linked into it rather than reinstalled; where the platform refuses the link, provisioning SHALL still succeed without it."
     },
     {
       "key": "a-reported-workspace-says-which-namespace-it-belongs-to",
@@ -805,6 +867,62 @@
       "party": null,
       "rationale": null,
       "statement": "A run that executed in the task's own checkout, a review run, a read-only agent and a task that does not take its own checkout MUST be unaffected."
+    },
+    {
+      "key": "worktrees-never-destroy-or-strand-an-removal-never-follows-links",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents create junctions themselves (DEAD-ENDS documents `mklink /J` for running vitest in a worktree), and a link may point at a shared .venv or the vault, so the Hub cannot assume it only removes its own links or only regenerable data.",
+      "statement": "Removing any worktree the Hub created leaves unchanged the contents of every directory that a symbolic link or junction inside that worktree points to, whoever created the link."
+    },
+    {
+      "key": "worktrees-never-destroy-or-strand-anythi-removal-still-completes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Making removal safe by skipping it would leave the stranded checkouts that F693 and the mender bug already show block later turns.",
+      "statement": "A worktree that contains links is still fully removed and deregistered from git, as one without links is."
+    },
+    {
+      "key": "worktrees-never-destroy-or-strand-an-mend-leaves-mender-runnable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today every successful mend disables the mender until the operator switches its checkout back by hand.",
+      "statement": "After a mend has been committed and merged, the mender's next turn starts in its own checkout on `agentweave/mender` without any manual git action."
+    },
+    {
+      "key": "worktrees-never-destroy-or-wrong-branch-refusal-names-the-branch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The present message sends the operator to delete a directory that only needs switching.",
+      "statement": "When an agent's own workspace is a registered worktree on a branch other than the agent's own and the Hub cannot safely switch it back, the refusal names the branch it is on and the branch expected, and does not say the directory is not a registered worktree."
+    },
+    {
+      "key": "worktrees-never-destroy-or-s-cleared-main-branch-survives-reopen",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An empty value today means both 'never chosen' and the operator's 'nothing merges'; the Hub overwrites the second as if it were the first.",
+      "statement": "A main branch the operator has explicitly cleared stays cleared when the project's folder is opened again, and no approved task merges as a result of reopening."
+    },
+    {
+      "key": "worktrees-never-destroy-or-stra-hub-setting-changes-are-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the Hub sets a project's main branch on its own (adopting a detected branch on first registration), it records a settings event naming the old and new values, as an operator change does."
+    },
+    {
+      "key": "worktrees-never-destr-dependencies-linked-without-symlink-rights",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On this machine every symlink is refused (F567), so no turn gets node_modules or .venv and agents create junctions by hand; a Hub-made link is one the Hub knows to remove safely, and the per-turn notice stops.",
+      "statement": "When the Hub prepares a checkout and a dependency directory exists in the main checkout (node_modules, .venv or venv at the root, or node_modules beside a tracked package.json up to three directories deep, such as hub/ui/node_modules), it links that directory into the checkout, using a directory junction where the platform refuses a symbolic link, and the turn carries no 'could not be linked' notice for it."
+    },
+    {
+      "key": "worktrees-never-destroy-or-strand-any-mend-in-a-scratch-checkout",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator decision 2026-10-27: a separate checkout also covers a mend abandoned half-way, which switching back afterwards does not.",
+      "statement": "A mend is built in a separate scratch checkout that is removed afterwards, whether the mend lands or is abandoned; the mender's own checkout is never switched to the mend branch."
     }
   ],
   "schema_version": 1,
