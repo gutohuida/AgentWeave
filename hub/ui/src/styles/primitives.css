@@ -309,6 +309,7 @@
 /* Text 240 + gap 32 + control basis 280: below this the control has wrapped, so it takes the row's width like a stacked row. */
 @container (max-width: 551px) {
   .aw-settings-row-control { justify-content: flex-start; max-width: none; }
+  .aw-settings-reset-slot { display: none; }
   .aw-settings-row-control > .control-field, .aw-settings-row-control > .aw-field { flex: 1; max-width: 640px; }
 }
 
