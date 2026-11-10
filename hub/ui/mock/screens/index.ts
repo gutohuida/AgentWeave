@@ -73,6 +73,9 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'settings-budgets', label: 'Settings · Budgets', route: { kind: 'settings', section: 'budgets' } },
   { id: 'app-settings', label: 'App settings · Sound and notifications', route: { kind: 'app-settings', section: 'notifications' } },
   { id: 'app-settings-appearance', label: 'App settings · Appearance', route: { kind: 'app-settings', section: 'appearance' } },
-  { id: 'agent-execution', label: 'Agent · Execution', route: { kind: 'agent-settings', agent: 'Builder', section: 'execution' } },
-  { id: 'agent-access', label: 'Agent · Access', route: { kind: 'agent-settings', agent: 'Builder', section: 'access' } },
+  { id: 'agent-agent', label: 'Agent · Agent', route: { kind: 'agent-settings', agent: 'Builder', section: 'agent' } },
+  { id: 'agent-running', label: 'Agent · Running', route: { kind: 'agent-settings', agent: 'Builder', section: 'running' } },
+  { id: 'agent-permissions', label: 'Agent · Permissions', route: { kind: 'agent-settings', agent: 'Builder', section: 'permissions' } },
+  { id: 'agent-checkpoints', label: 'Agent · Checkpoints', route: { kind: 'agent-settings', agent: 'Builder', section: 'checkpoints' } },
+  { id: 'agent-workspace', label: 'Agent · Workspace', route: { kind: 'agent-settings', agent: 'Builder', section: 'workspace' } },
 ]

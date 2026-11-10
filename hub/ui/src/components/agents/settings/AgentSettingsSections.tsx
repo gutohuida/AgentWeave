@@ -35,6 +35,8 @@ export function AgentIdentitySettings({
   archiveRefusal,
   descriptionMax = 256,
   notices,
+  children,
+  title = 'Identity',
 }: {
   agent: AgentSummary
   now: Date
@@ -50,6 +52,10 @@ export function AgentIdentitySettings({
   descriptionMax?: number
   /** A refused save, under the page heading. */
   notices?: React.ReactNode
+  /** Groups shown before the archive zone (the charter, on the Agent page). */
+  children?: React.ReactNode
+  /** The page heading; Identity by default, Agent once the charter joins it. */
+  title?: string
 }) {
   const archived = agent.lifecycle === 'archived'
   const [description, setDescription] = React.useState(agent.description ?? '')
@@ -59,7 +65,7 @@ export function AgentIdentitySettings({
   const nameError = /^[a-zA-Z0-9_-]{1,32}$/.test(name) ? null : 'Letters, digits, - and _ only, up to 32.'
 
   return (
-    <SettingsPage icon="badge" title="Identity" description="What this agent is called and what it is for.">
+    <SettingsPage icon="badge" title={title} description="What this agent is called, what it is for, and the charter it works under.">
       {notices}
       <SettingsGroup title="Agent">
         <SettingsRow
@@ -122,6 +128,7 @@ export function AgentIdentitySettings({
           control={<span className="aw-readonly-value tabular">{agent.last_seen ? formatDateTime(agent.last_seen, now) : 'Never'}</span>}
         />
       </SettingsGroup>
+      {children}
 
       {archived ? (
         <section className="aw-danger" aria-label="Archived" data-tone="neutral">
@@ -205,7 +212,6 @@ export function AgentExecutionSettings({
   children?: React.ReactNode
   onChange: (patch: AgentPatch, said: string) => void
 }) {
-  const ownGrants = agent.reach_grants != null
   return (
     <SettingsPage icon="terminal" title="Execution" description={`What ${agent.name} runs as when you give it a turn.`}>
       {notices}
@@ -233,45 +239,7 @@ export function AgentExecutionSettings({
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Permissions" description="What it may do when a conversation has not said. A conversation's own choice wins for that conversation.">
-        <SettingsRow
-          label="Default permissions"
-          changed={Boolean(agent.default_permission_mode)}
-          onReset={() => onChange({ default_permission_mode: null }, 'Default permissions follow the project again')}
-          description="Also what scheduled runs and peer messages get, since they have no composer to choose in."
-          control={
-            <span className="aw-control-stack">
-              <MenuSelect
-                label={`Default permissions for ${agent.name}`}
-                value={agent.default_permission_mode ?? ''}
-                onChange={(v) => onChange({ default_permission_mode: v || null }, v ? `${agent.name}: ${permissionModes.find((m) => m.id === v)?.label}` : 'Default permissions follow the project again')}
-                options={permissionOptions(permissionModes, permissionUnset?.label ?? 'The project’s default', permissionUnset?.detail ?? 'Whatever Project settings → General says')}
-              />
-              {permissionNote}
-            </span>
-          }
-        />
-        <SettingsRow
-          label="Own granted reach"
-          description="Folders and hosts beyond its workspace under Workspace only. Off: it has the project's grants."
-          changed={ownGrants}
-          onReset={() => onChange({ reach_grants: null }, 'Granted reach follows the project again')}
-          control={
-            <Switch
-              aria-label={`Own granted reach for ${agent.name}`}
-              checked={ownGrants}
-              onCheckedChange={(v) => onChange({ reach_grants: v ? (projectGrants ?? { roots: [], hosts: [] }) : null }, v ? `${agent.name} has its own reach` : 'Granted reach follows the project again')}
-            />
-          }
-        >
-          <ReachGrantsChips
-            grants={ownGrants ? agent.reach_grants : projectGrants}
-            readOnly={!ownGrants}
-            emptyLabel={ownGrants ? 'Nothing beyond the workspace' : 'The project grants nothing beyond the workspace'}
-            onChange={(g) => onChange({ reach_grants: g ?? { roots: [], hosts: [] } }, 'Granted reach updated')}
-          />
-        </SettingsRow>
-      </SettingsGroup>
+      <AgentPermissionGroup agent={agent} permissionModes={permissionModes} permissionUnset={permissionUnset} projectGrants={projectGrants} permissionNote={permissionNote} onChange={onChange} />
       {children}
     </SettingsPage>
   )
@@ -287,10 +255,75 @@ export function AgentAccessSettings({
   /** A refused save, under the page heading. */
   notices?: React.ReactNode
 }) {
-  const readCheckpoints = Boolean(agent.can_read_checkpoints)
   return (
     <SettingsPage icon="lock" title="Access" description={`What ${agent.name} may read of other agents' work, and what it may decide.`}>
       {notices}
+      <AgentAccessGroups agent={agent} onChange={onChange} />
+    </SettingsPage>
+  )
+}
+
+type PermissionGroupProps = {
+  agent: AgentSummary
+  permissionModes: ControlValue[]
+  permissionUnset?: { label: string; detail: string }
+  projectGrants: ReachGrants | null
+  permissionNote?: React.ReactNode
+  onChange: (patch: AgentPatch, said: string) => void
+}
+
+/** Default permissions and granted reach: the same two settings as Project settings → Permissions,
+ *  overriding them for this agent. */
+export function AgentPermissionGroup({ agent, permissionModes, permissionUnset, projectGrants, permissionNote, onChange }: PermissionGroupProps) {
+  const ownGrants = agent.reach_grants != null
+  return (
+    <SettingsGroup title="Permissions" description="What it may do when a conversation has not said. A conversation's own choice wins for that conversation.">
+      <SettingsRow
+        label="Default permissions"
+        changed={Boolean(agent.default_permission_mode)}
+        onReset={() => onChange({ default_permission_mode: null }, 'Default permissions follow the project again')}
+        description="Also what scheduled runs and peer messages get, since they have no composer to choose in."
+        control={
+          <span className="aw-control-stack">
+            <MenuSelect
+              label={`Default permissions for ${agent.name}`}
+              value={agent.default_permission_mode ?? ''}
+              onChange={(v) => onChange({ default_permission_mode: v || null }, v ? `${agent.name}: ${permissionModes.find((m) => m.id === v)?.label}` : 'Default permissions follow the project again')}
+              options={permissionOptions(permissionModes, permissionUnset?.label ?? 'The project’s default', permissionUnset?.detail ?? 'Whatever Project settings → General says')}
+            />
+            {permissionNote}
+          </span>
+        }
+      />
+      <SettingsRow
+        label="Own granted reach"
+        description="Folders and hosts beyond its workspace under Workspace only. Off: it has the project's grants."
+        changed={ownGrants}
+        onReset={() => onChange({ reach_grants: null }, 'Granted reach follows the project again')}
+        control={
+          <Switch
+            aria-label={`Own granted reach for ${agent.name}`}
+            checked={ownGrants}
+            onCheckedChange={(v) => onChange({ reach_grants: v ? (projectGrants ?? { roots: [], hosts: [] }) : null }, v ? `${agent.name} has its own reach` : 'Granted reach follows the project again')}
+          />
+        }
+      >
+        <ReachGrantsChips
+          grants={ownGrants ? agent.reach_grants : projectGrants}
+          readOnly={!ownGrants}
+          emptyLabel={ownGrants ? 'Nothing beyond the workspace' : 'The project grants nothing beyond the workspace'}
+          onChange={(g) => onChange({ reach_grants: g ?? { roots: [], hosts: [] } }, 'Granted reach updated')}
+        />
+      </SettingsRow>
+    </SettingsGroup>
+  )
+}
+
+/** What the agent may read of other agents' work, and what it may decide. */
+export function AgentAccessGroups({ agent, onChange }: { agent: AgentSummary; onChange: (patch: AgentPatch, said: string) => void }) {
+  const readCheckpoints = Boolean(agent.can_read_checkpoints)
+  return (
+    <>
       <SettingsGroup title="Other agents' work" description="Both closed by default. A summary of a peer's work and the raw output behind it are granted separately.">
         <SettingsRow
           label="Read other agents' checkpoints"
@@ -344,6 +377,6 @@ export function AgentAccessSettings({
           }
         />
       </SettingsGroup>
-    </SettingsPage>
+    </>
   )
 }

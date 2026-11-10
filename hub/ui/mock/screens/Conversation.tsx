@@ -182,7 +182,7 @@ function ConversationMock({ route, go }: ScreenProps) {
         onFoldAll={() => setFoldAll((n) => n + 1)}
         onOpenCheckpoints={conversation ? () => undefined : undefined}
         onOpenTrace={chat ? () => undefined : undefined}
-        onOpenAgentSettings={() => go({ kind: 'agent-settings', agent: agent.name, section: 'execution' })}
+        onOpenAgentSettings={() => go({ kind: 'agent-settings', agent: agent.name, section: 'running' })}
         onArchive={() => toast({ title: 'Conversation archived', action: { label: 'Undo', onClick: () => undefined } })}
       />
 

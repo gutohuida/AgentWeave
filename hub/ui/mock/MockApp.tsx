@@ -18,7 +18,7 @@ function parseHash(): MockRoute {
   if (kind === 'tab' && (PROJECT_TABS as readonly string[]).includes(a ?? '')) return { kind: 'tab', tab: a as ProjectTab }
   if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c === 'spec' || c === 'specs' ? { panel: c } : {}) }
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
-  if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'execution' }
+  if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'running' }
   if (kind === 'app-settings') {
     const section = (APP_SETTINGS_SECTIONS as readonly string[]).includes(a ?? '') ? (a as AppSettingsSection) : 'notifications'
     return { kind: 'app-settings', section }
@@ -99,7 +99,7 @@ export function MockApp() {
         onOpenConversation={(_, agent, conversationId) => go({ kind: 'conversation', agent, conversationId })}
         onNewConversation={(_, agent) => (agent ? go({ kind: 'conversation', agent, conversationId: null }) : undefined)}
         onOpenEnvironment={() => go({ kind: 'settings', section: 'general' })}
-        onOpenAgentSettings={(_, agent) => go({ kind: 'agent-settings', agent, section: 'execution' })}
+        onOpenAgentSettings={(_, agent) => go({ kind: 'agent-settings', agent, section: 'running' })}
         onAddAgent={() => undefined}
         onAddProject={() => undefined}
         onOpenAppSettings={() => go({ kind: 'app-settings', section: 'notifications' })}

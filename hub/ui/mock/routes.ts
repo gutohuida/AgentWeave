@@ -26,7 +26,7 @@ export type SettingsSection =
   | 'spec-steps'
   | 'traces'
   | 'agents-defaults' | 'manager' | 'runners' | 'charters' | 'instructions' | 'budgets' | 'worktrees' | 'diagnostics'
-export type AgentSettingsSection = 'identity' | 'execution' | 'charter' | 'interaction' | 'context' | 'access' | 'workspace'
+export type AgentSettingsSection = 'agent' | 'running' | 'permissions' | 'checkpoints' | 'workspace'
 
 export interface ScreenProps {
   route: MockRoute
@@ -47,7 +47,7 @@ export function beforeKey(route: MockRoute): string | null {
         { general: 'settings', manager: 'manager', charters: 'charters', budgets: 'budgets', runners: 'runners' } as Record<string, string>
       )[route.section] ?? null
     case 'agent-settings':
-      return route.section === 'access' ? 'agent-access' : route.section === 'execution' ? 'agent-execution' : null
+      return route.section === 'permissions' ? 'agent-access' : route.section === 'running' ? 'agent-execution' : null
     default:
       return null
   }
