@@ -27,6 +27,7 @@ unrecoverable after the fact.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 import subprocess
@@ -1255,6 +1256,85 @@ def hash_tree(root: Path) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 # Deciding
 # ---------------------------------------------------------------------------
+
+
+async def completion_warnings(
+    session: AsyncSession, task: Any, run_id: Optional[str] = None
+) -> List[str]:
+    """What a completion of *task* is told about its evidence (F1141): each requirement it serves
+    whose evidence from this task is only held or rejected, or names only a commit older than the
+    task branch's tip. Approval refuses held evidence and merges the commit evidence names, so
+    without this the reviewer found it and sent the task back for bookkeeping. It warns; it never
+    refuses. A requirement with no evidence from this task is not named, nor one with evidence
+    *run_id* (the completing run) recorded: its commit is restamped when the turn ends.
+    """
+    from . import project_workspace, task_integration
+    from .db.models import EvidenceFootprint, SpecRequirement, TaskRequirementLink
+
+    links = (
+        (
+            await session.execute(
+                select(SpecRequirement)
+                .join(TaskRequirementLink, TaskRequirementLink.requirement_id == SpecRequirement.id)
+                .where(TaskRequirementLink.task_id == task.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not links:
+        return []
+    tip: Optional[str] = None
+    try:
+        root = (await project_workspace.resolve_project_workspace(session, task.project_id)).root
+        tip = await asyncio.to_thread(task_integration.task_branch_tip, root, task.id)
+    except Exception:  # noqa: BLE001 -- no tip read: only the held and rejected cases are named
+        tip = None
+    warnings: List[str] = []
+    for requirement in sorted(links, key=lambda r: natural_key(r.identifier or "")):
+        rows = (
+            (
+                await session.execute(
+                    select(RequirementEvidence).where(
+                        RequirementEvidence.requirement_id == requirement.id,
+                        RequirementEvidence.task_id == task.id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not rows:
+            continue
+        live = [row for row in rows if row.review_state in (AWAITING, ACCEPTED)]
+        name = requirement.identifier or requirement.key
+        if not live:
+            states = sorted({row.review_state for row in rows})
+            warnings.append(
+                f"{name} has only {' and '.join(states)} evidence from this task: record it again "
+                "at this commit, or the review cannot approve it."
+            )
+            continue
+        if tip is None or (run_id and any(row.run_id == run_id for row in live)):
+            continue
+        commits = {
+            sha
+            for sha in (
+                await session.execute(
+                    select(EvidenceFootprint.commit_sha).where(
+                        EvidenceFootprint.evidence_id.in_([row.id for row in live])
+                    )
+                )
+            ).scalars()
+            if sha
+        }
+        if commits and tip not in commits:
+            older = ", ".join(sorted(sha[:12] for sha in commits))
+            warnings.append(
+                f"{name}'s evidence names only an older commit ({older}), not this task's tip "
+                f"{tip[:12]}: record it again at this commit, or approval merges the older work."
+            )
+    return warnings
 
 
 async def may_accept(session: AsyncSession, project_id: str, actor: Actor) -> bool:

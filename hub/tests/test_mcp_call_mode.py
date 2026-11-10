@@ -176,15 +176,49 @@ def test_list_names_every_served_tool_but_the_approver(pin, tmp_path):
     code, envelope, raw = _call(pin, ["--list"], env=_env(None, None), cwd=tmp_path)
     assert code == 0, raw
     listed = {tool["name"] for tool in envelope["result"]["tools"]}
-    assert listed == _served_tools() - {"approve_tool_call"}
+    # A switched tool is withheld from a run whose switch is off (`mcp_server.SWITCHED_TOOLS`).
+    assert listed == _served_tools() - {"approve_tool_call"} - set(mcp_server.SWITCHED_TOOLS)
     create = next(t for t in envelope["result"]["tools"] if t["name"] == "create_task")
     assert "title" in create["required"]
+
+
+def test_list_names_a_switched_tool_only_with_its_switch_on(pin, tmp_path):
+    """`an-agent-the-operator-trusts-can-tidy-the-specs` D5: `tidy_spec_document` is listed to a
+    run whose `AW_CAN_ADMIN_SPECS` is `1`, the variable the Hub writes from the agent's switch."""
+    code, envelope, raw = _call(
+        pin, ["--list"], env=_env(None, None, AW_CAN_ADMIN_SPECS="1"), cwd=tmp_path
+    )
+    assert code == 0, raw
+    listed = {tool["name"] for tool in envelope["result"]["tools"]}
+    assert listed == _served_tools() - {"approve_tool_call"}
+    assert "tidy_spec_document" in listed
 
 
 def test_the_callable_set_in_process_is_the_listed_set():
     """Review note 12: one plain name set, filled by `_tool()`, read by `--list`, `call_main` and
     the approver's predicate; it equals the fastmcp-registered set minus `approve_tool_call`."""
     assert set(mcp_server._CALLABLE_TOOLS) == _served_tools() - {"approve_tool_call"}
+
+
+def test_calling_in_process_with_the_switch_off_leaves_the_callable_set_alone(monkeypatch, capsys):
+    """AOTCT-3 send-back: `call_main` withheld a switched tool by popping it from
+    `_CALLABLE_TOOLS`, so one in-process call took it off every later caller's list. It now
+    filters without mutating: the tool is refused and unlisted here, and still callable after."""
+    monkeypatch.delenv("AW_CAN_ADMIN_SPECS", raising=False)
+    before = dict(mcp_server._CALLABLE_TOOLS)
+    registered = _served_tools()
+    assert "tidy_spec_document" in before
+
+    assert mcp_server.call_main(["--list"]) == 0
+    listed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert "tidy_spec_document" not in {t["name"] for t in listed["result"]["tools"]}
+    assert mcp_server.call_main(["tidy_spec_document"]) == 64
+    capsys.readouterr()
+    assert mcp_server.call_main(["--help", "tidy_spec_document"]) == 64
+    capsys.readouterr()
+
+    assert before == mcp_server._CALLABLE_TOOLS
+    assert _served_tools() == registered
     assert "approve_tool_call" not in mcp_server._CALLABLE_TOOLS
 
 

@@ -250,12 +250,17 @@ class _ThreadObserver:
             return None
         return sum(self._stopped(*sample) for sample in seen) / len(seen)
 
-    def describe(self, started: float, ended: float) -> str:
+    def describe(self, started: float, ended: float, names: "dict | None" = None) -> str:
+        """*names*: thread names by native id, so a holder can be told apart (AW-18)."""
+        names = names or {}
         seen = [s for s in self.samples if started <= s[0] <= ended]
         if not seen:
             return "no observer samples"
         history = [s for s in self.samples if s[0] < started][-1:] + seen
-        holders = Counter({0: "free", -1: "unread"}.get(s[2], f"held by t{s[2]}") for s in seen)
+        holders = Counter(
+            {0: "free", -1: "unread"}.get(s[2], f"held by t{s[2]}{_named(names, s[2])}")
+            for s in seen
+        )
         parts = [
             f"{len(seen)} observer samples, {sum(self._stopped(*s[2:]) for s in seen)} stopped, "
             f"{seen[-1][1] - history[0][1]} hard faults, GIL "
@@ -266,8 +271,12 @@ class _ThreadObserver:
             states = Counter(f"{state}/{reason}" for state, reason, _ in mine)
             cpu = (mine[-1][2] - mine[0][2]) / 10_000  # a thread can begin or end in the window
             common = " ".join(f"{k}x{v}" for k, v in states.most_common(3))
-            parts.append(f"t{tid} {cpu:.0f} ms {common}")
+            parts.append(f"t{tid}{_named(names, tid)} {cpu:.0f} ms {common}")
         return "state/reason: " + "; ".join(parts)
+
+
+def _named(names: dict, tid: int) -> str:
+    return f" ({names[tid]})" if tid in names else ""
 
 
 @dataclass
@@ -397,6 +406,10 @@ class LagProbe:
         #: (start, end, lateness, explanation) of each window the samples went missing in, judged
         #: once the observer has stopped.
         self._unsampled: List[tuple] = []
+        #: Every thread's name by native id, as the control thread last saw it running.
+        self._names: dict = {}
+        #: (gap start, gap end, {thread name: place}) at the first sample after each gap.
+        self._after_gaps: List[tuple] = []
 
     def _on_collection(self, phase: str, info: dict) -> None:
         if phase == "start":
@@ -433,8 +446,16 @@ class LagProbe:
 
     def _control(self) -> None:
         _raise_priority()
+        last = time.perf_counter()
         while self._on:
             time.sleep(SAMPLE)
+            for thread in threading.enumerate():
+                self._names.setdefault(thread.native_id, thread.name)
+            if time.perf_counter() - last > 5 * SAMPLE:
+                # The first sample after a gap: whichever thread kept the GIL through it has only
+                # just let it go, so where it is now is where it was.
+                self._after_gaps.append((last, time.perf_counter(), self._every_place()))
+            last = time.perf_counter()
             polling = self._loop_is_polling()
             waiting = None if polling or self._waiting is None else self._waiting()
             if waiting and self._starting_a_thread():
@@ -539,6 +560,30 @@ class LagProbe:
             f"seen at {self._places_in(started, ended)}"
         )
 
+    def _every_place(self) -> dict:
+        names = {thread.ident: thread.name for thread in threading.enumerate()}
+        places = {}
+        for ident, frame in sys._current_frames().items():
+            if ident == threading.get_ident():
+                continue
+            parts = []
+            while frame is not None and len(parts) < 7:
+                code = frame.f_code
+                parts.append(
+                    f"{os.path.basename(code.co_filename)}:{frame.f_lineno} {code.co_name}"
+                )
+                frame = frame.f_back
+            places[names.get(ident, str(ident))] = " < ".join(parts)
+        return places
+
+    def _after_gap_in(self, started: float, ended: float) -> str:
+        """Where every thread was at the first sample after the longest gap in the window."""
+        gaps = [g for g in self._after_gaps if g[1] >= started and g[0] <= ended]
+        if not gaps:
+            return "no gap"
+        gap = max(gaps, key=lambda g: g[1] - g[0])
+        return " || ".join(f"{name}: {place}" for name, place in sorted(gap[2].items()))
+
     def _places_in(self, started: float, ended: float) -> str:
         seen = Counter(place for at, place in self._loop_places if started <= at <= ended)
         return " | ".join(f"{count}x {place}" for place, count in seen.most_common(3)) or "nothing"
@@ -564,6 +609,7 @@ class LagProbe:
         self._loop_samples.clear()
         self._loop_places.clear()
         self._unsampled.clear()
+        self._after_gaps.clear()
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -576,7 +622,11 @@ class LagProbe:
         self._observer.stop()
         self._judge_unsampled()
         if self.worst:
-            self.why += f"; threads: {self._observer.describe(*self._worst_window)}"
+            self._names[threading.get_native_id()] = "the loop"
+            self.why += f"; after the gap: {self._after_gap_in(*self._worst_window)}"
+            self.why += (
+                f"; threads: {self._observer.describe(*self._worst_window, names=self._names)}"
+            )
         gc.unfreeze()
         gc.callbacks.remove(self._on_collection)
         _raise_priority(self._priority)

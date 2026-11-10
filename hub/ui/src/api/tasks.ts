@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, fetchWithAuth, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { neutraliseFileMentions } from '@/lib/fileMentions'
-import type { BuildPullRequest } from './pullRequests'
+import type { BuildPullRequest, CiRead } from './pullRequests'
 import type { EvidencePiece } from './spec'
 
 /**
@@ -275,14 +275,18 @@ export interface TaskLandingEntry {
 /** The task's latest landing: approved work on its way to the main branch. */
 export interface TaskLanding {
   id: string
-  state: 'queued' | 'checking' | 'landing' | 'held' | 'landed' | 'not_landed' | 'sent_back'
+  /** `pushed`: a pull request build's task, pushed to the build branch rather than merged into
+   *  main (`pull_requests.PUSHED`); `landed_sha` is then the commit it pushed. */
+  state: 'queued' | 'checking' | 'landing' | 'held' | 'landed' | 'pushed' | 'not_landed' | 'sent_back'
   kind: 'approval' | 'retry' | 'resolution' | 'evidence'
   /** Why it was sent back, held or not landed; empty otherwise. */
   reason: string
   /** The prerequisite task it waits on, where it is held for one. */
   waits_on: string | null
-  /** The commit main was moved to when it landed. */
+  /** The commit main was moved to when it landed, or the commit pushed to the PR when pushed. */
   landed_sha: string | null
+  /** A PR build's push with the CI setting on: CI's result on the commit it pushed. */
+  ci?: CiRead | null
   override_reason: string | null
   /** The known-failing entries its batch's checks went past, once landed (`known_failing.
    *  went_past`, FR-10): each as it stood then, kept after the entry itself comes off the list.

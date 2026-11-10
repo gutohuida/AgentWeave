@@ -294,7 +294,7 @@ function AccessSection({ agent }: { agent: AgentSummary }) {
   const { run, notices } = usePatchWrites()
   const apply = (patch: AgentPatch, said: string) =>
     run(
-      (['can_read_checkpoints', 'can_recall', 'can_accept_evidence'] as const)
+      (['can_read_checkpoints', 'can_recall', 'can_accept_evidence', 'can_admin_specs'] as const)
         .filter((key) => key in patch)
         .map((key) => w(grant, { agent: agent.name, grant: key, enabled: Boolean(patch[key]) })),
       said,

@@ -31,7 +31,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .model_catalog import model_context_window
 from .runner_events import (
@@ -60,6 +60,9 @@ class ParsedLine:
     harness_mcp_status: Optional[str] = None
     # The CLI version the harness reported (Claude's `system/init` `claude_code_version`), F678.
     runner_version: Optional[str] = None
+    # F1145: one model message's own usage, keyed by its message id (the CLI may repeat a message
+    # across lines). Summed only for a turn whose runner never sent its final report.
+    message_accounting: Optional[Tuple[str, AccountingSample]] = None
 
 
 #: Restated from `usage_accounting.SESSION_TOTAL_FIELDS` (a test asserts they agree): this module
@@ -343,8 +346,24 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
         )
         if usage_sample is not None:
             usage_sample.session_id = session_id
+        message_accounting = None
+        message_id = message.get("id") if isinstance(message, dict) else None
+        if isinstance(usage, dict) and isinstance(message_id, str):
+            own = _accounting_from_dimensions(
+                usage,
+                source=source,
+                model=reported_model if isinstance(reported_model, str) else None,
+                cache_is_separate_input=True,
+            )
+            if own is not None:
+                message_accounting = (message_id, own)
         _mark_subagent(data, events)
-        return ParsedLine(events=events, usage=usage_sample, session_id=session_id)
+        return ParsedLine(
+            events=events,
+            usage=usage_sample,
+            session_id=session_id,
+            message_accounting=message_accounting,
+        )
 
     if msg_type == "user":
         message = data.get("message", {})

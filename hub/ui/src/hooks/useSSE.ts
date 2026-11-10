@@ -30,6 +30,7 @@ const SSE_EVENT_TYPES = [
   'build_updated',
   'task_integration_retried',
   'queue_entry_abandoned',
+  'operator_notice',
   'question_asked',
   'question_answered',
   'stall_recorded',

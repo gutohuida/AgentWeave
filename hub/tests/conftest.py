@@ -81,6 +81,7 @@ RUN_ENVIRONMENT_NAMES = (
     "AW_DECISION_TIMEOUT",
     "AW_QUESTION_TIMEOUT",
     "AW_TURN_DEPTH",
+    "AW_CAN_ADMIN_SPECS",
     "HUB_URL",
     "HUB_API_KEY",
     "HUB_PROJECT_ID",
@@ -698,8 +699,82 @@ async def _no_connection_outlives_its_event_loop():
                 f"background runs did not settle in {_MAX_BACKGROUND_SETTLE_PASSES} passes; "
                 f"{len(still_running)} still registered: {still_running!r}"
             )
+        await _settle_every_other_task()
     finally:
         await _REAL_ENGINE.dispose()
+        _forget_module_level_background_state()
+
+
+async def _settle_every_other_task() -> None:
+    """Cancel every task the test left on its loop, to a fixed point, before the loop closes.
+
+    `pytest-asyncio` closes each test's loop through `asyncio.Runner`, which cancels what is left
+    and waits for it -- once. A task cancelled there whose done-callback schedules another
+    (`project_checks._ended` schedules `_replace` / `_check_shared_failure_again`; a landing job's
+    end arms the queue again) creates that one after the snapshot, and it stays pending on a loop
+    that is about to close. It also stays in its module's registry (`project_checks._pending`,
+    `_inflight`), so the next test on the worker to call `project_checks.drain()` gathers it:
+    `RuntimeError: ... got Future <_GatheringFuture pending> attached to a different loop` at
+    `test_a_checks_send_back_returns_accepted_evidence.py:294` (AW-46..53, AW-60, AW-61), the test
+    after one that ended with a check run still in flight.
+
+    Every task rather than a list of registries: what matters is that nothing outlives the loop,
+    whichever module scheduled it. Done-callbacks get a turn of the loop after each pass, so the
+    registries' own `discard` callbacks run while the loop can still run them."""
+    current = asyncio.current_task()
+    for _ in range(_MAX_BACKGROUND_SETTLE_PASSES):
+        leftover = [task for task in asyncio.all_tasks() if task is not current]
+        if not leftover:
+            return
+        for task in leftover:
+            task.cancel()
+        await asyncio.gather(*leftover, return_exceptions=True)
+        await asyncio.sleep(0)
+    still = [task for task in asyncio.all_tasks() if task is not current]
+    raise AssertionError(
+        f"tasks did not settle in {_MAX_BACKGROUND_SETTLE_PASSES} passes; "
+        f"{len(still)} still pending: {still!r}"
+    )
+
+
+def _forget_module_level_background_state() -> None:
+    """Drop what the Hub's background modules remember about the loop that is closing.
+
+    In production there is one loop for the life of the process. Here each test has its own, and
+    these hold its tasks, and locks and semaphores bound to it. The per-loop ones are keyed by
+    `id(loop)`, which CPython reuses: the next test's loop is often allocated where the last one
+    was, and would be handed the previous loop's primitive -- held, or bound elsewhere."""
+    import hub.assigned_task_start as _assigned_task_start
+    import hub.known_failing as _known_failing
+    import hub.landing_queue as _landing_queue
+    import hub.project_checks as _project_checks
+    import hub.pull_requests as _pull_requests
+
+    for registry in (
+        _project_checks._inflight,
+        _project_checks._inflight_tips,
+        _project_checks._superseded,
+        _project_checks._processes,
+        _project_checks._starting,
+        _project_checks._pending,
+        _project_checks._semaphores,
+        _project_checks._fast_waiters,
+        _project_checks._waiting_for_slot,
+        _landing_queue._jobs,
+        _landing_queue._timers,
+        _landing_queue._locks,
+        _landing_queue._batching,
+        _landing_queue._batch_waiters,
+        _known_failing._locks,
+        _known_failing._running_on,
+        _known_failing._pending,
+        _assigned_task_start._in_flight,
+        _assigned_task_start._locks,
+        _pull_requests._asking,
+        _pull_requests._watching,
+        _pull_requests._rewatch,
+    ):
+        registry.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -763,6 +838,20 @@ def _module_level_async_primitives_are_per_test():
     _rebuild()
     yield
     _rebuild()
+
+
+@pytest.fixture(autouse=True)
+def _a_diagnostic_git_is_not_timed_by_the_machines_load(monkeypatch):
+    """The approval-hold diagnostic bounds each git it spawns at
+    `DIAGNOSTIC_GIT_TIMEOUT_SECONDS` (5 s), and says "the Hub could not ask git" past it. A loaded
+    machine running the suite's workers took longer than that to start and run one `git` on a
+    two-commit repository (AW-41: `TimeoutExpired ... after 5 seconds` in a test that only meant
+    "no hold"), so in the suite the bound is what the machine allows, not what the product allows.
+    Kept below the transition's own 60 s so a test can still tell the two apart; a test of what a
+    timeout does raises one itself (`test_a_git_that_cannot_be_asked_refuses_approval.py`)."""
+    from hub import task_integration
+
+    monkeypatch.setattr(task_integration, "DIAGNOSTIC_GIT_TIMEOUT_SECONDS", 50)
 
 
 @pytest.fixture(autouse=True)

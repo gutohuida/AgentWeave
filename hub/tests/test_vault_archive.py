@@ -190,7 +190,9 @@ def test_the_archive_routes_have_a_client() -> None:
     orphans = {r["path"] for r in n10.clientless_routes(rows)}
     mine = {p for p in orphans if "/vault/sources/" in p or p.endswith("/vault/archived")}
     assert not mine, f"vault archive routes with no client: {sorted(mine)}"
-    assert len(orphans) <= 19, f"clientless routes grew past the ratchet: {len(orphans)}"
+    # 19 -> 22 2026-11-09: AOTCT-2 added four paths (hold, archive-batch, tidy-acts, reviewed)
+    # whose page is AOTCT-4, which owes them back.
+    assert len(orphans) <= 22, f"clientless routes grew past the ratchet: {len(orphans)}"
 
 
 def test_ui_client_reaches_archive_restore_and_archived_list() -> None:

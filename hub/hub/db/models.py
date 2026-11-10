@@ -129,6 +129,23 @@ class Project(Base):
     pr_single_commit: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # 'The PR's CI is the full check' (`the-pr-s-ci-is-the-full-check`, FR-1, migration 0169): a PR
+    # build's approved tasks are pushed without the local landing-phase checks, and the PR's CI
+    # decides. Off until the operator turns it on; only with `pr_landing` on.
+    pr_ci_full_check: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # The check names that count when GitHub marks none required on the PR's base (FR-3).
+    pr_ci_check_names: Mapped[Any] = mapped_column(
+        JSON, default=list, server_default="[]", nullable=False
+    )
+    # Minutes between asks while a counted check is pending, and after which asking stops (FR-10).
+    pr_ci_interval_minutes: Mapped[int] = mapped_column(
+        Integer, default=2, server_default="2", nullable=False
+    )
+    pr_ci_cutoff_minutes: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60", nullable=False
+    )
 
     # --- Evidence retention (UNUSED) ---
     # Nothing reads or writes this column. It held a retention policy that no cleaner ever applied;
@@ -141,6 +158,10 @@ class Project(Base):
     # `{"name", "command", "timeout_seconds"}` the Hub runs on the work a task's approval would
     # merge. Set only by the operator. Null or empty means no checks, and approval is unchanged.
     checks: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # The generated files (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`,
+    # FR-1): `{paths, command, timeout_seconds}`, the globs of files a command rebuilds from other
+    # files. Set only by the operator. Null means none, and every conflict sends the task back.
+    generated_files: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     # Whether every process a check run starts runs below normal scheduling priority, so the
     # operator's own work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-
     # user`, FR-5, migration 0161). Off for new and existing projects (FR-6).
@@ -314,6 +335,14 @@ class Agent(Base):
     # how an agent behaves, and behaviour is not authority. A "Verifier" charter may well describe
     # such an agent; it grants it nothing.
     can_accept_evidence: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # Whether this agent may tidy the project's specification corpus: fold built changes into
+    # capabilities, edit capabilities, mark documents superseded, set roadmap slices (`spec_tidy`,
+    # `an-agent-the-operator-trusts-can-tidy-the-specs`, migration 0172). Written only by the
+    # operator's agent PATCH, for the reason above. It never extends to the operator's own acts:
+    # approving, archiving, holding and deciding evidence stay refused whatever it says.
+    can_admin_specs: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
     # An agent is archived, never deleted — its conversations, runs and messages keep their
@@ -2542,6 +2571,17 @@ class SpecDocument(Base):
     acronym_chosen: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # Superseded and held are marks, not phases (`an-agent-the-operator-trusts-can-tidy-the-specs`,
+    # D2, migration 0172): the phase machine and its operator gates stay as they are. A superseded
+    # document keeps its phase and content and cannot be built; clearing the mark nulls all four.
+    # `superseded_by` is the actor's name, from its credential.
+    superseded_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    superseded_by: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    superseded_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    superseded_successor: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    # The operator's hold: a tidy act on a held document is refused. Only the operator sets it.
+    held_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    held_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False
@@ -2583,6 +2623,10 @@ class SpecDocumentMerge(Base):
     this file: this table exists *because* the operator's authorship is the point, and the CHECK
     makes that true even against a caller that reaches the table directly, not only against the one
     route this change adds.
+
+    Widened by 0172: an agent's fold is admitted too, but only with the run it came from, so an
+    agent row always names the run that made it (`an-agent-the-operator-trusts-can-tidy-the-specs`).
+    The constraint keeps its name, which the migration and its downgrade find it by.
     """
 
     __tablename__ = "spec_document_merges"
@@ -2603,7 +2647,8 @@ class SpecDocumentMerge(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "actor_kind = 'operator'", name="ck_spec_document_merges_actor_is_operator"
+            "actor_kind = 'operator' OR (actor_kind = 'agent' AND run_id IS NOT NULL)",
+            name="ck_spec_document_merges_actor_is_operator",
         ),
         Index("ix_spec_document_merges_capability", "capability_document_id", "created_at"),
         Index("ix_spec_document_merges_change", "change_document_id", "created_at"),
@@ -3433,6 +3478,13 @@ class Build(Base):
     pr_last_asked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     pr_pushed_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     pr_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # The PR's CI as the Hub last read it on the head commit (`the-pr-s-ci-is-the-full-check`,
+    # migration 0170): `{state, head_sha, checks, main_sha, last_asked_at, error}`, `state` one of
+    # `pending`, `passed`, `failed`, `failing_on_main`, `not_finished`; and when the head it reads
+    # was pushed, which the cutoff on asking is counted from (FR-5). Null until a push with the
+    # project's CI setting on.
+    pr_ci: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    pr_ci_pushed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     # The lead's build conversation, where its briefs are queued (driver `lead`).
     lead_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     stop_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -3493,6 +3545,9 @@ class TaskLanding(Base):
     waits_on: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     landed_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # A PR build's push with the CI setting on: CI's result on the commit it pushed, as
+    # `Build.pr_ci` reads it, or `superseded` once a later push replaced that head (migration 0170).
+    ci: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), default=_now, onupdate=_now, nullable=False

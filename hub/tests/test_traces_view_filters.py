@@ -187,3 +187,24 @@ async def test_build_filter_lists_exactly_the_runs_of_that_builds_tasks(app, aut
     )
     assert res.status_code == 200, res.text
     assert res.json()["totals"]["count"] == 4
+
+
+@pytest.mark.asyncio
+async def test_a_runs_row_says_who_started_it(app, auth_headers):
+    """TWC-2: the row's `initiator` is the root span's `aw.run.initiator`."""
+    for run_id, initiator in (("run-i-user", "operator"), ("run-i-auto", "autonomous")):
+        async with async_session_factory() as db:
+            run = Run(
+                id=run_id,
+                project_id=PROJECT,
+                agent="iota",
+                status="running",
+                started_at=NOW - timedelta(minutes=5),
+                initiator=initiator,
+            )
+            db.add(run)
+            traces.start_run(db, run, prompt="go", runner="claude", model="haiku")
+            await db.commit()
+    rows = {t["run_id"]: t for t in await _listed(app, auth_headers, agent="iota")}
+    assert rows["run-i-user"]["initiator"] == "operator"
+    assert rows["run-i-auto"]["initiator"] == "autonomous"

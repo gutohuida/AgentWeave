@@ -44,8 +44,12 @@ def _served() -> set:
 
 
 def _described() -> set:
-    """Tool names as the MCP rendering writes them: `name(args)` in backticks."""
-    text = "\n".join(_tool_surface_lines())
+    """Tool names as the MCP rendering writes them: `name(args)` in backticks.
+
+    Rendered with every switch on, so a switched tool (`agents.SWITCHED_TOOLS`) is checked like any
+    other; that it is withheld with the switch off is pinned beside the feature.
+    """
+    text = "\n".join(_tool_surface_lines(can_admin_specs=True))
     return set(re.findall(r"`(\w+)\(", text))
 
 
@@ -56,7 +60,7 @@ def _described_over_http() -> set:
 
 def _described_signatures() -> dict:
     """Each described tool mapped to the argument names the surface gives it."""
-    text = "\n".join(_tool_surface_lines())
+    text = "\n".join(_tool_surface_lines(can_admin_specs=True))
     return {
         name: [arg.split("=")[0].strip() for arg in args.split(",") if arg.strip()]
         for name, args in re.findall(r"`(\w+)\(([^)]*)\)`", text)
@@ -74,7 +78,7 @@ def _http_operations() -> list:
     text the agent receives, because that text is the only thing the agent has.
     """
     operations = []
-    for line in _tool_surface_lines(access_path=HTTP_PATH):
+    for line in _tool_surface_lines(access_path=HTTP_PATH, can_admin_specs=True):
         head = _HEAD_RE.match(line)
         if head is None:
             continue
@@ -377,7 +381,7 @@ def test_the_claude_family_prefixed_rendering_names_the_same_tools(monkeypatch):
     Claude-family run's rendering describes the same operations as every other caller's, just
     under its full callable name. Strip the prefix before comparing, the way the reader mentally
     does the reverse."""
-    text = "\n".join(_tool_surface_lines(runner="claude", access_path="mcp"))
+    text = "\n".join(_tool_surface_lines(runner="claude", access_path="mcp", can_admin_specs=True))
     prefixed = set(re.findall(r"`mcp__agentweave__(\w+)\(", text))
     assert prefixed == _served() - set(UNDESCRIBED_TOOLS)
     assert prefixed == _described()
@@ -390,7 +394,7 @@ def test_the_copilot_rendering_names_every_tool_by_its_copilot_name():
     from hub.launchability import access_path_notice
     from hub.runner_adapters import get_adapter
 
-    text = "\n".join(_tool_surface_lines(runner="copilot", access_path="mcp"))
+    text = "\n".join(_tool_surface_lines(runner="copilot", access_path="mcp", can_admin_specs=True))
     named = set(re.findall(r"`agentweave-(\w+)\(", text))
     assert named == _served() - set(UNDESCRIBED_TOOLS)
     assert "mcp__agentweave__" not in text
@@ -460,7 +464,7 @@ _SHIM_HEAD_RE = re.compile(r"^- `aw-tool (\w+)` — arguments: `([^`]*)` — ")
 def test_the_call_command_rendering_describes_every_operation():
     """The same operations as the other renderings, each as `aw-tool <tool>` with its MCP argument
     list (which the agreement checks above already hold against the tool signatures)."""
-    lines = _tool_surface_lines(access_path="shim", question_timeout=37)
+    lines = _tool_surface_lines(access_path="shim", question_timeout=37, can_admin_specs=True)
     named = {m.group(1) for line in lines if (m := _SHIM_HEAD_RE.match(line))}
     assert named == _described()
     assert named == _served() - set(UNDESCRIBED_TOOLS)

@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0168"
+HEAD_REVISION = "0172"
 
 
 # ---------------------------------------------------------------------------
@@ -4398,6 +4398,8 @@ def test_migration_0113_leaves_the_real_agents_table_insertable(tmp_path) -> Non
     with sqlite3.connect(db_file) as conn:
         conn.execute("DROP TABLE agents")
         conn.execute(_REAL_AGENTS_DDL)
+        # A column a later revision adds (0172), which the ORM insert below names.
+        conn.execute("ALTER TABLE agents ADD COLUMN can_admin_specs BOOLEAN DEFAULT '0' NOT NULL")
         conn.execute("CREATE INDEX ix_agents_name ON agents (name)")
         conn.execute("CREATE INDEX ix_agents_created_by_run_id ON agents (created_by_run_id)")
         conn.execute("CREATE UNIQUE INDEX ix_agents_project_name ON agents (project_id, name)")
@@ -4923,6 +4925,15 @@ def _database_at_0121(tmp_path, name: str) -> tuple:
         conn.execute("ALTER TABLE spec_documents DROP COLUMN size")
         conn.execute("ALTER TABLE spec_documents DROP COLUMN acronym")
         conn.execute("ALTER TABLE spec_documents DROP COLUMN acronym_chosen")
+        for column in (
+            "superseded_at",
+            "superseded_by",
+            "superseded_reason",
+            "superseded_successor",
+            "held_at",
+            "held_note",
+        ):  # 0172
+            conn.execute(f"ALTER TABLE spec_documents DROP COLUMN {column}")
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0121')")
         conn.commit()

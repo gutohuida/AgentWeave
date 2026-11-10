@@ -1,4 +1,4 @@
-import type { Span, TraceDetail } from '@/api/traces'
+import type { Span, TraceDetail, TraceSummary, TraceTotals } from '@/api/traces'
 import { buildWaterfall, type WaterfallRow } from '@/components/traces/traceModel'
 import { hubDate } from '@/lib/hubTime'
 
@@ -23,6 +23,8 @@ export interface ConversationRun {
   end_time: string | null
   ended: boolean
   cost_usd_micros: number | null
+  /** The list route's cost state: a running run is neither priced nor unpriced. */
+  cost_state?: 'measured' | 'unpriced' | 'running'
   input_tokens: number | null
   output_tokens: number | null
   model_calls: number
@@ -59,6 +61,43 @@ export function runEndMs(run: ConversationRun, nowMs: number): number {
 /** The runs in start order, each with its turn number in the whole conversation. */
 export function numberRuns(runs: ConversationRun[]): Array<ConversationRun & { turn: number }> {
   return [...runs].sort((a, b) => ms(a.start_time) - ms(b.start_time)).map((run, i) => ({ ...run, turn: i + 1 }))
+}
+
+/** A trace row from the list route as a conversation's run. The row carries no per-run call or
+ *  wait counts: those come from the totals route, so they are zero here. */
+export function runFromSummary(t: TraceSummary): ConversationRun {
+  return {
+    run_id: t.run_id ?? t.trace_id,
+    trace_id: t.trace_id,
+    agent: t.agent,
+    model: t.model ?? null,
+    initiator: t.initiator ?? null,
+    run_status: t.run_status ?? null,
+    status: t.status,
+    status_message: t.status_message,
+    start_time: t.start_time,
+    end_time: t.end_time,
+    ended: t.ended,
+    cost_usd_micros: t.cost_usd != null ? Math.round(t.cost_usd * 1_000_000) : null,
+    cost_state: t.cost_state,
+    input_tokens: null,
+    output_tokens: null,
+    model_calls: 0,
+    tool_calls: 0,
+    tool_errors: t.tool_errors ?? 0,
+    wait_seconds: 0,
+    span_count: t.span_count,
+  }
+}
+
+/** The since/until pair (ISO, `until` exclusive) that selects exactly these runs by start time. */
+export function boundsOf(runs: ConversationRun[]): { since: string; until: string } | null {
+  if (runs.length === 0) return null
+  const starts = runs.map((r) => ms(r.start_time))
+  return {
+    since: new Date(Math.min(...starts)).toISOString(),
+    until: new Date(Math.max(...starts) + 1000).toISOString(),
+  }
 }
 
 export function selectRuns<T extends ConversationRun & { turn: number }>(runs: T[], selection: RunSelection, nowMs: number): T[] {
@@ -116,6 +155,8 @@ export function buildAxis(runs: ConversationRun[], nowMs: number): Axis {
   })
   const at = (tMs: number) => {
     for (const seg of segments) {
+      // An instant on a break's far edge belongs to the time after it, not to the break.
+      if (seg.kind === 'break' && tMs >= seg.endMs) continue
       if (tMs <= seg.endMs) {
         if (tMs <= seg.startMs) return seg.x0
         if (seg.kind === 'break') return seg.x0
@@ -142,7 +183,7 @@ export interface TimelineRow {
 /** A turn's row, then (when unfolded) its spans below it, each placed on the shared axis. */
 export function buildTimeline(
   runs: Array<ConversationRun & { turn: number }>,
-  details: Record<string, TraceDetail | undefined>,
+  details: Record<string, TraceDetail | null | undefined>,
   unfolded: ReadonlySet<string>,
   axis: Axis,
   nowMs: number,
@@ -197,7 +238,9 @@ export interface ConversationTotals {
   /** From the first shown run's start to the last one's end. */
   elapsedMs: number
   costUsdMicros: number
+  /** Finished turns whose cost was not measured; a running turn is neither priced nor unpriced. */
   unpriced: number
+  priced: number
   modelCalls: number
   toolCalls: number
   toolErrors: number
@@ -206,7 +249,7 @@ export interface ConversationTotals {
 }
 
 export function conversationTotals(runs: ConversationRun[], nowMs: number): ConversationTotals {
-  const t: ConversationTotals = { runs: runs.length, workingMs: 0, elapsedMs: 0, costUsdMicros: 0, unpriced: 0, modelCalls: 0, toolCalls: 0, toolErrors: 0, failedRuns: 0, waitSeconds: 0 }
+  const t: ConversationTotals = { runs: runs.length, workingMs: 0, elapsedMs: 0, costUsdMicros: 0, unpriced: 0, priced: 0, modelCalls: 0, toolCalls: 0, toolErrors: 0, failedRuns: 0, waitSeconds: 0 }
   let first = Infinity
   let last = -Infinity
   for (const r of runs) {
@@ -215,8 +258,12 @@ export function conversationTotals(runs: ConversationRun[], nowMs: number): Conv
     first = Math.min(first, s)
     last = Math.max(last, e)
     t.workingMs += e - s
-    if (r.cost_usd_micros == null) t.unpriced += 1
-    else t.costUsdMicros += r.cost_usd_micros
+    if (r.cost_usd_micros == null) {
+      if (r.ended && r.cost_state !== 'running') t.unpriced += 1
+    } else {
+      t.costUsdMicros += r.cost_usd_micros
+      t.priced += 1
+    }
     t.modelCalls += r.model_calls
     t.toolCalls += r.tool_calls
     t.toolErrors += r.tool_errors
@@ -225,4 +272,30 @@ export function conversationTotals(runs: ConversationRun[], nowMs: number): Conv
   }
   t.elapsedMs = runs.length ? last - first : 0
   return t
+}
+
+/** What the totals strip shows: the turn rows' own figures, with the counts only the Hub's totals
+ *  know (a list row carries no calls or waiting) null while those are still being read. */
+export type ShownTotals = Omit<ConversationTotals, 'modelCalls' | 'toolCalls' | 'waitSeconds'> & {
+  modelCalls: number | null
+  toolCalls: number | null
+  waitSeconds: number | null
+}
+
+/** `route` undefined: the rows are all there is. `null`: the Hub's totals are on their way. An
+ *  object: the Hub's figures for the same turns replace the rows' where it has them. */
+export function withRouteTotals(rows: ConversationTotals, route: TraceTotals | null | undefined): ShownTotals {
+  if (route === undefined) return rows
+  if (route === null) return { ...rows, modelCalls: null, toolCalls: null, waitSeconds: null }
+  return {
+    ...rows,
+    costUsdMicros: route.cost_usd_micros ?? 0,
+    priced: route.priced,
+    unpriced: route.unpriced,
+    failedRuns: route.errors,
+    modelCalls: route.model_calls,
+    toolCalls: route.tool_calls,
+    toolErrors: route.tool_errors ?? rows.toolErrors,
+    waitSeconds: route.wait_seconds,
+  }
 }

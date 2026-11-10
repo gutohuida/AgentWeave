@@ -138,6 +138,49 @@ async def test_a_conflict_goes_back_to_its_builder_and_is_not_run_again_until_th
     assert (await _task()).status == "completed"
 
 
+async def test_a_conflicts_send_back_waits_for_the_completion_to_commit(app, tmp_path, monkeypatch):
+    """Completing work that already conflicted is sent back, whenever the background return runs.
+
+    The completion asks for its checks before it commits, so the send-back that request schedules
+    reads the task still `in_progress` and gives up; the route asks again once it has committed
+    (`update_task_for_actor`, F1084's shape). Here everything the move scheduled runs to its end
+    before the commit, every time, so that second ask is what sends it back (AW-55).
+    """
+    await _builder_task(tmp_path, content="x = 1\n")
+    await _configure([_lint(tmp_path)])
+    _conflicting_main(tmp_path)
+    assert (await _complete(app)).status_code == 200
+    await _settle()
+    assert (await _task()).status == "revision_needed"
+    resumed = await app.patch(
+        AGENT_TASKS.format(TASK), json={"status": "in_progress"}, headers=BUILDER_HEADERS
+    )
+    assert resumed.status_code == 200, resumed.text
+
+    from hub.api.v1 import tasks as task_routes
+
+    real = task_routes.apply_transition
+
+    async def background_first(*args, **kwargs):
+        moved = await real(*args, **kwargs)
+        await project_checks.drain()  # whatever the move scheduled ends before the route commits
+        return moved
+
+    monkeypatch.setattr(task_routes, "apply_transition", background_first)
+    again = await _complete(app)
+    assert again.status_code == 200, again.text
+    await _settle()
+
+    task = await _task()
+    assert task.status == "revision_needed", "sent back again"
+    back = (await _transitions(TASK))[-1]
+    assert (back.from_status, back.to_status, back.reason_class) == (
+        "completed",
+        "revision_needed",
+        "merge-needed",
+    )
+
+
 @pytest.mark.usefixtures("no_agent_cli_spawn")
 async def test_a_flow_tasks_conflict_asks_its_flow_to_give_the_builder_the_task_back(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch

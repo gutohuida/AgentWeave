@@ -97,18 +97,43 @@ def test_the_tool_states_the_caps_the_hub_enforces():
     assert f"at most {NOTE_ENTRY_MAX_CHARS} characters" in doc
 
 
-def test_an_overlong_entry_is_refused_by_name_and_overshoot():
-    """F364: "each entry must be at most 400 characters" named neither the entry nor how far
-    over it was, and an agent took two to five calls per note to find out."""
+def test_an_entry_slightly_over_the_cap_is_split_not_refused():
+    """F1143: one entry 37 characters over refused the whole call, and two runs then left no
+    notes at all. It is split at a space into entries within the cap, losing nothing."""
+    from hub.api.v1.agent_actions import NOTE_ENTRY_MAX_CHARS, AgentCheckpointNotes
+
+    long_entry = " ".join(["word"] * 87)  # 434 characters
+    notes = AgentCheckpointNotes(intent="i", suspicions=["fine", long_entry])
+
+    assert notes.suspicions[0] == "fine"
+    assert len(notes.suspicions) == 3
+    assert all(len(entry) <= NOTE_ENTRY_MAX_CHARS for entry in notes.suspicions)
+    assert " ".join(notes.suspicions[1:]) == long_entry
+
+
+def test_a_list_over_its_whole_budget_is_refused_by_name_and_overshoot():
+    """F364 still holds for an essay: the refusal names the list and how far over it is."""
     from pydantic import ValidationError
 
     from hub.api.v1.agent_actions import AgentCheckpointNotes
 
     with pytest.raises(ValidationError) as excinfo:
-        AgentCheckpointNotes(intent="i", suspicions=["fine", "x" * 412])
+        AgentCheckpointNotes(intent="i", warnings=["x" * 3000, "y" * 212])
 
-    message = str(excinfo.value)
-    assert "suspicions[1] is 412 characters, 12 over the 400" in message
+    assert "warnings is 3212 characters in all, 12 over the 3200" in str(excinfo.value)
+
+
+def test_the_briefings_that_ask_for_notes_name_the_three_arguments():
+    """F1143: an agent called it with `notes=` and was refused by argument validation."""
+    from types import SimpleNamespace
+
+    from hub.checkpoint_trigger import _NOTES_REQUEST
+    from hub.scheduler import _briefing_completion_lines
+
+    task = SimpleNamespace(display_id="AW-1", status="in_progress")
+    flow_lines = " ".join(_briefing_completion_lines(task, is_flow=True))
+    for text in (_NOTES_REQUEST, flow_lines):
+        assert all(name in text for name in ("intent", "suspicions", "warnings")), text
 
 
 @pytest.mark.asyncio
@@ -201,9 +226,9 @@ async def test_an_essay_is_refused(app, auth_headers):
             json={"intent": "ok", "suspicions": [f"s{i}" for i in range(9)], "warnings": []},
             headers=auth_headers,
         )
-        entry_too_long = await app.post(
+        list_too_long = await app.post(
             "/api/v1/agent-actions/checkpoint-notes",
-            json={"intent": "ok", "suspicions": ["y" * 401], "warnings": []},
+            json={"intent": "ok", "suspicions": ["y" * 1700, "y" * 1501], "warnings": []},
             headers=auth_headers,
         )
     finally:
@@ -211,7 +236,7 @@ async def test_an_essay_is_refused(app, auth_headers):
 
     assert too_long.status_code == 422
     assert too_many.status_code == 422
-    assert entry_too_long.status_code == 422
+    assert list_too_long.status_code == 422
 
 
 # --------------------------------------------------------------------------- as an input

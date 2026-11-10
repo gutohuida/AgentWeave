@@ -71,9 +71,9 @@ _NOTES_REQUEST = """\
 This conversation is approaching the point where the Hub will checkpoint it and continue in a \
 successor.
 
-Before that happens, call `submit_checkpoint_notes` with what the record cannot show: what you \
-are in the middle of doing, what you suspect but have not verified, and what a successor should \
-not repeat. Do not list changed files, tasks, or open questions — the Hub already has those.
+Before that happens, call `submit_checkpoint_notes` with what the record cannot show: `intent` \
+(what you are in the middle of doing), `suspicions` (what you suspect but have not verified) and \
+`warnings` (what a successor should not repeat), the last two lists of short strings. Do not list changed files, tasks, or open questions — the Hub already has those.
 
 Then carry on with your work. This is not a request to stop."""
 

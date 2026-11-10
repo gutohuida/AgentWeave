@@ -777,8 +777,10 @@ async def _check_mergeable(
     so a task with nothing to merge produces nothing here, and `merge_situation` has already
     returned `None` for every project where the question could not be asked.
     """
-    from . import task_integration
+    from . import generated_files, task_integration
+    from .db.models import Project
 
+    generated = generated_files.settings_of(await session.get(Project, task.project_id))
     for target in situation.will_merge:
         paths = await asyncio.to_thread(
             task_integration.would_conflict,
@@ -787,6 +789,10 @@ async def _check_mergeable(
             situation.main_branch,
         )
         if not paths:
+            continue
+        if generated_files.rebuildable(generated, paths):
+            # Only declared generated files conflict: where the work lands they are rebuilt on the
+            # merged tree, and a rebuild that fails sends it back from there (`generated_files`).
             continue
         refusal.unmergeable.append(
             {

@@ -2,8 +2,38 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
+/** One counted check on the head commit (`hub/hub/pull_requests.py` `read_ci`). */
+export interface CiCheck {
+  name: string
+  state: 'pending' | 'passed' | 'failed'
+  /** Its page on GitHub; null where GitHub gave none. */
+  url: string | null
+  /** For a failing check: what the same check did on main's latest commit. */
+  main_result?: 'failed' | 'passed' | 'none'
+}
+
+/** CI's result on a PR's head commit (`the-pr-s-ci-is-the-full-check`). */
+export interface CiRead {
+  state:
+    | 'pending'
+    | 'passed'
+    | 'failed'
+    | 'failing_on_main'
+    | 'superseded'
+    | 'not_finished'
+    | null
+  head_sha: string | null
+  checks: CiCheck[]
+  /** When the Hub last asked GitHub. */
+  last_asked_at?: string | null
+  /** GitHub's own words from a failed ask. */
+  error: string | null
+}
+
 /** A build's pull request as the build reads it (`hub/hub/builds.py` `pull_request_view`). */
 export interface BuildPullRequest {
+  /** Null until a push with the project's CI setting on. */
+  ci?: CiRead | null
   number: number | null
   url: string | null
   /** `draft`, `ready`, `merged` or `closed`; null before the first push opens it. */

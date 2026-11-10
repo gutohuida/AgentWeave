@@ -1555,6 +1555,45 @@ async def request(db: AsyncSession, project_id: str, path: str) -> None:
     _spawn(_run_claimed(plan, REQUESTED, subject_of(plan)))
 
 
+def _naive_utc(moment: datetime) -> datetime:
+    return moment.astimezone(timezone.utc).replace(tzinfo=None) if moment.tzinfo else moment
+
+
+async def _reviewed_automatically(db: AsyncSession, project_id: str, document_id: str) -> bool:
+    """Whether this build already has its automatic retrospective (F1144): a firing on its last
+    task's approval that did not fail, made after the document's newest task was created.
+
+    A last task approved again (a landing's merge-needed send-back, then re-approval) is the same
+    build and fires nothing; a task added afterwards reopens the build, so its approval fires.
+    A failed firing does not count, so the next approval retries it. Review this build is
+    `request` and is never held back by this.
+    """
+    newest_task = await db.scalar(
+        select(Task.created_at)
+        .where(Task.project_id == project_id, Task.spec_document_id == document_id)
+        .order_by(Task.created_at.desc())
+        .limit(1)
+    )
+    rows = await _rows(
+        db,
+        select(EventLog)
+        .where(
+            EventLog.project_id == project_id,
+            EventLog.event_type == manager.FIRED_EVENT,
+            EventLog.data["job"].as_string() == JOB,
+            EventLog.data["trigger"].as_string() == LAST_TASK_APPROVED,
+            EventLog.data["subject"]["document"].as_string() == document_id,
+        )
+        .order_by(EventLog.timestamp.desc(), EventLog.id.desc()),
+    )
+    for row in rows:
+        data = row.data or {}
+        if data.get("part") is not None or data.get("outcome") == "failed":
+            continue
+        return newest_task is None or _naive_utc(row.timestamp) >= _naive_utc(newest_task)
+    return False
+
+
 async def _fire_automatic(project_id: str, document_id: str, task_id: str) -> None:
     """The automatic entry: a document that is not reviewed now is simply not reviewed, and nothing
     here raises into the event loop."""
@@ -1563,7 +1602,7 @@ async def _fire_automatic(project_id: str, document_id: str, task_id: str) -> No
         async with async_session_factory() as db:
             job, runner = await gate(db, project_id, LAST_TASK_APPROVED)
             document = await db.get(SpecDocument, document_id)
-            if document is None:
+            if document is None or await _reviewed_automatically(db, project_id, document_id):
                 return
             plan = _plan(document, job, runner)
     except CannotReviewError as refusal:

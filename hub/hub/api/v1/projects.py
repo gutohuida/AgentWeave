@@ -6,10 +6,17 @@ import contextlib
 import copy
 import logging
 from datetime import datetime
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Annotated, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, create_model, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StringConstraints,
+    create_model,
+    field_validator,
+    model_validator,
+)
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.fields import FieldInfo
 from sqlalchemy import func, select
@@ -192,6 +199,73 @@ class ProjectCheck(BaseModel):
         return cleaned
 
 
+class GeneratedFiles(BaseModel):
+    """The files a command rebuilds from other files, and that command
+    (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`, FR-1). The
+    operator's, and only the operator's."""
+
+    paths: List[str] = Field(min_length=1, max_length=50)
+    command: str = Field(min_length=1, max_length=2000)
+    timeout_seconds: int = Field(default=600, ge=1, le=3600)
+
+    model_config = {"extra": "forbid"}
+
+    @field_validator("command")
+    @classmethod
+    def command_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value.strip()
+
+    @field_validator("paths")
+    @classmethod
+    def clean_paths(cls, value: List[str]) -> List[str]:
+        cleaned: List[str] = []
+        for pattern in value:
+            pattern = pattern.strip().replace("\\", "/")
+            if not pattern:
+                continue
+            if len(pattern) > 255:
+                raise ValueError("a path pattern is at most 255 characters")
+            if pattern.startswith("/") or ".." in pattern.split("/"):
+                raise ValueError(f"paths are relative to the repository root: {pattern!r}")
+            if pattern not in cleaned:
+                cleaned.append(pattern)
+        if not cleaned:
+            raise ValueError("name at least one generated path")
+        return cleaned
+
+
+#: The interval between asks while CI is pending, and the cutoff after which asking on the interval
+#: stops, in whole minutes (`the-pr-s-ci-is-the-full-check`, FR-10).
+CI_INTERVAL_MINUTES = (1, 60)
+CI_CUTOFF_MINUTES = (5, 1440)
+
+#: One name in the project's list of the CI checks that count (FR-3), as GitHub names a check.
+CheckName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255)]
+
+
+def ci_timing_problems(interval: int, cutoff: int) -> List[str]:
+    """Each rule an interval and cutoff break, in words naming it (FR-10); empty when none."""
+    problems = []
+    low, high = CI_INTERVAL_MINUTES
+    if not low <= interval <= high:
+        problems.append(
+            f"pr_ci_interval_minutes must be whole minutes from {low} to {high}; {interval} is not"
+        )
+    low, high = CI_CUTOFF_MINUTES
+    if not low <= cutoff <= high:
+        problems.append(
+            f"pr_ci_cutoff_minutes must be whole minutes from {low} to {high}; {cutoff} is not"
+        )
+    if cutoff < interval:
+        problems.append(
+            f"pr_ci_cutoff_minutes ({cutoff}) must not be shorter than pr_ci_interval_minutes "
+            f"({interval}): asking would stop before the first ask"
+        )
+    return problems
+
+
 class ProjectSettings(BaseModel):
     name: str = Field(min_length=1, max_length=256)
     hop_budget: int = Field(ge=1, le=1000)
@@ -242,6 +316,9 @@ class ProjectSettings(BaseModel):
     # operator's own work (`checks-know-their-phase-and-give-way-to-the-user`, FR-5). Off by
     # default, for new and existing projects alike (FR-6).
     checks_give_way: bool = False
+    # The files a command rebuilds, which landing rebuilds instead of sending a conflict back. Null
+    # is none, and every conflict sends the task back as before (FR-1, FR-2). Operator only.
+    generated_files: Optional[GeneratedFiles] = None
 
     # --- PR landing (`a-build-lands-as-one-pull-request`) ---
     # Whether a build may land as one GitHub pull request. Off until the operator turns it on, for
@@ -251,6 +328,19 @@ class ProjectSettings(BaseModel):
     # With PR landing on, whether the build branch carries one commit holding the whole build
     # instead of one commit per task as built (FR-7).
     pr_single_commit: bool = False
+
+    # --- The PR's CI is the full check (`the-pr-s-ci-is-the-full-check`) ---
+    # With PR landing on, whether a PR build's approved tasks are pushed without the local
+    # landing-phase checks, its CI deciding instead. Off until the operator turns it on; refused
+    # while PR landing is off, and turned off with it (FR-1); refused where nothing would be waited
+    # for: GitHub marks no check required on main and `pr_ci_check_names` is empty (FR-3).
+    pr_ci_full_check: bool = False
+    # The check names that count when GitHub marks none required on the PR's base (FR-3).
+    pr_ci_check_names: List[CheckName] = Field(default_factory=list, max_length=50)
+    # Minutes between asks while a counted check is pending, and after which asking on the interval
+    # stops (FR-10). Ranges are judged by `validate_ci_timing`, which names the rule broken.
+    pr_ci_interval_minutes: int = 2
+    pr_ci_cutoff_minutes: int = 60
 
     # --- Reach (reach-1019, `hub/hub/reach.py`) ---
     # The posture every agent's run gets when neither its conversation nor the agent states one.
@@ -308,6 +398,9 @@ class ProjectSettings(BaseModel):
             error = threshold_error(self.checkpoint_threshold_mode, self.checkpoint_threshold_value)
             if error:
                 raise ValueError(error)
+        ci_rules = ci_timing_problems(self.pr_ci_interval_minutes, self.pr_ci_cutoff_minutes)
+        if ci_rules:
+            raise ValueError("; ".join(ci_rules))
         if self.checkpoint_notes_value is not None:
             if self.checkpoint_threshold_value is None:
                 raise ValueError("a notes point needs a threshold to sit below")
@@ -773,6 +866,10 @@ async def update_project_settings(
     # and a deliberate clear is still expressible.
     current = await _project_settings(session, project)
     submitted = body.model_dump(exclude_unset=True)
+    # Turning PR landing off turns 'the PR's CI is the full check' off with it (FR-1); naming both,
+    # the CI setting on, is refused below.
+    if submitted.get("pr_landing") is False and "pr_ci_full_check" not in submitted:
+        submitted["pr_ci_full_check"] = False
     try:
         # Validated against the *merged* state, not the fragment. Validating the fragment would
         # refuse a lone notes value for wanting a threshold the project already has.
@@ -882,6 +979,56 @@ async def update_project_settings(
                 detail={
                     "code": problem.code,
                     "message": f"PR landing cannot be turned on: {problem.message}",
+                },
+            )
+
+    # 'The PR's CI is the full check' needs PR landing on (`the-pr-s-ci-is-the-full-check`, FR-1),
+    # and something to wait for: a check GitHub marks required on main, or a listed name (FR-3).
+    from ... import pull_requests
+
+    if merged.pr_ci_full_check and not merged.pr_landing:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "pr_landing_off",
+                "message": (
+                    f"'The PR's CI is the full check' ({pull_requests.CI_SETTING}) cannot be "
+                    f"turned on while PR landing ({pull_requests.SETTING}) is off: only a "
+                    "build landing as a pull request has a PR whose CI could decide. Turn PR "
+                    "landing on first."
+                ),
+            },
+        )
+    if merged.pr_ci_full_check and (
+        not project.pr_ci_full_check
+        or list(merged.pr_ci_check_names) != list(project.pr_ci_check_names or [])
+    ):
+        from ... import blocking, project_workspace
+
+        try:
+            workspace = await project_workspace.resolve_project_workspace(
+                session, resolved_project_id
+            )
+        except project_workspace.ProjectWorkspaceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Project workspace is unavailable, so GitHub's required checks cannot be "
+                    f"read: {exc}"
+                ),
+            ) from exc
+        problem = await blocking.run(
+            pull_requests.wait_problem,
+            workspace.root,
+            merged.main_branch,
+            merged.pr_ci_check_names,
+        )
+        if problem is not None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": pull_requests.NOTHING_TO_WAIT_FOR,
+                    "message": f"'The PR's CI is the full check' cannot be turned on: {problem}",
                 },
             )
 

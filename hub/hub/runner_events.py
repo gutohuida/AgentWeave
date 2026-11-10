@@ -534,6 +534,28 @@ class AccountingSample:
     #: reads it to decide whether to act on a sample at all.
     credit_session_new: Optional[bool] = None
 
+    @classmethod
+    def summed(cls, samples: List["AccountingSample"]) -> Optional["AccountingSample"]:
+        """The token fields of *samples* added together, with no cost (F1145): what a turn that
+        ended before its runner's final report consumed, read from its messages, unpriced."""
+        if not samples:
+            return None
+
+        def total(name: str) -> Optional[int]:
+            values = [getattr(s, name) for s in samples if getattr(s, name) is not None]
+            return sum(values) if values else None
+
+        return cls(
+            source=samples[-1].source,
+            input_tokens=total("input_tokens"),
+            output_tokens=total("output_tokens"),
+            total_tokens=total("total_tokens"),
+            cache_read_tokens=total("cache_read_tokens"),
+            cache_write_tokens=total("cache_write_tokens"),
+            reasoning_tokens=total("reasoning_tokens"),
+            model=next((s.model for s in reversed(samples) if s.model), None),
+        )
+
     def merged(self, newer: "AccountingSample") -> "AccountingSample":
         """Overlay newer reported fields while retaining independent earlier telemetry."""
         values: Dict[str, Any] = {}

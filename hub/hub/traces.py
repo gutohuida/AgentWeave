@@ -1945,6 +1945,7 @@ def _summary(root: TraceSpan, span_count: int) -> Dict[str, Any]:
         "model": attributes.get("gen_ai.request.model"),
         "worker_kind": attributes.get("aw.worker.kind"),
         "run_status": attributes.get("aw.run.status"),
+        "initiator": attributes.get("aw.run.initiator"),
         "status": root.status,
         "status_message": root.status_message,
         "start_time": root.start_time.isoformat(),
@@ -2029,8 +2030,10 @@ async def _describe_runs(
                 )
             ).all()
         )
+    tool_errors = await _tool_error_counts(db, run_ids)
     for summary in runs:
         run = run_rows.get(summary["run_id"])
+        summary["tool_errors"] = tool_errors.get(summary["run_id"], 0)
         measured = usage.get(summary["run_id"])
         status = summary["run_status"] or (run.status if run else None)
         micros = measured.api_equivalent_usd_micros if measured else None
@@ -2151,6 +2154,24 @@ _KIND_LABELS = {
 }
 
 
+async def _tool_error_counts(db: AsyncSession, run_ids: List[str]) -> Dict[str, int]:
+    """How many tool calls ended in error in each of *run_ids*: the tool spans whose status is
+    `error` (a call whose result was an error, or that was interrupted)."""
+    return dict(
+        (
+            await db.execute(
+                select(TraceSpan.run_id, func.count())
+                .where(
+                    TraceSpan.run_id.in_(run_ids),
+                    TraceSpan.operation == "execute_tool",
+                    TraceSpan.status == "error",
+                )
+                .group_by(TraceSpan.run_id)
+            )
+        ).all()
+    )
+
+
 def _empty_totals() -> Dict[str, Any]:
     return {
         "count": 0,
@@ -2165,6 +2186,7 @@ def _empty_totals() -> Dict[str, Any]:
         "tokens": None,
         "model_calls": 0,
         "tool_calls": 0,
+        "tool_errors": 0,
         "wait_seconds": 0.0,
     }
 
@@ -2190,6 +2212,7 @@ def _add(totals: Dict[str, Any], item: Dict[str, Any]) -> None:
             totals["tokens"][key] += value
     totals["model_calls"] += item["model_calls"]
     totals["tool_calls"] += item["tool_calls"]
+    totals["tool_errors"] += item["tool_errors"]
     totals["wait_seconds"] += item["wait"]
 
 
@@ -2257,6 +2280,7 @@ async def trace_totals(
     usage: Dict[str, TurnUsage] = {}
     run_rows: Dict[str, Tuple[str, Optional[str]]] = {}
     calls: Dict[Tuple[str, str], int] = {}
+    tool_errors: Dict[str, int] = {}
     waits: Dict[str, float] = {}
     for at in range(0, len(matched), _ID_CHUNK):
         ids = matched[at : at + _ID_CHUNK]
@@ -2279,6 +2303,7 @@ async def trace_totals(
             )
         ).all():
             calls[(rid, op)] = count
+        tool_errors.update(await _tool_error_counts(db, ids))
     if matched:
         # Waiting spans are rare: read them through the project/operation index, not per run.
         wanted = set(matched)
@@ -2309,6 +2334,7 @@ async def trace_totals(
             "tokens": None,
             "model_calls": 0,
             "tool_calls": 0,
+            "tool_errors": 0,
             "wait": 0.0,
         }
         if run_id:
@@ -2330,6 +2356,7 @@ async def trace_totals(
                     }
             item["model_calls"] = calls.get((run_id, "chat"), 0)
             item["tool_calls"] = calls.get((run_id, "execute_tool"), 0)
+            item["tool_errors"] = tool_errors.get(run_id, 0)
             item["wait"] = waits.get(run_id, 0.0)
         item["error_kind"] = _error_kind(status, run_status)
         items.append(item)

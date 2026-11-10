@@ -110,10 +110,23 @@ export interface ProjectSettings {
    *  work on the machine comes first (`checks-know-their-phase-and-give-way-to-the-user`). Off by
    *  default; absent from a Hub older than that change. */
   checks_give_way?: boolean
+  /** The files a command rebuilds from other files, which landing rebuilds instead of sending a
+   *  conflict back (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`).
+   *  Null means none. Only the operator sets this; absent from a Hub older than that change. */
+  generated_files?: GeneratedFiles | null
   /** Whether a build may land as one GitHub pull request; off until turned on. */
   pr_landing?: boolean
   /** With PR landing on, one commit holding the whole build rather than one per task. */
   pr_single_commit?: boolean
+  /** The PR's own CI is the full check: a PR build pushes without landing-phase checks locally
+   *  (`the-pr-s-ci-is-the-full-check`). Refused while PR landing is off; turned off with it. */
+  pr_ci_full_check?: boolean
+  /** The checks that count where GitHub marks none required. */
+  pr_ci_check_names?: string[]
+  /** Whole minutes between asks while CI is pending, 1 to 60; 2 by default. */
+  pr_ci_interval_minutes?: number
+  /** Whole minutes after a push when interval asking stops, 5 to 1440; 60 by default. */
+  pr_ci_cutoff_minutes?: number
   /** The posture every agent's run gets when neither its conversation nor the agent states one
    *  (reach-1019). Null is the runner's built-in posture; an agent's own default wins either way. */
   default_permission_mode?: string | null
@@ -141,6 +154,14 @@ export interface ProjectSettingsSaved extends ProjectSettings {
 }
 
 /** One of a project's checks (`approval-runs-the-projects-checks`). */
+/** The generated files setting: globs over repository-relative paths, the command that rebuilds
+ *  them, and its timeout (1 to 3600 seconds, 600 by default). */
+export interface GeneratedFiles {
+  paths: string[]
+  command: string
+  timeout_seconds: number
+}
+
 export interface ProjectCheck {
   name: string
   command: string

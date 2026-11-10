@@ -7,6 +7,7 @@ import {
   type TaskLanding as Landing,
   type TaskLandingEntry as LandingEntry,
 } from '@/api/tasks'
+import { CiState } from '@/components/spec/PullRequestLine'
 import { Button } from '@/components/ui/button'
 
 /**
@@ -100,6 +101,10 @@ function landingSentence(landing: Landing): string {
         : 'Held for you: its batch fails only as main does'
     case 'landed':
       return landing.landed_sha ? `Landed on main at ${short(landing.landed_sha)}` : 'Landed on main'
+    case 'pushed':
+      return landing.landed_sha
+        ? `Pushed to the build's pull request at ${short(landing.landed_sha)}`
+        : "Pushed to the build's pull request"
     case 'sent_back':
       return 'Sent back by its landing batch'
     case 'not_landed':
@@ -113,6 +118,7 @@ const COLOR: Record<Landing['state'], string> = {
   landing: 'var(--text-2)',
   held: 'var(--amber, var(--text-2))',
   landed: 'var(--green)',
+  pushed: 'var(--green)',
   sent_back: 'var(--red)',
   not_landed: 'var(--red)',
 }
@@ -137,6 +143,7 @@ export function TaskLanding({ taskId }: { taskId: string }) {
         <p style={{ color: 'var(--text-2)' }}>{landing.reason}</p>
       )}
       {landing.state === 'held' && !landing.waits_on && <HeldOnMain taskId={taskId} />}
+      <CiState ci={landing.ci} testId={`task-ci-${taskId}`} />
       {(landing.state === 'sent_back' || landing.state === 'not_landed') && landing.reason && (
         <pre
           aria-label="Why it did not land"

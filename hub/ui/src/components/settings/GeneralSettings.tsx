@@ -6,7 +6,7 @@ import { Input, Textarea } from '@/components/ui/input'
 import { MenuSelect, type SelectOption } from '@/components/ui/menu'
 import { Field, SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settings'
 import { Switch } from '@/components/ui/switch'
-import type { CheckPhase, CheckUsualDuration, CheckUsualDurations, ProjectCheck, ProjectSettings } from '@/api/projects'
+import type { CheckPhase, GeneratedFiles, CheckUsualDuration, CheckUsualDurations, ProjectCheck, ProjectSettings } from '@/api/projects'
 import type { ControlValue } from '@/api/modelCatalog'
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { CommittedInput } from './CommittedInput'
@@ -440,6 +440,13 @@ export function GeneralSettings({
           }
         />
         <SettingsRow
+          label="Generated files"
+          description="Files a command rebuilds from other files (a lockfile, a bundle). When work lands and only these files conflict, the Hub rebuilds them instead of sending the task back. Paths are comma-separated globs; the timeout is 1 to 3600 seconds. Leave the paths empty and save to turn it off."
+          changed={Boolean(settings.generated_files)}
+          onReset={() => onChange({ generated_files: null }, 'Generated files cleared')}
+          control={<GeneratedFilesEditor value={settings.generated_files ?? null} onSave={(v) => onChange({ generated_files: v }, v ? 'Generated files saved' : 'Generated files cleared')} />}
+        />
+        <SettingsRow
           label="Land builds as pull requests"
           description="A build may put its approved work on one GitHub pull request instead of merging into the main branch. Pushing publishes the work, so this is off until you turn it on. It needs a GitHub remote and a logged-in GitHub CLI."
           changed={(settings.pr_landing ?? false) !== PROJECT_DEFAULTS.pr_landing}
@@ -469,6 +476,80 @@ export function GeneralSettings({
               onCheckedChange={(v) =>
                 onChange({ pr_single_commit: v }, v ? 'The build branch carries one commit' : 'One commit per task')
               }
+            />
+          }
+        />
+        <SettingsRow
+          label="The PR's CI is the full check"
+          description="A pull request build pushes approved work without running the landing checks here; the checks that count on GitHub decide whether the PR is ready or the latest task goes back. It needs pull request landing on, and turns off with it. It also needs required checks on GitHub or a list of check names below."
+          changed={(settings.pr_ci_full_check ?? false) !== PROJECT_DEFAULTS.pr_ci_full_check}
+          onReset={() => onChange({ pr_ci_full_check: false }, 'Landing checks run here again')}
+          control={
+            <Switch
+              aria-label="The PR's CI is the full check"
+              data-testid="project-pr-ci-full-check"
+              checked={settings.pr_ci_full_check ?? false}
+              onCheckedChange={(v) =>
+                onChange({ pr_ci_full_check: v }, v ? 'The PR’s CI is the full check' : 'Landing checks run here again')
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label="CI check names"
+          htmlFor="s-pr-ci-names"
+          description="Comma-separated. Used only where GitHub marks no check required on the base branch."
+          changed={(settings.pr_ci_check_names ?? []).length > 0}
+          onReset={() => onChange({ pr_ci_check_names: [] }, 'CI check names cleared')}
+          control={
+            <CommittedInput
+              id="s-pr-ci-names"
+              ariaLabel="CI check names"
+              value={(settings.pr_ci_check_names ?? []).join(', ')}
+              onCommit={(v) =>
+                onChange(
+                  { pr_ci_check_names: v.split(',').map((n) => n.trim()).filter(Boolean) },
+                  'CI check names saved',
+                )
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label="CI asked every"
+          htmlFor="s-pr-ci-interval"
+          description="While a counted check is pending, the Hub asks GitHub this often. Whole minutes, 1 to 60."
+          changed={(settings.pr_ci_interval_minutes ?? 2) !== PROJECT_DEFAULTS.pr_ci_interval_minutes}
+          onReset={() => onChange({ pr_ci_interval_minutes: PROJECT_DEFAULTS.pr_ci_interval_minutes }, 'CI interval reset to 2 minutes')}
+          control={
+            <CommittedInput
+              id="s-pr-ci-interval"
+              ariaLabel="CI interval"
+              numeric
+              width={72}
+              suffix="min"
+              value={String(settings.pr_ci_interval_minutes ?? 2)}
+              validate={(d) => (/^\d+$/.test(d.trim()) ? null : 'A whole number of minutes.')}
+              onCommit={(v) => onChange({ pr_ci_interval_minutes: Number(v) }, `CI asked every ${v} minutes`)}
+            />
+          }
+        />
+        <SettingsRow
+          label="CI asking stops after"
+          htmlFor="s-pr-ci-cutoff"
+          description="After a push, asking on the interval stops this long with a counted check still unconcluded, and the build shows that CI has not finished. Whole minutes, 5 to 1440, and not shorter than the interval."
+          changed={(settings.pr_ci_cutoff_minutes ?? 60) !== PROJECT_DEFAULTS.pr_ci_cutoff_minutes}
+          onReset={() => onChange({ pr_ci_cutoff_minutes: PROJECT_DEFAULTS.pr_ci_cutoff_minutes }, 'CI cutoff reset to 60 minutes')}
+          control={
+            <CommittedInput
+              id="s-pr-ci-cutoff"
+              ariaLabel="CI cutoff"
+              numeric
+              width={72}
+              suffix="min"
+              value={String(settings.pr_ci_cutoff_minutes ?? 60)}
+              validate={(d) => (/^\d+$/.test(d.trim()) ? null : 'A whole number of minutes.')}
+              onCommit={(v) => onChange({ pr_ci_cutoff_minutes: Number(v) }, `CI asking stops after ${v} minutes`)}
             />
           }
         />
@@ -665,6 +746,54 @@ export function GeneralSettings({
         </Button>
       </section>
     </SettingsPage>
+  )
+}
+
+function GeneratedFilesEditor({
+  value,
+  onSave,
+}: {
+  value: GeneratedFiles | null
+  onSave: (value: GeneratedFiles | null) => void
+}) {
+  const stored = {
+    paths: (value?.paths ?? []).join(', '),
+    command: value?.command ?? '',
+    timeout: String(value?.timeout_seconds ?? 600),
+  }
+  const [paths, setPaths] = React.useState(stored.paths)
+  const [command, setCommand] = React.useState(stored.command)
+  const [timeout, setTimeoutValue] = React.useState(stored.timeout)
+  React.useEffect(() => {
+    setPaths(stored.paths)
+    setCommand(stored.command)
+    setTimeoutValue(stored.timeout)
+  }, [stored.paths, stored.command, stored.timeout])
+  const list = paths.split(',').map((p) => p.trim()).filter(Boolean)
+  const seconds = Number(timeout)
+  const error = !list.length
+    ? null
+    : !command.trim()
+      ? 'A rebuild command is needed.'
+      : !/^\d+$/.test(timeout.trim()) || seconds < 1 || seconds > 3600
+        ? 'The timeout is a whole number from 1 to 3600.'
+        : null
+  const dirty = paths !== stored.paths || command !== stored.command || timeout !== stored.timeout
+  return (
+    <div className="flex flex-col gap-2" data-testid="generated-files-editor">
+      <Input aria-label="Generated file paths" className="font-mono" value={paths} placeholder="package-lock.json, dist/**" onChange={(e) => setPaths(e.target.value)} />
+      <Input aria-label="Generated files command" className="font-mono" value={command} placeholder="npm install --package-lock-only" aria-invalid={Boolean(error && !command.trim())} onChange={(e) => setCommand(e.target.value)} />
+      <Input aria-label="Generated files timeout" inputMode="numeric" className="tabular" style={{ width: 96 }} value={timeout} onChange={(e) => setTimeoutValue(e.target.value)} />
+      {error ? <span role="alert" className="text-xs">{error}</span> : null}
+      <Button
+        size="xs"
+        className="self-start"
+        disabled={!dirty || Boolean(error)}
+        onClick={() => onSave(list.length ? { paths: list, command: command.trim(), timeout_seconds: seconds } : null)}
+      >
+        Save
+      </Button>
+    </div>
   )
 }
 

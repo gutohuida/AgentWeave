@@ -95,7 +95,8 @@ def micros_of(dollars: Optional[float]) -> Optional[int]:
 
 def pull_request_view(build: Build) -> Optional[Dict[str, Any]]:
     """The build's pull request as the build reads it (FR-13): its number, link, state, when the Hub
-    last asked GitHub and GitHub's last error. None for a build that does not land as one."""
+    last asked GitHub, GitHub's last error and CI's last result on its head commit. None for a
+    build that does not land as one."""
     if build.landing != LANDING_PULL_REQUEST:
         return None
     return {
@@ -104,6 +105,9 @@ def pull_request_view(build: Build) -> Optional[Dict[str, Any]]:
         "state": build.pr_state,
         "last_asked_at": _iso(build.pr_last_asked_at),
         "error": build.pr_error,
+        # CI on the head commit (`the-pr-s-ci-is-the-full-check`): `{state, head_sha, checks,
+        # last_asked_at, error}`, None until a push with the project's CI setting on.
+        "ci": build.pr_ci,
     }
 
 

@@ -247,6 +247,40 @@ async def test_fires_exactly_once_after_the_third_of_three(app, auth_headers, wo
     assert len(fake.calls) == 1 and fake.calls[0]["initiator"] == "autonomous"
 
 
+async def _back_to_review(task_id):
+    async with async_session_factory() as session:
+        (await session.get(Task, task_id)).status = "under_review"
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_last_task_approved_again_does_not_fire_a_second_time(app, auth_headers, worker):
+    """F1144: a landing's merge-needed send-back, then re-approval of the same last task, wrote a
+    second retrospective of the same build. A task added afterwards reopens it and fires again;
+    Review this build always runs."""
+    fake = worker()
+    await _configure(app, auth_headers)
+    await _seed(_document(), _task("t1"))
+    await _approve(app, auth_headers, "t1")
+    assert len(await _firings()) == 1
+
+    await _back_to_review("t1")
+    await _approve(app, auth_headers, "t1")
+    assert len(await _firings()) == 1 and len(fake.calls) == 1
+
+    pressed = await _press(app, auth_headers)
+    assert pressed.status_code == 202, pressed.text
+    assert [f["trigger"] for f in await _firings()] == [br.REQUESTED, br.LAST_TASK_APPROVED]
+
+    reopened = _task("t2")
+    reopened.created_at = datetime.now(timezone.utc) + timedelta(seconds=1)
+    await _seed(reopened)
+    await _approve(app, auth_headers, "t2")
+    firings = await _firings()
+    assert [f["trigger"] for f in firings][0] == br.LAST_TASK_APPROVED and len(firings) == 3
+    assert firings[0]["subject"]["task"] == "t2"
+
+
 @pytest.mark.asyncio
 async def test_on_with_no_runner_says_so_on_the_activity(app, auth_headers, worker):
     fake = worker()

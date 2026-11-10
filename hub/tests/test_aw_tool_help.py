@@ -52,7 +52,8 @@ def test_help_alone_and_list_are_unchanged(capsys):
     code, envelope = _call(capsys, "--list")
     assert code == 0
     tools = envelope["result"]["tools"]
-    assert [t["name"] for t in tools] == sorted(mcp_server._CALLABLE_TOOLS)
+    # A switched tool is withheld from the listing, not from `_CALLABLE_TOOLS` (AOTCT-3).
+    assert [t["name"] for t in tools] == sorted(mcp_server._served_tools())
     for entry in tools:
         assert set(entry) == {"name", "parameters", "required", "summary"}
         assert "\n" not in entry["summary"]

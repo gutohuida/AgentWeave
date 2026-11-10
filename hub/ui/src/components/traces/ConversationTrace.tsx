@@ -1,8 +1,6 @@
 import * as React from 'react'
-import type { TraceDetail } from '@/api/traces'
+import type { TraceDetail, TraceTotals } from '@/api/traces'
 import { Icon } from '@/components/common/Icon'
-import { MenuSelect } from '@/components/ui/menu'
-import { Segmented } from '@/components/ui/segmented'
 import { SpanDetail } from '@/components/traces/SpanDetail'
 import {
   buildAxis,
@@ -10,6 +8,7 @@ import {
   conversationTotals,
   keepLabels,
   selectRuns,
+  withRouteTotals,
   type ConversationRun,
   type RunSelection,
 } from '@/components/traces/conversationTraceModel'
@@ -21,11 +20,12 @@ import '@/styles/conversation-trace.css'
 
 type NumberedRun = ConversationRun & { turn: number }
 
+/** The select's values are the drive's; the selection's own are `all`, `24h`, `6h`, `1h`. */
 const SINCE_OPTIONS = [
-  { value: 'all', label: 'Any time' },
-  { value: '24h', label: 'Last 24 h' },
-  { value: '6h', label: 'Last 6 h' },
-  { value: '1h', label: 'Last hour' },
+  { value: 'all', option: 'any', label: 'Any time' },
+  { value: '24h', option: '24h', label: 'Last 24 h' },
+  { value: '6h', option: '6h', label: 'Last 6 h' },
+  { value: '1h', option: '1h', label: 'Last hour' },
 ] as const
 
 const INDENT_PX = 14
@@ -50,6 +50,7 @@ function initiatorLabel(initiator: string | null | undefined): string | null {
  * Presentational: the caller owns the runs, their traces and the selection.
  */
 export function ConversationTrace({
+  conversationId,
   title,
   agent,
   runs,
@@ -58,19 +59,28 @@ export function ConversationTrace({
   onSelection,
   continuedFrom,
   onOpenContinued,
+  onUnfold,
+  totals: routeTotals,
   now,
 }: {
+  conversationId?: string
   title: string
   agent: string
   /** Every run of the conversation, numbered in start order. */
   runs: NumberedRun[]
   /** Each run's trace, by run id; a run whose trace is not loaded yet shows its row only. */
-  details: Record<string, TraceDetail | undefined>
+  details: Record<string, TraceDetail | null | undefined>
   selection: RunSelection
   onSelection: (next: RunSelection) => void
   /** The conversation this one was carried over from, when it was. */
-  continuedFrom?: { title: string } | null
+  continuedFrom?: { id?: string; title: string } | null
   onOpenContinued?: () => void
+  /** A turn was unfolded for the first time: the caller reads its spans now. */
+  onUnfold?: (runId: string) => void
+  /** The Hub's totals over the turns shown: `undefined` takes them from the turn rows, `null`
+   *  while they are being read. The list's rows carry no call or wait counts, so only the Hub's
+   *  totals can say them. */
+  totals?: TraceTotals | null
   now: Date
 }) {
   const nowMs = now.getTime()
@@ -78,7 +88,17 @@ export function ConversationTrace({
   const axis = React.useMemo(() => buildAxis(shown, nowMs), [shown, nowMs])
   const [unfolded, setUnfolded] = React.useState<Set<string>>(() => new Set())
   const rows = React.useMemo(() => buildTimeline(shown, details, unfolded, axis, nowMs), [shown, details, unfolded, axis, nowMs])
+  const groups = React.useMemo(() => {
+    const out: Array<{ run: NumberedRun; rows: typeof rows }> = []
+    for (const r of rows) {
+      const last = out[out.length - 1]
+      if (last && last.run.run_id === r.run.run_id) last.rows.push(r)
+      else out.push({ run: r.run, rows: [r] })
+    }
+    return out
+  }, [rows])
   const totals = React.useMemo(() => conversationTotals(shown, nowMs), [shown, nowMs])
+  const stats = React.useMemo(() => withRouteTotals(totals, routeTotals), [totals, routeTotals])
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const selected = rows.find((r) => r.row.span.span_id === selectedId) ?? rows[0]
 
@@ -102,7 +122,10 @@ export function ConversationTrace({
     setUnfolded((prev) => {
       const next = new Set(prev)
       if (next.has(runId)) next.delete(runId)
-      else next.add(runId)
+      else {
+        next.add(runId)
+        onUnfold?.(runId)
+      }
       return next
     })
 
@@ -114,14 +137,14 @@ export function ConversationTrace({
   const allTurns = selection.from === 1 && selection.to === runs.length && selection.since === 'all'
 
   return (
-    <div className="aw-ctrace" data-testid="conversation-trace">
+    <div className="aw-ctrace" data-testid="conversation-trace" data-conversation-id={conversationId}>
       <header className="aw-ctrace-head">
         <div className="aw-ctrace-title">
           <strong>{title}</strong>
           <span>{agent}</span>
         </div>
         {continuedFrom ? (
-          <button type="button" data-slot="ctrace-continued" className="aw-ctrace-continued" onClick={onOpenContinued}>
+          <button type="button" data-slot="ctrace-continued" data-testid="conversation-trace-continued" data-conversation-id={continuedFrom.id} className="aw-ctrace-continued" onClick={onOpenContinued}>
             <Icon name="move_up" size={12} />
             Continued from “{continuedFrom.title}” · open its trace
           </button>
@@ -130,33 +153,46 @@ export function ConversationTrace({
 
       <div className="aw-ctrace-controls">
         <span className="aw-ctrace-label">Turns</span>
-        <MenuSelect
-          label="First turn shown"
+        <select
+          aria-label="First turn shown"
+          data-testid="conversation-trace-from"
+          className="control-field"
           value={String(selection.from)}
-          onChange={(v) => onSelection({ ...selection, from: Number(v), to: Math.max(Number(v), selection.to) })}
-          options={turnOptions}
-          testId="ctrace-from"
-        />
+          onChange={(e) => onSelection({ ...selection, from: Number(e.target.value), to: Math.max(Number(e.target.value), selection.to) })}
+        >
+          {turnOptions.map((o) => (
+            <option key={o.value} value={o.value}>{o.label} · {o.detail}</option>
+          ))}
+        </select>
         <span className="aw-ctrace-label">to</span>
-        <MenuSelect
-          label="Last turn shown"
+        <select
+          aria-label="Last turn shown"
+          data-testid="conversation-trace-to"
+          className="control-field"
           value={String(selection.to)}
-          onChange={(v) => onSelection({ ...selection, to: Number(v), from: Math.min(Number(v), selection.from) })}
-          options={turnOptions}
-          testId="ctrace-to"
-        />
+          onChange={(e) => onSelection({ ...selection, to: Number(e.target.value), from: Math.min(Number(e.target.value), selection.from) })}
+        >
+          {turnOptions.map((o) => (
+            <option key={o.value} value={o.value}>{o.label} · {o.detail}</option>
+          ))}
+        </select>
         <span className="aw-ctrace-label">started</span>
-        <Segmented
-          label="Started"
-          size="xs"
-          value={selection.since}
-          onChange={(since) => onSelection({ ...selection, since })}
-          options={SINCE_OPTIONS}
-        />
+        <select
+          aria-label="Started"
+          data-testid="conversation-trace-since"
+          className="control-field"
+          value={SINCE_OPTIONS.find((o) => o.value === selection.since)?.option ?? 'any'}
+          onChange={(e) => onSelection({ ...selection, since: SINCE_OPTIONS.find((o) => o.option === e.target.value)?.value ?? 'all' })}
+        >
+          {SINCE_OPTIONS.map((o) => (
+            <option key={o.option} value={o.option}>{o.label}</option>
+          ))}
+        </select>
         {!allTurns ? (
           <button
             type="button"
             data-slot="ctrace-reset"
+            data-testid="conversation-trace-show-all"
             className="aw-link aw-link-inline"
             onClick={() => onSelection({ from: 1, to: runs.length, since: 'all' })}
           >
@@ -165,39 +201,54 @@ export function ConversationTrace({
         ) : null}
       </div>
 
-      <section className="aw-ctrace-stats" aria-label="Totals" data-testid="ctrace-totals">
+      <section
+        className="aw-ctrace-stats"
+        aria-label="Totals"
+        data-testid="conversation-totals"
+        data-turns={shown.length}
+        data-of={runs.length}
+        data-working-seconds={Math.round(stats.workingMs / 1000)}
+        data-cost-usd-micros={stats.priced ? stats.costUsdMicros : ''}
+        data-unpriced={stats.unpriced}
+        data-failed={stats.failedRuns}
+        data-model-calls={stats.modelCalls ?? ''}
+        data-tool-calls={stats.toolCalls ?? ''}
+        data-tool-errors={stats.toolErrors}
+      >
         <div>
           <span>Turns</span>
           <strong>{shown.length === runs.length ? formatCount(runs.length) : `${formatCount(shown.length)} of ${formatCount(runs.length)}`}</strong>
         </div>
         <div>
           <span>Working</span>
-          <strong>{formatDuration(totals.workingMs)}</strong>
-          <small>over {formatDuration(totals.elapsedMs)}</small>
+          <strong>{formatDuration(stats.workingMs)}</strong>
+          <small>over {formatDuration(stats.elapsedMs)}</small>
         </div>
         <div>
           <span>Cost</span>
-          <strong>{totals.runs - totals.unpriced ? formatMoney(totals.costUsdMicros / 1_000_000) : '—'}</strong>
-          <small>{totals.unpriced ? `${plural(totals.unpriced, 'unpriced turn')} left out` : 'Every turn priced'}</small>
+          <strong>{stats.priced ? formatMoney(stats.costUsdMicros / 1_000_000) : '—'}</strong>
+          <small>{stats.unpriced ? `${plural(stats.unpriced, 'unpriced turn')} left out` : 'Every turn priced'}</small>
         </div>
-        <div data-bad={totals.failedRuns || totals.toolErrors ? 'true' : undefined}>
+        <div data-bad={stats.failedRuns || stats.toolErrors ? 'true' : undefined}>
           <span>Errors</span>
-          <strong>{formatCount(totals.failedRuns + totals.toolErrors)}</strong>
+          <strong>{formatCount(stats.failedRuns + stats.toolErrors)}</strong>
           <small>
-            {totals.failedRuns || totals.toolErrors
-              ? [totals.failedRuns ? plural(totals.failedRuns, 'failed turn') : null, totals.toolErrors ? plural(totals.toolErrors, 'tool error') : null].filter(Boolean).join(' · ')
+            {stats.failedRuns || stats.toolErrors
+              ? [stats.failedRuns ? plural(stats.failedRuns, 'failed turn') : null, stats.toolErrors ? plural(stats.toolErrors, 'tool error') : null].filter(Boolean).join(' · ')
               : 'None'}
           </small>
         </div>
         <p className="aw-ctrace-secondary">
-          <span>{plural(totals.modelCalls, 'model call')}</span>
-          <span>{plural(totals.toolCalls, 'tool call')}</span>
-          <span>{totals.waitSeconds ? `${formatDuration(totals.waitSeconds * 1000)} waiting on you` : 'No waiting on you'}</span>
+          <span>{stats.modelCalls === null ? 'Model calls …' : plural(stats.modelCalls, 'model call')}</span>
+          <span>{stats.toolCalls === null ? 'Tool calls …' : plural(stats.toolCalls, 'tool call')}</span>
+          <span>
+            {stats.waitSeconds === null ? 'Waiting on you …' : stats.waitSeconds ? `${formatDuration(stats.waitSeconds * 1000)} waiting on you` : 'No waiting on you'}
+          </span>
         </p>
       </section>
 
       {shown.length === 0 ? (
-        <p className="aw-ctrace-empty">No turn of this conversation matches. Widen the turns or the start time.</p>
+        <p className="aw-ctrace-empty" data-testid="conversation-trace-empty">No turn of this conversation matches. Widen the turns or the start time.</p>
       ) : (
         <div className="aw-ctrace-body">
           <div className="aw-ctrace-timeline" data-testid="ctrace-timeline">
@@ -211,11 +262,19 @@ export function ConversationTrace({
                     const gap = formatDuration(seg.endMs - seg.startMs)
                     if (seg.kind === 'break') {
                       const show = breakShown[b++]
-                      return show ? (
-                        <span key={i} className="aw-ctrace-break-label" style={{ left: `${((seg.x0 + seg.x1) / 2) * 100}%` }} title={`${gap} with no turn running, folded`}>
-                          {gap} later
+                      return (
+                        <span
+                          key={i}
+                          className="aw-ctrace-break-label"
+                          data-testid="conversation-break"
+                          data-label={`${gap} later`}
+                          data-quiet={show ? undefined : 'true'}
+                          style={{ left: `${((seg.x0 + seg.x1) / 2) * 100}%` }}
+                          title={`${gap} with no turn running, folded`}
+                        >
+                          {show ? `${gap} later` : null}
                         </span>
-                      ) : null
+                      )
                     }
                     const show = tickShown[t++]
                     return (
@@ -228,7 +287,9 @@ export function ConversationTrace({
               </div>
               <span className="aw-ctrace-dur">Duration</span>
             </div>
-            {rows.map((r) => {
+            {groups.map((group) => (
+              <div key={group.run.run_id} data-testid="conversation-turn" data-run-id={group.run.run_id} data-number={group.run.turn} style={{ display: 'contents' }}>
+            {group.rows.map((r) => {
               const isRun = r.kind === 'run'
               const token = isRun ? (r.run.status === 'error' ? 'var(--red)' : 'var(--purple)') : spanToken(r.row.span)
               const left = Math.min(r.x0 * 100, 99.6)
@@ -242,6 +303,9 @@ export function ConversationTrace({
                 <div
                   className="aw-ctrace-row"
                   data-kind={r.kind}
+                  data-testid={isRun ? undefined : 'conversation-span'}
+                  data-span-id={isRun ? undefined : r.row.span.span_id}
+                  data-left={isRun ? undefined : r.x0}
                   data-selected={isSelected ? 'true' : undefined}
                   data-status={r.row.span.status}
                 >
@@ -250,6 +314,7 @@ export function ConversationTrace({
                       <button
                         type="button"
                         data-slot="ctrace-fold"
+                        data-testid="conversation-turn-toggle"
                         className="aw-ctrace-fold"
                         aria-expanded={open}
                         aria-label={open ? `Fold turn ${r.run.turn}` : `Unfold turn ${r.run.turn}`}
@@ -272,7 +337,7 @@ export function ConversationTrace({
                           <strong>Turn {r.run.turn}</strong>
                           <small>
                             {hhmm(hubDate(r.run.start_time).getTime())}
-                            {who ? ` · from ${who}` : ''}
+                            {who ? <span data-testid="conversation-turn-from-you">{` · from ${who}`}</span> : null}
                             {r.run.cost_usd_micros != null ? ` · ${formatMoney(r.run.cost_usd_micros / 1_000_000)}` : ''}
                           </small>
                         </>
@@ -293,6 +358,9 @@ export function ConversationTrace({
                       ))}
                     <span
                       className="aw-ctrace-bar"
+                      data-testid={isRun ? 'conversation-turn-bar' : undefined}
+                      data-left={left / 100}
+                      data-width={Math.min(width, 100 - left) / 100}
                       data-open={r.row.open ? 'true' : undefined}
                       style={{
                         left: `${left}%`,
@@ -308,14 +376,21 @@ export function ConversationTrace({
                   </span>
                 </div>
                 {isRun && open ? (
-                  <p className="aw-ctrace-zoom-note">Turn {r.run.turn}’s spans, drawn across its own {formatDuration(r.row.durationMs)}</p>
+                  <p className="aw-ctrace-zoom-note" data-testid="conversation-turn-scale-note">Turn {r.run.turn}’s spans, drawn across its own {formatDuration(r.row.durationMs)}</p>
+                ) : null}
+                {isRun && open && details[r.run.run_id] === null ? (
+                  <p className="aw-ctrace-zoom-note" data-testid="conversation-turn-no-trace">Turn {r.run.turn} has no trace: it was cleared or never recorded.</p>
+                ) : isRun && open && details[r.run.run_id] === undefined ? (
+                  <p className="aw-ctrace-zoom-note">Reading turn {r.run.turn}’s spans…</p>
                 ) : null}
                 </React.Fragment>
               )
             })}
+              </div>
+            ))}
           </div>
           {selected ? (
-            <div className="aw-ctrace-detail">
+            <div className="aw-ctrace-detail" data-testid="conversation-detail">
               <p className="aw-ctrace-detail-of">
                 Turn {selected.run.turn}
                 {selected.kind === 'span' ? ` · ${selected.row.span.name}` : ''}

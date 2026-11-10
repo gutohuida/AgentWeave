@@ -167,7 +167,7 @@ async def test_a_turn_starts_git_is_not_queued_behind_streaming_runs(task_turn, 
             if not state["read"]:
                 state["read"] = True
                 reading.release()
-                release.wait(30)
+                release.wait(300)  # the `finally` sets it: they hold the pool for the whole test
             return ""
 
         process.read.side_effect = _read
@@ -180,9 +180,12 @@ async def test_a_turn_starts_git_is_not_queued_behind_streaming_runs(task_turn, 
         for name in READERS:
             await start(task_id=None, agent=name)
         for _ in READERS:
-            assert await asyncio.wait_for(asyncio.to_thread(reading.acquire, True, 10), 15)
+            assert await asyncio.wait_for(asyncio.to_thread(reading.acquire, True, 120), 150)
         with slow_git(threading.current_thread()) as git:
-            await asyncio.wait_for(start(), timeout=20)
+            # A guard against hanging, not a measure: how long the turn takes depends on the
+            # machine (AW-43 ran out of a 20 s one under load). Which pool its git ran on does not,
+            # and that is what the assertions below decide.
+            await asyncio.wait_for(start(), timeout=300)
         off_loop = [call for call in git.calls if not call.on_loop]
         assert off_loop and not git.on_loop, [call.argv[:3] for call in git.on_loop]
         # Not queued behind the readers: every git ran on the Hub's own blocking pool, never the

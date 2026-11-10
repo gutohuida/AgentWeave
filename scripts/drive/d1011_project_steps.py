@@ -127,7 +127,11 @@ def poll(fn, secs=15.0):
 
 def start_hub():
     TMP.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ)
+    # Nothing of the shell's own Hub may reach the scratch one. A drive started inside an agent turn
+    # inherits that turn's HUB_URL (the operator's :8000) and run credential; the Hub prefers its own
+    # HUB_URL over the address it observes when telling a run where to call back, so the scratch
+    # Hub's agents would call the operator's instance.
+    env = {k: v for k, v in os.environ.items() if k != "HUB_URL" and not k.startswith("AW_")}
     env["DATABASE_URL"] = f"sqlite+aiosqlite:///{DB.as_posix()}"
     env["AW_BOOTSTRAP_API_KEY"] = KEY
     log = open(TMP / "hub.log", "w", encoding="utf-8")  # noqa: SIM115 -- the child's stdout

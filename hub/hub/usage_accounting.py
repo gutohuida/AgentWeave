@@ -134,8 +134,8 @@ async def settle_claude_session_totals(
     `copilot_session_baseline` reads), unless a total went down, which says counting restarted
     and the totals are the turn's. A session's first turn is its totals. A session with earlier
     turns but no recorded totals (written before the Hub kept them) has no baseline: the turn
-    keeps its own `usage` tokens and records no cost. A sample with no totals is returned as it
-    came. Never raises: on a failed read the sample is returned unchanged, logged.
+    keeps its own `usage` tokens and records no cost; a turn that did not complete and recorded
+    no totals is passed over (F1145). A sample with no totals is returned as it came. Never raises: on a failed read the sample is returned unchanged, logged.
     """
     if sample is None or not sample.session_totals:
         return sample
@@ -146,7 +146,7 @@ async def settle_claude_session_totals(
     try:
         rows = (
             await db.execute(
-                select(TurnUsage.session_totals)
+                select(TurnUsage.session_totals, Run.status)
                 .select_from(TurnUsage)
                 .join(Run, Run.id == TurnUsage.run_id)
                 .where(
@@ -165,6 +165,9 @@ async def settle_claude_session_totals(
             session_id,
         )
         return sample
+    # F1145: a turn that ended before its final report (BLAOP-6's failed run) reported no totals
+    # and saved none to the session, so it neither is a baseline nor hides an older one.
+    rows = [row for row in rows if isinstance(row[0], dict) or row[1] == "completed"]
     if not rows:
         return _as_turn(sample, totals)
     baseline = next((row[0] for row in rows if isinstance(row[0], dict)), None)

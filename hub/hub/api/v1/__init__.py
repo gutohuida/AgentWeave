@@ -27,6 +27,7 @@ from .mender import mender_router, stalls_router
 from .messages import router as messages_router
 from .model_catalog import router as model_catalog_router
 from .native_dialog import router as native_dialog_router
+from .notify_settings import router as notify_settings_router
 from .permissions import router as permissions_router
 from .projects import router as projects_router
 from .questions import router as questions_router
@@ -50,6 +51,7 @@ v1_router.include_router(instance_events_router)
 v1_router.include_router(model_catalog_router)
 v1_router.include_router(fs_browse_router)
 v1_router.include_router(native_dialog_router)
+v1_router.include_router(notify_settings_router)
 v1_router.include_router(instance_conversations_router)
 v1_router.include_router(instance_work_router)
 

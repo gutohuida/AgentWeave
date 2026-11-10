@@ -15,6 +15,7 @@ import { CloseAlreadyBuilt } from '@/components/spec/CloseAlreadyBuilt'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
+import { useHoldDocument, useReleaseHold } from '@/api/specTidy'
 import { useProjectSettings } from '@/api/projects'
 import { useConfigStore } from '@/store/configStore'
 import { Button } from '@/components/ui/button'
@@ -193,6 +194,8 @@ export function useSpecPhaseControls(
   const build = useBuildSpecDocument()
   const approveAndBuild = useApproveAndBuildSpecDocument()
   const setPhase = useSetSpecPhase()
+  const holdDocument = useHoldDocument()
+  const releaseHold = useReleaseHold()
   const [blocking, setBlocking] = useState<SpecBlockingFinding[]>([])
   // Gaps the Hub listed at Check or approve (`approve-lists-what-is-missing-and-can-approve-
   // anyway`). Only an `approval_warnings` refusal makes them overridable: the one Approve anyway answers.
@@ -531,6 +534,30 @@ export function useSpecPhaseControls(
   // ── The overflow menu ──────────────────────────────────────────────────────────────────────
   const menu = (
     <>
+      <MenuItem
+        icon={'lock'}
+        data-testid={document.held ? 'spec-release-hold' : 'spec-hold'}
+        onSelect={() => {
+          if (document.held) {
+            releaseHold.mutate(path, {
+              onError: (error: unknown) =>
+                toast({ title: 'Could not release the hold', description: readableApiError(error, 'The Hub refused.'), tone: 'error' }),
+            })
+            return
+          }
+          const note = window.prompt('Hold this document so an agent cannot tidy it. A note (optional):')
+          if (note === null) return
+          holdDocument.mutate(
+            { path, note: note.trim() },
+            {
+              onError: (error: unknown) =>
+                toast({ title: 'Could not hold it', description: readableApiError(error, 'The Hub refused.'), tone: 'error' }),
+            },
+          )
+        }}
+      >
+        {document.held ? 'Release hold' : 'Hold…'}
+      </MenuItem>
       {canStartFlow && primary?.testId !== 'spec-start-flow' ? (
         <MenuItem icon="play_arrow" data-testid="spec-start-flow" onSelect={() => setStartingFlow(true)}>
           Start a flow…
@@ -573,7 +600,28 @@ export function useSpecPhaseControls(
       }
     : undefined
 
-  const badges =
+  const tidyMarks = (
+    <>
+      {document.superseded ? (
+        <span
+          className="aw-spec-chip"
+          data-static="true"
+          data-testid="spec-superseded-chip"
+          title={`${document.superseded.by}: ${document.superseded.reason}${document.superseded.successor ? ` (by ${document.superseded.successor})` : ''}`}
+        >
+          Superseded
+        </span>
+      ) : null}
+      {document.held ? (
+        <span className="aw-spec-chip" data-static="true" data-testid="spec-held-chip" title={document.held.note ?? 'Held by the operator'}>
+          <Icon name="lock" size={11} />
+          Held
+        </span>
+      ) : null}
+    </>
+  )
+
+  const flowBadge =
     document.kind === 'change-spec' && document.phase === 'approved' && flow ? (
       onOpenLoop && flow.agent ? (
         <button
@@ -594,6 +642,12 @@ export function useSpecPhaseControls(
         </span>
       )
     ) : null
+  const badges = (
+    <>
+      {flowBadge}
+      {tidyMarks}
+    </>
+  )
 
   // ── Messages ───────────────────────────────────────────────────────────────────────────────
   // Each message is built once, then laid out twice: stacked as `messages` (the phase bar) and as

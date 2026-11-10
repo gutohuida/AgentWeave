@@ -578,6 +578,7 @@ async def list_agents(
                 # its default no matter what the row says — and the operator sees a switch they
                 # set turn itself off.
                 can_accept_evidence=bool(agent_row.can_accept_evidence) if agent_row else False,
+                can_admin_specs=bool(agent_row.can_admin_specs) if agent_row else False,
                 config=(
                     {k: v for k, v in (agent_row.config or {}).items() if k in ROSTER_CONFIG_KEYS}
                     if agent_row
@@ -1013,8 +1014,18 @@ UNDESCRIBED_ARGUMENTS = {
 }
 
 
-def _operations() -> List[_Operation]:
+#: Tools described only to an agent holding a switch, by the agent field that is the switch.
+#: Restates `mcp_server.SWITCHED_TOOLS`, which names the run variable the Hub writes from that field
+#: (`agent_trigger`); `test_an_agent_the_operator_trusts_can_tidy_the_specs.py` pins the two.
+SWITCHED_TOOLS = {"tidy_spec_document": "can_admin_specs"}
+
+
+def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
     """The single description of the plane's operations, in the order an agent meets them.
+
+    `can_admin_specs` adds `tidy_spec_document`, which is listed only to an agent whose spec-admin
+    switch is on (`an-agent-the-operator-trusts-can-tidy-the-specs`, D5); the Hub refuses the call
+    whatever the list says.
 
     Constrained values are taken from `mcp_server`'s own `Literal` aliases, so this cannot drift
     from the schema clients receive. Imported inside the function because `mcp_server` is spawned
@@ -1285,7 +1296,8 @@ def _operations() -> List[_Operation]:
                 '(`{"document": <roadmap path>, "slice": <key>}`) names the roadmap slice a '
                 "change document specifies; it can be approved once that roadmap is. Each "
                 "entry in `tasks` lists the repo-relative paths it will edit in `files`, and "
-                "names sibling task keys in `depends_on`: chain any two tasks that share a path."
+                "names sibling task keys in `depends_on`: chain two tasks only where they share "
+                "a path or one needs what another builds."
             ),
             http_note=(
                 "This is the one operation whose request is not flat: everything after `path` — "
@@ -1449,6 +1461,60 @@ def _operations() -> List[_Operation]:
                 "`{class, requirement, where, summary}`, `class` one of `missing`, `partial`, "
                 "`contradicts`, `unrequested`. Only when asked to reconcile; changes nothing."
             ),
+        ),
+        *(
+            [
+                _Operation(
+                    tool="tidy_spec_document",
+                    args=(
+                        "path, op, reason, capability, requirements, retire, retire_criteria, "
+                        "algorithms, retire_algorithms, criteria, title, area, fold_from, "
+                        "requirement, statement, code_wins, successor, roadmap, slice"
+                    ),
+                    method="POST",
+                    path="/spec/documents/tidy",
+                    fields=(
+                        "path",
+                        "op",
+                        "reason",
+                        "capability",
+                        "items",
+                        "retire",
+                        "retire_criteria",
+                        "algorithms",
+                        "retire_algorithms",
+                        "criteria",
+                        "title",
+                        "area",
+                        "fold_from",
+                        "requirement",
+                        "statement",
+                        "code_wins",
+                        "successor",
+                        "roadmap",
+                        "slice",
+                    ),
+                    required=("path", "op"),
+                    text=(
+                        "the operator turned your spec-admin switch on: keep the specs true. "
+                        "`op` is `fold` (the approved change at `path` into `capability`, with "
+                        "the operator's fold choices `requirements`, `retire`, `retire_criteria`, "
+                        "`algorithms`, `retire_algorithms`, `criteria`; the change is marked "
+                        "superseded, never archived), `create_capability` (`title`, optional "
+                        "`area` and `fold_from`), `edit_capability` (`requirement` gets a new "
+                        "`statement`, or `retire` true; `code_wins` `{cited}` when you change it "
+                        "to match the code, naming the file you read), `supersede` (optional "
+                        "`successor`), `clear_superseded`, or `set_slice` (`roadmap`, `slice`). "
+                        "Each act applies at once and is listed for the operator with your "
+                        "`reason`, which is required. Refused with `code` `operators_act` for "
+                        "approving, archiving, holding or deciding anything; `document_held` on a "
+                        "document the operator holds (you may ask them whether to supersede it); "
+                        "`live_work` on one with a running build or open tasks."
+                    ),
+                )
+            ]
+            if can_admin_specs
+            else []
         ),
         _Operation(
             tool="report_cannot_satisfy",
@@ -1919,8 +1985,12 @@ def _tool_surface_lines(
     access_path: str = "mcp",
     runner: Optional[str] = None,
     question_timeout: Optional[int] = None,
+    can_admin_specs: bool = False,
 ) -> List[str]:
     """Describe every operation an agent can perform, in the idiom of its own access path.
+
+    `can_admin_specs` is the agent's spec-admin switch: only with it on is `tidy_spec_document`
+    described (`SWITCHED_TOOLS`).
 
     `access_path` defaults to `"mcp"`, which is what every caller rendered before
     `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, and what a caller outside any run
@@ -2034,7 +2104,7 @@ def _tool_surface_lines(
     if adapter is not None and adapter.host_tool_note:
         lines.append(adapter.host_tool_note)
     lines.append("")
-    for operation in _operations():
+    for operation in _operations(can_admin_specs=can_admin_specs):
         lines.extend(render(operation))
     lines.append("")
     lines.append(
@@ -2851,6 +2921,7 @@ async def _render_hub_agent_context(
                 access_path=access_path,
                 runner=runner,
                 question_timeout=question_timeout,
+                can_admin_specs=bool(agent_row is not None and agent_row.can_admin_specs),
             )
         )
     else:
@@ -3093,7 +3164,11 @@ CHECKPOINT_GRANT_FIELDS = ("can_read_checkpoints", "can_recall")
 # The column and its migration have existed since `0068`. Nothing could set it — no schema, no
 # route, no control — so `requirement_evidence.may_accept` refused every agent in every project,
 # and a capability enforced everywhere and grantable nowhere is a refusal of everyone.
-GRANT_FIELDS = (*CHECKPOINT_GRANT_FIELDS, "can_accept_evidence")
+#
+# `can_admin_specs` lets an agent tidy the specification corpus (`spec_tidy`, migration 0172). It is
+# written here and nowhere else: this route takes the operator's credential, so a run credential
+# cannot reach it, and no agent tool writes an agent row.
+GRANT_FIELDS = (*CHECKPOINT_GRANT_FIELDS, "can_accept_evidence", "can_admin_specs")
 
 CHECKPOINT_OVERRIDE_FIELDS = (
     "checkpoint_mode",

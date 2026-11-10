@@ -14,7 +14,18 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, Run, Task, TraceSpan, TurnUsage
 
 PROJECT = "proj-test"
-NOW = datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _a_midday_in_the_past() -> datetime:
+    """Today's noon UTC if it has passed, else yesterday's. A run defaults to five minutes before
+    this, and the day grouping expects it on this one's day: taken as the moment of import, a module
+    imported in the five minutes after midnight UTC put those runs on the day before (AW-58)."""
+    now = datetime.now(timezone.utc)
+    noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
+    return noon if noon <= now else noon - timedelta(days=1)
+
+
+NOW = _a_midday_in_the_past()
 
 
 async def _run(
@@ -185,6 +196,28 @@ async def test_secondary_numbers_match_what_was_recorded(app, auth_headers):
     assert t["model_calls"] == 4
     assert t["tool_calls"] == 5
     assert t["wait_seconds"] == 12
+
+
+@pytest.mark.asyncio
+async def test_a_conversations_totals_and_rows_count_its_failed_tool_calls(app, auth_headers):
+    """conversation-totals (FR-6): a run with two failing tool calls and one successful one
+    reports 2 tool errors, in the totals (and its group) and on the run's list row."""
+    await _run("run-te-1", "tessa", micros=1_000, conv="conv-te", tools=3, failed_tools=2)
+    await _run("run-te-2", "tessa", micros=1_000, conv="conv-te", tools=1)
+
+    t = (await _totals(app, auth_headers, conversation_id="conv-te"))["totals"]
+    assert t["tool_calls"] == 4
+    assert t["tool_errors"] == 2
+    assert t["errors"] == 0  # a failed tool call inside a completed run is not a failed turn
+    answer = await _totals(app, auth_headers, conversation_id="conv-te", group_by="conversation")
+    assert _groups(answer)["conv-te"]["totals"]["tool_errors"] == 2
+    res = await app.get(
+        f"/api/v1/projects/{PROJECT}/traces",
+        params={"conversation_id": "conv-te"},
+        headers=auth_headers,
+    )
+    rows = {r["run_id"]: r for r in res.json()["traces"]}
+    assert rows["run-te-1"]["tool_errors"] == 2 and rows["run-te-2"]["tool_errors"] == 0
 
 
 @pytest.mark.asyncio

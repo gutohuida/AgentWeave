@@ -871,6 +871,10 @@ export interface SpecDocumentRecord {
   /** Present while a build of this document is running: how many of the tasks it covers are
    *  approved (`the-spec-page-redesigned`: the list's 'building now' mark and the picker's progress). */
   build?: { id: string; done: number; total: number }
+  /** Marked superseded by an agent trusted with the specs, or null (`an-agent-the-operator-trusts-can-tidy-the-specs`). */
+  superseded?: { at: string; by: string; reason: string; successor: string | null } | null
+  /** Held by the operator: tidy acts on it are refused until released. */
+  held?: { at: string; note: string | null } | null
   updated_at: string
 }
 

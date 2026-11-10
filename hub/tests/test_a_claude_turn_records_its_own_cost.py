@@ -235,6 +235,102 @@ async def test_a_session_whose_earlier_turns_carry_no_totals_records_no_cost_onc
     assert third_usage.output_tokens == 5
 
 
+def _assistant(message_id, usage, session=SESSION):
+    return json.dumps(
+        {
+            "type": "assistant",
+            "session_id": session,
+            "message": {
+                "id": message_id,
+                "model": "claude-haiku-5-5",
+                "content": [{"type": "text", "text": "working"}],
+                "usage": usage,
+            },
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_turn_killed_before_its_report_records_its_messages_tokens_unpriced(
+    app, auth_headers, bind_runner
+):
+    """F1145: BLAOP-6's 33-minute failed run ended before Claude's `result`, and recorded no
+    tokens at all though each message it sent carried its own usage. They are summed, a message
+    repeated across lines once, and the turn is recorded unpriced rather than as nothing."""
+    await _agent(app, auth_headers, bind_runner, "killed-claude")
+    first = {"input_tokens": 3, "cache_read_input_tokens": 100, "output_tokens": 10}
+    second = {"input_tokens": 2, "cache_creation_input_tokens": 50, "output_tokens": 7}
+    lines = [
+        _init("2.1.301", session="sess-killed"),
+        _assistant("msg-1", first, session="sess-killed"),
+        _assistant("msg-1", first, session="sess-killed"),
+        _assistant("msg-2", second, session="sess-killed"),
+    ]
+    fake_spawn = _fake_pty([line + "\n" for line in lines], exit_code=1)
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.runner_adapters.base.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "killed-claude", "message": "hi"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200, resp.text
+            run_id = resp.json()["run_id"]
+            await _await_background_run()
+
+    usage, run = await _usage(run_id)
+    assert run.status == "failed"
+    assert usage.status == "measured"
+    assert (usage.input_tokens, usage.output_tokens) == (103 + 52, 17)
+    assert (usage.cache_read_tokens, usage.cache_write_tokens) == (100, 50)
+    assert usage.api_equivalent_usd_micros is None and usage.model == "claude-haiku-5-5"
+
+
+@pytest.mark.asyncio
+async def test_a_turn_resuming_a_session_whose_last_turn_failed_unreported_is_priced(app):
+    """F1145: BLAOP-6's completed run resumed the failed run's session. That run had saved no
+    totals, so it is no baseline, and the completed run's totals are its own, priced."""
+    from hub.db.models import Agent
+    from hub.runner_events import AccountingSample
+    from hub.usage_accounting import settle_claude_session_totals
+
+    async with async_session_factory() as db:
+        db.add(Agent(id="ag-resumed", project_id="proj-test", name="resumed"))
+        db.add(
+            Run(
+                id="run-killed",
+                project_id="proj-test",
+                agent="resumed",
+                session_id="sess-r",
+                status="failed",
+                turn_depth=0,
+            )
+        )
+        db.add(
+            TurnUsage(
+                id="usage-killed",
+                run_id="run-killed",
+                project_id="proj-test",
+                agent="resumed",
+                status="unavailable",
+                runner="claude",
+            )
+        )
+        await db.commit()
+        totals = {"api_equivalent_usd_micros": 643062, "input_tokens": 1000, "output_tokens": 80}
+        sample = AccountingSample(source="claude", input_tokens=900, session_totals=totals)
+        settled = await settle_claude_session_totals(
+            db,
+            sample,
+            project_id="proj-test",
+            agent="resumed",
+            session_id="sess-r",
+            runner_version="2.1.301",
+        )
+    assert settled.api_equivalent_usd_micros == 643062
+    assert settled.input_tokens == 1000
+
+
 def test_the_parser_restates_the_session_total_fields_exactly():
     from hub.runner_parsing import _SESSION_TOTAL_FIELDS
     from hub.usage_accounting import SESSION_TOTAL_FIELDS

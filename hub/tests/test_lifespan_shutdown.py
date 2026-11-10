@@ -10,6 +10,7 @@ subprocess — the only test in the suite that goes through the actual startup/s
 `main.py` wires these into.
 """
 
+import contextlib
 import sys
 import time
 
@@ -25,7 +26,8 @@ def test_hub_shutdown_kills_a_real_tracked_process():
     # HTTP trigger endpoint — this test's only concern is whether the ASGI lifespan's
     # shutdown event reaches terminate_all_active_runs() and it actually kills what it
     # finds, not the trigger endpoint's own request handling (covered elsewhere).
-    session = PtySession.spawn([sys.executable, "-c", "import time; time.sleep(30)"])
+    # Far longer than the wait below, so only the shutdown can be what ends it.
+    session = PtySession.spawn([sys.executable, "-c", "import time; time.sleep(600)"])
     pid = session.pid
     run_liveness.active_ptys["run-lifespan-test"] = session
     try:
@@ -35,7 +37,9 @@ def test_hub_shutdown_kills_a_real_tracked_process():
         with TestClient(app):
             pass  # lifespan startup runs on __enter__, shutdown runs on __exit__
 
-        for _ in range(50):
+        # Until it is gone, not for a fixed time: a loaded machine can take seconds to end a process.
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
             # `session.isalive()` first, and it is load-bearing on POSIX: a SIGKILLed child
             # stays a **zombie** until its parent reaps it, and `pid_alive()` uses
             # `os.kill(pid, 0)`, which succeeds for a zombie. This process is the parent, so
@@ -50,5 +54,9 @@ def test_hub_shutdown_kills_a_real_tracked_process():
         assert pid_alive(pid) is False
     finally:
         run_liveness.active_ptys.pop("run-lifespan-test", None)
-        if session.isalive():
-            session.terminate(force=True)
+        # Only a process still running is ended here. The pty's own `isalive()` can still say yes
+        # for a child the shutdown has already killed, and Windows refuses to terminate a process
+        # that is exiting with "Access is denied" (AW-44): that one is already going.
+        if pid_alive(pid) and session.isalive():
+            with contextlib.suppress(PermissionError):
+                session.terminate(force=True)

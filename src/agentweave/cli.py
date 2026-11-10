@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from . import __version__, desktop_window
+from . import __version__, desktop_window, notifier
 from .utils import load_dotenv, now_iso, print_error, print_info, print_success, print_warning
 
 logger = logging.getLogger(__name__)
@@ -1218,6 +1218,21 @@ def _make_window_ours(window: Any, port: int, closer: Optional["_AppWindowCloser
         window.events.before_show += _before_show
     with contextlib.suppress(AttributeError, TypeError):
         window.events.closing += _closing
+    _register_windows_notifications()
+
+
+def _register_windows_notifications() -> None:
+    """Register the `agentweave:` link and the Start-menu shortcut notifications are shown under
+    (D4, D5), behind the window: the shortcut's first creation compiles a helper for seconds."""
+    if not notifier.supported():
+        return
+    import threading
+
+    def _register() -> None:
+        target, arguments = _resolve_shortcut_target()
+        notifier.register(target, arguments, _app_icon_path())
+
+    threading.Thread(target=_register, name="aw-notify-register", daemon=True).start()
 
 
 def _app_close_setting_file(port: int) -> Path:
@@ -1380,12 +1395,13 @@ def _marker_pid(marker: Path) -> Optional[int]:
         return None
 
 
-def _focus_open_app_window(port: int) -> bool:
+def _focus_open_app_window(port: int, target: Optional[Dict[str, Any]] = None) -> bool:
     """If an app window is open on the Hub at `port`, restore it and bring it to the front (D2).
 
     Returns whether one is open: the caller then opens no second window. A marker whose process
     has gone is stale (a window that crashed never removed it) and is cleared; one whose process
     lives but shows no app window is passed over, so the launch opens a window of its own.
+    `target` is a notification's open target: the window is told to go there as it comes forward.
     """
     for marker in _app_window_markers(port):
         pid = _marker_pid(marker)
@@ -1397,9 +1413,92 @@ def _focus_open_app_window(port: int) -> bool:
                 with contextlib.suppress(OSError):
                     marker.unlink()
             continue
+        if target is not None:
+            _app_window_send_open(marker, target)
         desktop_window.focus_window(hwnd, owner_pid=pid)
         return True
     return False
+
+
+def _app_window_open_request(marker: Path) -> Path:
+    """Beside a window's marker: where another process asks that window to go somewhere."""
+    return marker.with_suffix(".goto")
+
+
+def _app_window_send_open(marker: Path, target: Dict[str, Any]) -> bool:
+    """Ask the window behind `marker` to open `target`; its watcher passes it to the page."""
+    request = _app_window_open_request(marker)
+    try:
+        partial = request.with_suffix(".goto-part")
+        partial.write_text(json.dumps(target), encoding="utf-8")
+        os.replace(partial, request)
+        return True
+    except OSError:
+        return False
+
+
+def _app_window_take_open(marker: Path) -> Optional[Dict[str, Any]]:
+    """The open target another process left for this window, consumed; None when there is none."""
+    request = _app_window_open_request(marker)
+    try:
+        target = json.loads(request.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    finally:
+        with contextlib.suppress(OSError):
+            request.unlink()
+    return target if isinstance(target, dict) else None
+
+
+def _app_open_script(target: Dict[str, Any]) -> str:
+    """The page's `aw-app-open` event: go to this project, and its conversation when it has one."""
+    detail = {
+        "project_id": target.get("project_id"),
+        "agent": target.get("agent"),
+        "conversation_id": target.get("conversation_id"),
+    }
+    return (
+        "window.dispatchEvent(new CustomEvent('aw-app-open', "
+        f"{{ detail: {json.dumps(detail)} }}))"
+    )
+
+
+def _open_from_link(link: str) -> int:
+    """A notification's click (D5): Windows runs the launcher with its `agentweave:` link.
+
+    A window already open on that Hub is restored, brought to the front and sent to the notice's
+    conversation; with none open, one opens there on the running Hub, which is not restarted, so
+    the work it is running carries on (FR-6). A link that names no running Hub starts AgentWeave
+    as a launch does.
+    """
+    target = notifier.parse_open_link(link)
+    if target is None:
+        print_error(f"Not an AgentWeave link: {link}")
+        return 1
+    port = int(target["port"])
+    profile = _hub_profile_serving_port(port) or "default"
+    if not _hub_native_answer_healthy(port):
+        return _hub_native_start(port=port, detach=True, app=True, cwd=None, profile=profile)
+    if _focus_open_app_window(port, target):
+        return 0
+    url = notifier.app_url(port, target)
+    code = _open_app_with_splash(lambda: (url, None), warm=True, port=port, profile=profile)
+    if code is not None:
+        return code
+    if not _open_app_window_native(url, profile=profile):
+        _open_app_window(url)
+    return 0
+
+
+def _hub_native_answer_healthy(port: int) -> bool:
+    """Whether a Hub answers healthy on `port` now (asking only a port someone holds)."""
+    if not _hub_port_accepts(port):
+        return False
+    try:
+        with urllib.request.urlopen(_hub_health_url(port), timeout=2) as resp:
+            return bool(resp.status == 200)
+    except Exception:
+        return False
 
 
 def _enable_default_context_menus(window: Any) -> None:
@@ -1619,6 +1718,20 @@ class _AppWindowApi:
 
         threading.Thread(target=_watch, name="app-window-front", daemon=True).start()
 
+    def notify(self, notice: Any) -> bool:
+        """Show one of the Hub's `operator_notice`s as a Windows notification (FR-1).
+
+        The page passes a notice of a kind the operator switched on for Windows; this refuses it
+        while the window is in front (FR-3), where the in-app toast covers it. Answers whether it
+        was shown, and never raises (FR-8).
+        """
+        try:
+            if self._closer is None or _foreground_is_ours():
+                return False
+            return notifier.show(notice, self._closer.port, HUB_DIR)
+        except Exception:
+            return False
+
     def sound(self, enabled: Any) -> bool:
         path = _app_sound_setting()
         try:
@@ -1665,9 +1778,8 @@ def _open_app_window_native(url: str, profile: str = "default", local: bool = Fa
             _allow_sound_before_a_click()
             webview.start(icon=_app_icon_path(), **_app_window_storage())
         finally:
-            if marker is not None:
-                with contextlib.suppress(OSError):
-                    marker.unlink()
+            stopped = _app_window_unregister(marker)
+        _hand_over_to_watcher(closer, stopped)
         closer.after_closed()
         return True
     except Exception as exc:
@@ -1805,12 +1917,22 @@ def _open_app_with_splash(
     _make_window_ours(window, port, closer)
 
     loaded = threading.Event()
+    # The window has gone. Set under `shown_lock`, which the app's showing also holds, so a window
+    # closed on the splash never has a marker (or a listener) registered for it afterwards.
+    gone = threading.Event()
+    shown_lock = threading.Lock()
 
     def _on_loaded(*_args: Any) -> None:
         loaded.set()
 
+    def _on_closed(*_args: Any) -> None:
+        with shown_lock:
+            gone.set()
+
     with contextlib.suppress(AttributeError, TypeError):
         window.events.loaded += _on_loaded
+    with contextlib.suppress(AttributeError, TypeError):
+        window.events.closed += _on_closed
 
     state: Dict[str, Any] = {"code": 0, "started": False, "url": None, "marker": None}
     work_done = threading.Event()
@@ -1832,6 +1954,8 @@ def _open_app_with_splash(
             url, failure = None, str(exc)
         if not url:
             state["code"] = 1
+            if gone.is_set():
+                return
             text = failure or "AgentWeave could not start."
             with contextlib.suppress(Exception):
                 window.evaluate_js(f"awSplashFail({_json.dumps(text)})")
@@ -1840,20 +1964,25 @@ def _open_app_with_splash(
                 window.destroy()
             return
         state["url"] = url
+        if gone.is_set():  # closed on the splash: nothing to show, nothing to ask the page
+            return
         minimum = _SPLASH_MIN_WARM if warm else _SPLASH_MIN_COLD
         remaining = minimum - (_time.monotonic() - shown_at)
         if remaining > 0:
             _time.sleep(remaining)
         # Leave when the thread is next fully drawn: the page answers how long that is, fade included.
         delay = 0.0
-        with contextlib.suppress(Exception):
-            delay = float(window.evaluate_js("awSplashLeave()") or 0) / 1000
+        if not gone.is_set():
+            with contextlib.suppress(Exception):
+                delay = float(window.evaluate_js("awSplashLeave()") or 0) / 1000
         _time.sleep(max(0.0, min(delay, 3.0)))
-        if closer.decided:  # closed on the splash: no app to show
-            return
-        state["marker"] = _app_window_register(url, window)
-        closer.marker = state["marker"]
-        window.load_url(url)
+        with shown_lock:
+            if closer.decided or gone.is_set():  # closed on the splash: no app to show
+                return
+            state["marker"] = _app_window_register(url, window)
+            closer.marker = state["marker"]
+        with contextlib.suppress(Exception):
+            window.load_url(url)
 
     try:
         _allow_sound_before_a_click()
@@ -1865,13 +1994,16 @@ def _open_app_with_splash(
         if state["url"]:
             _open_app_window(state["url"])
     finally:
-        if closer.stop_after and state["started"]:
-            # Closed on the splash: let the start-up finish first, so the stop finds the Hub it
-            # spawned (its PID file) rather than racing it.
+        with shown_lock:
+            gone.set()
+        if state["started"]:
+            # Closed on the splash: let the start-up finish first, so a stop finds the Hub it
+            # spawned (its PID file) rather than racing it, and a close that keeps it running
+            # hands it to the watcher once it is up (FR-2).
             work_done.wait(timeout=_SPLASH_STOP_WAIT_SECONDS)
-        if state["marker"] is not None:
-            with contextlib.suppress(OSError):
-                state["marker"].unlink()
+        stopped = _app_window_unregister(state["marker"])
+    if state["code"] == 0 and (state["marker"] is not None or state["url"]):
+        _hand_over_to_watcher(closer, stopped)
     closer.after_closed()
     return int(state["code"])
 
@@ -1910,11 +2042,395 @@ def _app_window_register(url: str, window: Any) -> Optional[Path]:
 
         while marker.exists():
             _time.sleep(_APP_WINDOW_POLL_SECONDS)
+            # A notification's click, from the launcher Windows ran for it: tell the page (D5).
+            target = _app_window_take_open(marker)
+            if target is not None:
+                with contextlib.suppress(Exception):
+                    window.evaluate_js(_app_open_script(target))
+        for request in (_app_window_open_request(marker), _app_window_listening(marker)):
+            with contextlib.suppress(OSError):
+                request.unlink()
         with contextlib.suppress(Exception):
             window.destroy()
 
     threading.Thread(target=_watch, name="aw-app-window-watch", daemon=True).start()
+    _listen_for_notices_in_window(port, marker)
     return marker
+
+
+def _app_window_listening(marker: Path) -> Path:
+    """Beside a window's marker: there while that window's process reads the operator stream."""
+    return marker.with_suffix(".listening")
+
+
+def _app_window_listens(port: int) -> bool:
+    """Does a live app window's process read the operator stream for `port`? A marker left by a
+    process that has gone (a crash, a kill) says nothing: trusting it left no listener at all."""
+    return any(
+        _app_window_listening(marker).exists()
+        and (pid := _marker_pid(marker)) is not None
+        and desktop_window.pid_alive(pid)
+        for marker in _app_window_markers(port)
+    )
+
+
+def _app_window_unregister(marker: Optional[Path]) -> bool:
+    """Remove a closing window's marker; answer whether `agentweave stop` had removed it first."""
+    if marker is None:
+        return False
+    stopped = not marker.exists()
+    for path in (marker, _app_window_listening(marker)):
+        with contextlib.suppress(OSError):
+            path.unlink()
+    return stopped
+
+
+# --- the notices while no window is open (task background-watcher: FR-2, FR-3, FR-10) ------------
+#
+# `notifier` explains the two listeners. Every app window's process listens from the moment its
+# window shows the app (`_app_window_register`). A close that leaves a launcher-started Hub running
+# starts the watcher (`--watch-notices <port>`, under `pythonw`, one per port) and keeps listening
+# until the watcher says it is and its own notices are shown; the watcher ends when the Hub ends or
+# a reopened window says it is listening. A marker counts only while its process lives (WNWCO-7: a
+# dead window's leftovers kept every watcher from starting, or ended it at once).
+
+#: How long a close waits for the watcher to say it is listening: pythonw's start, the imports and
+#: the stream's connection, on a busy machine. The closing process keeps listening all that time,
+#: so this is a ceiling, not a gap: it ends sooner when the Hub does.
+_NOTICE_WATCHER_READY_SECONDS = 120
+#: How often a close starts the watcher again when the one it started ended without listening (it
+#: lost its port to a watcher that was itself ending).
+_NOTICE_WATCHER_STARTS = 3
+#: Once the watcher listens, how long the closing process goes on reading: a notice the Hub sent
+#: just before the watcher connected may still be on its way to this process's stream.
+_NOTICE_HAND_OVER_SETTLE_SECONDS = 1.0
+#: Between a listener's attempts to (re)connect to the operator stream.
+_NOTICE_RETRY_SECONDS = 1.0
+#: A stream with nothing on it this long has gone: the Hub pings it every 15 s.
+_NOTICE_STREAM_IDLE_SECONDS = 45
+#: How long the watcher waits out a Hub that does not answer before deciding it has ended.
+_NOTICE_WATCHER_HUB_GRACE_SECONDS = 5.0
+_NOTICE_WATCHER_POLL_SECONDS = 0.5
+#: How long an ending watcher waits for the notices it is still showing (the hand-over hold plus
+#: the shell call).
+_NOTICE_SHOW_DRAIN_SECONDS = 20.0
+
+
+def _hub_local_url(port: int) -> str:
+    """The Hub's own address, not `localhost`: the Hub binds 127.0.0.1, and on Windows `localhost`
+    tries ::1 first, which a refusal makes cost seconds (`_hub_port_accepts`)."""
+    return f"http://127.0.0.1:{port}"
+
+
+def _hub_operator_key(port: int, timeout: float = 5) -> Optional[str]:
+    """The launcher's operator credential for the Hub on `port`, as the close's question gets it."""
+    try:
+        url = f"{_hub_local_url(port)}/api/v1/setup/token"
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            key = json.loads(resp.read()).get("api_key")
+    except Exception:
+        return None
+    return key if isinstance(key, str) and key else None
+
+
+def _open_operator_stream(port: int, key: str) -> Any:
+    """The operator stream (`/api/v1/events`) through a ticket from `/api/v1/events/ticket`."""
+    import urllib.parse as _parse
+
+    request = urllib.request.Request(
+        f"{_hub_local_url(port)}/api/v1/events/ticket", headers={"Authorization": f"Bearer {key}"}
+    )
+    with urllib.request.urlopen(request, timeout=5) as resp:
+        token = json.loads(resp.read())["token"]
+    return urllib.request.urlopen(
+        f"{_hub_local_url(port)}/api/v1/events?token={_parse.quote(token)}",
+        timeout=_NOTICE_STREAM_IDLE_SECONDS,
+    )
+
+
+class _WindowsKinds:
+    """The Hub's per-kind Windows choices (`GET /api/v1/notify-settings`), asked for each notice so
+    a change applies at once (FR-10). When the Hub cannot answer: its last answer, else the
+    defaults."""
+
+    def __init__(self, port: int) -> None:
+        self.port = port
+        self.key: Optional[str] = None
+        self._last: Optional[Dict[str, bool]] = None
+
+    def __call__(self) -> Dict[str, bool]:
+        try:
+            request = urllib.request.Request(
+                f"{_hub_local_url(self.port)}/api/v1/notify-settings",
+                headers={"Authorization": f"Bearer {self.key}"},
+            )
+            with urllib.request.urlopen(request, timeout=3) as resp:
+                data = json.loads(resp.read())
+            if isinstance(data, dict):
+                self._last = {k: data.get(k) is True for k in notifier.DEFAULT_WINDOWS_KINDS}
+        except Exception:
+            pass
+        return dict(self._last or notifier.DEFAULT_WINDOWS_KINDS)
+
+
+def _foreground_pid() -> Optional[int]:
+    """The process owning the operator's foreground window, or None (and None off Windows)."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return None
+        owner = wt.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        return int(owner.value) or None
+    except Exception:
+        return None
+
+
+def _app_window_in_front(port: int) -> bool:
+    """Is an app window showing the Hub on `port` the foreground window (FR-3)?"""
+    pid = _foreground_pid()
+    if pid is None:
+        return False
+    return any(_marker_pid(marker) == pid for marker in _app_window_markers(port))
+
+
+def _listen_for_notices(
+    port: int, on_ready: Callable[[], None], keep_going: Callable[[], bool] = lambda: True
+) -> None:
+    """Read the operator stream while `keep_going()`, reconnecting, and show the notices the
+    operator switched on for Windows once no window of `port` is in front. Never raises."""
+    import time as _time
+
+    kinds = _WindowsKinds(port)
+    while keep_going():
+        try:
+            key = _hub_operator_key(port)
+            if key:
+                kinds.key = key
+                with _open_operator_stream(port, key) as stream:
+                    notifier.listen(
+                        stream,
+                        port,
+                        HUB_DIR,
+                        kinds,
+                        lambda: _app_window_in_front(port),
+                        on_ready,
+                    )
+        except Exception:
+            pass
+        _time.sleep(_NOTICE_RETRY_SECONDS)
+
+
+def _listen_for_notices_in_window(port: int, marker: Path) -> None:
+    """The window process's listener, from the moment its window shows the app. It outlives the
+    window, so a close hands over to the watcher with no moment unheard."""
+    if not notifier.supported():
+        return
+    import threading
+
+    def _ready() -> None:
+        if marker.exists():
+            _app_window_listening(marker).write_text(str(os.getpid()), encoding="utf-8")
+
+    threading.Thread(
+        target=_listen_for_notices, args=(port, _ready), name="aw-notices", daemon=True
+    ).start()
+
+
+def _notice_watcher_files(port: int) -> Tuple[Path, Path]:
+    """The watcher's claim on its port (its pid), and its word that it is listening."""
+    return HUB_DIR / f"notice-watcher-{port}.pid", HUB_DIR / f"notice-watcher-{port}.ready"
+
+
+def _file_pid(path: Path) -> Optional[int]:
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _notice_watcher_ready(port: int) -> bool:
+    pid = _file_pid(_notice_watcher_files(port)[1])
+    return pid is not None and desktop_window.pid_alive(pid)
+
+
+def _claim_notice_watcher(port: int) -> bool:
+    """Claim the port for this process's watcher; False when a live watcher holds it."""
+    claim, _ = _notice_watcher_files(port)
+    for _attempt in range(2):
+        try:
+            HUB_DIR.mkdir(parents=True, exist_ok=True)
+            fd = os.open(str(claim), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            holder = _file_pid(claim)
+            if holder is not None and holder != os.getpid() and desktop_window.pid_alive(holder):
+                return False
+            with contextlib.suppress(OSError):
+                claim.unlink()
+            continue
+        except OSError:
+            return False
+        with contextlib.suppress(OSError):
+            os.write(fd, str(os.getpid()).encode("ascii"))
+        with contextlib.suppress(OSError):
+            os.close(fd)
+        return True
+    return False
+
+
+def _release_notice_watcher(port: int) -> None:
+    for path in _notice_watcher_files(port):
+        if _file_pid(path) == os.getpid():
+            with contextlib.suppress(OSError):
+                path.unlink()
+
+
+def _notice_watcher_should_end(port: int, hub_absent_since: Optional[float], now: float) -> bool:
+    """A window's listener has taken over, or the Hub has not answered for the grace period."""
+    if _app_window_listens(port):
+        return True
+    return hub_absent_since is not None and now - hub_absent_since >= (
+        _NOTICE_WATCHER_HUB_GRACE_SECONDS
+    )
+
+
+def _run_notice_watcher(port: int) -> int:
+    """`--watch-notices <port>`: the watcher, while no window is open on the Hub at `port` (D3).
+
+    Ends when a window's listener says it is listening or the Hub ends; one per port.
+    """
+    if not notifier.supported() or not _claim_notice_watcher(port):
+        return 0
+    import threading
+    import time as _time
+
+    _, ready = _notice_watcher_files(port)
+    ended = threading.Event()
+
+    def _ready() -> None:
+        if not ended.is_set():
+            with contextlib.suppress(OSError):
+                ready.write_text(str(os.getpid()), encoding="utf-8")
+
+    threading.Thread(
+        target=_listen_for_notices,
+        args=(port, _ready, lambda: not ended.is_set()),
+        name="aw-notices",
+        daemon=True,
+    ).start()
+    absent_since: Optional[float] = None
+    try:
+        while True:
+            now = _time.monotonic()
+            if _hub_port_accepts(port):
+                absent_since = None
+            elif absent_since is None:
+                absent_since = now
+            if _notice_watcher_should_end(port, absent_since, now):
+                ended.set()
+                # No longer the port's watcher from here: a close in the next seconds must start a
+                # new one, not take this ending one's word that it is listening.
+                _release_notice_watcher(port)
+                # A notice this watcher has claimed and not yet shown would be lost with it.
+                _drain_notice_deliveries(_NOTICE_SHOW_DRAIN_SECONDS)
+                return 0
+            _time.sleep(_NOTICE_WATCHER_POLL_SECONDS)
+    finally:
+        ended.set()
+        _release_notice_watcher(port)
+
+
+def _drain_notice_deliveries(timeout: float) -> None:
+    """Wait, at most `timeout`, for this process's notices still being shown (`notifier.listen`'s
+    `aw-notice` threads): each has claimed its notice, so ending under it shows it nowhere."""
+    import threading
+    import time as _time
+
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline and any(
+        t.name == "aw-notice" and t.is_alive() for t in threading.enumerate()
+    ):
+        _time.sleep(0.1)
+
+
+def _start_notice_watcher(port: int) -> bool:
+    """Start the watcher for `port` unless one is listening, and wait until it is.
+
+    The caller's own listener goes on reading meanwhile, so the wait is no gap. A watcher that ends
+    without listening (it found the port held by one that was ending) is started again; the wait
+    gives up once the Hub has stopped answering.
+    """
+    import subprocess as _sp
+    import time as _time
+
+    if _notice_watcher_ready(port):
+        return True
+    deadline = _time.monotonic() + _NOTICE_WATCHER_READY_SECONDS
+    starts = 0
+    proc: Any = None
+    absent_since: Optional[float] = None
+    while _time.monotonic() < deadline:
+        if _notice_watcher_ready(port):
+            return True
+        if proc is None or proc.poll() is not None:
+            if starts >= _NOTICE_WATCHER_STARTS:
+                return False
+            starts += 1
+            try:
+                proc = _sp.Popen(
+                    notifier.launcher_argv("--watch-notices", str(port)),
+                    # No console, its own group: pythonw has no window to show, and this
+                    # launcher's exit (it is closing) must not take the watcher with it.
+                    creationflags=0x08000000 | 0x00000200,  # NO_WINDOW | NEW_PROCESS_GROUP
+                    close_fds=True,
+                    stdin=_sp.DEVNULL,
+                    stdout=_sp.DEVNULL,
+                    stderr=_sp.DEVNULL,
+                )
+            except Exception:
+                return False
+        now = _time.monotonic()
+        if _hub_port_accepts(port):
+            absent_since = None
+        elif absent_since is None:
+            absent_since = now
+        elif now - absent_since >= _NOTICE_WATCHER_HUB_GRACE_SECONDS:
+            return False  # the Hub has gone: nothing left to hear
+        _time.sleep(0.2)
+    return False
+
+
+def _hand_over_to_watcher(closer: "_AppWindowCloser", stopped: bool) -> bool:
+    """After a window closes: start the watcher if the close left a Hub this launcher started
+    running (FR-2). Not when the close stops the Hub, or `agentweave stop` closed the window, or
+    another window on the port is still listening. Answers whether a watcher is listening.
+
+    Returns only once this process's own listener has nothing left to show (WNWCO-7): until the
+    watcher listens it is the one reading, and a notice it has claimed is shown by nobody else, so
+    the launcher's exit must not cut either short.
+    """
+    if not notifier.supported() or closer.stop_after or stopped:
+        return False
+    port = closer.port
+    try:
+        if _app_window_listens(port):
+            return False
+        if _hub_pid_running(port, closer.profile) is None:
+            return False  # not a Hub this launcher started: Docker, or one already gone
+        listening = _start_notice_watcher(port)
+        if listening:
+            import time as _time
+
+            _time.sleep(_NOTICE_HAND_OVER_SETTLE_SECONDS)
+        return listening
+    finally:
+        _drain_notice_deliveries(_NOTICE_SHOW_DRAIN_SECONDS)
 
 
 def _app_windows_close(port: int) -> int:
@@ -2589,6 +3105,23 @@ For more help: https://github.com/gutohuida/AgentWeave
         ),
     )
 
+    parser.add_argument(
+        "--open",
+        type=str,
+        default=None,
+        dest="open_link",
+        metavar="LINK",
+        help=argparse.SUPPRESS,  # the `agentweave:` link a notification's click hands the launcher
+    )
+    parser.add_argument(
+        "--watch-notices",
+        type=int,
+        default=None,
+        dest="watch_notices",
+        metavar="PORT",
+        help=argparse.SUPPRESS,  # the watcher a close starts while no window is open (D3)
+    )
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     doctor_parser = subparsers.add_parser("doctor", help="Check environment readiness")
@@ -2734,6 +3267,10 @@ def main(args: Optional[List[str]] = None) -> int:
 
     try:
         if not parsed_args.command:
+            if getattr(parsed_args, "open_link", None):
+                return _open_from_link(parsed_args.open_link)
+            if getattr(parsed_args, "watch_notices", None):
+                return _run_notice_watcher(parsed_args.watch_notices)
             # Bare invocation is the app's primary entry point: launch it, in app mode.
             parsed_args.app = True
             return cmd_hub_start(parsed_args)

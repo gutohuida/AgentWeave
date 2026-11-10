@@ -647,4 +647,4 @@ async def test_the_history_of_an_unknown_task_is_a_404_not_an_empty_list(app, au
         headers=auth_headers,
     )
     assert fresh.status_code == 200
-    assert fresh.json() == {"transitions": []}
+    assert fresh.json() == {"transitions": [], "rebuilds": []}

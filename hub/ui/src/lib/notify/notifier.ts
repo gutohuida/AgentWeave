@@ -17,7 +17,7 @@ export interface NotifierToast {
   description?: string
   /** The project the toast's action opens: the latest event's. */
   projectId: string
-  /** A reply's conversation, which the toast's action opens instead of the project. */
+  /** A reply's or question's conversation, which the toast's action opens instead of the project. */
   conversation?: { agent: string; conversationId: string }
 }
 
@@ -91,7 +91,8 @@ export function createNotifier(deps: NotifierDeps) {
 
   function toastFor(notices: Notice[], latest: Notice): NotifierToast {
     const t: NotifierToast = { ...describe(notices, deps.projectName), projectId: latest.projectId }
-    if (latest.kind === 'reply' && latest.agent && latest.conversationId) {
+    // A reply's or a question's conversation: the toast's action opens it instead of the project.
+    if ((latest.kind === 'reply' || latest.kind === 'ask') && latest.agent && latest.conversationId) {
       t.conversation = { agent: latest.agent, conversationId: latest.conversationId }
     }
     return t

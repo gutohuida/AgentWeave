@@ -379,6 +379,10 @@ class TaskResponse(BaseModel):
     # document that reports rather than refuses; never persisted, because it describes this moment,
     # not a record (`2026-08-13-a-gate-that-only-evidence-opens`, task 5.5).
     approval_report: List[Any] = Field(default_factory=list)
+    # F1141: on the answer to a move to `completed` only, each requirement whose evidence from this
+    # task is only held or rejected, or names only a commit older than the task's tip. A warning,
+    # never a refusal; never persisted.
+    completion_warnings: List[str] = Field(default_factory=list)
     # What filing this against a spec did to its build, or why it joined none
     # (`stopped-stays-stopped`). Only the create route's answer has it.
     build_note: Optional[str] = None

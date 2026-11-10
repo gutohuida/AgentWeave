@@ -18,6 +18,10 @@ export const PROJECT_DEFAULTS: Pick<
   | 'checks_give_way'
   | 'pr_landing'
   | 'pr_single_commit'
+  | 'pr_ci_full_check'
+  | 'pr_ci_check_names'
+  | 'pr_ci_interval_minutes'
+  | 'pr_ci_cutoff_minutes'
 > = {
   hop_budget: 6,
   turn_delivery_cap: 10,
@@ -28,6 +32,10 @@ export const PROJECT_DEFAULTS: Pick<
   checks_give_way: false,
   pr_landing: false,
   pr_single_commit: false,
+  pr_ci_full_check: false,
+  pr_ci_check_names: [],
+  pr_ci_interval_minutes: 2,
+  pr_ci_cutoff_minutes: 60,
 }
 
 /** What each posture lets an agent do, in a sentence: the menu's second line. */
