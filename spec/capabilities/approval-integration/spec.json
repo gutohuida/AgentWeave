@@ -449,13 +449,6 @@
       "when": "the reviewer approves it"
     },
     {
-      "given": "a completed task with one awaiting piece",
-      "key": "the-reviewers-verdict-decides-the-tasks-evidence-sendback",
-      "requirement": "the-reviewers-verdict-decides-the-tasks-evidenc-sendback-rejects",
-      "then": "the piece is rejected by the reviewer with the notes as reason",
-      "when": "the reviewer sends it back with notes"
-    },
-    {
       "given": "a completed task with awaiting evidence of its own and an ungranted reviewer",
       "key": "the-reviewers-verdict-decides-the-tasks-evidence-hold",
       "requirement": "the-reviewers-verdict-decides-the-tasks-evidenc-no-operator-hold",
@@ -484,12 +477,295 @@
       "requirement": "sweep-1018-corrections-approval-refuses-unlanded-commits",
       "then": "409 naming the branch and the commit, and what clears it",
       "when": "the operator Lands it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task with four awaiting pieces for FR-1..FR-4",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_evidence_judged_piece_by_piece.py -k one_of_four, through the agent update_task route as the reviewer; red on master (four rejected with S), green on the branch; paste both outputs.",
+      "key": "each-piece-of-evidence-is-judged-on-its-own-one-of-four",
+      "requirement": "each-piece-of-evidence-is-judged-on-its-send-back-names-failures",
+      "then": "FR-3's piece is rejected with R3, and only that one is rejected; fails on master 43301a6 (all four are rejected with S)",
+      "when": "the reviewer sends it back naming FR-3's piece as failing with reason R3 and a send-back reason S"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same send-back",
+      "how_to_check": "Same test file: read the list_evidence route after the send-back and assert the three states and reasons.",
+      "key": "each-piece-of-evidence-is-judged-on-its-own-three-held",
+      "requirement": "each-piece-of-evidence-is-judged-on-its-unnamed-pieces-are-held",
+      "then": "FR-1, FR-2 and FR-4's pieces are held with reason S, and none is accepted or rejected",
+      "when": "list_evidence is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task with two awaiting pieces",
+      "how_to_check": "Same test file: both calls through update_task; assert held states and the refusal's status and text.",
+      "key": "each-piece-of-evidence-is-judged-on-its-own-general-send-back",
+      "requirement": "each-piece-of-evidence-is-judg-send-back-without-a-failing-piece",
+      "then": "both pieces are held with that reason; a send-back naming none and giving no reason is refused",
+      "when": "the reviewer sends it back naming none, with the reason 'lint fails'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the task above after the builder's fix commit and completion",
+      "how_to_check": "Same test file in a git fixture: commit, complete, attempt approval (assert refusal names FR-1, FR-2, FR-4), record at the new commit, approve, assert states.",
+      "key": "each-piece-of-evidence-is-judged-on-its-own-re-record",
+      "requirement": "each-piece-of-evidence-is-judged-on-its-o-held-is-recorded-again",
+      "then": "the first is refused for those requirements' missing evidence; the second accepts the four new pieces, and the held ones stay held",
+      "when": "approval is attempted without new pieces for FR-1, FR-2 and FR-4, and then again after the builder records them at the new commit and the reviewer approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the send-back above",
+      "how_to_check": "Same test file: after the send-back, list_evidence(review_state='awaiting') for the task returns nothing.",
+      "key": "each-piece-of-evidence-is-judged-on-its-own-no-second-decision",
+      "requirement": "each-piece-of-evidence-is-judged-on-its-verdict-stays-one-action",
+      "then": "no piece of that task is still awaiting a decision from anyone",
+      "when": "the builder's next turn starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task with pieces awaiting",
+      "how_to_check": "Same test file: the call is refused with the contradiction's text, and the task status and every piece's state are unchanged.",
+      "key": "each-piece-of-evidence-is-judged-on-approve-with-failure-refused",
+      "requirement": "each-piece-of-evidence-is-judged-on-its-ow-contradiction-refused",
+      "then": "the approval is refused naming the contradiction and nothing changes",
+      "when": "the reviewer approves it while naming one piece as failing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the send-back above",
+      "how_to_check": "Route test over task_history and both list_evidence filters; plus a vitest over EvidencePieces fed the route's real payload showing 'held' distinct from 'rejected' with each reason and decider.",
+      "key": "each-piece-of-evidence-is-judged-on-its-own-trace-visible",
+      "requirement": "each-piece-of-evidence-is-judged-on-its-own-outcome-is-traceable",
+      "then": "the history names FR-3 rejected with R3 and three held; the two filters return three and one pieces",
+      "when": "the task's history and list_evidence(review_state='held') and (review_state='rejected') are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a review turn's brief and the update_task tool description",
+      "how_to_check": "A test reading the built review brief (review_turn) and the update_task tool's description from the MCP server, asserting both name the failing-pieces argument and the word held.",
+      "key": "each-piece-of-evidence-is-judged-on-its-own-brief-says-so",
+      "requirement": "each-piece-of-evidence-is-judged-on-its-own-reviewer-is-told-how",
+      "then": "both say how to name failing pieces and that unnamed pieces are held",
+      "when": "they are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub started from the checkout on its own port with a throwaway database, and a fixture project whose `gen.txt` is produced by `python gen.py` from `a.txt` and `b.txt`, declared as generated with that command; two tasks branched from the same commit, one editing a.txt and one editing b.txt, each committing its own rebuilt gen.txt",
+      "how_to_check": "Acceptance drive scripts/drive/generated_files_drive.py run against the scratch Hub; today it fails because the second task is sent back merge-needed",
+      "key": "generated-files-are-rebuilt-when-work-lands-instead-of-ac-drive",
+      "requirement": "generated-files-are-rebuilt-w-rebuild-on-generated-only-conflict",
+      "then": "neither is sent back, and master's gen.txt equals what `python gen.py` produces on master's a.txt and b.txt",
+      "when": "both are approved and land one after the other"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project",
+      "how_to_check": "Hub test over the settings route with an operator key and a run credential",
+      "key": "generated-files-are-rebuilt-when-work-l-ac-setting-operator-only",
+      "requirement": "generated-files-are-rebuilt-when-work-la-operator-sets-generated",
+      "then": "the operator's values are stored and read back; the agent's attempt is refused and changes nothing",
+      "when": "the operator saves generated paths, a command and a timeout in settings, and an agent's run tries to set the same field through any route it can reach"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with no generated paths and two tasks conflicting on a file",
+      "how_to_check": "Hub test at each of the three conflict points",
+      "key": "generated-files-are-rebuilt-when-work-lands-instead-of-ac-unset",
+      "requirement": "generated-files-are-rebuilt-when-work-lands-i-unset-is-unchanged",
+      "then": "it is sent back merge-needed with today's report",
+      "when": "the second lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with generated paths set and a task whose only conflict is in a generated file",
+      "how_to_check": "One Hub test per conflict point over a temporary git repository",
+      "key": "generated-files-are-rebuilt-when-work-lands-inst-ac-three-points",
+      "requirement": "generated-files-are-rebuilt-w-rebuild-on-generated-only-conflict",
+      "then": "at each point the task is not sent back and the resulting commit holds the rebuilt file",
+      "when": "the conflict is met at the check run before review, at the landing batch, and at the push to a build's PR (a local bare remote standing in for GitHub)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "generated paths set, and a task conflicting in both a generated file and a source file",
+      "how_to_check": "Hub test whose command writes a marker file; the marker is absent",
+      "key": "generated-files-are-rebuilt-when-work-lands-i-ac-source-conflict",
+      "requirement": "generated-files-are-rebuilt-when-source-conflict-still-sent-back",
+      "then": "it is sent back merge-needed naming the source file, and the command did not run",
+      "when": "it lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a generated-only conflict and a command that also modifies a.txt",
+      "how_to_check": "Hub test",
+      "key": "generated-files-are-rebuilt-when-work-lands-i-ac-unexpected-path",
+      "requirement": "generated-files-are-rebuilt-when-w-only-declared-paths-committed",
+      "then": "nothing is committed, and the task is sent back naming a.txt as an unexpected path",
+      "when": "it lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a generated-only conflict and a command that exits 1, and separately one that sleeps past a 2-second timeout",
+      "how_to_check": "Hub tests",
+      "key": "generated-files-are-rebuilt-when-work-lands-inst-ac-fail-timeout",
+      "requirement": "generated-files-are-rebuilt-when-w-only-declared-paths-committed",
+      "then": "nothing is committed, and the send-back names the exit code with the output tail, or the timeout",
+      "when": "each lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a generated-only conflict, and a project check that fails when gen.txt contains the word BAD, and a command that writes BAD",
+      "how_to_check": "Hub test",
+      "key": "generated-files-are-rebuilt-when-work-lands-instead-o-ac-checked",
+      "requirement": "generated-files-are-rebuilt-when-work-la-rebuilt-tree-is-checked",
+      "then": "the landing's check runs on the rebuilt tree and fails, and nothing reaches main",
+      "when": "it lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a generated-only conflict and a command that records its working directory and whether the Hub's database URL is in its environment",
+      "how_to_check": "Hub test",
+      "key": "generated-files-are-rebuilt-when-work-lands-instead-ac-isolated",
+      "requirement": "generated-files-are-rebuilt-when-work-lands-in-runs-like-a-check",
+      "then": "the directory is a scratch worktree under .agentweave/, not the project's checkout, and the Hub's database URL is absent",
+      "when": "it lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a landing that rebuilt gen.txt",
+      "how_to_check": "Hub test reading git log and the task-history route",
+      "key": "generated-files-are-rebuilt-when-work-lands-instead-ac-recorded",
+      "requirement": "generated-files-are-rebuilt-when-work-lands-rebuild-is-recorded",
+      "then": "the commit message ends '(generated files rebuilt)', and the record and history name gen.txt and a duration",
+      "when": "the merge commit, the landing record and the task's history are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a git fixture project whose single check is a script that appends the checked tree id to a counter file outside the repository, and four tasks under review, each with accepted evidence for its own commit touching its own file",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v, run on master first (fails) and then on the branch (passes); paste both outputs.",
+      "key": "approved-work-merges-in-batches-four-good-tasks-one-run",
+      "requirement": "approved-work-merges-in-batches-one-check-run-per-batch",
+      "then": "all four are approved with a merged integration record, main's tip tree equals the one batch's merged tree, and the counter holds exactly one execution made after the first approval. On master the first approval answers 409 'checks are still running', so the test fails there",
+      "when": "all four are approved within the gather window and the landing queue is drained"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review whose per-task check result passed on a main tip that has since moved, and a second task with no result at all",
+      "how_to_check": "Same file, test_a_stale_or_missing_result_does_not_hold_approval; py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v",
+      "key": "approved-work-merges-in-batches-approval-answers-at-once",
+      "requirement": "approved-work-merges-in-batches-approval-queues-without-waiting",
+      "then": "both answer 200 with status approved and a queued landing, and no per-task check run is started by either approval",
+      "when": "a reviewer approves each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose latest per-task run for its current merge targets failed on its own, with the failure confirmed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_gate.py -v (test_a_failing_check_refuses_approval_with_its_output_and_the_reviewers_move kept green; the stale/missing tests rewritten to expect queueing)",
+      "key": "approved-work-merges-in-batches-own-failure-still-refuses",
+      "requirement": "approved-work-merges-in-batches-approval-queues-without-waiting",
+      "then": "the approval is refused with the failing output, as today, and nothing is queued",
+      "when": "a reviewer approves it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a checked batch of two tasks, and separately the same batch where a commit is added to main by hand after the batch was built",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v (test_main_is_fast_forwarded_to_the_checked_commit, test_a_moved_main_rebuilds_the_batch)",
+      "key": "approved-work-merges-in-batches-tree-equals-checked",
+      "requirement": "approved-work-merges-in-batches-what-lands-is-what-was-checked",
+      "then": "in the first case `git rev-parse main^{tree}` equals the batch's merged tree and each task has one merged integration row per target; in the second nothing lands from the stale batch and a new batch is built on the new tip",
+      "when": "the batch lands"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the four-task fixture where the third task adds a file that makes one pytest test fail, the check being a plain pytest command",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_failing_batch_is_narrowed.py -v",
+      "key": "approved-work-merges-in-batches-broken-one-sent-back",
+      "requirement": "approved-work-merges-a-failing-batch-sends-back-only-the-breaker",
+      "then": "only the third task is revision_needed, with a transition note naming the batch, the failing test and the tasks before it. The other three are approved and merged, and the broken file is not on main. The check ran on the whole tree at most twice, and the narrowed runs executed only the failing test node id, at most two of them",
+      "when": "all four are approved together and the queue is drained"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two queued tasks that each change the same line of one file differently",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_failing_batch_is_narrowed.py -v (test_a_conflict_in_a_batch_goes_to_its_author)",
+      "key": "approved-work-merges-in-batches-conflict-taken-out",
+      "requirement": "approved-work-merges-in-a-conflict-in-a-batch-goes-to-its-author",
+      "then": "the first lands after the batch's check run; the second is revision_needed before any check runs, its note naming the conflicting path and the first task",
+      "when": "their batch is built"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a queued task B whose branch contains task A's commit, with A queued after B, and separately with A sent back by its batch",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_failing_batch_is_narrowed.py -v (test_a_dependent_lands_after_its_prerequisite)",
+      "key": "approved-work-merges-in-batches-dependent-waits",
+      "requirement": "approved-work-merges-in-batches-prerequisites-land-first",
+      "then": "in the first case A lands before or in the same batch as B, never after; in the second B stays queued, is not revision_needed, and its landing names A",
+      "when": "the queue is drained"
+    },
+    {
+      "checked_by": "agent",
+      "given": "every git process slowed by 250 ms with an event set when one starts, and a second engine on the same database file with a 100 ms busy timeout",
+      "how_to_check": "The second acceptance drive: py -3.11 -m pytest hub/tests/test_approval_holds_no_write_lock_across_git.py -v, red on master and green on the branch; py -3.11 -m pytest hub/tests/test_approvals_and_evidence_never_freeze_the_hub.py -v stays green",
+      "key": "approved-work-merges-in-batches-no-lock-during-git",
+      "requirement": "approved-work-merges-in-batches-no-write-lock-across-git",
+      "then": "each write commits within 1 s. On master the write during approval's merge or release fails with 'database is locked'",
+      "when": "a task is approved (no checks configured) and, while one of its git commands is running, the second engine inserts and commits an event row; then the same during a batch landing, an integration retry and a checkout release"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two tasks under review, one whose per-task result passed and one with no result, and main's tip then moved by a landing",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_refresh_when_main_moves.py -v (its refresh test rewritten, red first)",
+      "key": "approved-work-merges-in-batches-stale-pass-not-rerun",
+      "requirement": "approved-work-m-a-passed-task-check-is-not-rerun-when-main-moves",
+      "then": "a run is started for the task with no result only, and the passed task is still offered for review and approval",
+      "when": "refresh runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the checks route's real payloads for a queued, a checking, a held, a landed and a sent-back landing",
+      "how_to_check": "cd hub/ui && npx vitest run src/components/tasks/TaskLanding.test.tsx; then on the trial Hub :8010 started from the branch, approve two tasks of a project with a check and screenshot the drawer while checking and after landing",
+      "key": "approved-work-merges-in-batches-drawer-shows-landing",
+      "requirement": "approved-work-merges-in-batches-the-landing-is-visible",
+      "then": "each state reads as specified next to Land without scrolling: position, elapsed and previous batch duration, what it is held on, the landed commit, the failing output. A `task_landing_changed` event updates it without a reload and raises the operator's notification",
+      "when": "the task drawer renders each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with checks, with one task queued, an approved task whose integration was skipped for a dirty checkout, and a mend resolution",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v (test_every_merge_goes_through_the_queue); py -3.11 -m pytest hub/tests/test_task_integration.py hub/tests/test_task_integration_retry.py hub/tests/test_one_action_lands_the_work.py -v stay green",
+      "key": "approved-work-merges-in-batches-one-writer",
+      "requirement": "approved-work-merges-in-b-every-hub-merge-goes-through-the-queue",
+      "then": "both are queued behind the first task and land through a batch's checked commit; no `git merge` into main is made outside the landing queue (asserted by wrapping `task_integration.integrate` and the ff landing)",
+      "when": "the integration is retried and the resolution landed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a batch of two recorded checking, and another batch whose fast-forward ran but whose records were not written, then the startup reconcile",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_approved_work_merges_in_batches.py -v (test_a_restart_mid_batch_loses_and_repeats_nothing); py -3.11 -m pytest hub/tests/test_migration_0148_landing_queue.py -v for upgrade and downgrade",
+      "key": "approved-work-merges-in-batches-restart-mid-batch",
+      "requirement": "approved-work-merges-in-batc-a-restart-loses-and-repeats-nothing",
+      "then": "the first batch is interrupted and its two tasks are queued again in order. The second is recorded landed from main's history, with one integration row per target and no second merge",
+      "when": "the Hub's lifespan starts"
     }
   ],
-  "algorithms": [],
+  "algorithms": [
+    {
+      "name": "Building, checking and landing one batch",
+      "steps": [
+        "Start when the project has no batch running and the oldest queued landing has waited BATCH_GATHER_SECONDS (60). Take up to MAX_BATCH (8) queued landings in approval order, moving each prerequisite ahead of its dependents and leaving out a task whose prerequisite is neither landed nor taken.",
+        "Read main's tip T. Build the chain: base = T; for each task, merge each frozen target onto base with merge-tree and commit-tree (Hub identity, message 'Integrate approved work <sha12>'). A task that does not merge cleanly is taken out and sent back with its paths; otherwise its last commit is prefix P_k.",
+        "If the full chain's tree has passed every configured check before, record the pass; otherwise run the checks on the last prefix in a scratch worktree, stopping at the first failure that is the batch's own.",
+        "On a failure, re-run the failed tests on the same tree. A pass there records the flake and counts as a pass. Then run the failed tests on T: if every confirmed failure fails there too, apply slice M's decision and stop.",
+        "On a confirmed failure of the batch's own: binary-search k over the prefixes, running the failed tests (or the failing check) on P_k, to find the smallest failing k. Send task k back. Land P_(k-1) only if the tasks before k already had a full pass on exactly P_(k-1)'s tree; otherwise re-queue tasks 1..k-1 and k+1..n at the head as the next batch.",
+        "On a pass: under the mutation lock and with no transaction open, fast-forward main from T to the checked prefix (git merge --ff-only). If main is no longer at T, mark the batch superseded and go back to the first step.",
+        "In one short transaction, record the batch landed and one integration row per target for each landed task. After commit, broadcast, run refresh and re-drain queued turns."
+      ]
+    }
+  ],
   "aw_identity": {
     "digests": {
-      "FR-1": "90347f76e5a35bc61d0254a4ce076bb5c436fe229f9dba78c59332186da09972",
+      "FR-1": "cb70c33b28800ff2f4aa633a8d2ed143d9c0f7d8ab131eb55126b71716b9a697",
       "FR-10": "864854bf0d8b1dd811b4438775a98fae0886a08d66a6591f3322f9617a81e6fc",
       "FR-11": "4939ed5efebf7e8ef18bc1f2fff3d5ecab0164f5cdf414494049d05f97be0e17",
       "FR-12": "7c80dbc29dd118fbdf21c717ee65e5f6276b4709fe25d233e35d2e13e39795e1",
@@ -503,15 +779,42 @@
       "FR-2": "29fcc5dfa17eabebcc5121d3f7d04d71b8b976d99f0471f3a9fab1d4172b4eb7",
       "FR-20": "b9abb02bf69102d020039af301ffcf8305216a31de651e3d517792133c17ff81",
       "FR-21": "e91994722103dc84ed3645a19e54e8edd8a71f6c68730664ac6727d2690b5130",
+      "FR-22": "69add9d855f28fa5c69416b76fdd4cc6918ea8443f3b93e4eed7c6e4cbe42dde",
+      "FR-23": "811601899cf1cd407994f0c4cfe45c0bb140f389c63fdf5c503f17396920e850",
+      "FR-24": "d37d25114f7c7fa792edaff2036a9af88977c57f2c6f3b106ded2c50c7a93714",
+      "FR-25": "0f9060400bb9a791527952dcf0be8f8e06d5a1336b4f9284783e422e4d46c7e3",
+      "FR-26": "d9c7ad678f0655cf1c927bf4190983b1e1f8c391ad71c2edd680fec8e423850b",
+      "FR-27": "d6855e09d9399b42851f6d8893eb7744e50260baf856e561d5f0a1ac99471185",
+      "FR-28": "0571785fb2a80e46fa29da18d764310a8d316cdccccdd68b7e8944635d48d3dc",
+      "FR-29": "ba09e5336e5876a0d7a6ec4001d02d977bf91c2736ad116416807152cea3278b",
       "FR-3": "ea10ae2d13ef75727bc347849a7e6b3da5a375f39022387639c3c47473f491da",
+      "FR-30": "91537fb5445892780e95a86fbd21de84463b3325e5a57cd71693c6eb12e0815f",
+      "FR-31": "4973b7042d0e6f2a70b5ced27880ba72dde1a73811ca92849e18b0b0d893c4b3",
+      "FR-32": "3b5e915b991c54d4790ac8d9cbe30449c9294821a6bdabc2420a869202858867",
+      "FR-33": "98b39e8af54242bc991b110976d22a6e09f391daad63a66c97009eda42f97cd3",
+      "FR-34": "e9e315c234fb275ea363a829ef4706e48405fa9919a1f4c05961c282292a1e7c",
+      "FR-35": "49075704b3ada70ca6017ef30cb628e244d14987a13f69ada2f85cc157e4b104",
+      "FR-36": "e1c5ff1984df175a44e9d514ea59bd3a01a3c611a0ae11da6eaaf850310e7484",
+      "FR-37": "0000de5ddfacbcc7a53760f86bb59f7bc764f08753d658765c512d5afa65e4e5",
+      "FR-38": "465f175d9694297cdca6b4494bdee0c27758ec30fa1722172ee6e200c088a5a4",
+      "FR-39": "765e82769eebbcf836b000c63a040a94897999595c12cd1cff0e7dd524077d15",
       "FR-4": "dedd86d802dec61781970f2c835757f62db654878b4c88a6b804e1553605cdd3",
+      "FR-40": "b1939dd0681a9b76403a16f70bbfcd907a8b82f1e3be1390bf9323c80b81802e",
+      "FR-41": "0927fd7a3cb961f3af0d6e3554a9add4bfca5bcd6404eb05fbf822265eda261f",
+      "FR-42": "c3f19b58a8f48ef77aad0fa497dc5512ec907e8e0d7dd2d4eef0144339ee5736",
+      "FR-43": "64d147b343529a1ec5440411951a537d416b9bf9e85ea48ef9c02d10bf489717",
+      "FR-44": "b80b51ae8b0b2aa901b92a79a4d59dcbbb77834ea3efe7a918d38076ddf2e46b",
+      "FR-45": "bd0977b5beed43034790229b04795d0e3b5cde2520a0c47b330cc74bca4dca31",
+      "FR-46": "9b08fc25dad9ed5a79e1048d528f65154e97bdf76c9e346eec363d773551de94",
+      "FR-47": "f8c78ea2df9bc0bbf432b8892700793fa9b9fe36963c749fcc578e33a483dec3",
+      "FR-48": "feb06a9cd53cc214a82b4372f82951d3c6f16dfdc85d186550063db2dfc3c53d",
       "FR-5": "01a4e34bc4cb9b1aa638c304b0ae3bdbcb9d4a6af9be3940c48cd438f0c1de34",
       "FR-6": "e22da2893e7a213bae7794f43adfd996034c54876854cc3e5a52201d923ec8d2",
       "FR-7": "ce47a1bd84b1dd97d95f6c02a56f7d119df84fa4f01252e4a73e599d04c1d09f",
       "FR-8": "c83866d2addda80b7e8b19a54949421736b865b200977b576eb0272189c4cfb5",
       "FR-9": "6fd53c789afe39be13a8ea2194f05b787e9729d509c1b621a17150e6b4810303"
     },
-    "high_water": 21,
+    "high_water": 48,
     "requirements": {
       "accepting-evidence-attempts-the-integrations-that-wanted-it": "FR-9",
       "an-integration-that-cannot-proceed-does-not-block-approval": "FR-3",
@@ -521,7 +824,34 @@
       "approval-is-refused-when-the-work-cannot-be-merged-cleanly": "FR-2",
       "approval-is-refused-while-evidence-that-would-merge-sits-una": "FR-13",
       "approval-is-refused-while-the-work-is-still-being-produced": "FR-12",
+      "approved-work-m-a-passed-task-check-is-not-rerun-when-main-moves": "FR-45",
+      "approved-work-merges-a-failing-batch-sends-back-only-the-breaker": "FR-41",
+      "approved-work-merges-in-a-conflict-in-a-batch-goes-to-its-author": "FR-42",
+      "approved-work-merges-in-b-every-hub-merge-goes-through-the-queue": "FR-47",
+      "approved-work-merges-in-batc-a-restart-loses-and-repeats-nothing": "FR-48",
+      "approved-work-merges-in-batches-approval-queues-without-waiting": "FR-38",
+      "approved-work-merges-in-batches-no-write-lock-across-git": "FR-44",
+      "approved-work-merges-in-batches-one-check-run-per-batch": "FR-39",
+      "approved-work-merges-in-batches-prerequisites-land-first": "FR-43",
+      "approved-work-merges-in-batches-the-landing-is-visible": "FR-46",
+      "approved-work-merges-in-batches-what-lands-is-what-was-checked": "FR-40",
+      "each-piece-of-evidence-is-judg-send-back-without-a-failing-piece": "FR-24",
+      "each-piece-of-evidence-is-judged-on-its-o-held-is-recorded-again": "FR-25",
+      "each-piece-of-evidence-is-judged-on-its-ow-contradiction-refused": "FR-27",
+      "each-piece-of-evidence-is-judged-on-its-own-outcome-is-traceable": "FR-28",
+      "each-piece-of-evidence-is-judged-on-its-own-reviewer-is-told-how": "FR-29",
+      "each-piece-of-evidence-is-judged-on-its-send-back-names-failures": "FR-22",
+      "each-piece-of-evidence-is-judged-on-its-unnamed-pieces-are-held": "FR-23",
+      "each-piece-of-evidence-is-judged-on-its-verdict-stays-one-action": "FR-26",
       "every-integration-attempt-is-recorded": "FR-4",
+      "generated-files-are-rebuilt-w-rebuild-on-generated-only-conflict": "FR-32",
+      "generated-files-are-rebuilt-when-source-conflict-still-sent-back": "FR-33",
+      "generated-files-are-rebuilt-when-w-only-declared-paths-committed": "FR-34",
+      "generated-files-are-rebuilt-when-work-la-operator-sets-generated": "FR-30",
+      "generated-files-are-rebuilt-when-work-la-rebuilt-tree-is-checked": "FR-35",
+      "generated-files-are-rebuilt-when-work-lands-i-unset-is-unchanged": "FR-31",
+      "generated-files-are-rebuilt-when-work-lands-in-runs-like-a-check": "FR-36",
+      "generated-files-are-rebuilt-when-work-lands-rebuild-is-recorded": "FR-37",
       "n2": "FR-14",
       "naming-the-main-branch-attempts-the-integrations-that-wanted": "FR-7",
       "sweep-1018-corrections-approval-refuses-unlanded-commits": "FR-21",
@@ -529,13 +859,14 @@
       "the-reviewers-verdict-decides-the-tasks-ev-refusal-keeps-nothing": "FR-17",
       "the-reviewers-verdict-decides-the-tasks-evide-operator-overturns": "FR-20",
       "the-reviewers-verdict-decides-the-tasks-evidenc-no-operator-hold": "FR-19",
-      "the-reviewers-verdict-decides-the-tasks-evidenc-sendback-rejects": "FR-18",
       "the-reviewers-verdict-decides-the-tasks-evidence-approve-accepts": "FR-16",
       "within-one-line-of-work-the-later-commit-is-the-one-merged": "FR-15",
       "work-already-in-the-main-line-is-not-reported-as-merged": "FR-5",
       "work-that-no-evidence-governs-is-integrated-from-the-task-s-": "FR-8"
     },
-    "retired": {}
+    "retired": {
+      "the-reviewers-verdict-decides-the-tasks-evidenc-sendback-rejects": "FR-18"
+    }
   },
   "design": "D1. Integration is specified apart from the transition machine: the merge and the status map are tested and fail differently. Gates that refuse approval because of what would be merged live here; gates about who may approve stay in task-lifecycle-governance.\n\nD2. Approval means integration. Approving merges, locally and in the same operation, the commits accepted evidence names (reduced by ancestry per line of work), or the task's own branch tip where evidence does not govern; never an agent branch, never a remote.\n\nD3. Integration never rolls back the approval. Preconditions that make it impossible are recorded skips; a failed merge is aborted and recorded. Each attempt is an append-only `task_integrations` row with outcome, reason, riders, mechanism `local`, and `retryable` decided by `task_integration.is_retryable`.\n\nD4. Gates that ask \"what would merge\" (conflict, unaccepted evidence) run only when `merge_situation` resolves (main branch set and existing, workspace resolvable, a repository). The live-turn refusal is not about the repository and applies everywhere. A git call that raises is a refusal (`GitUnavailableError`), not a 500 and not an approval.\n\nD5. The preview asks the same `merge_situation` and test merge as the gate, so the two cannot disagree, but it never refuses and moves nothing.",
   "evidence": {
@@ -544,7 +875,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -558,7 +888,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "Approval is what places work in the product; a terminal state with no such meaning cannot answer whether anything approved shipped. Naming commits rather than branches narrows what lands to the approved work; per-task branches make the ancestry match the task, and riders are recorded where it does not.",
-      "statement": "The move into `approved` SHALL merge the approved work into the project's configured main branch, locally, in the same operation that records the transition, at every rigor. Where evidence governs the task, what merges SHALL be the commits named by its accepted evidence footprints, reduced per line of work so that a commit another kept commit contains is dropped; evidence awaiting review or rejected SHALL contribute nothing. The Hub SHALL NOT merge an agent's branch, contact a remote, push, or need a credential, and SHALL record the commits that rode along with each merge."
+      "statement": "The move into `approved` SHALL record the verdict at once and queue the task's work for landing on the project's configured main branch, its merge targets frozen at that moment. Without checks configured the landing SHALL run right after the approval and the approval SHALL answer with its outcome; with checks configured it SHALL land in a batch once the batch's checks pass. Where evidence governs the task, what lands SHALL be the commits named by its accepted evidence footprints, reduced per line of work so that a commit another kept commit contains is dropped; evidence awaiting review or rejected SHALL contribute nothing. A landing to main SHALL be local: it SHALL NOT contact a remote, push, or need a credential (a build that lands as a pull request is the one case that pushes, see Pull request landing), and SHALL record the commits that rode along with each merge."
     },
     {
       "key": "approval-is-refused-when-the-work-cannot-be-merged-cleanly",
@@ -673,13 +1003,6 @@
       "statement": "When the approval is refused for any reason, no acceptance made for it MUST persist, and the refusal MUST name the real reason rather than the evidence it would have accepted."
     },
     {
-      "key": "the-reviewers-verdict-decides-the-tasks-evidenc-sendback-rejects",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "A rejection is the author's signal of what to fix.",
-      "statement": "When a task moves to revision_needed or rejected, every awaiting piece of evidence recorded for that task MUST be rejected by the acting actor, its reason being the verdict's notes or, without notes, a sentence naming the verdict, except a piece the acting agent recorded itself or whose recording run is still live."
-    },
-    {
       "key": "the-reviewers-verdict-decides-the-tasks-evidenc-no-operator-hold",
       "modal": "MUST",
       "party": null,
@@ -699,6 +1022,195 @@
       "party": null,
       "rationale": "F681: Land approved a task on evidence another, task-less run recorded at main's tip and skipped the merge, so the task's own commit never reached main while its requirement read verified.",
       "statement": "The Hub SHALL refuse a move to approved, by PATCH and by Land, when the task's own branch holds commits on neither the main branch nor inside any merge target (gate category unlanded), naming the branch and the commits and saying what clears it: evidence recorded from the task's own checkout, then accepted."
+    },
+    {
+      "key": "each-piece-of-evidence-is-judged-on-its-send-back-names-failures",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A reviewer sending a task back can name the pieces of evidence that fail, each with its own reason, in the same action that sends it back; only the named pieces become rejected, each with its own reason."
+    },
+    {
+      "key": "each-piece-of-evidence-is-judged-on-its-unnamed-pieces-are-held",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A piece that held is not wrong; calling it rejected is what made the record and the counts misleading.",
+      "statement": "On a send-back, every awaiting piece of the task that the reviewer did not name as failing becomes held at its commit: not rejected, not accepted, and shown as held with the send-back's reason."
+    },
+    {
+      "key": "each-piece-of-evidence-is-judg-send-back-without-a-failing-piece",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A send-back that names no failing piece is allowed when it gives a reason (a defect outside any requirement, a failing check), and then every awaiting piece is held."
+    },
+    {
+      "key": "each-piece-of-evidence-is-judged-on-its-o-held-is-recorded-again",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26, option B: re-recording is correct by construction; carrying forward waits for slice H's numbers.",
+      "statement": "A held piece never counts as accepted evidence; the requirement it served needs a new piece at the builder's next commit, and the reviewer's next verdict judges that new piece."
+    },
+    {
+      "key": "each-piece-of-evidence-is-judged-on-its-verdict-stays-one-action",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F672: a second decision by someone else stalled finished work.",
+      "statement": "Neither the reviewer nor anyone else needs a separate evidence decision before or after the verdict: the send-back or approval decides every awaiting piece of the task in the one action."
+    },
+    {
+      "key": "each-piece-of-evidence-is-judged-on-its-ow-contradiction-refused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Approving a task while naming any of its pieces as failing is refused, naming the contradiction."
+    },
+    {
+      "key": "each-piece-of-evidence-is-judged-on-its-own-outcome-is-traceable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "list_evidence, the task's history and the app's evidence views show each piece's outcome (accepted, rejected, held, awaiting) with its own reason and who decided it, and filtering by review state distinguishes held from rejected."
+    },
+    {
+      "key": "each-piece-of-evidence-is-judged-on-its-own-reviewer-is-told-how",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The review turn's brief and the update_task tool's description tell the reviewer how to name failing pieces and that unnamed ones are held, not rejected."
+    },
+    {
+      "key": "generated-files-are-rebuilt-when-work-la-operator-sets-generated",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The command runs with the project's files at landing; like checks, only the operator decides what runs there.",
+      "statement": "The operator can set, per project, one or more generated-path globs, the command that rebuilds them, and its timeout, through the same settings route and screen as the project's checks; no agent tool or agent route accepts or changes this setting."
+    },
+    {
+      "key": "generated-files-are-rebuilt-when-work-lands-i-unset-is-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With no generated paths set, every conflict at every conflict point sends the task back exactly as it does today."
+    },
+    {
+      "key": "generated-files-are-rebuilt-w-rebuild-on-generated-only-conflict",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "When a task's work conflicts with the main branch (or a build's PR branch) only in paths matching the declared globs, at the check run before review, the landing batch or the push to a build's PR, the Hub does not send the task back: it merges the work, runs the command on the merged tree, and continues with the result."
+    },
+    {
+      "key": "generated-files-are-rebuilt-when-source-conflict-still-sent-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When any conflicting path is outside the declared globs, the task is sent back as merge-needed exactly as today, and the command is not run."
+    },
+    {
+      "key": "generated-files-are-rebuilt-when-w-only-declared-paths-committed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The Hub writes this commit without review, so it may contain only files nobody writes by hand.",
+      "statement": "A rebuild's result is committed only when the command exits zero within its timeout and every path it changed or created matches a declared glob; otherwise nothing is committed and the task is sent back as merge-needed with a report naming the unexpected paths, the exit code and output tail, or the timeout."
+    },
+    {
+      "key": "generated-files-are-rebuilt-when-work-la-rebuilt-tree-is-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The tree that lands after a rebuild goes through the same checks any landing does; a rebuild never skips or reuses a check result from a different tree."
+    },
+    {
+      "key": "generated-files-are-rebuilt-when-work-lands-in-runs-like-a-check",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The command runs in a scratch worktree, never in the project's own checkout, with the Hub's own configuration withheld, the same way a project check runs."
+    },
+    {
+      "key": "generated-files-are-rebuilt-when-work-lands-rebuild-is-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every rebuild is visible afterwards: the merge commit message says generated files were rebuilt, and the landing or check-run record and the task's history name the rebuilt paths and how long the command took."
+    },
+    {
+      "key": "approved-work-merges-in-batches-approval-queues-without-waiting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-27: QA's approval of T1 was refused for 2 h 40 min while checks ran and re-ran. The landing check is the batch's run on the real merged result (one-check-run-per-batch), so making approval wait for a current per-task result only repeats it.",
+      "statement": "In a project with checks configured, a move to approved that is refused for no other reason is recorded at once and queues the task's work for landing. It is not refused because the task's check result is missing, still running, or was produced on an earlier main tip. Approving starts no per-task check run. Approval is still refused when the task's own confirmed check failure is recorded for the same merge targets."
+    },
+    {
+      "key": "approved-work-merges-in-batches-one-check-run-per-batch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Ten full-suite runs of 8-18 min on 2026-10-26/27, most of them re-runs because another landing had moved main.",
+      "statement": "Tasks queued for landing in one project are landed together in a batch. Main's tip, with every batch task's merge targets merged in queue order, gets one run of the project's checks. When that run passes, every task in the batch reaches main and no further check run is started for any of them."
+    },
+    {
+      "key": "approved-work-merges-in-batches-what-lands-is-what-was-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "After a batch lands, the tree at main's tip equals the tree the batch's checks passed on, and each landed task has one merged integration record per merge target, with the commits that rode along. If main's tip moved after the batch was built, nothing lands from the stale batch, and the batch is built and checked again on the new tip."
+    },
+    {
+      "key": "approved-work-merges-a-failing-batch-sends-back-only-the-breaker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done criterion: a deliberately broken task among four is the only one sent back.",
+      "statement": "When a batch's checks fail with a confirmed failure that is not main's, the Hub finds the first task in queue order whose work, added to the tasks before it, makes the failing tests fail. Only that task goes back to its author (approved to revision_needed), with the failing output and the tasks it was landed on. The rest of the batch is checked again as the next batch and lands if it passes. Finding the task takes at most ceil(log2(n)) narrowed runs for a batch of n, and each narrowed run executes only the failed tests when the check is a plain pytest command."
+    },
+    {
+      "key": "approved-work-merges-in-a-conflict-in-a-batch-goes-to-its-author",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Reconciling two pieces of work is the later author's job, as for a conflicting prerequisite (`a-conflicting-prerequisite-is-the-authors-to-merge`).",
+      "statement": "A queued task whose work does not merge cleanly onto main plus the batch tasks before it is taken out of the batch before any check runs. It is sent back to its author naming the conflicting paths and the tasks it conflicts with, and the rest of the batch proceeds without it."
+    },
+    {
+      "key": "approved-work-merges-in-batches-prerequisites-land-first",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A merge brings in a commit's whole ancestry (F58, `task_integration.py:727-729`). A dependent landing first would put its prerequisite's unchecked or sent-back work on main under the dependent's name.",
+      "statement": "A queued task lands only in a batch where every task whose commit its merge targets contain has already landed or comes earlier in the same batch. If such a prerequisite is sent back, the dependent stays queued, is not sent back, and its landing names the prerequisite it waits for."
+    },
+    {
+      "key": "approved-work-merges-in-batches-no-write-lock-across-git",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today the merge (up to 2.1 s), the release (p95 10.3 s) and any mutation-lock wait (up to 20.8 s) run after the approval's first write and before its commit, so every other writer waits (F349 is the same shape on another route).",
+      "statement": "No approval, landing, integration retry, mend resolution or checkout release holds a database write transaction open while a git command or a check runs. A write from another database connection made while that git runs completes without waiting for it."
+    },
+    {
+      "key": "approved-work-m-a-passed-task-check-is-not-rerun-when-main-moves",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Under slice L the per-task run gives the builder fast feedback and gates review. Landing safety comes from the batch's run on the merged result, so re-running every waiting task on each landing is spent work.",
+      "statement": "When main's tip moves, the Hub does not re-run the checks of a task waiting for review whose latest per-task result passed. That result counts as passed for review dispatch and for approval whatever tip it was produced on. A task with no result, an interrupted result or an errored result still gets a run."
+    },
+    {
+      "key": "approved-work-merges-in-batches-the-landing-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice B made a check wait visible beside Land (FR a-wait-is-visible). The wait now belongs to the batch, so that is what the drawer shows.",
+      "statement": "The task's drawer and its checks route show its landing state: queued (with its position), checking (with the batch, how long it has run and how long the previous batch took), held (and on what), landed (with the commit), or sent back (with the failing check's output). The operator is notified when a batch lands or sends a task back, without reloading."
+    },
+    {
+      "key": "approved-work-merges-in-b-every-hub-merge-goes-through-the-queue",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One writer keeps a batch's base from moving under it, so every landing is checked, and the 24 hub test files that assert an integration outcome after approval keep their meaning in projects without checks.",
+      "statement": "Every merge the Hub makes into main goes through the landing queue, at most one batch at a time per project. That covers approval, retrying an integration, landing a mend resolution, and integrating approved work whose evidence was accepted afterwards. With no checks configured, the landing still runs after the approval commits, and the request that caused it answers with the integration outcome as it does today. With checks configured, the request answers at once with the task queued."
+    },
+    {
+      "key": "approved-work-merges-in-batc-a-restart-loses-and-repeats-nothing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's :8000 runs this checkout and is restarted by the operator, sometimes mid-flow.",
+      "statement": "If the Hub stops while a batch is being checked or landed, then after it starts again no queued task is lost and none is merged twice. A batch left checking is recorded interrupted and its tasks are queued again in their original order. A batch that had already moved main is recorded landed from what main contains."
     }
   ],
   "schema_version": 1,

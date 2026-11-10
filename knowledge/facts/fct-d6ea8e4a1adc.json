@@ -1,0 +1,23 @@
+{
+  "id": "fct-d6ea8e4a1adc",
+  "kind": "fact",
+  "claim": "The spec should state the shape of any new record field, such as the regenerated field being an object with paths and seconds, so builders and the drive agree from the start.",
+  "citations": [
+    {
+      "source": "src-0d2ef11b7769",
+      "quote": "The shape of any new record field, such as regenerated as an object with paths and seconds, should be stated in the spec so builders and the drive agree from the start.",
+      "line_start": 10,
+      "line_end": 10
+    }
+  ],
+  "sources": [
+    "src-0d2ef11b7769"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-08T01:13:23.989190Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

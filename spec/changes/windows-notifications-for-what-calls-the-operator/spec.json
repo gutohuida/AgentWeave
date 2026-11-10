@@ -1,0 +1,549 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "A recorded sequence of the Hub events the page's notifier sees today, including a blocking and a non-blocking question, a permission request, a failed run, a finished loop, an agent reply and events the page treats as silent",
+      "how_to_check": "Hub test reading the operator stream in the order the route returns, against a fixture whose expected kinds were taken from the page's rules before they were moved; a page test that the toast renders from a notice.",
+      "key": "c-notice",
+      "requirement": "one-notice-per-event",
+      "then": "Exactly one notice per non-silent event, of the kind the page assigns today, none for the silent ones, and the in-app toast for each is drawn from its notice",
+      "when": "They pass through the Hub"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A fresh scratch profile",
+      "how_to_check": "Drive flips the switches through the page, restarts the scratch Hub, closes the window and triggers both events, counting notifications.",
+      "key": "c-kinds",
+      "requirement": "kinds-chosen",
+      "then": "Defaults read question and failure on, done and reply off; after the restart the changed choices are still in force, and with the window closed a question gives no Windows notification while a reply gives one",
+      "when": "App settings is opened, then 'reply' is switched on for Windows and 'question' off, then the Hub is restarted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A scratch Hub and the app window open and minimized, a Haiku agent turn",
+      "how_to_check": "Drive reads the shell's notification history for AgentWeave, timing against the notice's timestamp; AW_TOAST_COMMAND recording is used for the timing where focus assist hides history.",
+      "key": "c-behind",
+      "requirement": "toast-when-behind",
+      "then": "One Windows notification within 5 seconds",
+      "when": "The agent calls ask_user"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The window closed with 'closing leaves AgentWeave running' on",
+      "how_to_check": "Drive reads the history and compares visible console windows before and after.",
+      "key": "c-closed",
+      "requirement": "toast-when-closed",
+      "then": "A notification within 5 seconds, and no conhost or powershell window was shown",
+      "when": "A run made to fail fails"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The window in front",
+      "how_to_check": "Drive counts history entries per notice id.",
+      "key": "c-in-front",
+      "requirement": "none-when-in-front",
+      "then": "No notification for the first; exactly one each for the second and third",
+      "when": "A question is asked; then the window is closed while a second question is asked at the same moment; then the window is reopened while a third is asked"
+    },
+    {
+      "checked_by": "operator",
+      "given": "A notification shown",
+      "how_to_check": "Drive reads the toast XML and the Start-menu shortcut's AppUserModelID (must equal the process's AgentWeave.Hub); the operator looks once at a real one.",
+      "key": "c-identity",
+      "requirement": "own-identity",
+      "then": "The source is AgentWeave with the packaged icon and the text names the agent",
+      "when": "Its source and image are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A question's notification, the window closed and the Hub running a turn",
+      "how_to_check": "Drive opens the link through the shell, reads the window's route and the Hub pid; the operator clicks one real notification once.",
+      "key": "c-click",
+      "requirement": "click-opens-conversation",
+      "then": "A window opens on that agent's conversation; the Hub's process id and the running turn are unchanged. With a window already open and minimized, it is restored and navigates instead",
+      "when": "Its activation link is opened through Windows itself (the registered agentweave: link, as a click does), not by calling the launcher directly"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A question asked from a conversation",
+      "how_to_check": "Hub test posting a question and reading the stream, in the order the route returns.",
+      "key": "c-event",
+      "requirement": "question-carries-conversation",
+      "then": "It has conversation_id; an old-style consumer still parses it",
+      "when": "The event is read from the operator stream"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The shell call made to fail through AW_TOAST_COMMAND",
+      "how_to_check": "Drive with a forced failure; unit test at the launcher seam, and one that the notifier does nothing off Windows.",
+      "key": "c-quiet",
+      "requirement": "quiet-failure",
+      "then": "The in-app toast, sound and flash still happen; no error is shown; the run continues",
+      "when": "A question is asked with the window minimized and again with it closed"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "02b5d0c9f72d8b272e900ac3cadce09727dfebd447eb56cb4e78b19dee515aa9",
+      "FR-10": "9d697e968156d209b02765263fd2575938600b8ecac9ca4aa28b01e59da73306",
+      "FR-2": "8af08f43777b9ff2f8447c7d8bbc6dd492bb7f86af1be4683fa2268221bf21a3",
+      "FR-3": "601e07e3086c11fa276c83654b6ff69b7de196fd70daabcc35ce080eb6f6132f",
+      "FR-4": "892b065a53ab93ddc18857d2994e43cec3846c60df74bc0140d7b1490d5f1a99",
+      "FR-5": "6147112769408b0c66b9207e1b19323d6f9c36d0f30a3d93d67421f193a3f725",
+      "FR-6": "1a32edeb10d9eaae8b5107a7bfe8e02c089cbc6d7222d3309fa2fc6a8c55aea8",
+      "FR-7": "4137b636202014e24c3ae6f3297abb82d715f2caeff637d70abbd26ccf26c87a",
+      "FR-8": "00ef311e87c62e63229ab0f00857dd709c3b6f79e86a49eae36e80850d2904bf",
+      "FR-9": "397e20f60a535e1b3b4679851f1a68d08c49864efb89489a3481f6fe3b14ec7f"
+    },
+    "high_water": 10,
+    "requirements": {
+      "click-opens-conversation": "FR-6",
+      "kinds-chosen": "FR-10",
+      "none-when-in-front": "FR-3",
+      "one-notice-per-event": "FR-9",
+      "own-identity": "FR-5",
+      "question-carries-conversation": "FR-7",
+      "quiet-failure": "FR-8",
+      "toast-when-behind": "FR-1",
+      "toast-when-closed": "FR-2"
+    },
+    "retired": {
+      "same-events-same-switches": "FR-4"
+    }
+  },
+  "delivery": {
+    "agent": "DeveloperOpus2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus2 leads; DeveloperOpus already leads generated-files tonight.",
+      "cron": "The usual five minutes.",
+      "mode": "A flow, as the operator is dogfooding builds.",
+      "stop": "Stop when the queue empties."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "TIER 1. No migration and no Hub-restart hazard. The live-app reach is the UI bundle commit (:8000 serves the committed bundle on reload), so the bundle is committed only with a passing drive.\n\nDECISIONS\nD1 (operator, 2026-11-08). The Hub classifies. A new module (hub/hub/operator_notices.py) holds the rules now in hub/ui/src/lib/notify/classify.ts, moved, not copied. It runs at the one broadcast seam (hub/hub/sse.py) and publishes an `operator_notice` event beside the original. The page's notifier stops classifying and renders notices. Non-blocking questions are ask, as the page does today: classify.ts never reads `blocking`.\nD2 (operator, 2026-11-08). Windows choices per kind live in the Hub, instance-wide, in a small file in the Hub's profile data directory behind an operator-only GET/PUT route. That is no migration. The in-app per-kind switches stay as they are.\nD3. The Windows notification is shown by the launcher side, never by the Hub, which stays platform-neutral and Docker-safe. With a window open, the page passes a notice to the bridge when the window is not in front. With the window closed and the Hub kept running, a hidden watcher run by the launcher (pythonw, one per port) reads the operator stream (/api/v1/events, ticket from /api/v1/events/ticket, credential as cli.py:1243 already obtains it). It ends when the Hub ends or a window opens. Both paths call the same notifier, which de-duplicates by notice id through a small per-port ledger, so the hand-over can overlap safely.\nD4 (operator, 2026-11-08). The notification is shown by powershell.exe (Windows PowerShell 5.1, named explicitly, CREATE_NO_WINDOW as at cli.py:758) through Windows' own toast interface, so the CLI stays stdlib-only. A Start-menu shortcut carrying AppUserModelID AgentWeave.Hub (desktop_window.APP_ID) gives it the name and icon. The shortcut is created once and idempotently, beside the desktop one (cli.py:1076-1087). This is how Electron apps (Slack, VS Code) get attributed.\nD5 (operator, 2026-11-08, option A). A click uses protocol activation. An `agentweave:` link is registered per user under HKCU\\Software\\Classes with winreg (stdlib), and the toast's launch is that link carrying port, project and conversation. The handler starts the launcher with an open target: it focuses the one window and tells the page to navigate (new `aw-app-open` window event beside the existing `aw-app-focus`, cli.py:1614), or opens a window on the running Hub without restarting it. The launcher-notify task tries this first. If Windows will not activate an unpackaged app this way, the builder calls report_cannot_satisfy on c-click; the fallback is that a click only brings AgentWeave to the front.\nD6. question_asked gains conversation_id. The broadcast and persisted payloads are built once and are identical. The project is not added: the operator stream already stamps it.\n\nCONTRACT\n- operator_notice: {id, kind: ask|fail|done|reply, project_id, agent, conversation_id|null, title, text, source_event}.\n- Bridge: notify(notice) -> bool (false when refused; never raises), called only when foreground() is false.\n- Hub route for the Windows kinds: {ask, fail, done, reply} booleans.\n- Off Windows, notifier calls return false and do nothing.\n- AW_TOAST_COMMAND replaces the PowerShell call, for drives (recorder) and the quiet-failure test (failing command).\n\nCURRENT: Hub event -> page classifies -> in-app toast. Window closed -> nothing.\nPROPOSED: Hub event -> Hub notice -> page toast, and (window not in front or closed) -> notifier -> Windows notification -> click -> agentweave: link -> window at the conversation.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/lib/notify/classify.ts: the rules never read `blocking`, so every question notifies today (review, 2026-11-08).",
+      "hub/ui/src/lib/notify/prefs.ts: kinds ask/fail/done/reply, defaults ask, fail and reply on; stored in page storage.",
+      "hub/hub/api/v1/questions.py:374-383: question_asked broadcast and persist without the conversation.",
+      "hub/hub/sse.py: the broadcast seam every operator event passes through.",
+      "hub/hub/api/v1/events.py:106-122: the operator stream is /api/v1/events with a ticket from /events/ticket.",
+      "src/agentweave/cli.py:1286-1350: close asks stop / keep running / cancel; the keep-running setting skips it.",
+      "src/agentweave/cli.py:1076-1087 and :758: PowerShell already creates the desktop shortcut; CREATE_NO_WINDOW pattern.",
+      "src/agentweave/desktop_window.py:30, cli.py:1166: the process AppUserModelID is AgentWeave.Hub.",
+      "src/agentweave/cli.py:1614: aw-app-focus is the only window event today.",
+      "src/agentweave/cli.py:1243: the launcher already obtains an operator credential."
+    ],
+    "limits": [
+      "The acceptance drive is proposed coverage; none of it has run.",
+      "Not tried: protocol activation of a PowerShell-shown toast for an unpackaged app on this Windows 11 machine. The launcher-notify task tries it first.",
+      "Focus assist and Windows' own notification settings can hide a notification; the drive times with the AW_TOAST_COMMAND recorder where needed, and the operator looks once."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [
+          "DeveloperSonnet2",
+          "DeveloperOpus2",
+          "Developer",
+          "DeveloperOpus"
+        ],
+        "checker": null,
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-08T21:28:05.586303+00:00",
+        "id": "build-4d278545b910",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-08T01:11:00.625053+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "acceptance-run": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA"
+          },
+          "background-watcher": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "close-gap-notices": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "drive": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA"
+          },
+          "drive-can-see": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "hub-notices": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA2"
+          },
+          "launcher-notify": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "page-notices": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "task-9eedcfd62b3b": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which kinds reach Windows? Answered (operator, 2026-11-08): the operator chooses per kind in App settings; defaults question and failure on, done and reply off.",
+      "resolved": true
+    },
+    {
+      "question": "Do non-blocking questions reach Windows? Answered (operator, 2026-11-08): yes, as the in-app notifier does today.",
+      "resolved": true
+    },
+    {
+      "question": "Second copy of the rules, or a Hub-made notice? Answered (operator, 2026-11-08): the Hub sends one ready-made notice.",
+      "resolved": true
+    },
+    {
+      "question": "A background watcher while the window is closed? Answered (operator, 2026-11-08): yes, a plain watcher now; a tray icon is a follow-up.",
+      "resolved": true
+    },
+    {
+      "question": "Add a notification package to the CLI? Answered (operator, 2026-11-08): no; PowerShell with a Start-menu shortcut and a registered agentweave: link. If that cannot work, report it rather than add a package.",
+      "resolved": true
+    },
+    {
+      "question": "Click activation? Answered (operator, 2026-11-08): option A, try real activation first; report_cannot_satisfy if impossible, falling back to bringing AgentWeave to the front.",
+      "resolved": true
+    }
+  ],
+  "problem": "Calls for the operator live only in the page, so they vanish whenever the page is not in view.\n- The page classifies Hub events into ask, fail, done and reply and plays the sound, shows an in-app toast, sets a title count and flashes the taskbar (hub/ui/src/hooks/useNotifications.ts; hub/ui/src/lib/notify/classify.ts). Nothing reaches Windows' own notifications.\n- Closing the window can leave the Hub working: with work running the close asks stop / keep running / cancel, and a 'keep running' setting skips the question (src/agentweave/cli.py:1286-1350). With no page, nothing calls the operator at all, which is exactly when an agent waiting on them is easiest to miss.\n- The classification rules exist only in the page, and the operator's switches live in the window's page storage (hub/ui/src/lib/notify/prefs.ts), so nothing without a window can apply either.\n- A click cannot open the question's conversation: the question_asked event carries only id, from_agent and blocking (hub/hub/api/v1/questions.py:374-383), though the stored question has a conversation.\n- Windows attributes a notification to an app only if the app has a registered identity (a Start-menu shortcut carrying its AppUserModelID). Slice 1 deferred that shortcut to this slice.",
+  "requirements": [
+    {
+      "key": "one-notice-per-event",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The operator chose (2026-11-08) one Hub-made notice over a second copy of the rules: the review already found the design's copied rule table disagreeing with the page on blocking questions, so a copy drifts.",
+      "statement": "For every Hub event the in-app notifier treats today as ask, fail, done or reply (non-blocking questions included, as ask), the Hub SHALL publish exactly one notice on the operator stream carrying a stable notice id, its kind, project, agent, conversation when known, and the title and text the in-app toast shows; for every event it treats as silent, none. The in-app toast and any Windows notification for that event SHALL both be drawn from this notice."
+    },
+    {
+      "key": "kinds-chosen",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Operator, 2026-11-08: the operator selects which events reach Windows. The Hub holds it because the closed-window case has no page to read it from.",
+      "statement": "App settings SHALL let the operator turn each kind (question, failure, done, reply) on or off for Windows notifications, separately from the in-app switches. The defaults SHALL be question and failure on, done and reply off. The choice SHALL be held by the Hub, apply while no window is open, and survive a Hub restart."
+    },
+    {
+      "key": "toast-when-behind",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The in-app toast, sound and flash are not seen from another app.",
+      "statement": "While the app window is open but not the foreground window (minimized or covered), each notice of a kind switched on for Windows SHALL appear as one Windows notification within 5 seconds of the notice."
+    },
+    {
+      "key": "toast-when-closed",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Closing to the background currently silences the app entirely.",
+      "statement": "While no app window is open and a Hub this launcher started is running, the same notices SHALL appear as Windows notifications within 5 seconds, with no console window shown at any point."
+    },
+    {
+      "key": "none-when-in-front",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "The in-app toast covers a window in front; the hand-over between window and background watcher must not duplicate or drop.",
+      "statement": "While the app window is the foreground window, no Windows notification SHALL appear. No notice SHALL produce more than one Windows notification, including across the moment the window closes or reopens."
+    },
+    {
+      "key": "own-identity",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "An unnamed or 'Windows PowerShell' notification cannot be told from anything else.",
+      "statement": "A Windows notification SHALL show AgentWeave's name and icon as its source, and say which agent or project needs the operator and why, in the words of the in-app toast."
+    },
+    {
+      "key": "click-opens-conversation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "A notification that opens the app in the wrong place is a second hunt. Operator, 2026-11-08 (option A): try real click activation first; if it proves impossible, the builder reports the criterion as not satisfiable and the operator decides, rather than shipping a click that only appears to work.",
+      "statement": "Clicking a notification SHALL bring the single AgentWeave window to the front, restored if minimized, on the project and conversation of its notice (the project overview for a permission request or a notice with no conversation). With no window open it SHALL open one on the running Hub without restarting it, so running work continues."
+    },
+    {
+      "key": "question-carries-conversation",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Without it, a question's notice can reach no further than the project.",
+      "statement": "The question_asked event SHALL carry the id of the conversation the question belongs to (null when it has none); consumers that ignore the extra field SHALL behave as before."
+    },
+    {
+      "key": "quiet-failure",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A notification is a convenience, never a dependency for work.",
+      "statement": "When Windows cannot show a notification (notifications off, focus assist, the shell call failing, not Windows), the app MUST carry on as before: the in-app toast, sound and flash still happen, and no error reaches the operator or interrupts any run."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/agentweave-feels-like-a-desktop-app/spec.json",
+    "slice": "windows-notifications"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "One Hub-made notice per event that calls the operator, used by both the in-app toast and Windows notifications.",
+      "The operator's choice per kind (question, failure, done, reply) of what reaches Windows, held by the Hub so it applies with the window closed.",
+      "A Windows notification when the window is not in front, or closed with the Hub running.",
+      "AgentWeave's name and icon on it, through a Start-menu shortcut.",
+      "A click opening AgentWeave at the conversation (project overview for a permission request), opening the window if none is open.",
+      "The question event carrying its conversation."
+    ],
+    "non_goals": [
+      "A tray icon: a follow-up, once the plain watcher has been used (operator, 2026-11-08).",
+      "Adding a Python package to the CLI for notifications: if the PowerShell route cannot attribute or activate a notification, that is reported to the operator, not worked around (operator, 2026-11-08).",
+      "Notifications when the Hub itself is not running.",
+      "Action buttons or reply fields inside the notification.",
+      "macOS and Linux (the notifier does nothing there).",
+      "Docker-mode or remote Hubs: Windows notifications come only from a Hub this launcher started on this machine.",
+      "Starting AgentWeave with Windows."
+    ]
+  },
+  "summary": "Slice 4 of 'AgentWeave feels like a desktop app'. The Hub decides once which of its events call the operator and publishes one ready-made notice for each. The in-app toast and a new Windows notification both come from that notice. The operator chooses in App settings which kinds (question, failure, done, reply) reach Windows; by default questions and failures do. A notification shows AgentWeave's name and icon, appears when the window is not in front or is closed with the Hub still running, and a click opens AgentWeave at the conversation that asked.",
+  "tasks": [
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Drive scripting on an established pattern; Sonnet.",
+      "checker": "QA",
+      "checker_reason": "Opus checker confirms it fails for the right reason before the build.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the CONTRACT and record it failing before anything is built. Dedicated scratch port and profile (never :8000 or :8010), Haiku turns that call ask_user, a run made to fail, the window opened, minimized, closed and reopened, the shell's notification history read, and the activation link opened through the shell. Check the date-prefixed drive name is free.",
+      "files": [
+        "scripts/drive/d1108_windows_notifications.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "one-notice-per-event",
+        "kinds-chosen",
+        "toast-when-behind",
+        "toast-when-closed",
+        "none-when-in-front",
+        "own-identity",
+        "click-opens-conversation",
+        "question-carries-conversation",
+        "quiet-failure"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive: a call for the operator reaches Windows"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "A change on the Hub's broadcast seam that every event passes through; Opus.",
+      "checker": "QA2",
+      "checker_reason": "Opus checker, different from the builder.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Move the page's classification rules into hub/hub/operator_notices.py, publish operator_notice at the broadcast seam, add conversation_id to question_asked, and add the operator-only route and file for the per-kind Windows choices with the defaults. The fixture's expected kinds are taken from classify.ts before it changes. Hub tests read the stream in the order the route returns.",
+      "files": [
+        "hub/hub/operator_notices.py",
+        "hub/hub/sse.py",
+        "hub/hub/api/v1/questions.py",
+        "hub/hub/api/v1/notify_settings.py",
+        "hub/hub/api/v1/__init__.py",
+        "hub/tests/test_operator_notices.py"
+      ],
+      "from": null,
+      "key": "hub-notices",
+      "requirements": [
+        "one-notice-per-event",
+        "kinds-chosen",
+        "question-carries-conversation"
+      ],
+      "reviewer": null,
+      "title": "The Hub publishes one notice per call, and holds the Windows choices"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Page change on an established notifier; Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "Opus checker.",
+      "depends_on": [
+        "hub-notices"
+      ],
+      "description": "The page notifier draws toasts from operator_notice instead of classifying, an ask toast opens its conversation (reply-only in-view suppression kept), and App settings gains the per-kind Windows switches reading and writing the Hub route. Existing notification tests are kept passing, adapted to notices. The UI bundle is refreshed.",
+      "files": [
+        "hub/ui/src/lib/notify/classify.ts",
+        "hub/ui/src/lib/notify/notifier.ts",
+        "hub/ui/src/lib/notify/prefs.ts",
+        "hub/ui/src/hooks/useNotifications.ts",
+        "hub/ui/src/components/settings/NotificationSettings.tsx",
+        "hub/ui/src/__tests__/notifications.test.ts",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "page-notices",
+      "requirements": [
+        "one-notice-per-event",
+        "kinds-chosen"
+      ],
+      "reviewer": null,
+      "title": "The page renders notices and offers the Windows switches"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Outward-facing Windows integration with one untried mechanism; Opus.",
+      "checker": "QA",
+      "checker_reason": "Opus checker.",
+      "depends_on": [
+        "page-notices"
+      ],
+      "description": "First, try protocol activation for an unpackaged app on this machine. If it cannot work, call report_cannot_satisfy on c-click before building further. Then: src/agentweave/notifier.py (powershell.exe toast, CREATE_NO_WINDOW, Start-menu shortcut with AgentWeave.Hub and the packaged icon, the agentweave: link in HKCU, the per-port de-duplication ledger, no-op off Windows, quiet failure), the bridge notify(notice), and the open target that focuses or opens the window and sends aw-app-open to the page.",
+      "files": [
+        "src/agentweave/notifier.py",
+        "src/agentweave/cli.py",
+        "src/agentweave/desktop_window.py",
+        "tests/test_windows_notifications.py",
+        "hub/ui/src/hooks/useNotifications.ts",
+        "hub/ui/src/App.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "launcher-notify",
+      "requirements": [
+        "toast-when-behind",
+        "own-identity",
+        "click-opens-conversation",
+        "quiet-failure"
+      ],
+      "reviewer": null,
+      "title": "The launcher shows notifications and a click opens their conversation"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "A new background process with lifecycle edges; Opus.",
+      "checker": "QA",
+      "checker_reason": "Opus checker.",
+      "depends_on": [
+        "launcher-notify"
+      ],
+      "description": "The launcher-owned pythonw watcher: starts when the window closes with the Hub kept running, reads the operator stream with the launcher's credential, applies the Hub-held Windows choices, ends when the Hub ends or a window opens, and shows through the same notifier, so the ledger prevents duplicates across the hand-over. Includes its lifecycle tests.",
+      "files": [
+        "src/agentweave/notifier.py",
+        "src/agentweave/cli.py",
+        "tests/test_notification_watcher.py"
+      ],
+      "from": null,
+      "key": "background-watcher",
+      "requirements": [
+        "toast-when-closed",
+        "none-when-in-front",
+        "kinds-chosen"
+      ],
+      "reviewer": null,
+      "title": "The watcher while the window is closed"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Running an existing drive and recording evidence; Sonnet.",
+      "checker": "QA",
+      "checker_reason": "Opus checker reads the evidence against each criterion.",
+      "depends_on": [
+        "drive",
+        "hub-notices",
+        "page-notices",
+        "launcher-notify",
+        "background-watcher"
+      ],
+      "description": "Run the drive against the built feature on the scratch port and profile (never :8000 or :8010). Fix nothing in product code. Record each criterion's result with the history entries per notice id, the console-window comparison and the window route after activation. A failing criterion sends its task back.",
+      "files": [
+        "scripts/drive/d1108_windows_notifications.py"
+      ],
+      "from": null,
+      "key": "acceptance-run",
+      "requirements": [
+        "one-notice-per-event",
+        "kinds-chosen",
+        "toast-when-behind",
+        "toast-when-closed",
+        "none-when-in-front",
+        "own-identity",
+        "click-opens-conversation",
+        "question-carries-conversation",
+        "quiet-failure"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive on the built notifications"
+    },
+    {
+      "depends_on": [],
+      "description": "After the app window closes with 'closing leaves AgentWeave running' on, notices published before the launcher's watcher reports ready (~15-20 s on this machine) produce no Windows notification at all. The window process's own listener is documented (notifier.py block comment above NOTICE_EVENT; _listen_for_notices_in_window) to keep reading after its window has gone until the watcher is listening, but nothing it receives in that span is shown. Make some listener show every wanted notice across the close, within 5 s, exactly once; and find why the watcher takes ~15-20 s to report ready. Add a test that fails on the current code: a notice published 2 s after the close is shown.",
+      "files": [
+        "src/agentweave/cli.py",
+        "src/agentweave/notifier.py",
+        "tests/test_notification_watcher.py"
+      ],
+      "from": null,
+      "key": "close-gap-notices",
+      "requirements": [
+        "toast-when-closed",
+        "none-when-in-front"
+      ],
+      "reviewer": null,
+      "title": "Notices in the first seconds after the window closes are lost"
+    },
+    {
+      "depends_on": [],
+      "description": "scripts/drive/d1108_windows_notifications.py cannot establish several criteria on this machine, so they fail whatever the product does. (1) c-click: app.windows() only lists processes the drive Popen'd, so a window the registered agentweave: link opens (a different process) is never seen. Find AgentWeave windows by title/class across all processes. page_url() relies on WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, which a shell-launched handler does not inherit, so read the route another way (e.g. set the variable in HKCU\\Environment for the drive's duration, or read the launcher's recorded URL). (2) c-kinds: d.choose_in_page cannot open App settings or reach the Windows switches through UI Automation, so the change and restart persistence are never exercised. Its last two checks then run under defaults and pass for the wrong reasons. (3) c-quiet: page_text's UIA read never finds the in-app toast text. (4) c-in-front: bring_front cannot take the foreground, so the first-question check proves nothing. (5) c-closed: ask within 2 s of the close, not only after the watcher is up. A step that cannot establish its precondition should report that, not count a pass.",
+      "files": [
+        "scripts/drive/d1108_windows_notifications.py",
+        "scripts/drive/d1105_own_app.py"
+      ],
+      "from": null,
+      "key": "drive-can-see",
+      "requirements": [
+        "click-opens-conversation",
+        "kinds-chosen",
+        "quiet-failure",
+        "none-when-in-front",
+        "toast-when-closed"
+      ],
+      "reviewer": null,
+      "title": "Make the acceptance drive able to observe c-click, c-kinds, c-quiet and c-in-front"
+    }
+  ],
+  "title": "Windows notifications for what calls the operator"
+}

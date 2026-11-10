@@ -1,0 +1,29 @@
+{
+  "id": "fct-bdf5ddc517a8",
+  "kind": "fact",
+  "claim": "Each task's file list in a spec should include schema migrations and every touched module, including UI surfaces and lifespan hooks, not only the core file.",
+  "citations": [
+    {
+      "source": "src-400939c6a155",
+      "quote": "List schema migrations and every touched module, including UI surfaces and lifespan hooks, in each task's file list.",
+      "line_start": 18,
+      "line_end": 18
+    },
+    {
+      "source": "src-400939c6a155",
+      "quote": "Do not name only the core file.",
+      "line_start": 18,
+      "line_end": 18
+    }
+  ],
+  "sources": [
+    "src-400939c6a155"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-04T13:13:19.187004Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-dbd02eb9fc92",
+  "kind": "fact",
+  "claim": "Tasks that depend only on settled shapes, such as the UI, should be started in parallel with later backend tasks to reduce waiting time.",
+  "citations": [
+    {
+      "source": "src-a8a5c1d6d109",
+      "quote": "Start tasks that depend only on settled shapes, such as the UI, in parallel with later backend tasks, to cut time spent waiting to start.",
+      "line_start": 25,
+      "line_end": 25
+    }
+  ],
+  "sources": [
+    "src-a8a5c1d6d109"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T12:20:16.154619Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

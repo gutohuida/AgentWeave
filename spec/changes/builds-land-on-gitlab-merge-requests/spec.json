@@ -1,0 +1,382 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "projects whose remotes are on github.com, gitlab.com, and a self-hosted address",
+      "how_to_check": "Hub test through the project settings route with temp repositories.",
+      "key": "ac-host",
+      "requirement": "host-setting",
+      "then": "the first reads as GitHub, the second as GitLab, the third is refused naming the setting and then accepted once set",
+      "when": "PR landing is turned on with the host unset, then the third with the host set to GitLab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a GitLab project with no GitLab CLI, then one that is not logged in, and a GitHub project without gh",
+      "how_to_check": "Hub test with the CLI lookups faked.",
+      "key": "ac-ready",
+      "requirement": "gitlab-ready",
+      "then": "the first two are refused with distinct reasons naming the GitLab CLI, and the GitHub project's refusal is the one slice 1 gives",
+      "when": "PR landing is turned on in each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a GitLab project with the CI setting off and a two-task spec",
+      "how_to_check": "Hub test with a fake GitLab CLI and a local bare remote; the acceptance drive confirms on a scratch GitLab project.",
+      "key": "ac-mr",
+      "requirement": "gitlab-draft-ready",
+      "then": "one draft merge request exists, it is ready after the second, and back to draft after the send-back, never more than one",
+      "when": "the first task is approved, the second approved, then one sent back"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a GitLab merge request merged by a person, and another closed",
+      "how_to_check": "Acceptance drive on the scratch GitLab project; the merge is the operator's.",
+      "key": "ac-follow",
+      "requirement": "gitlab-follow",
+      "then": "the first build's tasks read landed with the merge commit and the second's not landed, branch kept",
+      "when": "the build is opened in the app"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a scratch GitLab project, registered as a trial project",
+      "how_to_check": "Operator's check on the scratch GitLab project, with the drive's Haiku-bound agents.",
+      "key": "ac-done",
+      "requirement": "gitlab-follow",
+      "then": "the build lands as one merge request, followed to merged, with both tasks landed in the app",
+      "when": "a two-task spec is built with PR landing and a person merges the merge request"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a GitLab project with the CI setting on and a failing counted job on the head commit only, then also on main",
+      "how_to_check": "Hub test with a fake GitLab CLI.",
+      "key": "ac-ci",
+      "requirement": "gitlab-ci",
+      "then": "the first sends the latest task back and drafts the request, the second sends nothing back and shows 'fails on main too'",
+      "when": "the Hub reads the pipeline"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a merge request with a reviewer's inline discussion on task B's file",
+      "how_to_check": "Hub test with a fake GitLab CLI; the acceptance drive confirms on the scratch project.",
+      "key": "ac-reviews",
+      "requirement": "gitlab-reviews",
+      "then": "task B is sent back with the discussion, once, however many asks follow",
+      "when": "the Hub reads it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the GitLab call wrapper",
+      "how_to_check": "Hub test calling the wrapper.",
+      "key": "ac-never",
+      "requirement": "gitlab-never-merges",
+      "then": "each is refused before anything runs, and a read of the request's discussions and pipeline runs",
+      "when": "asked to merge, approve, change the target branch, resolve a discussion or make a non-GET API write"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a GitHub build and a GitLab build",
+      "how_to_check": "UI test with fixtures in the order the build route returns.",
+      "key": "ac-shown",
+      "requirement": "host-shown",
+      "then": "the first says pull request and names GitHub, the second says merge request and names GitLab, each with link and state",
+      "when": "the operator opens each"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "add0a48d76908db4cb6e1efdb111d274e168a6fabc08ebe84f2cdb7270558355",
+      "FR-2": "6063398dfb6b4904b6fae0e6e32785c745cf0650c1dc570a134cc69a95f760f8",
+      "FR-3": "b21a9993788c43679e585e564c9497f828b33494e08c78a900de0830c1fe6ff8",
+      "FR-4": "2421181cf482c7024d90be563ab9f1466549fc335fd799148bbcfd13c9f5f46e",
+      "FR-5": "2010c31a21b9422eccb3c281292fbe1393753654707c19ff7ad0f0adce4b78bf",
+      "FR-6": "00551a14af02a024c2af5a83db0b3278a2274597ac36ab69c2679fdc9865a48c",
+      "FR-7": "b551cd7b20921cd464d5b4846ba43539ab62b0ad117e3247d368c450c70b4843",
+      "FR-8": "4ee6dcb0afea46578ee5772ea3c495a13c0ad828971514d29ee7b4a5696d73e8"
+    },
+    "high_water": 8,
+    "requirements": {
+      "gitlab-ci": "FR-5",
+      "gitlab-draft-ready": "FR-3",
+      "gitlab-follow": "FR-4",
+      "gitlab-never-merges": "FR-7",
+      "gitlab-ready": "FR-2",
+      "gitlab-reviews": "FR-6",
+      "host-setting": "FR-1",
+      "host-shown": "FR-8"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus2",
+    "builder": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Opus for outward-facing Tier 2 work; DeveloperOpus2 takes the drive and the GitLab code so the two hands differ.",
+      "builder": "DeveloperOpus owns pull_requests.py through slices 1 to 3, so it does the host refactor.",
+      "checker": "QA checks the refactor leaves GitHub unchanged; QA2 reads the GitLab code and UI.",
+      "cron": "Every five minutes picks up the next task soon after the previous one is approved without firing idle turns often.",
+      "mode": "Five tasks; the host layer, the GitLab landing and the UI chain on what each builds, the drive runs first and last. Do not start before the operator unparks it and slice 3 has landed.",
+      "stop": "The flow has nothing to do once its tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 2. Outward-facing, as slices 1 to 3: pushes a branch and opens a merge request on a host, and acts on people's words there. Migration: adds a project column for the host (null reads as GitHub or what the remote shows) and no more; build columns from slices 1 to 3 are reused as they are. Rollback: the column is read only for GitLab projects; downgrading drops it and such projects fall back to 'PR landing needs a GitHub remote'.\n\nDecisions (author's choice unless said):\n- GitLab only; the host layer is shaped so a third host is an addition, but none is built (see open questions).\n- The Hub reaches GitLab through the user's own GitLab CLI login (glab), as it reaches GitHub through gh; tokens later, as on GitHub.\n- The same single wrapper that limits GitHub calls limits GitLab's: a closed list of allowed commands, none merging, approving or changing the target branch.\n- The host is a project setting, defaulting to what the remote's address shows; a self-hosted GitLab is recognised only when the operator names it in the setting.\n- GitLab's words map to the same few things the Hub already uses: draft/ready/merged/closed, a pipeline's counted jobs for CI, and unresolved discussions opened by a reviewer for 'requested changes' (see open question: GitLab's request-changes review exists only on some plans).\n\nCURRENT   remote must be github.com; gh only; build.pr_* columns mean GitHub\nPROPOSED  project.code_host = github | gitlab (default: from the remote)\n            -> readiness: remote on that host, its CLI installed and logged in\n            -> same landing, same states, same send-backs, through that host's CLI\n            -> one allowed-calls list per host\n\nThe contract (grounded in master, where slices 1 and 2 live; the Architect branch lacks them; slice 3's names are from its change document):\n- Setting: `code_host`, `\"github\" | \"gitlab\" | null` (null = from the remote), on the project settings model beside `pr_landing` and `pr_ci_full_check` (hub/hub/api/v1/projects.py:287-297; `Project.code_host`, String(16), nullable, hub/hub/db/models.py beside `pr_landing`; UI `code_host?: 'github' | 'gitlab' | null` in hub/ui/src/api/projects.ts:114). The refusals follow the existing `pr_landing_off` pattern at projects.py:949-953: a settings write is refused with a `code` and `message`; new codes `host_unknown` (address shows neither host and the setting is null), `no_gitlab_remote`, `no_gitlab_cli`, `gitlab_cli_not_logged_in`, beside the existing `no_github_remote`, `no_github_cli`, `github_cli_not_logged_in` (pull_requests.py:73-75), which stay untouched for GitHub.\n- Build: `builds.pr_host` (String(16), nullable; null reads as github) records the host a request was opened on, so FR-1's 'keeps the host it opened it on' holds; `builds.pull_request_view` (hub/hub/builds.py:96) gains `\"host\": \"github\" | \"gitlab\"`; the UI type is `BuildPullRequest.host` (hub/ui/src/api/pullRequests.ts:33). `pr_number` holds the merge request's iid, `pr_url` its link, `pr_state` the same draft/ready/merged/closed words.\n- Migration: one migration adding `projects.code_host` and `builds.pr_host`, nullable, guarded like 0170; number it the next free one after slice 3's (0171 is slice 3's, so 0172 unless the order changes). Downgrade drops both.\n- GitLab calls: a second wrapper beside `gh()`: `glab(root, *args)` -> `check_glab_call(args)` -> `_run_glab`, with `GLAB_ALLOWED` = `(\"mr\",\"create\")`, `(\"mr\",\"update\")`, `(\"mr\",\"view\")` and two-argument `(\"api\", <path>)` GETs whose path matches the merge request's `discussions` and `pipelines` reads only. `mr update` takes only the title, description, `--draft` and `--ready`; `mr merge`, `mr approve`, `--target-branch`, discussion resolution (any PUT/POST/`-X`) are refused before anything runs, exactly as `check_gh_call` refuses its list. Readiness functions mirror `github_remote` / `gh_executable` / `gh_logged_in` / `readiness_problem` (pull_requests.py:104-150) as `gitlab_remote`, `glab_executable`, `glab_logged_in` and a host-taking `readiness_problem(root, host)`.\n- Review and CI reads reuse slice 3's `builds.pr_reviews` records and slice 2's `builds.pr_ci`, with host-specific readers beside `read_reviews` and `read_ci`; what 'requested changes' means on GitLab is the open question. No new event name, status or setting beyond `code_host`.\n- Guards to relax or extend, each named: hub/tests/test_a_build_lands_as_one_pull_request_push.py (the refused-calls list ~:540 gains the GitLab equivalents in a parallel test; its nm-ac1 allowed-set check ~:342 stays GitHub-only and must still pass untouched); the 'one caller' test that counts `_run_gh(` (~:577) gets a twin for `_run_glab(`; the PR drives' gh-call audit (scripts/drive/pr_ci_drive.py ~:335) stays about gh and must still hold. 'Existing tests pass untouched' (host-layer) is itself the guard that GitHub is unchanged.",
+  "evidence": {
+    "checked": [
+      "hub/hub/pull_requests.py:72-74 and 87-105: a remote counts only when its address matches github.com.",
+      "hub/hub/pull_requests.py:128-150: readiness names a GitHub remote, gh installed and logged in, in that order.",
+      "hub/hub/pull_requests.py:159, 179-217: one wrapper allows only gh pr create, edit, ready and view; the same shape would serve a second host.",
+      "hub/hub/builds.py:50-52: the landing named 'pull_request' is host-neutral in name, so no build landing value is added.",
+      "Slices 1 to 3 are read from the Architect branch (slice 1) and their change documents (slices 2 and 3, unbuilt): this document assumes their requirements as written.",
+      "On master: pull_requests.py has check_gh_call with two-argument gh api GETs, github_remote / readiness_problem, SETTING 'pr_landing'; builds.pull_request_view is the build's pull_request; projects.py:287-297 and :949-953 hold the settings model and its refusal pattern; migration 0170 is the latest."
+    ],
+    "limits": [
+      "Nothing demonstrates any requirement yet: the acceptance drive is proposed coverage, to be written and recorded failing before the build.",
+      "No scratch GitLab project exists and no GitLab account or glab login is known on this machine; the drive depends on the operator creating one.",
+      "The GitLab CLI's commands for draft state, discussions and pipeline jobs, and whether its request-changes review exists on a free plan, are unverified.",
+      "No project has asked for GitLab; the roadmap's own intent says 'when there is demand'."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "large",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Build this now or park it? Options: (a) park until a project actually needs GitLab; (b) build after slice 3. Recommendation: (a). The roadmap says 'when there is demand', no demand is recorded, a second host doubles what the Hub must keep correct on an outward-facing path, and the GitLab commands are unverified. Slices 1 to 3 should prove the landing on GitHub first; this document stays approved-but-unscheduled.",
+      "resolved": false
+    },
+    {
+      "question": "Which hosts? Options: (a) GitLab only; (b) also a Gitea/Forgejo or Bitbucket. Recommendation: (a), written so a host is an addition (a host column and a list of allowed calls per host), because each further host needs its own scratch project and drive.",
+      "resolved": false
+    },
+    {
+      "question": "What counts as 'requested changes' on GitLab? Options: (a) a reviewer's unresolved discussions on the merge request, any plan; (b) GitLab's own request-changes review state, where the plan has it. Recommendation: (a), since it works on every plan, but it means an unresolved comment alone sends work back, which differs from GitHub where a comment-only review does not. If (b), projects on plans without it get no review loop.",
+      "resolved": false
+    },
+    {
+      "question": "Self-hosted GitLab. Options: (a) support it only when the operator names the host in the setting; (b) not at first. Recommendation: (a), as the requirement says, because many teams self-host and the CLI handles it; the drive cannot cover it, so it is unverified.",
+      "resolved": false
+    }
+  ],
+  "problem": "The Hub's pull request landing talks to GitHub alone. A remote is recognised only if it points at github.com (hub/hub/pull_requests.py:72-74, 87-105), readiness checks for the `gh` CLI and its login (pull_requests.py:128-150), and every host call goes through one wrapper that allows only `gh pr create/edit/ready/view` (pull_requests.py:159, 211-217). A team on GitLab turning PR landing on is refused with 'no GitHub remote'. The roadmap's slice 4 says this should work 'when there is demand', and today there is none recorded. This document therefore describes what GitLab support would be, so that the operator can decide whether to build it now or park it.",
+  "requirements": [
+    {
+      "key": "host-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A project has a code host setting with the values GitHub and GitLab; unset, it is what the PR-landing remote's address shows, and when the address shows neither, turning PR landing on is refused with a reason naming the setting; a build that has already opened a request keeps the host it opened it on."
+    },
+    {
+      "key": "gitlab-ready",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Turning PR landing on, and starting a PR build, in a GitLab project are refused with a reason naming the problem when the project directory has no remote on the chosen host, the GitLab CLI is not installed, or it is not logged in, in that order; GitHub projects keep their present refusals unchanged."
+    },
+    {
+      "key": "gitlab-draft-ready",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a GitLab project, a build opens one draft merge request from the build branch against the project's main branch at its first approved task, pushes later tasks to it, marks it ready when every task is pushed and returns it to draft when a task is sent back, with the same description, the same squash setting and the same refusals as slice 1."
+    },
+    {
+      "key": "gitlab-follow",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A GitLab merge request found merged records the build's tasks as landed, naming the merge commit; one found closed without merging records them not landed with the build branch kept; asking happens on the same actions as slice 1, and the local main moves forward on a merge under the same safety rules."
+    },
+    {
+      "key": "gitlab-ci",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "In a GitLab project with the CI setting on, the merge request's pipeline for its head commit is the full check as slice 2 defines it for GitHub's checks: counted jobs are the project's list (GitLab has no required-checks listing the Hub may read), only the head commit's result counts, a failure not also failing on main sends the latest task pushed back, and the merge request becomes ready only when every task is pushed and the pipeline has passed."
+    },
+    {
+      "key": "gitlab-reviews",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A review of a GitLab merge request that asks for changes returns to the matching tasks as send-backs by slice 3's rules (matching by the task's own change, unmatched comments to the latest task pushed, each review handled once), where the reviewer's request is the one the operator's answer to the open question names."
+    },
+    {
+      "key": "gitlab-never-merges",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The Hub's GitLab calls are limited to a closed list: pushing the build branch, and the GitLab CLI's create, update, mark-ready and view of a merge request, its discussions and its pipeline, read only; a call to merge, approve, change the target branch, or resolve a discussion is refused before anything runs."
+    },
+    {
+      "key": "host-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build card and its tasks name the host and call the request by that host's word (pull request, merge request), with its link and state, as slice 1 does for GitHub."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/work-lands-through-pull-requests/spec.json",
+    "slice": "other-code-hosts"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A per-project code host setting, GitHub or GitLab, defaulting from the remote",
+      "Readiness for GitLab: a GitLab remote, the GitLab CLI installed and logged in",
+      "Slice 1's landing on GitLab: branch push, draft merge request, ready, back to draft, followed to merged or closed",
+      "Slice 2's CI on GitLab: a merge request pipeline's jobs standing in for the local landing check",
+      "Slice 3's review comments on GitLab returning as send-backs",
+      "Showing the host's name on the build"
+    ],
+    "non_goals": [
+      "Any host other than GitLab (Bitbucket, Gitea, Azure DevOps, and the like)",
+      "Merging, approving or retargeting the merge request, or touching GitLab's protections: merging stays a person's",
+      "Per-project tokens or an OAuth app",
+      "Webhooks",
+      "Moving a project's existing builds between hosts",
+      "Switching this repository to PR landing",
+      "Building before the operator decides (see the open questions)"
+    ]
+  },
+  "summary": "A project whose remote is on GitLab can land a build as one merge request, with the behaviour of slices 1 to 3 carried over: opened as a draft at the first approved task, ready when every task is approved, CI as the full check where the project chooses it, review comments returning as send-backs, and the work recorded landed when a person merges. The project's host is chosen in its settings and defaults to what its remote shows. GitLab only; no other host. Tier 2: outward-facing, plus a migration. It builds after slice 3 (review-comments-come-back), and whether to build it at all is the operator's call: see the open questions.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "A drive against a real outside host, written by someone other than the Hub-code builder; Opus.",
+      "checker": "QA",
+      "checker_reason": "QA holds the drive and the behaviour it is meant to catch.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the contract named in the design (`code_host` setting and its refusal codes, `pull_request.host` on the build, the merge request opened through glab) and record it failing. It uses a scratch GitLab project (to be created by the operator, with a pipeline of one job) on a dedicated trial Hub with its own port and database, the CI setting off, real agent turns bound to Haiku: builds a two-task spec with PR landing on, expects one draft merge request, ready after the second task, a sent-back task returning it to draft, and followed to merged after a person merges it.",
+      "files": [
+        "scripts/drive/gitlab_landing_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "gitlab-draft-ready",
+        "gitlab-follow",
+        "gitlab-ready"
+      ],
+      "reviewer": null,
+      "title": "GitLab landing acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Tier 2: a migration and the closed list that keeps the Hub from merging; refactors the file slices 1 to 3 built, so the same builder.",
+      "checker": "QA",
+      "checker_reason": "QA checks that GitHub's behaviour is unchanged and that nothing outside the lists can run.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "The code host column and `builds.pr_host` with the migration, the `code_host` setting with its refusals, readiness per host, the call wrapper and its allowed list per host (`glab`, `check_glab_call`, `GLAB_ALLOWED`), and `host` in `builds.pull_request_view`, with GitHub's behaviour unchanged (existing tests pass untouched, the named guards extended). Tests first, at the seam.",
+      "files": [
+        "hub/hub/pull_requests.py",
+        "hub/hub/db/models.py",
+        "hub/hub/builds.py",
+        "hub/hub/migrations/versions/0172_other_code_hosts.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/tests/test_other_code_hosts_layer.py"
+      ],
+      "from": null,
+      "key": "host-layer",
+      "requirements": [
+        "host-setting",
+        "gitlab-ready",
+        "gitlab-never-merges",
+        "host-shown"
+      ],
+      "reviewer": null,
+      "title": "A per-project host and one list of allowed calls per host"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Outward-facing code on a second host; Opus. Swap for DeveloperOpus if busy.",
+      "checker": "QA2",
+      "checker_reason": "QA2 reads the second host's code with fresh eyes.",
+      "depends_on": [
+        "host-layer"
+      ],
+      "description": "Open, update, draft, ready and follow a merge request through the GitLab CLI; read the pipeline for CI and discussions for reviews; map them onto the existing states and send-backs. Tests with a fake GitLab CLI and a real local bare remote.",
+      "files": [
+        "hub/hub/pull_requests.py",
+        "hub/hub/landing_queue.py",
+        "hub/tests/test_other_code_hosts_gitlab.py"
+      ],
+      "from": null,
+      "key": "gitlab-landing",
+      "requirements": [
+        "gitlab-draft-ready",
+        "gitlab-follow",
+        "gitlab-ci",
+        "gitlab-reviews"
+      ],
+      "reviewer": null,
+      "title": "Landing, CI and review comments on GitLab"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Routine presentation of fields the Hub returns; Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checked the landing, so it can tell whether the UI matches the route.",
+      "depends_on": [
+        "host-layer"
+      ],
+      "description": "Add `code_host` to the project settings type and screen with its refusals, and `host` to `BuildPullRequest`, showing the host's name and word (pull request or merge request) on the build and tasks; refresh the UI bundle.",
+      "files": [
+        "hub/ui/src/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "host-setting",
+        "host-shown"
+      ],
+      "reviewer": null,
+      "title": "The host on the build card and in the project settings"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "The hand that wrote the drive runs it, against a real outside host; Opus.",
+      "checker": "QA",
+      "checker_reason": "QA holds the drive and can tell a pass that read nothing from a real one.",
+      "depends_on": [
+        "drive",
+        "host-layer",
+        "gitlab-landing",
+        "ui"
+      ],
+      "description": "Run the acceptance drive from the first task against the built feature on the scratch GitLab project and a dedicated trial Hub, and record its evidence (run output, the merge request's state and commits read from GitLab, the build card screenshot) against every requirement of this document; the merge itself is the operator's, so the operator-checked criteria are recorded as awaiting that step. A failure here sends the task that builds the behaviour back, not this one.",
+      "files": [
+        "scripts/drive/gitlab_landing_drive.py"
+      ],
+      "from": null,
+      "key": "accept",
+      "requirements": [
+        "host-setting",
+        "gitlab-ready",
+        "gitlab-draft-ready",
+        "gitlab-follow",
+        "gitlab-ci",
+        "gitlab-reviews",
+        "gitlab-never-merges",
+        "host-shown"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive and record its evidence"
+    }
+  ],
+  "title": "Other code hosts"
+}

@@ -1,0 +1,29 @@
+{
+  "id": "fct-f8c366e68587",
+  "kind": "fact",
+  "claim": "Long Windows GUI drives with real agent turns should run on a less loaded machine or be serialized with other agents' work, because load caused flaky app opens, late prompts and slow health answers.",
+  "citations": [
+    {
+      "source": "src-40507bd03662",
+      "quote": "Run long Windows GUI drives with real agent turns on a less loaded machine, or serialize them with other agents' work.",
+      "line_start": 25,
+      "line_end": 25
+    },
+    {
+      "source": "src-40507bd03662",
+      "quote": "Load caused flaky app opens, late prompts and slow health answers that cost review and fix time.",
+      "line_start": 25,
+      "line_end": 25
+    }
+  ],
+  "sources": [
+    "src-40507bd03662"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T16:09:01.153757Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

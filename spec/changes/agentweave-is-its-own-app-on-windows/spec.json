@@ -1,0 +1,424 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "The app window open",
+      "how_to_check": "Covered by the acceptance drive.",
+      "key": "taskbar-button",
+      "requirement": "taskbar-identity",
+      "then": "It names AgentWeave and points at AgentWeave's icon file",
+      "when": "Its taskbar identity is read"
+    },
+    {
+      "checked_by": "operator",
+      "given": "The app open from the desktop shortcut",
+      "how_to_check": "Operator check on their own machine after the build lands.",
+      "key": "pin-by-hand",
+      "requirement": "pin-reopens-agentweave",
+      "then": "The pin shows AgentWeave's icon and name, and clicking it opens AgentWeave; clicking it again while open focuses the window",
+      "when": "The operator pins its taskbar button, closes the app, then clicks the pin"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app started from the shortcut's command",
+      "how_to_check": "The acceptance drive samples the window list during start and close.",
+      "key": "no-console",
+      "requirement": "no-terminal",
+      "then": "No console-host window belonging to any process the app started appears at any point",
+      "when": "It opens, a project is used, and it is closed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app window open and minimized",
+      "how_to_check": "Covered by the acceptance drive, plus a unit test of the launch decision.",
+      "key": "second-launch-focuses",
+      "requirement": "one-window",
+      "then": "The same window is restored and in front, one window and one Hub process exist, and the launching process exits",
+      "when": "The app is launched again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The Hub kept running in the background with an agent turn in progress",
+      "how_to_check": "Test of the launch decision against a running Hub, and a drive step with a real Haiku turn.",
+      "key": "reopen-keeps-work",
+      "requirement": "reopen-to-background-hub",
+      "then": "A window opens on the same Hub process (same process id), and the turn completes without interruption",
+      "when": "The app is launched"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The window closed maximized, and separately closed at 1200x800 at a position, and separately remembered at a position on a screen no longer connected",
+      "how_to_check": "Unit test of the stored geometry and its screen check, and a drive step for the maximized case.",
+      "key": "window-reopens-maximized",
+      "requirement": "window-memory",
+      "then": "It opens maximized; then at 1200x800 at that position; then on the primary screen at 1200x800",
+      "when": "The app is opened each time"
+    },
+    {
+      "checked_by": "agent",
+      "given": "This change installed on a Windows machine with the trial profile on a scratch port (not 8000 or 8010) and no Hub running there",
+      "how_to_check": "Acceptance drive, written and failing before the build: scripts/drive/d1105_own_app.py starts the app, reads the window's shell properties and the process list, sends the window a close, and checks the port.",
+      "key": "drive-own-app",
+      "requirement": "close-idle-stops",
+      "then": "The window's app identity is AgentWeave's, with a relaunch command that opens AgentWeave and AgentWeave's icon. The second launch focuses the same window and starts no second Hub. After the close, no Hub process remains and the port is free within 30 seconds. Before the change, the relaunch command is absent and the Hub survives the close.",
+      "when": "The drive starts the app through the desktop shortcut's command, waits for the window, reads the window's taskbar identity, launches again, then closes the window while idle"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app open with no work running",
+      "how_to_check": "Covered by the acceptance drive.",
+      "key": "close-idle",
+      "requirement": "close-idle-stops",
+      "then": "No prompt appears, and within 30 seconds no Hub process for the port remains and the port is free",
+      "when": "The window is closed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The app open with one agent turn in progress",
+      "how_to_check": "Drive with a real Haiku turn, choosing through the window's page; a UI test of the prompt's wording.",
+      "key": "close-busy",
+      "requirement": "close-busy-asks",
+      "then": "The prompt names one agent turn. Cancel leaves the window open. Keep running closes the window and the turn completes. Stop it all ends the turn as `agentweave stop` does and leaves no Hub process.",
+      "when": "The window is closed and each of the three choices is taken in turn (reopening between)"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A build (flow) between its firings with no agent turn or check run in progress, and separately an enabled recurring job that is not a build, with no turn in progress",
+      "how_to_check": "Test of the 'is work running' answer over each kind of work: an agent turn, a check run, a landing, a flow between firings, and a non-build job.",
+      "key": "work-between-firings",
+      "requirement": "what-counts-as-work",
+      "then": "With the build, the prompt appears and names the build. With only the recurring job, no prompt appears and the Hub stops.",
+      "when": "The window is closed in each case"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Two Hubs on two scratch ports, each with a window, one with an agent turn in progress",
+      "how_to_check": "A drive step in d1105_own_app.py reading the process list and the port of each Hub.",
+      "key": "other-hub-survives",
+      "requirement": "close-stops-only-its-own-hub",
+      "then": "After the first close the busy Hub's process id and its turn are unchanged; after the second, only the busy Hub's processes are gone",
+      "when": "The idle one's window is closed, and then the busy one's with 'Stop it all'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The setting turned on in App settings, then the app restarted",
+      "how_to_check": "Drive step, plus a unit test that the launcher reads the stored choice before asking the Hub.",
+      "key": "setting-restores-old-close",
+      "requirement": "close-behaviour-setting",
+      "then": "The setting still reads on, no prompt appears, and the Hub process is still running and answering 60 seconds later",
+      "when": "The window is closed with no work running"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "232c62c40deadc35222ab06794d0a6a0eb59581a1215ae321d3a7d3105ab1e18",
+      "FR-10": "17d5f9c4d9bd64eec35ce21665295a1be67e2c7f2cc351d4e107139f6f52df90",
+      "FR-11": "e5d2506a68c6b70b5b96623f0cdab53ac33f89cf642caf5c6a6d3c85c560a341",
+      "FR-2": "ceeb15f93b43f7ec70cd154783e7ebea71899e36e191b2a46bdaa64bc2ca61ad",
+      "FR-3": "83f5eed684bc3ffd40c221207ba4608602a85580035fb2fe3a50ad1ca499afb8",
+      "FR-4": "59a60edb3f2e578af3bfea9080ee0ea29e7ad4b9eab738fcf3885e72fd6e59ee",
+      "FR-5": "07a33c88cf7d388d985cc2c3d1df375bde3a037aaee2ca52ae14d746cf624847",
+      "FR-6": "712da6c271e99338876102d456f6790a002ccf10854e4bc602dc66ddcb5e6582",
+      "FR-7": "34069fefe864d905b044c944f1525a6ff33ab88260c3cb5f4573c291c7b385f7",
+      "FR-8": "8fac463a4873c6f9d2a40ebe78583d1ad6a4550beb55fb11f77397299eec1222",
+      "FR-9": "069e04d4dabdd2208fe285f69a8a6133bd759506a2e9cb1fec85aa74fc51c105"
+    },
+    "high_water": 11,
+    "requirements": {
+      "close-behaviour-setting": "FR-11",
+      "close-busy-asks": "FR-8",
+      "close-idle-stops": "FR-7",
+      "close-stops-only-its-own-hub": "FR-10",
+      "no-terminal": "FR-3",
+      "one-window": "FR-4",
+      "pin-reopens-agentweave": "FR-2",
+      "reopen-to-background-hub": "FR-5",
+      "taskbar-identity": "FR-1",
+      "what-counts-as-work": "FR-9",
+      "window-memory": "FR-6"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus2",
+    "builder": "DeveloperOpus2",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus2 is free of the parallel steadier-tests build.",
+      "builder": "One builder keeps the launcher's chain of changes consistent.",
+      "checker": "QA checks all three, leaving QA2 to the steadier-tests build.",
+      "cron": "Every five minutes so finished work is checked promptly.",
+      "mode": "Three chained tasks sharing cli.py, built in order by a flow.",
+      "stop": "Stop when the queue empties."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "**D1. The window carries its own relaunch identity.** Before the window is shown, the app writes four shell properties on it: app identity, relaunch command (the same command the desktop shortcut runs), display name 'AgentWeave', and icon (the packaged app icon). Spike, 2026-11-04: all four set on a test window were read back from a separate process with SHGetPropertyStoreForWindow, so the acceptance drive can check them without a human. Pinning such a window uses these properties (Windows' documented relaunch behaviour). The pin click itself stays an operator check. The CLI's own code imports only the standard library, so this is done through ctypes, not pywin32. Rejected: a Start-menu shortcut carrying the app identity. It also works and slice 4 (notifications) may need one, but it is more install-time machinery than the pin needs, so it is deferred to slice 4.\n\n**D2. One window per Hub, focused by the launcher.** The window markers that already exist per port (cli.py:1547) say a window is open and which process owns it. A launch that finds a live marker for its Hub restores and brings that window to the front itself, then exits. A process just started by the operator's click is allowed to take the foreground. Rejected: asking the owning process to focus itself through a file or pipe, which adds a channel and still hits the foreground rules.\n\n**D3. Window geometry is the launcher's, stored beside the window's storage.** Size, position and maximized state are saved when the window closes and passed to the window at creation. If the saved position is off every connected screen, the window falls back to the primary screen.\n\n**D4. Close asks the Hub, then stops it through the existing stop path.** pywebview's `closing` event can cancel a close. On close, the app asks the Hub one instance-wide question: what work is running (agent turns, check runs, landings, builds not ended, across projects). With nothing running, the close goes ahead and the same code `agentweave stop` uses stops the Hub. With work running, the close is cancelled and the page shows the three-way prompt. 'Stop it all' runs the stop path; 'keep running' closes the window only; 'cancel' does nothing. If the Hub cannot be reached, the window closes and the Hub is stopped as when idle, since there is nothing left to protect. Rejected: deciding in the page alone, which cannot see other projects' work.\n\n**D5. The rollback setting is the launcher's.** 'Closing the window leaves AgentWeave running' is stored beside the window geometry (D3), because the launcher must read it before it asks the Hub anything, and is shown under App settings, where the page reads and writes it through the window. Off by default.\n\n**Hazard (Tier 2).** Closing the window now stops the Hub and, after 'Stop it all', the agents' runs. On the operator's :8000 this reaches live work, and :8000 runs this checkout, so the new close takes effect there at its next restart; the UI prompt reaches it on its next reload. It replaces an agreed requirement (app-lifecycle n6). Mitigations: the instance-wide work check before any stop; a Hub that cannot answer is never taken as idle while it is still up (the page asks again rather than guessing); a close stops only its own port's Hub (FR on own-hub), since :8000 and :8010 run side by side on this machine; every drive runs on a scratch port with the trial profile, never :8000 or :8010. Rollback: the D5 setting restores today's behaviour without a release.",
+  "evidence": {
+    "checked": [
+      "src/agentweave/cli.py:1095-1109: the process sets AppUserModelID 'AgentWeave.Hub' before the window opens; nothing sets the window's relaunch command, name or icon for pinning.",
+      "src/agentweave/cli.py:1328-1359: the native window is a pywebview window in the launching process; webview.start returns when it closes and only the window marker is removed (1352-1355).",
+      "src/agentweave/cli.py:1712-1748: the Hub is a detached uvicorn process (CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP) with a pid file.",
+      "src/agentweave/cli.py:1547-1572: window markers per port; `agentweave stop` deletes them and a watcher closes the window (F724).",
+      "src/agentweave/cli.py:974-1042: the desktop shortcut runs pythonw.exe -m agentweave, offered once per install.",
+      "src/agentweave/cli.py:1147: only page storage persists; window geometry does not.",
+      "spec/capabilities/app-lifecycle: n6-closing-the-window-leaves-the-hub-running (to be superseded), n7 (no-detach), n8 (shortcut offered once).",
+      "Spike 2026-11-04 (throwaway, outside the repo): a test window's AppUserModel ID, RelaunchCommand, RelaunchDisplayNameResource and RelaunchIconResource were set and then read back from a separate process via SHGetPropertyStoreForWindow.",
+      "Installed pywebview: Window has confirm_close and a cancellable `closing` event (webview/window.py:101,163); create_window takes maximized and geometry (webview/__init__.py:309-328).",
+      "hub/ui/src/components/settings/AppSettingsScreen.tsx: App settings today are page-side (configStore); nothing there is read by the launcher, hence D5."
+    ],
+    "limits": [
+      "The spike proved the properties are set and readable, not that a pin honours them: pinning was not automated and stays an operator check.",
+      "The spike used pywin32; the product must do the same through ctypes, which is untried.",
+      "That `agentweave stop`'s path stops only one port's Hub has not been checked; the own-hub criterion tests it.",
+      "The file names ClosePrompt.tsx, desktop_window.py and the test files are proposed, not existing.",
+      "The acceptance criteria are proposed coverage; none has run."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [
+          "DeveloperOpus2"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-05T16:07:12.058766+00:00",
+        "id": "build-826f93f0f675",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-05T10:59:42.938353+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "close": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "drive": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "window": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "After the build lands, the app-lifecycle capability's n6-closing-the-window-leaves-the-hub-running is amended to the new rule (close means stop, asking first when work runs, unless the rollback setting is on).",
+  "open_questions": [
+    {
+      "question": "Does an enabled job or loop that is not a build count as work? Operator 2026-11-04: no; they just miss their firings.",
+      "resolved": true
+    }
+  ],
+  "problem": "The operator, 2026-11-04: 'I don't want to have a terminal open and then close the app, run agentweave stop, then agentweave again, then maximize it.' Pinning the app to the taskbar shows a Python icon. The process sets its own app identity (src/agentweave/cli.py:1095-1109, 'AgentWeave.Hub'), but nothing tells Windows how to relaunch it, so the pin falls back to pythonw.exe. Closing the window leaves the Hub running by design (app-lifecycle n6-closing-the-window-leaves-the-hub-running; cli.py:1352-1355), so getting a fresh Hub takes a terminal. The window keeps page storage (cli.py:1147) but not its size, position or maximized state.",
+  "requirements": [
+    {
+      "key": "taskbar-identity",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While the app window is open, its taskbar button shows the name AgentWeave and AgentWeave's icon, never Python's."
+    },
+    {
+      "key": "pin-reopens-agentweave",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: pinning showed a Python symbol. A pin that relaunches Python is useless as a way to open the app.",
+      "statement": "Pinning the open window's taskbar button produces a pin with AgentWeave's name and icon. Clicking that pin with the app closed opens AgentWeave exactly as the desktop shortcut does, and with the app open it focuses the open window."
+    },
+    {
+      "key": "no-terminal",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Opening, using and closing the app from the desktop shortcut or a pin never shows a console or terminal window."
+    },
+    {
+      "key": "one-window",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A launch (shortcut, pin, or bare `agentweave`) while the app window is open for the same Hub opens no second window and starts no second Hub. It brings the open window to the front, restored if it was minimized."
+    },
+    {
+      "key": "reopen-to-background-hub",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A launch while the Hub is running in the background with no window open opens a window on that Hub without restarting it, so work it is running continues uninterrupted."
+    },
+    {
+      "key": "window-memory",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: having to maximize the window again on every start is part of the friction.",
+      "statement": "The window reopens at the size and position it had when last closed, and maximized if it was closed maximized. If that position is not on any connected screen, it opens on the primary screen at its remembered size."
+    },
+    {
+      "key": "close-idle-stops",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: close means stop. Supersedes app-lifecycle n6-closing-the-window-leaves-the-hub-running.",
+      "statement": "Closing the window when no work is running stops the Hub without asking. Within 30 seconds no Hub process for that port remains and the port is free."
+    },
+    {
+      "key": "close-busy-asks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: closing must never silently kill a build that was forgotten.",
+      "statement": "Closing the window while work is running does not close it at once. It names what is running (how many agent turns, check runs and builds) and offers three choices. Stop it all and close: the work is stopped as `agentweave stop` stops it today, then the Hub. Keep running in the background: the window closes and the Hub and its work continue. Cancel: nothing changes."
+    },
+    {
+      "key": "what-counts-as-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: recurring jobs that are not builds just miss their firings while the Hub is stopped. Counting them would make closing nearly always ask, which defeats close-means-stop. A build counts even between firings because it holds tasks in flight.",
+      "statement": "Work is running when any of the following is in progress for any project on that Hub: an agent turn, a check run, a landing, or a build (flow) that has not ended, even between its firings. An enabled job or loop that is not a build, with no turn in progress, is not work."
+    },
+    {
+      "key": "close-stops-only-its-own-hub",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's Hub on :8000 and the trial Hub on :8010 run side by side on this machine; a close of one must never reach the other.",
+      "statement": "Closing a window, with any choice, stops at most the Hub serving that window's port. A Hub on another port of the same machine keeps running, with its processes and its work untouched."
+    },
+    {
+      "key": "close-behaviour-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The rollback for the Tier 2 hazard, with no release needed.",
+      "statement": "The operator can turn on 'Closing the window leaves AgentWeave running' in the app's settings. It is off by default. While it is on, closing the window closes only the window, asks nothing and leaves the Hub and its work running, as before this change; the choice survives a restart of the app."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/agentweave-feels-like-a-desktop-app/spec.json",
+    "slice": "its-own-app"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Windows, the native app window (pywebview), started from the desktop shortcut, a taskbar pin, or bare `agentweave`.",
+      "The taskbar button's name and icon, and what a pin launches.",
+      "One window per Hub: a launch while it is open focuses it.",
+      "Remembering the window's size, position and maximized state.",
+      "What closing the window does to the Hub, with and without work running, and a setting that restores today's behaviour."
+    ],
+    "non_goals": [
+      "macOS and Linux.",
+      "The browser fallback when pywebview is unavailable (its behaviour is unchanged).",
+      "`--no-detach` foreground starts (unchanged: Ctrl+C stops them, no native window).",
+      "Updates and Windows notifications (later slices).",
+      "A tray icon, a Start menu entry as a feature, and starting with Windows.",
+      "Keeping recurring jobs that are not builds alive: they miss their firings while the Hub is stopped (operator, 2026-11-04)."
+    ]
+  },
+  "summary": "Slice 1 of 'AgentWeave feels like a desktop app'. On Windows, AgentWeave shows its own name and icon in the taskbar, and a pin reopens AgentWeave rather than Python. A launch while it is open brings back the open window, and the window reopens at the size, place and maximized state it was left in. Closing the window stops the Hub when nothing is running, and asks first when work is. No terminal at any point.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Opus: reading shell properties through ctypes from another process is untried in the product, and a wrong drive would pass the build on nothing.",
+      "checker": "QA",
+      "checker_reason": "Opus: has to judge the drive really fails today and never touches :8000 or :8010.",
+      "depends_on": [],
+      "description": "Write scripts/drive/d1105_own_app.py: on a scratch port with the trial profile (never 8000 or 8010), start the app by the desktop shortcut's command, read the window's shell properties (app identity, relaunch command, name, icon) and the process and window lists, launch a second time, close the window idle and check the port, and run two Hubs side by side for the own-hub step. Record it failing on today's master: no relaunch command, a second window or Hub, the Hub surviving the close.",
+      "files": [
+        "scripts/drive/d1105_own_app.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "taskbar-identity",
+        "no-terminal",
+        "one-window",
+        "close-idle-stops",
+        "close-stops-only-its-own-hub"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive for the own-app window, failing first"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Opus: Win32 foreground rules and shell properties through ctypes are where a plausible change silently does nothing.",
+      "checker": "QA",
+      "checker_reason": "Opus: needs to run the drive and the launch decision tests, not read them.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Through ctypes, set the window's app identity, relaunch command, display name and icon before it shows (D1). A launch that finds a live window marker for its Hub restores and focuses that window and exits; a launch against a background Hub with no window opens one without restarting it (D2). Save size, position and maximized state on close and restore them, falling back to the primary screen (D3). With tests.",
+      "files": [
+        "src/agentweave/cli.py",
+        "src/agentweave/desktop_window.py",
+        "tests/test_desktop_window.py"
+      ],
+      "from": null,
+      "key": "window",
+      "requirements": [
+        "taskbar-identity",
+        "pin-reopens-agentweave",
+        "no-terminal",
+        "one-window",
+        "reopen-to-background-hub",
+        "window-memory"
+      ],
+      "reviewer": null,
+      "title": "Taskbar identity, one window per Hub, remembered geometry"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Opus: this is the Tier 2 part, stopping live work on the operator's Hub; one builder keeps the cli.py chain in one head.",
+      "checker": "QA",
+      "checker_reason": "Opus: must drive the three choices with a real Haiku turn and confirm the other Hub survives.",
+      "depends_on": [
+        "window"
+      ],
+      "description": "Add the Hub's instance-wide 'what work is running' answer (turns, check runs, landings, builds not ended; not non-build jobs). On the window's cancellable close: with the rollback setting on, close the window only; otherwise ask the Hub, stop it through the existing stop path when idle, and show the three-way prompt when busy. Stop only the Hub of the window's port. Add the setting under App settings, stored beside the geometry. Refresh the UI bundle with its source. With tests and the drive's busy and two-Hub steps.",
+      "files": [
+        "src/agentweave/cli.py",
+        "src/agentweave/desktop_window.py",
+        "tests/test_desktop_close.py",
+        "hub/hub/api/v1/status.py",
+        "hub/tests/test_work_running_answer.py",
+        "hub/ui/src/components/settings/AppSettingsScreen.tsx",
+        "hub/ui/src/components/app/ClosePrompt.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "close",
+      "requirements": [
+        "close-idle-stops",
+        "close-busy-asks",
+        "what-counts-as-work",
+        "close-stops-only-its-own-hub",
+        "close-behaviour-setting"
+      ],
+      "reviewer": null,
+      "title": "Close means stop, asking first when work runs, with the rollback setting"
+    }
+  ],
+  "title": "AgentWeave is its own app on Windows"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-1a8532c7da67",
+  "kind": "fact",
+  "claim": "A scratch-Hub drive was done during review for NPSAG-3.",
+  "citations": [
+    {
+      "source": "src-bee1f99d4616",
+      "quote": "as was done for NPSAG-3",
+      "line_start": 23,
+      "line_end": 23
+    }
+  ],
+  "sources": [
+    "src-bee1f99d4616"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-10T14:26:03.428424Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "fct-971806af5eeb",
+  "kind": "fact",
+  "claim": "Runs should not be started on tasks whose dependencies have not landed; GFARW-3 and GFARW-4 both ran early against stand-ins and scratch merges.",
+  "citations": [
+    {
+      "source": "src-0d2ef11b7769",
+      "quote": "Do not start runs on tasks whose dependencies have not landed.",
+      "line_start": 20,
+      "line_end": 20
+    },
+    {
+      "source": "src-0d2ef11b7769",
+      "quote": "GFARW-3 and GFARW-4 both ran early, against stand-ins and scratch merges.",
+      "line_start": 20,
+      "line_end": 20
+    }
+  ],
+  "sources": [
+    "src-0d2ef11b7769"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-08T01:13:24.081498Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

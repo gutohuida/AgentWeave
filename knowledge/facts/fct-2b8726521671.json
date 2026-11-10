@@ -1,0 +1,23 @@
+{
+  "id": "fct-2b8726521671",
+  "kind": "fact",
+  "claim": "A fast check should be added, in the sweep or the completion gate, that fails when a branch's alembic revisions would give two heads once merged with current master.",
+  "citations": [
+    {
+      "source": "src-b8ed975e77a6",
+      "quote": "Add a fast check, in the sweep or the completion gate, that fails when a branch's alembic revisions would give two heads once merged with current master.",
+      "line_start": 20,
+      "line_end": 20
+    }
+  ],
+  "sources": [
+    "src-b8ed975e77a6"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-06T08:26:11.109856Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

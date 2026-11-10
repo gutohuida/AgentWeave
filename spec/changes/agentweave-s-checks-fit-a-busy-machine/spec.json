@@ -1,0 +1,370 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "Two checkouts of this change and the entry point pointed at a small, fixed test selection that takes about 20 seconds",
+      "how_to_check": "Acceptance drive, written and failing before the build: scripts/drive/d1104_one_suite_at_a_time.py starts both and compares the start and end timestamps each prints.",
+      "key": "two-runs-queue",
+      "requirement": "one-full-suite-at-a-time",
+      "then": "Their test phases do not overlap in time (the second starts after the first prints its end), both exit 0, and the second's output says it waited. Before the change, running the same selection twice overlaps.",
+      "when": "Both are started within one second of each other"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A selection with one failing test",
+      "how_to_check": "Test of the entry point with a stub selection.",
+      "key": "result-unchanged-by-wait",
+      "requirement": "one-full-suite-at-a-time",
+      "then": "It exits non-zero and names the failing test, exactly as when run alone",
+      "when": "It runs second, after waiting for the lock"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A run holding the lock that is killed (process terminated, no cleanup)",
+      "how_to_check": "Test that starts a holder, kills it, and times the next run's acquisition.",
+      "key": "dead-holder-taken-over",
+      "requirement": "dead-holder-does-not-block",
+      "then": "The new run takes the lock within 10 seconds and completes",
+      "when": "A new run starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A run holding the lock",
+      "how_to_check": "Covered by the acceptance drive's captured output.",
+      "key": "wait-printed",
+      "requirement": "waiting-is-visible",
+      "then": "Its first line says it is waiting, naming the holder's process id and start time, and a later line says it has started",
+      "when": "A second run starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The entry point's worker choice fed a reading of 80% idle on 16 logical CPUs, then 30% idle",
+      "how_to_check": "Unit test of the choice with the CPU reading injected.",
+      "key": "workers-from-idle",
+      "requirement": "workers-fit-the-load",
+      "then": "It chooses 16, then 8, and prints each number with the idle share; at 30% idle on 2 logical CPUs it chooses 2",
+      "when": "It chooses"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The sweep set as delivered",
+      "how_to_check": "Reviewer reads the list against each file and records any removal in the review.",
+      "key": "sweep-set-audited",
+      "requirement": "sweep-set-named",
+      "then": "Every file scans the repository or UI source, and none is there only because the heuristic matched",
+      "when": "QA reads each listed file"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A new test file under hub/tests that globs hub/ui/src and is not in the sweep set, and separately a sweep set naming a deleted file",
+      "how_to_check": "Test of the currency check against a temporary tree.",
+      "key": "missing-sweep-file-fails",
+      "requirement": "sweep-set-stays-current",
+      "then": "It fails in both cases, naming the file",
+      "when": "The currency test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "This repository at the change's commit on an otherwise idle machine",
+      "how_to_check": "Timed run of the command, output recorded with the evidence.",
+      "key": "sweep-under-two-minutes",
+      "requirement": "sweep-check-fast",
+      "then": "It finishes within 2 minutes",
+      "when": "The sweep check's command runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The repository's agent guidance after the change",
+      "how_to_check": "Reviewer reads the changed guidance; a test asserts the guidance names the entry point.",
+      "key": "guidance-says-so",
+      "requirement": "agents-run-what-they-changed",
+      "then": "It tells builders and reviewers to run the tests for changed files plus the sweep set, leave the full suite to the Hub, and use the entry point for any full run",
+      "when": "It is read where agents load testing instructions"
+    },
+    {
+      "checked_by": "operator",
+      "given": "The delivered settings text",
+      "how_to_check": "The operator applies the settings; an agent reads the next check run's results with mode=ro.",
+      "key": "settings-applied",
+      "requirement": "settings-delivered",
+      "then": "The task's checks show the sweep check finishing first, and hub-tests' output shows the entry point's worker line; the landing still runs hub-tests",
+      "when": "The operator pastes it into this project's check settings on :8000 and the next task completes"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9c63c30fc13f1a36e9c74f91ec6c79cc5ea8f754503209001a456e6e61ede043",
+      "FR-2": "02dc1a4fbaf86d166880ba2bdd4148d8fa39288a5fba45917a148127a8debc13",
+      "FR-3": "96bddd5f27244f617beb554dd111eb614ad9614773abe6c82e012371d1ee32cb",
+      "FR-4": "a6827fa0d067fad85d249320d88b925b466f89dd24536926b2069022f06145dc",
+      "FR-5": "dabc52ae407f66bf8c558bc6b6a2737d23bd40b578197c38b5514cd2f24d98db",
+      "FR-6": "c10b208a8baff3ee446289bed25d796441e4de52ba3ac110ef127419521652d5",
+      "FR-7": "fb8bc3d45964037dd97f8a21c0e2d86b1e6ab76eb4d0655a976cf2d3a324897c",
+      "FR-8": "3d7243dcd8f3d2797b406c695ca361f51d543701594a57b8b287742aa12f3706",
+      "FR-9": "af5e4f42d17b746cd18f74eebbcff584f10d2a4e229ce2a9f3eecef1d4a115a2"
+    },
+    "high_water": 9,
+    "requirements": {
+      "agents-run-what-they-changed": "FR-8",
+      "dead-holder-does-not-block": "FR-2",
+      "one-full-suite-at-a-time": "FR-1",
+      "settings-delivered": "FR-9",
+      "sweep-check-fast": "FR-7",
+      "sweep-set-named": "FR-5",
+      "sweep-set-stays-current": "FR-6",
+      "waiting-is-visible": "FR-3",
+      "workers-fit-the-load": "FR-4"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus builds all three tasks.",
+      "builder": "One builder for three chained tasks.",
+      "checker": "QA2 checks all three.",
+      "cron": "Every five minutes so finished work is checked promptly.",
+      "mode": "A flow of three chained tasks; it runs beside the checkpoint spec, which uses different builders (Developer, DeveloperOpus2), a different checker (QA) and none of these files.",
+      "stop": "Stop when the queue empties."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "One entry point for the full Hub suite, a script in this repository that the hub-tests check, agents and the operator all call. It holds a machine-wide lock, so a second run waits and then runs rather than failing. A lock whose holder process has died is taken over, so a crashed or killed run never blocks the queue. Rejected: a Hub product feature (a global check-run semaphore). Slice 3 is project-only by the roadmap; a product-level limit belongs to a later slice once this one shows the effect.\n\nWorker count is chosen once, at start, from how idle the machine's CPUs are, and printed with the reason (operator, 2026-11-04: all logical CPUs at half idle or more, at most half otherwise, never fewer than 2). Rejected: changing workers mid-run, which xdist cannot do.\n\nThe sweep set is a list kept in the repository (probe 2's 34 files as the starting point, audited by hand when it is built), run as its own fast check. A test keeps the list current: a test file that scans the repository but is missing from the list fails it. Rejected: deriving the set at run time by heuristic, which makes the fast check's contents change silently.\n\nThe check settings live in the operator's Hub database (:8000), which agents never write. The build delivers the exact settings, and the operator applies them in the app.",
+  "evidence": {
+    "checked": [
+      "Project check settings on :8000 (projects.checks, mode=ro, 2026-11-04): ruff and black fast; hub-ui (paths hub/ui/, 1800 s); hub-tests `py -3.11 -m pytest hub/tests -q -n auto --dist loadgroup -p no:cacheprovider --timeout=600.` (3600 s, paths []); all phase both; checks_give_way = 1.",
+      "F1122 (scripts/drive/FINDINGS.md): hub-tests ran 82 times / 29.2 h from 2026-10-29; median 11.8 min alone, 19.2 min overlapping.",
+      "Probe 2 (C:/Users/huida/probe-checks/out/probe2.md): a 34-file sweep set (heuristic, not hand-audited) recovers test_surface_ceilings.py (44 of 74 failures) and test_spec_index_writer.py (18) failures that change-based selection misses.",
+      "Night of 2026-11-03: two concurrent full suites crashed after ~45 min ('node down', xdist internal error); re-runs passed ~32 min later (CRFWM/BDR retrospectives).",
+      "People, judged by what the author already knows (operator's choice of source, 2026-11-04): Opus 5.5 is the strongest and most expensive model on the roster, used for subtle or hazardous work; Sonnet 5.5 is much cheaper and reliable on contained, well-specified work."
+    ],
+    "limits": [
+      "The 2-minute sweep target is proposed and not yet measured.",
+      "The acceptance criteria are proposed coverage; none has run.",
+      "The model picks rest on general knowledge only; this project's per-model record and a web search were not consulted, by the operator's choice."
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-04T22:59:01.990590+00:00",
+        "id": "build-947045e3357e",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-04T16:09:37.332583+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "entry-point": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "guidance-and-settings": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "sweep-set": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Worker rule. Operator 2026-11-04: all logical CPUs when at least half the CPU is idle, at most half otherwise, never fewer than 2.",
+      "resolved": true
+    }
+  ],
+  "problem": "On this project, hub-tests ran 82 times in 29.2 hours between 2026-10-29 and 2026-11-01. The median was 11.8 minutes when no other check run overlapped and 19.2 minutes with one (F1122, from task_check_runs read with mode=ro). On 2026-11-03 two full suites running at once crashed after about 45 minutes ('node down' and an xdist scheduler internal error), and the re-runs passed about 32 minutes later. That was most of the night's build time. The failures most often caught before review come from repo-wide guardrail tests (test_surface_ceilings.py in 44 of 74 failures, test_spec_index_writer.py in 18, per probe 2 at C:/Users/huida/probe-checks/out/probe2.md), but today they are only reported when the full suite ends. Agents also run the full suite in their own checkouts beside the Hub's check runs, which adds to the contention. CKTPG (slice 2) shipped phases and 'give way', and the operator turned give-way on (:8000, checks_give_way = 1), but nothing yet stops two full suites from overlapping.",
+  "requirements": [
+    {
+      "key": "one-full-suite-at-a-time",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two overlapping full suites crashed after ~45 minutes on 2026-11-03 and took a median 19.2 minutes against 11.8 alone, so running them one after the other finishes both sooner.",
+      "statement": "On this machine, at most one full Hub test suite started through this repository's suite entry point runs at a time, whoever started it (a check run, an agent, or the operator). A second one waits until the first ends and then runs. It is not refused, and its result is reported as if it had not waited."
+    },
+    {
+      "key": "dead-holder-does-not-block",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A check run killed at its time limit or by a Hub stop must not leave the machine unable to run the suite.",
+      "statement": "When the run holding the one-at-a-time lock has ended without releasing it (killed, crashed, or its machine restarted), the next run takes the lock within 10 seconds of starting, without anyone removing anything by hand."
+    },
+    {
+      "key": "waiting-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A suite run that is waiting for the lock prints, as its first output, that it is waiting and which run holds the lock (process id and when it started), and prints again when it starts. The wait is visible in the check run's output on the task."
+    },
+    {
+      "key": "workers-fit-the-load",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The machine is shared with the operator's own work. Fewer workers on a busy machine finish more reliably than the full count fighting for CPU. Thresholds agreed by the operator on 2026-11-04.",
+      "statement": "The suite chooses its number of test workers when it starts, from how idle the machine's CPUs are, and prints the number and the idle share it read. When at least half the CPU capacity is idle it uses as many workers as there are logical CPUs. When less than half is idle it uses at most half of that, and never fewer than 2."
+    },
+    {
+      "key": "sweep-set-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The repository holds a named list of the Hub tests that scan the whole repository or the UI source rather than importing the code they guard (the sweep set), each file in it audited by hand to belong there."
+    },
+    {
+      "key": "sweep-set-stays-current",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A list nobody maintains rots silently, and a missing sweep test lets a UI-only change pass the fast check and fail only at landing.",
+      "statement": "A test fails, naming the file, when a Hub test file reads the repository or UI source by walking or globbing paths and is not in the sweep set, or when the sweep set names a file that does not exist."
+    },
+    {
+      "key": "sweep-check-fast",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The sweep set runs as its own check that finishes within 2 minutes on an otherwise idle machine, so a sweep-test failure is reported within about two minutes of a task's completion instead of after the full suite."
+    },
+    {
+      "key": "agents-run-what-they-changed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents' own full-suite runs in their checkouts were a large share of the contention; the Hub's check runs the full suite anyway.",
+      "statement": "This repository's guidance for agents tells builders and reviewers to run the tests for the files they changed plus the sweep set, to leave the full suite to the Hub's check, and, if they do run the full suite, to run it through the entry point so it takes its turn."
+    },
+    {
+      "key": "settings-delivered",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build delivers the exact check settings for this project (the hub-tests command through the entry point, and the sweep check marked fast) as text the operator can paste into the check settings, and the full suite still runs on every landing."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-cost-less-on-a-machine-that-is-in-use/spec.json",
+    "slice": "agentweave-checks-fit-a-busy-machine"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A single entry point for running this repository's full Hub test suite, with a machine-wide one-at-a-time lock and a worker count chosen from current load.",
+      "The whole-repo sweep tests as a named list, a fast check that runs them, and a test that keeps the list current.",
+      "This project's check settings changed to use the entry point and to add the sweep check (applied by the operator).",
+      "Project guidance telling builders and QA to run the tests for what they changed plus the sweep set, and to leave the full suite to the Hub's check."
+    ],
+    "non_goals": [
+      "Any change to the Hub product's check runner, landing queue or settings model (product-level concurrency is a later slice).",
+      "Choosing a reduced Hub test set per change before review (slice 4, tiered tests).",
+      "Running slow or timing tests when the machine is idle (slice 4).",
+      "Making the tests themselves faster (slice 5).",
+      "Changing which checks gate landing: the full suite still runs before work reaches master."
+    ]
+  },
+  "summary": "Slice 3 of 'Checks cost less on a machine that is in use', and for this repository only. At most one full Hub test suite runs on the machine at a time, whoever starts it, so two tasks finishing together queue instead of colliding. The suite sizes its workers to how busy the machine is. The whole-repo 'sweep' tests become a fast check that reports in about two minutes. Builders and QA run the tests for what they changed and leave the full suite to the Hub's check.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus: cross-process locking with takeover of a dead holder on Windows is subtle, and a wrong lock stalls every check run, so the stronger model is worth its cost.",
+      "checker": "QA2",
+      "checker_reason": "Opus: judging a concurrency fix needs the stronger model to see races a reading would miss.",
+      "depends_on": [],
+      "description": "First write scripts/drive/d1104_one_suite_at_a_time.py and record it failing on today's code (two runs overlap). Then add the entry point script: a machine-wide one-at-a-time lock with takeover of a dead holder, a printed wait, workers chosen from CPU idle at start, and pytest arguments passed through. With tests.",
+      "files": [
+        "scripts/checks/hub_suite.py",
+        "scripts/drive/d1104_one_suite_at_a_time.py",
+        "tests/test_hub_suite_entry_point.py"
+      ],
+      "from": null,
+      "key": "entry-point",
+      "requirements": [
+        "one-full-suite-at-a-time",
+        "dead-holder-does-not-block",
+        "waiting-is-visible",
+        "workers-fit-the-load"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive, then the full-suite entry point with lock and load-fitted workers"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus: auditing 34 files by judgement is where a miss lets a break reach landing, so the stronger model is used, and Sonnet's only builder is taken by the parallel checkpoint build.",
+      "checker": "QA2",
+      "checker_reason": "Opus: the audit is judgement over 34 files, where the stronger model is the safer check.",
+      "depends_on": [
+        "entry-point"
+      ],
+      "description": "Start from probe 2's 34-file sweep set (C:/Users/huida/probe-checks/out, sweep_set.txt), audit each file by hand, and commit the list. Add the currency test and the sweep check command; time it.",
+      "files": [
+        "scripts/checks/sweep_tests.txt",
+        "hub/tests/test_the_sweep_set_is_current.py"
+      ],
+      "from": null,
+      "key": "sweep-set",
+      "requirements": [
+        "sweep-set-named",
+        "sweep-set-stays-current",
+        "sweep-check-fast"
+      ],
+      "reviewer": null,
+      "title": "Sweep set, its currency test, and the fast check command"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus: routine text, but Sonnet's only builder is taken by the parallel checkpoint build, and the task is small, so the extra cost is small.",
+      "checker": "QA2",
+      "checker_reason": "Opus: the reviewer reads the guidance as an agent would and catches instructions that would mislead one.",
+      "depends_on": [
+        "entry-point",
+        "sweep-set"
+      ],
+      "description": "Update the testing guidance agents load (CLAUDE.md Quick commands/Testing and the rules file they read) to run what they changed plus the sweep set and use the entry point for full runs. Write the exact check settings text for the operator to paste, with the full suite still on landing.",
+      "files": [
+        "CLAUDE.md",
+        ".claude/rules/",
+        ".claude/reference/checks.md",
+        "tests/test_hub_suite_entry_point.py"
+      ],
+      "from": null,
+      "key": "guidance-and-settings",
+      "requirements": [
+        "agents-run-what-they-changed",
+        "settings-delivered"
+      ],
+      "reviewer": null,
+      "title": "Agent guidance and the settings to paste"
+    }
+  ],
+  "title": "AgentWeave's checks fit a busy machine"
+}

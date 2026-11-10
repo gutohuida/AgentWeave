@@ -1,0 +1,298 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project with existing agents, after the change is installed and its migration run",
+      "how_to_check": "Drive: migrate a copy of a populated database, read can_admin_specs from the agents route for each agent, create one agent, read it again.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-default-off",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-switch",
+      "then": "the switch reads off for every agent, including the new one",
+      "when": "each agent's settings page is opened and a new agent is created"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with the switch on",
+      "how_to_check": "Hub test over the agent routes with a run credential, plus the drive toggling it in the page.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-only-operator",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-switch",
+      "then": "the call is refused and every switch is unchanged; the operator's toggle on the settings page changes it",
+      "when": "that agent, through any of its tools or routes, tries to turn its own or another agent's switch on or off"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub started from the built checkout on a scratch port and profile, a fresh scratch project with one capability and two built changes, and two Haiku agents, one with the switch on and one off",
+      "how_to_check": "py -3.11 scripts/drive/d1108_spec_admin.py --port <scratch> --profile <scratch>; it prints one PASS or FAIL line per step and exits non-zero on any FAIL.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-drive",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-tidy-acts",
+      "then": "the first agent's acts all land and are listed with their reasons; every act of the second agent is refused with code spec_admin_off; the operator's batch archive leaves exactly the selected documents archived; the drive fails on master before the build",
+      "when": "scripts/drive/d1108_spec_admin.py asks the switched-on agent, in a real turn, to tidy the specs (fold one change into the capability, fold the other into a new capability, rewrite one requirement to match the code, mark a dead document superseded), then asks the switched-off agent to do the same, then the operator filters superseded documents, archives them and marks the acts reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved, fully built change and an agent with the switch on",
+      "how_to_check": "Hub test: fold the same change twice on two copies, once as operator (archive off) and once as the agent, and compare the capability payloads.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-fold",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-tidy-acts",
+      "then": "the capability carries the change's requirements and the retirement exactly as the operator's fold of the same choices produces, and the change is marked superseded by that capability",
+      "when": "the agent folds it into a capability, retiring one capability requirement"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved, built change that belongs to no existing capability",
+      "how_to_check": "Drive: read the capability and spec/index.json after the act.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-spec-ac-new-capability",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-tidy-acts",
+      "then": "the new capability is current, lists the folded requirements, and appears in the project's spec map",
+      "when": "the agent creates a capability and folds the change into it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change whose roadmap slice is unset",
+      "how_to_check": "Drive: read the roadmap after the act.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-slice",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-tidy-acts",
+      "then": "the roadmap shows that slice as specified by the change",
+      "when": "the agent sets it to a slice of an approved roadmap"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved change",
+      "how_to_check": "Hub test comparing the document's read before marking and after clearing; drive for the Build refusal.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-mark-clear",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-superseded",
+      "then": "while marked, the document reads superseded with agent, reason and successor, and Build is refused; after clearing, it reads exactly as before",
+      "when": "an agent with the switch marks it superseded naming another document, and then clears the mark"
+    },
+    {
+      "checked_by": "agent",
+      "given": "five documents marked superseded and others not",
+      "how_to_check": "Drive in the page plus a Hub test for the agent refusal.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-batch",
+      "requirement": "an-agent-the-operator-trusts-can-tid-archive-superseded-in-batch",
+      "then": "the filter shows exactly the five; the three are archived and the other two stay marked; an agent's attempt to archive any document is refused",
+      "when": "the operator filters to superseded, selects three and archives them"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built feature on the operator's own Hub, after an agent has tidied this repository's backlog",
+      "how_to_check": "The operator does it and says whether it worked.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-spec-ac-operator-batch",
+      "requirement": "an-agent-the-operator-trusts-can-tid-archive-superseded-in-batch",
+      "then": "the operator can tell from the list alone what each act did and why, and the archive takes one action",
+      "when": "the operator reviews the tidy list and archives the superseded documents"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a held approved change",
+      "how_to_check": "Hub test over each tidy act on a held document.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-held",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-held",
+      "then": "each is refused with code document_held, and the document is unchanged; after the operator releases it, the fold succeeds",
+      "when": "an agent with the switch tries to fold it, mark it superseded and edit it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with the switch on and a proposed change",
+      "how_to_check": "Hub test iterating the listed acts with a switched-on agent's credential.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-sp-ac-no-operator-acts",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-t-never-the-operators-acts",
+      "then": "every attempt is refused with a reason naming it as the operator's, and nothing changes",
+      "when": "it tries each act listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with the switch off",
+      "how_to_check": "Hub test: hash the spec tree and document rows before and after.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-off",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-off-refuses",
+      "then": "each is refused with code spec_admin_off, and every spec file and document row is unchanged",
+      "when": "it attempts each tidy act"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change with one task in progress",
+      "how_to_check": "Hub test.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-live",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-sp-hands-off-live-work",
+      "then": "each is refused with code live_work naming the open task",
+      "when": "an agent with the switch tries to fold it, mark it superseded or set its slice"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent that performed five tidy acts",
+      "how_to_check": "Drive in the page.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-listed",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-spe-applied-and-listed",
+      "then": "all five appeared with agent, run, act, document and reason; afterwards the list is empty and each act is still in the document's history",
+      "when": "the operator opens the list of unreviewed acts and marks all reviewed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with the switch on",
+      "how_to_check": "Hub test.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-reason",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-reason-required",
+      "then": "the fold is refused with code reason_required, and nothing changes",
+      "when": "it folds a change with an empty reason"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a capability requirement the code contradicts",
+      "how_to_check": "Hub test plus the drive's list read.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-code-wins",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-spe-code-wins-recorded",
+      "then": "the capability carries the new statement, the old one stays readable in its history, and the operator's list shows the act as a requirement changed to match the code, naming the file",
+      "when": "the agent rewrites it citing a file"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fresh scratch project with one capability and one built change",
+      "how_to_check": "Drive on a fresh scratch project, not a copy of this repository.",
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-ac-any",
+      "requirement": "an-agent-the-operator-trusts-can-tidy-the-specs-any-project",
+      "then": "the fold succeeds as in ac-fold",
+      "when": "an agent with the switch folds the change"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "f2c0bc8c1f7d8db73ba551c653489db03729d4d1a9fae8a0c341f6dc1bcff9e2",
+      "FR-10": "d4dd8c4ca2a43951d8af44a2c942f72b3304c41bd42739bfb840bf75c20f12b3",
+      "FR-11": "725a0ac2ce314051bfc686eabff822d2cb77aae12410e30863c1f60848e0f90a",
+      "FR-12": "734df3e7bf5496c35006abe21265fa83e3e057110f39234116b2d8d55de6758e",
+      "FR-2": "efcd8412c3147719896f001852bcf06c3f29fd52805519a63cd7b4b54e7fe381",
+      "FR-3": "fa277e6b9c2b23c6fc8221c12b9949c9601820b217e5e9218f594e696cb19af1",
+      "FR-4": "883b1ddc95a7676556ff7f37ebe39bd30de33333f4038e3d2cef7013b97a6161",
+      "FR-5": "967219ef92a84ac57be3fae6a3c2c8528df31ef9b2b709a443aadbde8580ca39",
+      "FR-6": "0eba72c6439e0db65a1c791a7d1ec96f1dc27b735aa9e42a5ca8e731196d350b",
+      "FR-7": "4e8ad9ef7c8237e360555754e9a76f2e9b8065876e1a278393636d580b598b88",
+      "FR-8": "844d80449ab223ab63ce9dff4bd1449be3bea8eebb94bfdfc1a35eb02e548a50",
+      "FR-9": "9a74151a608a310f8e70566e1e847bd2c20d0ff6d06ee14d000baaea828ba5a5"
+    },
+    "high_water": 12,
+    "requirements": {
+      "an-agent-the-operator-trusts-can-tid-archive-superseded-in-batch": "FR-4",
+      "an-agent-the-operator-trusts-can-tidy-t-never-the-operators-acts": "FR-6",
+      "an-agent-the-operator-trusts-can-tidy-the-sp-hands-off-live-work": "FR-8",
+      "an-agent-the-operator-trusts-can-tidy-the-spe-applied-and-listed": "FR-9",
+      "an-agent-the-operator-trusts-can-tidy-the-spe-code-wins-recorded": "FR-11",
+      "an-agent-the-operator-trusts-can-tidy-the-specs-any-project": "FR-12",
+      "an-agent-the-operator-trusts-can-tidy-the-specs-held": "FR-5",
+      "an-agent-the-operator-trusts-can-tidy-the-specs-off-refuses": "FR-7",
+      "an-agent-the-operator-trusts-can-tidy-the-specs-reason-required": "FR-10",
+      "an-agent-the-operator-trusts-can-tidy-the-specs-superseded": "FR-3",
+      "an-agent-the-operator-trusts-can-tidy-the-specs-switch": "FR-1",
+      "an-agent-the-operator-trusts-can-tidy-the-specs-tidy-acts": "FR-2"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-switch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Authority sits on the agent record and nowhere else, as with can_accept_evidence (models.py:313-345): a charter is behaviour text a model reads, and prose an agent can be persuaded to write must never become an authorisation mechanism.",
+      "statement": "Each agent has a spec-admin switch, off for every existing and new agent, that only the operator can change. The agent's settings page shows it and lets the operator change it."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-tidy-acts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An agent with the switch on can, through its tools: fold an approved change into an existing capability with the same choices the operator's fold offers (which requirements, retired requirements and criteria, rewritten criteria, algorithms); create a capability and fold into it; edit a capability's content, including rewriting or retiring a requirement; mark any change, roadmap, area or capability superseded, or clear that mark; and set or correct a change's roadmap slice. Each act has the same effect on the document's content as the operator's own act."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-superseded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's choice (2026-11-08): archive cannot be undone (spec_lifecycle TRANSITIONS has no way out of archived), so agents mark and the operator archives. A mark that can be cleared makes an agent's mistake cheap.",
+      "statement": "A document marked superseded keeps its phase, content and history, shows that it is superseded, by whom, why and, where given, by which document, and cannot be built. Clearing the mark restores it as it was. A fold by an agent marks the folded change superseded by the capability instead of archiving it."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tid-archive-superseded-in-batch",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can filter the project's documents to those marked superseded, see for each who marked it, why and its successor, and archive any selection of them, or all, in one action. Archiving stays the operator's alone."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-held",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's rule (2026-11-08): documents they held stay held. Today a hold exists only as prose in spec-queue/METRICS.md (decision trace-6), which no gate can read.",
+      "statement": "The operator can hold any document, with an optional note, and release it. A tidy act on a held document is refused, naming the hold. The agent may ask the operator whether to supersede a held document; the hold stays until the operator releases it."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-t-never-the-operators-acts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approval authorises building and archive cannot be undone; the operator has decided only they do either (2026-11-08).",
+      "statement": "The switch never lets an agent approve a document, close an exploration, archive, accept or decline a proposed amendment, answer a cannot-satisfy report, decide evidence, or hold or release a document. These stay refused for an agent whatever its switch says."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-off-refuses",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An agent with the switch off that attempts any tidy act is refused with a reason that names the switch and says only the operator can turn it on, and nothing changes."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-sp-hands-off-live-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator's rule (2026-11-08): specs with a build in progress are not touched. Builders and reviewers work against the document as approved.",
+      "statement": "A tidy act is refused on any document that has a running build or open tasks, and on a capability while a document with a running build is being folded into it, naming what is in progress."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-spe-applied-and-listed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator chose apply-at-once over propose-and-accept (2026-11-08): 48 folds needing 48 approvals defeats the purpose. Visibility replaces the gate, as for tester amendments.",
+      "statement": "Every tidy act applies at once and is recorded with the agent, its run, the time, the act, the document and the agent's reason. The operator sees every act not yet reviewed in one list, can open the document each touched, and can mark acts reviewed one at a time or all at once. The record is kept after review and the agent cannot change or remove it."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-reason-required",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A tidy act without a non-empty reason is refused, naming the missing reason."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-spe-code-wins-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator allowed the agent to decide code-versus-spec disagreements (2026-11-08). A requirement changed to match an accident makes the accident permanent, so the change must be visible and cite what it rests on.",
+      "statement": "When an agent rewrites or retires a requirement because the code does something else, the act records that the requirement was changed to match the code, the requirement before and after, and the code or test the agent read to decide. The operator's list marks such acts apart from the others."
+    },
+    {
+      "key": "an-agent-the-operator-trusts-can-tidy-the-specs-any-project",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The switch, the marks and the tidy acts behave the same in every project, with no dependence on this repository's layout or document names."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Spec tidying by a trusted agent"
+}

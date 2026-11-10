@@ -1,0 +1,115 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "key": "size-limit",
+      "question": "What size makes a capability too big to keep whole? (spec-document-authority has 152 requirements.)",
+      "resolved": false,
+      "slice": "the-map-is-real"
+    },
+    {
+      "key": "fold-without-agent",
+      "question": "In a project where no agent holds the switch, is telling the operator that a fold is due enough, or should the operator be offered a one-click fold?",
+      "resolved": false,
+      "slice": "a-finished-build-folds-itself"
+    }
+  ],
+  "problem": "An assessment on 2026-11-08 of this repository's corpus (spec/ and the Hub database, read-only) found these problems. 1. Only 4 folds have ever happened, the last on 2026-10-29, against 48 built, approved, unfolded changes, so the capability specs describe early October. 2. A change does not say which capability it changes until the fold dialog asks: 14 of 165 changes even mention a capability, and no one can ask which open changes affect capability X. 3. Live and finished documents share one flat folder: 179 under spec/changes/, 85 of them archived. The archive subfolder decided on 2026-10-08 was never built. 4. Documents do not reach an end. 16 have been exploring for more than 10 days, 10 change specs were approved and never got tasks (most of them built anyway), and all 14 roadmaps stay approved forever. 5. The 6 area maps are one paragraph each (3 still exploring), and 104 of 160 index entries have no parent. 6. Capability sizes range from 5 to 152 requirements (spec-document-authority). 7. There is no way to find \"the spec for feature X\" except by title or path; read_spec_document needs the path. What works and must be kept: capabilities as the structured source of current behaviour (2336 active requirements, 225 retired rather than deleted), per-requirement identity, rich document history, and readable sentence slugs.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in": [
+      "Who may tidy the corpus and how the operator stays in control",
+      "Links from a change to the capabilities it changes, and from a capability to its waiting changes",
+      "Folding as part of finishing a build",
+      "Separating live from finished documents, and giving documents and roadmaps an end state",
+      "Finding a spec by what it is about",
+      "Area maps that place every capability and change"
+    ],
+    "in_scope": [],
+    "non_goals": [
+      "Changing who approves: approval stays the operator's",
+      "Replacing capabilities, requirement identity or the document lifecycle",
+      "Anything specific to this repository: every slice is a product feature any project gets",
+      "Migrating the frozen openspec/ tree, beyond what an agent can archive with the first slice"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "spec/changes/an-agent-the-operator-trusts-can-tidy-the-specs is built and its drive passes, and an agent has cleared this repository's 48 unfolded changes, with the operator archiving the superseded ones.",
+      "intent": "A per-agent switch lets one agent fold, create and edit capabilities, mark documents superseded and fix roadmap links, applied at once and listed for the operator. The operator archives superseded documents in a batch and can hold any document.",
+      "key": "an-agent-can-tidy-the-specs",
+      "title": "An agent the operator trusts can tidy the specs"
+    },
+    {
+      "builds_after": [
+        "an-agent-can-tidy-the-specs"
+      ],
+      "done": "A new change can be written naming its capability, the capability's page lists it as waiting until it is folded, and the operator can see which open changes affect any capability.",
+      "intent": "A change document names the capability or capabilities it changes, or a new one it creates, while it is being written. Each capability shows the approved changes waiting to fold into it, and the fold starts from that link instead of a search.",
+      "key": "changes-name-their-capability",
+      "title": "A change names the capabilities it changes"
+    },
+    {
+      "builds_after": [
+        "an-agent-can-tidy-the-specs",
+        "changes-name-their-capability"
+      ],
+      "done": "A change built through a flow ends folded into its capability and marked superseded, with no step from the operator other than the batch archive.",
+      "intent": "When every task of a change's build is approved and its work has landed, folding the change into its named capability is part of finishing, done by the build's tidy agent where there is one, so the corpus never drifts again. Where no agent holds the switch, the operator is told that the fold is due.",
+      "key": "a-finished-build-folds-itself",
+      "title": "A finished build folds its change"
+    },
+    {
+      "builds_after": [
+        "an-agent-can-tidy-the-specs"
+      ],
+      "done": "The live list of this repository shows only documents still in play, finished roadmaps read done, and the flags list matches the documents that are stuck.",
+      "intent": "Archived documents leave the live list and folder. A roadmap reaches done when every slice's change is folded or archived. Documents exploring too long, or approved with no tasks, are flagged for the operator or the tidy agent.",
+      "key": "live-apart-from-finished",
+      "title": "Finished documents leave the live view, and documents reach an end"
+    },
+    {
+      "builds_after": [
+        "changes-name-their-capability"
+      ],
+      "done": "Asking for a feature by words, not path, returns its capability and open changes, in the app and through an agent tool.",
+      "intent": "Operators and agents can search the corpus by what a document is about (title, requirement text, area, capability) and get the current capability and any open changes to it.",
+      "key": "find-the-spec",
+      "title": "Find the spec for a feature"
+    },
+    {
+      "builds_after": [
+        "changes-name-their-capability",
+        "live-apart-from-finished"
+      ],
+      "done": "Every capability and live change has an area, and no capability is past an agreed size without the operator's say-so.",
+      "intent": "Area maps become real maps that every capability and change sits under, and oversized capabilities can be split without losing requirement identity, so the corpus can be read from the top down.",
+      "key": "the-map-is-real",
+      "title": "The area map places everything"
+    }
+  ],
+  "summary": "A project's specification corpus keeps describing the system as it is, and anyone (operator or agent) can find the spec for a feature, see what is live and what is finished, and trust it. First an agent can be trusted to tidy the corpus. Then every change says which capability it changes, a finished build folds itself, finished documents leave the live view, specs can be searched, and the area map becomes a real map.",
+  "tasks": [],
+  "title": "The specs stay true and easy to work with"
+}

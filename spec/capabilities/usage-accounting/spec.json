@@ -399,9 +399,156 @@
       "requirement": "a-stopped-turns-call-is-estimated-estimate-never-counted",
       "then": "project.estimated_input_tokens is 333,102, budget.used_tokens 0, project.total_tokens null; the panel reads '≈333,102 input tokens, not measured — not counted against the budget'",
       "when": "GET /accounting is read and the Budgets panel renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with one spec document that has a build, and work_tally.tally patched to return a recorded sentinel",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k same_function -v",
+      "key": "project-stats-come-from-the-same-record-same-function-feeds-both",
+      "requirement": "project-stats-come-from-the-same-records-one-tally",
+      "then": "the sentinel's figures appear unchanged in all three responses; on master the stats route answers 404",
+      "when": "the spec page's builds route (slice D's), GET /api/v1/projects/proj-test/stats and GET /api/v1/projects/proj-test/ledger are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub's source",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k no_second_sum -v",
+      "key": "project-stats-come-from-the-same-records-no-second-sum",
+      "requirement": "project-stats-come-from-the-same-records-one-tally",
+      "then": "none is found outside hub/hub/work_tally.py",
+      "when": "a test scans hub/hub/api/v1/stats.py, the builds route's module and project_ledger.py for sums over TurnUsage, TaskCheckRun or TaskTransition durations"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a seeded project with two spec documents (one with two builds, one with work before builds), a mender stall on one, an unbound conversation run, an unpriced run, a Copilot run and two worker invocations",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k totals_agree -v",
+      "key": "project-stats-come-from-the-same-records-spec-rows-equal-pages",
+      "requirement": "project-stats-come-from-the-same-records-totals-agree",
+      "then": "each spec row equals the sum of its page's builds in every figure, and spec rows + 'not from a spec' + workers equal /accounting's project api_equivalent_usd_micros, total_tokens, ai_nano_aiu and premium_requests",
+      "when": "each spec page's builds and the project stats are read through the routes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task built by Developer, reviewed by QA through a review turn, re-approved by QA through an ordinary message bound to the task while it is under_review, and a mender run on its stall",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k roles -v",
+      "key": "project-stats-come-from-the-same-records-roles-split",
+      "requirement": "project-stats-come-from-the-same-records-cost-by-role",
+      "then": "Developer's run is building, both QA runs are reviewing, the mender's is mending, every run appears in exactly one role, and the role costs sum to the spec's cost",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three mender conversations: one for a stall naming a task of document A, one for a loop_stalled stall naming document B's flow, one for a stall naming neither",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k mender -v",
+      "key": "project-stats-come-from-the-same-records-mender-follows-stall",
+      "requirement": "project-stats-come-from-the-same-r-mender-attributed-to-its-spec",
+      "then": "their runs count as mending under A, under B and under 'not from a spec' respectively",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build whose task is built for 10 min, waits 2 min, has a check run failing after 8 min, waits 30 min on that failure, is reviewed for 5 min while a second check runs, and is approved",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k partition -v",
+      "key": "project-stats-come-from-the-same-records-partition-sums",
+      "requirement": "project-stats-come-from-the-same-records-wall-time-partition",
+      "then": "building 10 min, checks 8 min, held by a failed check 30 min, reviewing 5 min, waiting for review 2 min, and the parts equal the build's wall time to the second",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec with three check runs, one failed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k checks -v",
+      "key": "project-stats-come-from-the-same-records-checks-line",
+      "requirement": "project-stats-come-from-the-same-record-checks-on-their-own-line",
+      "then": "both show 3 check runs, 2 passed, 1 failed and their summed running time, and no agent's run time includes it",
+      "when": "its spec page and its project row are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task built on Sonnet by Developer, sent back twice by QA on Opus, each send-back rejecting four pieces as recorded before slice K",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k send_back -v",
+      "key": "project-stats-come-from-the-same-records-send-back-once",
+      "requirement": "project-stats-come-from-the-same-records-send-backs-counted-once",
+      "then": "Sonnet's row shows 2 send-backs received and Opus's row 2 send-backs made, not 8",
+      "when": "the model grouping is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a send-back under slice K naming one failing piece of four",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k per_piece -v",
+      "key": "project-stats-come-from-the-same-records-one-of-four",
+      "requirement": "project-stats-come-from-the-same-records-verdicts-per-piece",
+      "then": "the recording model's row shows 1 rejected and 3 held for that send-back",
+      "when": "the model grouping is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two send-backs, one made while the task's newest check run had failed and one after a passing check",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k beside_failing -v",
+      "key": "project-stats-come-from-the-same-records-beside-failing-check",
+      "requirement": "project-stats-come-from-the-same-reviews-beside-a-failing-check",
+      "then": "exactly the first counts as a review beside a failing check, with that review run's cost and time",
+      "when": "the tally is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the seeded project, with and without a 'since' date between its two builds",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k groupings -v; cd hub/ui && npx vitest run src/__tests__/projectWork.test.tsx",
+      "key": "project-stats-come-from-the-same-records-groupings-agree",
+      "requirement": "project-stats-come-from-the-same-records-groupings",
+      "then": "the four totals rows are equal for each 'since', work before builds shows as 'before builds' and 'no level recorded', and the view renders all four groupings from the route's real payload",
+      "when": "the spec, agent, model and level groupings are read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec with one priced run, one unpriced run and one Copilot run reporting credits only",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_stats_come_from_the_same_records.py -k unpriced -v",
+      "key": "project-stats-come-from-the-same-records-unpriced-counted",
+      "requirement": "project-stats-come-from-the-same-records-unknown-is-not-zero",
+      "then": "each shows the priced cost with '1 unpriced' beside it and the credits in their own unit, and the ledger no longer adds the unpriced run as $0",
+      "when": "its spec page, its project row and the Activity tab's spend total are read"
+    },
+    {
+      "checked_by": "operator",
+      "given": "a copy of the :8000 database taken with VACUUM INTO (mode=ro) and a Hub started from the branch on the copy at :8010",
+      "how_to_check": "Drive: VACUUM INTO a copy (.claude/reference/hubs.md:79), start the branch's Hub on it at :8010, screenshot both views; the expected figures are from the 2026-10-27 read-only queries recorded in evidence",
+      "key": "project-stats-come-from-the-same-records-the-night-without-sql",
+      "requirement": "project-stats-come-from-the-same-records-groupings",
+      "then": "slice B shows one 'before builds' entry with mending $15.86 over 42 runs, building $14.66 over 9, reviewing $11.28 over 11, 10 check runs, and 3 reviews beside a failing check costing $4.39; its project row equals the page",
+      "when": "the operator opens slice B's spec page and the Activity tab's project view grouped by spec, then by model"
     }
   ],
-  "algorithms": [],
+  "algorithms": [
+    {
+      "name": "A run's spec and build",
+      "steps": [
+        "A run bound to a task (Run.task_id) belongs to that task's spec document (Task.spec_document_id) and to the build slice D records for the task.",
+        "Otherwise, a run of the Hub's mender belongs to the spec of the stall whose conversation_id is the run's conversation: the stall's task's document, else its loop's document (Loop.spec_document_id); when several stalls share the conversation they name the same task (stalls.mending_thread), so the first by first_seen_at decides.",
+        "Otherwise, a run slice D records as a build's lead belongs to that build's document.",
+        "Otherwise the run is 'not from a spec'.",
+        "A spec run with no build recorded belongs to the document's 'before builds' entry."
+      ]
+    },
+    {
+      "name": "A run's role (first match wins)",
+      "steps": [
+        "mending: the run's agent is the Hub's mender (stalls.is_mender on its Agent row).",
+        "leading: slice D records the run as a build's lead's.",
+        "reviewing: the run was delivered a review entry (InboundQueueEntry.review_task_id with delivered_in_run_id = the run), or it is bound to a task whose status at the run's start was completed or under_review and its agent is not the one recorded completing the task at that time (completion_attribution).",
+        "building: any other run bound to a task.",
+        "other: everything else."
+      ]
+    },
+    {
+      "name": "Wall-time partition of a build",
+      "steps": [
+        "The span runs from the first of the build's tasks leaving pending to the last one's approval, or to now while any is open.",
+        "Each instant goes to the first that applies: building (a building run of the build is running), reviewing (a reviewing run is running), checks (a check run of one of its tasks is running), held by a failed check (a task is completed or under_review and its newest finished check run failed), waiting for review (a task is completed or under_review), waiting to be handed out (otherwise).",
+        "Mending is not a time part: the mender's runs are counted as run time and cost, since they overlap the wait they mend.",
+        "Spec and level rows sum their builds' parts; agent and model rows carry run time by role instead."
+      ]
+    }
+  ],
   "aw_identity": {
     "digests": {
       "FR-10": "d178f731ddc22799f5bf808abbddf2c7cb3931719575bc0bbfb5a6e85d5f4114",
@@ -431,11 +578,22 @@
       "FR-34": "9afd6c399fad41271596c0d632078d955df5e1180164ea0599690f76eb424a7a",
       "FR-35": "8b9556465de5e79f6f79306082141ac2f776c9db78a51c127a3342f04dc05196",
       "FR-36": "b83f18770e358911b2eb960543058b347673487cfa3fdbd52cb2279147b13b36",
+      "FR-37": "c74db9d435e694a8d9fe8b7114caaaa1f82dbd8382a0bbc10b5532190e05f8d2",
+      "FR-38": "a231f6b260d58a7f8951bf1f71e475dc7e72694fd69ff9de6832748831e9c722",
+      "FR-39": "b9070b610a7f79922fc2c39982799c4d80bb2c40a4aa9bce0f461f87f948bd27",
+      "FR-40": "205ba5c7a2d33bcbb3df22f47f9d26be0713fd3c98d3f2d92bd9f8defb9ebac9",
+      "FR-41": "a90ba35797260ecd372f0ebd8f3f51f45977525cf8632c9abd246e4945748ad2",
+      "FR-42": "f172035a690fe1a5ead3fde546078fc5c8872668b2e43dc1c157cc480cff1f0b",
+      "FR-43": "4739923215114e9defc839d3ab5082b85f77f831e293335edd6999d39860a311",
+      "FR-44": "3fa7d0d2de8be6da7fa11febdcbee4534376f1abfa1c2cd762a7db142a7f08be",
+      "FR-45": "6f4a7fe638e1c0fe2bfd7951d1026822221e1b098f0f5cc736598b252c60ce33",
+      "FR-46": "668d6d90f13df32c2e0f9cf7982600624079ce1b23dfc66b7c6bcdf66ff37b9d",
+      "FR-47": "e132ce0cf3f552374fbaf451e28fa24c352c9dc39cd9cdf0d7bb53ca0e81bb4f",
       "FR-7": "0243dcae0b94bec3d8557b1d6fbe37b827f6ac81370c20aac02c926ddd800868",
       "FR-8": "a47401808ab90b647f8f27c6cfb33aa0b068daa8f6f20a22c5e66cc07a4af6e1",
       "FR-9": "f9b839718a1d5e35d1d0b3306acbf14f7d2ac72c331553511beb93cb06c0b0f4"
     },
-    "high_water": 36,
+    "high_water": 47,
     "requirements": {
       "a-copilot-one-shot-call-records-the-credits-its-session-repo": "FR-14",
       "a-copilot-turn-s-ai-credits-and-premium-requests-are-recorde": "FR-13",
@@ -457,6 +615,17 @@
       "n4-a-copilot-run-is-charged-credits-once": "FR-18",
       "n5-malformed-copilot-figures-are-unknown-not-fatal": "FR-19",
       "n6-credits-are-never-money-or-budget": "FR-20",
+      "project-stats-come-from-the-same-r-mender-attributed-to-its-spec": "FR-40",
+      "project-stats-come-from-the-same-record-checks-on-their-own-line": "FR-42",
+      "project-stats-come-from-the-same-records-cost-by-role": "FR-39",
+      "project-stats-come-from-the-same-records-groupings": "FR-46",
+      "project-stats-come-from-the-same-records-one-tally": "FR-37",
+      "project-stats-come-from-the-same-records-send-backs-counted-once": "FR-43",
+      "project-stats-come-from-the-same-records-totals-agree": "FR-38",
+      "project-stats-come-from-the-same-records-unknown-is-not-zero": "FR-47",
+      "project-stats-come-from-the-same-records-verdicts-per-piece": "FR-44",
+      "project-stats-come-from-the-same-records-wall-time-partition": "FR-41",
+      "project-stats-come-from-the-same-reviews-beside-a-failing-check": "FR-45",
       "supported-runner-telemetry-normalizes-to-one-accounting-shap": "FR-8",
       "the-activity-tab-becomes-the-projects-ledger-ledger-route": "FR-28",
       "the-activity-tab-becomes-the-projects-ledger-ledger-view": "FR-29",
@@ -482,7 +651,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -700,6 +868,83 @@
       "party": null,
       "rationale": "An estimate is a lower bound, not a measurement; counting it would let a guess pause autonomy.",
       "statement": "The accounting snapshot SHALL report each turn's estimate and the sum of the estimates of unavailable turns, per project and per agent, separately from every measured figure; the Budgets panel SHALL show it as '≈N input tokens, not measured' and say it is not counted against the budget; and the estimate SHALL NOT count toward the project's used tokens, its budget state, or any measured total."
+    },
+    {
+      "key": "project-stats-come-from-the-same-records-one-tally",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Three sums with three rules exist today (accounting_snapshot, project_ledger, task_story). Totals that agree because two implementations happen to match drift apart the first time one changes; totals that come from one function cannot.",
+      "statement": "Every figure the spec page shows for a build, every figure in the project view, and the Activity tab's spend total and spend by agent are produced by one function in hub/hub/work_tally.py; no route or component computes a cost, a duration or a count of its own from the rows."
+    },
+    {
+      "key": "project-stats-come-from-the-same-records-totals-agree",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The roadmap's done sentence: 'its totals equal the sum of the spec pages'. Tying the grand total to the accounting route ties the new view to the figure the budget is already held against (usage_accounting.used_tokens, :508).",
+      "statement": "For any project, each spec row of the project view equals, figure by figure, the sum of that document's builds on its spec page; and the spec rows plus the 'not from a spec' row plus the Hub's worker line equal the project's api_equivalent_usd_micros, total_tokens and Copilot credits reported by GET /projects/{id}/accounting."
+    },
+    {
+      "key": "project-stats-come-from-the-same-records-cost-by-role",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The mender was 38% of slice B's cost on 2026-10-26/27 and appeared nowhere; the spec page mock splits cost into building, reviewing and leading only (SpecBuilds.tsx:90, :161).",
+      "statement": "Each run is counted in exactly one role: mending (a run of the Hub's mender), leading (a run slice D records as a build's lead), reviewing (a run that took a review turn of a task, or a run bound to a completed or under_review task by an agent other than the one recorded completing it), building (any other run bound to a task), or other (none of these); cost, run time and run count are shown per role, the mender's on a line of its own."
+    },
+    {
+      "key": "project-stats-come-from-the-same-r-mender-attributed-to-its-spec",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Mender runs are not bound to a task (stalls.wake queues a conversation with no task, stalls.py:497-508), so binding alone would put $15.86 of slice B's cost outside it.",
+      "statement": "A mender run counts toward the spec document whose task or flow the stall it was woken for names (the stall's task's document, or its loop's document), and toward 'not from a spec' only when the stall names neither."
+    },
+    {
+      "key": "project-stats-come-from-the-same-records-wall-time-partition",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The night's longest wait (T1, 2 h 40 min behind a check that also failed on main) is invisible in a four-part split; naming it is what lets slice H show whether L and M removed it.",
+      "statement": "Each build's wall time, from its first task leaving pending to its last task's approval (or now, while it runs), is split into building, reviewing, checks, held by a failed check, waiting for review and waiting to be handed out, by the precedence in the 'wall-time partition' algorithm, and the parts sum to the wall time to the second."
+    },
+    {
+      "key": "project-stats-come-from-the-same-record-checks-on-their-own-line",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Check runs are shown on their own line per spec, per build and per level: how many ran, how many passed and failed, and their total running time, apart from any agent's run time."
+    },
+    {
+      "key": "project-stats-come-from-the-same-records-send-backs-counted-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A send-back (a task moved from under_review to revision_needed or rejected) counts once, attributed to the agent, model and level of the run recorded as completing the work that was sent back, and to the reviewer agent and model that sent it back."
+    },
+    {
+      "key": "project-stats-come-from-the-same-records-verdicts-per-piece",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice K's done sentence: 'the per-model counts in the stats count one rejection, not four'.",
+      "statement": "Evidence verdicts are counted per piece by its own outcome (accepted, rejected, held, awaiting), attributed to the model and agent of the run that recorded the piece; a send-back that names one failing piece among four counts one rejected and three held."
+    },
+    {
+      "key": "project-stats-come-from-the-same-reviews-beside-a-failing-check",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "On 2026-10-26/27 three such reviews cost $4.39 and found what ruff and the suite had already found. Slice L is meant to make this zero; H needs to see that it did.",
+      "statement": "The view counts, per spec, reviewer agent and reviewer model, the send-backs made by a review run while the task's newest check run that started before the review ended had failed, with those reviews' cost and run time."
+    },
+    {
+      "key": "project-stats-come-from-the-same-records-groupings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Comparing builders and levels is the slice's intent; 'before builds' keeps the night of 2026-10-26/27, which predates slice D, readable without SQL.",
+      "statement": "The project view shows the same figures grouped by spec, by agent, by model and by level, each grouping with a totals row equal to the others' and a 'since' date applied to all of them; work with no build recorded appears under its spec as 'before builds' and under level as 'no level recorded'."
+    },
+    {
+      "key": "project-stats-come-from-the-same-records-unknown-is-not-zero",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The rule usage_accounting already keeps (_plus, usage_accounting.py:432-435) and project_ledger breaks (project_ledger.py:129).",
+      "statement": "A run with no priced cost is counted as unpriced and shown as a count beside the cost, never added as $0; Copilot credits are summed in their own unit; a figure no row reports is shown as unknown, not 0."
     }
   ],
   "schema_version": 1,

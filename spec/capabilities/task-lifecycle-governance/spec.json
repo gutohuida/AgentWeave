@@ -839,6 +839,393 @@
       "requirement": "the-rest-of-what-the-hub-records-becomes-reachable-run-links",
       "then": "the transition links to that run's conversation",
       "when": "it renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the task transition table and the tools offered to agents, the mender and the flow's review turn",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_every_task_state_has_a_mover.py -v, run on master first (fails on completed/author outside a flow) and then on the branch (passes); paste both outputs.",
+      "key": "every-task-can-always-be-moved-on-invariant-test",
+      "requirement": "every-task-can-always-be-moved-on-every-state-has-a-mover",
+      "then": "every pair other than blocked names at least one actor and a target status it is allowed; on master 43301a6 the test fails for completed held by its author outside a flow",
+      "when": "a test enumerates each non-terminal status against each holder kind"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task moved to blocked with a reason",
+      "how_to_check": "On a Hub started from the branch (trial :8010), block a task with a reason via the board, open Overview, screenshot the row with its reason and action; or a component test over the Overview fed the route's real payload.",
+      "key": "every-task-can-always-be-moved-on-blocked-on-overview",
+      "requirement": "every-task-can-always-be-moved-blocked-is-shown-to-the-operator",
+      "then": "the task is listed as waiting on them, with its reason and an action that moves it",
+      "when": "the operator opens the Overview"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task created by create_task outside any flow, completed by DeveloperOpus and still held by it",
+      "how_to_check": "A Hub test calling the agent update_task route as QA on a completed task held by its author, red on master (403) and green on the branch, asserting the holder becomes QA and both verdicts are then allowed.",
+      "key": "every-task-can-always-be-moved-on-reviewer-takes-it",
+      "requirement": "every-task-can-always-be-moved-o-a-reviewer-takes-completed-work",
+      "then": "the move succeeds, QA is the holder, and QA can then approve or send it back; fails on master 43301a6 with 403",
+      "when": "QA calls update_task(status='under_review')"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same completed task",
+      "how_to_check": "Same test file: the author's two calls return 403 with the mover decision's reason.",
+      "key": "every-task-can-always-be-moved-on-author-refused",
+      "requirement": "every-task-can-always-be-moved-on-author-still-cannot-review",
+      "then": "both are refused, as today",
+      "when": "DeveloperOpus calls update_task(status='under_review') or (status='approved')"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose evidence the mender re-recorded",
+      "how_to_check": "A Hub test: record evidence on a task as the mender, then attempt both moves as the mender through update_task and mend_reset_task; both refused.",
+      "key": "every-task-can-always-be-moved-on-mender-author-refused",
+      "requirement": "every-task-can-always-be-moved-on-author-still-cannot-review",
+      "then": "both are refused",
+      "when": "the mender tries to move it to under_review or approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved spec document with four pending tasks whose work is on main at a known commit",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_close_spec_tasks_already_built.py: approve a four-task document in a git fixture, call the close route with a commit on main, assert task statuses and zero runs created.",
+      "key": "every-task-can-always-be-moved-on-close-in-one-step",
+      "requirement": "every-task-can-always-be-moved-on-close-already-built",
+      "then": "none of the four is pending or in progress on the board, and no run was started for any of them",
+      "when": "the operator closes them as already built, naming that commit"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the tasks closed above",
+      "how_to_check": "Same test file: read the evidence route, decide three accepted and one rejected, assert task statuses and task_history entries naming the commit.",
+      "key": "every-task-can-always-be-moved-on-evidence-awaits-review",
+      "requirement": "every-task-can-always-be-moved-on-already-built-is-reviewable",
+      "then": "each requirement had evidence naming the commit in review_state awaiting; afterwards the three tasks are approved, the fourth is not, and each task's history names the action and the commit",
+      "when": "list_evidence is read for the document, and then a reviewer accepts the evidence for three tasks' requirements and rejects one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a document with recorded evidence",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_evidence_tools_take_spdoc_ids.py, red on master (404) and green on the branch.",
+      "key": "every-task-can-always-be-moved-on-spdoc-id-works",
+      "requirement": "every-task-can-always-be-moved-on-evidence-tools-take-spdoc-ids",
+      "then": "both reads return the same rows and the record succeeds; fails on master 43301a6 with 404",
+      "when": "list_evidence is called with its spdoc- id and with its path, and record_evidence is called with its spdoc- id"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task held by its author, and the same task held by a reviewer",
+      "how_to_check": "A parametrised test in test_every_task_state_has_a_mover.py driving each path's real entry point for every (status, holder, actor) and comparing verdict and reason.",
+      "key": "every-task-can-always-be-moved-on-same-answer",
+      "requirement": "every-task-can-always-be-moved-on-one-answer-everywhere",
+      "then": "each path gives the same verdict and the same refusal reason; a test asserts this for every status, holder and actor the invariant test enumerates",
+      "when": "the same move is attempted by the same actor through update_task, the flow's review claim and the mender's reset"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task held by its author, DeveloperOpus, in the operator's app",
+      "how_to_check": "Playwright against a Hub started from the branch (trial :8010): open the completed task's drawer, open the status menu, choose review, pick QA; screenshot the picker and read the task back (status under_review, assignee QA).",
+      "key": "every-task-can-always-be-moved-on-board-review-picker",
+      "requirement": "every-task-can-always-be-moved-on-board-hands-to-a-reviewer",
+      "then": "the app asks which agent reviews it, lists every open agent except DeveloperOpus, and after choosing QA the task is under_review held by QA; at no point is 'Move to Under review' offered as a move that keeps DeveloperOpus as holder",
+      "when": "the operator opens the task's status menu and moves it into review"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each status and holder the invariant test enumerates",
+      "how_to_check": "A test comparing the moves the task route reports for the operator (the menu's source) with the mover decision for every enumerated (status, holder); plus a vitest that the menu renders exactly the route's moves.",
+      "key": "every-task-can-always-be-moved-on-menu-offers-only-allowed",
+      "requirement": "every-task-can-always-be-moved-on-board-hands-to-a-reviewer",
+      "then": "every move it offers is one the mover decision allows the operator, and a test asserts the menu's moves equal the decision's answer",
+      "when": "the board's status menu is rendered for the operator"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task linked to FR-1..FR-10 of its document, whose document then gains FR-11, and evidence for FR-11 recorded on that task from its checkout at a later commit and accepted",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_landing_explains_itself.py: replay the 2026-10-26 sequence in a git fixture (create task, add requirement, commit, record and accept evidence, land); red on master with the quoted refusal, green on the branch with the commit reachable from main.",
+      "key": "every-task-can-always-be-moved-on-late-requirement-merges",
+      "requirement": "every-task-can-always-be-moved-on-own-evidence-counts",
+      "then": "the later commit merges with it, and the task's requirement links include FR-11; on master 43301a6 the landing is refused as 'commits on neither master nor inside any commit the accepted evidence names'",
+      "when": "the operator lands the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose branch tip is named only by evidence still awaiting a decision",
+      "how_to_check": "Route test asserting the refusal body lists the awaiting evidence ids, requirement identifiers and commits; then Playwright on :8010: press Land, Accept beside the refusal, press Land, read the task back as approved.",
+      "key": "every-task-can-always-be-moved-on-awaiting-evidence-offered",
+      "requirement": "every-task-can-always-be-moved-on-refusal-offers-its-remedy",
+      "then": "the refusal names that evidence by requirement and commit and shows Accept and Reject beside it; accepting it there and pressing Land again lands the task",
+      "when": "the operator presses Land"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose checks are running on the commit approval would merge",
+      "how_to_check": "Vitest over the drawer fed the land route's real refusal bodies for a running run and for a failed run: no 'Land anyway' for running, present for failed.",
+      "key": "every-task-can-always-be-moved-on-running-checks-wait",
+      "requirement": "every-task-can-always-be-moved-on-refusal-offers-its-remedy",
+      "then": "the app says the landing waits for the checks and offers no 'Land anyway'; 'Land anyway' with a reason is offered only once a check has failed",
+      "when": "the operator presses Land"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose checks have been running for 8 minutes and whose previous check run took 14 minutes",
+      "how_to_check": "Vitest over the drawer fed the checks route's real payload (a running run plus a finished earlier run) asserting the text beside Land; then on :8010 with a real check run, screenshot the drawer at open (Land visible in the first viewport), wait for the run to pass, and capture the notification and the enabled Land without reloading.",
+      "key": "every-task-can-always-be-moved-on-wait-shows-progress",
+      "requirement": "every-task-can-always-be-moved-on-a-wait-is-visible",
+      "then": "beside Land, without scrolling, it reads that it waits for checks running 8 minutes of about 14; when the run passes, Land becomes available without a reload and the operator receives a notification naming the task",
+      "when": "the operator opens the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the 'Land anyway' control with no reason typed",
+      "how_to_check": "Vitest asserting the button is disabled, carries the disabled styling and a title naming the missing reason; a dark and light screenshot of the control with and without a reason.",
+      "key": "every-task-can-always-be-moved-on-disabled-looks-disabled",
+      "requirement": "every-task-can-always-be-moved-on-a-wait-is-visible",
+      "then": "it is visibly disabled and its title says a reason is needed; pressing it does nothing and says nothing new",
+      "when": "it is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec with acronym BPS and a project with acronym AW",
+      "how_to_check": "Hub test through the approval and create routes",
+      "key": "tickets-have-readable-ids-ac-mint",
+      "requirement": "tickets-have-readable-ids-every-task-has-one",
+      "then": "the tasks read BPS-1, BPS-2 and AW-1",
+      "when": "the spec is approved with two tasks, and a task with no spec is created"
+    },
+    {
+      "checked_by": "agent",
+      "given": "BPS-1 to BPS-3, with BPS-3 deleted, and 20 simultaneous creates",
+      "how_to_check": "Hub test with concurrent requests against a file database",
+      "key": "tickets-have-readable-ids-ac-unique",
+      "requirement": "tickets-have-readable-ids-unique-never-reused",
+      "then": "they hold BPS-4 to BPS-23 with no duplicate and no failure",
+      "when": "the creates finish"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task BPS-3, and task AW-7 with no spec",
+      "how_to_check": "Hub test",
+      "key": "tickets-have-readable-ids-ac-stable",
+      "requirement": "tickets-have-readable-ids-never-changes",
+      "then": "they still read BPS-3 and AW-7",
+      "when": "BPS-3's spec is renamed and the task is reassigned, and AW-7 is linked to a spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project already holding acronym BPS",
+      "how_to_check": "Hub test",
+      "key": "tickets-have-readable-ids-ac-acronym",
+      "requirement": "tickets-have-readable-ids-acronym-derived",
+      "then": "it receives a different acronym meeting the shape",
+      "when": "a second spec whose title would also derive BPS is created"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec titled 'Secret Keys', one titled 'Tasks', and an edit to sk",
+      "how_to_check": "Hub test, including `runner_events` redaction",
+      "key": "tickets-have-readable-ids-ac-refused",
+      "requirement": "tickets-have-readable-ids-acronym-refusals",
+      "then": "neither is given SK or TASK, the edit is refused, and text carrying a minted id in lowercase survives the redactor unchanged",
+      "when": "each acronym is derived or the edit is sent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec with no tasks, then the same spec with one",
+      "how_to_check": "UI test plus Hub test",
+      "key": "tickets-have-readable-ids-ac-edit",
+      "requirement": "tickets-have-readable-ids-acronym-editable-before-first-task",
+      "then": "the first change takes effect and the first task uses it; the second is refused with the reason",
+      "when": "the operator changes its acronym each time"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task BPS-3 and another project that also holds a BPS-3",
+      "how_to_check": "Hub test enumerating the task routes and tools, failing if one is added that does not resolve",
+      "key": "tickets-have-readable-ids-ac-accepted",
+      "requirement": "tickets-have-readable-ids-accepted-everywhere",
+      "then": "each acts on the first project's task, never the other's",
+      "when": "each task route and agent tool is called with bps-3 from the first project"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task from before the migration",
+      "how_to_check": "Hub test",
+      "key": "tickets-have-readable-ids-ac-old",
+      "requirement": "tickets-have-readable-ids-old-ids-resolve",
+      "then": "everything works as it did and the branch is still agentweave/task/task-hex",
+      "when": "it is fetched by its task-hex id, and its branch and checkout are used"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the create route",
+      "how_to_check": "Hub test",
+      "key": "tickets-have-readable-ids-ac-shape",
+      "requirement": "tickets-have-readable-ids-no-ambiguous-ids",
+      "then": "it answers 422 naming id",
+      "when": "it is called with id BPS-3"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a board holding BPS-3",
+      "how_to_check": "UI test fed the task route's payload, plus a Hub test on the turn prompt",
+      "key": "tickets-have-readable-ids-ac-shown",
+      "requirement": "tickets-have-readable-ids-shown-everywhere",
+      "then": "the card shows BPS-3, the drawer shows both ids, both searches find it, and an agent turn bound to it names BPS-3",
+      "when": "the operator reads its card and drawer and searches bps-3, then its hex id"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent's turn on BPS-3 with uncommitted work",
+      "how_to_check": "Hub test over a real git repository",
+      "key": "tickets-have-readable-ids-ac-commit",
+      "requirement": "tickets-have-readable-ids-commit-messages-name-both",
+      "then": "the commit message holds both BPS-3 and the task-hex id",
+      "when": "the Hub snapshots it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the real :8000 database, never the database itself",
+      "how_to_check": "Hub migration test on fixture data, plus one recorded run on the copy",
+      "key": "tickets-have-readable-ids-ac-migrated",
+      "requirement": "tickets-have-readable-ids-existing-tasks-migrated",
+      "then": "every task has a unique readable id in creation order per acronym, all stored ids and references are unchanged, and the downgrade leaves the copy as it was",
+      "when": "the migration upgrades it, then downgrades it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with tasks in specs A (3 tasks) and B (1 task), 2 tasks with no spec, and an approved spec C with no tasks",
+      "how_to_check": "UI test on the board fed the task list route's payload in the order the route returns it",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-picker-lists",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-scope-picker",
+      "then": "the picker offers All, No spec, A (3) and B (1), not C; after typing it offers only A",
+      "when": "the operator opens the board's scope picker and then types part of A's title"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an archived spec A with one completed and one pending task, and spec B with two tasks",
+      "how_to_check": "UI test plus a Hub test on the list route's filter",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-one-spec",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-one-spec-exact",
+      "then": "the board shows A's two tasks and nothing else",
+      "when": "the operator chooses A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with 1005 tasks where spec A's two tasks are the newest",
+      "how_to_check": "Hub test on the list route with the board's parameters for one spec",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-past-the-page",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-one-spec-exact",
+      "then": "both of A's tasks are shown",
+      "when": "the operator chooses A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two tasks with no spec and three tasks in spec A",
+      "how_to_check": "UI test plus a Hub test on the list route's no-spec filter",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-no-spec",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-no-spec-exact",
+      "then": "the board shows the two tasks with no spec and nothing else",
+      "when": "the operator chooses No spec"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project from ac-one-spec",
+      "how_to_check": "UI test",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-all",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-all-unchanged",
+      "then": "B's two tasks and A's pending task show, and A's completed task does not",
+      "when": "the operator chooses All"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec A chosen, with 2 tasks",
+      "how_to_check": "UI test",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-says",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-says-what-it-shows",
+      "then": "it reads A's title and 2 tasks, and one click on its action shows All again",
+      "when": "the board is shown"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec A with tasks held by Developer (2) and QA (1), and spec B with a task held by Developer",
+      "how_to_check": "UI test",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-combined",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-combines-with-filters",
+      "then": "the Developer chip reads 2 before it is clicked, and after it only A's two Developer tasks show",
+      "when": "the operator chooses A and then the Developer chip"
+    },
+    {
+      "checked_by": "agent",
+      "given": "project P scoped to spec A and project Q scoped to No spec",
+      "how_to_check": "UI test over local storage, plus a step in the drive that reloads the page",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-remembers",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-remembers-scope",
+      "then": "P's board shows spec A's scope and Q's shows No spec",
+      "when": "the operator reloads the app and opens P's board, then Q's"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a remembered scope of spec A, whose tasks have since all been deleted",
+      "how_to_check": "UI test",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-stale-scope",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-remembers-scope",
+      "then": "it shows All",
+      "when": "the board opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the board scoped to No spec, and a coverage row of spec A naming two of A's five tasks",
+      "how_to_check": "UI test",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-override",
+      "requirement": "the-board-shows-one-spec-no-spec-or-all-task-list-overrides",
+      "then": "the board first shows exactly those two tasks, then shows the No spec scope again, and No spec is still what it reopens in",
+      "when": "the operator follows the coverage row's link, then clears the narrowing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec A's page, with A holding three tasks",
+      "how_to_check": "UI test, plus a step in the drive",
+      "key": "the-board-shows-one-spec-no-spec-or-all-ac-spec-link",
+      "requirement": "the-board-shows-one-spec-no-spec-or-al-spec-page-opens-its-scope",
+      "then": "the board shows A's scope with its three tasks, names A, and reopens in A's scope after a reload",
+      "when": "the operator chooses 'Show these on the board'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the gate command `py -3.11 -m pytest hub/tests -q -n auto --dist loadgroup -p no:cacheprovider --timeout=600`",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_reuse_a_pass_and_confirm_a_failure.py -v: the test at :310 now asserts the serial form; the flaky test at :255 still passes.",
+      "key": "a-red-main-does-not-hold-the-night-serial-rerun",
+      "requirement": "a-red-main-does-not-hold-the-night-rerun-on-its-own",
+      "then": "the narrowed command runs only that id with `-n 0`, without `--dist loadgroup`, and keeps `-p no:cacheprovider` and `--timeout=600`; a failure that passes that rerun is recorded flaky and the run passes",
+      "when": "it is narrowed to one failed node id for the confirmation rerun"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open agent and a task outside any flow, created pending",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_an_assigned_task_outside_a_flow_starts.py -v, red on master first.",
+      "key": "a-red-main-does-not-hold-the-night-assigned-task-starts",
+      "requirement": "a-red-main-does-not-hold-the-nigh-assigned-outside-a-flow-starts",
+      "then": "one queued entry for the agent with task_id set to the task exists after the commit and schedule_agent was asked for the agent; repeating the PATCH or a second commit queues nothing more; on master bbf3f10 no entry exists",
+      "when": "the operator (and, in a second case, an agent's run) moves it to assigned with that agent as assignee"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pending task with an assignee outside a flow, and an assigned task in a flow",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_an_assigned_task_outside_a_flow_starts.py -v -k \"untouched\"",
+      "key": "a-red-main-does-not-hold-the-night-flow-and-pending-untouched",
+      "requirement": "a-red-main-does-not-hold-the-nigh-assigned-outside-a-flow-starts",
+      "then": "no entry is queued for either by this mechanism",
+      "when": "they are created and moved by the flow"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task written straight into assigned outside a flow with no entry for its assignee, and one whose entry was delivered after it entered assigned",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_an_assigned_task_outside_a_flow_starts.py -v -k \"sweep\"",
+      "key": "a-red-main-does-not-hold-the-night-sweep-backstop",
+      "requirement": "a-red-main-does-not-hold-the-night-sweep-starts-what-was-missed",
+      "then": "an entry is queued for the first and none for the second",
+      "when": "stalls.sweep runs"
     }
   ],
   "algorithms": [],
@@ -850,12 +1237,48 @@
       "FR-103": "c2ef7d821f2788c1c8ac53019cb98084ab614131b881ee3a08300c8e6a33abf6",
       "FR-104": "628c05eb28859f1abb4325a6f5e8e9db1e40dee645f5652fcd6e17299e2e492c",
       "FR-105": "2b4698fbad2df2178097dbbc5509df5848f7c69183e8c0104046e19299c224a2",
+      "FR-106": "d787b3703f5570b3ccddffd5153af1e024478216ddfafaed35d7a62ab6189b8c",
+      "FR-107": "5e11fe7d071e18e197f1fa3fda439cd7f58ab1938e7a0201a4da0ed8dacdda86",
+      "FR-108": "7d894d2634875adbe160a3c34e506df0d48fb9e2239be944d6f71d9b1a1ddf7c",
+      "FR-109": "991bfc71f7a0a8899c2920bbbd5dd0ad6ce65284c7a389996956f46256c36aca",
+      "FR-110": "1ea35c090e4481f4d45200034463c17c35ec895daedf09d71d1ddce36f42b61b",
+      "FR-111": "7441e16c9b69712346dcd9f690bdaa21ef92429e4129898b751ca74bfe611dd4",
+      "FR-112": "74d797712e5096775bc9f5e25f46b677a1a93c22fcdfc1e804db88416c0b7292",
+      "FR-113": "d872db56103d59c25e4b846d719b1849474d3fdc031c129dd68460eb8e174d22",
+      "FR-114": "3e550898c21483106e4ee513810f0bdeae5921ed862a7fb48814898387560511",
+      "FR-115": "1ed7acf41463a6b4e683bf23b3f0f61e3ee6197deeacc0163c7abab50374b829",
+      "FR-116": "765fa805ee51abd1ae7a0f8503a9fdbf5270310884543ec4509f7ae6f5159b1c",
+      "FR-117": "fdb48be8f5462624615e5ee8e909384f67caa53f559a57742f605edc12b3982e",
+      "FR-118": "e813f73be5c8ccf978af970e61ac2c29caed622d07e29450288dc2e634a9ddc3",
+      "FR-119": "e06c88e554ae33712802c7bdb3298340581d4e610e74d01b6ecc9b72b62ae321",
+      "FR-120": "f1e1ebd5c077dea32854c65e621b5adbdc24bf34ed49ba76882861944ca152c2",
+      "FR-121": "86b52f16f5d35c9b08e39aaf70a8eb3b589694e6f5fd5f7f548085335f543f97",
+      "FR-122": "f8ea6a64e965bba01441b5b721d0ff26dffd0633f1476ab897ffdcb922aaa015",
+      "FR-123": "ab26e2e9448b0c3e7c78dceb8f1224fa628a76323071c7e293b10f2818556654",
+      "FR-124": "20c730cd08d5ef96fe74cece5853ec42b4727340bd3f3a8c1083496b7d735f55",
+      "FR-125": "c76020c1fda9496ff60bc426ff80def926df277e0e0c88dd2629b05070ce1676",
+      "FR-126": "27a59e0cc3e3b03e2bc0712e8da01f3ca0442e0e1efe918b9d38b943c8c6de78",
+      "FR-127": "ff6d71bea9f713e0748be67e9601fce272d24c016a46297d2480aa07d3e2f355",
+      "FR-128": "9c721fb3e8a078c5cb7e4434e5210e0051774ddc3c863e9c1f5d939797689008",
+      "FR-129": "349d9d36d91e40c6424ed4fc660a8279ba1aac6051bc595d1671fd85154e8c84",
+      "FR-130": "c3196f50dba2340241deeb662e85a083d91dacf3f23e52d82ca80655be0a62e5",
+      "FR-131": "9f07d52a7eaa4fe8719a63eccf40b464d6d8c61844798c474aca382994ec8098",
+      "FR-132": "4fd02b78ddb77b62d72c7da4a7dea4b8f619e879eece8320ba6a6b7c005d7a13",
+      "FR-133": "f17ab0a4d2827d02c09257d6f362d67a7f3fa0554be86c05b1459e39a05fb494",
+      "FR-134": "3d87e80cb304b01fd42864412f2e9f5b8f58f3946e0a80ac457d3755fa25082e",
+      "FR-135": "df93264cd44761fb89ae26056a8762961d701b71f81dd0ed204bc868e167cd0a",
+      "FR-136": "cd39fab0c4fd7179939977431826636d51ecee2dcbd416b0367c0815adffa19d",
+      "FR-137": "f74d02e2cc813b4214528e9bf1dfc94b2a147d69906fc89bcab226c16251cdea",
+      "FR-138": "517d6c0a95aca8ab8fd747e52af241afba7fae9f82ca15f7ead52dbfb5f98136",
+      "FR-139": "6a896298b40165f46fc212128b54fa37e33992e526a211180c94b69b82adf710",
+      "FR-140": "b2aa441b286334788b168732f390d22b32731d66e6ac9fed089d2302d24bcc38",
+      "FR-141": "923fd090d1ff1e844ce91c7b6d6401eff99995c1b5a324a338799b1dcd4b6a16",
       "FR-33": "7c740474881186d7a0e928ab0150619be41407ca2768ef98b31ee72ba673aef9",
       "FR-34": "8a8faac0eea8d9531c99a6f9bc479c464c90c9eee149933bce352537b1e5a451",
       "FR-35": "c4e50307b122c0e1381d35e14907fc5c648a211171aaff447c7b90087fb37af2",
       "FR-36": "20e9dac661b6601d772dc9ba80be680f9925e9d4bbdffb24be7ac15ae3b9e1d5",
       "FR-37": "417d41a5fdcd3308f66b5a4795e7c0eee78ae6c4cf47d6c87662b1ae2c89dd46",
-      "FR-38": "48a9c4f027146bd4f43c8b5ce2ea26c8f8c4bd76cc76aa224b55a3608e30b759",
+      "FR-38": "71cb165258b0928e8aaf398630c9d8aa1fb8499ce548330247eb7ebc444775a7",
       "FR-39": "a05e735c695ba410901b672535b2e90de8e2fdfb5059988139804f05bba13be7",
       "FR-40": "746a5262c7af8c984b0a036572567368aaac8e652762bd20d4c389f3657bee69",
       "FR-41": "cb9dab51e3e53aa7f0cb1410f8533e7282aa15bc54e7c373a13550d8f43c5664",
@@ -875,8 +1298,8 @@
       "FR-55": "e22da2893e7a213bae7794f43adfd996034c54876854cc3e5a52201d923ec8d2",
       "FR-56": "ce47a1bd84b1dd97d95f6c02a56f7d119df84fa4f01252e4a73e599d04c1d09f",
       "FR-57": "b10365250624abd66df24d9083ddcb5f7e4ac2d8069a8111e0812acdb286929f",
-      "FR-58": "57cecfdd39778e2bb55b41be53bf03f9cb36acef608653b10f482b6930e21f6c",
-      "FR-59": "0fb6decc995d9ac27e6cb1099d6c21b24ee8c7c327e7d013bb82b3a22b1834bd",
+      "FR-58": "9fd4552a499228903f0bd978d01663d96cf95900b271f3d4e4935362c8905d66",
+      "FR-59": "df309a2291f42cde72d80f53c7a44298ef893461e0cb2f9bd7bce77fd231538a",
       "FR-60": "9b8ed0d586ef94f2906bb87d5ba0a43b245c6a0c190bbb3812f8dc263a54e097",
       "FR-61": "cbfaa6761b2160e96984da8daff9f4ce39b7e8e44ecbbb739d3b33aa657fc2e1",
       "FR-62": "1b8b56dbfd9bcdb0a6062c803a84344f96e09e34a3dd4e6292ee056ccfdee20a",
@@ -918,9 +1341,12 @@
       "FR-98": "6fd361c52514449bab9c7e50f5b55ac9ef41f4d90d4ef7c6ad650e916a947525",
       "FR-99": "cb3b52213f3a9755eb9ffb3befd98e80ea6ea1a871fea4c79ea651c4643fea43"
     },
-    "high_water": 105,
+    "high_water": 141,
     "requirements": {
       "a-move-a-scheduled-firing-makes-is-recorded-as-that-firing-s": "FR-82",
+      "a-red-main-does-not-hold-the-nigh-assigned-outside-a-flow-starts": "FR-140",
+      "a-red-main-does-not-hold-the-night-rerun-on-its-own": "FR-139",
+      "a-red-main-does-not-hold-the-night-sweep-starts-what-was-missed": "FR-141",
       "a-run-may-only-complete-the-task-it-holds": "FR-72",
       "a-task-can-be-waiting-on-a-person": "FR-44",
       "a-task-entering-review-must-not-still-name-its-author-as-its": "FR-39",
@@ -943,6 +1369,18 @@
       "approval-is-refused-while-a-gated-requirement-is-unverified": "FR-58",
       "declining-a-question-releases-the-task-it-parked": "FR-48",
       "every-accepted-transition-is-recorded-append-only": "FR-37",
+      "every-task-can-always-be-moved-blocked-is-shown-to-the-operator": "FR-107",
+      "every-task-can-always-be-moved-o-a-reviewer-takes-completed-work": "FR-108",
+      "every-task-can-always-be-moved-on-a-wait-is-visible": "FR-117",
+      "every-task-can-always-be-moved-on-already-built-is-reviewable": "FR-111",
+      "every-task-can-always-be-moved-on-author-still-cannot-review": "FR-109",
+      "every-task-can-always-be-moved-on-board-hands-to-a-reviewer": "FR-114",
+      "every-task-can-always-be-moved-on-close-already-built": "FR-110",
+      "every-task-can-always-be-moved-on-every-state-has-a-mover": "FR-106",
+      "every-task-can-always-be-moved-on-evidence-tools-take-spdoc-ids": "FR-112",
+      "every-task-can-always-be-moved-on-one-answer-everywhere": "FR-113",
+      "every-task-can-always-be-moved-on-own-evidence-counts": "FR-115",
+      "every-task-can-always-be-moved-on-refusal-offers-its-remedy": "FR-116",
       "every-task-status-is-classified-into-exactly-one-lifecycle-b": "FR-70",
       "governance-holds-identically-over-http-and-mcp": "FR-41",
       "n1": "FR-95",
@@ -953,12 +1391,33 @@
       "some-transitions-are-the-operator-s-alone": "FR-36",
       "status-sets-are-derived-from-the-classification-not-listed-i": "FR-71",
       "task-status-moves-only-along-declared-transitions": "FR-33",
+      "the-board-shows-one-spec-no-spec-or-al-spec-page-opens-its-scope": "FR-138",
+      "the-board-shows-one-spec-no-spec-or-all-all-unchanged": "FR-133",
+      "the-board-shows-one-spec-no-spec-or-all-combines-with-filters": "FR-135",
+      "the-board-shows-one-spec-no-spec-or-all-no-spec-exact": "FR-132",
+      "the-board-shows-one-spec-no-spec-or-all-one-spec-exact": "FR-131",
+      "the-board-shows-one-spec-no-spec-or-all-remembers-scope": "FR-136",
+      "the-board-shows-one-spec-no-spec-or-all-says-what-it-shows": "FR-134",
+      "the-board-shows-one-spec-no-spec-or-all-scope-picker": "FR-130",
+      "the-board-shows-one-spec-no-spec-or-all-task-list-overrides": "FR-137",
       "the-operator-can-delete-a-document-a-task-or-an-archived-ag-task": "FR-89",
       "the-operator-can-perform-every-transition-reserved-to-them": "FR-35",
       "the-operator-can-rename-a-task": "FR-84",
       "the-rest-of-what-the-hub-records-becomes-reachable-run-links": "FR-105",
       "the-system-may-cause-a-transition-without-becoming-an-actor": "FR-42",
       "the-task-list-s-default-view-retires-completed-work-from-arc": "FR-62",
+      "tickets-have-readable-ids-accepted-everywhere": "FR-124",
+      "tickets-have-readable-ids-acronym-derived": "FR-121",
+      "tickets-have-readable-ids-acronym-editable-before-first-task": "FR-123",
+      "tickets-have-readable-ids-acronym-refusals": "FR-122",
+      "tickets-have-readable-ids-commit-messages-name-both": "FR-128",
+      "tickets-have-readable-ids-every-task-has-one": "FR-118",
+      "tickets-have-readable-ids-existing-tasks-migrated": "FR-129",
+      "tickets-have-readable-ids-never-changes": "FR-120",
+      "tickets-have-readable-ids-no-ambiguous-ids": "FR-126",
+      "tickets-have-readable-ids-old-ids-resolve": "FR-125",
+      "tickets-have-readable-ids-shown-everywhere": "FR-127",
+      "tickets-have-readable-ids-unique-never-reused": "FR-119",
       "work-that-proceeded-without-an-answer-says-so-for-good": "FR-76"
     },
     "retired": {
@@ -1013,7 +1472,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -1062,7 +1520,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "Distinctness is on agent identity, not run: every turn is a new run, so a run check forbids nothing. Evidence is the one authorship record that reviewing does not create, so it catches an agent judging its own work where the completion names nobody (an operator completion) or names a different agent (F505). Evidence keyed on its review state would make the authority to review depend on the review's outcome. The operator is exempt so a single-operator project can approve anything; the history says an operator did it.",
-      "statement": "The Hub SHALL refuse an agent run's move to `approved`, `rejected` or `revision_needed` when that run's agent is the agent recorded as moving the task to `completed`, or is an agent that recorded evidence for the task (whatever that evidence's review state, and whoever completed the task). Evidence the operator recorded SHALL refuse no agent. The operator SHALL be permitted every review outcome regardless of who produced the work."
+      "statement": "The Hub SHALL refuse an agent run's move to `approved`, `rejected` or `revision_needed` when that run's agent is the agent recorded as moving the task to `completed`, or is an agent that recorded evidence for the task (whatever that evidence's review state, and whoever completed the task), with one exception: in a build at the Fast level, the task's builder and the build's lead may approve completed work without a review. Evidence the operator recorded SHALL refuse no agent. The operator SHALL be permitted every review outcome regardless of who produced the work."
     },
     {
       "key": "a-task-entering-review-must-not-still-name-its-author-as-its",
@@ -1195,14 +1653,14 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "A gate that computed its own answer could disagree with the document beside it. A `rejected` requirement means its only proof was judged not to prove it; approving over it records as done what was refused (the FR-11 incident). An unactionable gate gets turned off.",
-      "statement": "The Hub SHALL refuse a move to `approved` while a requirement the task serves on a `gate`-rigor document is not verified, or is structurally invalid; and, at every rigor, while a requirement it serves is `rejected`. `contract` requirements SHALL be reported on the approval and SHALL NOT block; `sketch` ones SHALL block only when rejected. Verification SHALL be read from the same coverage computation the document surfaces use, and the typed refusal SHALL name each requirement with its state and remedy."
+      "statement": "The Hub SHALL refuse a move to `approved` of a task built at the Gated level while a requirement it serves is not verified, or is structurally invalid; and, at every level, while a requirement it serves is `rejected` or holds held evidence. At Reviewed such requirements SHALL be reported on the approval and SHALL NOT block; at Fast, and for a task outside any build, they SHALL block only when rejected. Verification SHALL be read from the same coverage computation the document surfaces use, and the typed refusal SHALL name each requirement with its state and remedy."
     },
     {
       "key": "a-transition-records-the-policy-that-governed-it",
       "modal": "SHALL",
       "party": null,
       "rationale": "Rigor is editable, so a gate that passed last month cannot be explained today without the policy it ran under.",
-      "statement": "A transition into `approved` SHALL record the policy that governed it: the state, integration and rigor of every requirement the task serves, `sketch` included; a task serving no requirement SHALL record none."
+      "statement": "A transition into `approved` SHALL record the policy that governed it: the task's build level (none for a task outside any build) and the state and integration of every requirement the task serves; a task serving no requirement SHALL record no requirements."
     },
     {
       "key": "n5",
@@ -1301,6 +1759,258 @@
       "party": null,
       "rationale": "run_id was returned and ignored.",
       "statement": "A transition made by a run, and a run, in the task story MUST link to that run's conversation."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-every-state-has-a-mover",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Each dead end so far came from rules checked one at a time; only a test over the whole table catches the combination before an agent meets it.",
+      "statement": "For every non-terminal task status and every kind of holder (none, the author, another agent, the mender), at least one agent can move the task to another status with the tools it is offered, except `blocked`, whose mover is the operator."
+    },
+    {
+      "key": "every-task-can-always-be-moved-blocked-is-shown-to-the-operator",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A state reserved for the operator is a dead end if the operator cannot see it.",
+      "statement": "Every task whose only mover is the operator appears on the operator's Overview as waiting on them, with the action that moves it."
+    },
+    {
+      "key": "every-task-can-always-be-moved-o-a-reviewer-takes-completed-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the hand-off a flow's review turn already makes (BAND_AWAITING_HANDOFF: 'not by the agent that finished it ... anybody else can'), and what slice D's Reviewed level means; one rule everywhere, and no named reviewer who can be busy or gone (operator, 2026-10-26).",
+      "statement": "Outside a flow, any agent other than the one recorded as completing a task can move that completed task to under_review, and becomes its holder; the author still cannot."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-author-still-cannot-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The agent recorded as completing a task, including a mender that re-recorded its evidence, cannot move it to under_review or approve it."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-close-already-built",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Specs approved after interactive work shipped otherwise cost one paid run per task, or a flow started on them rebuilds shipped work. Roadmap slice C offers this at approval when intake recorded the work as already built.",
+      "statement": "The operator can close every open task of an approved spec document in one action, naming the commit or commits on main that already hold the work, and no agent run is started for those tasks."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-already-built-is-reviewable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-26: 'already built' is checked like any other work, so the record stays trustworthy; on 2026-10-23 the check found a possible gap (the Composer's spinning send button). One review covers the whole document.",
+      "statement": "Closing tasks as already built records, for each requirement those tasks serve, evidence pointing at the named commits, awaiting a decision like any other evidence; each task becomes approved only once the evidence for its requirements is accepted, and the action and its commits appear in each task's history."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-evidence-tools-take-spdoc-ids",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "list_evidence and record_evidence accept a document's spdoc- id wherever they accept its path, and answer the same as for the path."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-one-answer-everywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The dead ends came from separate checks each answering a slightly different question; one answer is what lets slice D add levels and a lead without new dead ends.",
+      "statement": "Every path that moves a task (update_task, a flow's staffing and review turn, the mender's tools, approval, the operator's board) gives the same answer, allowed or refused with the same reason, for the same status, holder and actor."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-board-hands-to-a-reviewer",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-26: the board offered 'Move to Under review', which keeps the author as holder and so can only be refused. A menu that offers a refused move teaches the operator that the menu cannot be trusted.",
+      "statement": "From the board, the operator can move a completed task into review by choosing any agent other than its author, who becomes its holder; the board's status menu offers no move the Hub would refuse the operator."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-own-evidence-counts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-26: FR-11 and FR-12 were added to the spec-page document after its mock task existed; their evidence, recorded on that task from its checkout and accepted, merged nothing, because only evidence for linked requirements counts (task_integration._targets joins TaskRequirementLink). A document that grows while its task is open is normal in exploring and amending.",
+      "statement": "Evidence recorded on a task against a requirement of that task's own spec document counts toward what approving the task merges, whether or not the requirement was linked to the task when the task was created."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-refusal-offers-its-remedy",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-26: two refusals told the operator to ask the author for new evidence when the cause was evidence awaiting a decision and then a missing link, and 'Land anyway' was offered for checks that had not failed but were still running. A refusal that names the wrong remedy costs more than one that names none.",
+      "statement": "When approving or landing a task is refused, the refusal names each cause the Hub can see and, in the operator's app, offers the action that clears it beside the refusal: Accept or Reject on each piece of evidence still awaiting a decision that approval would merge; linking a requirement whose accepted evidence on the task's branch the task does not serve; and, while the project's checks are still running on the work, a wait (with no override offered) instead of a refusal."
+    },
+    {
+      "key": "every-task-can-always-be-moved-on-a-wait-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-26: the operator could not tell when the checks would finish (shown below the Notes, no estimate, no notice), and pressed a 'Land anyway' button that was disabled without looking it, so nothing happened.",
+      "statement": "While approval of a task waits on its project checks, the task's Land control shows that it is waiting, for how long the checks have run and how long the previous run on that task took, and becomes available without a reload when they pass; when they finish the operator is notified; a control that cannot act looks disabled and says why."
+    },
+    {
+      "key": "tickets-have-readable-ids-every-task-has-one",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every task created through any door receives a readable id of the form ACRONYM-N: its spec's acronym if it belongs to a spec at creation, otherwise the project's acronym."
+    },
+    {
+      "key": "tickets-have-readable-ids-unique-never-reused",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A deleted task's id still appears in old messages and notes; reusing it would point them at the wrong work.",
+      "statement": "A readable id is unique within its project, including under simultaneous creation, and its number is never used again within that acronym, even after the task is deleted."
+    },
+    {
+      "key": "tickets-have-readable-ids-never-changes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task's readable id does not change when its spec is renamed or archived, when it is reassigned, or when a task with no spec is later linked to a spec."
+    },
+    {
+      "key": "tickets-have-readable-ids-acronym-derived",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An acronym of 2 to 5 uppercase letters and digits starting with a letter is derived from the title or name, and is unique within the project across specs and the project itself."
+    },
+    {
+      "key": "tickets-have-readable-ids-acronym-refusals",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "task-12 would be read as a stored id (`worktrees.py:84`), and a lowercase sk-12 is destroyed by the secret redactor (`runner_events.py:71`), which already cost every task id its name once (F118).",
+      "statement": "An acronym can never be TASK or SK, in any case, whether derived or edited."
+    },
+    {
+      "key": "tickets-have-readable-ids-acronym-editable-before-first-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can see a spec's acronym on its page and change it until the spec's first task exists; after that a change is refused, naming why. An edited acronym obeys the same shape, uniqueness and refusal rules."
+    },
+    {
+      "key": "tickets-have-readable-ids-accepted-everywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every operator route and agent tool that takes a task id, including prerequisites, accepts the readable id in any case as well as the stored id, and acts on the same task within the caller's project."
+    },
+    {
+      "key": "tickets-have-readable-ids-old-ids-resolve",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A stored task-hex id keeps resolving wherever it did, indefinitely, and branch and checkout names stay as they are."
+    },
+    {
+      "key": "tickets-have-readable-ids-no-ambiguous-ids",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The create route accepts caller ids such as BPS-3 today (`schemas/tasks.py:18`), and one could shadow a real readable id.",
+      "statement": "A caller-supplied task id shaped like a readable id is refused at creation."
+    },
+    {
+      "key": "tickets-have-readable-ids-shown-everywhere",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The readable id is what the board card, task drawer, prerequisite lists, build record, messages and agent turn prompts show to name a task, the drawer also shows the stored id, and the board search finds a task by either."
+    },
+    {
+      "key": "tickets-have-readable-ids-commit-messages-name-both",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A commit message the Hub writes that names a task names both its readable id and its stored id."
+    },
+    {
+      "key": "tickets-have-readable-ids-existing-tasks-migrated",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "After the migration, every existing task holds a readable id numbered in creation order within its acronym, and nothing else about it has changed. A task whose spec no longer exists takes the project's acronym."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-all-scope-picker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "27 specs carry tasks in the live project; a list that cannot be narrowed by typing is a scroll hunt.",
+      "statement": "The Tasks board offers a scope of All, No spec, or one spec. The spec choices are every spec in the project that has at least one task, each shown by title with its number of tasks, and the list narrows as the operator types part of a title."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-all-one-spec-exact",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With one spec chosen, the board shows exactly the tasks whose spec is that document, in every status, including the completed tasks of an archived spec, however many tasks the project holds."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-all-no-spec-exact",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With No spec chosen, the board shows exactly the tasks that belong to no spec, however many tasks the project holds."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-all-all-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "With All chosen, the board shows the same tasks it shows today, including hiding the completed tasks of archived specs."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-all-says-what-it-shows",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While the scope is not All, the board names it (the spec's title, or No spec) and how many tasks it holds, and offers one action that returns to All."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-all-combines-with-filters",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The scope, the agent filter and the search apply together: a task shows only if it is in the scope, matches the agent filter and matches the search. The agent filter's counts count only tasks in the scope."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-all-remembers-scope",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: the board should remember my choice. Kept in the window, as the board's column folds are, not on the Hub.",
+      "statement": "The board reopens in the scope the operator last chose in that project, in the same browser window profile, after leaving the Tasks tab, switching project and back, or reloading the app. Each project remembers its own scope. A remembered spec that no longer has any task opens as All."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-all-task-list-overrides",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: keep it separate. A coverage row names one requirement's tasks, narrower than a spec.",
+      "statement": "A list of task ids sent to the board by a coverage row or a loop link narrows it to exactly those tasks while it is set, whatever the scope, and says so as it does today. Clearing it shows the board in the scope it was in before, and setting or clearing it never changes the remembered scope."
+    },
+    {
+      "key": "the-board-shows-one-spec-no-spec-or-al-spec-page-opens-its-scope",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-29: a spec page should link to its board. The link already exists and sends a list of task ids; scoping instead makes the board read as the spec and keeps it so.",
+      "statement": "A spec page's 'Show these on the board' opens the Tasks board scoped to that spec, and that scope becomes the remembered one."
+    },
+    {
+      "key": "a-red-main-does-not-hold-the-night-rerun-on-its-own",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The night's test passed its narrowed rerun once and failed it once, each time run with the gate's `-n auto` (narrowed_command keeps the options, test at test_checks_reuse_a_pass_and_confirm_a_failure.py:310); a timing test is measured under load it does not need. One rerun, as today, so a deterministic own failure is never retried into a pass.",
+      "statement": "Before a failure is charged to anyone, the failed node ids are run once more on the same tree and nothing else, serially (the command's xdist worker count set to 0 and its distribution options dropped); if they all pass the failure is a flake and the check passes, recorded as flaky with the ids; if any fails again it stands and is compared with main."
+    },
+    {
+      "key": "a-red-main-does-not-hold-the-nigh-assigned-outside-a-flow-starts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "2026-10-27: task-eecc162f6e1d was moved to assigned at 01:24 and nothing was queued for its assignee until the mender messaged it at 02:55.",
+      "statement": "A task that belongs to no flow and is in status assigned, whose assignee is an open agent and whose prerequisites are met, gets one turn queued for that assignee naming and bound to the task, within seconds of entering assigned (created there, moved there, or given a new assignee while there), started as soon as the agent is idle; a turn already queued, delivered or running for that task and assignee since it entered assigned means nothing new is queued."
+    },
+    {
+      "key": "a-red-main-does-not-hold-the-night-sweep-starts-what-was-missed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The stall sweep (every 300 s) queues the same turn for any task left assigned outside a flow with no turn queued or delivered for its assignee since it entered assigned, such as one assigned before this change, while the Hub was down, or whose prerequisites have since cleared."
     }
   ],
   "schema_version": 1,

@@ -1,0 +1,23 @@
+{
+  "id": "fct-76bae1bb60bd",
+  "kind": "fact",
+  "claim": "Check-run pagination beyond 100 and re-runs after a concluded pass are not yet covered in the requirements.",
+  "citations": [
+    {
+      "source": "src-19951ad9b2b5",
+      "quote": "Cover check-run pagination beyond 100 and re-runs after a concluded pass in the requirements.",
+      "line_start": 20,
+      "line_end": 20
+    }
+  ],
+  "sources": [
+    "src-19951ad9b2b5"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T12:07:18.116776Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

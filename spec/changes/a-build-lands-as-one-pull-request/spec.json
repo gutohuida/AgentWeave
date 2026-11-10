@@ -1,0 +1,567 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project that has never changed its PR landing setting",
+      "how_to_check": "hub test on the Build route and the project settings route; drive step 1",
+      "key": "off-ac1",
+      "requirement": "off-by-default",
+      "then": "it is refused naming the PR landing setting, and the Build dialog offers only main and nowhere",
+      "when": "a Build request names landing 'pull request'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project directory whose remote is not GitHub, or with the GitHub CLI absent from PATH",
+      "how_to_check": "hub test with a stubbed CLI and a local bare remote",
+      "key": "gh-ac1",
+      "requirement": "needs-github",
+      "then": "it is refused naming which of the three is missing",
+      "when": "PR landing is turned on"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR build whose approved task fails a landing-phase check on a test not on the known-failing list",
+      "how_to_check": "hub test against a local bare remote",
+      "key": "chk-ac1",
+      "requirement": "checked-before-push",
+      "then": "the task is sent back and the remote branch is unchanged",
+      "when": "it is processed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a PR build of two tasks on this repository",
+      "how_to_check": "acceptance drive, reading `gh pr view --json isDraft,baseRefName,commits`",
+      "key": "draft-ac1",
+      "requirement": "draft-at-first",
+      "then": "a draft PR against master exists on GitHub from the build branch, and approving the second task adds its commit to the same PR",
+      "when": "the first task is approved and passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's PR with both tasks pushed",
+      "how_to_check": "acceptance drive, `gh pr view --json isDraft` after each step",
+      "key": "ready-ac1",
+      "requirement": "ready-and-back",
+      "then": "it reads ready, then draft, then ready",
+      "when": "it is read, then the second task is sent back, then approved again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's PR after a push",
+      "how_to_check": "acceptance drive, `gh pr view --json title,body`",
+      "key": "desc-ac1",
+      "requirement": "description",
+      "then": "it names the spec path, every requirement identifier the build serves, the accepted evidence ids, and each task with its state",
+      "when": "its body is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "single-commit mode and a build branch on the remote someone else pushed to since the Hub's last push",
+      "how_to_check": "hub test against a local bare remote",
+      "key": "sq-ac1",
+      "requirement": "squash-setting",
+      "then": "the push is refused, the other commit is still on the branch, and the build shows the refusal",
+      "when": "the next task is pushed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "single-commit mode and two approved tasks",
+      "how_to_check": "hub test against a local bare remote",
+      "key": "sq-ac2",
+      "requirement": "squash-setting",
+      "then": "the remote build branch holds exactly one commit above main containing both tasks' changes",
+      "when": "both are pushed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the remote main gained a commit after the build's first push, touching a file the next task also changes",
+      "how_to_check": "hub test against a local bare remote",
+      "key": "main-ac1",
+      "requirement": "main-moved",
+      "then": "the task is sent back to its builder as a merge conflict and the remote branch is unchanged; with a non-conflicting commit, the branch is pushed with main merged in",
+      "when": "the next task is pushed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open PR and a GitHub CLI stub that counts calls and takes 30 s to answer",
+      "how_to_check": "hub test with a stubbed CLI and a frozen clock",
+      "key": "ask-ac1",
+      "requirement": "asks-on-actions",
+      "then": "the turn starts without waiting for the stub, the stub was asked once for the action, and it was not asked during the idle hour",
+      "when": "a task worktree is created and a turn starts in the project, and then an hour passes with no action"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a second drive PR",
+      "how_to_check": "acceptance drive (closes it with `gh pr close`)",
+      "key": "mc-ac1",
+      "requirement": "merged-or-closed",
+      "then": "its tasks read not landed and the build branch still exists on GitHub and locally",
+      "when": "it is closed without merging on GitHub and the operator opens the build"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive's PR whose only change is a line in testbed/README.md",
+      "how_to_check": "human step in the drive's guide, then the drive reads the tasks' landings",
+      "key": "mc-ac2",
+      "requirement": "merged-or-closed",
+      "then": "its tasks read landed, naming GitHub's merge commit",
+      "when": "the operator merges it on GitHub and presses 'check now'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a merged PR and a project whose main is not checked out with changes",
+      "how_to_check": "hub test with a local bare remote; drive after mc-ac2",
+      "key": "lm-ac1",
+      "requirement": "local-main",
+      "then": "the local main equals GitHub's main",
+      "when": "the Hub finds it merged"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a merged PR and the project's main checked out with an uncommitted change",
+      "how_to_check": "hub test with a local bare remote",
+      "key": "lm-ac2",
+      "requirement": "local-main",
+      "then": "the local main and the uncommitted change are untouched, the project shows 'main is behind GitHub', and Update says why it cannot yet",
+      "when": "the Hub finds it merged"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a whole drive run",
+      "how_to_check": "hub test asserting the set of CLI commands the PR module can issue; drive's recorded call list",
+      "key": "nm-ac1",
+      "requirement": "never-merges",
+      "then": "none is a merge, a review approval, a base change or a branch-protection change",
+      "when": "the GitHub CLI calls the Hub made are listed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's build with an open draft PR",
+      "how_to_check": "UI test on the build card; drive screenshot of the card",
+      "key": "sh-ac1",
+      "requirement": "shown",
+      "then": "both show the PR link, 'draft' and the last-asked time; after a push refused by GitHub the card shows GitHub's error",
+      "when": "the operator opens the build card and a task"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "0b360cf5868fe9282f08bc57cc3eabef81028b113fcaa7de0e71d1e180e66ed2",
+      "FR-10": "f0f03a7de57a9b16fa7e037c06a8d65ef30c7b9d515d1a15350aab0669d1baae",
+      "FR-11": "e871b83f42199a0063d48ab44fcf8db42f62c95f71c3aef98fa5c5a527d4250e",
+      "FR-12": "04ed0034687ddbeebe740b5d975f42efbd9f7f7677e893f1a578c75973352601",
+      "FR-13": "c69ad6f31d86b2a660510c5ea32c964c12f580194c7a45175ea03b43471a1606",
+      "FR-2": "521a707953c9d0f9c3d7413d269b2087aca3e43f70c3f8fa73e37843a2a2b98a",
+      "FR-3": "4b0cb976ec4a39f2969cdcccbfb166d10c4873815ef71a5acf4451c9404f6f56",
+      "FR-4": "c22887f19b8b5a2bbe52ff2290bcfdad44db934e77cb7f42d39de94d041feea7",
+      "FR-5": "3402e1a11af0cdf1662adc5df4c674e1936ab6bdf96d4bbcd8573570613e8b28",
+      "FR-6": "eb7e7e2d50a63458c4bfea232cda992c7b3bba26c037a96d054bb6377c68c2d7",
+      "FR-7": "1f25b50ccd92b28f541936c3512a9567ecdcb1d7f5493614c98a1c3d13f00191",
+      "FR-8": "7497770752474cc1caaeb12e9315b5a49b3e63c391b5dfed3ba6024321e71901",
+      "FR-9": "222a22717cf87abc904de41d10aeeb010940ba47913b8ae5cf1f9f2b66e534f3"
+    },
+    "high_water": 13,
+    "requirements": {
+      "asks-on-actions": "FR-9",
+      "checked-before-push": "FR-3",
+      "description": "FR-6",
+      "draft-at-first": "FR-4",
+      "local-main": "FR-11",
+      "main-moved": "FR-8",
+      "merged-or-closed": "FR-10",
+      "needs-github": "FR-2",
+      "never-merges": "FR-12",
+      "off-by-default": "FR-1",
+      "ready-and-back": "FR-5",
+      "shown": "FR-13",
+      "squash-setting": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "The Hub tasks are DeveloperOpus's.",
+      "builder": "Opus for the migration, the landing queue and the outward-facing push; Developer takes the drive and the UI, so no agent is shared with the changed-files slice.",
+      "checker": "QA checks the whole slice; QA2 checks the changed-files slice.",
+      "cron": "Every five minutes, as for the checks slices.",
+      "mode": "Five tasks in a chain; a flow runs each as soon as the one before lands.",
+      "stop": "Stop when the five tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 2: outward-facing. Pushing a branch and opening a PR publishes the work on GitHub, and cannot be taken back once seen. Hence: off by default, refused without a GitHub remote and a logged-in GitHub CLI, and the acceptance drive's merge step is the operator's.\n\nMigration: adds columns only (a project's PR landing and squash settings; a build's PR number, URL, state and when it was last checked). Rollback: the columns are unused by the main and nowhere landings, so downgrading drops them with no effect on existing builds.\n\nFlow:\nCURRENT   task approved -> landing checks on merged tree -> Hub merges into main\nPROPOSED  task approved -> landing checks on build branch + task -> pushed\n            first task: draft PR opened against main\n            all tasks approved: PR marked ready; a send-back: back to draft\n          something starts from main / operator looks -> Hub asks GitHub\n            merged -> tasks landed -> local main fast-forwarded if safe, else 'behind GitHub' + Update\n            closed -> tasks not landed, branch kept\n\nThe landing queue's merge to main is replaced for these builds by a push to the build branch; checking still goes through the queue, so the two-concurrent-check limit and the known-failing list apply unchanged.",
+  "evidence": {
+    "checked": [
+      "hub/hub/builds.py:47-49: landings main and nowhere",
+      "hub/hub/api/v1/spec.py:568: the Build route accepts only main and nowhere",
+      "hub/hub/landing_queue.py:605-660: land_by_merge, where a nowhere build's task skips the merge, the place a PR build's push goes",
+      "hub/hub/db/models.py:117: a project's main_branch",
+      "No code host client anywhere in hub/hub",
+      "`gh auth status` on this machine: logged in as gutohuida with repo scope; origin is github.com/gutohuida/AgentWeave"
+    ],
+    "limits": [
+      "The drive's merged case needs the operator's merge on GitHub; until then it is unchecked",
+      "Not tried: GitHub's behaviour when a repository's rules forbid draft PRs or require signed commits"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "Developer",
+          "DeveloperOpus"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-07T00:53:17.372632+00:00",
+        "id": "build-61d1b726e18c",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-06T21:15:09.520395+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "drive-routes": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
+          },
+          "notice": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "push": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "settings": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "ui": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which branch does the PR target? Answered (operator, 2026-11-06): the project's main branch, master here, merged only on GitHub under the repository's own PR rules.",
+      "resolved": true
+    },
+    {
+      "question": "When does the Hub ask GitHub? Answered (operator, 2026-11-06): on actions, not a timer (FR asks-on-actions).",
+      "resolved": true
+    },
+    {
+      "question": "Local main after a merge? Answered (operator, 2026-11-06): fast-forward when safe, else show 'behind GitHub' with Update (FR local-main).",
+      "resolved": true
+    },
+    {
+      "question": "Checks before a push? Answered (operator, 2026-11-06): the landing-phase checks locally until slice 2.",
+      "resolved": true
+    },
+    {
+      "question": "Main moving while the PR is open? Answered (operator, 2026-11-06): the Hub merges it into the build branch; a conflict goes to the builder.",
+      "resolved": true
+    },
+    {
+      "question": "The drive's merged case? Answered (operator, 2026-11-06): one human step, merging a PR that changes only testbed/README.md.",
+      "resolved": true
+    }
+  ],
+  "problem": "A build has two landings today: merged into main by the Hub, or nowhere (hub/hub/builds.py:47-49; the Build dialog's route accepts only those two, hub/hub/api/v1/spec.py:568). Nothing in the Hub talks to a code host. A team that lands work through pull requests, with CI and a person's review on the host, cannot use AgentWeave's builds without giving that up or carrying the work across by hand.\n\nDecisions made by the operator on 2026-11-04 (roadmap design) and 2026-11-06 (this document): one PR per build; the agents' own review still happens first; squash or not is a project setting; the user's own GitHub CLI login is used; draft at the first approved task, ready when all are approved, back to draft on a send-back; never on by default; the PR targets the project's main branch and is merged only on GitHub, under that repository's own PR rules; the Hub asks GitHub on actions, not on a timer; it brings the local main forward only when that is safe; landing-phase checks still run locally until slice 2; main moving on GitHub is merged into the build branch by the Hub.",
+  "requirements": [
+    {
+      "key": "off-by-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Pushing publishes the work; it must be a choice, never a default.",
+      "statement": "A project has PR landing off until the operator turns it on in the project's settings; a build's landing can be 'pull request' only in a project that has it on, and a Build request naming it in any other project is refused with a reason that names the setting."
+    },
+    {
+      "key": "needs-github",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Found at the start, not at the first approved task after hours of work.",
+      "statement": "Turning PR landing on, and starting a build whose landing is 'pull request', are refused with a reason naming the problem when the project directory has no GitHub remote, when the GitHub CLI is not installed, or when it is not logged in."
+    },
+    {
+      "key": "checked-before-push",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Until slice 2 the PR's CI is not the gate, so the PR must only ever hold work that passed the full local check.",
+      "statement": "An approved task of a PR build is pushed only after the project's landing-phase checks pass on the build branch with the task merged in, judged against the known-failing list as any landing is; a failing task is sent back as a landing failure is today and nothing is pushed for it."
+    },
+    {
+      "key": "draft-at-first",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "When the first task of a PR build has passed its checks, the Hub pushes the build branch to the project's GitHub remote and opens a draft PR from it against the project's main branch; each later task that passes is pushed to the same branch, and the build keeps one PR."
+    },
+    {
+      "key": "ready-and-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The PR is marked ready for review once every task of the build has been pushed, and is returned to draft when any task of the build is sent back while the PR is open, until every task has been pushed again."
+    },
+    {
+      "key": "description",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "The PR's title is the spec's title, and its description names the spec document, each requirement the build serves by identifier and statement, the accepted evidence for each requirement, and each task with its state; the description is rewritten on every push and every draft or ready change."
+    },
+    {
+      "key": "squash-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Replacing a branch someone else pushed to would destroy their work.",
+      "statement": "A project with PR landing on chooses whether the build branch carries one commit per task as built or a single commit holding the whole build; with the single commit, each push replaces the branch's commit only if the branch on GitHub is still the one the Hub last pushed, and otherwise the push is refused and shown on the build."
+    },
+    {
+      "key": "main-moved",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Before each push, when the project's main branch on GitHub holds commits the build branch does not, the Hub merges GitHub's main into the build branch; a conflict sends the task being pushed back to its builder, as a merge conflict on landing does today, and nothing is pushed."
+    },
+    {
+      "key": "asks-on-actions",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The state matters only when something is about to start from main or the operator is looking (operator, 2026-11-06). A slow GitHub must not freeze turn starts.",
+      "statement": "While a build's PR is open, the Hub asks GitHub for its state when a build starts in that project, when a task branch or worktree is created in it, before each push to the PR, when the operator opens the build or the project, when the Hub starts, and when the operator presses 'check now' on the build; it does not ask on a schedule, and asking never delays a turn starting."
+    },
+    {
+      "key": "merged-or-closed",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "A PR found merged on GitHub records every task of its build as landed, naming the merge commit; a PR found closed without merging records them as not landed, and the build branch is kept on GitHub and locally."
+    },
+    {
+      "key": "local-main",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The next build must start from the merged work, and the Hub never touches a checkout holding the operator's changes.",
+      "statement": "After a PR is found merged, the Hub fetches from GitHub and moves the project's local main to GitHub's main only when that is a fast-forward and the main branch is not checked out with uncommitted changes; otherwise it shows on the project that main is behind GitHub, with an Update button that does the same fast-forward once it is safe and says why when it is not."
+    },
+    {
+      "key": "never-merges",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Teams that land through PRs keep their own rules (operator, 2026-11-06).",
+      "statement": "The Hub never merges the PR, changes its base branch, approves it, or changes the repository's branch protection or required reviews and checks; the only GitHub operations it issues are pushing the build branch and opening, editing, drafting, readying and reading its PR."
+    },
+    {
+      "key": "shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build card and each of its tasks show the PR's link and state (draft, ready, merged, closed) and when the Hub last asked GitHub; a failed push or a failed ask is shown on the build with GitHub's error."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/work-lands-through-pull-requests/spec.json",
+    "slice": "a-build-lands-as-a-pr"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A third build landing, pull request, available only in a project that has turned PR landing on",
+      "Pushing a build branch and opening, updating, drafting and readying its PR against the project's main branch, through the user's GitHub CLI login",
+      "The PR's description: spec, requirements, accepted evidence, task list",
+      "Asking GitHub for an open PR's state on actions, and recording the build's work as landed or not landed",
+      "Bringing the project's local main up to date after a merge when that is safe",
+      "Showing the PR's link and state on the build and its tasks"
+    ],
+    "non_goals": [
+      "Merging the PR, or bypassing the host's PR rules: merging happens only on GitHub",
+      "Waiting for the PR's CI as the full check (slice 2)",
+      "Review comments on the PR coming back as send-backs (slice 3)",
+      "Hosts other than GitHub (slice 4)",
+      "Switching this repository's normal builds to PR landing",
+      "Per-project tokens or a GitHub App",
+      "Webhooks: a local app cannot receive them",
+      "A timer that asks GitHub on a schedule (operator, 2026-11-06; reconsider in slices 2 and 3, which wait on CI and on reviewers)"
+    ]
+  },
+  "summary": "A build whose landing is \"pull request\" puts its approved work on one GitHub pull request against the project's main branch, instead of merging into main itself. The PR opens as a draft at the first approved task, gains each later approved task, is marked ready when every task is approved, and returns to draft when a task is sent back. Its description carries the spec, requirements and accepted evidence. The PR is merged only on GitHub, under that repository's own rules. The Hub asks GitHub for the PR's state when something is about to start from main or the operator looks (no timer), records the work as landed or not, and brings the local main up to date when that is safe. Product, opt-in per project. This repository stays on direct merges for its normal builds.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "A drive script with no Hub code: Sonnet is enough and saves Opus quota.",
+      "checker": "QA",
+      "checker_reason": "QA checks this whole slice, so it owns the drive it will run.",
+      "depends_on": [],
+      "description": "Write scripts/drive/pr_landing_drive.py against the trial Hub :8010 and this repository's GitHub remote: a two-task PR build whose tasks change only testbed/README.md, checking draft at the first task, both commits on one PR, ready, back to draft on a send-back, the description's contents, and a second PR closed unmerged; it records every GitHub CLI call the Hub made. It stops at a printed human step (merge PR 1 on GitHub, press 'check now') and then checks the tasks read landed and the local main moved. It fails today because the landing 'pull request' does not exist. Include a short guide for the human step in the script's docstring.",
+      "files": [
+        "scripts/drive/pr_landing_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "draft-at-first",
+        "ready-and-back",
+        "description",
+        "merged-or-closed",
+        "local-main",
+        "never-merges",
+        "shown"
+      ],
+      "reviewer": null,
+      "title": "PR landing acceptance drive"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "A migration that reaches the live Hub on restart: Tier 2 work goes to Opus.",
+      "checker": "QA",
+      "checker_reason": "QA checks this whole slice.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add the project's PR landing and single-commit settings and the build's PR fields (number, URL, state, last asked) with a migration; add the 'pull request' landing to the builds module and the Build route; refuse it where the setting is off; refuse turning it on or starting such a build without a GitHub remote and a logged-in GitHub CLI.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/hub/builds.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "settings",
+      "requirements": [
+        "off-by-default",
+        "needs-github",
+        "squash-setting"
+      ],
+      "reviewer": null,
+      "title": "PR landing setting and build landing choice"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "The landing queue every build uses, plus the outward-facing push: Opus.",
+      "checker": "QA",
+      "checker_reason": "QA checks this whole slice.",
+      "depends_on": [
+        "settings"
+      ],
+      "description": "In the landing queue, route a PR build's approved task to a push of the build branch instead of a merge into main, after the landing-phase checks pass on the build branch plus the task. Add a module that wraps the GitHub CLI calls (push, open draft, update description, mark ready, return to draft) and can issue nothing else. Merge GitHub's main into the build branch before each push, sending a conflict back to the builder. Implement single-commit mode with a push that only replaces what the Hub last pushed.",
+      "files": [
+        "hub/hub/landing_queue.py",
+        "hub/hub/pull_requests.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "push",
+      "requirements": [
+        "checked-before-push",
+        "draft-at-first",
+        "ready-and-back",
+        "description",
+        "squash-setting",
+        "main-moved",
+        "never-merges"
+      ],
+      "reviewer": null,
+      "title": "Approved tasks are pushed to the build's PR"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Moves the project's local main and hooks turn starts, where a freeze has happened before: Opus.",
+      "checker": "QA",
+      "checker_reason": "QA checks this whole slice.",
+      "depends_on": [
+        "push"
+      ],
+      "description": "Ask GitHub for an open PR's state on the actions FR asks-on-actions names, in the background and never delaying a turn start, with no scheduled timer; record tasks landed or not landed; fetch and fast-forward the local main when safe, else record that main is behind GitHub; add the 'check now' and 'update main' routes.",
+      "files": [
+        "hub/hub/pull_requests.py",
+        "hub/hub/worktrees.py",
+        "hub/hub/builds.py",
+        "hub/hub/main.py",
+        "hub/hub/api/v1/spec.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "notice",
+      "requirements": [
+        "asks-on-actions",
+        "merged-or-closed",
+        "local-main"
+      ],
+      "reviewer": null,
+      "title": "The Hub notices a merged or closed PR"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "UI wiring over routes the earlier tasks built: Sonnet.",
+      "checker": "QA",
+      "checker_reason": "QA checks this whole slice; QA2 is on the changed-files slice.",
+      "depends_on": [
+        "notice"
+      ],
+      "description": "Offer 'pull request' in the Build dialog only where the project has it on; add the two settings to the project's settings; show the PR's link, state, last-asked time and errors on the build card and the task drawer, a 'check now' button, and the 'main is behind GitHub' notice with Update. Refresh the committed UI bundle.",
+      "files": [
+        "hub/ui/src/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "off-by-default",
+        "shown",
+        "local-main"
+      ],
+      "reviewer": null,
+      "title": "PR landing in the app"
+    },
+    {
+      "depends_on": [],
+      "description": "scripts/drive/pr_landing_drive.py (lines ~43-47, 250, 379, 397) assumes POST /project/builds/{id}/check-now and GET /project/builds/{id} returning tasks each with `landed`. Neither exists: the check is POST /project/builds/{id}/pull-request/check (wait=true for 'check now', wait=false for opening the build), there is no GET /project/builds/{id}, and a task's landing is read from the task's landing view (hub/hub/api/v1/tasks.py:1585, landing_queue.view). As written, mc-ac1's call returns 404 and its 'not landed' check passes only because every `landed` is None; mc-ac2 cannot pass. Update the drive to call the shipped routes and to read each task's latest landing (state landed / not_landed, landed_sha) for mc-ac1, mc-ac2 and lm-ac1, and its sh-ac1 build read to a route that exists (or add the build read if BLAOP-5 needs one). Run it with AW_DRIVE_NO_HUMAN=1 to show the automated steps through mc-ac1 reach the Hub.",
+      "files": [
+        "scripts/drive/pr_landing_drive.py"
+      ],
+      "from": null,
+      "key": "drive-routes",
+      "requirements": [
+        "merged-or-closed",
+        "local-main"
+      ],
+      "reviewer": null,
+      "title": "Point the PR landing drive at the routes the build shipped"
+    }
+  ],
+  "title": "A build lands as one pull request"
+}

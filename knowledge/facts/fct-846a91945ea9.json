@@ -1,0 +1,29 @@
+{
+  "id": "fct-846a91945ea9",
+  "kind": "fact",
+  "claim": "Labels styled with text-transform: uppercase come back uppercased from innerText, so drive checks should read textContent or compare case-insensitively.",
+  "citations": [
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "Labels styled with text-transform: uppercase come back uppercased from innerText.",
+      "line_start": 9,
+      "line_end": 9
+    },
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "Drive checks should read textContent or compare case-insensitively.",
+      "line_start": 9,
+      "line_end": 9
+    }
+  ],
+  "sources": [
+    "src-a13ebcf48a62"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-03T03:26:55.834535Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

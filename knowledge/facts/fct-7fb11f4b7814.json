@@ -1,0 +1,23 @@
+{
+  "id": "fct-7fb11f4b7814",
+  "kind": "fact",
+  "claim": "The test test_checks_give_way fails on main and needs fixing, and the scheduler, pty_runner and mcp_announce tests are flaky and need stabilising.",
+  "citations": [
+    {
+      "source": "src-dc306dd182e5",
+      "quote": "Fix test_checks_give_way, which fails on main, and stabilise the flaky scheduler, pty_runner and mcp_announce tests.",
+      "line_start": 16,
+      "line_end": 16
+    }
+  ],
+  "sources": [
+    "src-dc306dd182e5"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T00:09:19.695613Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

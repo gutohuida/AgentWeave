@@ -1,0 +1,23 @@
+{
+  "id": "fct-9d5ea64e5863",
+  "kind": "fact",
+  "claim": "Symlink creation (Developer Mode) should be enabled for the Hub account so that worker checkouts get the shared dependency directories.",
+  "citations": [
+    {
+      "source": "src-8723a13b3ffc",
+      "quote": "Enable symlink creation (Developer Mode) for the Hub account, so that worker checkouts get the shared dependency directories.",
+      "line_start": 20,
+      "line_end": 20
+    }
+  ],
+  "sources": [
+    "src-8723a13b3ffc"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-04T01:26:25.016399Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "id": "fct-4ff2923362a2",
+  "kind": "fact",
+  "claim": "UI specs should list the test ids the drive relies on, the exact singular and plural wording of count sentences, and any existing performance ratchets the change must respect, such as the warm-list file-read budget and the n11 query-error ceiling.",
+  "citations": [
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "In UI specs, list the test ids the drive relies on and the exact singular and plural wording of count sentences.",
+      "line_start": 21,
+      "line_end": 21
+    },
+    {
+      "source": "src-a13ebcf48a62",
+      "quote": "State any existing performance ratchets the change must respect, such as the warm-list file-read budget and the n11 query-error ceiling.",
+      "line_start": 21,
+      "line_end": 21
+    }
+  ],
+  "sources": [
+    "src-a13ebcf48a62"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-03T03:26:56.554182Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

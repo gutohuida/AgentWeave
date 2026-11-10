@@ -1,0 +1,23 @@
+{
+  "id": "fct-1593668deaa2",
+  "kind": "fact",
+  "claim": "A long hub-tests run should not be repeated on an identical tree whose only failure is already confirmed preexisting.",
+  "citations": [
+    {
+      "source": "src-97c14a3097b5",
+      "quote": "Avoid re-running a long hub-tests on an identical tree whose only failure is already confirmed preexisting.",
+      "line_start": 19,
+      "line_end": 19
+    }
+  ],
+  "sources": [
+    "src-97c14a3097b5"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-04T23:00:20.728170Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

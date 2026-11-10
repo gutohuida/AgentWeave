@@ -1,0 +1,95 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "Decisions (operator, 2026-11-04):\n- One PR per build. The build's tasks become the PR's commits.\n- AgentWeave's own checker still reviews each task before it reaches the PR, so people on the host see only work that already passed an agent review.\n- Whether the PR's commits are squashed into one or pushed as they are is a project setting.\n- Pushing to the host publishes the work, so a project turns PR landing on explicitly; it is never a default.\n- The Hub reaches GitHub through the user's own GitHub command-line login. A per-project token or a GitHub App is later work for teams.\n- The PR opens as a draft at the build's first approved task and fills in as further tasks are approved. It is marked ready for review when every task of the build is approved.\n- A task sent back while its build's PR is open returns the PR to draft until every task is approved again, so nobody merges a half-fixed build.\n- This repository does not land through PRs for now.\n\nFlow:\nCURRENT   task approved -> Hub check on merged tree -> Hub merges into main\nPROPOSED  first task approved -> quick checks -> build branch pushed -> draft PR opened\n          later tasks approved -> pushed to the same PR\n          every task approved  -> PR marked ready -> CI + human review on the host\n            -> merged on the host   -> work recorded as landed\n            -> changes requested    -> comments become a send-back to the builder (PR back to draft)\n            -> closed unmerged      -> recorded as not landed, branch kept",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "How does the Hub authenticate to the host? Answered (operator, 2026-11-04): the user's own GitHub CLI login; tokens or a GitHub App later.",
+      "resolved": true
+    },
+    {
+      "question": "When is the PR opened? Answered (operator, 2026-11-04): as a draft at the build's first approved task, marked ready when every task is approved.",
+      "resolved": true
+    },
+    {
+      "question": "A task sent back while the PR is open? Answered (operator, 2026-11-04): the PR returns to draft until every task is approved again.",
+      "resolved": true
+    }
+  ],
+  "problem": "Most teams the operator has worked in never merge into the main branch directly. Work reaches it through a pull request that runs CI and is reviewed by a person on the code host, then merged there by a person or a merge queue. AgentWeave has only two landings for a build, merging into the main branch or landing nowhere (hub/hub/builds.py:47-49, `main` and `nowhere`), and nothing in the Hub talks to a code host. So a team that works through PRs cannot use AgentWeave's builds without giving up its own review and CI, or carrying the work across by hand.\n\nThe same gap costs the local machine: today the full test suite runs locally on every task before review and again at landing (roadmap 'Checks cost less on a machine that is in use'), while a project with CI could run it there.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A build landing setting for 'pull request', next to 'main' and 'nowhere'",
+      "One PR per build on the project's code host, carrying the spec, requirements and accepted evidence",
+      "The Hub following the PR to merged or closed and recording the work as landed or not",
+      "The PR's CI result standing in for the full local check",
+      "Human review comments on the PR returning to the builder as send-backs",
+      "A project setting for squashing or keeping commits"
+    ],
+    "non_goals": [
+      "Switching this repository to PRs (operator, 2026-11-04: not for now)",
+      "Merging the PR on the host by the Hub; merging stays a person's (or the host's merge queue's) decision",
+      "Hosting AgentWeave's review UI on the code host",
+      "Per-project tokens or a GitHub App for authentication in the first slices; the user's own GitHub CLI login is used",
+      "Supporting a host other than GitHub before the GitHub slices are proven (slice 4)"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "On a scratch GitHub repository, building a two-task spec with PR landing opens one draft PR at the first approval, marks it ready at the second, and merging it on GitHub marks both tasks landed in the app within a few minutes.",
+      "intent": "A project with PR landing on gets one PR per build on GitHub, opened as a draft at the first approved task and marked ready when every task is approved, holding the work with the spec, requirements and accepted evidence in its description, squashed or not per the project setting. A task sent back returns the PR to draft. When the PR is merged or closed on GitHub the Hub records the build's work as landed or not landed.",
+      "key": "a-build-lands-as-a-pr",
+      "title": "A build lands as one pull request"
+    },
+    {
+      "builds_after": [
+        "a-build-lands-as-a-pr"
+      ],
+      "done": "A PR whose CI fails shows the failure on the build in the app and no local landing-phase check runs for it; one whose CI passes reads as checked.",
+      "intent": "For a project whose PR runs CI, the Hub waits for CI's result on the PR instead of running the landing-phase checks locally, and shows that result on the build and its tasks.",
+      "key": "pr-ci-is-the-full-gate",
+      "title": "The PR's CI is the full check"
+    },
+    {
+      "builds_after": [
+        "pr-ci-is-the-full-gate"
+      ],
+      "done": "Requesting changes on a PR with one inline comment sends the matching task back with that comment, and the builder's fix appears as a new commit on the same PR.",
+      "intent": "When a person requests changes on the PR, the comments reach the task's builder as a send-back, the fix is checked and reviewed by the agents as usual, and it is pushed to the same PR.",
+      "key": "review-comments-come-back",
+      "title": "Requested changes come back to the builder"
+    },
+    {
+      "builds_after": [
+        "review-comments-come-back"
+      ],
+      "done": "A build lands as a merge request on a scratch GitLab project, followed to merged as on GitHub.",
+      "intent": "The same landing works on GitLab merge requests and other hosts when there is demand.",
+      "key": "other-code-hosts",
+      "title": "Other code hosts"
+    }
+  ],
+  "summary": "A project can choose that a build's approved work lands as one pull request on its code host instead of being merged into the main branch by the Hub. The PR carries the spec, its requirements and the accepted evidence. The project's CI on the PR becomes the full check, people review on the host, their requested changes come back to the agents as send-backs, and the Hub records the work as landed when the PR is merged. Product, general, opt-in per project. This repository keeps landing directly on master for now (operator, 2026-11-04).",
+  "tasks": [],
+  "title": "Work lands through pull requests"
+}

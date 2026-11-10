@@ -1,0 +1,29 @@
+{
+  "id": "fct-5b1cf2c8ecc0",
+  "kind": "fact",
+  "claim": "On Windows, a gh or claude stand-in must be a real .exe and must be probed by full path, because subprocess resolves bare names on the parent's PATH.",
+  "citations": [
+    {
+      "source": "src-4a40052b8cca",
+      "quote": "On Windows a gh or claude stand-in must be a real .exe.",
+      "line_start": 10,
+      "line_end": 10
+    },
+    {
+      "source": "src-4a40052b8cca",
+      "quote": "It must also be probed by full path, because subprocess resolves bare names on the parent's PATH.",
+      "line_start": 10,
+      "line_end": 10
+    }
+  ],
+  "sources": [
+    "src-4a40052b8cca"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T00:55:31.670315Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

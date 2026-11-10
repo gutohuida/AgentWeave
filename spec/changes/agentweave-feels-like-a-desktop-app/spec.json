@@ -1,0 +1,98 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Operator 2026-11-04: closing while work is running asks whether to stop it or keep running in the background (b); closing while idle stops the Hub. Supersedes app-lifecycle n6.",
+      "resolved": true
+    },
+    {
+      "question": "Operator 2026-11-04: updates cover pip installs and the operator's development checkout (b).",
+      "resolved": true
+    },
+    {
+      "question": "Operator 2026-11-04: update automatically on a double-click launch when nothing was running; otherwise show the Update button.",
+      "resolved": true
+    },
+    {
+      "question": "Operator 2026-11-04: the roadmap also covers Windows notifications and window memory; that is enough. No tray icon.",
+      "resolved": true
+    }
+  ],
+  "problem": "The operator (2026-11-04) is 'getting tired' of how AgentWeave runs as an app. Their words: 'I don't want to have a terminal open and then close the app, run agentweave stop, then agentweave again, then maximize it.'\n- Pinning it to the taskbar shows a Python icon. The process does set an app identity (src/agentweave/cli.py:1095-1109, 'AgentWeave.Hub'), but nothing tells Windows how to relaunch it, so a pin falls back to pythonw.exe.\n- Closing the window leaves the Hub running (app-lifecycle n6-closing-the-window-leaves-the-hub-running; cli.py:1352-1355), and stopping it takes `agentweave stop`.\n- The window does not remember being maximized: only page storage persists (cli.py:1147).\n- Nothing checks for updates or reports the running version (/health has none, hub/hub/main.py:807-814). Updating is a manual pip install -U, stop, start (docs/getting-started/installation.md:89-96), or, for the operator's checkout, a manual pull and restart.\n- Calls for the operator (asks, failures) are in-app toasts, a sound and a flashing taskbar button (hooks/useNotifications.ts, change agentweave-calls-you-with-its-own-sound). There is nothing in Windows' own notifications, and nothing at all while the window is closed.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Windows only (operator, 2026-11-04).",
+      "The app's identity in the taskbar, pinning, opening a single window, and remembering the window's size, position and maximized state.",
+      "What closing the window does to the Hub and the work it runs.",
+      "Knowing a newer version exists, and applying it from a launch or a button, for pip installs and for a development checkout.",
+      "Windows notifications for what already calls the operator in the app."
+    ],
+    "non_goals": [
+      "macOS and Linux (later, once Windows is right).",
+      "A Docker-mode desktop app.",
+      "A tray icon (operator, 2026-11-04: double-click or the pin brings the window back).",
+      "Starting with Windows.",
+      "A signed installer or Microsoft Store package, unless a slice finds it is the only way to get the taskbar identity right."
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "The operator pins AgentWeave, closes it, and starts it again from the pin, seeing AgentWeave's icon and name throughout, maximized as left. A second double-click focuses the open window. Closing while a build runs asks first, and closing while idle leaves no Hub process behind.",
+      "intent": "The window shows AgentWeave's name and icon in the taskbar, and a pinned AgentWeave reopens AgentWeave rather than Python. Double-clicking while it is open brings back the open window instead of a second one. The window reopens at the size, place and maximized state it was left in. Closing the window stops the Hub when nothing is running. When work is running, it asks: stop it, or keep running in the background. No terminal at any point.",
+      "key": "its-own-app",
+      "title": "AgentWeave is its own app on Windows"
+    },
+    {
+      "builds_after": [
+        "its-own-app"
+      ],
+      "done": "With an older version installed and nothing running, a double-click opens the newer version. With work running, the Update button appears, and pressing it after the work ends brings the window back on the newer version.",
+      "intent": "The app shows its version and knows when a newer one is published. A launch with nothing running updates and then opens. With work running, an Update button appears that says what is running and applies the update (stop, upgrade, start, reload) when the operator chooses. For pip installs.",
+      "key": "updates-itself",
+      "title": "AgentWeave updates itself"
+    },
+    {
+      "builds_after": [
+        "updates-itself"
+      ],
+      "done": "After a merge to master, the operator's app offers the update and restarts onto the new master without a terminal.",
+      "intent": "For a Hub run from a git checkout (the operator's own), 'newer' means master has commits the running Hub does not. The same launch and button rules apply: restart onto it, run its migrations, reload.",
+      "key": "updates-a-checkout",
+      "title": "A development checkout updates the same way"
+    },
+    {
+      "builds_after": [
+        "its-own-app"
+      ],
+      "done": "With the window minimized or closed to the background, an agent's ask_user shows a Windows notification with AgentWeave's name and icon; clicking it opens the app on that question.",
+      "intent": "What already calls the operator in the app (an agent's question, a failure) also appears as a Windows notification when the window is not in front, or is closed while the Hub runs in the background. Clicking it opens AgentWeave at that conversation.",
+      "key": "windows-notifications",
+      "title": "Windows notifications"
+    }
+  ],
+  "summary": "On Windows, AgentWeave behaves like an installed desktop app rather than a Python process run from a terminal. It has its own name and icon in the taskbar and can be pinned. Double-clicking opens it, or brings back the window already open, at the size and place it was left. Closing it stops the Hub, after asking if work is still running. It updates itself: automatically at launch when nothing is running, otherwise through an Update button. That applies to pip installs and to the operator's own development checkout. It tells the operator through Windows notifications when it needs them and the window is not in front.",
+  "tasks": [],
+  "title": "AgentWeave feels like a desktop app"
+}

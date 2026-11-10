@@ -1,0 +1,379 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "Two checkouts of this change and the entry point pointed at a small, fixed test selection that takes about 20 seconds",
+      "how_to_check": "Acceptance drive, written and failing before the build: scripts/drive/d1104_one_suite_at_a_time.py starts both and compares the start and end timestamps each prints.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-two-runs-queue",
+      "requirement": "agentweave-s-checks-fit-a-busy-machine-one-full-suite-at-a-time",
+      "then": "Their test phases do not overlap in time (the second starts after the first prints its end), both exit 0, and the second's output says it waited. Before the change, running the same selection twice overlaps.",
+      "when": "Both are started within one second of each other"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A selection with one failing test",
+      "how_to_check": "Test of the entry point with a stub selection.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-result-unchanged-by-wait",
+      "requirement": "agentweave-s-checks-fit-a-busy-machine-one-full-suite-at-a-time",
+      "then": "It exits non-zero and names the failing test, exactly as when run alone",
+      "when": "It runs second, after waiting for the lock"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A run holding the lock that is killed (process terminated, no cleanup)",
+      "how_to_check": "Test that starts a holder, kills it, and times the next run's acquisition.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-dead-holder-taken-over",
+      "requirement": "agentweave-s-checks-fit-a-busy-machin-dead-holder-does-not-block",
+      "then": "The new run takes the lock within 10 seconds and completes",
+      "when": "A new run starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A run holding the lock",
+      "how_to_check": "Covered by the acceptance drive's captured output.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-wait-printed",
+      "requirement": "agentweave-s-checks-fit-a-busy-machine-waiting-is-visible",
+      "then": "Its first line says it is waiting, naming the holder's process id and start time, and a later line says it has started",
+      "when": "A second run starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The entry point's worker choice fed a reading of 80% idle on 16 logical CPUs, then 30% idle",
+      "how_to_check": "Unit test of the choice with the CPU reading injected.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-workers-from-idle",
+      "requirement": "agentweave-s-checks-fit-a-busy-machine-workers-fit-the-load",
+      "then": "It chooses 16, then 8, and prints each number with the idle share; at 30% idle on 2 logical CPUs it chooses 2",
+      "when": "It chooses"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The sweep set as delivered",
+      "how_to_check": "Reviewer reads the list against each file and records any removal in the review.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-sweep-set-audited",
+      "requirement": "agentweave-s-checks-fit-a-busy-machine-sweep-set-named",
+      "then": "Every file scans the repository or UI source, and none is there only because the heuristic matched",
+      "when": "QA reads each listed file"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A new test file under hub/tests that globs hub/ui/src and is not in the sweep set, and separately a sweep set naming a deleted file",
+      "how_to_check": "Test of the currency check against a temporary tree.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-missing-sweep-file-fails",
+      "requirement": "agentweave-s-checks-fit-a-busy-machine-sweep-set-stays-current",
+      "then": "It fails in both cases, naming the file",
+      "when": "The currency test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "This repository at the change's commit on an otherwise idle machine",
+      "how_to_check": "Timed run of the command, output recorded with the evidence.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-sweep-under-two-minutes",
+      "requirement": "agentweave-s-checks-fit-a-busy-machine-sweep-check-fast",
+      "then": "It finishes within 2 minutes",
+      "when": "The sweep check's command runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The repository's agent guidance after the change",
+      "how_to_check": "Reviewer reads the changed guidance; a test asserts the guidance names the entry point.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-guidance-says-so",
+      "requirement": "agentweave-s-checks-fit-a-busy-mach-agents-run-what-they-changed",
+      "then": "It tells builders and reviewers to run the tests for changed files plus the sweep set, leave the full suite to the Hub, and use the entry point for any full run",
+      "when": "It is read where agents load testing instructions"
+    },
+    {
+      "checked_by": "operator",
+      "given": "The delivered settings text",
+      "how_to_check": "The operator applies the settings; an agent reads the next check run's results with mode=ro.",
+      "key": "agentweave-s-checks-fit-a-busy-machine-settings-applied",
+      "requirement": "agentweave-s-checks-fit-a-busy-machine-settings-delivered",
+      "then": "The task's checks show the sweep check finishing first, and hub-tests' output shows the entry point's worker line; the landing still runs hub-tests",
+      "when": "The operator pastes it into this project's check settings on :8000 and the next task completes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "Today's master and the steady-set list",
+      "how_to_check": "py -3.11 scripts/drive/d1105_steady_under_load.py --repeat 10 --load, on master before the build",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migra-drive-fails-today",
+      "requirement": "hub-tests-pass-on-a-busy-machine-and-the-migra-steady-under-load",
+      "then": "It reports at least one failing test id, with how often it failed. If it reports none, the drive is not yet a measurement and the build stops to say so.",
+      "when": "The acceptance drive runs the steady set 10 times with every logical CPU kept busy"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The built change",
+      "how_to_check": "py -3.11 scripts/drive/d1105_steady_under_load.py --repeat 10 --load, then without --load",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migr-drive-passes-after",
+      "requirement": "hub-tests-pass-on-a-busy-machine-and-the-migra-steady-under-load",
+      "then": "0 failures in both, and the output lists every steady-set id with 10 of 10 passes",
+      "when": "The same drive runs, under load and then idle"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The list and the 'Fix flaky test' task titles on :8000 (mode=ro) filed 2026-10-28 to 2026-11-04",
+      "how_to_check": "Read-only query of tasks.title on the operator's database against the list",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-mi-list-matches-records",
+      "requirement": "hub-tests-pass-on-a-busy-machine-and-the-migrat-steady-set-named",
+      "then": "Every test id in those titles is in the list, and every entry names its source",
+      "when": "They are compared"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A 250 ms blocking call injected on the loop in each guarded path",
+      "how_to_check": "The drive's --inject-freeze mode",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migr-freeze-still-fails",
+      "requirement": "hub-tests-pass-on-a-busy-machine-and-the-still-catches-a-freeze",
+      "then": "Each fails every time",
+      "when": "Each never-freezes test runs 10 times idle and 10 times under load"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The six assertions named under evidence",
+      "how_to_check": "Read the six sites; drive output",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-mig-wall-clock-reviewed",
+      "requirement": "hub-tests-pass-on-a-busy-machine-a-wall-clock-asserts-load-proof",
+      "then": "Each is rewritten, or carries the comment, and is in the steady set the drive runs",
+      "when": "The change is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The diff",
+      "how_to_check": "git diff master -- hub/tests | grep for those markers and for removed 'def test_' lines",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migrati-nothing-skipped",
+      "requirement": "hub-tests-pass-on-a-busy-machine-and-t-no-test-weakened-silently",
+      "then": "None appear, except merges listed in the evidence with their replacement",
+      "when": "It is searched for removed test functions, skip, xfail, flaky or rerun markers in the steady set's files"
+    },
+    {
+      "checked_by": "agent",
+      "given": "A steady-set test that still fails under load after the change",
+      "how_to_check": "Read FINDINGS.md and the test's diff",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migrat-real-stall-filed",
+      "requirement": "hub-tests-pass-on-a-busy-machine-an-real-stall-becomes-a-finding",
+      "then": "A finding naming that code path is in scripts/drive/FINDINGS.md and the test is unchanged",
+      "when": "Its failure is traced to Hub code blocking the loop"
+    },
+    {
+      "checked_by": "agent",
+      "given": "master and the built change, on the same machine in one session",
+      "how_to_check": "That command twice, summing the durations lines",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migratio-migration-time",
+      "requirement": "hub-tests-pass-on-a-busy-machine-and-the-migra-migrations-faster",
+      "then": "The summed durations of the change are at most 40% of master's",
+      "when": "py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_migration_*.py -q -p no:cacheprovider -n 4 --durations=0 runs on each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "The revisions exercised before and after",
+      "how_to_check": "List the revisions each test upgrades or downgrades to, before and after; break one downgrade in a scratch worktree and run the family",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migr-migration-coverage",
+      "requirement": "hub-tests-pass-on-a-busy-machine-and-th-migrations-coverage-kept",
+      "then": "The same revisions are exercised after as before, and the broken downgrade fails at least one test",
+      "when": "One revision's downgrade is broken deliberately in a scratch copy"
+    },
+    {
+      "checked_by": "agent",
+      "given": "An idle machine",
+      "how_to_check": "py -3.11 scripts/checks/hub_suite.py --durations=0 on each, summed",
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migration-te-suite-time",
+      "requirement": "hub-tests-pass-on-a-busy-machine-and-the-migrat-suite-not-slower",
+      "then": "The change's summed test-seconds are lower",
+      "when": "The full suite runs on master and on the change"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "9c63c30fc13f1a36e9c74f91ec6c79cc5ea8f754503209001a456e6e61ede043",
+      "FR-10": "85db352d6e8a853a06314fac5cbddb71dad220b6546c47e97f6ddf5a18ae45a1",
+      "FR-11": "ca56863f6784396fec9b84f526feca17db70224db6bdc17aee73c12a7393f8b7",
+      "FR-12": "675259d4fa7b1e96c111ebd79131b54cf24478a718fba9cf98575effe5ae0f1c",
+      "FR-13": "d1a267f9d25fa4db5c772a5a88c28a825fa13330c10138a22a1259e0c8af5eec",
+      "FR-14": "8690c10716da77bc106bf136971734e92e3708689d89819d734fd39732f24478",
+      "FR-15": "5dca8f143b979ed3e881d0d30195686ea2c0c2529d563e1f856b42dac1b62c27",
+      "FR-16": "b7a5b903cdba8d2655038cdaf02170c003bdfe7bc94662e67f2d8c80cf0bbd94",
+      "FR-17": "35c285e27fe5e96143ebb9af098202a1432c242ac6f4b97eeaa433236bc262e1",
+      "FR-18": "9a760c77c40b15f4477185f8958037c54118c5cc66a268ebe87edc6736eda9f1",
+      "FR-2": "02dc1a4fbaf86d166880ba2bdd4148d8fa39288a5fba45917a148127a8debc13",
+      "FR-3": "96bddd5f27244f617beb554dd111eb614ad9614773abe6c82e012371d1ee32cb",
+      "FR-4": "a6827fa0d067fad85d249320d88b925b466f89dd24536926b2069022f06145dc",
+      "FR-5": "dabc52ae407f66bf8c558bc6b6a2737d23bd40b578197c38b5514cd2f24d98db",
+      "FR-6": "c10b208a8baff3ee446289bed25d796441e4de52ba3ac110ef127419521652d5",
+      "FR-7": "fb8bc3d45964037dd97f8a21c0e2d86b1e6ab76eb4d0655a976cf2d3a324897c",
+      "FR-8": "3d7243dcd8f3d2797b406c695ca361f51d543701594a57b8b287742aa12f3706",
+      "FR-9": "af5e4f42d17b746cd18f74eebbcff584f10d2a4e229ce2a9f3eecef1d4a115a2"
+    },
+    "high_water": 18,
+    "requirements": {
+      "agentweave-s-checks-fit-a-busy-mach-agents-run-what-they-changed": "FR-8",
+      "agentweave-s-checks-fit-a-busy-machin-dead-holder-does-not-block": "FR-2",
+      "agentweave-s-checks-fit-a-busy-machine-one-full-suite-at-a-time": "FR-1",
+      "agentweave-s-checks-fit-a-busy-machine-settings-delivered": "FR-9",
+      "agentweave-s-checks-fit-a-busy-machine-sweep-check-fast": "FR-7",
+      "agentweave-s-checks-fit-a-busy-machine-sweep-set-named": "FR-5",
+      "agentweave-s-checks-fit-a-busy-machine-sweep-set-stays-current": "FR-6",
+      "agentweave-s-checks-fit-a-busy-machine-waiting-is-visible": "FR-3",
+      "agentweave-s-checks-fit-a-busy-machine-workers-fit-the-load": "FR-4",
+      "hub-tests-pass-on-a-busy-machine-a-wall-clock-asserts-load-proof": "FR-13",
+      "hub-tests-pass-on-a-busy-machine-an-real-stall-becomes-a-finding": "FR-15",
+      "hub-tests-pass-on-a-busy-machine-and-t-no-test-weakened-silently": "FR-14",
+      "hub-tests-pass-on-a-busy-machine-and-th-migrations-coverage-kept": "FR-17",
+      "hub-tests-pass-on-a-busy-machine-and-the-migra-migrations-faster": "FR-16",
+      "hub-tests-pass-on-a-busy-machine-and-the-migra-steady-under-load": "FR-11",
+      "hub-tests-pass-on-a-busy-machine-and-the-migrat-steady-set-named": "FR-10",
+      "hub-tests-pass-on-a-busy-machine-and-the-migrat-suite-not-slower": "FR-18",
+      "hub-tests-pass-on-a-busy-machine-and-the-still-catches-a-freeze": "FR-12"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "agentweave-s-checks-fit-a-busy-machine-one-full-suite-at-a-time",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two overlapping full suites crashed after ~45 minutes on 2026-11-03 and took a median 19.2 minutes against 11.8 alone, so running them one after the other finishes both sooner.",
+      "statement": "On this machine, at most one full Hub test suite started through this repository's suite entry point runs at a time, whoever started it (a check run, an agent, or the operator). A second one waits until the first ends and then runs. It is not refused, and its result is reported as if it had not waited."
+    },
+    {
+      "key": "agentweave-s-checks-fit-a-busy-machin-dead-holder-does-not-block",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A check run killed at its time limit or by a Hub stop must not leave the machine unable to run the suite.",
+      "statement": "When the run holding the one-at-a-time lock has ended without releasing it (killed, crashed, or its machine restarted), the next run takes the lock within 10 seconds of starting, without anyone removing anything by hand."
+    },
+    {
+      "key": "agentweave-s-checks-fit-a-busy-machine-waiting-is-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A suite run that is waiting for the lock prints, as its first output, that it is waiting and which run holds the lock (process id and when it started), and prints again when it starts. The wait is visible in the check run's output on the task."
+    },
+    {
+      "key": "agentweave-s-checks-fit-a-busy-machine-workers-fit-the-load",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The machine is shared with the operator's own work. Fewer workers on a busy machine finish more reliably than the full count fighting for CPU. Thresholds agreed by the operator on 2026-11-04.",
+      "statement": "The suite chooses its number of test workers when it starts, from how idle the machine's CPUs are, and prints the number and the idle share it read. When at least half the CPU capacity is idle it uses as many workers as there are logical CPUs. When less than half is idle it uses at most half of that, and never fewer than 2."
+    },
+    {
+      "key": "agentweave-s-checks-fit-a-busy-machine-sweep-set-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The repository holds a named list of the Hub tests that scan the whole repository or the UI source rather than importing the code they guard (the sweep set), each file in it audited by hand to belong there."
+    },
+    {
+      "key": "agentweave-s-checks-fit-a-busy-machine-sweep-set-stays-current",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A list nobody maintains rots silently, and a missing sweep test lets a UI-only change pass the fast check and fail only at landing.",
+      "statement": "A test fails, naming the file, when a Hub test file reads the repository or UI source by walking or globbing paths and is not in the sweep set, or when the sweep set names a file that does not exist."
+    },
+    {
+      "key": "agentweave-s-checks-fit-a-busy-machine-sweep-check-fast",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The sweep set runs as its own check that finishes within 2 minutes on an otherwise idle machine, so a sweep-test failure is reported within about two minutes of a task's completion instead of after the full suite."
+    },
+    {
+      "key": "agentweave-s-checks-fit-a-busy-mach-agents-run-what-they-changed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Agents' own full-suite runs in their checkouts were a large share of the contention; the Hub's check runs the full suite anyway.",
+      "statement": "This repository's guidance for agents tells builders and reviewers to run the tests for the files they changed plus the sweep set, to leave the full suite to the Hub's check, and, if they do run the full suite, to run it through the entry point so it takes its turn."
+    },
+    {
+      "key": "agentweave-s-checks-fit-a-busy-machine-settings-delivered",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build delivers the exact check settings for this project (the hub-tests command through the entry point, and the sweep check marked fast) as text the operator can paste into the check settings, and the full suite still runs on every landing."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migrat-steady-set-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The drive measures from this list, so the list is the definition of 'steady' and cannot drift from what is measured.",
+      "statement": "The repository holds a list of the steady set: every test in the never-freezes family, every test named by a 'Fix flaky test' task filed from 2026-10-28 to 2026-11-04, and the six wall-clock assertions named under evidence. Each entry gives its test id and the record that put it there."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migra-steady-under-load",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today these tests fail under load for reasons the work did not cause, and each failure holds a landing batch.",
+      "statement": "Every test in the steady set passes 10 consecutive repetitions while every logical CPU is kept busy for the whole run, with 0 failures, and also passes 10 consecutive repetitions on an otherwise idle machine."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-still-catches-a-freeze",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A guard made steady by making it unable to fail is worse than a flaky one: it reports safety that is not there.",
+      "statement": "For each never-freezes test, when a blocking call of at least 250 ms is placed on the Hub's event loop in the path that test guards, the test fails on every one of 10 repetitions, idle and under load."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-a-wall-clock-asserts-load-proof",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "None of the six wall-clock assertions named under evidence fails because the machine is slow: each is rewritten so its verdict does not depend on how long real work takes, or it stays, with a comment beside it saying why load cannot move the time it measures, and passes the under-load repetitions."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-and-t-no-test-weakened-silently",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "No test in the steady set is deleted, skipped, marked expected-to-fail or retried to make it pass. A test merged into another is listed in the change's evidence beside the test that now catches what it caught."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-an-real-stall-becomes-a-finding",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Non-goal: product fixes. The test's job is to report a real stall.",
+      "statement": "When a steady-set test fails under load because the Hub code it guards really does block the loop or hold a lock, the test is left failing and a finding naming the code path is recorded in scripts/drive/FINDINGS.md, rather than the test being changed to pass."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migra-migrations-faster",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured 2026-11-05: 580 test-seconds, 154 s wall at -n 4, about 9% of a full suite.",
+      "statement": "The migration family takes at most 40% of its baseline test-seconds (sum of setup, call and teardown durations), with the baseline and the new figure measured by the same command, on the same machine, in the same session."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-and-th-migrations-coverage-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every migration revision whose upgrade or downgrade the family exercises today is still exercised, and a downgrade deliberately broken in one revision still fails at least one migration test."
+    },
+    {
+      "key": "hub-tests-pass-on-a-busy-machine-and-the-migrat-suite-not-slower",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The full Hub suite's total test-seconds on an idle machine is lower after the change than before, measured the same way."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Development test suite"
+}

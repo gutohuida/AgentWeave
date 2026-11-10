@@ -119,9 +119,9 @@
       "FR-1": "38eb7cb723184362d00ad2786fd9abb6eacca18918edf82dca8b963c0137f231",
       "FR-2": "e8e3087e7b09ab2967c04f063817a38fbd52553f401f8db5b6117eb2f0086fa7",
       "FR-3": "3f6b651850a9b244044209e4a3ef4647e47f606443faabd3c443335816b1988d",
-      "FR-4": "5aaded6000404704d98e77c92501050cab46fc6f0aff9086b38b27e83a9ff340",
-      "FR-5": "245689e96fb3024603000eab1a2719a61ea92dab9b11d70166ffc74ffbb3accd",
-      "FR-6": "da8f793a367296b25d79faf76a975323f603f31f7ee08e80f324c4e5914d15a2",
+      "FR-4": "c4713502226031839edfb68890b10b9c9c01104a5df7e9e9fe8262886a1ce032",
+      "FR-5": "c641658a5612fec1dfc16d02bfee190c80767060745e68586e1bb168438568c8",
+      "FR-6": "7679f53e7c3fab10702875af517c06fdbfab6b01edb2422fc843cd47279b377b",
       "FR-7": "1a39b2b80cf8839f0aa37cf64076631ae4e73d54bdb2e0dadf538463d496d5e1",
       "FR-8": "f87995f5822158fe9d39cce1d1ce793e6e8466e644d25d101821ae9a1aac6cb1",
       "FR-9": "7d985d52352dae344a90aacec567d0be6dc007fd528a34c26a1a29ff629c71d2"
@@ -151,7 +151,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -165,21 +164,21 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "The database is the only source; there is no local-file mirror and no revision history.",
-      "statement": "The Hub SHALL store one instructions text per project in `project_instructions`, return an empty string when none is stored, and replace it in place on `PUT`, accepting the empty string as a deliberate clear."
+      "statement": "The Hub SHALL store one instructions text per project in `project_instructions`, return an empty string when none is stored, and replace it in place on `PUT`, accepting the empty string as a deliberate clear. While the project's AGENTS.md is its instructions, the row SHALL be kept and not read, so switching AGENTS.md off returns to it unchanged."
     },
     {
       "key": "hub-prepends-instructions-to-charter-content",
       "modal": "SHALL",
       "party": null,
       "rationale": "Project-wide rules frame every role, so they come first.",
-      "statement": "When a project's instructions are non-empty, the Hub SHALL place them before the charter content in `GET /agents/context` (separated by a rule) and as a `## Project Instructions` section before the `## Charter` section of an agent's full context; when they are empty, the charter SHALL be returned unchanged."
+      "statement": "When a project's instructions are non-empty, the Hub SHALL place them before the charter content in `GET /agents/context` (separated by a rule) and as a `## Project Instructions` section before the `## Charter` section of an agent's full context; when they are empty, the charter SHALL be returned unchanged. While the project's AGENTS.md is its instructions, a runner whose CLI reads AGENTS.md itself SHALL get a pointer to the file instead of a second copy, and every other runner SHALL get the file's text."
     },
     {
       "key": "hub-ui-provides-instructions-editor",
       "modal": "SHALL",
       "party": null,
       "rationale": "The operator edits project-wide guidance in the app, where every other project setting lives.",
-      "statement": "Once the selected project's instructions have been read, the Instructions screen SHALL present them in a markdown textarea with a Save control and a notice that changes take effect when agents start a new session."
+      "statement": "Once the selected project's instructions have been read, the Instructions screen SHALL present them in a markdown textarea with a Save control and a notice that changes take effect when agents start a new session. While the project's AGENTS.md is its instructions, the screen SHALL show and save the file, and a save SHALL commit AGENTS.md alone on the main branch."
     },
     {
       "key": "an-unread-instructions-editor-is-not-presented-as-the-projec",

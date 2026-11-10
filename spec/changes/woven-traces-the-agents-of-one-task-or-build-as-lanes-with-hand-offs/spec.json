@@ -1,0 +1,402 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a task with three runs, a task with none, and a build over the first task",
+      "how_to_check": "UI test of the three entry points; the acceptance drive clicks each on a live trial Hub.",
+      "key": "ac-open",
+      "requirement": "open-from-task-and-build",
+      "then": "the first task, the build and the narrowed Traces view each open the same woven view; the task with no runs offers none",
+      "when": "the operator opens the drawer of each task and the card of the build and the Traces view narrowed to the first task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build in which Developer ran 3 times, QA twice and Architect once, Architect first",
+      "how_to_check": "Route test and model test fed runs in the order the route returns them, failing if that order is reversed; drive compares block counts to the runs listed by /traces?build_id.",
+      "key": "ac-lanes",
+      "requirement": "lane-per-agent",
+      "then": "three lanes appear in the order Architect, Developer, QA, with 1, 3 and 2 blocks, each run in its own agent's lane only",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a 10-minute run that is still running, and two runs of one agent overlapping by 2 minutes",
+      "how_to_check": "Model test of stacking; UI test; screenshot in the drive, dark and light.",
+      "key": "ac-blocks",
+      "requirement": "runs-as-blocks",
+      "then": "the running block ends at the right edge and is marked open, the overlapping runs sit in two stacked rows of their lane, and the selection opens that run's trace drawer",
+      "when": "the view is drawn and the operator selects the first block"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two runs 9 hours apart on different lanes and a third 5 minutes after the second",
+      "how_to_check": "Model test sharing the conversation-trace axis function; screenshot in the drive.",
+      "key": "ac-fold",
+      "requirement": "axis-shared-and-folded",
+      "then": "one break labelled '9h 0m later' crosses every lane between the first and second, and the second and third are drawn to scale",
+      "when": "the view is drawn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run of Developer that sent QA a message with subject 'ready' which started a QA run",
+      "how_to_check": "Route test over a message with created_by_run_id and the queue entry delivered_in_run_id; drive sends a real message between two Haiku agents on a task.",
+      "key": "ac-recorded",
+      "requirement": "handoff-recorded",
+      "then": "a link labelled 'message: ready' runs from Developer's run block to QA's run block",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow build in which Developer's run completed a task and the flow then started a QA review run, and QA sent it back and the flow started Developer's next run",
+      "how_to_check": "Route test over transitions and flow-origin queue entries; drive runs a two-task flow with Haiku agents and reads both links.",
+      "key": "ac-flow",
+      "requirement": "handoff-through-the-flow",
+      "then": "a link 'review (from task history)' joins Developer's run to QA's, and a link 'send-back (from task history)' joins QA's run to Developer's next run, both marked derived",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run the operator started from the chat, and a run started by a checkpoint carry-over with an earlier conversation's run on the same task",
+      "how_to_check": "Route test; UI test for the labels.",
+      "key": "ac-operator",
+      "requirement": "operator-starts-have-no-link",
+      "then": "the first reads 'from you' with no link; the second reads 'continued' and is linked from the earlier conversation's last run",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow-started run where two transitions by different runs both precede it equally, and a run with no delivered queue entry",
+      "how_to_check": "Route test with the two ambiguous histories; a test that fails if the route picks one.",
+      "key": "ac-untraced",
+      "requirement": "untraced-is-shown-as-untraced",
+      "then": "both read 'start not traced' and no link ends at either",
+      "when": "the view is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build of 40 runs, one whose trace was cleared",
+      "how_to_check": "UI test counting requests to the weave route and the by-run trace route.",
+      "key": "ac-one-read",
+      "requirement": "one-read",
+      "then": "opening makes one request and no span request; each opened block makes one span request; the cleared one says it has no trace",
+      "when": "the operator opens the view, then opens two blocks including the cleared one"
+    },
+    {
+      "checked_by": "agent",
+      "given": "runs whose recorded times would place a hand-off's receiver before its sender (built in a test fixture with skewed timestamps; the Hub's own clocks do not produce this)",
+      "how_to_check": "Route test with skewed timestamps; model test of lane order.",
+      "key": "ac-order",
+      "requirement": "order-per-lane",
+      "then": "no backwards link is drawn and the receiver reads 'start not traced'; the runs in each lane are in start order",
+      "when": "the view is opened"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "d11bb178cbe7299461c49a9c97c3c799c5d39022366836b401a96ecb9d57fd64",
+      "FR-10": "154318b0999ce82a39f17f18d13aa39fe61e59c31b2030771c65d1b7ac46c529",
+      "FR-2": "3305581304c562345ba58d514f3956489bd5199929e1e46ff88a23ff5c2ceeb8",
+      "FR-3": "3d16ab5682964815d32b23aa0908782f982e0453dde5631f8c2ce50c3fdc6b98",
+      "FR-4": "0633e45b447c61e1c2dd6fd7c1977e746d7192f3f5fb52ec4c0678188f7060ad",
+      "FR-5": "7a855890f43c6828debd7c89b722e5ff51c784c3a29f0d4a3d84fc532b59d113",
+      "FR-6": "9fea59929d7281acf85eefc9d14f97823495209a7f1546083d8d553cd5c2758c",
+      "FR-7": "820d98b74ae1d63afeab005e3526a7c5d69d202d14c6db391e590c3baedeb64e",
+      "FR-8": "aebca4601965105f5adee0c4145ff1caaf1e7c78a9b866574c2fe949a224e589",
+      "FR-9": "55b9614bff550e106e003a0aa89e0bdca5e8b3c725a21ca1e31a982fb911c200"
+    },
+    "high_water": 10,
+    "requirements": {
+      "axis-shared-and-folded": "FR-4",
+      "handoff-recorded": "FR-5",
+      "handoff-through-the-flow": "FR-6",
+      "lane-per-agent": "FR-2",
+      "one-read": "FR-9",
+      "open-from-task-and-build": "FR-1",
+      "operator-starts-have-no-link": "FR-7",
+      "order-per-lane": "FR-10",
+      "runs-as-blocks": "FR-3",
+      "untraced-is-shown-as-untraced": "FR-8"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperSonnet2",
+    "builder": "DeveloperSonnet2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Sonnet is enough for a read route and UI over existing records; builds after conversation-trace, so DeveloperSonnet2 is free by then.",
+      "builder": "Same as the agent; the drive tasks name Developer.",
+      "checker": "QA2 knows the traces routes and components from conversation-trace.",
+      "cron": "Every five minutes picks up the next task soon after the previous is approved.",
+      "mode": "The drive starts first; the route and the view wait for it, and the final drive run waits for all three; a flow runs them.",
+      "stop": "Nothing to do once its tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 1: a read route and UI over records that exist. No migration, no Hub-restart hazard. The UI bundle is committed with the build, so the wiring commit is timed (CLAUDE.md: a bundle reaches the live app on reload).\n\nDecisions (author's choices, to confirm on review):\n- Reuses 'conversation-trace' (spec/changes/a-trace-of-a-whole-conversation): one axis shared by all rows, idle stretches over 20 minutes folded into marked breaks, axis labels that would overlap dropped into hover text, 'from you' for operator-started runs, spans read only when a run is opened, the run detail drawer. Same components where they fit (ConversationTrace.tsx, conversationTraceModel.ts); no second axis implementation.\n- Lanes are agents, ordered by their first run; a run is a block on its agent's lane. Concurrent runs of one agent (different conversations) stack inside the lane rather than overlap.\n- A hand-off link is drawn from the sending run's block (or, for a derived one, the run that moved the task) to the receiving run's block, labelled with its kind.\n- Hand-offs are READ where recorded (message, agent request, divergence response, operator) and DERIVED where the Hub names no sender (flow hand-out, review after completion, send-back). A derived link says so in its label and hover. Recording the sender on the flow's queue entry would be a migration (Tier 2) and is left to the operator (open question).\n- One route returns the lanes' runs and the hand-offs together, so the view needs one request, and hand-off derivation lives on the Hub where it can be tested, not in the browser.\n\nCONTRACT (names the tasks, tests and the drive share; grounded in hub/hub/api/v1/traces.py, hub/ui/src/api/traces.ts and conversationTraceModel.ts):\n- No new setting, no new event and no SSE message: the view is a read. Nothing is migrated.\n- Route: GET /api/v1/projects/{project_id}/traces/weave, query `task_id` (database or readable id, resolved with readable_ids.resolve as _run_ids does) or `build_id`; exactly one, otherwise 422; unknown task or build 404. It MUST be declared in hub/hub/api/v1/traces.py above `@router.get(\"/{trace_id}\")` (line 299), or 'weave' is read as a trace id. Module: hub/hub/woven_traces.py, `async def weave(session, project_id, *, task_id=None, build_id=None) -> dict`. The build's runs come from work_tally.tally(session, project_id, build_id=...)[\"build_runs\"][build_id], the same set the card counts and /traces?build_id selects.\n- Response: {\"task_id\": str|null, \"build_id\": str|null, \"lanes\": [{\"agent\": str, \"is_lead\": bool, \"runs\": [Run]}], \"handoffs\": [Handoff]} in lane order (first run start, then agent name). Run is the row shape of ConversationRun in conversationTraceModel.ts (run_id, trace_id, agent, model, initiator, run_status, status, status_message, start_time, end_time, ended, cost_usd_micros, input_tokens, output_tokens, model_calls, tool_calls, tool_errors, wait_seconds, span_count) plus \"start\": {\"kind\": \"operator\"|\"recorded\"|\"derived\"|\"continued\"|\"untraced\", \"label\": str}. It is built from the Run row, with trace_id = traces.trace_id_for_run(run_id), so a run whose spans were cleared is still a block (span_count 0) and opens to the by-run 404 line 'This run has no trace'. Runs within a lane are in start order.\n- Handoff: {\"from_run_id\": str|null, \"from_agent\": str|null, \"to_run_id\": str, \"kind\": \"message\"|\"request\"|\"retry\"|\"review\"|\"send-back\"|\"next step\"|\"continued\", \"basis\": \"recorded\"|\"derived\", \"subject\": str|null, \"label\": str}. from_run_id is null only for a sender outside the task or build (from_agent names it). 'recorded' reads Message.created_by_run_id and InboundQueueEntry.origin_agent/delivered_in_run_id/message_id, and Run.divergence_source_run_id; 'derived' reads TaskTransition.run_id/actor_agent for the one transition that precedes a flow ('job' origin) queue entry on the same task.\n- Task status path the drive walks (CLAUDE.md lifecycle): pending -> assigned -> in_progress -> completed -> under_review -> revision_needed -> assigned -> in_progress -> completed -> under_review -> approved. 'review' links come from the completed transition, 'send-back' from revision_needed or rejected.\n- UI: `useWovenTrace(projectId, scope)` in hub/ui/src/api/traces.ts (scope is {taskId} or {buildId}), query key ['project', projectId, 'traces', 'weave', scope] (under the prefix clearing traces already invalidates); model hub/ui/src/components/traces/wovenTraceModel.ts calling buildAxis and keepLabels from conversationTraceModel.ts; component hub/ui/src/components/traces/WovenTrace.tsx; block selection opens the existing TraceDrawer through the existing useRunTrace (by-run) hook.\n- Guards: no existing test or guard has to be relaxed. The ones the change meets are the `/{trace_id}` catch-all above and hub/tests/test_ui_staleness.py (source and committed bundle must agree). Tests feed the route's own order (CLAUDE.md).\n- Mock: this document has no mock-first task. If open question 1 is resolved as (a), the mock (hub/ui/mock, real components on recorded fixtures) MUST be committed on the base branch before the 'view' task starts, and the view task's description is then read as wiring the mock, not redrawing it.\n\nCURRENT   task -> story column / Traces rows -> open one run\nPROPOSED  task or build -> 'Weave' -> lanes on one axis, runs as blocks, hand-offs linking lanes -> open a block -> that run's trace",
+  "evidence": {
+    "checked": [
+      "hub/hub/db/models.py:1514-1560 Run columns (agent, task_id, conversation_id, initiator operator|autonomous, divergence_source_run_id).",
+      "hub/hub/db/models.py:630-715 InboundQueueEntry carries origin_type, origin_agent, task_id, review_task_id, job_id, message_id, delivered_in_run_id; no delete of entries found by grep.",
+      "hub/hub/api/v1/messages.py:98-107 and 379-380: a message records the sender's run, and its queue entry the origin agent.",
+      "hub/hub/api/v1/agents.py:3019-3044: an agent request records created_by_run_id and origin_agent.",
+      "hub/hub/builds.py:1385-1392 and hub/hub/scheduler.py:5076: flow and job hand-outs queue origin_type 'job' with job_id and no agent or run.",
+      "hub/hub/db/models.py:914-980 TaskTransition: run_id, actor_agent, origin, job_id.",
+      "hub/hub/api/v1/traces.py:41-70: the runs route already filters by task_id and build_id; :299 the /{trace_id} catch-all the new route must precede; :282 /by-run/{run_id}.",
+      "hub/ui/src/components/traces/conversationTraceModel.ts:13-33 ConversationRun, :88 buildAxis, :184 keepLabels, now present on this checkout; hub/ui/src/api/traces.ts:248 the by-run hook.",
+      "spec/changes/a-trace-of-a-whole-conversation/spec.json: axis, fold and lazy-span decisions reused."
+    ],
+    "limits": [
+      "No requirement is demonstrated yet: the acceptance drive is proposed coverage, to be written and recorded failing before the build.",
+      "Derived links (flow hand-outs) are inference from task history; how often exactly one candidate transition exists was not measured on real data, and ambiguity is shown as untraced.",
+      "How a checkpoint carry-over's earlier run is found for the 'continued' link was not traced to its columns and is to be confirmed in the route task (see the open question).",
+      "No mock exists; the visual design is unproven until one is made."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Mock first? The roadmap says each slice is mocked interactively once specified and approved against the mock. Options: (a) mock first, from real components fed recorded fixtures of two or three builds, then approve the document against it; (b) build straight from this text. Recommendation: (a), as for conversation-trace: lanes, stacked runs and link routing are visual decisions that are cheap to change in a mock and expensive after the bundle ships. Not built here.",
+      "resolved": false
+    },
+    {
+      "question": "Flow hand-outs name the flow, not the agent or run that caused them, so review and send-back links are derived from task history and marked so. Options: (a) accept derived links, shown as such (this document); (b) also record the causing run on the flow's queue entry, which is a migration and a Hub-restart hazard (Tier 2) in a separate change, making those links recorded; (c) draw no flow links. Recommendation: (a) now, (b) only if derived links prove ambiguous on real builds.",
+      "resolved": false
+    },
+    {
+      "question": "Entry points. This document opens the view from the task drawer, the build card and the Traces view. Options: add a lead-only 'whole build' lane for the lead agent's runs (counted by the build's card) or leave the lead as an ordinary lane. Recommendation: ordinary lane, labelled lead.",
+      "resolved": false
+    },
+    {
+      "question": "How is the earlier conversation's last run found for a 'continued' link (FR operator-starts-have-no-link)? The contract assumes it is reachable from the Checkpoint row (covers_through_run_id, previous conversation) to the successor conversation's first run, but the columns were not traced. If the successor is not reachable from the checkpoint, the given of ac-operator cannot be built. Recommendation: confirm in the route task; if not reachable, such a run reads 'start not traced' and the requirement's second half is cut.",
+      "resolved": false
+    }
+  ],
+  "problem": "A task or a build is worked by several agents (builder, checker, lead), each in runs of their own. Today the only places that show that are separate: the task story lists events in one column (hub/hub/task_story.py:80, route hub/hub/api/v1/tasks.py:2642), the Traces view filters runs by task or build (hub/hub/api/v1/traces.py:41-70, task_id and build_id) but lists them as rows, and a run's trace shows one run (hub/ui/src/components/traces/TraceWaterfall.tsx). Nothing shows who handed work to whom, or how long a task waited between agents. What the Hub records that could tie a run to what started it: Run.agent, task_id, conversation_id, initiator (operator or autonomous only) and divergence_source_run_id (hub/hub/db/models.py:1514-1560); the inbound queue entry that became the run, with origin_type, origin_agent, task_id, review_task_id, job_id, message_id and delivered_in_run_id (models.py:630-715), kept after delivery (no code deletes entries); the Message with created_by_run_id, the sender's run (models.py:591-606, written at hub/hub/api/v1/messages.py:98-107); and TaskTransition rows with run_id, actor_agent, origin and job_id (models.py:914-980). Three hand-off kinds are recorded as a pointer to the run that caused them: a message or agent request (messages.py:379-380, agents.py:3043-3044) and a divergence response. Two are not: a flow's hand-out of a build or a review is queued with origin_type 'job' and the flow's job_id and names no agent or run (builds.py:1385-1392, scheduler.py:5076), and the operator's assignment of a task starts a run with no sending run. For those the link can only be derived (the transition that completed or sent the task back, in the same task, shortly before the run starts), not read.",
+  "requirements": [
+    {
+      "key": "open-from-task-and-build",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task with at least one run offers a woven view of that task, and a build with at least one run offers one of the build's runs (those the build's card counts); the Traces view narrowed to a task or a build offers to open it, and all three open the same view for the same task or build."
+    },
+    {
+      "key": "lane-per-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The view shows one lane for each agent that has at least one run in the task or build, labelled with the agent's name, ordered by the start of the agent's first run, and every run of that agent appears only in that lane."
+    },
+    {
+      "key": "runs-as-blocks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each run is a block on its agent's lane placed by its start and end on one time axis shared by all lanes, showing its status, its cost when priced and 'from you' when the operator started it; a run still running is drawn open and grows; selecting a block opens that run's trace; runs of one agent that overlap in time are stacked within the lane, not drawn over each other."
+    },
+    {
+      "key": "axis-shared-and-folded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Reuses the decision made for the conversation trace (operator, 2026-11-06): drawn to scale a task that waits a night is slivers.",
+      "statement": "A stretch longer than 20 minutes in which no run of the task or build was running is drawn as a break of fixed width across every lane and labelled with its length; runs and shorter gaps are drawn to scale; labels that would overlap are left out of the drawing and kept in hover text."
+    },
+    {
+      "key": "handoff-recorded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When a run was started by a message, agent request or divergence response whose sender's run is recorded, the view draws a link from the sending run's block on the sender's lane to the receiving run's block, labelled with the kind (message, request or retry) and carrying the message's subject when it has one; a sender outside the task or build adds no lane and the link starts at the lane's edge naming the sender."
+    },
+    {
+      "key": "handoff-through-the-flow",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A flow hand-out names the flow, not the previous agent, so the link is inferred from the task's own transitions (models.py:914-980); inferring it silently would put a claim in an audit view that no record makes.",
+      "statement": "A run the flow started to review or to continue a task is linked to the run that moved the task into the state that caused it (a completion for a review, a send-back or a rejection for the builder's next run), when exactly one such transition by a run precedes it on the same task; the link is labelled 'review', 'send-back' or 'next step' and marked as derived from the task's history in its label and hover."
+    },
+    {
+      "key": "operator-starts-have-no-link",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A run the operator started, by a chat message or by assigning the task, is drawn with no link and the label 'from you'; a run started by a checkpoint carry-over is labelled 'continued' and linked to the earlier conversation's last run on the same task when there is one."
+    },
+    {
+      "key": "untraced-is-shown-as-untraced",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A run whose start the Hub cannot tie to a sender (no queue entry delivered in it, or more than one candidate transition) is drawn with no link and the label 'start not traced'; the view never draws a link between two runs that no record or single candidate supports."
+    },
+    {
+      "key": "one-read",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A build can hold hundreds of runs and each run's spans can be hundreds; the lanes answer most questions without them.",
+      "statement": "Opening the view makes one request that returns the lanes' runs and every hand-off, and no run's spans are read until its block is opened; a run whose trace was cleared opens to a line saying it has no trace."
+    },
+    {
+      "key": "order-per-lane",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Within each lane the runs are in the order they started, and each link points from an earlier-started block to a later-started one; a link whose records would run backwards in time is not drawn and the receiving run is labelled 'start not traced'."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checkpoints-and-traces-you-can-find-and-use/spec.json",
+    "slice": "woven-traces"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A woven view for one task and for one build, opened from the task's drawer and from the build's card and from the Traces view narrowed to a task or build",
+      "One lane per agent with runs as blocks in order on a shared, gap-folded axis",
+      "Hand-off links between lanes for messages, agent requests, assignments, flow hand-outs, reviews, send-backs and divergence responses",
+      "A run block opens its trace",
+      "Marking a hand-off that is derived rather than recorded, and a run whose start cannot be traced"
+    ],
+    "non_goals": [
+      "Recording the sender on the flow's queue entries or any other new record (open question; would be Tier 2)",
+      "Weaving across several tasks, several builds or a whole project",
+      "Changing what is recorded as spans or how runs are traced",
+      "Editing, replaying or re-running anything from the view",
+      "Trace retention, export or clearing"
+    ]
+  },
+  "summary": "For one task or one build, the operator opens a single view in which each agent who worked it is a lane on a shared time axis, each run a block that opens its trace, and the hand-offs between agents (a message or assignment that started a run, a completion that led to a review, a send-back) are drawn as links between lanes. Slice 3 of 'Checkpoints and traces you can find and use'; builds after 'conversation-trace' and reuses its axis decisions. Drawn only from records the Hub already keeps; a hand-off it cannot trace is shown as unlinked, never guessed.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Routine drive scripting following the existing scripts/drive pattern; Sonnet is enough. Developer may be busy with PR slice 2; DeveloperSonnet2 is the alternative once conversation-trace lands.",
+      "checker": "QA",
+      "checker_reason": "QA checks the drive for whether it can fail for the right reason on today's code; not busy with the conversation-trace check.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the contract named in the design (GET /traces/weave, its lanes and handoffs fields, the entry points). It runs on a dedicated trial Hub (own port and database): a two-task flow build with Haiku builder and checker agents, one message sent between agents on a task, one operator chat run and one run left with no traceable start. It opens the woven view from the task drawer, build card and narrowed Traces view, checks lanes and block order, the recorded message link, the derived review and send-back links and their 'derived' marks, 'from you' and 'start not traced', opens a block and compares counts with /traces?build_id. Screenshots in dark and light. Recorded failing on today's code before the build (the weave route answers 404 or is read as a trace id).",
+      "files": [
+        "scripts/drive/d1107_woven_traces.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "open-from-task-and-build",
+        "lane-per-agent",
+        "runs-as-blocks",
+        "axis-shared-and-folded",
+        "handoff-recorded",
+        "handoff-through-the-flow",
+        "operator-starts-have-no-link",
+        "untraced-is-shown-as-untraced",
+        "one-read",
+        "order-per-lane"
+      ],
+      "reviewer": null,
+      "title": "Woven-traces acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Read-only joins over existing tables, no migration; Sonnet. DeveloperSonnet2 is building conversation-trace now, and this slice builds after it, so it is free by then.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checks conversation-trace's route field and knows these tables; Opus for the ambiguity cases.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "hub/hub/woven_traces.py and GET /traces/weave in hub/hub/api/v1/traces.py (declared above /{trace_id}) returning the response named in the design: runs grouped by agent and the hand-offs between them, recorded ones from message created_by_run_id, queue entry origin_agent and delivered_in_run_id, divergence_source_run_id, and derived ones from task transitions and flow-origin queue entries, each tagged recorded or derived, with ambiguity and time-order rules as the requirements state. Tests feed the route's own order and fail if reversed.",
+      "files": [
+        "hub/hub/woven_traces.py",
+        "hub/hub/api/v1/traces.py",
+        "hub/tests/test_woven_traces.py"
+      ],
+      "from": null,
+      "key": "route",
+      "requirements": [
+        "lane-per-agent",
+        "handoff-recorded",
+        "handoff-through-the-flow",
+        "operator-starts-have-no-link",
+        "untraced-is-shown-as-untraced",
+        "one-read",
+        "order-per-lane"
+      ],
+      "reviewer": null,
+      "title": "One read returns a task's or build's lanes and hand-offs"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Wiring and drawing over the components conversation-trace built, which this builder wrote; Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checks UI against the drive, as for conversation-trace.",
+      "depends_on": [
+        "route"
+      ],
+      "description": "The lanes, blocks, links and axis (wovenTraceModel.ts, WovenTrace.tsx), reusing the conversation-trace components and axis model; the entry points in the task drawer, the build card and the Traces view; one request to the weave route and spans on opening a block. Model and UI tests per the criteria, fed the route's order. UI bundle refreshed, committed with src.",
+      "files": [
+        "hub/ui/src/components/traces/",
+        "hub/ui/src/api/traces.ts",
+        "hub/ui/src/styles/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "view",
+      "requirements": [
+        "open-from-task-and-build",
+        "runs-as-blocks",
+        "axis-shared-and-folded",
+        "lane-per-agent",
+        "handoff-recorded",
+        "handoff-through-the-flow",
+        "operator-starts-have-no-link",
+        "untraced-is-shown-as-untraced",
+        "one-read",
+        "order-per-lane"
+      ],
+      "reviewer": null,
+      "title": "The woven view, wired to task, build and Traces"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Runs the written drive and records its output; routine for Sonnet.",
+      "checker": "QA",
+      "checker_reason": "QA re-runs the drive itself and compares its result with the recorded evidence.",
+      "depends_on": [
+        "drive",
+        "route",
+        "view"
+      ],
+      "description": "Run the acceptance drive on a trial Hub serving the built feature (route and committed bundle), fix only drive faults, and record the drive's output and screenshots as evidence on each requirement it covers. Every line that failed before the build must now pass.",
+      "files": [
+        "scripts/drive/d1107_woven_traces.py"
+      ],
+      "from": null,
+      "key": "drive-run",
+      "requirements": [
+        "open-from-task-and-build",
+        "lane-per-agent",
+        "runs-as-blocks",
+        "axis-shared-and-folded",
+        "handoff-recorded",
+        "handoff-through-the-flow",
+        "operator-starts-have-no-link",
+        "untraced-is-shown-as-untraced",
+        "one-read",
+        "order-per-lane"
+      ],
+      "reviewer": null,
+      "title": "Run the woven-traces drive on the built feature"
+    }
+  ],
+  "title": "Woven traces"
+}

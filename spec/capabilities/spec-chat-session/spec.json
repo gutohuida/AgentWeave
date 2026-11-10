@@ -330,25 +330,11 @@
       "when": "the briefing is rendered"
     },
     {
-      "given": "every step's duty",
-      "key": "a-spec-is-written-one-step-at-a-time-asks",
-      "requirement": "a-spec-is-written-one-step-at-a-time-step-asks-to-advance",
-      "then": "it names what the step writes and the three choices through ask_user",
-      "when": "it is read"
-    },
-    {
       "given": "a document moved to tasks in one conversation",
       "key": "a-spec-is-written-one-step-at-a-time-fresh",
       "requirement": "a-spec-is-written-one-step-at-a-time-resume-anywhere",
       "then": "its briefing is the tasks step's",
       "when": "a turn starts in a new conversation, with another agent"
-    },
-    {
-      "given": "the intake duty",
-      "key": "a-spec-is-written-one-step-at-a-time-size-told",
-      "requirement": "a-spec-is-written-one-step-at-a-time-intake-sizes",
-      "then": "it asks one question per ask_user and requires the size and reason before advancing",
-      "when": "it is read"
     },
     {
       "given": "the acceptance and tasks duties",
@@ -390,6 +376,60 @@
       "requirement": "a-project-orders-its-own-spec-steps-custom-step-runs",
       "then": "the agent follows the pasted Markdown and says where it wrote the result",
       "when": "they explore a change through that step"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8106 with a fresh database, a project with agent alice bound to a Claude runner on claude-haiku-4-5, and a change-spec document created by starting an exploration, at step intake (scripts/drive/d1020_exploring_prose.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1020_exploring_prose.py",
+      "key": "an-exploring-turn-asks-its-questions-in-its-reply-drive",
+      "requirement": "an-exploring-turn-asks-its-questions-in-exploring-asks-in-prose",
+      "then": "the composed context the run was given contains the prose-interview rule and no 'reach nobody' or 'not a way to finish' sentence, and its step duty names no ask_user; the run completed; the project has no question row asked by that run; and the run's reply contains at least one question. Fails on today's Hub at the first check (the context carries 'reach nobody').",
+      "when": "the operator sends alice, in that document's conversation, a deliberately underspecified request ('make the board easier to scan') and the run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an exploring change-spec at each built-in step, one whose step the project removed, and an exploring document with no step",
+      "how_to_check": "Hub test",
+      "key": "an-exploring-turn-asks-its-questions-in-its-re-context-exploring",
+      "requirement": "an-exploring-turn-asks-its-questions-in-exploring-asks-in-prose",
+      "then": "each carries the prose rule and the precedence line, none carries 'reach nobody' or 'not a way to finish', and the composed phase duty and step duty contain no ask_user",
+      "when": "the canonical context and the turn notice are composed for each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the step duties of every built-in step",
+      "how_to_check": "Hub test",
+      "key": "an-exploring-turn-asks-its-questions-in-its-reply-steps",
+      "requirement": "an-exploring-turn-asks-its-questions-in-its-r-steps-ask-in-prose",
+      "then": "intake names fix, small and large and set_spec_size; every step but delivery names the three continue/stop choices and advance_spec_step; none names ask_user; delivery has no ask-to-advance",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a change-spec document in phase proposed and one in approved",
+      "how_to_check": "Hub test",
+      "key": "an-exploring-turn-asks-its-questions-in-its-reply-other-phases",
+      "requirement": "an-exploring-turn-asks-its-questions-in-i-other-phases-unchanged",
+      "then": "each still carries the 'is not a way to finish' and 'reach nobody' sentences unchanged",
+      "when": "the canonical context is composed for a turn with each open"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the MCP ask_user tool, the HTTP tool-surface rendering and data/charters/spec.md",
+      "how_to_check": "Hub test",
+      "key": "an-exploring-turn-asks-its-questions-in-its-reply-tool-text",
+      "requirement": "an-exploring-turn-asks-its-questions-in-its-re-tool-text-neutral",
+      "then": "ask_user's description does not mention a specification, test_tool_surface_matches_server.py still passes, and the charter says exploring questions are asked in the reply",
+      "when": "the tests read them"
+    },
+    {
+      "checked_by": "operator",
+      "given": "their own project with a spec agent",
+      "how_to_check": "operator explores a change in the app",
+      "key": "an-exploring-turn-asks-its-questions-in-its-reply-reads-well",
+      "requirement": "an-exploring-turn-asks-its-questions-in-its-r-steps-ask-in-prose",
+      "then": "the agent's questions arrive in its reply rather than a question card, and the document moves to the next step on their answer",
+      "when": "they start an exploration, answer the agent's questions in the composer, and reply 'continue here' when it asks"
     }
   ],
   "algorithms": [],
@@ -412,6 +452,10 @@
       "FR-22": "1ca8d3a245a31f95b4eaf938642989889399c328d9349cc6a7da45f4fd2a4b95",
       "FR-23": "2be87a8f834c8c7c4b5516a1fccda56934ca3572d9139a9cce3304c196e39d4e",
       "FR-24": "4b0d9a5fd032a7ce92837fe65482975a5c16f24ea6787e6ca345e847982ab54d",
+      "FR-25": "c4ee8904ac86b953283869d97a2b8dc5efc8cf427f0fdead34857bc260827618",
+      "FR-26": "24a36c8de69a1da7c2e934287c660e6f105a20270d005b8d34cb89a929ac67fc",
+      "FR-27": "a3aa11051294910b5e91277872155aae12cefb0834330498de4ca6aba61e58da",
+      "FR-28": "7cc0223737f2fce12540115c108c661e118d53c68176e265c555a3bd632081f8",
       "FR-3": "ffc6f55ce539912c79844a531cce01507c3f7c1b6fcbb66c06d9a357db9a8142",
       "FR-4": "6aa65cdc5ffa3cfb23055e4fd59c66406d6649b949b3965d1924f4649b6dcc74",
       "FR-5": "50527755b7316342bccd5d8f365c1afec72cce261b6d331edd54293326ddfd72",
@@ -420,18 +464,20 @@
       "FR-8": "b2fcffc5ae0e9dfc3171dcad2628cd28b3285bffd501001745b2beeef5905af0",
       "FR-9": "3f0d78af3319472281c1f2eefe4ca1fc55af248d6248f2349e787a5b60b202bf"
     },
-    "high_water": 24,
+    "high_water": 28,
     "requirements": {
       "a-project-orders-its-own-spec-steps-append-own-step": "FR-24",
       "a-project-orders-its-own-spec-steps-custom-step-runs": "FR-23",
       "a-spec-is-written-one-step-at-a-time-acceptance-step": "FR-21",
       "a-spec-is-written-one-step-at-a-time-context-preview": "FR-22",
-      "a-spec-is-written-one-step-at-a-time-intake-sizes": "FR-20",
       "a-spec-is-written-one-step-at-a-time-one-step-briefing": "FR-17",
       "a-spec-is-written-one-step-at-a-time-resume-anywhere": "FR-19",
-      "a-spec-is-written-one-step-at-a-time-step-asks-to-advance": "FR-18",
       "a-specification-document-opens-beside-a-conversation": "FR-4",
       "a-specification-turn-is-announced-with-the-turn-not-only-bef": "FR-13",
+      "an-exploring-turn-asks-its-questions-in-exploring-asks-in-prose": "FR-25",
+      "an-exploring-turn-asks-its-questions-in-i-other-phases-unchanged": "FR-27",
+      "an-exploring-turn-asks-its-questions-in-its-r-steps-ask-in-prose": "FR-26",
+      "an-exploring-turn-asks-its-questions-in-its-re-tool-text-neutral": "FR-28",
       "authoring-assistance-is-scoped-away-from-performing-discover": "FR-14",
       "n1": "FR-7",
       "n2": "FR-8",
@@ -447,6 +493,8 @@
       "the-turn-context-states-the-phase-and-holds-without-a-charte": "FR-12"
     },
     "retired": {
+      "a-spec-is-written-one-step-at-a-time-intake-sizes": "FR-20",
+      "a-spec-is-written-one-step-at-a-time-step-asks-to-advance": "FR-18",
       "the-conversation-surface-is-legible-at-every-width-it-is-off": "FR-5"
     }
   },
@@ -466,7 +514,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -588,25 +635,11 @@
       "statement": "A turn on an exploring change document MUST be briefed with the current step's instructions and one line naming the journey's steps and the current one, and MUST NOT carry another step's instructions."
     },
     {
-      "key": "a-spec-is-written-one-step-at-a-time-step-asks-to-advance",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "The agent proposes advancing; the operator decides (2026-10-08).",
-      "statement": "Every step's instructions MUST say what the step writes into the document and MUST tell the agent, once that is written, to ask the operator through ask_user whether to continue here, continue in a fresh conversation, or stop, and to advance only on either continue."
-    },
-    {
       "key": "a-spec-is-written-one-step-at-a-time-resume-anywhere",
       "modal": "MUST",
       "party": null,
       "rationale": "Drop it today, continue another day.",
       "statement": "A turn in any conversation on the document, including a new one or another agent's, MUST be briefed from the document's recorded step and size."
-    },
-    {
-      "key": "a-spec-is-written-one-step-at-a-time-intake-sizes",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "Sizing is announced so it can be overridden.",
-      "statement": "The intake step's instructions MUST have the agent ask one question at a time through ask_user, offering choices where it can, and record the size with its reason before asking to advance; the size MUST be told to the operator."
     },
     {
       "key": "a-spec-is-written-one-step-at-a-time-acceptance-step",
@@ -635,6 +668,34 @@
       "party": null,
       "rationale": null,
       "statement": "An appended instruction MUST appear in its own step's briefing and in advance's instructions for that step, and in no other step's."
+    },
+    {
+      "key": "an-exploring-turn-asks-its-questions-in-exploring-asks-in-prose",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "overhaul-exploring-interview (F545): prose wins. A step duty is not the only instruction an agent reads, so the precedence line covers static text the Hub does not compose per turn.",
+      "statement": "The context and turn notice of a turn with an exploring-phase document open MUST tell the agent to ask its questions in its reply and then end its turn, and MUST say that this overrides any charter or tool description telling it to call ask_user; no instruction composed for that turn (the phase duty, a journey step duty, the ask-to-advance protocol or the removed-step briefing) MUST tell it to ask through ask_user or say that questions in its reply reach nobody."
+    },
+    {
+      "key": "an-exploring-turn-asks-its-questions-in-its-r-steps-ask-in-prose",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The protocol keeps its three choices and its never-advance-without-asking rule; only the channel moves from ask_user to the reply (night-1010-5).",
+      "statement": "A journey step's duty MUST ask the size confirmation (fix, small, large) and the ask-to-advance choice (continue here, continue in a fresh conversation, stop here) in the reply and end the turn; on the operator's next message the agent MUST, on either continue, call advance_spec_step(path) before anything else (and on a fresh conversation end its turn after it), record a size answer with set_spec_size, and on stop end its turn without advancing."
+    },
+    {
+      "key": "an-exploring-turn-asks-its-questions-in-i-other-phases-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F38's exit condition was measured on a turn that ended with chat-text questions; the decision moves exploring only.",
+      "statement": "The context of a turn with a document open in any phase other than exploring MUST keep the rule that ending the turn without submitting or calling ask_user is not a way to finish, word for word."
+    },
+    {
+      "key": "an-exploring-turn-asks-its-questions-in-its-re-tool-text-neutral",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Static text reaches every turn; the clause in ask_user's description pointed exploring turns at the tool (DEAD-ENDS 2026-10-08).",
+      "statement": "The ask_user tool description MUST NOT name writing a specification as a reason to call it, and the bundled spec charter MUST say that while a document is being explored its questions are asked in the reply."
     }
   ],
   "schema_version": 1,

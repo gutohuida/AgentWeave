@@ -1,0 +1,13 @@
+{
+  "id": "src-0e454f2c9ee6",
+  "name": "Build retrospective of A check can run only the tests for what a task changed, 2026-11-06",
+  "type": "document",
+  "visibility": "tracked",
+  "created_at": "2026-11-06T22:45:40.732768Z",
+  "holder": null,
+  "media_type": "text/plain",
+  "dated": "2026-11-06",
+  "sha256": "773f9a3aec101453eaae279d048a7bd3dea3762953bee030e7192061aa43d7b4",
+  "added_by": "manager",
+  "distilled_version": "773f9a3aec101453eaae279d048a7bd3dea3762953bee030e7192061aa43d7b4"
+}

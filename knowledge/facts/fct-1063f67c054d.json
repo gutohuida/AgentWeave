@@ -1,0 +1,23 @@
+{
+  "id": "fct-1063f67c054d",
+  "kind": "fact",
+  "claim": "Hub timestamps are timezone-aware and end in '+00:00', so since/until queries must URL-encode them or the route returns 422.",
+  "citations": [
+    {
+      "source": "src-c931c232dc13",
+      "quote": "Hub timestamps are tz-aware and end in '+00:00', so any drive or client building a since/until query must URL-encode it, or the route answers 422.",
+      "line_start": 9,
+      "line_end": 9
+    }
+  ],
+  "sources": [
+    "src-c931c232dc13"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T11:36:33.781600Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

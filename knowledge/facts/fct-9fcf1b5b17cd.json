@@ -1,0 +1,23 @@
+{
+  "id": "fct-9fcf1b5b17cd",
+  "kind": "fact",
+  "claim": "File locations of inputs such as probe outputs should be verified before they are written into a task.",
+  "citations": [
+    {
+      "source": "src-97c14a3097b5",
+      "quote": "File locations of inputs such as probe outputs should be verified before they are written into a task, because a wrong path cost the builder time.",
+      "line_start": 10,
+      "line_end": 10
+    }
+  ],
+  "sources": [
+    "src-97c14a3097b5"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-04T23:00:20.663911Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

@@ -1,0 +1,322 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the committed bundle at master",
+      "how_to_check": "The size test; and py -3.11 scripts/drive/perf_ui_open.py --scenario open --ui-dir hub/hub/static/ui prints 'JS before usable' with PASS. 'Put back' is shown by the size test's marker check on a rebuilt bundle, not by the committed one.",
+      "key": "ac-ceiling",
+      "requirement": "entry-under-ceiling",
+      "then": "it is at or under the ceiling, and it is not when the checkpoints import is put back",
+      "when": "the entry script named in hub/hub/static/ui/index.html is measured"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the app open on a project's Overview with the page idle for several seconds",
+      "how_to_check": "UI component test loading the screens first (as the App tests do); acceptance drive requests the tab and screenshots it; grep of the entry for the libraries' markers returns nothing.",
+      "key": "ac-checkpoints",
+      "requirement": "checkpoints-on-demand",
+      "then": "the tab shows its content in both cases with no loading placeholder once its chunk has arrived, and the entry script contains neither the markdown nor the highlight library",
+      "when": "the checkpoints tab is opened, then the app is reloaded straight onto the checkpoints tab"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the test run against a bundle whose entry is 1 byte over the ceiling",
+      "how_to_check": "The test parametrises the ceiling so it can be run once against a smaller number and seen to fail with that message.",
+      "key": "ac-check",
+      "requirement": "size-is-checked",
+      "then": "it fails naming the file, its size and the ceiling",
+      "when": "it runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch copy of the operator's database padded to 25 projects, behind a trial Hub of its own",
+      "how_to_check": "perf_ui_open.py --scenario open, 'API requests' line.",
+      "key": "ac-requests",
+      "requirement": "open-requests",
+      "then": "at most 15 GETs are counted and one of them is the conversation listings",
+      "when": "the project screen is opened at 6x CPU"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same scratch Hub and the committed bundle",
+      "how_to_check": "perf_ui_open.py --scenario open, 'time to usable' line, run three times; the worst counts.",
+      "key": "ac-time",
+      "requirement": "open-time",
+      "then": "top bar, rail and an agent card are present within the stated time",
+      "when": "the project screen is opened at 6x CPU"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project's largest conversation padded to 1,000 rows and open",
+      "how_to_check": "perf_ui_open.py --scenario stream.",
+      "key": "ac-stream",
+      "requirement": "stream-smooth",
+      "then": "dropped frames, longest task and long-task time per line are within bounds and the last line is visible",
+      "when": "90 output lines a minute are posted for the drive's run"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the drive has been run on the current build",
+      "how_to_check": "Open the evidence record on the task.",
+      "key": "ac-record",
+      "requirement": "numbers-recorded",
+      "then": "they see, for each measurement, the 2026-10-25 figure, today's figure and the budget",
+      "when": "the operator opens the recorded evidence"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "abcbb81a75de563ea85c21231af15ade625e68a5781cbab22e01cb4f74b1ba75",
+      "FR-2": "922500ae54e9851427ba2bf4eb242ccc0a186e4da75ac37738a4fa84bbedf56a",
+      "FR-3": "1f0a7363b80a0d7d392ba246a17c017a422c165a976b6e37ee76676e53c24430",
+      "FR-4": "568e0ef76da09766838ba59356827fa39784b071c4132232dcf5a4224b65b38a",
+      "FR-5": "832b6c6bb700886b559f24a2854eabec8168faaec8066458b625d29198a61a6e",
+      "FR-6": "92b67e03e8e8c32357f7577b547bc5377428481070b263a1a15bc7a71ab130c3",
+      "FR-7": "c142b142c1f5c4d8bf7ba87e7e7121c12728200b3c543a541a666333135fd5d1"
+    },
+    "high_water": 7,
+    "requirements": {
+      "checkpoints-on-demand": "FR-2",
+      "entry-under-ceiling": "FR-1",
+      "numbers-recorded": "FR-7",
+      "open-requests": "FR-4",
+      "open-time": "FR-5",
+      "size-is-checked": "FR-3",
+      "stream-smooth": "FR-6"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "UI wiring and scripting, no migration: Sonnet. Developer may be busy with PR slice 2; DeveloperSonnet2 is the substitute once the trace build ends.",
+      "builder": "Same as the agent; the test task names a different builder.",
+      "checker": "QA is Opus and re-runs the browser drive itself; QA2 is the substitute if QA is on PR slice 2.",
+      "cron": "Every five minutes picks up the next task soon after the previous is approved.",
+      "mode": "The drive and the lazy import start together; the size test waits for the import and the final run for all three; a flow runs them.",
+      "stop": "Nothing to do once its tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 1: UI import change, one test, one re-measurement; no migration, no Hub-restart hazard (the committed bundle reaches the operator's :8000 app on reload, which is the point; rebuilt with `make ui`).\n\nDecisions (author's choices unless marked):\n- Fix the cause rather than raise the ceiling: load the checkpoints screen on demand like every other screen, through lazyScreens.ts, so a loaded one renders without a loading flash (the slice-4 rule).\n- The ceiling becomes a test, not a drive: the bundle is committed, so a plain test that reads index.html's entry script and fails over the budget costs milliseconds and runs on every task. The browser drive stays the proof of time and frames; it is too heavy to run per task.\n- The drive measures the committed bundle as well as a fresh build (a flag), since the committed bundle is what ships.\n- Numbers (usable time, frame bound) are the operator's: see open questions. Budgets remain provisional until used on the work VDI (roadmap).\n- No virtualisation: memoisation meets the bound and windowing breaks find-in-page and scroll anchoring. Revisit only if the re-measured dropped frames exceed the bound.\n\nCONTRACT (grounded in scripts/drive/perf_ui_open.py, hub/ui/src/lib/lazyScreens.ts, hub/tests/test_ui_staleness.py):\n- No setting, route, response field or event is added or changed.\n- Drive: perf_ui_open.py already takes `--ui-dir` (required, line 349) and `--scenario open|stream`, so measuring the committed bundle needs no flag; the extension is a printed line `entry script <file> <bytes> bytes` naming the file index.html loads. Its existing line 'JS before usable' (line 268, unit KB = 1024 bytes, BUDGET[\"js_kb_before_usable\"] = 700) counts all script requested before usable, while the test measures the entry file only: the test is the narrower, per-task guard and the drive the total.\n- Screen: `export const CheckpointsScreen = screen(() => import('@/components/checkpoints/CheckpointsScreen'), 'CheckpointsScreen')` in hub/ui/src/lib/lazyScreens.ts beside the others (lines 48-63), imported by App.tsx from '@/lib/lazyScreens' in place of line 49. The factory returns the loaded component with no Suspense fallback once loaded; loadAllScreens() loads it with the others.\n- Test: hub/tests/test_ui_entry_budget.py with `ENTRY_CEILING_BYTES = 700 * 1024`, `entry_script(ui_dir: Path) -> Path` (the module script in `<ui_dir>/index.html`), and `check_entry(ui_dir, ceiling_bytes)`, which raises AssertionError with the message `<file name> is <size> bytes, over the <ceiling> byte ceiling`. A second test fails when the entry contains the markers `react-markdown` or `micromark`.\n- Existing guards the change meets, none relaxed: UI tests that render App must `await loadAllScreens()` first (hub/ui/src/__tests__/checkpointsTab.test.tsx does); hub/tests/test_ui_staleness.py and test_ui_build_stamp.py require the committed bundle and source to agree, so lazyScreens.ts, App.tsx and hub/hub/static/ui change in one commit.\n- Task status path: none walked; the drive uses real agent turns only for the stream scenario, bound to Haiku.\n\nCURRENT   entry script 823 KB; checkpoints stack inside it; no check on size; drive not run since 2026-10-25\nPROPOSED  entry script back near 610 KB; size test fails the build if it grows past the ceiling; drive re-run on the committed bundle, numbers recorded",
+  "evidence": {
+    "checked": [
+      "git: a8f2015 and 433d406 are on master; the commit message of a8f2015 records the drive's before/after numbers (565 KB, 14 requests, 2.85 s, 8.7%).",
+      "hub/hub/static/ui/index.html loads assets/index-lsIeO-UK.js; sizes measured with gzip level 6 over assets/*.js and *.css: entry 823,082 B / 254,383 gzip; total 2,048,920 B / 602,950 gzip; ConversationView chunk 232,650 B; stylesheet 293,485 B.",
+      "Entry size over committed bundles (git ls-tree): 578,139 B at ef6647c, 609,493 B at 63924a2^ era, 815,709 B at 63924a2 (ECFR-5, 2026-11-04), 823,082 B now.",
+      "hub/ui/src/App.tsx:49 imports CheckpointsScreen directly and :575 renders it; hub/ui/src/lib/lazyScreens.ts:48-63 lists the lazy screens and does not include it; the entry contains react-markdown and micromark markers.",
+      "hub/ui/src: no virtualisation (no windowing library in package.json:14-37); AgentTimeline.tsx:435-438 and lib/agentTimelineModel.ts:88 are the memoisation.",
+      "scripts/drive/perf_ui_open.py:53-66 holds the budgets, :268 the KB (1024) comparison, :349 the required --ui-dir, :83 seed_projects pads to 25 projects; :177-187 applies the 6x CPU throttle with Emulation.setCPUThrottlingRate; nothing under .github, scripts/checks or tests references it.",
+      "Not run by the author (no server or browser allowed this session)."
+    ],
+    "limits": [
+      "The acceptance drive is proposed coverage: it is not run for this document and no figure here is a fresh browser measurement; the only figures measured now are file sizes.",
+      "The cause of the +207 KB is read from source and from the entry's contents, not bisected by building each commit.",
+      "A 6x CPU throttle on this machine is an estimate of the work VDI, not a measurement of it.",
+      "Frames are measured in headless Chromium; a real GPU-composited window may differ."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "What is the stated time for the project screen to be usable at a 6x-throttled CPU? Options: 4.0 s (the current budget; 2.85 s measured on 2026-10-25), 3.0 s (tighter, margin only 0.15 s on that measurement), or wait for real work-VDI use. Recommendation: keep 4.0 s; tighten once the VDI has been used.",
+      "resolved": false
+    },
+    {
+      "question": "What dropped-frame bound for a 1,000-row conversation streaming 90 lines a minute? Options: 10% (current; measured 8.7%, thin margin), 15% (safer for noise, looser), or 8% (would fail today's measurement). Recommendation: keep 10% and have the drive take the worst of three runs, reporting the margin.",
+      "resolved": false
+    },
+    {
+      "question": "What ceiling for script loaded before usable? Options: 700 KB (current), or 650 KB to keep a margin over the ~610 KB the entry returns to. Recommendation: 700 KB, so ordinary additions are not blocked while a 200 KB import still is.",
+      "resolved": false
+    },
+    {
+      "question": "Should the browser drive ever run automatically (nightly or per release)? Options: never (size test only), nightly on this machine, or on every UI change. Recommendation: size test per task now; the drive by hand before a release, as today.",
+      "resolved": false
+    },
+    {
+      "question": "The size test measures the entry file only, while the ceiling in the requirement and the drive count all script loaded before usable. A future import that lands in a separate eagerly loaded chunk would pass the test and fail the drive. Options: (a) test the entry file only (this document); (b) also sum the modulepreload links in index.html. Recommendation: (b) if the build emits preloads for such chunks, confirmed in the size-test task; otherwise (a).",
+      "resolved": false
+    }
+  ],
+  "problem": "**What was built.** Commit a8f2015 (2026-10-25, merged in 08a7c2c) made the sidebar's per-project listings one request, split every screen but the Overview into its own chunk (hub/ui/src/lib/lazyScreens.ts:1-86, prefetched one per idle period at hub/ui/src/App.tsx:166), and memoised the timeline so a streamed line re-renders only its own turn (hub/ui/src/lib/agentTimelineModel.ts:88 `reuseTurns`; hub/ui/src/components/agents/AgentTimeline.tsx:435-438 `TurnSection` memo). Its drive, scripts/drive/perf_ui_open.py, passed at a 6x-throttled CPU: 14 API requests (budget 15), 565 KB of script before usable (700), usable in 2.85 s (4.0), 8.7% dropped frames (10), longest task 75 ms (150), 13.5 ms of long task per line (40).\n\n**What has happened since.** The committed entry script hub/hub/static/ui/assets/index-lsIeO-UK.js is 823,082 bytes (254,383 gzip); the whole bundle is 2,048,920 bytes (602,950 gzip). Its size by committed bundle: 578 KB on 2026-10-26 (ef6647c), 609 KB on 2026-11-03, then 816 KB at 63924a2 (2026-11-04, ECFR-5), 823 KB now. That step is +207 KB. The cause visible in source: the checkpoints screen added in that commit is imported directly in the first script (hub/ui/src/App.tsx:49, rendered at :575), not through lazyScreens.ts, and it brings the markdown and code-highlight stack (the entry now contains react-markdown and micromark) that slice 4 had moved out. 823 KB is over the 700 KB ceiling (BUDGET `js_kb_before_usable`, scripts/drive/perf_ui_open.py:60), and on the operator's weak work machine script time is the dominant open cost (2.79 s of ScriptDuration at the slice's baseline of 1.5 MB, 1.16 s at 565 KB).\n\n**Why nobody noticed.** No test, check or CI step runs perf_ui_open.py or reads the bundle's size (searched .github, scripts/checks, tests, hub/tests). The drive is operator-run by hand, and it builds the source to a temp directory rather than measuring what the Hub ships.\n\n**What is not wrong.** The conversation is not virtualised: every turn is in the DOM (no windowing in hub/ui/src; package.json has no virtualisation library). It is kept smooth by memoisation instead, and that held at 8.7% dropped frames, which leaves little margin under the 10% bound. Request count on open: no project-screen query polls on a timer except the manager's 10 s refetch when a manager exists (hub/ui/src/api/manager.ts:93,237); the rest follow the event stream.",
+  "requirements": [
+    {
+      "key": "entry-under-ceiling",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Script time is the largest part of a weak machine's open cost: 1.16 s of script at 565 KB, 2.79 s at 1.5 MB.",
+      "statement": "The JavaScript the app loads before the project screen is usable totals no more than the stated ceiling (recommended 700 KB uncompressed), measured on the committed bundle in hub/hub/static/ui; today it is 823 KB in the entry script alone."
+    },
+    {
+      "key": "checkpoints-on-demand",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This import is the identified cause of the +207 KB.",
+      "statement": "The checkpoints screen loads when it is first opened or when the idle prefetch reaches it, not in the first script; once loaded it draws at once with no loading placeholder, as the other screens do, and the markdown and code-highlight libraries are not part of the entry script."
+    },
+    {
+      "key": "size-is-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The regression sat unnoticed for three days because nothing measured it.",
+      "statement": "A check that runs with the project's ordinary tests fails when the committed entry script (named by hub/hub/static/ui/index.html) exceeds the ceiling, and its message names the entry file, its size and the ceiling."
+    },
+    {
+      "key": "open-requests",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice 4 reached 14; this guards it against the same drift.",
+      "statement": "Opening a project with 25 projects in the sidebar issues no more than 15 API GET requests from navigation until 3 seconds after the screen is usable, and the 25 conversation listings leave as one request."
+    },
+    {
+      "key": "open-time",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the roadmap's 'usable within a stated time'.",
+      "statement": "At a 6x-throttled CPU the project screen (top bar, project rail and the Overview's agent cards) is usable within the stated time (recommended 4.0 s) of navigation, on the committed bundle."
+    },
+    {
+      "key": "stream-smooth",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the roadmap's 'does not drop frames beyond a stated bound'; the recorded margin was 8.7% against 10%.",
+      "statement": "With a 1,000-row conversation open at a 6x-throttled CPU and 90 lines a minute arriving, dropped frames stay within the stated bound (recommended 10%), no main-thread task exceeds 150 ms, and long-task time stays within 40 ms per line."
+    },
+    {
+      "key": "numbers-recorded",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The drive's measurements on the current build, with the previous (2026-10-25) figures beside them, are recorded where the operator reads them, so the budgets can be set from data when the work VDI has been used."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/agentweave-performance-overhaul/spec.json",
+    "slice": "opens-fast-on-a-weak-machine"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The size of the script the app loads before a project screen is usable",
+      "A check that keeps that size from growing unnoticed",
+      "Re-measuring open time, request count and streaming smoothness on the current build, at a 6x-throttled CPU"
+    ],
+    "non_goals": [
+      "Changing what any screen shows or does",
+      "Virtualising the conversation's rows",
+      "Server-side cost of routes, git or the database (the other three slices of the roadmap)",
+      "Tuning for any machine other than by the 6x throttle (real work-VDI numbers come from the operator's use)",
+      "Splitting the stylesheet (293 KB, kept as one file for cascade order, vite.config.ts)",
+      "Running the browser drive in CI"
+    ]
+  },
+  "summary": "The roadmap's fourth slice was built on 2026-10-25 (the app opened in 14 requests and a 565 KB script; a 1,000-row conversation streamed at 8.7% dropped frames) but has since regressed: the committed first script is 823 KB, over the 700 KB budget it set, because a screen added on 2026-11-04 is imported into it. Nothing runs the slice's drive, so nothing noticed. This change puts the first script back under its ceiling, makes that ceiling a check that runs with the tests, and re-records the slice's numbers on the current build so the figures the operator holds are current, not three weeks old.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Scripting over an existing drive, routine work for Sonnet; Developer may be busy with PR slice 2, in which case DeveloperSonnet2 is free after the trace build.",
+      "checker": "QA",
+      "checker_reason": "QA re-runs the drive itself and confirms the failure is on the size line and not on a drive fault; may be busy with PR slice 2, QA2 is the alternative.",
+      "depends_on": [],
+      "description": "Extend scripts/drive/perf_ui_open.py (it already exists and drives a scratch copy behind a trial Hub of its own port, with Playwright and CPU throttling through the DevTools protocol; it already takes --ui-dir) so it prints the entry script's file name and size when pointed at the committed bundle (--ui-dir hub/hub/static/ui). Record it failing on today's committed bundle on 'JS before usable' (823 KB against 700 KB), and record the other five measurements as the current baseline. Any real agent turn binds Haiku.",
+      "files": [
+        "scripts/drive/perf_ui_open.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "entry-under-ceiling",
+        "open-requests",
+        "open-time",
+        "stream-smooth",
+        "numbers-recorded"
+      ],
+      "reviewer": null,
+      "title": "Weak-machine acceptance drive, failing first"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "A small UI import change following an established pattern in the same repo.",
+      "checker": "QA",
+      "checker_reason": "Needs to run the UI tests and the drive and look at the checkpoints tab.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Move the checkpoints screen into hub/ui/src/lib/lazyScreens.ts like the other screens and use it from App.tsx; keep every existing checkpoints test passing (they load the screens first via loadAllScreens). Rebuild and commit the UI bundle and source together (make ui). Run the existing drive against the committed bundle: JS before usable passes and all other lines still pass.",
+      "files": [
+        "hub/ui/src/lib/lazyScreens.ts",
+        "hub/ui/src/App.tsx",
+        "hub/ui/src/__tests__/checkpointsTab.test.tsx",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "lazy-checkpoints",
+      "requirements": [
+        "checkpoints-on-demand",
+        "entry-under-ceiling"
+      ],
+      "reviewer": null,
+      "title": "The checkpoints screen loads on demand"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "A short test; a different builder from the UI change so the test is written against the stated requirement, not against the fix. Busy with the trace build until it closes.",
+      "checker": "QA2",
+      "checker_reason": "QA2 runs it against a deliberately inflated bundle.",
+      "depends_on": [
+        "lazy-checkpoints"
+      ],
+      "description": "Add a test beside the other Hub tests (hub/tests/test_ui_entry_budget.py, contract in the design) that reads hub/hub/static/ui/index.html, finds the entry script and fails over the ceiling with the file, size and ceiling in the message; it also fails if the entry contains the markdown library, so the cause cannot return under a different name. Parametrise the ceiling so the failure message is seen once. It depends on the lazy-checkpoints task because it must pass on the committed bundle.",
+      "files": [
+        "hub/tests/test_ui_entry_budget.py"
+      ],
+      "from": null,
+      "key": "size-test",
+      "requirements": [
+        "size-is-checked",
+        "entry-under-ceiling"
+      ],
+      "reviewer": null,
+      "title": "The entry script's size is checked with the tests"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Runs the drive and writes up what it prints.",
+      "checker": "QA",
+      "checker_reason": "Compares the recorded figures with its own run.",
+      "depends_on": [
+        "drive",
+        "lazy-checkpoints",
+        "size-test"
+      ],
+      "description": "Run the acceptance drive (both scenarios) three times on the final committed bundle, attach the output as evidence on the task, with the 2026-10-25 figures beside today's and each budget, and state the margin on dropped frames. Every line that failed before the build must now pass. Do not change a budget: that is the operator's decision.",
+      "from": null,
+      "key": "record",
+      "requirements": [
+        "numbers-recorded",
+        "entry-under-ceiling",
+        "checkpoints-on-demand",
+        "open-time",
+        "stream-smooth",
+        "open-requests"
+      ],
+      "reviewer": null,
+      "title": "Run the drive on the final bundle and record the numbers"
+    }
+  ],
+  "title": "The app opens fast and stays smooth on a weak machine"
+}

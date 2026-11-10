@@ -1,0 +1,23 @@
+{
+  "id": "fct-42e772bef64a",
+  "kind": "fact",
+  "claim": "The launch registers no project on named profiles; this should be investigated and the drive's POST /projects/open fallback then removed.",
+  "citations": [
+    {
+      "source": "src-b03fa1d93d52",
+      "quote": "Investigate why the launch registers no project on named profiles, then remove the drive's POST /projects/open fallback.",
+      "line_start": 19,
+      "line_end": 19
+    }
+  ],
+  "sources": [
+    "src-b03fa1d93d52"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T16:31:03.369422Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

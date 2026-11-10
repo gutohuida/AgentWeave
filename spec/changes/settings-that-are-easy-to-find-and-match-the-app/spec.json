@@ -1,0 +1,101 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "Decisions (operator, 2026-11-10):\n- Narrowest supported width: 960px, on the Architect's recommendation — half of a 1920px screen.\n- Save behaviour: save on change, everywhere. No per-section Save buttons.\n- Quality section: removed.\n- Set-up surfaced on Overview, the rail and settings — all three.\n- Slice order as listed; slices 1 and 4 are drafted and can be built in parallel (one is UI, the other Hub); slices 2, 3 and 5 are drafted once the slices they build after are built.\n- Git by default: a project created in a new folder becomes a git repository with a first commit holding AGENTS.md. An existing folder without git is not committed automatically; the operator is offered it with the list of what the first commit would hold.\n- AGENTS.md becomes the project's instructions where AgentWeave created it, or where the operator opts in; a project with its own AGENTS.md (this repository has one) keeps today's behaviour until then. Saving commits it on the main branch; database instructions move into it when it becomes the instructions.\n- AGENTS.md is not created when the folder already holds AGENTS.md, CLAUDE.md, GEMINI.md or .github/copilot-instructions.md, or is already an AgentWeave project.\n\nHow agents are instructed today (for reference): the Hub hands each run a context file holding the roster, charter, tools and the Settings → Instructions text (a database row); it reads neither CLAUDE.md nor AGENTS.md. Each CLI reads its own file from the folder it runs in — Claude Code reads CLAUDE.md, Codex/Kimi/OpenCode read AGENTS.md.",
+  "evidence": {
+    "checked": [
+      "Every settings section rendered on a copy of the trial Hub's database (jobs switched off, runner CLIs off PATH), 1440 and 1024px, dark; DOM sweep for elements past the viewport and sideways-scrolling containers (testbed/ui-judge/settings-audit/sweep.py)",
+      "The same sweep with long values injected into the copy",
+      "Tall captures of General (5,712px scroll height at 1440px), Execution, Access, Identity, Manager",
+      "Code: settings rows (ui/settings.tsx, environment/SettingsSection.tsx); hub/hub/project_lifecycle.py; hub/hub/api/v1/instructions.py; hub/hub/api/v1/agents.py:2903; hub/hub/runner_commands.py:270; hub/hub/repo_hygiene.py:98"
+    ],
+    "limits": [
+      "Light mode and 960px not yet captured",
+      "A freshly added project was not driven"
+    ]
+  },
+  "hub": {
+    "phase": "approved",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Operator, 2026-11-10: configuration is hard. It is hard to find the setting you want — both not knowing which of the three settings places holds it, and not spotting it on the page once there. The screens are not intuitive, they missed the UI overhaul the rest of the app had and so do not match its tone, and some break on long strings. A new project gives no sign that it needs setting up, nor an easy way to reach what does; and AgentWeave should treat git as the default — a new project with no repository should get one.\n\nAudit, 2026-11-10 (Architect; screenshots of every settings section at 1440 and 1024px, dark, on a copy of the trial Hub's data and again with long values injected; testbed/ui-judge/settings-audit/):\n\nBroken by long content\n- Agent settings → Context and Workspace are broken at every width: the label column collapses to one word per line (the Checkpointing description runs ~25 lines one word each) because the control beside it does not wrap; at 1024px the page also scrolls sideways by 236px/157px and controls sit off-screen.\n- Project General → Granted reach: a long folder path runs off the page.\n- Project General → Checks: a check with path filters and a change command overflows its fixed-height row, its meta text overlaps the next row and \"Add check\"; at 1024px the move/edit/remove buttons are pushed out of view.\n- Project General → Generated files, Main branch, CI check names: values cut to one input width with no way to see the whole without clicking in.\n- Agent settings Workspace → Provider sessions: the label column squeezed to ~120px beside long ids and paths.\n- Diagnostics: a raw status block scrolls sideways 220px at 1024px.\n- Worktrees: every path ellipsised at the end, hiding exactly the part that differs (the worktree's own folder).\n- At 1024px the project tab bar is clipped (\"Vaul\") with no overflow affordance.\n- A runner's flags error renders as a paragraph naming an API route (\"PATCH /runners/{id}\") under the runner picker.\n\nHard to find / not intuitive\n- Project \"General\" is ~5,700px tall: Collaboration, Reach, Integration (checks, generated files, PR landing, CI polling), Checkpointing, Project, Delete project — and then two further whole sections, Spec steps and Traces, appended below the danger zone.\n- Quality shows only \"Add a quality: section to agentweave.yml\" — a dead end pointing at a file the product no longer uses.\n- Three save models side by side: most controls save on change, Generated files and Keep traces have their own Save, Spec steps has \"Save steps\", Traces has \"Save export settings\".\n- Native checkboxes (spec step sizes, \"Send to a collector\") and native date pickers in Traces, against the app's own primitives; raw step slugs (\"requirements-and-acceptance\") as titles.\n- Inheritance is explained in prose (\"An agent's own settings win over these\") rather than shown: nothing on a project setting says which agents override it, and an agent setting shows \"Inherit\" without the inherited value.\n- No search for a setting; the command palette does not reach settings.\n\nCode (2026-11-10): two row systems coexist. The newer `SettingsRow` (hub/ui/src/components/ui/settings.tsx, grid in styles/primitives.css) is used by project General and most project sections; the older `settings-row` (components/environment/SettingsSection.tsx, flex in index.css, stacking only under a narrow-viewport media query) is used by Agent settings, Spec steps, Traces and the Quality panel — every screen whose label column collapses is on the older one.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "App settings, Project settings and Agent settings screens, and the settings primitives they share",
+      "Finding a setting: structure, naming, search, deep links",
+      "Showing where a value comes from (default, project, agent) and resetting it",
+      "A new project's starting state: a git repository and an AGENTS.md when the folder has neither",
+      "AGENTS.md as a project's instructions where AgentWeave created it or the operator opts in",
+      "A project's set-up state: what it still needs, shown on Overview, in the rail and in settings",
+      "Robustness to long values at 960px and wider"
+    ],
+    "non_goals": [
+      "Changing the three-scope model (app / project / agent) — the operator keeps it (2026-11-10)",
+      "Changing what any existing setting does on the Hub side, beyond what slice a-new-project-starts-in-git names",
+      "Settings outside these screens (a conversation's own permission choice, the Build dialog, a job's form)",
+      "Layouts designed for windows narrower than 960px (phones, a quarter-screen window)",
+      "Configuring quality governance (review gates, decision docs, echo-chamber guard) in the app — the Quality section is removed instead (operator, 2026-11-10)",
+      "Committing an existing folder's files automatically — an existing folder without git is offered a repository, never given one unasked",
+      "Changing how a project with its own instruction files is instructed, unless the operator opts in"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "A long-values sweep of every settings section (app, project, agent) at 960 and 1440px, dark and light, reports no sideways scroll and nothing off-screen, and each broken screen listed in the problem renders whole.",
+      "intent": "Every settings screen stays readable and usable with long paths, commands, names and model ids at 960px and wider: labels keep a readable width, controls move below the label when space runs out, long values wrap or middle-truncate with the full value one hover or copy away, lists grow to fit their items, and nothing scrolls sideways.",
+      "key": "rows-that-hold-any-value",
+      "title": "Settings rows that hold any value"
+    },
+    {
+      "builds_after": [
+        "rows-that-hold-any-value"
+      ],
+      "done": "No project section holds another section below its danger zone, no screen has a Save button for a setting, every control is an app primitive, the Quality section is gone, and the operator signs off the screens against the rest of the app.",
+      "intent": "Settings look like the rest of the redesigned app and are organised so a setting is where its name says: General is split into named sections, Spec steps and Traces get their own places, the Quality section is removed, every control saves on change, and only the app's own controls are used, in the operator's words.",
+      "key": "settings-in-the-apps-style",
+      "title": "Settings in the app's style, where you expect them"
+    },
+    {
+      "builds_after": [
+        "settings-in-the-apps-style"
+      ],
+      "done": "Searching for a setting by a word from its label or description lands on it highlighted, from the settings screens and from the command palette; an overridden value names what it overrides and resets in one action.",
+      "intent": "Type part of a setting's name or what it does and jump to it, across app, project and agent settings; every setting shows whether it is the default, set for the project or overridden by an agent, with the value it inherits and a reset.",
+      "key": "find-any-setting",
+      "title": "Find any setting and see where its value comes from"
+    },
+    {
+      "builds_after": [],
+      "done": "Creating a project in a fresh folder leaves a repository with one commit holding AGENTS.md and the first writing agent gets its own worktree; opening an existing folder changes nothing in it unasked; a project with its own AGENTS.md is instructed as before until the operator opts in.",
+      "intent": "A project created in a new folder becomes a git repository whose first commit holds an AGENTS.md, so agents get their own worktrees from the first turn; an existing folder without git can be made one in one action after seeing what the first commit holds; and an AGENTS.md AgentWeave created, or one the operator adopts, becomes the project's instructions, edited from Settings → Instructions.",
+      "key": "a-new-project-starts-in-git",
+      "title": "A new project starts as a git repository with an AGENTS.md"
+    },
+    {
+      "builds_after": [
+        "rows-that-hold-any-value",
+        "a-new-project-starts-in-git"
+      ],
+      "done": "A freshly added project shows its set-up list in all three places, each item links to its setting or action, and the list disappears once everything on it is done.",
+      "intent": "A project that is not set up says so on Overview, in the rail and in settings, lists what it still needs, and each item opens the setting or action that resolves it.",
+      "key": "a-project-says-what-it-needs",
+      "title": "A project says what it still needs"
+    }
+  ],
+  "summary": "An overhaul of AgentWeave's configuration (app, project and agent settings): screens that hold any value without breaking, a structure where a setting is where you expect it, a way to find any setting by name and see where its value comes from, and a new project that starts as a git repository with an AGENTS.md and says what it still needs. The three-scope model (app / project / agent) stays.",
+  "tasks": [],
+  "title": "Settings that are easy to find and match the app"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "fct-1e704d380d1a",
+  "kind": "fact",
+  "claim": "The hub-tests suite should be made robust to SQLite lock contention under parallel runs so the gate does not need a serial re-run.",
+  "citations": [
+    {
+      "source": "src-a8a5c1d6d109",
+      "quote": "Make the hub-tests suite robust to SQLite lock contention under parallel runs, so the gate does not need a serial re-run.",
+      "line_start": 21,
+      "line_end": 21
+    }
+  ],
+  "sources": [
+    "src-a8a5c1d6d109"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T12:20:16.089421Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

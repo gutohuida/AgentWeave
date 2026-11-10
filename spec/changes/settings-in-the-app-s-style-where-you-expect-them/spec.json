@@ -1,0 +1,489 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a project open in the app",
+      "how_to_check": "py -3.11 scripts/checks/settings_style_check.py (reads the side list of a Hub started on a temporary database)",
+      "key": "ac-sections-listed",
+      "requirement": "project-sections",
+      "then": "the side list shows the four group headings and fifteen sections in the stated order, and no General, Quality or Runners entry",
+      "when": "Project settings is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "each section named in the requirement",
+      "how_to_check": "settings_style_check.py asserts each section's row labels against the requirement's list",
+      "key": "ac-every-setting",
+      "requirement": "every-setting-kept",
+      "then": "every setting the requirement places there is present as a labelled row, and none appears on two sections",
+      "when": "it is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the URLs of the old General, Quality and Runners sections and of each old agent section",
+      "how_to_check": "settings_style_check.py opens each old route and reads the active section",
+      "key": "ac-old-links",
+      "requirement": "old-links-land",
+      "then": "the successor section named in the requirement is shown, not an empty page",
+      "when": "each is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "every project and agent settings section",
+      "how_to_check": "settings_style_check.py counts Save buttons per section and watches the writes each change issues",
+      "key": "ac-no-save-buttons",
+      "requirement": "save-on-change",
+      "then": "no button named Save, Save steps or Save export settings exists outside Instructions; changing a hop budget, a spec step's sizes, the trace retention and an agent's question wait each issues one write with no further click",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "every project and agent settings section",
+      "how_to_check": "settings_style_check.py queries each section's DOM",
+      "key": "ac-no-native",
+      "requirement": "app-controls-only",
+      "then": "it contains no input[type=checkbox], no input[type=date] and no select element",
+      "when": "each is rendered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the built-in steps and one step of the operator's",
+      "how_to_check": "vitest for SpecStepsSettings and its container, plus the drive above",
+      "key": "ac-spec-steps",
+      "requirement": "spec-steps-section",
+      "then": "built-in steps read in words and are marked built in, the move and size change are stored without a Save, and the colliding add is refused with a reason while the list stays as stored",
+      "when": "Spec steps is opened, the operator's step is moved up and its sizes changed, then a step whose title collides with an existing one is added"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with traces and a collector header stored",
+      "how_to_check": "vitest for TracesSettings and its container",
+      "key": "ac-traces",
+      "requirement": "traces-section",
+      "then": "each change is stored without a Save, no stored header value appears anywhere on the page, and the download asks for traces since seven days ago",
+      "when": "the retention is changed, the collector switch turned, the headers replaced, and Download pressed with 7 days chosen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent's settings",
+      "how_to_check": "settings_style_check.py on an agent's settings",
+      "key": "ac-agent-sections",
+      "requirement": "agent-sections",
+      "then": "exactly Agent, Running, Permissions, Checkpoints and Workspace are listed, each holding the rows the requirement names",
+      "when": "they are opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent on Claude Sonnet and no runner for Claude Haiku in the project",
+      "how_to_check": "Hub test on the binding route, plus a drive: choose the model, start a turn with claude replaced on PATH by a recording stub, read the launch command",
+      "key": "ac-model-new",
+      "requirement": "agent-model-choice",
+      "then": "the agent's next turn launches Claude Code with that model, and the project holds exactly one runner for it",
+      "when": "Claude Code · Haiku is chosen in Running → Model"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a runner for Claude Opus already exists",
+      "how_to_check": "Hub test counting runners before and after",
+      "key": "ac-model-reuse",
+      "requirement": "agent-model-choice",
+      "then": "no new runner is created and both agents are bound to the existing one",
+      "when": "a second agent chooses Claude Code · Opus"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent with no checkpoint mode of its own and a project set to Offer me one",
+      "how_to_check": "vitest for AgentCheckpointsSettings",
+      "key": "ac-unset-shows-project",
+      "requirement": "agent-unset-shows-project",
+      "then": "the mode reads as the project's, naming Offer me one, and after choosing Off the reset returns it to the project's",
+      "when": "its Checkpoints section is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the long-values check's seeded long values",
+      "how_to_check": "py -3.11 scripts/checks/long_values_check.py",
+      "key": "ac-long-values",
+      "requirement": "long-values-still-fit",
+      "then": "it reports PASS at 960 and 1440, dark and light",
+      "when": "it runs over every new project and agent section"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the built screens",
+      "how_to_check": "Operator opens Project settings and an agent's settings in the app",
+      "key": "ac-signed-off",
+      "requirement": "matches-mock",
+      "then": "they sign them off",
+      "when": "the operator compares them with the approved mock and the rest of the app"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "6e8567767071e3d9d133fa6bb06a7c025852c2cc0234abb5161d03a02e5fa654",
+      "FR-10": "f19a1b02d077670dc526b0f07a78c4c5bcdd67d21849573a39394f3f67dcedc4",
+      "FR-11": "4bd5f64c69502ff6c57105ffe9be515247ddb8c0e41546fc013ce81c2c1ae15f",
+      "FR-12": "f19f0e000a850d92d7b289b19d1fb68d4b5df8864aa2ac1ebca93d4d44ce4a35",
+      "FR-2": "8da5453a5f49a9f4748257fd7d5b9d5eae42c8625c1a71bea3476968c2a8a439",
+      "FR-3": "71de29463481ecb2adafeccde8da41166cbfce819279f3820fe2a7b81bbfbbc1",
+      "FR-4": "43947e7a6adb0b5cd32f11f744f8f57014a14025ca093decbdf0c70b6aecb240",
+      "FR-5": "939f929b6b62708f4dcc6387f0ecbbb912c365d3cb90c6fb67803846d52b3d57",
+      "FR-6": "5d4027ccae89e4c9d1653911c91d3ffedfb50a718fc560e291a2dfe0a8426c39",
+      "FR-7": "5d0f053afe65b83c1f1c35777ed3e460e11472fa482b8acd9692e462890d9192",
+      "FR-8": "945a7fc07958f36e5da7b089b69272f98d6d861351d047de892d218e544b7197",
+      "FR-9": "8aa93752409b1c1ef4068e2886e06750d73b7d37ffb7e72ac0104deda75269f5"
+    },
+    "high_water": 12,
+    "requirements": {
+      "agent-model-choice": "FR-9",
+      "agent-sections": "FR-8",
+      "agent-unset-shows-project": "FR-10",
+      "app-controls-only": "FR-5",
+      "every-setting-kept": "FR-2",
+      "long-values-still-fit": "FR-11",
+      "matches-mock": "FR-12",
+      "old-links-land": "FR-3",
+      "project-sections": "FR-1",
+      "save-on-change": "FR-4",
+      "spec-steps-section": "FR-6",
+      "traces-section": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer built slice 1's settings work on the same components.",
+      "builder": "Sonnet for wiring components the mock already holds (quota-aware model choice); the Hub piece is a small find-or-create.",
+      "checker": "QA2 checked slice 1 by running the long-values check and driving the screens, which is what these criteria need.",
+      "cron": "Every five minutes keeps the queue moving without piling up turns.",
+      "mode": "Four chained tasks; a flow carries them in order without hand-offs.",
+      "stop": "Stops when the four tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Mock approved in look and structure by the operator (2026-11-10), built from real components fed fixtures: `cd hub/ui && npx vite --config vite.mock.config.ts`, then http://localhost:5199/mock.html#settings/general and #agent-settings/Builder/running. Screenshots: testbed/ui-judge/settings-style/ (dark and light, 1440 and 960). The components it renders are the deliverable; building is wiring them to the Hub's hooks.\n\nProject settings, grouped in the side list:\n- Project: Project (name, folder, delete), Collaboration, Permissions, Budgets (token limit, and the agent budget moved here)\n- Agents: Instructions, Charters, Checkpoints, Manager\n- Landing work: Checks (checks list, checks give way, generated files), Landing (main branch; pull requests and CI polling), Worktrees\n- Specs and records: Spec steps, Traces, Diagnostics\n\nAgent settings: Agent (identity + charter), Running (model + waits), Permissions (default permissions, granted reach, access grants), Checkpoints, Workspace. App settings unchanged.\n\nSave rule (operator, 2026-11-10: \"leave the button behaviour only where it's needed\"): a setting applies on change; long text applies when its field is left. Instructions keeps its Save, because saving commits AGENTS.md and emptying it asks to confirm.\n\nModel choice: the menu value is provider plus model, as agent creation already accepts (AgentCreate's provider+model form). The Hub binds the agent to a runner of that provider and model, reusing one if it exists. Runners stay the Hub's: checkpoint and manager menus still list them.\n\nComponents already written for the mock (hub/ui/src/components/settings/: GeneralSettings.tsx section exports, SpecStepsSettings.tsx, TracesSettings.tsx, CommittedTextarea in CommittedInput.tsx, SettingsNavLayout groups; hub/ui/src/components/agents/settings/: AgentSettingsPages.tsx, AgentPermissionGroup and AgentAccessGroups in AgentSettingsSections.tsx). They type-check and lint clean, and the existing settings and agent tests pass (639) with them in place.\n\nHazard: the UI bundle is committed and reaches the operator's :8000 on reload once master is merged; each task rebuilds it, so the tasks are chained rather than parallel.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/settings/ProjectSettingsScreen.tsx (section list, General body)",
+      "GeneralSettings.tsx groups and rows",
+      "Save buttons: OtherSettings.tsx:54, SpecStepsSection.tsx:139, TracesSection.tsx:185, RetentionRow",
+      "Native inputs: SpecStepsSection.tsx:198-230, TracesSection.tsx:215-304, AgentSettingsControls.tsx:81-331",
+      "Runners: RunnerForm is used only by sections/RunnersSection.tsx; seeding in hub/hub/db/engine.py:287; AgentCreate provider+model form in hub/ui/src/api/agents.ts:93",
+      "Operator's runners, read-only: 13 rows in 3 projects, none with flags",
+      "Agent settings sections: AgentSettingsPage.tsx:305-400",
+      "Mock rendered at 1440 and 960, dark and light, every new project and agent section, no console errors (mock/shoot.py)",
+      "tsc clean; eslint clean on the touched files; vitest agent/settings/instructions/budgets/spec-steps/traces tests: 639 passed"
+    ],
+    "limits": [
+      "The app itself is not wired to the new sections; only the mock renders them",
+      "Whether a Hub route already binds an agent by provider and model was not checked; the agent-sections task finds out",
+      "Copilot's extras on Running were not put in the mock"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": null,
+        "id": "build-cb6a77f734b1",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-10T17:39:02.882335+00:00",
+        "state": "running",
+        "stop_reason": null,
+        "tasks": {
+          "agent-sections": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "project-sections": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "steps-and-traces": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "style-drive": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": null,
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Does the mock's section list and grouping match where you expect each setting? Resolved: yes (operator, 2026-11-10).",
+      "resolved": true
+    },
+    {
+      "question": "Instructions: save when left, keep its Save, or save after a pause? Resolved: a Save stays only where it is needed; Instructions keeps it.",
+      "resolved": true
+    },
+    {
+      "question": "Agent settings in five sections with the model chosen directly; app settings left as they are? Resolved: yes to both (operator, 2026-11-10).",
+      "resolved": true
+    },
+    {
+      "question": "Is the look in the mock the style you want signed off? Resolved: yes (operator, 2026-11-10).",
+      "resolved": true
+    }
+  ],
+  "problem": "Code as of master 35c13ea (2026-11-10), after slice 1 shipped:\n\n- Project settings → General (ProjectSettingsScreen.tsx: GeneralSection, then SpecStepsSection, then TracesSection) renders seven groups on one page about 5,700px tall: Collaboration (jobs allowed, hop budget, deliveries per turn, agent budget, token limit), Reach (default permissions, granted reach), Integration (main branch, checks, checks give way, generated files, PR landing, one commit per build, PR CI is the full check, CI check names, CI polling interval and cutoff), Checkpointing (six rows), Project (name, folder, delete). Spec steps and Traces then follow the danger zone.\n- Quality (QualityHealthPanel) shows only a pointer to agentweave.yml, a file the product no longer uses.\n- Runners (RunnersSection, RunnerForm) is the only place a runner is created, edited (CLI, model, flags) or deleted. The operator has never used it (2026-11-10). On their own Hub every runner is either one of the three seeded defaults (db/engine.py `_seed_default_runners`) or one created by choosing a provider and model when an agent was created (AgentCreate's provider+model form). None has flags (read-only query of ~/.agentweave/hub/data/agentweave.db, 13 runners in 3 projects). An agent's Execution → Runner menu lists only runners that already exist.\n- There are three save models. Most rows save on change. Generated files and trace retention each have their own Save. Spec steps has \"Save steps\". Traces has \"Save export settings\". Instructions has one Save for its text body.\n- Two row systems are still in use. Agent settings (AgentSettingsPage, AgentSettingsControls), Spec steps, Traces and the Quality panel use the older `settings-row` from environment/SettingsSection.tsx. Everything else uses `SettingsRow` (components/ui/settings.tsx).\n- Some controls are native rather than the app's primitives: checkboxes in Spec steps (step sizes), Traces (\"Send to a collector\") and agent settings; date inputs in Traces' export range; <select>s in Spec steps (\"Add after\") and agent Context (checkpoint mode, unit). Built-in spec steps are titled by their raw slug (\"requirements-and-acceptance\").\n- Agent settings has seven sections (Identity, Execution, Charter, Interaction, Context, Access, Workspace) holding about fifteen rows; Charter is one row, Interaction two, and an agent's default permissions sit under Execution while what it may read and decide sits under Access.\n- App settings has three sections (Sound and notifications, Appearance, Hub connection) that read clearly; they stay as they are.",
+  "requirements": [
+    {
+      "key": "project-sections",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator approved this list and grouping in the mock (2026-11-10). General held seven groups on one ~5,700px page, so nothing on it was where its name said.",
+      "statement": "Project settings lists exactly these sections, under these group headings, in this order: Project — Project, Collaboration, Permissions, Budgets; Agents — Instructions, Charters, Checkpoints, Manager; Landing work — Checks, Landing, Worktrees; Specs and records — Spec steps, Traces, Diagnostics. No section named General, Quality or Runners is listed."
+    },
+    {
+      "key": "every-setting-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A reorganisation that drops a setting is a regression nobody sees until they need it.",
+      "statement": "Every setting the General page held appears on exactly one project settings section: name, folder and delete on Project; jobs allowed, hop budget and deliveries per turn on Collaboration; default permissions and granted reach on Permissions; agent budget and token limit on Budgets; the six checkpoint settings on Checkpoints; checks, checks give way and generated files on Checks; main branch, pull-request landing, one commit per build, PR CI as the full check, CI check names, CI interval and CI cutoff on Landing."
+    },
+    {
+      "key": "old-links-land",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Links to settings exist in toasts, notices and other screens (General's token limit, a runner error); a removed id must not open a blank page.",
+      "statement": "A link or saved location naming a section that no longer exists opens its successor: General, Quality and Runners open Project; an agent's Identity or Charter opens Agent, Execution or Interaction opens Running, Access opens Permissions, Context opens Checkpoints."
+    },
+    {
+      "key": "save-on-change",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-10: a Save stays only where it is needed. Saving Instructions writes and commits AGENTS.md and emptying it asks to confirm, so it is an act rather than a stored value. Confirm buttons inside dialogs (add a check, replace headers, clear traces) are actions, not saves.",
+      "statement": "Every setting on project and agent settings applies when it is changed — a text or number field when it is left or Enter is pressed, a long text when it is left — and no section shows a Save button for a setting, except Instructions, which keeps its one Save."
+    },
+    {
+      "key": "app-controls-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "No project or agent settings section renders a native checkbox, a native <select> or a native date input; each such choice uses the app's own switch, toggle, menu or segmented control."
+    },
+    {
+      "key": "spec-steps-section",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Spec steps shows the steps in order, each built-in step under a title in words (Intake, Requirements, Requirements and acceptance, Acceptance criteria, Approach, Tasks, Build) and marked built in; adding a step, moving or removing one of the operator's steps, changing its sizes, or changing any step's added instruction or a custom step's instructions applies at once, and a change the Hub refuses shows the Hub's reason and leaves the list as the Hub last stored it."
+    },
+    {
+      "key": "traces-section",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Traces applies the retention, the collector switch and the endpoint on change; replaces the collector headers only through a dialog, never displaying a stored value; and downloads or clears the traces of the last 24 hours, 7 days, 30 days or all of them, as chosen, with clearing confirmed first."
+    },
+    {
+      "key": "agent-sections",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-10. Permissions and Checkpoints share their names with the project sections they override, which slice 3's inheritance display builds on.",
+      "statement": "An agent's settings list exactly five sections — Agent (name, description, last active, charter, archive), Running (model, permission-decision wait, question wait, and Copilot's extras for a Copilot agent), Permissions (default permissions, own granted reach, reading other agents' checkpoints, recall, deciding evidence, keeping the specs true), Checkpoints (checkpoint mode, its own checkpoint point, its checkpoints taken) and Workspace (working directory, its own checkout, provider sessions)."
+    },
+    {
+      "key": "agent-model-choice",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With no Runners screen, a menu of existing runners could never reach a model nobody had used yet. Reusing runners keeps the checkpoint and manager menus, which still list runners, from filling with duplicates.",
+      "statement": "An agent's Running → Model lists every model of every provider whose coding agent is installed, plus each provider's own default, and choosing one makes the agent's next turn run on that provider and model without a runner having been created first; the Hub reuses an existing runner of the same provider and model rather than adding a second one."
+    },
+    {
+      "key": "agent-unset-shows-project",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Where an agent has no value of its own for a checkpoint setting or a permission, its section says what the project's value is, and a reset returns it to following the project."
+    },
+    {
+      "key": "long-values-still-fit",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The long-values check from `settings-rows-that-hold-any-value` passes on every new project and agent section at 960 and 1440px, dark and light."
+    },
+    {
+      "key": "matches-mock",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The built screens match the mock the operator approved on 2026-11-10 (hub/ui/mock, routes settings/* and agent-settings/*), and the operator signs them off against the rest of the app."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/settings-that-are-easy-to-find-and-match-the-app/spec.json",
+    "slice": "settings-in-the-apps-style"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Project settings section list and grouping, splitting General",
+      "Spec steps and Traces as their own sections, on the app's controls",
+      "Removing the Quality and Runners sections",
+      "Agent settings in five sections, with the model chosen directly",
+      "Save-on-change for every setting on project and agent settings, with Instructions' Save the one exception",
+      "Replacing native checkboxes, selects and date inputs on settings screens with the app's own controls",
+      "Human-readable titles for built-in spec steps",
+      "Old links to removed or renamed sections landing on their successor"
+    ],
+    "non_goals": [
+      "Search, and showing where a value is inherited from: slice 3",
+      "The set-up list: slice 5",
+      "Reorganising App settings (operator, 2026-11-10: its three sections stay)",
+      "Changing what any existing setting does on the Hub",
+      "Removing runners as a Hub concept: agents, checkpoints and manager jobs still run on one; only the screen goes",
+      "Editing a runner's flags from the app (no runner on the operator's Hub has any)",
+      "Changing the app / project / agent split",
+      "Layouts narrower than 960px",
+      "Forms outside settings (Build dialog, job form, check editor dialog, new agent dialog)"
+    ]
+  },
+  "summary": "Reorganise project and agent settings so a setting sits where its name says, matching the mock the operator approved on 2026-11-10. In project settings, General is split into named sections, Spec steps and Traces get their own, and Quality and Runners are removed. Agent settings go from seven sections to five, and an agent picks its model directly. Every setting saves on change except Instructions. Every control is one of the app's own.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Developer wrote and drove slice 1's long-values check, whose harness this reuses.",
+      "checker": "QA2",
+      "checker_reason": "QA2 ran that harness when checking slice 1, so it can tell a real failure from a harness one.",
+      "depends_on": [],
+      "description": "Write scripts/checks/settings_style_check.py on the harness long_values_check.py uses (its own Hub on a temporary database, Playwright): it reads the project settings side list (ac-sections-listed), each section's row labels (ac-every-setting), opens every old section route (ac-old-links), counts Save buttons and native checkbox/date/select elements per section and watches the writes a change issues (ac-no-save-buttons, ac-no-native), and reads an agent's five sections (ac-agent-sections). It fails on master today; record that failing output. It is not added to the project's checks.",
+      "files": [
+        "scripts/checks/settings_style_check.py"
+      ],
+      "from": null,
+      "key": "style-drive",
+      "requirements": [
+        "project-sections",
+        "every-setting-kept",
+        "old-links-land",
+        "save-on-change",
+        "app-controls-only",
+        "agent-sections"
+      ],
+      "reviewer": null,
+      "title": "Settings style check"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Wiring presentational components to existing hooks is Sonnet work; Developer built slice 1 on these same settings files.",
+      "checker": "QA2",
+      "checker_reason": "Checked by running the style and long-values checks and comparing with the mock, which QA2 did for slice 1.",
+      "depends_on": [
+        "style-drive"
+      ],
+      "description": "Wire ProjectSettingsScreen to the section components the mock uses (GeneralSettings.tsx: ProjectBasicsSettings, CollaborationSettings, PermissionsSettings, ChecksSettings, LandingSettings, CheckpointsSettings; AgentBudgetRow into Budgets) with the grouped side list (SettingsNavLayout `group`). Split GeneralSection's container so each section reads and saves through the same hooks. Remove the Quality and Runners sections and their now-unused components; route the old `settings`, `quality` and `runners` ids to Project in lib/navigation.ts. Generated files saves on leave (already in the component). Remove the old single-page GeneralSettings export once nothing uses it. Update the tests that named General, Quality or Runners. Rebuild and commit the UI bundle.",
+      "files": [
+        "hub/ui/src/components/settings",
+        "hub/ui/src/lib/navigation.ts",
+        "hub/ui/src/components/runners",
+        "hub/ui/src/components/quality",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "project-sections",
+      "requirements": [
+        "project-sections",
+        "every-setting-kept",
+        "old-links-land",
+        "save-on-change",
+        "long-values-still-fit",
+        "matches-mock"
+      ],
+      "reviewer": null,
+      "title": "Project settings in named sections"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Same settings folder as the task before it, so the same builder keeps the context.",
+      "checker": "QA2",
+      "checker_reason": "The checks are vitest plus the style drive, which QA2 already runs for this slice.",
+      "depends_on": [
+        "project-sections"
+      ],
+      "description": "Replace environment/SpecStepsSection and environment/TracesSection with containers feeding SpecStepsSettings and TracesSettings (components/settings) from useProjectJourney/useSaveProjectJourney and the trace hooks: each change saves the whole step list at once and shows a refusal as a notice; traces apply each setting on change, replace headers through the dialog, download and clear by the chosen range (clear behind the existing type-to-confirm). Delete the old sections and move their tests to the new components (ac-spec-steps, ac-traces). Rebuild and commit the UI bundle.",
+      "files": [
+        "hub/ui/src/components/environment",
+        "hub/ui/src/components/settings",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "steps-and-traces",
+      "requirements": [
+        "spec-steps-section",
+        "traces-section",
+        "save-on-change",
+        "app-controls-only"
+      ],
+      "reviewer": null,
+      "title": "Spec steps and Traces on the app's controls"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Mostly wiring; the Hub piece is a small find-or-create next to the existing provider+model agent creation.",
+      "checker": "QA2",
+      "checker_reason": "The model-choice criteria need a driven turn with a recording stub, which QA2's slice 1 drives already set up.",
+      "depends_on": [
+        "steps-and-traces"
+      ],
+      "description": "Rebuild AgentSettingsPage on the mock's components (agents/settings/AgentSettingsPages.tsx and AgentSettingsSections.tsx): Agent, Running, Permissions, Checkpoints, Workspace, routing the old section ids to their successors. Running → Model lists every installed provider's models plus its default and binds the agent to a runner of that provider and model, reusing an existing one or creating it once (Hub side if no route does this today: a find-or-create by provider and model, with tests for ac-model-new and ac-model-reuse). Replace the native checkpoint-mode and unit selects. Remove AgentSettingsControls pieces left unused. Rebuild and commit the UI bundle.",
+      "files": [
+        "hub/ui/src/components/agents",
+        "hub/ui/src/lib/navigation.ts",
+        "hub/ui/src/api/runners.ts",
+        "hub/ui/src/api/agents.ts",
+        "hub/hub/api/v1/agents.py",
+        "hub/hub/api/v1/runners.py",
+        "hub/tests",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "agent-sections",
+      "requirements": [
+        "agent-sections",
+        "agent-model-choice",
+        "agent-unset-shows-project",
+        "old-links-land",
+        "app-controls-only",
+        "save-on-change"
+      ],
+      "reviewer": null,
+      "title": "Agent settings in five sections, model chosen directly"
+    }
+  ],
+  "title": "Settings in the app's style, where you expect them"
+}

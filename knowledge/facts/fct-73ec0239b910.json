@@ -1,0 +1,23 @@
+{
+  "id": "fct-73ec0239b910",
+  "kind": "fact",
+  "claim": "Acceptance-drive tasks need an available trial Hub or must start a scratch Hub, and a drive that has not run past its first step must not be approved.",
+  "citations": [
+    {
+      "source": "src-b8ed975e77a6",
+      "quote": "Make sure a trial Hub is available, or have the task start a scratch Hub, for acceptance-drive tasks, and do not approve a drive that has not run past its first step.",
+      "line_start": 24,
+      "line_end": 24
+    }
+  ],
+  "sources": [
+    "src-b8ed975e77a6"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-06T08:26:11.209177Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

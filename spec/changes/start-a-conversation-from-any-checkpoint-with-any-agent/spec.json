@@ -1,0 +1,396 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "on the trial Hub, a conversation of agent A that was carried over by its checkpoint, and an idle agent B on a cheap model",
+      "how_to_check": "py -3.11 scripts/drive/d1106_start_from_checkpoint.py against the trial Hub :8010, binding Haiku",
+      "key": "ac-drive",
+      "requirement": "any-agent",
+      "then": "a new conversation of B exists whose first delivered input is that checkpoint with the note naming A, B's turn ran on B's model, and A's original conversation and its successor are unchanged (same lifecycle, no new runs or queue entries)",
+      "when": "the operator opens that checkpoint on the Checkpoints page, chooses B and starts"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an offered checkpoint, a carried-over one, and one already used to start a conversation",
+      "how_to_check": "Hub route test",
+      "key": "ac-any",
+      "requirement": "start-any",
+      "then": "each start creates a new conversation",
+      "when": "the operator starts from each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an original conversation with a model override",
+      "how_to_check": "Hub test",
+      "key": "ac-overrides",
+      "requirement": "any-agent",
+      "then": "the new conversation carries no override and runs on the agent's own model",
+      "when": "a conversation is started from its checkpoint for the same agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a checkpoint of agent A",
+      "how_to_check": "Hub test over the delivered queue content",
+      "key": "ac-input-own",
+      "requirement": "first-input",
+      "then": "A's first input is the checkpoint as a carry-over renders it; B's begins by naming A as the checkpoint's author and saying its tasks are A's",
+      "when": "a conversation is started from it for A, and another for B"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a start with an operator message",
+      "how_to_check": "Hub test over the delivered input",
+      "key": "ac-note",
+      "requirement": "operator-note",
+      "then": "it carries the checkpoint and then the message, in one turn",
+      "when": "the first turn is delivered"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose carry-overs wait for Continue",
+      "how_to_check": "Hub test",
+      "key": "ac-starts",
+      "requirement": "starts-now",
+      "then": "the new conversation's turn is scheduled with no Continue",
+      "when": "the operator starts from a checkpoint"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an open conversation with an offered checkpoint not yet carried over",
+      "how_to_check": "Hub test",
+      "key": "ac-untouched",
+      "requirement": "original-untouched",
+      "then": "the original is still open, and carrying the checkpoint over afterwards still works",
+      "when": "a conversation is started from that checkpoint"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a checkpoint carried into one conversation and used to start two others",
+      "how_to_check": "vitest component test and a browser step in the drive",
+      "key": "ac-lineage",
+      "requirement": "records-origin",
+      "then": "the checkpoint shows the carry-over and lists both started conversations with agent and time; each started conversation links back to the checkpoint",
+      "when": "the checkpoint and the started conversations are opened in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a checkpoint titled 'Revised check slices 1, 3, 4'",
+      "how_to_check": "Hub test",
+      "key": "ac-title",
+      "requirement": "title",
+      "then": "the conversation's title names that title and that it started from a checkpoint, and renaming it works",
+      "when": "a conversation is started from it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent B without the checkpoint-reading grant",
+      "how_to_check": "Hub test",
+      "key": "ac-no-grant",
+      "requirement": "no-grant-needed",
+      "then": "the start succeeds, and B's read_checkpoint of that id is still refused",
+      "when": "the operator starts B from agent A's checkpoint"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a failed checkpoint, an archived agent, and a checkpoint id of another project",
+      "how_to_check": "Hub route test",
+      "key": "ac-refused",
+      "requirement": "refusals",
+      "then": "each is refused with a reason and no conversation is created",
+      "when": "the operator tries to start from each"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "3229e3aef421a436b6d9d090de29cd2529220252471a1348ffbdc5dc4319e403",
+      "FR-10": "d4f273dcf209d3186cf0e6d95c65196ad2dd22e48f6ae52fef6ac60b5c258973",
+      "FR-2": "a414d2d612091a737032cd1044a408b58c72acdfaf2e91aca6c5267353baf898",
+      "FR-3": "7a84e99242456eb67959c8fb332b8464be50c6e27f5e1a5cdb5d212021b3d7b2",
+      "FR-4": "6f6832690599a659c149bc941b0d0ea2cb5e5a8dceccdecf0479c58961a8f1af",
+      "FR-5": "14b636fde7abf189a6f5dcf51e3d64265086d53bbb29398e9bd6c657a2b17763",
+      "FR-6": "f3ff8e45c65a609668df0cc3b77646369f1c82d4b99245728e5e495119add334",
+      "FR-7": "f374f36e539b08f468fd5875038c64926a28860d7ebf29a2b95c6c291cc189df",
+      "FR-8": "9c8188424a6dd25320b1e41d4cc9c314079b1ee422d97e860dc1d35a1fa4cc2e",
+      "FR-9": "0256e59251e6155aa7493ea01098d093a7635b2ada1b7ea66e7812cda03c09ba"
+    },
+    "high_water": 10,
+    "requirements": {
+      "any-agent": "FR-2",
+      "first-input": "FR-3",
+      "no-grant-needed": "FR-9",
+      "operator-note": "FR-4",
+      "original-untouched": "FR-6",
+      "records-origin": "FR-7",
+      "refusals": "FR-10",
+      "start-any": "FR-1",
+      "starts-now": "FR-5",
+      "title": "FR-8"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus2",
+    "builder": "DeveloperOpus2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus2 is free while DeveloperOpus builds the known-failing list.",
+      "builder": "Opus for the migration; the drive and the UI are Developer's.",
+      "checker": "QA2, since QA checks the known-failing list.",
+      "cron": "Every five minutes, as for the other slices.",
+      "mode": "Three tasks in a chain; a flow runs each as soon as the one before lands.",
+      "stop": "Stop when the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Hazard: one migration (the conversation records the checkpoint it started from), applied to live data on the :8000 Hub's restart. It adds a nullable column and changes no row; its downgrade drops it.\n\nParallel with 'Failures already known are on a list': that slice adds migrations too, so whichever lands second takes the next number. The two share no files except hub/hub/db/models.py, hub/hub/migrations/versions/ and the UI bundle, hub/hub/static/ui/. The bundle is rebuilt by the last UI task to land.",
+  "evidence": {
+    "checked": [
+      "hub/hub/checkpoint_cutover.py, api/v1/checkpoints.py, checkpoint_access.py, conversations.py, db/models.py:2164-2335 and the Checkpoints page on master (subagent inventory with file:line, 2026-11-06)",
+      "The roadmap slice 'start-from-a-checkpoint' and its done sentence"
+    ],
+    "limits": [
+      "Whether a different agent makes good use of another agent's checkpoint is judged by the drive's one example only"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [
+          "Developer",
+          "DeveloperOpus2"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-06T03:49:00.218390+00:00",
+        "id": "build-b7a683b2b64f",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-06T00:34:57.464382+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "start": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA2"
+          },
+          "ui": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Start at once or wait for Continue? Resolved 2026-11-06: at once, on the operator's confirm (FR-5).",
+      "resolved": true
+    },
+    {
+      "question": "Where does the start action appear? Resolved 2026-11-06: only on the Checkpoints page (non-goal recorded).",
+      "resolved": true
+    }
+  ],
+  "problem": "A checkpoint can be used once, by the agent that wrote it, to continue the conversation it came from:\n- Cutting over is bound to the checkpoint's own conversation and agent (hub/hub/checkpoint_cutover.py:170-174). It archives the original (conversations.py:531-534).\n- It is refused once that conversation has been handed over: a conditional update plus a unique index of one handover per conversation (models.py:2327-2335).\n- The Checkpoints page lists and reads every checkpoint, but its detail view has no action (hub/ui/src/components/checkpoints/CheckpointsPage.tsx:140-222). The only cut-over button is in the conversation panel, and only for an offered checkpoint (AgentOutputPanel.tsx:751-800).\n\nSo the operator cannot:\n- go back to an earlier point in a line of work and try again from there;\n- hand a well-summarised state to a different agent, for example a cheaper model or a reviewer;\n- start a second attempt alongside the first.\n\nEach of those today means copying a checkpoint's text into a new conversation by hand.",
+  "requirements": [
+    {
+      "key": "start-any",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can start a new conversation from any checkpoint of the project that was written, whatever its age, its trigger, and whether it has already been carried over or used to start other conversations."
+    },
+    {
+      "key": "any-agent",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The point of choosing another agent is often a different model or role; inheriting the original's overrides would quietly undo the choice.",
+      "statement": "When starting, the operator chooses the conversation's agent from the project's open agents, with the checkpoint's own agent offered first; the new conversation belongs to that agent and runs with that agent's own runner, model and permissions, not the original conversation's overrides."
+    },
+    {
+      "key": "first-input",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A checkpoint is written in the first person of the agent that produced it (it lists 'every task assigned to this agent'); read unannotated by another agent, it would be taken as that agent's own state.",
+      "statement": "The new conversation's first input is the checkpoint, rendered as a carry-over renders it. When the chosen agent is not the checkpoint's own, the input first says whose conversation the checkpoint was written in, and that the tasks it lists are that agent's, not the reader's."
+    },
+    {
+      "key": "operator-note",
+      "modal": "MAY",
+      "party": null,
+      "rationale": null,
+      "statement": "When starting, the operator may add a message of their own, which is delivered after the checkpoint in the same first turn."
+    },
+    {
+      "key": "starts-now",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06. Unlike an automatic carry-over, this is a deliberate operator action, so a second confirmation adds a click and nothing else.",
+      "statement": "The new conversation's first turn starts as soon as the operator confirms, without a separate Continue, whatever the project's carry-over setting says."
+    },
+    {
+      "key": "original-untouched",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Starting from a checkpoint changes nothing about the conversation the checkpoint came from or about the checkpoint itself: the conversation stays open or archived as it was, its runs and queue are untouched, and a checkpoint not yet carried over can still be carried over afterwards."
+    },
+    {
+      "key": "records-origin",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Without the record, a second attempt is indistinguishable from fresh work, and the Checkpoints page's lineage would show only the carry-over.",
+      "statement": "A conversation started this way records the checkpoint it started from. The conversation shows it, with a link to that checkpoint, and the checkpoint lists every conversation started from it, each with its agent and when, apart from the conversation it was carried into."
+    },
+    {
+      "key": "title",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The new conversation is titled from the checkpoint's title, marked as started from a checkpoint, and the operator can rename it."
+    },
+    {
+      "key": "no-grant-needed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator can already read every checkpoint, and here they choose what to hand over. A grant check would make the operator ask permission of their own setting.",
+      "statement": "Starting another agent from a checkpoint needs no checkpoint-reading grant for that agent; the grant continues to govern only what an agent may read with its own tools."
+    },
+    {
+      "key": "refusals",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Starting is refused, saying why, when the checkpoint was never written, when the chosen agent is archived or not in this project, or when the checkpoint belongs to another project; a refused start creates no conversation."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checkpoints-and-traces-you-can-find-and-use/spec.json",
+    "slice": "start-from-a-checkpoint"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A start action on any written checkpoint in the Checkpoints page, with a choice of agent",
+      "The new conversation: its agent, its first input, its title, and its record of the checkpoint it started from",
+      "Showing, on a checkpoint, the conversations started from it, and on a conversation, the checkpoint it started from",
+      "Leaving the original conversation and the checkpoint's carry-over untouched"
+    ],
+    "non_goals": [
+      "A start action anywhere but the Checkpoints page, such as the conversation view (operator, 2026-11-06)",
+      "Changing how the automatic or offered carry-over works, including that it archives the original",
+      "Editing a checkpoint's text before starting from it",
+      "Starting from a checkpoint of another project",
+      "Agents starting conversations from checkpoints themselves (an MCP tool)",
+      "Starting from a checkpoint that was never written (unwritten or failed)",
+      "Merging two conversations, or carrying a conversation's provider session over"
+    ]
+  },
+  "summary": "From the Checkpoints page, the operator picks any written checkpoint, including an old one or one already carried over, chooses any agent of the project, and starts a new conversation for that agent whose first input is that checkpoint. Its first turn starts as soon as the operator confirms. The original conversation, and the checkpoint's own carry-over, are left exactly as they were. One checkpoint can start any number of conversations, and each one records where it started from.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: a drive script in the existing scripts/drive pattern.",
+      "checker": "QA2",
+      "checker_reason": "QA is on the known-failing list; QA2 checks this slice end to end.",
+      "depends_on": [],
+      "description": "Write scripts/drive/d1106_start_from_checkpoint.py against the trial Hub :8010, with per-run scratch it cleans up and Haiku bound to every agent turn. Produce a conversation for agent A, carry it over by its checkpoint, then start agent B from that checkpoint through the operator route and in the browser. Assert ac-drive and the lineage display. Show it failing on master first.",
+      "files": [
+        "scripts/drive/d1106_start_from_checkpoint.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "any-agent",
+        "original-untouched",
+        "records-origin"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive: start another agent from a carried-over checkpoint"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Opus: a migration on live data, and DeveloperOpus is building the known-failing list in parallel.",
+      "checker": "QA2",
+      "checker_reason": "Same checker through the slice.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add the operator route that starts a conversation from a checkpoint for a chosen agent, with an optional message. It must not touch the original conversation or the checkpoint's carry-over. Record which checkpoint the conversation started from (a migration), and list the conversations started from a checkpoint on the checkpoint routes. Write the first input, with the authorship note for another agent, the title and the refusals, and schedule the turn at once. Hub tests for each criterion.",
+      "files": [
+        "hub/hub/checkpoint_start.py",
+        "hub/hub/checkpoint_cutover.py",
+        "hub/hub/api/v1/checkpoints.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "start",
+      "requirements": [
+        "start-any",
+        "any-agent",
+        "first-input",
+        "operator-note",
+        "starts-now",
+        "original-untouched",
+        "records-origin",
+        "title",
+        "no-grant-needed",
+        "refusals"
+      ],
+      "reviewer": null,
+      "title": "The Hub starts a conversation from a checkpoint"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: one action and one list on an existing page.",
+      "checker": "QA2",
+      "checker_reason": "Same checker through the slice; it runs the drive's browser step.",
+      "depends_on": [
+        "start"
+      ],
+      "description": "On the checkpoint detail, add a Start a conversation action: an agent picker (the checkpoint's agent first), an optional message, and confirm, which opens the new conversation. Show the conversations started from the checkpoint beside the carry-over lineage, and the started-from link on the conversation. Add a vitest component test, then refresh the UI bundle (hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/ui/src/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "any-agent",
+        "operator-note",
+        "records-origin"
+      ],
+      "reviewer": null,
+      "title": "Start button and lineage on the Checkpoints page"
+    }
+  ],
+  "title": "Start a conversation from any checkpoint, with any agent"
+}

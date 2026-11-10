@@ -1,0 +1,23 @@
+{
+  "id": "fct-8a4450127241",
+  "kind": "fact",
+  "claim": "Specs should name the selectors and URLs the acceptance drive will use.",
+  "citations": [
+    {
+      "source": "src-dc306dd182e5",
+      "quote": "Name the selectors and URLs the acceptance drive will use.",
+      "line_start": 18,
+      "line_end": 18
+    }
+  ],
+  "sources": [
+    "src-dc306dd182e5"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T00:09:19.643826Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

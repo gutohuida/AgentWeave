@@ -1,0 +1,13 @@
+{
+  "id": "src-aa7a1289debe",
+  "name": "Build retrospective of Hub tests pass on a busy machine, and the migration tests take less time, 2026-11-05",
+  "type": "document",
+  "visibility": "tracked",
+  "created_at": "2026-11-05T16:19:34.462345Z",
+  "holder": null,
+  "media_type": "text/plain",
+  "dated": "2026-11-05",
+  "sha256": "6fad0aa3c04ae4fe40ce83b1972d8529dca36650f390c23b6facfbe15006f3e7",
+  "added_by": "manager",
+  "distilled_version": "6fad0aa3c04ae4fe40ce83b1972d8529dca36650f390c23b6facfbe15006f3e7"
+}

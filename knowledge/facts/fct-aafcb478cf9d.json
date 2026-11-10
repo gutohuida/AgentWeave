@@ -1,0 +1,23 @@
+{
+  "id": "fct-aafcb478cf9d",
+  "kind": "fact",
+  "claim": "Product tasks should be started alongside the acceptance-drive task rather than queued behind it, so drive review rounds do not hold up the code the drive tests.",
+  "citations": [
+    {
+      "source": "src-a1c950abd4af",
+      "quote": "Start the product tasks alongside the acceptance-drive task rather than queuing them behind it, so drive review rounds do not hold up the code that the drive tests.",
+      "line_start": 24,
+      "line_end": 24
+    }
+  ],
+  "sources": [
+    "src-a1c950abd4af"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T23:11:47.881493Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

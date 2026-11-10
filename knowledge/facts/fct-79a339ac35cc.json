@@ -1,0 +1,23 @@
+{
+  "id": "fct-79a339ac35cc",
+  "kind": "fact",
+  "claim": "The 2-second health check in agentweave stop gave up silently on a busy Hub during this build.",
+  "citations": [
+    {
+      "source": "src-40507bd03662",
+      "quote": "In this build, agentweave stop's 2 s health check gave up silently on a busy Hub.",
+      "line_start": 10,
+      "line_end": 10
+    }
+  ],
+  "sources": [
+    "src-40507bd03662"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T16:09:00.700051Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

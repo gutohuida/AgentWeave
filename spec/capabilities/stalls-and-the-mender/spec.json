@@ -1,0 +1,289 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the mender enabled with a runner; a flow (a loop with a spec document) with task T1 completed by agent A with review evidence naming a commit, a run of A `running` on T1, and task T2 depending on T1",
+      "how_to_check": "The acceptance drive: py -3.11 -m pytest hub/tests/test_the_mender_wakes_only_for_real_stalls.py -v, run on master first (fails: a loop_stalled stall is recorded and the mender briefed) and then on the branch (passes).",
+      "key": "the-mender-wakes-only-for-real-sta-gap-fires-no-stall-end-to-end",
+      "requirement": "the-mender-wakes-only-for-real-stall-hand-off-gap-is-not-a-stall",
+      "then": "no `Stall` row with cause `loop_stalled` exists, no inbound queue entry for the mender exists, no `JobRun` for the job has status `skipped`, and `decide_firing` returns kind `in_flight` with `stall_reason` None",
+      "when": "the flow's job fires (`JobScheduler._fire_job_internal`, trigger 'scheduled') and `stalls.drain()` returns"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same flow with T1 as its only task",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_the_mender_wakes_only_for_real_stalls.py -v; and py -3.11 -m pytest hub/tests/test_review_waits_for_the_authors_turn.py -v (its mid-turn test now asserts kind `in_flight` and no stall reason)",
+      "key": "the-mender-wakes-only-for-gap-without-dependents-fires-no-stall",
+      "requirement": "the-mender-wakes-only-for-real-stall-hand-off-gap-is-not-a-stall",
+      "then": "no `loop_stalled` stall is recorded and `decide_firing` carries no stall reason",
+      "when": "the job fires"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the change deployed on :8000 and an unattended flow run overnight",
+      "how_to_check": "Read-only query on :8000's database (mode=ro): join `stalls` (cause loop_stalled) to `task_transitions` (to_status completed) on the loop's tasks, and count pairs under 10 s apart; expect 0.",
+      "key": "the-mender-wakes-only-for-real-sta-night-shows-no-hand-off-wakes",
+      "requirement": "the-mender-wakes-only-for-real-stall-hand-off-gap-is-not-a-stall",
+      "then": "no `loop_stalled` stall's `first_seen_at` falls within 10 seconds after a `completed` transition of one of that flow's tasks",
+      "when": "the operator reads the night's stalls the next morning"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the gap-fires-no-stall-end-to-end state with a reviewer agent R that has a runner and is free",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_the_mender_wakes_only_for_real_stalls.py -v",
+      "key": "the-mender-wakes-only-for-real-st-turn-end-dispatches-the-review",
+      "requirement": "the-mender-wakes-only-for-real-stal-review-follows-the-turns-end",
+      "then": "the job fired once more and a review turn for T1 is queued for R (or T1 is `under_review` with assignee R), with no `loop_stalled` stall recorded at any point",
+      "when": "A's run on T1 is marked ended and `flow_advance.after_run` is called for it (DEBOUNCE_SECONDS patched to 0), then `flow_advance.settled()` returns"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the mender enabled; a flow whose only open task T2 depends on T1, where T1 is rejected, so nothing is claimable and no run is on any of the flow's tasks",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_the_mender_wakes_only_for_real_stalls.py -v; and the existing py -3.11 -m pytest hub/tests/test_a_stalled_project_wakes_the_mender.py -v stays green",
+      "key": "the-mender-wakes-only-for-real-real-stall-wakes-on-first-firing",
+      "requirement": "the-mender-wakes-only-for-real-st-real-stalls-still-wake-at-once",
+      "then": "one `loop_stalled` stall is recorded on that firing and one mender brief is queued",
+      "when": "the job fires once"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the gap-fires-no-stall-end-to-end flow, with A's run started 40 minutes ago, T1's last transition 35 minutes ago, and the run not in this Hub's live registry",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_the_mender_wakes_only_for_real_stalls.py -v",
+      "key": "the-mender-wakes-only-for-real-stall-hung-turn-reported-by-sweep",
+      "requirement": "the-mender-wakes-only-for-rea-a-hung-author-turn-is-still-caught",
+      "then": "a `dead_run` stall for A's run and a `no_progress` stall for the loop are recorded",
+      "when": "`stalls.sweep(now=...)` runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Manager mender entry enabled with a Claude Code runner whose model is `claude-opus-5-5` and no model chosen",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_stalled_project_wakes_the_mender.py -v (new test; `test_turning_the_mender_on_makes_its_agent` updated to expect the default-model runner)",
+      "key": "the-mender-wakes-only-for-real-stalls-empty-model-runs-on-sonnet",
+      "requirement": "the-mender-wakes-only-for-mender-defaults-to-the-catalog-default",
+      "then": "the mender agent's runner has cli `claude` and model `claude-sonnet-5-5`, and the brief is queued for it",
+      "when": "a stall wakes the mender"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an existing mender agent bound to the Opus runner, from an entry with no model",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_stalled_project_wakes_the_mender.py -v",
+      "key": "the-mender-wakes-only-for-real-existing-entry-moves-on-next-wake",
+      "requirement": "the-mender-wakes-only-for-mender-defaults-to-the-catalog-default",
+      "then": "the agent's `runner_id` now names a `claude-sonnet-5-5` runner, and no migration ran",
+      "when": "the next stall wakes it"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the change deployed on :8000 with the mender entry unchanged",
+      "how_to_check": "Read-only query on :8000 (mode=ro): `turn_usage.model` for every row with agent 'mender' created after the restart; expect only claude-sonnet-5-5.",
+      "key": "the-mender-wakes-only-for-real-stall-night-mender-runs-on-sonnet",
+      "requirement": "the-mender-wakes-only-for-mender-defaults-to-the-catalog-default",
+      "then": "every `turn_usage` row of agent `mender` after the deploy names a Sonnet model",
+      "when": "the operator reads the next night's mender runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a mender entry with runner model `claude-sonnet-5-5` and model `claude-opus-5-5` chosen",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_stalled_project_wakes_the_mender.py -v",
+      "key": "the-mender-wakes-only-for-real-stalls-chosen-opus-is-kept",
+      "requirement": "the-mender-wakes-only-for-real-sta-a-chosen-mender-model-is-kept",
+      "then": "the mender agent's runner has model `claude-opus-5-5`",
+      "when": "a stall wakes the mender"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Manager page with the mender job on a Claude Code runner and no model, and the titles job likewise",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/managerSection.test.tsx",
+      "key": "the-mender-wakes-only-for-real-st-manager-menu-names-the-default",
+      "requirement": "the-mender-wakes-only-for-manager-page-names-the-mender-default",
+      "then": "the mender's model menu's empty choice reads 'Sonnet 5.5 (the mender's default)' and the titles job's still reads 'The runner's model'",
+      "when": "the page renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running mender run bound to a task, and a running builder run",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_the_mender_leaves_notes.py -v",
+      "key": "the-mender-wakes-only-for-real-sta-mender-blocking-ask-is-a-note",
+      "requirement": "the-mender-wakes-only-for-real-stalls-mender-questions-are-notes",
+      "then": "the mender's rows have `blocking` false, `wait_expires_at` null and its task stays unparked; the builder's rows have `blocking` true and a `wait_expires_at`",
+      "when": "the mender posts `/agent-actions/questions/batch` with `blocking: true`, and the builder posts the same"
+    },
+    {
+      "checked_by": "agent",
+      "given": "`ask_user` called with `blocking` left True against a Hub stub whose batch response records every row with `blocking` false",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_mcp_server.py -v -k note",
+      "key": "the-mender-wakes-only-for-real-s-tool-returns-at-once-for-a-note",
+      "requirement": "the-mender-wakes-only-for-real-stalls-mender-questions-are-notes",
+      "then": "it returns without polling `GET /questions/{id}` and its result says the questions were recorded as a note whose answer arrives as a later message",
+      "when": "the tool runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "any stall",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_the_mender_leaves_notes.py -v",
+      "key": "the-mender-wakes-only-for-real-stalls-brief-says-note-not-wait",
+      "requirement": "the-mender-wakes-only-fo-mender-leaves-the-note-and-does-not-act",
+      "then": "the brief contains no 'wait for the answer', tells the mender to leave a note with ask_user, not take the action, and end the stall gave_up naming the note",
+      "when": "`stalls.brief` composes the mender's brief"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the mender with two open conversations C1 (older, where the note was asked) and C2 (updated later), and its asking run ended",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_the_mender_leaves_notes.py -v; and py -3.11 -m pytest hub/tests/test_question_batch_delivery.py hub/tests/test_a_question_names_its_conversation.py -v stay green",
+      "key": "the-mender-wakes-only-for-real-sta-answer-lands-in-asking-thread",
+      "requirement": "the-mender-wakes-only-answer-reaches-the-thread-it-was-asked-in",
+      "then": "one queued entry for the mender exists, with `conversation_id` C1; and when C1 has been archived first, the entry goes to C2",
+      "when": "the operator answers the note through `PATCH /questions/{id}`"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an unanswered non-blocking mender question with `asker_waiting` false and a `conversation_id`, and a blocking builder question with `asker_waiting` false",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/overviewScreen.test.tsx",
+      "key": "the-mender-wakes-only-for-real-stalls-overview-note-row",
+      "requirement": "the-mender-wakes-only-fo-the-note-reads-as-a-note-in-the-morning",
+      "then": "the mender row shows its header, not 'nobody is waiting', and its action opens the mender's conversation with that id; the builder row still shows the 'nobody is waiting' sentence",
+      "when": "the Overview renders Needs you"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the change deployed on :8000 and an unattended night",
+      "how_to_check": "Drive step on :8000 in the morning; also read-only: every `questions` row from_agent mender created after the deploy has blocking 0 and wait_expires_at NULL.",
+      "key": "the-mender-wakes-only-for-morning-finds-notes-not-expired-waits",
+      "requirement": "the-mender-wakes-only-fo-the-note-reads-as-a-note-in-the-morning",
+      "then": "each question the mender asked overnight is listed as a note under Needs you, none reads 'nobody responded' or 'nobody is waiting', and answering one wakes the mender in that stall's thread",
+      "when": "the operator opens the Overview in the morning"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "858964a0180166ad8056726073d385476f980aa48f624ebb8582657a7be6ca86",
+      "FR-10": "5cdaba4f2a51e11266e00544c520d6b44395b7ae4746937c2daa6962ab492a3d",
+      "FR-11": "ba29f72462791374ea8a1d5122c022ecc16a53273bf523f4f61a9340a96fdd81",
+      "FR-2": "0998124fbb208a3f2b589e8073073e59eaa1ba1f4021ba1807e1b2a0d04c2404",
+      "FR-3": "44d0c945180be4df789a4d6d4c1584e9476ef3b2258177453576bef87ab55384",
+      "FR-4": "983dedfebd17538877b574bec0f0aaf43a660d82477ac911d4638896395a3f2e",
+      "FR-5": "0f338b78f450756cc025d70360f69518a64621ef85e1295c2444e5175f0e5f84",
+      "FR-6": "4c5a88c6a6670d007dd666e7d1ebeac7201e707786ba6cd8f1377e0e3d434b33",
+      "FR-7": "350dbb99a0d9a780477f9161b28c0ddca7516fce79d0b1eb18ecc689b69eb9f0",
+      "FR-8": "b6d5e3aed2786bca7567eedf99f94387687a8b7c605053930f41d8379e1808fd",
+      "FR-9": "ad575f4902fc29e883eaf5870144b3b3091c20c9622f08e9b5997be88b1ecaac"
+    },
+    "high_water": 11,
+    "requirements": {
+      "the-mender-wakes-only-answer-reaches-the-thread-it-was-asked-in": "FR-10",
+      "the-mender-wakes-only-fo-mender-leaves-the-note-and-does-not-act": "FR-9",
+      "the-mender-wakes-only-fo-the-note-reads-as-a-note-in-the-morning": "FR-11",
+      "the-mender-wakes-only-for-manager-page-names-the-mender-default": "FR-7",
+      "the-mender-wakes-only-for-mender-defaults-to-the-catalog-default": "FR-5",
+      "the-mender-wakes-only-for-rea-a-hung-author-turn-is-still-caught": "FR-4",
+      "the-mender-wakes-only-for-real-st-real-stalls-still-wake-at-once": "FR-3",
+      "the-mender-wakes-only-for-real-sta-a-chosen-mender-model-is-kept": "FR-6",
+      "the-mender-wakes-only-for-real-stal-review-follows-the-turns-end": "FR-2",
+      "the-mender-wakes-only-for-real-stall-hand-off-gap-is-not-a-stall": "FR-1",
+      "the-mender-wakes-only-for-real-stalls-mender-questions-are-notes": "FR-8"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "the-mender-wakes-only-for-real-stall-hand-off-gap-is-not-a-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F1049: six Opus mender turns in one night, each finding a review that was about to start. The author's run ending is what makes the work reviewable and already requests the next firing (`flow_advance.after_run`), so this is the flow working, not a stall.",
+      "statement": "A flow firing that finds a `completed` task whose completing agent still has a run `running` on that task records no `loop_stalled` stall, briefs no mender, writes no `skipped` job run, and its decision carries no stall reason, whether or not other tasks of the flow are gated on that task's approval."
+    },
+    {
+      "key": "the-mender-wakes-only-for-real-stal-review-follows-the-turns-end",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Requirement hand-off-gap-is-not-a-stall is safe only because this firing exists; the acceptance drive asserts both halves so neither can regress alone.",
+      "statement": "When the completing agent's run on that task ends, the firing its end requests selects the task for review by a reviewer other than its author, without waiting for the flow's cron tick."
+    },
+    {
+      "key": "the-mender-wakes-only-for-real-st-real-stalls-still-wake-at-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The fix narrows what counts as a stall; it must not delay a real one.",
+      "statement": "A flow firing that finds open work, nothing claimable, and no agent's run `running` on any of the flow's tasks records a `loop_stalled` stall on that first firing and wakes the enabled mender once, as today."
+    },
+    {
+      "key": "the-mender-wakes-only-for-rea-a-hung-author-turn-is-still-caught",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Treating the task as in flight removes the firing's stall; the sweep is what keeps a run that never ends from hiding forever.",
+      "statement": "A completed task held in flight by its author's run is still reported by the stall sweep when that run is recorded `running` but this Hub is not executing it (`dead_run`), and when its loop has had no run started and no task moved for `NO_PROGRESS_MINUTES` (`no_progress`)."
+    },
+    {
+      "key": "the-mender-wakes-only-for-mender-defaults-to-the-catalog-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On :8000 the operator chose a runner, not a model, and got Opus for 42 turns. Mending is reading state and calling a few routes; the everyday model is enough, and an operator who wants more can choose it.",
+      "statement": "When the project's Manager mender entry names no model, every mender turn runs on the model the model catalog marks `default` for the CLI of the entry's runner (`claude-sonnet-5-5` for Claude Code), whatever model that runner itself names; a project whose entry already names no model moves to it at the mender's next wake, with no migration."
+    },
+    {
+      "key": "the-mender-wakes-only-for-real-sta-a-chosen-mender-model-is-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A model the operator chose for the mender on the Manager page is the model its turns run on, as today."
+    },
+    {
+      "key": "the-mender-wakes-only-for-manager-page-names-the-mender-default",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Warn, don't gate: the operator must be able to see what the mender costs before it runs.",
+      "statement": "The Manager page's model menu for the mender, with no model chosen, names the model the mender will run on (for a Claude Code runner: 'Sonnet 5.5 (the mender's default)'), never 'The runner's model'; the other jobs' menus are unchanged."
+    },
+    {
+      "key": "the-mender-wakes-only-for-real-stalls-mender-questions-are-notes",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "27 four-minute waits ran out unanswered on 2026-10-26/27. A wait on a person who is asleep only ends in 'nobody responded'.",
+      "statement": "Every question the Hub's mender asks through `ask_user` is recorded with `blocking` false and no `wait_expires_at`, whatever `blocking` value it passed; the call returns without waiting; it parks no task; and a blocking question from any other agent still waits as today."
+    },
+    {
+      "key": "the-mender-wakes-only-fo-mender-leaves-the-note-and-does-not-act",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Keeps the rule that the hardcore moves wait for the operator, without a wait; F1048's rule then keeps the stall the operator's while its reason holds, so the note is not asked again.",
+      "statement": "The mender's brief tells it that, for each action it must ask the operator about, it leaves the question as a note, does not take the action, and ends the stall with `mend_end_stall(stall_id, \"gave_up\", summary)` whose summary names the note."
+    },
+    {
+      "key": "the-mender-wakes-only-answer-reaches-the-thread-it-was-asked-in",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The mender holds one open conversation per stall; delivering into the latest open one (`questions.py:164`) would wake it in another stall's thread.",
+      "statement": "Answering (or declining) a question that no run is waiting on delivers the answer as a new queued turn into the conversation the question was asked from when that conversation is still open, and into the asker's latest open conversation only when it is not."
+    },
+    {
+      "key": "the-mender-wakes-only-fo-the-note-reads-as-a-note-in-the-morning",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today every non-blocking question whose run ended reads 'nobody is waiting on this answer any more' (`OverviewScreen.tsx:117`), which is false for a note whose answer is delivered.",
+      "statement": "The Overview's Needs-you list shows each unanswered mender note with its question, an action that opens the conversation it was asked in, and no sentence saying nobody is waiting on the answer; the 'nobody is waiting' sentence is shown only for a blocking question whose asking turn has ended."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Stalls and the mender"
+}

@@ -177,24 +177,6 @@
     },
     {
       "checked_by": "agent",
-      "given": "a scratch project whose check fails on master, and a Haiku agent's completed task",
-      "how_to_check": "py -3.11 scripts/drive/d1015_f605_preexisting_checks.py <project> (written first: fails before the build)",
-      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-drive",
-      "requirement": "a-check-that-fails-on-main-too-is-not-the-tasks-held",
-      "then": "the first answer says the check fails on main too, has no send-back line and names the override; the second lands the task",
-      "when": "the operator presses Land, then Land with an override reason"
-    },
-    {
-      "checked_by": "agent",
-      "given": "real disposable repositories",
-      "how_to_check": "pytest hub/tests/test_project_checks_gate.py hub/tests/test_project_checks_run.py",
-      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-unit",
-      "requirement": "a-check-that-fails-on-main-too-is-not-the-tasks-baseline",
-      "then": "preexisting is recorded, not recorded, and the check is not re-run",
-      "when": "a check fails on main and the task, fails only on the task, and passes"
-    },
-    {
-      "checked_by": "agent",
       "given": "the same held task",
       "how_to_check": "py -3.11 scripts/drive/d1015_f605_preexisting_checks.py <project>",
       "key": "a-check-that-fails-on-main-too-is-not-the-tasks-land-override",
@@ -210,20 +192,6 @@
       "when": "the checks row renders and is opened"
     },
     {
-      "given": "two completed tasks A and B in one project, each with a passed result for the current main tip",
-      "key": "checks-wait-less-fresh-results-after-maste-ac-land-a-refreshes-b",
-      "requirement": "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results",
-      "then": "a new check run for B starts on the new main tip without B's approval being requested, and once it passes, approving B is not refused for checks",
-      "when": "A is approved and its work lands on main"
-    },
-    {
-      "given": "a task in in_progress with a recorded check run",
-      "key": "checks-wait-less-fresh-results-afte-ac-in-progress-not-refreshed",
-      "requirement": "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results",
-      "then": "no check run starts for it",
-      "when": "main moves"
-    },
-    {
       "given": "a completed task with a passed result and the Hub running",
       "key": "checks-wait-less-fresh-results-after-master-mov-ac-outside-merge",
       "requirement": "checks-wait-less-fresh-re-a-move-from-outside-the-hub-is-noticed",
@@ -231,25 +199,11 @@
       "when": "a commit is made on the main branch with git directly, not through the Hub"
     },
     {
-      "given": "a check run in progress for task B",
-      "key": "checks-wait-less-fresh-results-after-master-moves-ac-superseded",
-      "requirement": "checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced",
-      "then": "that run ends recorded as superseded, not failed, its process tree is ended, and a run for B on the new tip is started",
-      "when": "main moves"
-    },
-    {
       "given": "three tasks completed at t1 < t2 < t3, each stale after main moves",
       "key": "checks-wait-less-fresh-results-after-master-moves-and-c-ac-order",
       "requirement": "checks-wait-less-fresh-results-aft-refresh-order-is-oldest-first",
       "then": "the t1 and t2 tasks' runs start before the t3 task's",
       "when": "the refresh starts with two concurrent slots"
-    },
-    {
-      "given": "a task whose only result passed on an older main tip",
-      "key": "checks-wait-less-fresh-results-after-mast-ac-stale-still-refused",
-      "requirement": "checks-wait-less-fresh-the-gate-still-requires-a-current-result",
-      "then": "it is refused as checks running or not current, not approved",
-      "when": "approval is requested"
     },
     {
       "given": "the project's Checks settings",
@@ -348,15 +302,922 @@
       "requirement": "project-checks-path-pattern-syn-a-path-pattern-matches-as-a-glob",
       "then": "'every configured check' finds nothing, and n2 and the-capability-says-what-runs are gone",
       "when": "the operator reads it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose check run is executing a check that passes after a few seconds",
+      "how_to_check": "Run test_a_run_main_moved_past_runs_to_the_end in hub/tests/test_checks_refresh_when_main_moves.py (it replaces test_a_run_main_moved_past_is_superseded_and_replaced); it must fail on master, where the run is recorded superseded, and pass after.",
+      "key": "a-check-run-finishes-when-master-moves-ac-runs-through-a-move",
+      "requirement": "a-check-run-finishes-when-master-a-main-move-does-not-end-a-run",
+      "then": "the task's runs are exactly one run, recorded passed, with main_sha the tip it was cut from, and approving the task is not refused for checks",
+      "when": "main moves to a new commit and the Hub's refresh runs while the check is executing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same task with its check executing",
+      "how_to_check": "Run test_an_outside_commit_does_not_end_the_run in hub/tests/test_checks_refresh_when_main_moves.py, which commits on main with git and calls project_checks.watch_main_once while the check executes; it must fail on master and pass after.",
+      "key": "a-check-run-finishes-when-master-moves-ac-outside-move-too",
+      "requirement": "a-check-run-finishes-when-master-a-main-move-does-not-end-a-run",
+      "then": "the run is not ended and records passed",
+      "when": "a commit is made on the main branch with git directly and the watcher notices it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check run is executing",
+      "how_to_check": "Run test_new_work_still_supersedes_the_run in hub/tests/test_checks_refresh_when_main_moves.py; it passes on master and after (the behaviour must not change).",
+      "key": "a-check-run-finishes-when-master-mo-ac-new-completion-supersedes",
+      "requirement": "a-check-run-finishes-when-master-mov-new-work-still-ends-the-run",
+      "then": "the first run ends recorded superseded and a run on the new work starts",
+      "when": "the task is completed again with new work"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check run is executing",
+      "how_to_check": "Run test_two_moves_start_no_second_run in hub/tests/test_checks_refresh_when_main_moves.py, which moves main twice and calls refresh after each move while the check executes; it must fail on master and pass after.",
+      "key": "a-check-run-finishes-when-master-moves-ac-no-second-run",
+      "requirement": "a-check-run-finishes-when-master-one-run-per-task-across-a-move",
+      "then": "no other run for the task is recorded until the first one has ended",
+      "when": "main moves twice before it ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose run was cut from tip T1 and fails with a failure that also fails on T1's main (not the task's own)",
+      "how_to_check": "Run test_a_failure_shared_with_an_old_main_is_checked_again in hub/tests/test_checks_refresh_when_main_moves.py, using a repository whose T1 main fails a test that T2 fixes; it must fail on master and pass after.",
+      "key": "a-check-run-finishes-when-master-moves-ac-old-tip-failure-rerun",
+      "requirement": "a-check-run-finishes-a-failure-on-an-older-tip-is-checked-again",
+      "then": "a new run for the task on T2 starts without approval being requested",
+      "when": "main has moved to T2 before that run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose run was cut from tip T1 and fails with a failure confirmed as the task's own",
+      "how_to_check": "Run test_an_own_failure_on_an_old_tip_goes_back_once in hub/tests/test_checks_refresh_when_main_moves.py; it asserts the task's status is revision_needed and exactly one run is recorded for it.",
+      "key": "a-check-run-finishes-when-master-moves-ac-own-failure-returns",
+      "requirement": "a-check-run-finishes-when-mas-an-own-failure-goes-back-unchanged",
+      "then": "the task is returned to its author and no further run is started for it",
+      "when": "main has moved to T2 before that run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a testbed project with two modules a and b, test files test_a and test_b, and a pytest check whose command for a change runs only the test files that name a changed module",
+      "how_to_check": "acceptance drive scripts/drive/changed_files_drive.py on the trial Hub",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-cc-ac1",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-c-changed-command",
+      "then": "the check's report holds test_a's tests and none of test_b's, and the list file named exactly a's path",
+      "when": "a task changing only a reaches its pre-review run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task that renames a file",
+      "how_to_check": "hub test on the pre-review run with a stub check that copies the list file",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-cc-ac2",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-c-changed-command",
+      "then": "it holds both the old and the new path",
+      "when": "the list file is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose merge base cannot be read",
+      "how_to_check": "hub test",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-fu-ac1",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-full-when-unknown",
+      "then": "the full command ran and the result says the change was unknown",
+      "when": "its pre-review run runs the check"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's task approved",
+      "how_to_check": "acceptance drive",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-pr-ac1",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-c-pre-review-only",
+      "then": "the check's report holds test_a's and test_b's tests",
+      "when": "its landing batch runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check with a command for a change",
+      "how_to_check": "hub test",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-pr-ac2",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-c-pre-review-only",
+      "then": "neither ran the command for a change",
+      "when": "a run on main and a narrowing re-run execute it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's pre-review run",
+      "how_to_check": "acceptance drive reading the run route; UI test on the check run view",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-rs-ac1",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-chang-result-says",
+      "then": "it shows the check as sized to the change, 1 file",
+      "when": "the task's check run is opened in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose change makes test_a fail",
+      "how_to_check": "acceptance drive, second task",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-js-ac1",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-c-judged-the-same",
+      "then": "the failing test is named from the report and confirmed by the re-run command, and the task is sent back naming it",
+      "when": "its pre-review run runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pass of the command for a change on tree T with change list L",
+      "how_to_check": "hub test",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-ru-ac1",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-changed-reuse",
+      "then": "the pass is not reused and the command runs",
+      "when": "a later run has tree T and a different list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project's check settings",
+      "how_to_check": "hub test on the settings route; UI test on the settings panel",
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-st-ac1",
+      "requirement": "a-check-can-run-only-the-tests-for-what-a-task-changed-setting",
+      "then": "the save is refused naming the placeholder; one with it is saved and read back unchanged",
+      "when": "a command for a change without `{changed_files}` is saved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a trial-Hub testbed project whose main has a test on the list as failing on main, and a task that adds a different failing test",
+      "how_to_check": "py -3.11 scripts/drive/d1106_known_failing_list.py against the trial Hub :8010",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-drive",
+      "requirement": "failures-already-known-are-on-a-list-not-gates-consult-the-list",
+      "then": "the other task lands past the listed test, the new failure's task is sent back to its author, no check run is made on a checkout of main, and no batch is held",
+      "when": "the task is approved and lands with another task in one batch"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flaky test found by a task's run and a whole check without a report failing on main",
+      "how_to_check": "Hub test reading the list route",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-entry",
+      "requirement": "failures-already-known-are-on-a-list-not-re-argued-the-list",
+      "then": "each entry carries check, test id or whole check, kind, first and last seen, the adding run and the fix task",
+      "when": "the list is read from its route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database with two open fix tasks naming tests, and one approved fix task",
+      "how_to_check": "Hub migration test over a seeded database, upgrade then downgrade",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-seeded",
+      "requirement": "failures-already-known-are-on-a-list-not-re-argued-the-list",
+      "then": "the list holds exactly the two open tasks' tests, each with that task as owner, and no other row changed",
+      "when": "the migration runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check fails one test that passes on its confirmation re-run",
+      "how_to_check": "Hub test at the check-run seam",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-flaky",
+      "requirement": "failures-already-known-are-on-a-list-not-re-argued-flaky-added",
+      "then": "the test is on the list as flaky, with the run that added it, and the task is not sent back",
+      "when": "the completion gate decides"
+    },
+    {
+      "checked_by": "agent",
+      "given": "main moved by a commit the Hub did not land, and that commit fails a test not on the list",
+      "how_to_check": "Hub test driving the main watcher with an outside commit",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-main-added",
+      "requirement": "failures-already-known-are-on-a-list-not-re-main-failures-added",
+      "then": "exactly one full run was made on that commit, and the test is on the list as failing on main",
+      "when": "the Hub's run on main ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test not on the list that fails, confirmed, for task A and then for task B, once with main failing it and once with main passing it",
+      "how_to_check": "Hub test at the check-run seam",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-twice",
+      "requirement": "failures-already-known-are-on-a-list-not-re-argue-twice-unlisted",
+      "then": "with main failing: one single-test run on main, the test listed, neither task sent back; with main passing: both tasks sent back",
+      "when": "task B's gate decides"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a failing-on-main entry, a second failing-on-main entry, and a flaky entry with its fix task open",
+      "how_to_check": "Hub test over the landing queue; drive step in d1106",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-removed",
+      "requirement": "failures-already-known-are-on-a-list-not-re-removed-when-passing",
+      "then": "the first entry is gone, the second and the flaky entry stay; after the flaky test's fix task is approved and it passes once more, or after 20 consecutive passes, it is gone too",
+      "when": "a landed batch's run runs and passes the first and the flaky test but never runs the second"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test added to the list by a task of a build whose builder is DeveloperOpus, a second failure of the same test, and a test found by a run on main",
+      "how_to_check": "Hub test",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-owner",
+      "requirement": "failures-already-known-are-on-a-list-not-re-argued-owner-task",
+      "then": "exactly one fix task exists for the first test, assigned to DeveloperOpus, naming check, test, kind and run; the main-found test's fix task is unassigned",
+      "when": "all are recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fix task created for an entry",
+      "how_to_check": "drive step in d1106 reading the task and its runs",
+      "key": "failures-already-known-are-on-a-list-not-re-argue-ac-not-started",
+      "requirement": "failures-already-known-are-on-a-list-not-re-ar-owner-not-started",
+      "then": "the task has no loop, flow or build, and no run exists for it",
+      "when": "a minute passes with its assignee idle and the build's flow still firing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an entry whose fix task is open",
+      "how_to_check": "Hub test",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-kept",
+      "requirement": "failures-already-known-are-on-a-list-not-r-owner-kept-on-removal",
+      "then": "the fix task is still open and has a note naming that main commit",
+      "when": "the entry is removed because its test passes on main"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task in a Gated build whose check fails a listed test, and another task whose check fails a test not on the list that still fails on re-run",
+      "how_to_check": "Hub test asserting no main checkout was made",
+      "key": "failures-already-known-are-on-a-list-not-re-argue-ac-own-failure",
+      "requirement": "failures-already-known-are-on-a-list-not-gates-consult-the-list",
+      "then": "the first is not sent back; the second is sent back as its own failure; no check runs on a checkout of main",
+      "when": "the completion gate decides each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check that writes no report, with and without a whole-check entry on the list",
+      "how_to_check": "Hub test",
+      "key": "failures-already-known-are-on-a-list-not-re-argue-ac-whole-check",
+      "requirement": "failures-already-known-are-on-a-list-not-gates-consult-the-list",
+      "then": "with the entry the failure is not the task's; without it the task is sent back",
+      "when": "the check fails for a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a batch whose only failures are on the list, and a batch of three where the second task's prefix times out twice",
+      "how_to_check": "Hub test over the landing queue",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-no-hold",
+      "requirement": "failures-already-known-are-on-a-list-not-re-argu-no-held-batches",
+      "then": "the first batch lands; in the second the first task lands, the second is sent back with the reason 'timed out', and the third is queued again; no landing is held",
+      "when": "the landing gate decides"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a batch that landed past two entries",
+      "how_to_check": "Hub test reading the landing route",
+      "key": "failures-already-known-are-on-a-list-not-re-ar-ac-landing-record",
+      "requirement": "failures-already-known-are-on-a-list-not-landing-records-entries",
+      "then": "it names those two entries",
+      "when": "its task's landing is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with one flaky and one failing-on-main entry",
+      "how_to_check": "vitest component test; drive in the browser against the trial Hub",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-shown",
+      "requirement": "failures-already-known-are-on-a-list-not-re-argued-list-shown",
+      "then": "both entries show with check, test, kind, first and last seen, and a working link to the fix task",
+      "when": "the operator opens the project overview"
+    },
+    {
+      "checked_by": "agent",
+      "given": "master after this change",
+      "how_to_check": "py -3.11 -m pytest on the sweep test",
+      "key": "failures-already-known-are-on-a-list-not-re-argued-ac-retired",
+      "requirement": "failures-already-known-are-on-a-list-not-re-ar-old-rules-retired",
+      "then": "it passes, and fails if the main-baseline re-run, the shared-failure hold or release, the timeout hold, or the event-log flaky reconstruction is put back",
+      "when": "the sweep test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub on this change, after its migrations",
+      "how_to_check": "Hub route test plus a browser drive of the settings page against the trial Hub",
+      "key": "failures-already-known-are-on-a-list-not-re-argu-ac-setting-gone",
+      "requirement": "failures-already-known-are-on-a-list-no-override-setting-removed",
+      "then": "no 'Hub may override checks' switch is shown, the save succeeds, the project's settings carry no checks_auto_override, and a request that sends it is refused",
+      "when": "the operator opens the project's settings, changes another setting and saves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with evidence accepted for FR-1 and FR-2 at commit A and one awaiting piece for FR-3, completed, with a project check that fails on A",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k check_run_holds_accepted",
+      "key": "a-checks-send-back-returns-the-task-ac-check-run-holds-accepted",
+      "requirement": "a-checks-send-back-returns-the-hold-accepted-on-checks-send-back",
+      "then": "the task is revision_needed; the FR-1, FR-2 and FR-3 pieces are all held; each held piece carries an evidence review whose reason is the send-back's report; no piece of that task is still accepted",
+      "when": "the check run fails and return_failed_work sends the task back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task whose evidence was all accepted at commit A, queued in a landing batch that fails on A",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k landing_holds_accepted",
+      "key": "a-checks-send-back-returns-the-task-s-ac-landing-holds-accepted",
+      "requirement": "a-checks-send-back-returns-the-hold-accepted-on-checks-send-back",
+      "then": "the task is revision_needed and every piece it recorded is held, none accepted",
+      "when": "the batch sends the task back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task T1 and task T2 both serve FR-1; T2's evidence for FR-1 is accepted at a commit already on main, and T1 has accepted evidence of its own at failing commit A",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k others_untouched",
+      "key": "a-checks-send-back-returns-the-task-s-accept-ac-others-untouched",
+      "requirement": "a-checks-send-back-returns-the-task-s-others-evidence-untouched",
+      "then": "T1's pieces are held and T2's piece is still accepted, with no new review recorded on it",
+      "when": "the checks send T1 back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task sent back by a failed check run at completion after its evidence was accepted at failing commit A, then a fix committed as B on its branch (B descends from A) with evidence recorded at B, and a check that passes on B",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k fix_is_checked_after_check_run (real git repository and real configured check; recorded failing before the change)",
+      "key": "a-checks-send-back-returns-the-task-s-accepted-ac-fix-is-checked",
+      "requirement": "a-checks-send-back-returns-the-task-s-accepted-ev-fix-is-checked",
+      "then": "the check run's targets are [B], not A; the run passes; the task reaches under_review. Before the change the run targets A, fails, and completion is refused",
+      "when": "the task is completed again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "F1081's shape: an approved task whose evidence was accepted at commit A, sent back by a failing landing batch, then a fix committed as B on its branch with evidence recorded at B, and a check that passes on B",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k fix_is_checked_after_landing (real git repository and real configured check; recorded failing before the change)",
+      "key": "a-checks-send-back-returns-the-t-ac-fix-is-checked-after-landing",
+      "requirement": "a-checks-send-back-returns-the-task-s-accepted-ev-fix-is-checked",
+      "then": "the check run's targets are [B], not A; the run passes; the task reaches under_review. Before the change the run targets A and fails, as chk-2edc3a8bd93b did",
+      "when": "the task is completed again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the send-back in ac-check-run-holds-accepted",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k note (reads the transition note through the task history route)",
+      "key": "a-checks-send-back-returns-the-task-s-accepted-evidence-ac-note",
+      "requirement": "a-checks-send-back-returns-the-task-s-note-names-returned-pieces",
+      "then": "the note names FR-1 and FR-2 as accepted evidence returned, with commit A's short sha, and names FR-3 separately as held awaiting evidence",
+      "when": "its transition note is read from the task's history"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review with FR-1 accepted and FR-2 awaiting",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_checks_send_back_returns_accepted_evidence.py -k reviewer_unchanged, and hub/tests/test_evidence_judged_piece_by_piece.py still passes",
+      "key": "a-checks-send-back-returns-the-task-s-acce-ac-reviewer-unchanged",
+      "requirement": "a-checks-send-back-returns-the-task-reviewer-send-back-unchanged",
+      "then": "FR-2 is rejected and FR-1 is still accepted",
+      "when": "the reviewer sends it back with failing_pieces naming FR-2"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow with stop_when_queue_empties whose last task has just been approved, with its landing queued",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k stays_open (recorded failing before the change)",
+      "key": "a-checks-send-back-returns-the-task-s-accepte-ac-flow-stays-open",
+      "requirement": "a-checks-send-back-returns-the-task-s-ac-flow-open-while-landing",
+      "then": "the flow has not ended (no 'loop queue is empty' stop) and its job is still enabled. Before the change it ends on this firing",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the flow in ac-flow-stays-open, after the task's landing has landed",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k ends_after_landing",
+      "key": "a-checks-send-back-returns-the-task-s-ac-flow-ends-after-landing",
+      "requirement": "a-checks-send-back-returns-the-task-s-ac-flow-open-while-landing",
+      "then": "it ends with the queue-empty stop reason, as today",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow with stop_when_queue_empties in a project with no checks configured (no landing waits), whose last task is approved",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k no_landing",
+      "key": "a-checks-send-back-returns-the-ta-ac-no-landing-ends-at-approval",
+      "requirement": "a-checks-send-back-returns-the-task-s-ac-flow-open-while-landing",
+      "then": "it ends as today",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the flow in ac-flow-stays-open with its only task's landing checking",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k landing_wait, and hub/tests/test_the_mender_wakes_only_for_real_stalls.py still passes",
+      "key": "a-checks-send-back-returns-the-task-s-acce-ac-landing-wait-quiet",
+      "requirement": "a-checks-send-back-returns-the-task-landing-wait-is-not-a-stall",
+      "then": "the firing is recorded as in progress; no stall is recorded and the mender is not woken",
+      "when": "the flow fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "F1080's shape: a flow with stop_when_queue_empties, its last task approved, then sent back to revision_needed by a failing landing batch",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_a_flow_stays_open_until_its_work_lands.py -k resumed_after_landing_send_back (end to end through approval, the landing batch and the next firing; recorded failing before the change)",
+      "key": "a-checks-send-back-returns-th-ac-resumed-after-landing-send-back",
+      "requirement": "a-checks-send-back-returns-the-task-s-acc-sent-back-task-resumed",
+      "then": "a turn starts for the task's assignee on that task. Before the change the flow has already ended and no turn starts",
+      "when": "the flow next fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build where drive task D and build task B both serve FR-x, D is approved and landed with accepted FR-x evidence at its own commit, and B's commit breaks an existing test",
+      "how_to_check": "Hub test through the real task and evidence routes over a git fixture; it fails on master because the run targets D's commit",
+      "key": "a-task-s-checks-and-merges-use-its-o-ac-shared-requirement-check",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-work-and-a-live-own-work",
+      "then": "a check run is recorded whose target contains B's branch commit, it fails naming the broken test, and no pass is reused from D's run",
+      "when": "B moves to completed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "tasks A and B both serve FR-x, B is approved with accepted FR-x evidence at commit b, and A has its own commit a",
+      "how_to_check": "Hub test reading the integration preview and the task_integrations row A's approval writes",
+      "key": "a-task-s-checks-and-merges-use-its-own-wor-ac-sibling-not-merged",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-work-and-a-live-own-work",
+      "then": "A's merge targets are a only, and b is not merged through A",
+      "when": "A is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "B from ac-shared-requirement-check was sent back and D's commit is on the main branch",
+      "how_to_check": "Same Hub test, continued: count task_check_runs for B after the second completion",
+      "key": "a-task-s-checks-and-merges-use-its-own-w-ac-recompletion-checked",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-every-completion-checked",
+      "then": "a new check run targets that commit",
+      "when": "B completes again with a new commit"
+    },
+    {
+      "checked_by": "agent",
+      "given": "task C depends only on D; task B (not a prerequisite of C) serves FR-x with D and is approved with accepted FR-x evidence at commit b",
+      "how_to_check": "Hub test: approve C through PATCH /tasks and assert 200, and that git log of C's branch has no merge of b",
+      "key": "a-task-s-checks-and-merges-use-its-own-w-ac-no-third-party-merge",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-w-prerequisite-is-its-own",
+      "then": "approval does not refuse for lacking b, and C's checkout was never asked to merge b",
+      "when": "C is approved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "C depends on D and D's commit d is brought into C's checkout",
+      "how_to_check": "Hub test reading the merge commit's message in C's worktree",
+      "key": "a-task-s-checks-and-merges-use-its-own-work-and-a-ac-merge-label",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-merge-names-its-producer",
+      "then": "its message names d and D's task id, and no other task's",
+      "when": "the Hub writes the merge commit"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow whose only moving task has a run executing for longer than the no-progress window, with no status change",
+      "how_to_check": "Hub test with the run registered live and the clock past NO_PROGRESS_MINUTES; assert no stalls row",
+      "key": "a-task-s-checks-and-merges-use-its-own-work-ac-long-run-no-stall",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-work-live-run-is-progress",
+      "then": "no no_progress stall is opened for that flow",
+      "when": "the stall scan runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task in_progress with an executing run",
+      "how_to_check": "Hub test through the mender's agent-actions route with the run registered live",
+      "key": "a-task-s-checks-and-merges-use-its-own-work-and-ac-reset-refused",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-wo-no-reset-of-a-live-run",
+      "then": "the call is refused naming the run id, agent and start time, and the task's status and history are unchanged",
+      "when": "the mender calls mend_reset_task to assigned"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a running build with default builder Developer and checker QA",
+      "how_to_check": "Hub test for the stored people and the flow's firing; vitest for the board card's 'by default' mark, fed the shape GET /tasks returns",
+      "key": "a-task-s-checks-and-merges-use-its-own-wor-ac-added-task-staffed",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-mid-build-task-has-people",
+      "then": "the task's builder is Developer and checker QA, the board marks both 'by default', and the flow starts it when its dependencies are met",
+      "when": "a reviewer adds a task to it naming neither"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review",
+      "how_to_check": "Hub test through update_task and task_history; vitest for TaskTransitionHistory fed the route's real response",
+      "key": "a-task-s-checks-and-merges-use-its-own-work-a-ac-reason-recorded",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-work-a-send-back-says-why",
+      "then": "task_history's revision_needed row carries merge-needed and the sentence, and the app's task history shows both",
+      "when": "the reviewer sends it back with class merge-needed, a sentence, and no failing pieces"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review",
+      "how_to_check": "Hub test through the agent update_task route",
+      "key": "a-task-s-checks-and-merges-use-its-own-work-a-ac-reason-required",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-send-back-class-producer",
+      "then": "the call is refused naming the six classes and the task stays under_review",
+      "when": "the reviewer sends it back with no reason class"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose check fails, once failing on confirmation and once passing on the confirming re-run",
+      "how_to_check": "Hub test with stubbed check results (confirmed exit 1, then 0)",
+      "key": "a-task-s-checks-and-merges-use-its-own-wor-ac-hub-sendback-class",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-send-back-class-producer",
+      "then": "the first row records broken-check and the second records flaky",
+      "when": "the Hub sends it back"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the trial Hub :8010 restarted onto this change, and a two-task flow where a drive task and a build task share a requirement and the build task breaks an existing test",
+      "how_to_check": "Drive on :8010 with Haiku agents; read task_check_runs.target_shas and the task history",
+      "key": "a-task-s-checks-and-merges-use-its-own-work-and-a-ac-live-replay",
+      "requirement": "a-task-s-checks-and-merges-use-its-own-work-and-a-live-own-work",
+      "then": "the build task's completion check fails on its own commit before any review turn starts, and no task is asked to merge a commit of a task it does not depend on",
+      "when": "the flow runs both tasks to completion"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose checks were saved before this change",
+      "how_to_check": "Run a new test in hub/tests/test_checks_have_a_phase.py that stores checks without a phase key, reads them through GET on the project route, and runs a pre-review and a landing check run; it must fail on master (no phase field returned) and pass after. Plus a vitest test in hub/ui/src/__tests__/ rendering the settings with such checks showing 'both'.",
+      "key": "checks-know-their-phase-and-give-way-to-the-use-ac-phase-default",
+      "requirement": "checks-know-their-phase-and-give-way-to-the-user-phase-setting",
+      "then": "every check reports phase both, and a pre-review run and a landing run each run every check, as before",
+      "when": "the check settings are read through the project route and shown in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with two checks",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py: PATCH the project's checks with one phase landing, GET them back; and a vitest test that changes the phase control and asserts the saved payload. Both fail on master.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-phase-set",
+      "requirement": "checks-know-their-phase-and-give-way-to-the-user-phase-setting",
+      "then": "re-reading the settings returns landing for that check and both for the other",
+      "when": "the operator sets one to landing in the check settings and saves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a review-phase check A and a landing-phase check B, and a task that completes",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py with real check commands that write a marker file when they run: complete a task, wait for its run, assert B's marker is absent, GET /tasks/{id}/checks lists B as runs-at-landing, and the move to under_review and approved is not refused. Plus the acceptance drive in the design, red on master.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-landing-only",
+      "requirement": "checks-know-their-phase-and-g-landing-only-skipped-before-review",
+      "then": "only A ran, the task's checks list B as 'runs at landing', and the task can be handed to review and approved without B having run",
+      "when": "its pre-review check run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same task approved",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py: approve the task, let landing_queue check the batch, assert B's marker exists with the merged tree's sha; with B made to fail, assert the landing is held and the task not landed.",
+      "key": "checks-know-their-phase-and-give-way-to-the-u-ac-landing-runs-it",
+      "requirement": "checks-know-their-phase-and-g-landing-only-skipped-before-review",
+      "then": "B runs on the merged tree and a failure of B holds the landing as any landing check failure does today",
+      "when": "its landing batch is checked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with a review-phase check A and a both-phase check C",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py: markers show A did not run in the landing batch's run, C did, and the task is recorded landed.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-review-only",
+      "requirement": "checks-know-their-phase-and-give-review-only-skipped-at-landing",
+      "then": "only C runs in the batch, and the batch lands when C passes",
+      "when": "an approved task's landing batch is checked"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the check settings",
+      "how_to_check": "Test in hub/tests/test_checks_have_a_phase.py: PATCH such a check, assert a 4xx naming the reason and that GET returns the previous settings; plus a vitest test that the settings show the refusal's message.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-fast-refused",
+      "requirement": "checks-know-their-phase-and-give-way-to-th-fast-not-landing-only",
+      "then": "the save is refused with the stated reason and the stored settings are unchanged",
+      "when": "the operator saves a check marked fast with phase landing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with the setting turned on and a check whose command starts a child process that reports its own scheduling priority",
+      "how_to_check": "Test in hub/tests/test_checks_give_way.py whose check command runs a Python script that starts a child, and each writes its own priority (Windows GetPriorityClass via ctypes, POSIX os.nice(0)) to a file; assert both are below normal. Fails on master (no setting, normal priority).",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-priority",
+      "requirement": "checks-know-their-phase-and-give-way-to-the-below-user-priority",
+      "then": "the reported priority of the check's process and of its child are both below normal (Windows: below-normal or idle priority class; POSIX: niceness of at least 10)",
+      "when": "the check runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project that existed before this change, and a newly created project, neither of which has changed the setting",
+      "how_to_check": "Test in hub/tests/test_checks_give_way.py: a project row without the setting and one created through the route both read off, and the same priority-reporting check reports normal priority in each.",
+      "key": "checks-know-their-phase-and-give-way-to-ac-priority-default-off",
+      "requirement": "checks-know-their-phase-and-give-way-to-the-use-priority-opt-out",
+      "then": "both report the setting off and the child reports normal priority",
+      "when": "their settings are read and the same check runs in each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose branch conflicts with the main branch in file f",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py with a real git repo where the task branch and main both edit f: complete the task, assert status revision_needed, reason class merge-needed, notes containing f, a builder turn requested, and task_check_runs gains no row until a commit is added to the branch. Fails on master, where the run records error and the task stays completed.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-conflict",
+      "requirement": "checks-know-their-phase-and-give-way-to-conflict-goes-to-builder",
+      "then": "the task moves to revision_needed with reason class merge-needed, the notes name f, the builder is given the task back, and no new check run is recorded for it until a commit is added to its branch",
+      "when": "its pre-review check run is attempted"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose pre-review check run is running",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py: leave a run row running, call the startup reconcile (interrupt_leftover_runs) and the startup hook, assert the old row is interrupted and a new run is requested for the task without a refresh or approval. Fails on master.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-hub-stop",
+      "requirement": "checks-know-their-phase-and-give-way-to-the-user-hub-stop-reruns",
+      "then": "the old run reads interrupted and a new run for the task is requested within one minute of startup",
+      "when": "the Hub is stopped and started again with the main branch unchanged"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check run ends in error for a reason that is not a conflict (forced in the test)",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py forcing build_merged_commit (or the checkout) to raise: assert two runs total, both error, the Needs-you route lists the second with its error text and task, and the task is still completed.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-fault-once",
+      "requirement": "checks-know-their-phase-and-give-way-to-t-hub-fault-retried-once",
+      "then": "exactly one new run is requested on the current tip; if that also ends in error, no third run is requested, the operator's Needs-you list shows the error and the task, and the task's status is unchanged",
+      "when": "the run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check whose command sleeps past its time limit and prints no test failures",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py with a check of timeout_seconds 2 that sleeps 10: assert the task is not revision_needed, exactly two runs, and the Needs-you item. Fails on master, where the task is sent back as broken-check.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-timeout",
+      "requirement": "checks-know-their-phase-and-give-way-to-th-timeout-not-the-tasks",
+      "then": "the task is not sent back; one retry is requested and, if it also runs out of time, the operator's Needs-you list shows it",
+      "when": "the task's check run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pytest check that names a failing test, passing on main, and then runs past its limit",
+      "how_to_check": "Test in hub/tests/test_check_runs_that_did_not_judge_the_work.py whose check prints a pytest 'FAILED tests/x.py::t' line and then sleeps past its limit, with main passing: assert the task is sent back and the notes name tests/x.py::t. Passes on master and after (guards the boundary).",
+      "key": "checks-know-their-phase-and-give-way-to-the-use-ac-timeout-named",
+      "requirement": "checks-know-their-phase-and-give-way-to-th-timeout-not-the-tasks",
+      "then": "the task is sent back as today, naming that test",
+      "when": "the run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check with at least three passing results in the project",
+      "how_to_check": "Test in hub/tests/test_checks_give_way.py seeding passing run results with known durations and asserting the route's median and longest; plus a vitest test rendering both cases. Fails on master.",
+      "key": "checks-know-their-phase-and-give-way-to-the-user-ac-duration",
+      "requirement": "checks-know-their-phase-and-give-way-to-the-usual-duration-shown",
+      "then": "the check shows the median and longest of its last 20 passing durations beside its time limit; a check with none shows 'no passing runs yet'",
+      "when": "the operator opens the check settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a testbed project on the trial Hub (:8010) whose only check runs Node's built-in test runner with --test-reporter=junit to a report file, with one test failing on a task's work, and a re-run command using {tests}",
+      "how_to_check": "py -3.11 scripts/drive/d1105_checks_report_tests.py against :8010; fails on master before the build",
+      "key": "checks-report-which-tests-failed-in-any-langu-drive-node-project",
+      "requirement": "checks-report-which-tests-failed-in-any-lang-ids-from-the-report",
+      "then": "the check result names exactly that failing test's id, and its confirmation ran the re-run command with only that id. Before the build the result names no test",
+      "when": "the task completes and its check run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same Node project, and recorded pytest (xunit1 and xunit2), Vitest and Node reports including two pytest classes in one file with a same-named method",
+      "how_to_check": "hub test of the report reader with the recorded reports; plus the drive",
+      "key": "checks-report-which-tests-failed-in-any-language-rerun-ids-match",
+      "requirement": "checks-report-which-tests-failed-in-any-language-stable-ids",
+      "then": "the re-run's id equals the full run's id, and the two same-named methods get different ids",
+      "when": "the failing test's re-run report is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three failing checks: one with no report configured, one whose report file is absent, one whose report is not XML",
+      "how_to_check": "hub test at the run-execution seam",
+      "key": "checks-report-which-tests-failed-in-any-lang-missing-report-said",
+      "requirement": "checks-report-which-tests-failed-in-any-la-no-report-whole-check",
+      "then": "each is judged as a whole, names no test, and its result reads 'no report configured', 'report missing' and 'report unreadable' respectively",
+      "when": "each run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check whose full run wrote a report naming a failure, and whose re-run in the same directory writes no report",
+      "how_to_check": "hub test at confirm_failure; fails if the report is not removed before the re-run",
+      "key": "checks-report-which-tests-failed-in-any-la-stale-report-not-read",
+      "requirement": "checks-report-which-tests-failed-in-any-la-no-report-whole-check",
+      "then": "the re-run reads 'report missing', not the full run's failures",
+      "when": "the failure is confirmed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check that exits 3 and writes a valid report with no failing testcase, and a check that exits 0 with a report listing a failure",
+      "how_to_check": "hub test",
+      "key": "checks-report-which-tests-failed-in-any-langu-exit-3-whole-check",
+      "requirement": "checks-report-which-tests-failed-in-any-langua-exit-code-decides",
+      "then": "the first is a failed whole-check result naming no test; the second passes",
+      "when": "each run ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a landing batch of two tasks whose check fails one test, with a re-run command configured",
+      "how_to_check": "hub test of landing narrowing with a recorded command log",
+      "key": "checks-report-which-tests-failed-in-any-l-narrowing-uses-command",
+      "requirement": "checks-report-which-tests-failed-in-an-rerun-through-the-command",
+      "then": "each probe ran the re-run command with {tests} replaced by that id, and the culprit found is the same as with today's pytest rewrite",
+      "when": "the batch is narrowed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check with a re-run command and enough failing test ids that the substituted command exceeds 8,000 characters",
+      "how_to_check": "hub test with a recorded command log",
+      "key": "checks-report-which-tests-failed-in-any-languag-long-rerun-whole",
+      "requirement": "checks-report-which-tests-failed-in-an-rerun-through-the-command",
+      "then": "the check is re-run as a whole with its own command",
+      "when": "the failure is confirmed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub source after the build",
+      "how_to_check": "sweep test that greps hub/hub for the retired names and patterns",
+      "key": "checks-report-which-tests-failed-in-any-language-no-parser-left",
+      "requirement": "checks-report-which-tests-failed-in-any-lang-no-runner-knowledge",
+      "then": "no pytest summary regex, pytest option list, xdist option handling or command rewriting remains in hub/hub; a sweep test fails if one is reintroduced",
+      "when": "searched"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project settings route",
+      "how_to_check": "hub route test",
+      "key": "checks-report-which-tests-failed-in-any-lan-placeholder-required",
+      "requirement": "checks-report-which-tests-failed-in-any-language-report-settings",
+      "then": "the save is refused naming {tests}; a check without either setting saves and reads back without them",
+      "when": "a check is saved with a re-run command lacking {tests}"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the check settings in the app",
+      "how_to_check": "vitest component test of the settings panel; operator glance",
+      "key": "checks-report-which-tests-failed-in-any-langua-settings-examples",
+      "requirement": "checks-report-which-tests-failed-in-any-languag-settings-explain",
+      "then": "report path and re-run command fields show with the five examples, the id form and the whole-check note",
+      "when": "a check is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project settings route",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_project_checks_settings.py -v",
+      "key": "checks-run-before-anyone-reviews-fast-flag-validated",
+      "requirement": "checks-run-before-anyone-reviews-fast-flag",
+      "then": "the first is refused with 422 naming the 120-second limit; the second reads back with fast true; the third reads back with fast false",
+      "when": "the operator saves a check with fast true and timeout_seconds 300, then one with fast true and 60, then one without fast"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project whose checks are configured as [slow, fast] in that order, in a real git fixture",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-fast-checks-run-first",
+      "requirement": "checks-run-before-anyone-reviews-fast-flag",
+      "then": "the fast check's result is the run's first result and the slow check's the second",
+      "when": "a task's check run executes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task outside any flow, in_progress and held by a builder run, whose committed work contains a line the project's fast check rejects (a real git fixture, a real check subprocess)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v (run on master first: fails; then on the branch: passes; paste both)",
+      "key": "checks-run-before-anyone-review-completion-refused-on-master-red",
+      "requirement": "checks-run-before-anyone-reviews-completion-runs-fast-checks",
+      "then": "the response is 409 and the task is still in_progress; on master the same call returns 200 and the task is completed (the acceptance drive, red first)",
+      "when": "the builder's run calls the agent route PATCH /tasks/{id} with status completed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose review target is its branch tip, and whose checkout holds an uncommitted change the fast check rejects",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-uncommitted-work-is-checked",
+      "requirement": "checks-run-before-anyone-reviews-completion-runs-fast-checks",
+      "then": "the completion is refused, and the task branch's tip now contains the change",
+      "when": "the builder completes it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the refused completion above",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-refusal-quotes-output",
+      "requirement": "checks-run-before-anyone-reviews-completion-refused-with-output",
+      "then": "detail.message names the check, the merged commit and the run id and contains the check's output line; the readable detail is that message",
+      "when": "its body is read, and passed through mcp_server._readable_detail"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fast check that sleeps past the completion budget (patched to 2 s in the test)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-slow-fast-check-does-not-hold",
+      "requirement": "checks-run-before-anyone-reviews-completion-wait-is-bounded",
+      "then": "the completion is recorded within the budget plus 5 s, the run is still running, and when the check later fails the task is returned to the builder",
+      "when": "the builder completes the task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the MCP server's restated completion timeout and the Hub's completion budget",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-mcp-timeout-covers-budget",
+      "requirement": "checks-run-before-anyone-reviews-completion-wait-is-bounded",
+      "then": "the MCP timeout for update_task with status completed exceeds the Hub's budget, and every other call keeps 10 s",
+      "when": "they are compared"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fast check that appends a line to a counter file outside the checkout, and a slow check, both passing",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-fast-check-executes-once",
+      "requirement": "checks-run-before-anyone-reviews-one-run",
+      "then": "exactly one check run row exists for the work, it passed, and the counter file holds one line",
+      "when": "the builder completes the task, the builder's run ends, and the check run finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flow whose only open task is completed, its builder's turn ended, its check run running",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-review-deferred-while-running",
+      "requirement": "checks-run-before-anyone-reviews-review-waits-for-checks",
+      "then": "no review is queued, the decision lists the task as deferred naming the run, and no Stall row with cause loop_stalled exists; on master the review is queued (red)",
+      "when": "the flow's job fires"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed flow task whose slow check fails with the task's own failure (confirmed on rerun, passing on main)",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-own-failure-returns",
+      "requirement": "checks-run-before-anyone-reviews-failure-returns-to-builder",
+      "then": "the task is revision_needed, held by its builder; its latest transition has origin 'checks' and a note naming the run; its notes contain the check's output; no queue entry names it as review_task_id; on master it stays completed (red)",
+      "when": "the run finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a transition row with actor_kind operator and origin 'checks'",
+      "how_to_check": "cd hub/ui && npx vitest run src/__tests__/taskTransitionHistory.test.tsx",
+      "key": "checks-run-before-anyone-reviews-history-names-the-checks",
+      "requirement": "checks-run-before-anyone-reviews-failure-returns-to-builder",
+      "then": "it reads 'The project's checks moved completed -> revision_needed', not 'You'",
+      "when": "the task's history renders it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed flow task deferred for its running checks, with the job's cron not firing during the test",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-review-queued-on-pass",
+      "requirement": "checks-run-before-anyone-reviews-review-starts-promptly",
+      "then": "a review queue entry for the task exists once flow_advance.settled() returns, with no cron tick",
+      "when": "the run passes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a trial Hub (:8010) started from the branch, a two-task flow with Haiku builder and reviewer, ruff and black fast, hub-tests slow",
+      "how_to_check": "Drive on :8010; read task_check_runs.ended_at and task_transitions.created_at for the task; paste both",
+      "key": "checks-run-before-anyone-reviews-drive-review-within-a-minute",
+      "requirement": "checks-run-before-anyone-reviews-review-starts-promptly",
+      "then": "its completed -> under_review transition is recorded less than 60 s after its check run's ended_at, read from the trial database",
+      "when": "a task that passes every check is completed"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task outside any flow completed by DeveloperA, its check run running",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-outside-flow-review-refused",
+      "requirement": "checks-run-before-anyone-reviews-same-order-outside-a-flow",
+      "then": "both are refused naming the running checks; after the run passes, QA's call succeeds and QA holds the task",
+      "when": "QA calls update_task(status='under_review'), and the mender calls mend_reset_task(status='under_review', assignee='QA')"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task outside any flow, completed, whose check run fails with its own failure",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-outside-flow-return",
+      "requirement": "checks-run-before-anyone-reviews-same-order-outside-a-flow",
+      "then": "the task is revision_needed held by its builder, as in a flow",
+      "when": "the run finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the MCP server's update_task tool",
+      "how_to_check": "py -3.11 -m pytest hub/tests/test_checks_run_before_review.py -v",
+      "key": "checks-run-before-anyone-reviews-tool-says-so",
+      "requirement": "checks-run-before-anyone-reviews-builders-know",
+      "then": "it says that completing runs the fast checks, may take up to two minutes, and is refused with their output when one fails",
+      "when": "its description is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with 'checks give way' on and two checks, one marked fast and one not, each a command that reports its own process priority",
+      "how_to_check": "hub test that starts the real processes through the check runner (Windows: priority class; POSIX: niceness) and fails on master",
+      "key": "quick-checks-run-at-normal-priority-fast-not-lowered",
+      "requirement": "quick-checks-run-at-normal-priority-fast-checks-normal-priority",
+      "then": "the fast check reports normal priority and the other reports below normal. Before the build both report below normal",
+      "when": "a task's check run executes both"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same project with 'checks give way' off",
+      "how_to_check": "same hub test, setting off",
+      "key": "quick-checks-run-at-normal-priority-off-unchanged",
+      "requirement": "quick-checks-run-at-normal-priority-fast-checks-normal-priority",
+      "then": "both report normal priority",
+      "when": "both checks run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "project settings open",
+      "how_to_check": "projectSettingsPanel vitest asserting the description text",
+      "key": "quick-checks-run-at-normal-priority-text-says-fast",
+      "requirement": "quick-checks-run-at-normal-priority-setting-says-which",
+      "then": "its description names fast checks as keeping normal priority",
+      "when": "the operator reads 'Checks give way to me'"
     }
   ],
-  "algorithms": [],
+  "algorithms": [
+    {
+      "name": "A check run that did not judge the work",
+      "steps": [
+        "When a pre-review run ends, take what ended it.",
+        "Merge conflict: send the task back to its builder as merge-needed, naming the files. Start no new run until the branch changes.",
+        "The Hub stopped: at the next start, request a new run for every task still waiting for its pre-review result.",
+        "Error of any other kind, or a check that ran out of time with no failing test of the task's own named: if the previous run on the same task work was not itself such a retry, request one run on the current main tip.",
+        "Otherwise (the retry ended the same way): request nothing more, put the run and its error on the operator's Needs-you list, and leave the task's status unchanged.",
+        "Any other failure: the task's own failure, as today (sent back as broken-check or flaky)."
+      ]
+    }
+  ],
   "aw_identity": {
     "digests": {
       "FR-1": "48c3cbc116c27c38bc2b5d08acfb51464aef5450c63a5a110dfc0869a79df494",
       "FR-10": "09886282149ce16082f67c56de5065f75d60c2d7cbeb077988566c52516c4b4f",
+      "FR-100": "324b02a56bc1c1a5204ed303818bf4cdc682c0f80a2a9dd0bc4a11d04ee0a48b",
+      "FR-101": "1fff07c6c78f959a4357c14886ff0dab68ea3d54568431a1e504aefa7af14783",
+      "FR-102": "2cd586db5d024ba1f13271a9f04ef31a2b0bd769272756857c84cfeef5f5c933",
+      "FR-103": "09071619fac8ba45399c102ad67f1e3b2a1e08692347a92bce5fdba1abeecfa0",
       "FR-11": "701c505c04f3800e6bc0005738caeed17a8938393694546a2a3259665497c206",
-      "FR-12": "7bc72d7624b35a5488a5ee62f7ce886e8a9e6404069ad07de36c358a29fa1969",
+      "FR-12": "ea2edc2e9718c83fcd484045a81a11c39ab70d7efbd27be296aa5c260bb7037a",
       "FR-13": "1b3c9f5f5df007b8c2b74b6417266022ad56baab0f5528b437cc81ce501ee379",
       "FR-14": "4cedcefecfbfee5a2acddf8d43ef8ab49daf0c66d69786bd49a45561e13c6c05",
       "FR-15": "1d6e7d8db7c5659f9524c11707ff3e9675365040ba1a7c2b27159642e0921baa",
@@ -376,30 +1237,167 @@
       "FR-28": "8264d98073400b196526e3af23ea5fabedbbffc81e115348bc4b4f9ba51cfbae",
       "FR-29": "35057022b0d6ae4c5facdd8f2a0cdfd32d017978d856499868d9f98eb4c57d71",
       "FR-3": "c90e76333fc87d07bd6ceb18b914cf94e00dbc30ede4de0b5209945bc76859f5",
+      "FR-30": "1d4eaa1c88b6589841e82259e8ae2a36e8c4c0aa751b0d3e3baf1945151b67e2",
+      "FR-31": "386f76e6477ff2ef65445ac118f4357a15685f786efa5ffb6d6082aca074dc3c",
+      "FR-32": "87086305a924fd4d0104f21174cf37981997cacbbe02d586d2efcd3adc9ba9fb",
+      "FR-33": "71645a73bcd6d54cec4e010c26cb4e1376b5490738ebffdd0ef542992828302a",
+      "FR-34": "cae3ecc39b5c3705bbf1c4d4b68e844a4eae44858142d76c6b0c43552df2a01a",
+      "FR-35": "1dea3eb8000667cc64a3508ea758f9b7b580abf235522867ba8b143da8da2b15",
+      "FR-36": "68997701eb8755118c36a42ca5aa255a6f6d73d3ba52f4bab26b7fb5cc98d416",
+      "FR-37": "5cc4c632e4673ef30641d6c2647f4f85c2ac1ad39abe9a4b01414215e72ea306",
+      "FR-38": "4f3fda4605ac432fbbc3811310bfae6554058019b263f1cce8971b31bb21c0ef",
+      "FR-39": "2bf40387477b4ec0025b50ecdedc1ed258f3bc2359b5776c8be762cadf4a3270",
       "FR-4": "b74b03cef2a76c22c2aa71334059cdf8cbe93c4f414646b91be3719f342b8015",
-      "FR-5": "2d28561ac45d97f18654f91b15d058c3bdaa1fe6023e8641861eee028409e1e6",
+      "FR-40": "d9e6e127bbfce3490468bbca7643ca723e91af6711b8b3c7ebeb7a7d57ee59bf",
+      "FR-41": "2a2e2114ef02ed526c51dc12943ba5ab499571418d4875f139a5cda0bd61923a",
+      "FR-42": "15a0bd486537da478285c2f240a9c0a31717eaf4c2888eabc58fb53c16248225",
+      "FR-43": "1c45f24d77c0b6d90a120bcc85ee1c089318d4fd94d4e2b6570ff2c72352f91d",
+      "FR-44": "5a89674261ca48142c509e1c6205e60ac6606dd65e047c8fe4f48b9dbe146cda",
+      "FR-45": "b6372034520bb21036465392c20fb20eda4c365b384583cbc7e21bb6e0b71ca4",
+      "FR-46": "255f4aa6800c8bb57b5b0a78ec610673789419eb8d54b0eaea649619bfa0ec80",
+      "FR-47": "6b9bd9b75a2aadb44e3b7772c5b4d349a0de2bca5484a0297879062428258519",
+      "FR-48": "4cd67e13c6ec6c78c60ad3ec6887036c73da9823033b08def613bc355a6ec6f1",
+      "FR-49": "b0f8a7152ede43e5b3d271ff0135952d4deceba2e3979d603b3cd818badcabca",
+      "FR-5": "5836d64f6bb0a66448e7d999fc2bdefdcf4e512790792c2ee9b724f455176f5c",
+      "FR-50": "3b1d85e31c3a413210529e52bd67e84ffecb902e4f1d8ad7fedae0ed94d2ccff",
+      "FR-51": "87bdd76e58c48734e3997aab7d0d14fff2e3f81ae94d66d196c4864090128df3",
+      "FR-52": "d1f8cba34a05ccf38b5c876ae2cb47465d947562f95dbd139b544c843f58c9ac",
+      "FR-53": "fb4c04e0c4639b60652e86c5b0a1b504f3ee9418ea48eef2f4aafdec7aa1862e",
+      "FR-54": "41cc610cdf9426ee5e0e1c34b871c202b086070e87d6fff6fbd399a557b99400",
+      "FR-55": "a88ac38b60af3819e0f525bdcb3610737c1b576d004c5343a2633f5c04bda93f",
+      "FR-56": "ba3480eed3d9ee1a5e584086d15ec4103575d865f1ab75c6568a3cb83191b780",
+      "FR-57": "54cd8d4fa932d2cec4e42f7ee80c65a40cec0141fa5a3ffaa2ec041d84a52b4d",
+      "FR-58": "f938a99418ac654117a7c78d24b2a7fc7ef359b9a90f5c648dde45a1cbe74333",
+      "FR-59": "a237a290b4c76ff1b9295d622d5ca54de2e1db563b8ba9146d1332686fccbc4c",
       "FR-6": "b8ec3b0958c5304e2c6d751bb6bb38f54953c10e451ff04928e9af78a47380ae",
-      "FR-7": "f8dbfe815021d0ebcaf23e418fef4b51b7053e10e4bf307fc8d6943e16042a8c",
+      "FR-60": "aacbe9cd1ceb16dc9a8cf97982153244e82986ce92a2ecfcef458c5d311156d9",
+      "FR-61": "8eca4b9ec94d8dc7041af79c1ccb1e310b211e79af2e47516e55955ee45def9e",
+      "FR-62": "bf19f4e992b0d5b61069376372306008ef6353050ed21d31c9162ce2d05800c0",
+      "FR-63": "c2d5c2e2e97192f8a108a90df0ce3489c2e23355e0659d7e9cbd2dc2d44e77a6",
+      "FR-64": "f9b7051999e1a553efc4b8fb6823f68696ef6c780ceef1989551184b439d4515",
+      "FR-65": "6673420693c026aaded4d46a9d4f151278ea83f6a620816528d9c35b7108e6a0",
+      "FR-66": "a45c4b1a87b00cc7b580a3c75145a40a1b6a570bcbbed66c2f0b9afbc5b20ee2",
+      "FR-67": "7c4149ffc8c2e451e0d1b5e6d17216615155902fce43e7e970bb2dc509139f6e",
+      "FR-68": "95113bbbb1497d36d73f55683715f1e9323d9aa36b3d3e0cfbe04c53c1ff71d9",
+      "FR-69": "6764cb241af149a70a5328e71677d4a6cfa54afe02abd687fc338a8b4c13eaa0",
+      "FR-7": "c704a8f6371ccc183556415758d67030cb67b06383dcd42d6dae08b6005404ff",
+      "FR-70": "2b2791fe1c4d080a6c493b1b2db038960a33a58bd8489b0de08f5222fb832acc",
+      "FR-71": "08a2e0ea604d90451910a15b99d4ed6d9f58fa14f9ea0d56595be24aee2e7f3b",
+      "FR-72": "d1c584a8fe758638224cad672c29c654464d8b3312ace12553d2207d52232b59",
+      "FR-73": "737c81ada66a3f3831fc4ee6793418d3792cf317b2521f91e30807033f665c83",
+      "FR-74": "5dc61af00ae543b9b549e83be02457e3186fbcedd64ff51be548e745c4b66a8a",
+      "FR-75": "55526ddd24b7b327e160aca0f28a593b2699c292104ea636cc00365060160e05",
+      "FR-76": "7efea327c166b9e460d34df41f18ffe5b84a43af1cb7c7a05d37ce2379a8dc21",
+      "FR-77": "f22692c7579902fffdb197f47605b853bd7c22b86aa6a65e640533d1a29bb9df",
+      "FR-78": "b30593164b12b18b1970189b324411597e0d2104f0a5b9f7afb3fae30b70e421",
+      "FR-79": "bdf58f4b540e58e8afc5e4256aa2af5b3b19cd9179901e67281ae0904c0a287c",
       "FR-8": "8aea269a27df923c8e3cec427fe2eabafe42d6d7de4cfdeff6eb4cb9980825f9",
-      "FR-9": "854991160e82881901ab1fac712c64fd0b2d738ebf6882854911a222d5105cf6"
+      "FR-80": "58c4535e7ec0c4bc4ca1e13a80c1eda6a0343f8d348d10bc6b72dfcf53eac8dd",
+      "FR-81": "1f76e33af5b7ffd4740a65adc60526f58bf550f2d6c73d77b305e99963625279",
+      "FR-82": "4e09649b7c23e5609c3f18df9b99c58147b81bd65f50789ccaac17caeba80740",
+      "FR-83": "96e4770515ea32b1008054043eaa802ebf68a2cca9927a43754aa15a545bb5cd",
+      "FR-84": "3cfd782b90c67e796c80e59bf59f558861ef34fd1ee12f085f5c17a56301d11b",
+      "FR-85": "9976413eabfcf3d1294c32a66d5fe0f350b0dc556b22228195454614b39c4c81",
+      "FR-86": "46e161a90f1aa34e65a2625660135c974f235107da83064c3853d5e30260d3a4",
+      "FR-87": "fa835686eb9a2d12b49034091f95da1ab6308633b424608c0045971602d379e6",
+      "FR-88": "a623b4876c71b85edddeb880ab9f1628fbb12ec2b2b76c3dd383d09ac19daf4e",
+      "FR-89": "b59124878a911f9a3785eb905a0f6270dbc6d89d8388f4875a60a547d129c907",
+      "FR-9": "854991160e82881901ab1fac712c64fd0b2d738ebf6882854911a222d5105cf6",
+      "FR-90": "e2fdc0510c2d541cd53ab23354790d8856d1fc8de9d0367160b538c0b5b0cae0",
+      "FR-91": "cf167c03b72f5bdd189843b09f9a535729bcc20032f5c05b688cb7bcfa6db342",
+      "FR-92": "d212e5cd0d57fb0094861a7acbb5da5e0fd328793c5c004f408e57a3e825a618",
+      "FR-93": "92fc9c7b06e33f81d4be07105a83adb681db619f3bc6bb0614a847e0c43a8986",
+      "FR-94": "14a1579b144585c567466b0605cc8479b986b6e0328b7075e9681b79b51fba0e",
+      "FR-95": "8346a8e65f930cdca72e13a8d382fa8ce516add0160baf4e36fb06ded81bf089",
+      "FR-96": "5815c2e26017ebf8185651bc81c5b7c34e6c870e3dd17a6e1995d639cbbe76ff",
+      "FR-97": "05fbf5fac6ed0ad6f7a37c1a710db624e6f1cf9a3927d4dbb2235453bdfb8c06",
+      "FR-98": "d00ff6a31b352ed90f919714b9647e085751691332a5368a750378cac94413e2",
+      "FR-99": "dc31e35c92d05b8889035f106e631b9a0523821b271d816527cc2ab7a150338b"
     },
-    "high_water": 29,
+    "high_water": 103,
     "requirements": {
+      "a-check-can-run-only-the-tests-for-what-a-task-c-changed-command": "FR-35",
+      "a-check-can-run-only-the-tests-for-what-a-task-c-judged-the-same": "FR-39",
+      "a-check-can-run-only-the-tests-for-what-a-task-c-pre-review-only": "FR-37",
+      "a-check-can-run-only-the-tests-for-what-a-task-chang-result-says": "FR-38",
+      "a-check-can-run-only-the-tests-for-what-a-task-changed-reuse": "FR-40",
+      "a-check-can-run-only-the-tests-for-what-a-task-changed-setting": "FR-41",
+      "a-check-can-run-only-the-tests-for-what-a-task-full-when-unknown": "FR-36",
+      "a-check-run-finishes-a-failure-on-an-older-tip-is-checked-again": "FR-33",
+      "a-check-run-finishes-when-mas-an-own-failure-goes-back-unchanged": "FR-34",
+      "a-check-run-finishes-when-master-a-main-move-does-not-end-a-run": "FR-30",
+      "a-check-run-finishes-when-master-mov-new-work-still-ends-the-run": "FR-31",
+      "a-check-run-finishes-when-master-one-run-per-task-across-a-move": "FR-32",
       "a-check-run-is-never-lost-silently": "FR-3",
       "a-check-runs-with-the-hub-s-environment-minus-the-hub-s-cred": "FR-4",
-      "a-check-that-fails-on-main-too-is-not-the-tasks-baseline": "FR-14",
-      "a-check-that-fails-on-main-too-is-not-the-tasks-held": "FR-15",
       "a-check-that-fails-on-main-too-is-not-the-tasks-land": "FR-16",
+      "a-checks-send-back-returns-the-hold-accepted-on-checks-send-back": "FR-56",
+      "a-checks-send-back-returns-the-task-landing-wait-is-not-a-stall": "FR-62",
+      "a-checks-send-back-returns-the-task-reviewer-send-back-unchanged": "FR-60",
+      "a-checks-send-back-returns-the-task-s-ac-flow-open-while-landing": "FR-61",
+      "a-checks-send-back-returns-the-task-s-acc-sent-back-task-resumed": "FR-63",
+      "a-checks-send-back-returns-the-task-s-accepted-ev-fix-is-checked": "FR-58",
+      "a-checks-send-back-returns-the-task-s-note-names-returned-pieces": "FR-59",
+      "a-checks-send-back-returns-the-task-s-others-evidence-untouched": "FR-57",
       "a-project-s-checks-are-configured-by-the-operator-only": "FR-1",
+      "a-task-s-checks-and-merges-use-its-own-every-completion-checked": "FR-65",
+      "a-task-s-checks-and-merges-use-its-own-merge-names-its-producer": "FR-67",
+      "a-task-s-checks-and-merges-use-its-own-mid-build-task-has-people": "FR-70",
+      "a-task-s-checks-and-merges-use-its-own-send-back-class-producer": "FR-72",
+      "a-task-s-checks-and-merges-use-its-own-w-prerequisite-is-its-own": "FR-66",
+      "a-task-s-checks-and-merges-use-its-own-wo-no-reset-of-a-live-run": "FR-69",
+      "a-task-s-checks-and-merges-use-its-own-work-a-send-back-says-why": "FR-71",
+      "a-task-s-checks-and-merges-use-its-own-work-and-a-live-own-work": "FR-64",
+      "a-task-s-checks-and-merges-use-its-own-work-live-run-is-progress": "FR-68",
       "approval-is-refused-unless-the-project-s-checks-passed-on-th": "FR-12",
+      "checks-know-their-phase-and-g-landing-only-skipped-before-review": "FR-74",
+      "checks-know-their-phase-and-give-review-only-skipped-at-landing": "FR-75",
+      "checks-know-their-phase-and-give-way-to-conflict-goes-to-builder": "FR-79",
+      "checks-know-their-phase-and-give-way-to-t-hub-fault-retried-once": "FR-81",
+      "checks-know-their-phase-and-give-way-to-th-fast-not-landing-only": "FR-76",
+      "checks-know-their-phase-and-give-way-to-th-timeout-not-the-tasks": "FR-82",
+      "checks-know-their-phase-and-give-way-to-the-below-user-priority": "FR-77",
+      "checks-know-their-phase-and-give-way-to-the-use-priority-opt-out": "FR-78",
+      "checks-know-their-phase-and-give-way-to-the-user-hub-stop-reruns": "FR-80",
+      "checks-know-their-phase-and-give-way-to-the-user-phase-setting": "FR-73",
+      "checks-know-their-phase-and-give-way-to-the-usual-duration-shown": "FR-83",
+      "checks-report-which-tests-failed-in-an-rerun-through-the-command": "FR-89",
+      "checks-report-which-tests-failed-in-any-la-no-report-whole-check": "FR-87",
+      "checks-report-which-tests-failed-in-any-lang-ids-from-the-report": "FR-85",
+      "checks-report-which-tests-failed-in-any-lang-no-runner-knowledge": "FR-90",
+      "checks-report-which-tests-failed-in-any-langua-exit-code-decides": "FR-88",
+      "checks-report-which-tests-failed-in-any-languag-settings-explain": "FR-91",
+      "checks-report-which-tests-failed-in-any-language-report-settings": "FR-84",
+      "checks-report-which-tests-failed-in-any-language-stable-ids": "FR-86",
+      "checks-run-before-anyone-reviews-builders-know": "FR-101",
+      "checks-run-before-anyone-reviews-completion-refused-with-output": "FR-94",
+      "checks-run-before-anyone-reviews-completion-runs-fast-checks": "FR-93",
+      "checks-run-before-anyone-reviews-completion-wait-is-bounded": "FR-95",
+      "checks-run-before-anyone-reviews-failure-returns-to-builder": "FR-98",
+      "checks-run-before-anyone-reviews-fast-flag": "FR-92",
+      "checks-run-before-anyone-reviews-one-run": "FR-96",
+      "checks-run-before-anyone-reviews-review-starts-promptly": "FR-99",
+      "checks-run-before-anyone-reviews-review-waits-for-checks": "FR-97",
+      "checks-run-before-anyone-reviews-same-order-outside-a-flow": "FR-100",
       "checks-wait-less-fresh-re-a-move-from-outside-the-hub-is-noticed": "FR-19",
       "checks-wait-less-fresh-re-a-skipped-check-is-recorded-and-passes": "FR-25",
-      "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results": "FR-18",
       "checks-wait-less-fresh-results-aft-an-unmatched-check-is-skipped": "FR-24",
       "checks-wait-less-fresh-results-aft-refresh-order-is-oldest-first": "FR-21",
-      "checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced": "FR-20",
       "checks-wait-less-fresh-results-after-a-check-may-name-its-paths": "FR-23",
-      "checks-wait-less-fresh-the-gate-still-requires-a-current-result": "FR-22",
+      "failures-already-known-are-on-a-list-no-override-setting-removed": "FR-55",
+      "failures-already-known-are-on-a-list-not-gates-consult-the-list": "FR-50",
+      "failures-already-known-are-on-a-list-not-landing-records-entries": "FR-52",
+      "failures-already-known-are-on-a-list-not-r-owner-kept-on-removal": "FR-49",
+      "failures-already-known-are-on-a-list-not-re-ar-old-rules-retired": "FR-54",
+      "failures-already-known-are-on-a-list-not-re-ar-owner-not-started": "FR-48",
+      "failures-already-known-are-on-a-list-not-re-argu-no-held-batches": "FR-51",
+      "failures-already-known-are-on-a-list-not-re-argue-twice-unlisted": "FR-45",
+      "failures-already-known-are-on-a-list-not-re-argued-flaky-added": "FR-43",
+      "failures-already-known-are-on-a-list-not-re-argued-list-shown": "FR-53",
+      "failures-already-known-are-on-a-list-not-re-argued-owner-task": "FR-47",
+      "failures-already-known-are-on-a-list-not-re-argued-the-list": "FR-42",
+      "failures-already-known-are-on-a-list-not-re-main-failures-added": "FR-44",
+      "failures-already-known-are-on-a-list-not-re-removed-when-passing": "FR-46",
       "n1": "FR-5",
       "n2": "FR-6",
       "n3": "FR-7",
@@ -410,12 +1408,19 @@
       "project-checks-path-pattern-syn-a-path-pattern-matches-as-a-glob": "FR-29",
       "project-checks-says-what-a-a-run-stops-at-the-tasks-own-failure": "FR-27",
       "project-checks-says-what-a-run-records-its-state-and-each-check": "FR-28",
+      "quick-checks-run-at-normal-priority-fast-checks-normal-priority": "FR-102",
+      "quick-checks-run-at-normal-priority-setting-says-which": "FR-103",
       "the-operator-may-approve-over-failing-checks-with-a-recorded": "FR-13",
       "the-rest-of-what-the-hub-records-becomes-reachabl-checks-history": "FR-17"
     },
     "retired": {
+      "a-check-that-fails-on-main-too-is-not-the-tasks-baseline": "FR-14",
+      "a-check-that-fails-on-main-too-is-not-the-tasks-held": "FR-15",
       "checks-run-in-the-background-on-the-work-approval-would-merg": "FR-2",
-      "checks-wait-less-fresh-results-aft-the-capability-says-what-runs": "FR-26"
+      "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results": "FR-18",
+      "checks-wait-less-fresh-results-aft-the-capability-says-what-runs": "FR-26",
+      "checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced": "FR-20",
+      "checks-wait-less-fresh-the-gate-still-requires-a-current-result": "FR-22"
     }
   },
   "design": "D1 Merged commit by plumbing. The commit approval would produce is built with `git merge-tree --write-tree` and `commit-tree`, one target at a time onto the main tip, skipping targets already in the base. No branch, index or checkout moves, so building it is safe while agents and the operator work.\n\nD2 Scratch worktree per task. The merged commit is checked out detached at `.agentweave/checks/<task_id>` under the project root (gitignored), with the repository's shared dependency directories symlinked in when the OS allows. It is removed after the run; a leftover locked registration is unlocked and force-removed before the next. Adding and removing it may take up to 900 s, since it writes the whole tree.\n\nD3 One record per run (`task_check_runs`). Results are written after each check, so a reader sees progress. Deleting a task deletes its runs.\n\nD4 Bounded, per-task queue. Two runs per Hub, one per task, in-process. A restart marks leftover `running` rows `interrupted` at startup.\n\nD5 Never inside a request. Completion outside a turn, the end of a turn bound to a completed task, and an approval request with no current result each schedule a background run; the approval gate itself only reads (`project_checks.view`). Only callers that are approving may schedule.\n\nD6 The gate asks only when the merge situation resolves (main branch set and existing, workspace resolvable, a repository), like the other what-would-merge gates. The override is the operator's alone, refused from any agent, and its reason is kept on the approval transition.\n\nD8 Hub configuration stays in the Hub. A check's environment drops the Hub's own variables by prefix and by credential-shaped value, and output is scrubbed of anything removed, because check output is quoted to agents.",
@@ -431,7 +1436,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -452,7 +1456,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "Work an agent completes mid-turn is only committed when its turn ends, so checking at completion would check the wrong commit. A check can take minutes; no transition waits for it.",
-      "statement": "The Hub SHALL start a check run in the background, never inside the request that triggers it, when a task is moved to `completed` outside a turn, when a turn bound to a task that is `completed` ends, and when approval is requested and the latest result is missing, stale, interrupted or `error`."
+      "statement": "The Hub SHALL start a check run in the background, never inside the request that triggers it, when a task is moved to `completed` outside a turn and when a turn bound to a task that is `completed` ends. Requesting approval SHALL NOT start a run."
     },
     {
       "key": "n2",
@@ -466,7 +1470,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "`error` is the Hub failing to check, not the work failing its checks, so it must not stand as a result the way `failed` does.",
-      "statement": "When a merge target does not merge cleanly onto the main tip, or the Hub otherwise fails to produce a result, the run SHALL be recorded `error` with the reason, and an `error` result SHALL be treated as no verdict and run again when approval is requested."
+      "statement": "When a merge target does not merge cleanly onto the main tip, or the Hub otherwise fails to produce a result, the run SHALL be recorded `error` with the reason, and an `error` result SHALL be treated as no verdict: it refuses nothing at approval."
     },
     {
       "key": "n4",
@@ -515,7 +1519,7 @@
       "modal": "SHALL",
       "party": null,
       "rationale": "Approval would otherwise land work that breaks the project. An errored run is the Hub failing to produce a result, not a verdict, so approving retries it (F516).",
-      "statement": "In a project with checks configured, the Hub SHALL refuse a move to `approved` unless the latest check run for the task passed on the current main tip and the current merge targets. Approving SHALL start a run where the result is missing, stale, interrupted or errored and report the checks as running; a failed result SHALL be refused naming each failing check with its output tail and ending with the reviewer's move (`revision_needed`). Of the gate's callers only the approval transition and the land route start a run; the others (the review briefing, the scheduler, run divergence, the integration preview) read the recorded result."
+      "statement": "In a project with checks configured, the Hub SHALL refuse a move to `approved` only for the task's own confirmed check failure on its current merge targets, whatever main tip that run was cut from, naming each failing check with its output tail. A missing, running, errored, interrupted or stale result SHALL refuse nothing and start nothing; a pass on any earlier main tip SHALL count; a failure on the project's known-failing list, or a flake, SHALL refuse nothing at any build level. What lands is decided by the landing batch's own check run."
     },
     {
       "key": "the-operator-may-approve-over-failing-checks-with-a-recorded",
@@ -523,20 +1527,6 @@
       "party": null,
       "rationale": "The override covers a known failure the operator accepts, not an unknown, and it is an operator judgement recorded where the history can show it.",
       "statement": "The operator SHALL be able to approve over a failed or errored check result by giving a non-empty reason, which the approval transition keeps; any override reason sent by an agent SHALL be refused, and a running result SHALL NOT be overridable."
-    },
-    {
-      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-baseline",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "Charging a task only for what it changed needs main's own answer to the same check.",
-      "statement": "When a check run's check fails on the merged work, the Hub MUST run that check on the main tip the run was cut from and record its outcome on the result as on_main, and preexisting when it failed there too; a check that passed is not re-run."
-    },
-    {
-      "key": "a-check-that-fails-on-main-too-is-not-the-tasks-held",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "fix-D13: never charged silently, never hidden.",
-      "statement": "A refusal whose only failing checks are pre-existing MUST say they fail on main too, MUST NOT tell a reviewer to send the task back, and MUST be held for the operator, who lifts it with override_checks_reason; a refusal with any failure that is not pre-existing MUST stay the author's, as today, naming the pre-existing ones as such."
     },
     {
       "key": "a-check-that-fails-on-main-too-is-not-the-tasks-land",
@@ -553,13 +1543,6 @@
       "statement": "The task drawer's checks row MUST offer the task's earlier check runs, each with its state, time and every check's exit code and duration."
     },
     {
-      "key": "checks-wait-less-fresh-res-main-moving-refreshes-waiting-results",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "Approval was where the stale result was discovered, so the whole suite ran while the approver waited.",
-      "statement": "When a project's main tip changes, the Hub MUST start a check run, in the background, for every task of that project in completed or under_review whose latest result is not for the new tip, without anyone requesting approval."
-    },
-    {
       "key": "checks-wait-less-fresh-re-a-move-from-outside-the-hub-is-noticed",
       "modal": "MUST",
       "party": null,
@@ -567,25 +1550,11 @@
       "statement": "A main tip change made outside the Hub (an operator's own merge or push to the main branch) MUST trigger the same refresh within 120 seconds of the change."
     },
     {
-      "key": "checks-wait-less-fresh-results-afte-a-superseded-run-is-replaced",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "Finishing it produces a result the gate will refuse as stale anyway, while holding one of two check slots.",
-      "statement": "A check run still running when its project's main tip changes MUST be ended, recorded as superseded rather than failed, and replaced by a run on the new tip."
-    },
-    {
       "key": "checks-wait-less-fresh-results-aft-refresh-order-is-oldest-first",
       "modal": "SHOULD",
       "party": null,
       "rationale": "The oldest waiting task is the one most likely to be approved next.",
       "statement": "Refresh runs SHOULD start in the order their tasks entered completed, oldest first, within the existing limit on concurrent runs."
-    },
-    {
-      "key": "checks-wait-less-fresh-the-gate-still-requires-a-current-result",
-      "modal": "MUST",
-      "party": null,
-      "rationale": "Two tasks can each pass alone and break main together; only a run on the merged tree catches it (operator, 2026-10-24).",
-      "statement": "Approval MUST continue to accept only a result for the current main tip and the current merge targets; a result for an older tip MUST NOT count as passing."
     },
     {
       "key": "checks-wait-less-fresh-results-after-a-check-may-name-its-paths",
@@ -628,6 +1597,524 @@
       "party": null,
       "rationale": "The operator writes these patterns by hand, and a pattern that covers less than intended skips a check that should have run, with CI as the only backstop. `constraints-dev.txt` must not match `hub/constraints-dev.txt`, and `src/*.py` must not reach `src/x/a.py`.",
       "statement": "A check's path pattern SHALL match repository-relative paths as a glob in which `**` matches across directories, `*` and `?` match within one path segment, a pattern ending in `/` matches everything beneath that directory, and any other character matches only itself; a pattern with no wildcard SHALL match only the file at exactly that path."
+    },
+    {
+      "key": "a-check-run-finishes-when-master-a-main-move-does-not-end-a-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A pass of the task's work counts on any main tip (approved-work-merges-in-batches FR-9), so the result is usable; ending it repeated the same work and cost about 8 hours of hub-tests in three days.",
+      "statement": "A pre-review check run that is in progress when its project's main tip changes MUST run to completion and record its own outcome (passed, failed or error) against the main tip it was cut from; it MUST NOT be ended, recorded superseded, or replaced because of that change."
+    },
+    {
+      "key": "a-check-run-finishes-when-master-mov-new-work-still-ends-the-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "That run checks work that no longer exists; its result could never be used.",
+      "statement": "A pre-review check run whose task's own work is replaced by a new completion MUST still be ended, recorded superseded, and replaced by a run on the new work."
+    },
+    {
+      "key": "a-check-run-finishes-when-master-one-run-per-task-across-a-move",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A main tip change while a task's run is in progress MUST NOT start a second run for that task; the task has at most one run in progress at any time."
+    },
+    {
+      "key": "a-check-run-finishes-a-failure-on-an-older-tip-is-checked-again",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The failure may belong to the old main, which has since moved; before this change the run would have been replaced on the new tip, so this keeps that outcome for failures only.",
+      "statement": "When a run cut from a main tip other than the current one ends failed, and its failure is not confirmed as the task's own, the Hub MUST start a run for the task on the current main tip without anyone requesting approval."
+    },
+    {
+      "key": "a-check-run-finishes-when-mas-an-own-failure-goes-back-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A run cut from an older tip that ends with a failure confirmed as the task's own MUST return the task to its author exactly as a failure on the current tip does, with no extra run started."
+    },
+    {
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-c-changed-command",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": "Many test runners can run only related tests if they are told the files; the list in a file fits any size of change and needs no shell quoting.",
+      "statement": "A check may carry a command for a change containing `{changed_files}`; in a task's pre-review run, when the Hub knows the files the task changed, it runs that command instead of the check's command, with `{changed_files}` replaced by the path of a file listing each changed file once, one repository-relative path per line, both sides of a rename included."
+    },
+    {
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-full-when-unknown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A check is never narrowed on a guess, as it is never skipped on one (project_checks.py:224).",
+      "statement": "When the Hub cannot tell which files a task changed, the pre-review run runs the check's command in full, and the result says it ran in full because the change was unknown."
+    },
+    {
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-c-pre-review-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Landing stays the full gate, and only a full run on main may take a test off the known-failing list.",
+      "statement": "A landing batch's run, a run on main, and a confirmation or narrowing re-run never use the command for a change: they run the check's command or its re-run command exactly as a check without one."
+    },
+    {
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-chang-result-says",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A check result produced by the command for a change records that it was sized to the change and how many changed files it was given, and the task's check run shows it as sized to the change, with that count."
+    },
+    {
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-c-judged-the-same",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A failure from the command for a change is judged as any failure of that check is: failing tests are read from the check's report, confirmed with its re-run command, and set against the known-failing list."
+    },
+    {
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-reuse",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The same tree with a different base changes which tests the command runs.",
+      "statement": "A pass of the command for a change is reused only for a later run on the same tree with the same list of changed files; a pass of the full command is reused as today."
+    },
+    {
+      "key": "a-check-can-run-only-the-tests-for-what-a-task-changed-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The project's check settings accept, save and return a check's command for a change, in the API and in the app's check settings; one that does not contain `{changed_files}` is refused on save with a reason naming the placeholder."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-argued-the-list",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One list, read by every gate, replaces about 25 per-failure rules; a test is argued about once, when it goes on the list, not on every batch. Seeding keeps failures already being fixed from sending work back on the first day.",
+      "statement": "Each project has one known-failing list. An entry names the check, the test's id (from the check's report) or the whole check when that check writes no report, its kind (fails on main, or flaky), when it was first and last seen failing, the run that added it, and its owner fix task. When the list ships, it holds an entry for each test named by a fix task still open at that moment."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-argued-flaky-added",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A failing test whose confirmation re-run passes is added to the list as flaky, if it is not already on it, and is not held against the work that ran it."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-main-failures-added",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Commits the Hub lands were tested as merged; a commit made outside the Hub was not, so main is checked once after it.",
+      "statement": "A test that fails in a run on main's tree is added to the list as failing on main, if it is not already on it. Runs on main's tree are: a landed batch's own run; a full run of the project's checks, made whenever main moves by a commit the Hub did not land; and the narrow re-run below."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-argue-twice-unlisted",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Catches main breaking with no commit (a changed dependency or environment), which would otherwise send every task back until someone noticed.",
+      "statement": "When a test that is not on the list fails its confirmation re-run for one task and then, with no passing run of that test in between, for a different task, the Hub re-runs that test alone on main's tree once. If it fails there it is added as failing on main and is not held against either task; if it passes, both failures stand as the tasks' own."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-removed-when-passing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: a test comes off the list when it passes again. A flaky test passes most runs, so one pass cannot be the rule for it. A batch run stops at the first failure of its own (landing_queue.py:1353) and a narrowing probe runs only the failing ids, so many runs never run a listed test.",
+      "statement": "A failing-on-main entry is removed when its test ran and passed in a run on main's tree; a run that did not run the test does not count. A flaky entry is removed when its test ran and passed in a run on main's tree after its fix task was approved, or when it has run and passed in 20 consecutive runs."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-argued-owner-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06. An entry without an owner is a quarantine nobody empties.",
+      "statement": "When an entry is added, the Hub creates one fix task for it, naming the check, the test, the kind and the run that found it, unless an open fix task already names that test. The task is assigned to the developer of the loop or build the finding task belongs to; failing that, the finding task's builder, else its assignee; an entry found by a run on main has an unassigned fix task."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-ar-owner-not-started",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: 'the user runs them later'. Today a task created assigned outside a flow is started for its assignee at once (hub/hub/api/v1/tasks.py:1064); this must not apply to these tasks.",
+      "statement": "A fix task the Hub creates for an entry is not on any loop, flow or build, and no agent's turn starts on it until the operator starts it."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-r-owner-kept-on-removal",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When an entry is removed because its test passes again, its fix task is left open and gains a note naming the commit of main where the test passed."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-gates-consult-the-list",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An entry with an owner task is the reason an override used to supply, so a Gated build need not stop for it (operator, 2026-11-06).",
+      "statement": "The completion gate and the landing gate, for every build including Gated builds, treat a failing test that is on the list as not the work's. A failing test that is not on the list and whose confirmation re-run also fails is the work's. Apart from the narrow re-run above, neither gate runs a failure on a checkout of main to decide this. For a check that writes no report, an entry for the whole check means no failure of that check is held against work while it stands."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-argu-no-held-batches",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A landing batch is never held waiting for the operator. A batch whose only failures are on the list lands. A batch with failures of its own, or a check that timed out twice naming no failing test, is narrowed to the task whose part first fails or times out; that task is sent back to its author (with the reason 'timed out' for a timeout), and the rest land or are queued again."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-landing-records-entries",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A landing that went past failures on the list records which entries it went past, and the task's landing shows them."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-argued-list-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The app shows the project's list, each entry with its check, test, kind, first and last seen, and a link to its owner fix task, in place of today's flaky-tests list."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-not-re-ar-old-rules-retired",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The main-comparison re-run, the hold for a failure main shares and its release when main moves, the hold after repeated timeouts, the automatic override for shared failures, and the reconstruction of flaky tests from event logs are removed, and a test fails if any of them returns."
+    },
+    {
+      "key": "failures-already-known-are-on-a-list-no-override-setting-removed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06. It governed the shared-failure override (requirement_gate.py:1212-1229) and fix-task filing (flaky_tests.py:409); FR-12 removes the first and FR-5 always files, so it would be a switch that does nothing.",
+      "statement": "The project setting 'The Hub may override checks' no longer exists: the settings page has no switch for it, the project's settings neither show nor accept it, and saving the project's settings from the app keeps working."
+    },
+    {
+      "key": "a-checks-send-back-returns-the-hold-accepted-on-checks-send-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Accepted evidence names the commits that approval merges and that the checks judge. The send-back is the finding that those commits fail. Left accepted, they stay what is checked, so no fix can ever be judged.",
+      "statement": "When the project's checks send a task back (a failed check run at completion, or a failing landing batch), every piece of evidence that task itself recorded and that is accepted MUST become held, with the send-back's report as its reason, in the same transition that moves the task to revision_needed. The awaiting pieces are held as they are today."
+    },
+    {
+      "key": "a-checks-send-back-returns-the-task-s-others-evidence-untouched",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The failure belongs to this task's unmerged work (F518). Another task's accepted evidence, or work already on main, is not what failed.",
+      "statement": "A checks send-back MUST NOT change evidence recorded by another task, even against a requirement the two tasks share, and MUST NOT change evidence whose commit is already reachable from the main branch."
+    },
+    {
+      "key": "a-checks-send-back-returns-the-task-s-accepted-ev-fix-is-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the outcome that was impossible twice on 2026-10-28/29: the check judged f7cf6d3 again on every completion of the archive task, and fd8aa77 again on the vault-tab task's (F1081).",
+      "statement": "After a checks send-back of either kind, when the author commits a fix on the task's branch, records evidence at it and completes the task again, the completion check MUST run on the commit the review is given (that evidence's commit), and not on any commit the send-back held. When that check passes, the task MUST reach under_review."
+    },
+    {
+      "key": "a-checks-send-back-returns-the-task-s-note-names-returned-pieces",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The author and the next reviewer need to see that previously accepted work was returned and why. Otherwise the requirement looks like it lost its acceptance for no reason.",
+      "statement": "The send-back's evidence note MUST name the requirements whose accepted evidence it held, separately from those whose awaiting evidence it held, together with the commit that accepted evidence was at."
+    },
+    {
+      "key": "a-checks-send-back-returns-the-task-reviewer-send-back-unchanged",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Only the checks' send-back is the finding that accepted work fails. A reviewer judges what is awaiting them, and overturning a decision stays the operator's.",
+      "statement": "A send-back by a reviewer (update_task to revision_needed or rejected, with or without failing_pieces) MUST continue to decide only the task's awaiting pieces, leaving accepted pieces accepted."
+    },
+    {
+      "key": "a-checks-send-back-returns-the-task-s-ac-flow-open-while-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Approval only queues the landing; the landing can still send the task back. A flow that has already ended cannot pick that task up (F1080).",
+      "statement": "A flow with stop_when_queue_empties MUST NOT end on an empty queue while any of its approved tasks has a landing in an open state (queued, checking, landing or held). It MUST end on its next firing once every approved task's landing has landed or the task has no landing."
+    },
+    {
+      "key": "a-checks-send-back-returns-the-task-landing-wait-is-not-a-stall",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A landing in progress is the Hub doing the work. Reporting it as a stall would repeat the false alarms F1049 removed for reviews about to start.",
+      "statement": "A firing whose flow has no claimable work and whose only open work is approved tasks with a landing queued, checking or landing MUST be recorded as work in progress and MUST NOT raise a stall or wake the mender."
+    },
+    {
+      "key": "a-checks-send-back-returns-the-task-s-acc-sent-back-task-resumed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This is the outcome F1080 was missing: the send-back reaches an author who can act on it.",
+      "statement": "When a landing batch sends back a task of a flow that is still open, the flow's next firing MUST resume that task on its assignee, as it resumes any revision_needed task."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-work-and-a-live-own-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On 2026-10-29 the F1083 task's completion check ran on the drive task's commit and reused a pass, so a change breaking two existing tests passed the gate. Retires F520's 'or by tasks already approved' (operator, 2026-10-29).",
+      "statement": "The commits that a task's completion check, review turn and approval check treat as the task's work are the task's own: the newest commit on its branch and commits named by evidence it recorded. A commit named by evidence another task recorded, including against a requirement both tasks serve and including after that task is approved, never counts as this task's work."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-every-completion-checked",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The F1083 task's second and third completions recorded no check run at all.",
+      "statement": "Every move of a task to completed, including each one after a send-back, either records a check run whose target contains that completion's newest branch commit, or says in the task's history why no check ran. It never skips silently because a stand-in commit is already on the main branch."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-w-prerequisite-is-its-own",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "task-dac742f3f922 was sent back for lacking 00fe846, a commit of a task it does not depend on.",
+      "statement": "The work a dependent task's checkout takes in from a prerequisite, and the work approval requires the dependent's branch to contain, are commits produced by that prerequisite task. A commit produced by a task the dependent does not depend on, directly or through its prerequisites, is never required."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-merge-names-its-producer",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "A 'Bring in prerequisite work' commit made by the Hub names the task that produced the commit it merges."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-work-live-run-is-progress",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The stall scan does not report a loop or flow as having made no progress while a run on one of its tasks is executing."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-wo-no-reset-of-a-live-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The mender reset task-799357e3e80e at 17:39 while DeveloperOpus's run was executing (17:02-18:02).",
+      "statement": "Resetting a task (mend_reset_task, or any route that moves an in_progress task back to assigned or pending) while a run on that task is executing is refused. The refusal names the run, its agent and when it started, and the task is unchanged."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-mid-build-task-has-people",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "task-4161311000e6 was added during review with no assignee, builder or checker.",
+      "statement": "A task added to a running build, by any agent or by an amendment, takes the build's default builder and checker unless the addition names them. The board shows each as 'by default' when it came that way."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-work-a-send-back-says-why",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Two send-backs on 2026-10-29, one a regression and one a merge only, both read just 'held (not named as failing)' in the history.",
+      "statement": "Every move of a task to revision_needed records a reason class (defect, regression, broken-check, merge-needed, evidence-only or flaky) and a sentence of reason, whether or not it names failing pieces. The class and sentence appear in the task's history in the app and in task_history."
+    },
+    {
+      "key": "a-task-s-checks-and-merges-use-its-own-send-back-class-producer",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "A reviewer's send-back without a reason class is refused, naming the classes. A send-back the Hub makes itself (checks or a landing batch) records broken-check, or flaky when a confirming re-run passed."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-the-user-phase-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Opt-in: no project's gates change unless it chooses.",
+      "statement": "Each check in a project's check settings carries a phase of review, landing or both. The operator can set it per check, and a check saved before this change reads and behaves as both."
+    },
+    {
+      "key": "checks-know-their-phase-and-g-landing-only-skipped-before-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A check whose phase is landing does not run in a task's pre-review check run. The task's checks show it as 'runs at landing', not as passed or skipped, and review and approval are not held waiting for it."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-review-only-skipped-at-landing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A check whose phase is review does not run in a landing batch's check run, and a landing batch is not held waiting for it."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-th-fast-not-landing-only",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "Saving a check that is both fast and landing-only is refused with a message saying a fast check gates an agent's completion before review, so it cannot be landing-only."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-the-below-user-priority",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While the project's 'checks give way to the user' setting is on, every process a check run starts, including the processes those start, runs at a scheduling priority below the priority of a normally started user application on the same machine."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-the-use-priority-opt-out",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-04: no project's checks change speed without its say.",
+      "statement": "The 'checks give way to the user' setting is off for every project until the operator turns it on, including projects that existed before this change. While it is off, check processes run at the priority they run at today."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-conflict-goes-to-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "All 13 error runs on this project were conflicts; re-running one on the same tips repeats it. The builder can resolve it; the operator chose the builder over themselves (2026-11-04).",
+      "statement": "When a pre-review check run cannot merge the task's work onto the main branch, the task is sent back to its builder with reason class merge-needed and notes naming the conflicting files. No further check run starts for that task until its branch has new commits."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-the-user-hub-stop-reruns",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Deliberately replaces today's behaviour, recorded in vault fact fct-c1dfbea42f5e (an interrupted run waits for the next refresh or approval): nothing about the work was judged, so the task should not wait on an unrelated event to be checked.",
+      "statement": "A check run ended because the Hub stopped is requested again when the Hub next starts, for every task still waiting for its pre-review result, without waiting for a main-branch move or an approval."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-t-hub-fault-retried-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Deliberately replaces today's behaviour, recorded in vault fact fct-c1dfbea42f5e (an errored run waits for the next refresh or approval). Bounded at one retry so a project whose checks are long builds or paid time is not charged for a loop.",
+      "statement": "A check run that ends in error for any reason other than a merge conflict is requested once more automatically on the current main tip. A second consecutive error on the same task work is not retried: it appears in the operator's Needs-you list with the error text and the task, and the task is not sent back to its builder."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-th-timeout-not-the-tasks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Running out of time on a busy machine says nothing about the work; a named failing test does.",
+      "statement": "A check that runs past its time limit, and whose output names no failing test as the task's own, does not count as the task's failure: it is retried and surfaced like a Hub fault (hub-fault-retried-once). A check whose output names failing tests that are not failing on main still counts as the task's failure, as today."
+    },
+    {
+      "key": "checks-know-their-phase-and-give-way-to-the-usual-duration-shown",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "Beside each check's time limit, the check settings show how long that check usually takes: the median and the longest of its last 20 passing results in this project, or 'no passing runs yet'."
+    },
+    {
+      "key": "checks-report-which-tests-failed-in-any-language-report-settings",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "Each check in a project's check settings can carry an optional report path, relative to the directory the check runs in, naming the JUnit XML file the check writes, and an optional re-run command containing the placeholder {tests}. Both are set through the app's check settings and the project settings route. A check saved before this change, or without them, reads as having neither. A re-run command without {tests} is refused on save with a message naming the placeholder."
+    },
+    {
+      "key": "checks-report-which-tests-failed-in-any-lang-ids-from-the-report",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "The report is the runner's own statement of what failed; console output differs per runner and per version, and the pytest summary was cut off or missing in exactly the cases that held batches. Classname and name are the two attributes every JUnit writer fills (Decision 5).",
+      "statement": "When a check that names a report ends with a non-zero exit and the report exists and is valid JUnit XML, the failing tests recorded for that check are exactly the testcases in the report that carry a failure or error element. Each has a test id of the testcase's classname attribute, followed by '::' and its name attribute. When the testcase has a file attribute, the file is recorded alongside the id for display and for telling whether the build changed it; it is not part of the id. No test id is taken from the check's console output."
+    },
+    {
+      "key": "checks-report-which-tests-failed-in-any-language-stable-ids",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "A test that fails in a check's full run and again in a re-run of only that test is recorded under the same test id in both, so the Hub matches it across runs, across tasks and against main. Two different testcases in one report never share an id unless their classname and name are both equal."
+    },
+    {
+      "key": "checks-report-which-tests-failed-in-any-la-no-report-whole-check",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "A re-run in the same directory as the full run (project_checks.py:1055, :1061) would otherwise read the full run's report as its own.",
+      "statement": "Before every run of a check that names a report, full or re-run, the Hub removes any file at the report path, so only a report the run itself wrote is read. A failing check that names no report, or whose report is missing, empty or not valid JUnit XML when the check ends, is judged as a whole by its exit code and names no failing test. Its result in the task's checks and the build's caught list says which of 'no report configured', 'report missing' or 'report unreadable' applied."
+    },
+    {
+      "key": "checks-report-which-tests-failed-in-any-langua-exit-code-decides",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Keeps today's meaning of a pass; pytest's exit 3 (internal error) and similar endings need no rule of their own.",
+      "statement": "A check passes or fails by its exit code and time limit exactly as before this change. A report naming failures on a check that exited 0 does not fail it. A non-zero exit whose valid report names no failing testcase is a whole-check failure that names no test."
+    },
+    {
+      "key": "checks-report-which-tests-failed-in-an-rerun-through-the-command",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Windows' command interpreter refuses a command line over 8,191 characters.",
+      "statement": "Wherever the Hub re-runs a check's failing tests (confirming a failure is real, comparing with main, narrowing a landing batch), it runs that check's re-run command with {tests} replaced by the failing test ids, each passed as a separate argument, and reads the re-run's report by the same rules. A check with no re-run command, or whose re-run command with the ids substituted would be longer than 8,000 characters, is re-run as a whole with its own command."
+    },
+    {
+      "key": "checks-report-which-tests-failed-in-any-lang-no-runner-knowledge",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-05: AgentWeave must be usable to build any type of project. Runner-specific parsing is what kept a non-Python check weaker and kept adding rules.",
+      "statement": "The Hub's judgement of a check depends only on that check's settings, exit code, time limit and report. The Hub does not parse any test runner's console output for results and does not rewrite a check's command."
+    },
+    {
+      "key": "checks-report-which-tests-failed-in-any-languag-settings-explain",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The check settings show the report path and re-run command for each check. They give a working example for pytest, Vitest or Jest, Node's built-in test runner, Go (gotestsum) and cargo-nextest. They say that test ids are the report's classname and name joined by '::', that a re-run command receives them as separate arguments, and that a check without a report is judged as a whole, with no per-test re-run or narrowing."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-fast-flag",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Which checks are cheap enough to make a builder wait for is a fact about the project's commands, so it belongs to the operator's configuration, beside paths and timeout. On :8000, ruff and black took 0.9-6.7 s and hub-tests 8-16 min on 2026-10-26/27.",
+      "statement": "Each of a project's checks has a 'fast' setting that the operator sets in the app's project settings and through the project settings route. It defaults to off for every check saved before or without it. A check marked fast with a timeout over 120 seconds is refused with a reason naming the limit. A task's check run executes its fast checks before its other checks."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-completion-runs-fast-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "On 2026-10-27 T2's ruff failure was recorded 18 s after completion; the builder could have fixed it in the same turn instead of after a 5.5-minute review.",
+      "statement": "When an agent moves its task to completed and the project has fast checks that apply to the work, the Hub first commits the agent's uncommitted work in the task's checkout to the task branch. It then runs the fast checks on the commit the task's review would be given, merged onto the main branch, before the completion is recorded."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-completion-refused-with-output",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent's only feedback on a refusal is that message (main.py:746-756, mcp_server.py:204-207); without the output it re-runs the check itself or guesses.",
+      "statement": "When a fast check fails with a failure of the task's own, the completion is refused (409) and the task stays in_progress, held by its builder. The message the agent's update_task tool returns names each failing check, the commit checked and the check run, and quotes the check's output (its failure excerpt or the last 4000 characters)."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-completion-wait-is-bounded",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Warn, don't gate: a builder must never be held by a slow machine. Under load a check checkout has taken over 60 s (F516).",
+      "statement": "An agent's completion waits at most 120 seconds for the fast checks. When they have not decided within that time, the completion is recorded and the checks continue as part of the task's check run. A failure they find later returns the task to its builder like any other."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-one-run",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The fast checks run at completion are the start of the task's check run for that work. The remaining checks continue in the same run, and no fast check is executed a second time for the same merged tree."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-review-waits-for-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Three reviews on 2026-10-26/27 ran beside a failing suite and found what the checks found. A deferral with nothing else claimable is reported as a stall today (scheduler.py:2685-2689, :4403-4410), and this wait lasts the suite's 8-16 minutes.",
+      "statement": "A flow queues no review of a completed task while the task's check run for the work under review is running, has not started, or was superseded. The firing records the task as deferred, saying how long its checks have run and how long the previous run took. While that is all the flow is waiting on, the firing is not recorded as stalled and no loop_stalled stall is raised."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-failure-returns-to-builder",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "completed -> revision_needed is the operator's edge (task_transitions.py:134-141), so today only a reviewer's verdict returns such a task, which costs a review turn.",
+      "statement": "When a task's check run ends failed with a failure of the task's own while the task is completed, the Hub moves the task to revision_needed, held by the agent that built it, and queues and starts no review of that work. The task's notes carry the failing checks, the commit and their output. The transition is recorded with origin 'checks' and a note naming the run, and the app's history attributes it to the project's checks, not to the operator."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-review-starts-promptly",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A flow's tick is every 5 minutes, and a hand-off left to it waited about 2.5 minutes on average (flow_advance.py:3-6). The wait for checks must not add a tick's delay on top of the suite.",
+      "statement": "When a completed flow task's check run passes, or ends with no failure of the task's own, the flow queues the task's review within 60 seconds, without waiting for its next scheduled tick."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-same-order-outside-a-flow",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Slice B lets any agent but the author take completed work into review outside a flow; without this, that path would review beside a failing suite as the flow did. The operator's explicit action stays theirs (warn, don't gate).",
+      "statement": "Outside a flow, completion is gated and a failed task is returned as inside one. An agent cannot move a completed task to under_review, and the mender cannot hand it to a reviewer, while its check run is undecided or has failed with the task's own failure; the refusal states the run's state and how long it has run. The operator's own review dispatch is not refused."
+    },
+    {
+      "key": "checks-run-before-anyone-reviews-builders-know",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The update_task tool's description says that moving a task to completed runs the project's fast checks on the committed work, can take up to two minutes, and is refused with their output when one fails."
+    },
+    {
+      "key": "quick-checks-run-at-normal-priority-fast-checks-normal-priority",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Operator, 2026-11-05 (roadmap approval): a fast check is what an agent's completion waits on, so slowing it holds a running turn; on 2026-11-05 a starved ruff run timed out after passing.",
+      "statement": "While the project's 'checks give way to the user' setting is on, every process a check marked fast starts, including the processes those start, runs at the same scheduling priority as it would with the setting off. Every process a check not marked fast starts runs below the priority of a normally started user application, as before."
+    },
+    {
+      "key": "quick-checks-run-at-normal-priority-setting-says-which",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": null,
+      "statement": "The 'Checks give way to me' setting's description says that checks marked fast keep normal priority and only the other checks give way."
     }
   ],
   "schema_version": 1,

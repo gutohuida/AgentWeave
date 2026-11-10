@@ -1,0 +1,23 @@
+{
+  "id": "fct-6519e573e5ba",
+  "kind": "fact",
+  "claim": "Nested git repositories, very large folders and pre-commit hooks were not covered for actions that commit an operator's existing folder.",
+  "citations": [
+    {
+      "source": "src-bee1f99d4616",
+      "quote": "Specs for actions that commit an operator's existing folder should address nested git repositories, very large folders and pre-commit hooks, because none of these were covered here.",
+      "line_start": 11,
+      "line_end": 11
+    }
+  ],
+  "sources": [
+    "src-bee1f99d4616"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-10T14:26:03.321563Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

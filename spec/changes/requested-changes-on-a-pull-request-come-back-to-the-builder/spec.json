@@ -1,0 +1,482 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "an open PR build with a review that has one inline comment, and a second case where GitHub errors",
+      "how_to_check": "Hub test with a fake GitHub CLI answering each case.",
+      "key": "ac-reads",
+      "requirement": "reads-reviews",
+      "then": "the first shows the review and its comment; the second shows GitHub's error and no task changes state",
+      "when": "the operator opens the build"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one review that only comments (the author's own, on the scratch repository) and one that approves",
+      "how_to_check": "Hub test with a fake GitHub CLI; the drive also leaves a real comment-only review with the operator's account and confirms nothing is sent back.",
+      "key": "ac-only-changes",
+      "requirement": "only-changes-requested",
+      "then": "both are listed on the build and no task leaves approved",
+      "when": "the Hub reads them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a changes-requested review already sent back",
+      "how_to_check": "Hub test calling the ask three times with a restart of the module state between them.",
+      "key": "ac-once",
+      "requirement": "each-review-once",
+      "then": "the task is not sent back again and its history shows one send-back for the review",
+      "when": "the Hub asks twice more, and restarts between the asks"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a two-task build where task A touched a.py and task B touched b.py, with the squash setting on in a second case",
+      "how_to_check": "Hub test with real git in a temp repository and a fake GitHub CLI; the acceptance drive confirms on the scratch repository.",
+      "key": "ac-inline",
+      "requirement": "inline-to-task",
+      "then": "B is sent back with the comment and A is not, in both cases",
+      "when": "a review comments on b.py line 3"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a review with only a general body, and another with a comment on a file no task touched",
+      "how_to_check": "Hub test with a fake GitHub CLI.",
+      "key": "ac-unmatched",
+      "requirement": "unmatched-to-latest",
+      "then": "the latest task pushed is sent back and its report marks the comment as not matched to a change of that task",
+      "when": "the Hub reads them"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one review with two comments on task A and one on task B",
+      "how_to_check": "Hub test reading the tasks' notes and history.",
+      "key": "ac-content",
+      "requirement": "send-back-content",
+      "then": "A has one send-back quoting both comments with author, file, line and link, and B has one quoting its comment",
+      "when": "the Hub reads it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "reviewer one requested changes and reviewer two then approved",
+      "how_to_check": "Hub test with a fake GitHub CLI.",
+      "key": "ac-reviewers",
+      "requirement": "several-reviewers",
+      "then": "the task is sent back for reviewer one's comments and reviewer two's approval is shown without cancelling it",
+      "when": "the Hub reads the PR"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task already in revision_needed from a CI send-back",
+      "how_to_check": "Hub test.",
+      "key": "ac-back-already",
+      "requirement": "task-already-back",
+      "then": "the comment is in its notes with the review link and its history gains no second send-back",
+      "when": "a review comments on its change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task sent back by a review on the scratch repository's PR",
+      "how_to_check": "Acceptance drive on the scratch repository gutohuida/agentweave-pr-scratch, reading the PR's commits and draft state from GitHub after waiting for CI.",
+      "key": "ac-fix",
+      "requirement": "fix-same-pr",
+      "then": "the PR has one more commit than before, the PR number is unchanged, and the PR is ready again",
+      "when": "the builder's fix is approved and pushed, and, where the project uses slice 2, CI on the new head has passed (until then the PR stays a draft)"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the scratch repository PR of a built two-task spec, pushed, CI passed and the PR ready",
+      "how_to_check": "Operator's check on the scratch repository, with the Haiku-bound agents of the drive.",
+      "key": "ac-done",
+      "requirement": "fix-same-pr",
+      "then": "the matching task is sent back with that comment; after its fix is approved and CI has passed, a new commit appears on the same PR and github-actions[bot] is listed as requested to review again",
+      "when": "the operator runs the scratch repository's review workflow, which requests changes as github-actions[bot] with one inline comment, and opens the build in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two reviewers, one whose changes-requested review sent a task back and one who only commented",
+      "how_to_check": "Hub test with a fake GitHub CLI counting calls; the drive reads the PR's requested reviewers from GitHub.",
+      "key": "ac-rerequest",
+      "requirement": "asks-reviewers-again",
+      "then": "exactly one review request is made, for the first reviewer, through `gh pr edit <n> --add-reviewer <login>`, and the second ask makes none; a fake GitHub refusing the request leaves the error on the build and no task changed",
+      "when": "the fix is pushed and the PR returns to ready, and the Hub then asks again"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Hub's GitHub call wrapper",
+      "how_to_check": "Hub test calling the wrapper with each.",
+      "key": "ac-readonly",
+      "requirement": "read-only-github",
+      "then": "each is refused before anything runs, while a GET of the PR's reviews and comments and `pr edit --add-reviewer` run",
+      "when": "it is asked for a reply to a comment, a thread resolution, a review approval or dismissal, a non-GET API call, or a `pr edit` with a base change"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with a sent-back review whose reviewer was asked again and a comment-only review",
+      "how_to_check": "UI test over the build card with fixtures in the order the build route returns; a screenshot in the drive.",
+      "key": "ac-shown",
+      "requirement": "review-shown",
+      "then": "the sent-back review shows with its comments and 'asked to review again', and the other says it was a comment only",
+      "when": "the operator opens the build and the task"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "a7ea0791367b4045ff9c91d3d399c12084aae5b183c6d509bf3520adf0945353",
+      "FR-10": "8a1f0bfd1bdb35cc9235e77750c8066537f90c3755341e8a226fc7b86ce80aa0",
+      "FR-11": "851ce1de91faaa96712c81448537666b3f08ff679422b8ad988d086649c137ed",
+      "FR-12": "3cc3ec6922dbc4226bcef50d889224f1f2a19422cd7d1d86b1939b6ddae007ea",
+      "FR-2": "e1bcdeacd495aeece8d7272859ea430d3389113555e0aa28eda7f976d3f1db82",
+      "FR-3": "e3aecab148fed2a2a23ad56999b77375e9a9bafc02d60c2e51186417b6c55bcf",
+      "FR-4": "c5e788703d3c86214da901f21f52f242de130fa5ae858d9f0265927d4e7b842b",
+      "FR-5": "e55d8a32b7fdef282b7a00c93813edef1c8940cd1827d69d59e614a9d7cc7c4f",
+      "FR-6": "51fbd0d728b782a2da1a8d37305662da7b79ae556c23c57d4aa0f35f33792bb1",
+      "FR-7": "771e6c410354e986478f926e0568115b288b0f1ab686ad8e914ea0e7d63bd17a",
+      "FR-8": "598fe56a37648e586db72bbf63ba5aa1062592b5bdb4bd93cd06c66987eaf69d",
+      "FR-9": "a3fef308fa2da390fa03a44e23a8f181dfc681ced62ddf828bfb92b30dbf489b"
+    },
+    "high_water": 12,
+    "requirements": {
+      "asks-reviewers-again": "FR-12",
+      "each-review-once": "FR-3",
+      "fix-same-pr": "FR-9",
+      "inline-to-task": "FR-4",
+      "only-changes-requested": "FR-2",
+      "read-only-github": "FR-10",
+      "reads-reviews": "FR-1",
+      "review-shown": "FR-11",
+      "send-back-content": "FR-6",
+      "several-reviewers": "FR-7",
+      "task-already-back": "FR-8",
+      "unmatched-to-latest": "FR-5"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Tier 2 and outward-facing: an Opus lead; DeveloperOpus2 takes the drive and send-back so the load splits with DeveloperOpus.",
+      "cron": "Every five minutes, the usual cadence.",
+      "mode": "Five tasks; the three that share pull_requests.py chain, the drive runs first and last.",
+      "stop": "The flow has nothing to do once its tasks are approved."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 2. Outward-facing: the Hub sends real work back on the strength of what people typed on GitHub, widens the one place that limits what it may ask of GitHub, and makes one notifying call, a review request. Migration: adds nullable build columns only. Rollback: the columns are read only when PR landing is on, so downgrading drops them and reviews are simply not read.\n\nDecisions (operator, 2026-11-08):\n- Only a review that requests changes sends anything back. Comment-only and approving reviews are shown on the build, nothing more. This is a team feature: GitHub refuses 'request changes' from a PR's own author, and the Hub opens PRs under the operator's login, so a solo author's own reviews never send work back.\n- Each review is handled once, by its GitHub id, recorded on the build.\n- An inline comment is matched to a task by that task's own change (the lines and files it touched), not by the PR's commits, so it works with the squash setting. If several tasks touched the file, it goes to the one that touched the commented line; otherwise to the latest of them pushed.\n- A general review body, or a comment on a file no task touched, goes to the latest task pushed, marked unmatched.\n- Comments of one review for one task are one send-back; several tasks mean several send-backs.\n- When the Hub learns of a review: on slice 1's asks (`sync_pr`, pull_requests.py:895; `refresh`, :974) and on slice 2's interval while CI is pending. There is no new timer.\n- Once the PR is ready again with the fixes, the reviewers whose changes-requested reviews sent work back are asked to review again, once per review.\n- The Hub never replies, resolves threads, approves or dismisses reviews.\n- Testing without a second account: the scratch repository carries a workflow_dispatch workflow that submits a REQUEST_CHANGES review with one inline comment as github-actions[bot], using GITHUB_TOKEN with pull-requests: write. That is a real reviewer who is not the PR's author, the way teams' bots review. If GitHub refuses it, the drive says so and the real-GitHub check of the send-back falls back to a stand-in for the review read only; the operator is told.\n\nCURRENT   PR open -> Hub asks state only -> a person's changes-requested review is invisible to the app\nPROPOSED  ask -> new changes-requested review (by id) -> inline comments read -> each matched to a task by its own change -> task approved -> revision_needed with the comments; PR back to draft (slice 1) -> fix approved after checks and agent review -> pushed to the same PR -> ready again when all pushed (+ CI, slice 2) -> reviewers who requested changes asked to look again\n\nThe contract (grounded in hub/hub/pull_requests.py, builds.py and models.py on master):\n- GitHub reads: `check_gh_call` gains a third read pattern, `_REVIEWS_READ`. It matches exactly `repos/<owner>/<repo>/pulls/<number>/reviews?per_page=100` and `.../pulls/<number>/comments?per_page=100`, with an optional `&page=N` as `_COMMIT_READ` allows (F1146), and nothing else. Replies, thread resolution, review approval or dismissal, and any call with `-X` or extra arguments stay refused by the existing `len(args) == 2` rule. Calls go through `gh()`.\n- Review request: `gh pr edit <number> --add-reviewer <login>`. `(\"pr\",\"edit\")` is already in GH_ALLOWED, where only a base change is refused, so no new subcommand is allowed. A test pins that this is the only new use of `pr edit`. For a bot reviewer, the login is the one GitHub reports on the review.\n- New function `read_reviews(root, number) -> {reviews, error}` beside `read_pr`. It is blocking, run through `blocking.run` as `read_pr` is, and called on the same asks for each build whose answer state is draft or ready, after `read_pr` and before `check_ci`.\n- A review record: `{\"id\": int, \"author\": str, \"state\": \"CHANGES_REQUESTED\"|\"COMMENTED\"|\"APPROVED\"|\"DISMISSED\", \"url\": str, \"submitted_at\": str|null, \"outcome\": \"sent_back\"|\"comment_only\"|\"approved\"|\"dismissed\"|\"already_handled\"|\"pr_not_open\", \"sent_to\": [task_id], \"re_requested_at\": str|null, \"comments\": [{\"id\": int, \"path\": str|null, \"line\": int|null, \"body\": str, \"url\": str, \"task_id\": str|null, \"matched\": bool}]}`.\n- Migration, named `<next>_requested_changes_come_back.py`, takes the next number after master's head at build time (0170 today; the generated-files build may land first). It adds nullable `builds.pr_reviews` (JSON, the list above), `builds.pr_reviews_read_at` (datetime) and `builds.pr_reviews_error` (text, apart from `builds.pr_error`). It is guarded like 0170; the downgrade drops them.\n- Build view: `builds.pull_request_view` gains `reviews`, `reviews_read_at` and `reviews_error`, typed on `BuildPullRequest` (hub/ui/src/api/pullRequests.ts).\n- Send-back: reuse `landing_queue._send_back` and the existing reason classes. The history row's reason names the review and carries its link, with origin 'checks'. No new event name, setting or task status.\n- Existing guards to relax, each named:\n  - the 'nm-ac1' allowed-call set in hub/tests/test_a_build_lands_as_one_pull_request_push.py, which must accept the reviews reads and `pr edit --add-reviewer` and nothing else;\n  - the notice test;\n  - the fake GitHub in hub/tests/test_the_pr_s_ci_is_the_full_check_read.py and the equivalent fakes of slices 1 and 2;\n  - scripts/drive/pr_ci_drive.py's quiet-period gh-call audit, which must still hold.",
+  "evidence": {
+    "checked": [
+      "hub/hub/pull_requests.py:176 GH_ALLOWED; :181 _API_READ; :184 _COMMIT_READ; :209-226 check_gh_call allows `pr edit` with any argument except a base change, so `--add-reviewer` needs no new subcommand (master, 2026-11-08).",
+      "hub/hub/pull_requests.py:895 sync_pr and :974 refresh are slice 1's asks; no timer.",
+      "No code on master reads PR reviews (git grep reviews|review_comment|pulls/ in pull_requests.py, builds.py, landing_queue.py).",
+      "hub/hub/landing_queue.py:355 calls pull_requests.land: the push-the-fix-to-the-same-PR path.",
+      "Master's migration head is 0170_the_pr_s_ci_is_read_on_the_head.py; the number is taken at build time.",
+      "`gh auth status` on this machine: one account, gutohuida, which is the PR author and so cannot request changes."
+    ],
+    "limits": [
+      "Nothing demonstrates any requirement yet: the acceptance drive is proposed coverage, to be written and recorded failing before the build.",
+      "Unverified: that github-actions[bot] may submit a REQUEST_CHANGES review on the scratch repository (GitHub restricts Actions approving PRs; requesting changes is believed allowed). The drive proves it first.",
+      "The shape of `gh api` review and comment output, including outdated comments after later pushes, is unverified; matching uses the comment's recorded path and line at the commit commented on.",
+      "Whether the Hub's own pushes reset a pending changes-requested review is GitHub's branch protection setting and unverified.",
+      "Whether `--add-reviewer` accepts a bot login is unverified; the drive records it."
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "When the Hub learns of a review. Answered (operator, 2026-11-08): (a) on slice 1's asks and slice 2's CI interval only; no timer.",
+      "resolved": true
+    },
+    {
+      "question": "A review body that names no file, or a comment on a file no task touched. Answered (operator, 2026-11-08): (a) the latest task pushed, marked unmatched.",
+      "resolved": true
+    },
+    {
+      "question": "Ask the reviewers who requested changes to look again? Answered (operator, 2026-11-08): (a) yes, automatically, once the PR is ready again.",
+      "resolved": true
+    },
+    {
+      "question": "Resolving threads. Answered (operator, 2026-11-08): (a) never; the reviewer does.",
+      "resolved": true
+    },
+    {
+      "question": "Should a solo author's own comment reviews count, since GitHub refuses 'request changes' from a PR's author? Answered (operator, 2026-11-08): no; this is a team feature and need not fit a solo author.",
+      "resolved": true
+    },
+    {
+      "question": "How is it tested without a second GitHub account? Answered (operator, 2026-11-08: a second account is not workable): a workflow in the scratch repository requests changes as github-actions[bot].",
+      "resolved": true
+    },
+    {
+      "question": "Does GitHub accept a changes-requested review on a draft PR? Not the operator's: the drive records what the scratch repository does.",
+      "resolved": true
+    }
+  ],
+  "problem": "A PR build lets people review on GitHub, but nothing reads what they say. Slice 1 asks GitHub only for the PR's state (`read_pr`, `gh pr view --json state,isDraft,mergeCommit`) and acts only on merged or closed. A reviewer who requests changes leaves the PR open and blocking, and the operator has to carry each comment to the right task by hand.\n\nThe send-back itself exists: `_send_back` moves an approved task to revision_needed with a report (hub/hub/landing_queue.py, around :2032-2072), and a task leaving approved already returns its build's PR to draft. What is missing is reading reviews, deciding which task each comment belongs to, and sending it back.\n\nThe Hub cannot read inline comments today. `GH_ALLOWED` (hub/hub/pull_requests.py:176) holds only pr create/edit/ready/view, and `check_gh_call` (:209-226) allows `gh api` only as a two-argument GET matching `_API_READ` (:181) or `_COMMIT_READ` (:184), so a third read pattern is needed. Even after the fix lands, nothing tells the reviewer it is there, so their changes-requested review keeps blocking the merge.",
+  "requirements": [
+    {
+      "key": "reads-reviews",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "While a build's PR is open, whenever the Hub asks GitHub for its state, it also reads the PR's reviews and their inline comments, read only; a failed read is shown on the build with GitHub's error and sends nothing back."
+    },
+    {
+      "key": "only-changes-requested",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Only a review whose state is 'changes requested' sends a task back; a review that only comments or approves is shown on the build with its author and link, and sends nothing back."
+    },
+    {
+      "key": "each-review-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each review is acted on once: the Hub records the GitHub identifier of every review it has handled on the build, and a later ask finding the same review changes nothing, including after a Hub restart."
+    },
+    {
+      "key": "inline-to-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "An inline comment on a file and line goes to the task of the build whose own change touched that line; when no task touched the line but some touched the file, to the latest of those pushed; this holds with the squash setting, where the PR's commits no longer map to tasks."
+    },
+    {
+      "key": "unmatched-to-latest",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-08 (option a): a blocking review with nothing moving is the worst result, so it is never dropped for naming no file; the report says plainly it could not be matched.",
+      "statement": "A review's general body, and an inline comment on a file no task of the build touched, go to the latest task pushed, and its send-back marks each such comment as not matched to any change of that task."
+    },
+    {
+      "key": "send-back-content",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A review sends each matched task back once, as one send-back that quotes every comment for it in the reviewer's words, with the reviewer's name, the file and line, and a link to the comment; a review whose comments concern two tasks sends both back."
+    },
+    {
+      "key": "several-reviewers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Reviews by different people are handled independently: each changes-requested review sends back its tasks, a second reviewer's approval does not cancel a first reviewer's request, and a comment already sent back in an earlier review is not sent again."
+    },
+    {
+      "key": "task-already-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When the task a comment belongs to is already not approved (sent back for another reason, or being fixed), the comments are added to its notes with the review's link and no second send-back is made."
+    },
+    {
+      "key": "fix-same-pr",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A builder's fix to a review send-back is checked and reviewed as any task is, and once approved is pushed to the same build branch and PR, as a new commit on it, or replacing the build's single commit under the squash setting; no second PR opens, and the PR returns to ready only when every task is pushed again, and CI has passed in a project that uses slice 2."
+    },
+    {
+      "key": "asks-reviewers-again",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-08 (option a): a changes-requested review keeps blocking a merge until its reviewer re-reviews, and nothing else tells the reviewer the fix is there.",
+      "statement": "When a PR that had a changes-requested review returns to ready with fixes for it, the Hub asks each reviewer whose changes-requested review sent work back to review again, once per such review; it asks no one else, and a failed request is shown on the build and changes nothing else."
+    },
+    {
+      "key": "read-only-github",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Apart from asking reviewers to review again, the Hub reads reviews only with read requests: it never replies to a comment, resolves a thread, approves or dismisses a review, or requests anything of GitHub beyond what slices 1 and 2 allow; a call outside that list is refused before anything runs."
+    },
+    {
+      "key": "review-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The build and each task sent back by a review show the review's author and link, the comments sent, whether its reviewer was asked to review again, and when the Hub last read reviews; a review that sent nothing back says why (comment only, approval, already handled, PR not open)."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/work-lands-through-pull-requests/spec.json",
+    "slice": "review-comments-come-back"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Reading reviews and inline comments of an open PR through the GitHub CLI, read only",
+      "Recording which reviews were handled",
+      "Matching comments to tasks, and sending those tasks back with the comments",
+      "Showing review send-backs on the build and the task",
+      "Pushing the fix to the same PR through the existing landing path",
+      "Asking the reviewers who requested changes to review again once the PR is ready again (operator, 2026-11-08)"
+    ],
+    "non_goals": [
+      "Replying to comments, resolving threads, approving or dismissing reviews on GitHub (operator, 2026-11-08: the reviewer resolves)",
+      "Merging the PR (a person's decision, as in slice 1)",
+      "A timer that waits for reviews (operator, 2026-11-08: on slice 1's asks and slice 2's CI interval only)",
+      "Treating comment-only reviews as requests for changes, including the author's own (operator, 2026-11-08: a team feature; it need not fit a solo author)",
+      "Reading comments on a PR that is merged or closed",
+      "Hosts other than GitHub (slice 4, parked)",
+      "Switching this repository to PR landing; this repository lands by direct merge, so the feature is demonstrated on the scratch repository"
+    ]
+  },
+  "summary": "When a person requests changes on a build's pull request, the Hub reads their comments and sends each affected task back to its builder, quoting the comments that concern it. The fix goes through the usual agent review and checks and is pushed to the same PR. Once the PR is ready again, the Hub asks the reviewers who requested changes to look again. The Hub never replies in threads, resolves them or approves; a person does. A product feature for teams, where reviewers are other people: GitHub does not let a PR's author request changes on their own PR, and the operator confirmed (2026-11-08) that this is fine. Opt-in with PR landing. Tier 2: outward-facing reads of people's words, plus a migration. Builds after slice 2 (the-pr-s-ci-is-the-full-check), which has landed.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Not the Hub-code builder, so the builder cannot shape the check; a drive against a real GitHub repository and workflow wants Opus.",
+      "checker": "QA",
+      "checker_reason": "QA holds the drive and the behaviour it is meant to catch.",
+      "depends_on": [],
+      "description": "Write the acceptance drive against the contract (the review reads, `pull_request.reviews` on the build, the send-back, the same-PR fix and the review request) and record it failing.\n\nIt uses gutohuida/agentweave-pr-scratch (required check ci-check). Add to that repository a workflow_dispatch workflow that submits a REQUEST_CHANGES review with one inline comment (inputs: PR number, path, line, body) as github-actions[bot] (GITHUB_TOKEN, permissions pull-requests: write).\n\nThe drive builds a two-task spec with PR landing, waits for CI and a ready PR, and dispatches the workflow on task B's file. It expects B sent back with that comment, A untouched, the fix as a new commit on the same PR, the PR ready again once CI passes, and github-actions[bot] listed as requested again. It also leaves a comment-only review with the operator's own account and expects nothing sent back.\n\nIt runs on a dedicated trial Hub with its own port and database; real agent turns bind Haiku; one GitHub login only. First prove that the workflow can request changes. If GitHub refuses, record that and report it to the operator rather than adding a second account. Keep pr_ci_drive.py's quiet-period audit true.",
+      "files": [
+        "scripts/drive/pr_review_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "reads-reviews",
+        "only-changes-requested",
+        "inline-to-task",
+        "send-back-content",
+        "fix-same-pr",
+        "asks-reviewers-again"
+      ],
+      "reviewer": null,
+      "title": "Review-comments acceptance drive, written and failing first"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Tier 2: widens what the Hub may ask of GitHub, plus a migration; the builder of slices 1 and 2's pull_requests.py.",
+      "checker": "QA",
+      "checker_reason": "QA can verify that nothing outside the allowed list can run.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add `_REVIEWS_READ` to the GitHub call wrapper. Add `read_reviews` and call it on the same asks as the PR's state. Record review records on the build: the migration, numbered at build time, and the three columns. Expose them in `builds.pull_request_view`. Show comment-only and approving reviews without acting. Update the named guards. Tests first, at the seam.",
+      "files": [
+        "hub/hub/pull_requests.py",
+        "hub/hub/db/models.py",
+        "hub/hub/builds.py",
+        "hub/hub/migrations/versions",
+        "hub/tests/test_a_build_lands_as_one_pull_request_push.py",
+        "hub/tests/test_a_build_lands_as_one_pull_request_notice.py",
+        "hub/tests/test_the_pr_s_ci_is_the_full_check_read.py",
+        "hub/tests/test_requested_changes_are_read.py"
+      ],
+      "from": null,
+      "key": "read-reviews",
+      "requirements": [
+        "reads-reviews",
+        "only-changes-requested",
+        "each-review-once",
+        "read-only-github"
+      ],
+      "reviewer": null,
+      "title": "The Hub reads reviews and inline comments, once each"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "Sends real work back and notifies people on the strength of outside text; Opus, a different hand from read-reviews.",
+      "checker": "QA2",
+      "checker_reason": "QA2 reads the send-back path with fresh eyes.",
+      "depends_on": [
+        "read-reviews"
+      ],
+      "description": "Match inline comments to tasks by each task's own change, and unmatched comments to the latest task pushed. Group them into one send-back per task and review. Add them to the notes of a task already not approved. Show the send-back's origin. When the PR returns to ready with the fixes, request a re-review once per sending review through `gh pr edit --add-reviewer`, recording `re_requested_at`. The fix lands through the existing path onto the same PR. Tests with real git, squash on and off.",
+      "files": [
+        "hub/hub/pull_requests.py",
+        "hub/hub/landing_queue.py",
+        "hub/tests/test_requested_changes_come_back.py"
+      ],
+      "from": null,
+      "key": "match-and-send-back",
+      "requirements": [
+        "inline-to-task",
+        "unmatched-to-latest",
+        "send-back-content",
+        "several-reviewers",
+        "task-already-back",
+        "fix-same-pr",
+        "asks-reviewers-again"
+      ],
+      "reviewer": null,
+      "title": "Comments reach the right task as a send-back, and reviewers are asked again"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Presenting fields the Hub already returns is routine UI work for Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checked the send-back, so it can tell whether the UI matches the route.",
+      "depends_on": [
+        "match-and-send-back"
+      ],
+      "description": "Type `reviews`, `reviews_read_at` and `reviews_error` on BuildPullRequest. Show reviews (author, link, comments sent or why none, asked to review again), when the Hub last read reviews, and a review's send-back on the task. Refresh the UI bundle.",
+      "files": [
+        "hub/ui/src/api/pullRequests.ts",
+        "hub/ui/src/components/spec/page/SpecBuilds.tsx",
+        "hub/ui/src/components/tasks/TaskDetailDrawer.tsx",
+        "hub/ui/src/__tests__/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "review-shown"
+      ],
+      "reviewer": null,
+      "title": "Review send-backs on the build card and task"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "The hand that wrote the drive runs it on a real GitHub repository; Opus for the unfamiliar failure modes.",
+      "checker": "QA",
+      "checker_reason": "QA can tell a pass that read nothing from a real one.",
+      "depends_on": [
+        "drive",
+        "read-reviews",
+        "match-and-send-back",
+        "ui"
+      ],
+      "description": "Run the drive against the built feature on the scratch repository and a dedicated trial Hub. Record evidence against every requirement: run output, the review payloads read, the send-back notes and history, and from GitHub the PR's commits, draft state and requested reviewers, plus the build card screenshot. A failure here sends back the task that builds the behaviour, not this one.",
+      "files": [
+        "scripts/drive/pr_review_drive.py"
+      ],
+      "from": null,
+      "key": "accept",
+      "requirements": [
+        "reads-reviews",
+        "only-changes-requested",
+        "each-review-once",
+        "inline-to-task",
+        "unmatched-to-latest",
+        "send-back-content",
+        "several-reviewers",
+        "task-already-back",
+        "fix-same-pr",
+        "asks-reviewers-again",
+        "read-only-github",
+        "review-shown"
+      ],
+      "reviewer": null,
+      "title": "Run the acceptance drive and record its evidence"
+    }
+  ],
+  "title": "Requested changes come back to the builder"
+}

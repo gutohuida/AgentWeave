@@ -1,0 +1,448 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a testbed project with two modules a and b, test files test_a and test_b, and a pytest check whose command for a change runs only the test files that name a changed module",
+      "how_to_check": "acceptance drive scripts/drive/changed_files_drive.py on the trial Hub",
+      "key": "cc-ac1",
+      "requirement": "changed-command",
+      "then": "the check's report holds test_a's tests and none of test_b's, and the list file named exactly a's path",
+      "when": "a task changing only a reaches its pre-review run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task that renames a file",
+      "how_to_check": "hub test on the pre-review run with a stub check that copies the list file",
+      "key": "cc-ac2",
+      "requirement": "changed-command",
+      "then": "it holds both the old and the new path",
+      "when": "the list file is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose merge base cannot be read",
+      "how_to_check": "hub test",
+      "key": "fu-ac1",
+      "requirement": "full-when-unknown",
+      "then": "the full command ran and the result says the change was unknown",
+      "when": "its pre-review run runs the check"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's task approved",
+      "how_to_check": "acceptance drive",
+      "key": "pr-ac1",
+      "requirement": "pre-review-only",
+      "then": "the check's report holds test_a's and test_b's tests",
+      "when": "its landing batch runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check with a command for a change",
+      "how_to_check": "hub test",
+      "key": "pr-ac2",
+      "requirement": "pre-review-only",
+      "then": "neither ran the command for a change",
+      "when": "a run on main and a narrowing re-run execute it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the drive's pre-review run",
+      "how_to_check": "acceptance drive reading the run route; UI test on the check run view",
+      "key": "rs-ac1",
+      "requirement": "result-says",
+      "then": "it shows the check as sized to the change, 1 file",
+      "when": "the task's check run is opened in the app"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose change makes test_a fail",
+      "how_to_check": "acceptance drive, second task",
+      "key": "js-ac1",
+      "requirement": "judged-the-same",
+      "then": "the failing test is named from the report and confirmed by the re-run command, and the task is sent back naming it",
+      "when": "its pre-review run runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a pass of the command for a change on tree T with change list L",
+      "how_to_check": "hub test",
+      "key": "ru-ac1",
+      "requirement": "reuse",
+      "then": "the pass is not reused and the command runs",
+      "when": "a later run has tree T and a different list"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project's check settings",
+      "how_to_check": "hub test on the settings route; UI test on the settings panel",
+      "key": "st-ac1",
+      "requirement": "setting",
+      "then": "the save is refused naming the placeholder; one with it is saved and read back unchanged",
+      "when": "a command for a change without `{changed_files}` is saved"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a list holding only hub/hub/landing_queue.py",
+      "how_to_check": "test for hub_suite.py in tests/ or hub/tests/",
+      "key": "rr-ac1",
+      "requirement": "repo-related-tests",
+      "then": "it runs exactly the Hub test files that name landing_queue, and r.xml holds their results",
+      "when": "`py -3.11 scripts/checks/hub_suite.py --report r.xml --changed-files list.txt` runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a list holding only hub/ui/src/App.tsx, and one holding hub/tests/conftest.py",
+      "how_to_check": "test for hub_suite.py",
+      "key": "rr-ac2",
+      "requirement": "repo-related-tests",
+      "then": "the first runs no tests, passes and says no Hub test relates; the second runs the full suite",
+      "when": "hub_suite.py runs with each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "scripts/checks/check_settings.json",
+      "how_to_check": "read the file",
+      "key": "rf-ac1",
+      "requirement": "repo-settings-file",
+      "then": "sweep's timeout is 3600, and hub-tests has phase both and a command for a change containing `{changed_files}`",
+      "when": "it is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": ".claude/rules/testing.md",
+      "how_to_check": "read the file",
+      "key": "rl-ac1",
+      "requirement": "repo-rules",
+      "then": "it says hub-tests runs the related tests before review and the full suite at landing",
+      "when": "it is read"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "1dea3eb8000667cc64a3508ea758f9b7b580abf235522867ba8b143da8da2b15",
+      "FR-10": "e27eab99d04d8082d55916d74efab2b2c4eae9643bd31de19da838eaf558c24b",
+      "FR-2": "68997701eb8755118c36a42ca5aa255a6f6d73d3ba52f4bab26b7fb5cc98d416",
+      "FR-3": "5cc4c632e4673ef30641d6c2647f4f85c2ac1ad39abe9a4b01414215e72ea306",
+      "FR-4": "4f3fda4605ac432fbbc3811310bfae6554058019b263f1cce8971b31bb21c0ef",
+      "FR-5": "2bf40387477b4ec0025b50ecdedc1ed258f3bc2359b5776c8be762cadf4a3270",
+      "FR-6": "d9e6e127bbfce3490468bbca7643ca723e91af6711b8b3c7ebeb7a7d57ee59bf",
+      "FR-7": "2a2e2114ef02ed526c51dc12943ba5ab499571418d4875f139a5cda0bd61923a",
+      "FR-8": "253cee98b4f792c5308bc49956bdc45f69e909a5bc229212bdc2c15a8b4e1b76",
+      "FR-9": "804afc18e1c7aa004f208f05059345b40018362268b48b41d3fb5d1a82b3458e"
+    },
+    "high_water": 10,
+    "requirements": {
+      "changed-command": "FR-1",
+      "full-when-unknown": "FR-2",
+      "judged-the-same": "FR-5",
+      "pre-review-only": "FR-3",
+      "repo-related-tests": "FR-8",
+      "repo-rules": "FR-10",
+      "repo-settings-file": "FR-9",
+      "result-says": "FR-4",
+      "reuse": "FR-6",
+      "setting": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus2",
+    "builder": "DeveloperOpus2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperOpus2, since DeveloperOpus builds the pull-request slice in parallel.",
+      "builder": "Opus for the check runner; DeveloperSonnet2 takes the drive, the UI and this repository's scripts, so no agent is shared with the pull-request slice.",
+      "checker": "QA2 checks the whole slice; QA checks the pull-request slice.",
+      "cron": "Every five minutes, as for the checks slices.",
+      "mode": "Four tasks in a chain; a flow runs each as soon as the one before lands.",
+      "stop": "Stop when the four tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Tier 1. No migration: a project's checks are stored as a list of settings, and the new one is another optional field beside `report_path` and `rerun_command`.\n\nThe command for a change mirrors the re-run command: a setting with a placeholder the Hub fills in. `{changed_files}` is replaced by the path of a file listing the changed files, not by the files themselves, so a change of any size fits a command line and no path needs shell quoting (the re-run command has an 8000-character limit for that reason, project_checks.py:643).\n\nCURRENT   pre-review: command (whole suite) or nothing; landing: command\nPROPOSED  pre-review: change known -> command for a change, given the list\n                      change unknown -> command\n          landing, main runs, confirmations: command, as now\n\nWhich tests relate to a change is the project's check's decision, never the Hub's.\n\nThis repository's half: on master, 464 of 677 Hub test files name `models` and 89 name `worktrees`, while 25 name `landing_queue` (grep, 2026-11-06), so the related set is small for most modules and close to the full suite for the few everything uses. That is accepted: the landing run is the gate.",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_checks.py:214-239: changed files computed, used only to skip a check by its paths",
+      "hub/hub/project_checks.py:640-643, 826-837: the {tests} placeholder and the 8000-character limit of the re-run command",
+      "hub/hub/project_checks.py:866-875: what makes a pass reusable",
+      "hub/hub/api/v1/projects.py, hub/ui/src/components/settings/GeneralSettings.tsx: where rerun_command is accepted and edited today",
+      "scripts/checks/check_settings.json and the live project's checks (mode=ro): hub-tests phase landing; live sweep timeout 3600 s, the file 360 s",
+      "task_check_runs and landing_batches on the operator's database (mode=ro), 2026-11-02 to 2026-11-06",
+      "grep of hub/tests on master: 677 test files; models named in 464, worktrees 89, landing_queue 25",
+      ".claude/rules/testing.md:14-27"
+    ],
+    "limits": [
+      "The related set's run time is not measured yet; for modules everything uses it is close to the full suite",
+      "Overlap with the pull-request slice: both change hub/hub/api/v1/projects.py and hub/ui/src, so the second to land may need a merge and a UI bundle rebuild"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [
+          "DeveloperSonnet2",
+          "DeveloperOpus2"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-06T22:44:23.766679+00:00",
+        "id": "build-ff971027645e",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-06T21:15:22.367386+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "hub": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA2"
+          },
+          "repo": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "ui": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Hub tests before review again, as the related set? Answered (operator, 2026-11-06): yes.",
+      "resolved": true
+    },
+    {
+      "question": "How are related tests found? Answered (operator, 2026-11-06): a text search of hub/tests for the changed modules' names.",
+      "resolved": true
+    },
+    {
+      "question": "When the change is unknown? Answered (operator, 2026-11-06): the check runs in full.",
+      "resolved": true
+    },
+    {
+      "question": "The idle-time run of slow tests? Answered (operator, 2026-11-06): dropped; any project's slow tests already run on main at landing and in slice 2's main runs.",
+      "resolved": true
+    }
+  ],
+  "problem": "The Hub already works out which files a task changed, but uses that only to skip a whole check whose `paths` match none of them (hub/hub/project_checks.py:214-239). A check's command is never told what changed. So a project's choice is all or nothing: run its whole test suite before review, which is slow, or leave tests to landing, where a failure is found after a checker has already spent a turn approving the work.\n\nThis repository took the second option. Read-only on the operator's Hub, 2026-11-06:\n- hub-tests is phase \"landing\" (scripts/checks/check_settings.json; the live settings agree). Its pre-review runs stopped after 2026-11-04 (21, 24 and 33 runs on 11-02 to 11-04, none since).\n- Since 2026-11-02, 115 uncached hub-tests runs had a median of 17 minutes and used 47 h in total.\n- .claude/rules/testing.md:23-27 still says hub-tests runs on every task before review. It no longer does.\n\nThe roadmap slice was written as this repository's work only, with an idle-time run of slow tests. Recast on 2026-11-06 at the operator's direction: the change belongs in the product where any project has the same need, and in this repository's scripts only where the need is this repository's. The idle-time run is dropped: in the product every landing runs every landing-phase check in full, and slice 2 of the checks roadmap runs them on main when main moves outside the Hub, so any project's slow tests already run on main.",
+  "requirements": [
+    {
+      "key": "changed-command",
+      "modal": "MUST",
+      "party": "producer",
+      "rationale": "Many test runners can run only related tests if they are told the files; the list in a file fits any size of change and needs no shell quoting.",
+      "statement": "A check may carry a command for a change containing `{changed_files}`; in a task's pre-review run, when the Hub knows the files the task changed, it runs that command instead of the check's command, with `{changed_files}` replaced by the path of a file listing each changed file once, one repository-relative path per line, both sides of a rename included."
+    },
+    {
+      "key": "full-when-unknown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A check is never narrowed on a guess, as it is never skipped on one (project_checks.py:224).",
+      "statement": "When the Hub cannot tell which files a task changed, the pre-review run runs the check's command in full, and the result says it ran in full because the change was unknown."
+    },
+    {
+      "key": "pre-review-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Landing stays the full gate, and only a full run on main may take a test off the known-failing list.",
+      "statement": "A landing batch's run, a run on main, and a confirmation or narrowing re-run never use the command for a change: they run the check's command or its re-run command exactly as a check without one."
+    },
+    {
+      "key": "result-says",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A check result produced by the command for a change records that it was sized to the change and how many changed files it was given, and the task's check run shows it as sized to the change, with that count."
+    },
+    {
+      "key": "judged-the-same",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A failure from the command for a change is judged as any failure of that check is: failing tests are read from the check's report, confirmed with its re-run command, and set against the known-failing list."
+    },
+    {
+      "key": "reuse",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The same tree with a different base changes which tests the command runs.",
+      "statement": "A pass of the command for a change is reused only for a later run on the same tree with the same list of changed files; a pass of the full command is reused as today."
+    },
+    {
+      "key": "setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The project's check settings accept, save and return a check's command for a change, in the API and in the app's check settings; one that does not contain `{changed_files}` is refused on save with a reason naming the placeholder."
+    },
+    {
+      "key": "repo-related-tests",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": null,
+      "statement": "In this repository, hub-tests runs in both phases; before review it runs, through scripts/checks/hub_suite.py, the changed Hub test files plus every Hub test file that names a changed hub/hub module by its module name, writing its report as the full run does; it runs the full suite when the list includes hub/tests/conftest.py or a packaging file, and when nothing relates it runs no tests, passes, and prints that no Hub test relates to the change."
+    },
+    {
+      "key": "repo-settings-file",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "scripts/checks/check_settings.json gives sweep a 3600 s timeout, as the operator set it live on 2026-11-06, and gives hub-tests phase both and its command for a change."
+    },
+    {
+      "key": "repo-rules",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": ".claude/rules/testing.md says that hub-tests runs the related tests before review and the full suite at landing, and tells a reviewer to read the pre-review result as covering only the related tests."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-cost-less-on-a-machine-that-is-in-use/spec.json",
+    "slice": "tiered-tests"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Product: a check's optional command for a change, with the `{changed_files}` placeholder, run in a task's pre-review run",
+      "Product: what runs when the change is unknown, what the result records, and when a pass is reused",
+      "Product: the setting in the project's check settings, in the API and the app",
+      "This repository: hub-tests runs its related tests before review, through scripts/checks/hub_suite.py",
+      "This repository: check_settings.json records sweep's 3600 s timeout (operator, 2026-11-06) and hub-tests' command for a change",
+      "This repository: .claude/rules/testing.md says where hub-tests runs"
+    ],
+    "non_goals": [
+      "Changing what landing runs: every landing-phase check runs its full command on the exact merged tree",
+      "The Hub choosing which tests relate to a change: that is the project's check's decision",
+      "An idle-time or scheduled run of slow tests (dropped 2026-11-06; a scheduled check is a separate, later idea)",
+      "Test selection by import graph for Hub Python changes (roadmap probe 2: saves almost nothing)",
+      "Changing the Hub's limit of two concurrent check runs",
+      "Applying the new settings to the operator's live Hub: the operator pastes them after the build lands, as for slice 1"
+    ]
+  },
+  "summary": "Product, general: a check can carry a second command, used only before review, that the Hub runs with the list of files the task changed, so any project can run just the tests for that change. Many test runners already do this when given the files (Jest's --findRelatedTests, Vitest's related, per-package go test, pytest on chosen files). Landing, runs on main and confirmations keep running the full command. This repository then uses it: hub-tests runs its related tests before review again, and its settings file and testing rules are brought up to date.",
+  "tasks": [
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "A drive script with no Hub code: Sonnet, and Developer is on the pull-request slice.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checks this whole slice, so QA stays free for the pull-request slice.",
+      "depends_on": [],
+      "description": "Write scripts/drive/changed_files_drive.py against the trial Hub :8010: a testbed project with modules a and b and their test files, a pytest check with a report, a re-run command and a command for a change; a task changing only a, checked before review (only test_a runs) and at landing (both run); a second task breaking test_a, sent back naming it. It fails today because the command for a change does not exist.",
+      "files": [
+        "scripts/drive/changed_files_drive.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "changed-command",
+        "pre-review-only",
+        "result-says",
+        "judged-the-same"
+      ],
+      "reviewer": null,
+      "title": "Changed-files acceptance drive"
+    },
+    {
+      "builder": "DeveloperOpus2",
+      "builder_reason": "The check runner every task uses; Opus, and DeveloperOpus is on the pull-request slice.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checks this whole slice.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Add the command for a change to a check's settings (normalised with the others, refused on save without `{changed_files}`), write the list file and run it in a task's pre-review run when the change is known, run the full command otherwise and in every landing, main and re-run; record and return 'sized to the change' with the file count; include the change list in what makes a pass reusable for this command.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "hub",
+      "requirements": [
+        "changed-command",
+        "full-when-unknown",
+        "pre-review-only",
+        "result-says",
+        "judged-the-same",
+        "reuse",
+        "setting"
+      ],
+      "reviewer": null,
+      "title": "The Hub runs a check's command for a change"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "UI wiring over a route the hub task built: Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checks this whole slice.",
+      "depends_on": [
+        "hub"
+      ],
+      "description": "Add the command for a change to the check settings panel, and show 'sized to the change (N files)' on a task's check run. Refresh the committed UI bundle.",
+      "files": [
+        "hub/ui/src/",
+        "hub/hub/static/ui/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "setting",
+        "result-says"
+      ],
+      "reviewer": null,
+      "title": "Command for a change in the app"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "This repository's scripts and docs, not product code: Sonnet.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checks this whole slice.",
+      "depends_on": [
+        "hub"
+      ],
+      "description": "Add --changed-files to scripts/checks/hub_suite.py (changed Hub test files plus test files naming a changed hub/hub module; the full suite for conftest or packaging changes; no tests and a pass when nothing relates), with tests; update scripts/checks/check_settings.json (sweep 3600 s; hub-tests phase both and its command for a change); update .claude/rules/testing.md.",
+      "files": [
+        "scripts/checks/hub_suite.py",
+        "scripts/checks/check_settings.json",
+        ".claude/rules/testing.md",
+        "tests/"
+      ],
+      "from": null,
+      "key": "repo",
+      "requirements": [
+        "repo-related-tests",
+        "repo-settings-file",
+        "repo-rules"
+      ],
+      "reviewer": null,
+      "title": "This repository's hub-tests runs related tests before review"
+    }
+  ],
+  "title": "A check can run only the tests for what a task changed"
+}

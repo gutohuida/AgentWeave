@@ -1,0 +1,560 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a trial-Hub testbed project whose main has a test on the list as failing on main, and a task that adds a different failing test",
+      "how_to_check": "py -3.11 scripts/drive/d1106_known_failing_list.py against the trial Hub :8010",
+      "key": "ac-drive",
+      "requirement": "gates-consult-the-list",
+      "then": "the other task lands past the listed test, the new failure's task is sent back to its author, no check run is made on a checkout of main, and no batch is held",
+      "when": "the task is approved and lands with another task in one batch"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a flaky test found by a task's run and a whole check without a report failing on main",
+      "how_to_check": "Hub test reading the list route",
+      "key": "ac-entry",
+      "requirement": "the-list",
+      "then": "each entry carries check, test id or whole check, kind, first and last seen, the adding run and the fix task",
+      "when": "the list is read from its route"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a database with two open fix tasks naming tests, and one approved fix task",
+      "how_to_check": "Hub migration test over a seeded database, upgrade then downgrade",
+      "key": "ac-seeded",
+      "requirement": "the-list",
+      "then": "the list holds exactly the two open tasks' tests, each with that task as owner, and no other row changed",
+      "when": "the migration runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task whose check fails one test that passes on its confirmation re-run",
+      "how_to_check": "Hub test at the check-run seam",
+      "key": "ac-flaky",
+      "requirement": "flaky-added",
+      "then": "the test is on the list as flaky, with the run that added it, and the task is not sent back",
+      "when": "the completion gate decides"
+    },
+    {
+      "checked_by": "agent",
+      "given": "main moved by a commit the Hub did not land, and that commit fails a test not on the list",
+      "how_to_check": "Hub test driving the main watcher with an outside commit",
+      "key": "ac-main-added",
+      "requirement": "main-failures-added",
+      "then": "exactly one full run was made on that commit, and the test is on the list as failing on main",
+      "when": "the Hub's run on main ends"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test not on the list that fails, confirmed, for task A and then for task B, once with main failing it and once with main passing it",
+      "how_to_check": "Hub test at the check-run seam",
+      "key": "ac-twice",
+      "requirement": "twice-unlisted",
+      "then": "with main failing: one single-test run on main, the test listed, neither task sent back; with main passing: both tasks sent back",
+      "when": "task B's gate decides"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a failing-on-main entry, a second failing-on-main entry, and a flaky entry with its fix task open",
+      "how_to_check": "Hub test over the landing queue; drive step in d1106",
+      "key": "ac-removed",
+      "requirement": "removed-when-passing",
+      "then": "the first entry is gone, the second and the flaky entry stay; after the flaky test's fix task is approved and it passes once more, or after 20 consecutive passes, it is gone too",
+      "when": "a landed batch's run runs and passes the first and the flaky test but never runs the second"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test added to the list by a task of a build whose builder is DeveloperOpus, a second failure of the same test, and a test found by a run on main",
+      "how_to_check": "Hub test",
+      "key": "ac-owner",
+      "requirement": "owner-task",
+      "then": "exactly one fix task exists for the first test, assigned to DeveloperOpus, naming check, test, kind and run; the main-found test's fix task is unassigned",
+      "when": "all are recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fix task created for an entry",
+      "how_to_check": "drive step in d1106 reading the task and its runs",
+      "key": "ac-not-started",
+      "requirement": "owner-not-started",
+      "then": "the task has no loop, flow or build, and no run exists for it",
+      "when": "a minute passes with its assignee idle and the build's flow still firing"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an entry whose fix task is open",
+      "how_to_check": "Hub test",
+      "key": "ac-kept",
+      "requirement": "owner-kept-on-removal",
+      "then": "the fix task is still open and has a note naming that main commit",
+      "when": "the entry is removed because its test passes on main"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task in a Gated build whose check fails a listed test, and another task whose check fails a test not on the list that still fails on re-run",
+      "how_to_check": "Hub test asserting no main checkout was made",
+      "key": "ac-own-failure",
+      "requirement": "gates-consult-the-list",
+      "then": "the first is not sent back; the second is sent back as its own failure; no check runs on a checkout of main",
+      "when": "the completion gate decides each"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check that writes no report, with and without a whole-check entry on the list",
+      "how_to_check": "Hub test",
+      "key": "ac-whole-check",
+      "requirement": "gates-consult-the-list",
+      "then": "with the entry the failure is not the task's; without it the task is sent back",
+      "when": "the check fails for a task"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a batch whose only failures are on the list, and a batch of three where the second task's prefix times out twice",
+      "how_to_check": "Hub test over the landing queue",
+      "key": "ac-no-hold",
+      "requirement": "no-held-batches",
+      "then": "the first batch lands; in the second the first task lands, the second is sent back with the reason 'timed out', and the third is queued again; no landing is held",
+      "when": "the landing gate decides"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a batch that landed past two entries",
+      "how_to_check": "Hub test reading the landing route",
+      "key": "ac-landing-record",
+      "requirement": "landing-records-entries",
+      "then": "it names those two entries",
+      "when": "its task's landing is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with one flaky and one failing-on-main entry",
+      "how_to_check": "vitest component test; drive in the browser against the trial Hub",
+      "key": "ac-shown",
+      "requirement": "list-shown",
+      "then": "both entries show with check, test, kind, first and last seen, and a working link to the fix task",
+      "when": "the operator opens the project overview"
+    },
+    {
+      "checked_by": "agent",
+      "given": "master after this change",
+      "how_to_check": "py -3.11 -m pytest on the sweep test",
+      "key": "ac-retired",
+      "requirement": "old-rules-retired",
+      "then": "it passes, and fails if the main-baseline re-run, the shared-failure hold or release, the timeout hold, or the event-log flaky reconstruction is put back",
+      "when": "the sweep test runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub on this change, after its migrations",
+      "how_to_check": "Hub route test plus a browser drive of the settings page against the trial Hub",
+      "key": "ac-setting-gone",
+      "requirement": "override-setting-removed",
+      "then": "no 'Hub may override checks' switch is shown, the save succeeds, the project's settings carry no checks_auto_override, and a request that sends it is refused",
+      "when": "the operator opens the project's settings, changes another setting and saves"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "15a0bd486537da478285c2f240a9c0a31717eaf4c2888eabc58fb53c16248225",
+      "FR-10": "d1f8cba34a05ccf38b5c876ae2cb47465d947562f95dbd139b544c843f58c9ac",
+      "FR-11": "fb4c04e0c4639b60652e86c5b0a1b504f3ee9418ea48eef2f4aafdec7aa1862e",
+      "FR-12": "41cc610cdf9426ee5e0e1c34b871c202b086070e87d6fff6fbd399a557b99400",
+      "FR-13": "b6372034520bb21036465392c20fb20eda4c365b384583cbc7e21bb6e0b71ca4",
+      "FR-14": "b0f8a7152ede43e5b3d271ff0135952d4deceba2e3979d603b3cd818badcabca",
+      "FR-15": "a88ac38b60af3819e0f525bdcb3610737c1b576d004c5343a2633f5c04bda93f",
+      "FR-2": "1c45f24d77c0b6d90a120bcc85ee1c089318d4fd94d4e2b6570ff2c72352f91d",
+      "FR-3": "5a89674261ca48142c509e1c6205e60ac6606dd65e047c8fe4f48b9dbe146cda",
+      "FR-4": "255f4aa6800c8bb57b5b0a78ec610673789419eb8d54b0eaea649619bfa0ec80",
+      "FR-5": "6b9bd9b75a2aadb44e3b7772c5b4d349a0de2bca5484a0297879062428258519",
+      "FR-6": "4cd67e13c6ec6c78c60ad3ec6887036c73da9823033b08def613bc355a6ec6f1",
+      "FR-7": "3b1d85e31c3a413210529e52bd67e84ffecb902e4f1d8ad7fedae0ed94d2ccff",
+      "FR-8": "4c550d62380e81b4b198998c22e4d990be1c990ffd39fcea45e2e88f9542b51b",
+      "FR-9": "87bdd76e58c48734e3997aab7d0d14fff2e3f81ae94d66d196c4864090128df3"
+    },
+    "high_water": 15,
+    "requirements": {
+      "flaky-added": "FR-2",
+      "gates-consult-the-list": "FR-7",
+      "landing-records-entries": "FR-10",
+      "list-shown": "FR-11",
+      "main-failures-added": "FR-3",
+      "no-held-batches": "FR-9",
+      "old-rules-retired": "FR-12",
+      "override-setting-removed": "FR-15",
+      "owner-kept-on-removal": "FR-14",
+      "owner-not-started": "FR-6",
+      "owner-task": "FR-5",
+      "removed-when-passing": "FR-4",
+      "the-list": "FR-1",
+      "twice-unlisted": "FR-13"
+    },
+    "retired": {
+      "whole-check-entries": "FR-8"
+    }
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "The Tier 2 tasks are DeveloperOpus's.",
+      "builder": "Opus by default for the landing-gate and migration work; the drive moves to Developer.",
+      "checker": "QA checks the slice end to end; QA2 takes the UI and settings task.",
+      "cron": "Every five minutes, as for slice 1.",
+      "mode": "Four tasks in a chain; a flow runs each as soon as the one before lands.",
+      "stop": "Stop when the four tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Hazard (Tier 2): migrations the operator's :8000 Hub applies to live data on restart, and a change to what the landing gate lets onto main for every project.\n\nMigrations and rollback:\n- The list task's migration adds the list's own table and seeds it from the tests named by fix tasks still open at migration time. It changes no existing row, and its downgrade drops the table.\n- The ui task's migration drops projects.checks_auto_override. Its downgrade adds the column back with its old default (on).\n- Rolling back the code after the gates task lands brings back the main-comparison rules, which read nothing from the list.\n\nWhy the setting goes in the last task: the project settings route refuses unknown fields (hub/hub/api/v1/projects.py:238, extra=forbid). Removing the field from the route before the switch leaves the UI would make every settings save fail. By the ui task, the gates task has already stopped reading the setting.\n\nParallel builds: another slice building at the same time that also adds a migration must take the next number after this one, whichever lands second.",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_checks.py, landing_queue.py, flaky_tests.py, requirement_gate.py, build_caught.py on master (subagent inventory with file:line, 2026-11-06)",
+      "hub/hub/api/v1/tasks.py:1064: a task created assigned outside a flow is started at once",
+      "hub/hub/main_watch.py:205-217: the Hub already tells a main move it made from one it did not",
+      "hub/hub/landing_queue.py:1316-1334, :1457-1475: AW-39's unjudged-timeout requeue and the hold after a second one, which FR-9 replaces",
+      "hub/hub/api/v1/projects.py:225, :238: checks_auto_override is a project settings field, and the route forbids unknown fields",
+      "The operator's live check settings (mode=ro, 2026-11-06) match scripts/checks/check_settings.json, so sweep and hub-tests write reports"
+    ],
+    "limits": [
+      "The list is designed from practice elsewhere and not yet tried here; the acceptance drive is its first test",
+      "A full run on main after an outside commit costs one full suite (about an hour on this repository) per such commit; acceptable because the Hub lands almost every commit",
+      "Narrowing a timed-out batch on a loaded machine may send back a task whose prefix timed out from load, not from its own work (2026-11-05's timeouts were mostly load). Accepted by the operator; watch the 'timed out' send-backs after it ships"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "Developer",
+          "DeveloperOpus"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-06T08:23:54.446022+00:00",
+        "id": "build-a1e2d9919641",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "started_at": "2026-11-06T00:28:29.613437+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "gates": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "list": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "ui": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which runs count as runs on main? Resolved 2026-11-06: a landed batch's run, a full run when main moves by a commit the Hub did not land, and a single-test re-run when an unlisted test fails for two tasks in a row (FR-3, FR-13).",
+      "resolved": true
+    },
+    {
+      "question": "When does a flaky entry come off? Resolved 2026-11-06: after its fix task is approved and it passes once on main, or after 20 consecutive passes (FR-4).",
+      "resolved": true
+    },
+    {
+      "question": "What happens to a batch whose check times out twice? Resolved 2026-11-06: narrowed like a failure, and the task whose prefix first times out is sent back as 'timed out' (FR-9).",
+      "resolved": true
+    },
+    {
+      "question": "Who owns a fix task where no loop or build applies? Resolved 2026-11-06: the finding task's builder, else its assignee; unassigned for a run on main (FR-5).",
+      "resolved": true
+    },
+    {
+      "question": "What happens to the fix task when its entry comes off? Resolved 2026-11-06: it stays open, with a note naming the main commit (FR-14).",
+      "resolved": true
+    },
+    {
+      "question": "Does the list apply to Gated builds? Resolved 2026-11-06: yes (FR-7).",
+      "resolved": true
+    },
+    {
+      "question": "What becomes of the 'Hub may override checks' setting? Resolved 2026-11-06: removed with its switch (FR-15).",
+      "resolved": true
+    }
+  ],
+  "problem": "Today, after slice 1, the gates decide whose a failure is by re-running it on a checkout of main (`_MainBaseline`, hub/hub/project_checks.py:1268, called at :1807; and for landing batches, hub/hub/landing_queue.py:1275).\n\nWhen main shares the failure, the landing gate does one of two things:\n- It lands with a Hub override and files a fix task.\n- It holds the batch for the operator: \"land the batch with one reason, or fix main first\" (landing_queue.py:1583-1613). The batch is released only when main moves (:508).\n\nA check that times out twice in a row also holds its batch (:1457-1475).\n\nFlaky tests have no store of their own. They are reconstructed from 30 days of check-run results and event-log rows (hub/hub/flaky_tests.py:10-13, :55-57), and stop counting when the operator marks the list handled.\n\nFix tasks are filed critical and unassigned on the finding task's live flow (flaky_tests.py:387-467). The flow then picks them up and runs them straight away, in competition with the build's own work.\n\nMeasured 2026-11-05 on the operator's Hub: five landings waited 1.5 to 5 h behind held batches, and the main re-runs added full-suite runs to a machine already starved of check time.\n\nOperator, 2026-11-06:\n- Fix tasks are created automatically, but not put on the loop: the operator runs them later, and each is assigned to the developer agent of that loop.\n- A test comes off the list when it passes again.\n- They accepted the proposals for every open question and for Gated builds.\n- Remove the 'Hub may override checks' setting and its switch.",
+  "requirements": [
+    {
+      "key": "the-list",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One list, read by every gate, replaces about 25 per-failure rules; a test is argued about once, when it goes on the list, not on every batch. Seeding keeps failures already being fixed from sending work back on the first day.",
+      "statement": "Each project has one known-failing list. An entry names the check, the test's id (from the check's report) or the whole check when that check writes no report, its kind (fails on main, or flaky), when it was first and last seen failing, the run that added it, and its owner fix task. When the list ships, it holds an entry for each test named by a fix task still open at that moment."
+    },
+    {
+      "key": "flaky-added",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A failing test whose confirmation re-run passes is added to the list as flaky, if it is not already on it, and is not held against the work that ran it."
+    },
+    {
+      "key": "main-failures-added",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Commits the Hub lands were tested as merged; a commit made outside the Hub was not, so main is checked once after it.",
+      "statement": "A test that fails in a run on main's tree is added to the list as failing on main, if it is not already on it. Runs on main's tree are: a landed batch's own run; a full run of the project's checks, made whenever main moves by a commit the Hub did not land; and the narrow re-run below."
+    },
+    {
+      "key": "twice-unlisted",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Catches main breaking with no commit (a changed dependency or environment), which would otherwise send every task back until someone noticed.",
+      "statement": "When a test that is not on the list fails its confirmation re-run for one task and then, with no passing run of that test in between, for a different task, the Hub re-runs that test alone on main's tree once. If it fails there it is added as failing on main and is not held against either task; if it passes, both failures stand as the tasks' own."
+    },
+    {
+      "key": "removed-when-passing",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: a test comes off the list when it passes again. A flaky test passes most runs, so one pass cannot be the rule for it. A batch run stops at the first failure of its own (landing_queue.py:1353) and a narrowing probe runs only the failing ids, so many runs never run a listed test.",
+      "statement": "A failing-on-main entry is removed when its test ran and passed in a run on main's tree; a run that did not run the test does not count. A flaky entry is removed when its test ran and passed in a run on main's tree after its fix task was approved, or when it has run and passed in 20 consecutive runs."
+    },
+    {
+      "key": "owner-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06. An entry without an owner is a quarantine nobody empties.",
+      "statement": "When an entry is added, the Hub creates one fix task for it, naming the check, the test, the kind and the run that found it, unless an open fix task already names that test. The task is assigned to the developer of the loop or build the finding task belongs to; failing that, the finding task's builder, else its assignee; an entry found by a run on main has an unassigned fix task."
+    },
+    {
+      "key": "owner-not-started",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06: 'the user runs them later'. Today a task created assigned outside a flow is started for its assignee at once (hub/hub/api/v1/tasks.py:1064); this must not apply to these tasks.",
+      "statement": "A fix task the Hub creates for an entry is not on any loop, flow or build, and no agent's turn starts on it until the operator starts it."
+    },
+    {
+      "key": "owner-kept-on-removal",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "When an entry is removed because its test passes again, its fix task is left open and gains a note naming the commit of main where the test passed."
+    },
+    {
+      "key": "gates-consult-the-list",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An entry with an owner task is the reason an override used to supply, so a Gated build need not stop for it (operator, 2026-11-06).",
+      "statement": "The completion gate and the landing gate, for every build including Gated builds, treat a failing test that is on the list as not the work's. A failing test that is not on the list and whose confirmation re-run also fails is the work's. Apart from the narrow re-run above, neither gate runs a failure on a checkout of main to decide this. For a check that writes no report, an entry for the whole check means no failure of that check is held against work while it stands."
+    },
+    {
+      "key": "no-held-batches",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A landing batch is never held waiting for the operator. A batch whose only failures are on the list lands. A batch with failures of its own, or a check that timed out twice naming no failing test, is narrowed to the task whose part first fails or times out; that task is sent back to its author (with the reason 'timed out' for a timeout), and the rest land or are queued again."
+    },
+    {
+      "key": "landing-records-entries",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A landing that went past failures on the list records which entries it went past, and the task's landing shows them."
+    },
+    {
+      "key": "list-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The app shows the project's list, each entry with its check, test, kind, first and last seen, and a link to its owner fix task, in place of today's flaky-tests list."
+    },
+    {
+      "key": "old-rules-retired",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The main-comparison re-run, the hold for a failure main shares and its release when main moves, the hold after repeated timeouts, the automatic override for shared failures, and the reconstruction of flaky tests from event logs are removed, and a test fails if any of them returns."
+    },
+    {
+      "key": "override-setting-removed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-06. It governed the shared-failure override (requirement_gate.py:1212-1229) and fix-task filing (flaky_tests.py:409); FR-12 removes the first and FR-5 always files, so it would be a switch that does nothing.",
+      "statement": "The project setting 'The Hub may override checks' no longer exists: the settings page has no switch for it, the project's settings neither show nor accept it, and saving the project's settings from the app keeps working."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/checks-any-project-can-use-judged-against-a-known-failing-list/spec.json",
+    "slice": "a-known-failing-list"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A per-project known-failing list: entries for tests failing on main and for flaky tests, each with its owner fix task",
+      "How entries are added (a confirmation re-run that passes; a failure in a run on main's tree) and removed (the test passes again on main)",
+      "Which runs count as runs on main: a landed batch's run, a full run when main moves by a commit the Hub did not land, and a narrow re-run when an unlisted test fails for two tasks in a row",
+      "Fix tasks: one per entry, created automatically, assigned to the finding work's developer, not on any loop and not started",
+      "The completion gate and the landing gate consulting the list, for every build including Gated builds",
+      "Timed-out batches narrowed like failing ones instead of held",
+      "Landing records naming the entries a landing went past",
+      "The list shown in the app, replacing today's flaky-tests list",
+      "Seeding the list from fix tasks open when it ships",
+      "Removing the 'Hub may override checks' project setting and its switch",
+      "Retiring the main-comparison re-run, the shared-failure hold and its release, the timeout hold, the shared-failure automatic override, and the event-log flaky reconstruction"
+    ],
+    "non_goals": [
+      "Changing the merge queue's shape: testing the merged result, moving main to exactly what was tested, splitting a failing batch to find the culprit",
+      "Making any suite faster or smaller",
+      "Retrying flaky tests automatically beyond the existing single confirmation re-run",
+      "Starting fix tasks, or closing them when their test passes again: both are the operator's",
+      "Moving fix tasks already open on a flow off it",
+      "The operator's typed override of a task's own failure at approval, which stays as it is",
+      "Landing once per build",
+      "Running checks on another machine or in CI"
+    ]
+  },
+  "summary": "Each project keeps a list of tests known to fail on main or known to be flaky. Every entry has an owner fix task, created automatically, assigned to the developer of the loop that found it, and left for the operator to start. The completion and landing gates treat a failure on the list as not the work's. A failure not on the list, and still failing when re-run, is the work's. Neither gate re-runs the failure on main, except one narrow re-run when an unlisted test fails for two tasks in a row. No batch is held for the operator. When a listed test passes again on main, it comes off the list. The 'Hub may override checks' setting goes, because nothing is left for it to govern.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "Sonnet for quota: a drive script in the existing scripts/drive pattern.",
+      "checker": "QA",
+      "checker_reason": "QA checks the whole slice, so it runs the drive it will later judge evidence by.",
+      "depends_on": [],
+      "description": "Write scripts/drive/d1106_known_failing_list.py against the trial Hub :8010, with per-run scratch it cleans up. Use a testbed project with a JUnit-reporting check. Seed main with a listed failing test, then approve two tasks, one of which adds a new failing test. Assert: the clean task lands past the listed test, the other is sent back, no check run used a main checkout, no batch is held, the fix task is assigned and not started, and the entry comes off once the test passes on main. Show it failing on master first.",
+      "files": [
+        "scripts/drive/d1106_known_failing_list.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "gates-consult-the-list",
+        "owner-not-started",
+        "removed-when-passing"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive: a known failure lands past, a new one goes back"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus: a migration the live :8000 Hub applies on restart, and the store every gate reads (Tier 2).",
+      "checker": "QA",
+      "checker_reason": "Same checker through the slice; Opus for a migration.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Store the list (a migration that seeds it from open fix tasks; downgrade drops it). Add entries from confirmation re-runs that pass (flaky) and from runs on main's tree: a landed batch's run, a full run when main moves by a commit the Hub did not land, and the single-test re-run after two tasks in a row. Remove entries by the failing-on-main and flaky rules, counting only runs that ran the test. Create one fix task per entry, deduplicated against open fix tasks, whatever the override setting says. Assign it by the owner rule, keep it off any loop, flow or build, and do not start it. On removal, note the main commit on the fix task. Hub tests for each criterion.",
+      "files": [
+        "hub/hub/known_failing.py",
+        "hub/hub/flaky_tests.py",
+        "hub/hub/main_watch.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/hub/api/v1/tasks.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "list",
+      "requirements": [
+        "the-list",
+        "flaky-added",
+        "main-failures-added",
+        "twice-unlisted",
+        "removed-when-passing",
+        "owner-task",
+        "owner-not-started",
+        "owner-kept-on-removal"
+      ],
+      "reviewer": null,
+      "title": "The known-failing list and its owner tasks"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus, and the same builder as list: this decides what lands on main for every project.",
+      "checker": "QA",
+      "checker_reason": "Same checker through the slice; it runs the acceptance drive.",
+      "depends_on": [
+        "list"
+      ],
+      "description": "Make the completion gate (project_checks.py) and the landing gate (landing_queue.py, requirement_gate.py) judge failures against the list, for every build including Gated builds. Remove _MainBaseline, the shared-failure hold, _release_shared_failure_holds, the repeated-timeout hold, the shared-failure automatic override and every read of checks_auto_override. Narrow a twice-timed-out batch the same way as a failing one. Record on each landing the entries it went past, and serve them on the landing route. Point build_caught at the list. Add the sweep test that fails if any of it returns. Run the drive.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/landing_queue.py",
+        "hub/hub/requirement_gate.py",
+        "hub/hub/build_caught.py",
+        "hub/hub/flaky_tests.py",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "gates",
+      "requirements": [
+        "gates-consult-the-list",
+        "no-held-batches",
+        "landing-records-entries",
+        "old-rules-retired"
+      ],
+      "reviewer": null,
+      "title": "Gates consult the list; main re-runs and holds retired"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "Opus: this now carries a column-dropping migration on live data, as well as the UI.",
+      "checker": "QA2",
+      "checker_reason": "A settings and UI check, with a browser drive; QA is on the gates task.",
+      "depends_on": [
+        "list",
+        "gates"
+      ],
+      "description": "Serve the list from the checks routes (api/v1/checks.py) in place of the flaky list and its 'handled' action, and show it on the overview with check, test, kind, first and last seen and the fix-task link. Show on the task's landing the entries it went past, as the gates task serves them. Remove the 'Hub may override checks' switch, the checks_auto_override field from the project routes (api/v1/projects.py), and the column with a migration (downgrade re-adds it, default on), all in this one task so settings saves never break. Add a vitest component test, then refresh the UI bundle (hub/ui/src and hub/hub/static/ui together).",
+      "files": [
+        "hub/hub/api/v1/checks.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/versions/",
+        "hub/ui/src/",
+        "hub/hub/static/ui/",
+        "hub/tests/"
+      ],
+      "from": null,
+      "key": "ui",
+      "requirements": [
+        "list-shown",
+        "landing-records-entries",
+        "override-setting-removed"
+      ],
+      "reviewer": null,
+      "title": "The list on the overview; the override setting removed"
+    }
+  ],
+  "title": "Failures already known are on a list, not re-argued"
+}

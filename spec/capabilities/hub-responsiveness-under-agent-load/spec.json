@@ -1,0 +1,235 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the built dashboard is open on the chat screen with an agent's output panel expanded, against a Hub whose stream the drive controls",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario one-event (headless page, request log); also the hub/ui unit test that one event with N subscribers gives one refresh",
+      "key": "the-app-stays-responsive-while-agents-run-ac-one-event",
+      "requirement": "the-app-stays-responsive-while-agents-run-one-request-per-event",
+      "then": "the tab's network log shows at most one GET for each route it re-reads, and no GET of /agents/{name}/output",
+      "when": "the Hub emits exactly one context_warning event for that agent"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dashboard is open against a Hub that delays GET /agents by 2s",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario no-overlap; also the hub/ui unit test that five rapid invalidations of an in-flight key give at most two fetches",
+      "key": "the-app-stays-responsive-while-agents-run-ac-no-overlap",
+      "requirement": "the-app-stays-responsive-while-agents-run-no-duplicate-in-flight",
+      "then": "the network log never shows two GET /agents in flight at once, and shows no more than two GET /agents in total",
+      "when": "five events that affect the agent list arrive within 500ms"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a conversation is open with its history loaded",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario line-appears (asserts the line's text in the DOM and reads the request log)",
+      "key": "the-app-stays-responsive-while-agents-run-ac-line-appears",
+      "requirement": "the-app-stays-responsive-while-age-streamed-line-without-refetch",
+      "then": "the line is visible in the conversation, and the network log shows no GET of that conversation's chat history, no GET of /agents/{name}/output and no GET /agents",
+      "when": "the Hub streams one agent output line for that conversation"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub runs on a copy of the trial database, and a real Claude (Haiku) turn is streaming on the open conversation",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario run-budget --runner claude --model haiku (prints requests per rolling minute)",
+      "key": "the-app-stays-responsive-while-agents-run-ac-run-budget-claude",
+      "requirement": "the-app-stays-responsive-while-agents-run-run-request-budget",
+      "then": "no one-minute window of the tab's network log holds more than 40 requests to the Hub",
+      "when": "the turn streams for at least two minutes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub runs on a copy of the trial database, and a real Copilot turn is streaming on the open conversation",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario run-budget --runner copilot",
+      "key": "the-app-stays-responsive-while-agents-run-ac-run-budget-copilot",
+      "requirement": "the-app-stays-responsive-while-agents-run-run-request-budget",
+      "then": "no one-minute window of the tab's network log holds more than 40 requests to the Hub",
+      "when": "the turn streams for at least two minutes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub replays a recorded Codex turn's event stream onto the open conversation at its recorded pace (live Codex once the operator's account exists)",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario run-budget --runner codex-replay (live: --runner codex once an account exists)",
+      "key": "the-app-stays-responsive-while-agents-run-ac-run-budget-codex",
+      "requirement": "the-app-stays-responsive-while-agents-run-run-request-budget",
+      "then": "no one-minute window of the tab's network log holds more than 40 requests to the Hub",
+      "when": "the replay streams for at least two minutes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the dashboard is open on the chat screen with nothing running",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario idle-budget (five minutes, prints the total)",
+      "key": "the-app-stays-responsive-while-agents-run-ac-idle-budget",
+      "requirement": "the-app-stays-responsive-while-agents-run-run-request-budget",
+      "then": "the tab sends no more than 30 requests to the Hub in total",
+      "when": "five minutes pass with no operator input"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the operator's database",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario lists --db <copy of the operator database> (in process, lifespan off)",
+      "key": "the-app-stays-responsive-while-agents-run-ac-lists-now",
+      "requirement": "the-app-stays-responsive-while-agents-run-lists-flat-in-history",
+      "then": "each route's median answer time is under 60ms",
+      "when": "each of the three routes is requested five times in turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy with agent_outputs, event_logs and trace_spans each multiplied ten times",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario lists-10x --db <copy> (the drive builds the 10x copy itself)",
+      "key": "the-app-stays-responsive-while-agents-run-ac-lists-10x",
+      "requirement": "the-app-stays-responsive-while-agents-run-lists-flat-in-history",
+      "then": "each route's median is under 1.5 times its median on the original copy",
+      "when": "each of the three routes is requested five times in turn"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the operator's database with a statement counter on the engine",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario loops --db <copy>; also the hub test bounding the statement count on a multi-loop fixture",
+      "key": "the-app-stays-responsive-while-agents-run-ac-loops",
+      "requirement": "the-app-stays-responsive-while-agents-run-loops-route-cost",
+      "then": "each request issues no more than 25 statements, and each route's median answer time is under 80ms",
+      "when": "GET /loops and GET /jobs are each requested five times"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the operator's database, and the master revision this slice starts from",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario same-answers --db <copy> --base <master sha> (diffs bodies from a checkout of the base revision); also the hub tests asserting unchanged bodies",
+      "key": "the-app-stays-responsive-while-agents-run-ac-same",
+      "requirement": "the-app-stays-responsive-while-agents-run-same-answers",
+      "then": "the response bodies are equal, apart from fields that state the current time",
+      "when": "each listed route is requested on both revisions against the same copy"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a Hub on a scratch database",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario streams; also the hub test that opens more streams than the pool holds",
+      "key": "the-app-stays-responsive-while-agents-run-ac-streams",
+      "requirement": "the-app-stays-responsive-while-agents-streams-hold-no-connection",
+      "then": "the 51st stream receives its first frame, and GET /agents answers 200 in under 1 second",
+      "when": "50 project event streams are opened and held, then one more is opened and GET /agents is requested"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a copy of the operator's database served in process with the lifespan off",
+      "how_to_check": "py -3.11 scripts/drive/perf_responsive.py --scenario burst --db <copy>",
+      "key": "the-app-stays-responsive-while-agents-run-ac-burst",
+      "requirement": "the-app-stays-responsive-while-agents-run-burst-drains",
+      "then": "every one answers within 600ms",
+      "when": "24 concurrent requests of the poll mix are sent at once"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "6303ee3fbb8aa6c696b3b30858570e2239d59f1353e40ee35afcb95b7e87a156",
+      "FR-2": "cb3f128964f8d755b390ceece0e93ef15f390fcca8b50da1d70adc43aab7d856",
+      "FR-3": "729fa05068ac7bd700106f45590b6f1c223dea113c852b2cebb4aa8f561fb076",
+      "FR-4": "10765639e0700f576ef890321211a4d9c0524d9ca599ebdfce7cde4e86771623",
+      "FR-5": "bfb2dd6690821cb622a1db3333c1e86fdffc8aca890d95f7b5fde91645dc9aa2",
+      "FR-6": "36d0c0180cd7337b54dc0216636b2311017ebaf97ae292c1f5522f45e82c2e72",
+      "FR-7": "d7189b066b7a07ad67342a3a3dd2fae3763a6dfb38668f0d641f1c13be7875f1",
+      "FR-8": "251e5e5caf786ca172556beeea24c63f5bf4cea924bb80b5c034c9cf64acf330",
+      "FR-9": "34e2cd74ad81bb1c2fac8f727c9fbaf36da1cb5fa327ad207cd7ebea9ef559de"
+    },
+    "high_water": 9,
+    "requirements": {
+      "the-app-stays-responsive-while-age-streamed-line-without-refetch": "FR-3",
+      "the-app-stays-responsive-while-agents-run-burst-drains": "FR-9",
+      "the-app-stays-responsive-while-agents-run-lists-flat-in-history": "FR-5",
+      "the-app-stays-responsive-while-agents-run-loops-route-cost": "FR-6",
+      "the-app-stays-responsive-while-agents-run-no-duplicate-in-flight": "FR-2",
+      "the-app-stays-responsive-while-agents-run-one-request-per-event": "FR-1",
+      "the-app-stays-responsive-while-agents-run-run-request-budget": "FR-4",
+      "the-app-stays-responsive-while-agents-run-same-answers": "FR-7",
+      "the-app-stays-responsive-while-agents-streams-hold-no-connection": "FR-8"
+    },
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "current",
+    "size": null,
+    "step": null
+  },
+  "kind": "capability",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "",
+  "requirements": [
+    {
+      "key": "the-app-stays-responsive-while-agents-run-one-request-per-event",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "About 20 subscribers each re-run the whole invalidation today, so one context_warning costs about 44 requests on the chat screen.",
+      "statement": "For any single stream event, an open dashboard tab sends at most one request per distinct resource the event affects, however many panels on screen show that resource."
+    },
+    {
+      "key": "the-app-stays-responsive-while-agents-run-no-duplicate-in-flight",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "A client-side cancel does not stop the Hub serving the cancelled request, so cancelling and resending doubles the Hub's work.",
+      "statement": "A dashboard tab never has two identical GET requests to the Hub in flight at the same time. A refresh asked for while one is in flight results in at most one further request, sent after the first answers."
+    },
+    {
+      "key": "the-app-stays-responsive-while-age-streamed-line-without-refetch",
+      "modal": "MUST",
+      "party": "consumer",
+      "rationale": "Today each output line refetches the full conversation (1.28MB for 764 lines). Each agent-list refresh refetches 200 output lines per agent, only to discard them.",
+      "statement": "An agent output line or context-usage reading delivered on the stream appears on screen without the tab re-requesting the conversation's history, an agent's recent output, or the agent list."
+    },
+    {
+      "key": "the-app-stays-responsive-while-agents-run-run-request-budget",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Estimated today: about 350 a minute during a run and 52 a minute idle. The budget bounds the queue a weak CPU must drain. The numbers are provisional until the operator has tried the build on the work VDI.",
+      "statement": "With the chat screen open on a conversation whose agent is streaming a turn, on any runner, a dashboard tab sends no more than 40 requests to the Hub in any minute. With nothing running and the app idle, it sends no more than 6 a minute."
+    },
+    {
+      "key": "the-app-stays-responsive-while-agents-run-lists-flat-in-history",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: 80-93ms, 49-138ms and 40-107ms, growing at 10x to 1,784ms, 960ms and 962ms. Almost all of that is decoding every context reading.",
+      "statement": "GET /agents, GET /conversations and GET /agent/{agent}/conversations each answer in under 60ms on a copy of the operator's database. On a copy with ten times its agent_outputs, event_logs and trace_spans, each answers in under 1.5 times its time on the original copy."
+    },
+    {
+      "key": "the-app-stays-responsive-while-agents-run-loops-route-cost",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: 220 statements and 192-410ms, because availability and holds are recomputed per loop and per check.",
+      "statement": "GET /loops and GET /jobs each issue no more than 25 SQL statements and answer in under 80ms on a copy of the operator's database (3 loops, 5 agents)."
+    },
+    {
+      "key": "the-app-stays-responsive-while-agents-run-same-answers",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "This slice changes cost only. A cheaper route that answers differently is a behaviour change nobody asked for.",
+      "statement": "For the same database state, GET /agents, GET /conversations, GET /agent/{agent}/conversations, GET /loops and GET /jobs return the same response bodies after this change as before it."
+    },
+    {
+      "key": "the-app-stays-responsive-while-agents-streams-hold-no-connection",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: each open stream holds a pooled database connection. The 16th stream fails with 500, and reads then wait 30s.",
+      "statement": "With 50 event streams open against one Hub, opening another stream succeeds, and GET /agents answers in under 1 second."
+    },
+    {
+      "key": "the-app-stays-responsive-while-agents-run-burst-drains",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Measured today: the same burst takes 2.16s wall, the sum of the solo costs, because the loop serves them one after another.",
+      "statement": "On a copy of the operator's database, a burst of 24 concurrent requests made of the dashboard's poll mix (agents, loops, conversations, an agent's output, accounting, an agent's conversations, tasks, questions) completes with every request answered within 600ms."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [],
+    "non_goals": []
+  },
+  "summary": "",
+  "tasks": [],
+  "title": "Hub responsiveness under agent load"
+}

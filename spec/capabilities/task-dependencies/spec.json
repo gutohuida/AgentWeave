@@ -169,62 +169,6 @@
       "when": "the importing document is proposed again"
     },
     {
-      "given": "two hand-made tasks A and B",
-      "key": "ac29",
-      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "then": "201 with outcome `added`, and moving B to in_progress is refused until A is approved",
-      "when": "the operator declares B depends on A"
-    },
-    {
-      "given": "B already depends on A",
-      "key": "ac30",
-      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "then": "409 naming the cycle",
-      "when": "the operator declares A depends on B, directly or through others"
-    },
-    {
-      "given": "a task id that does not exist in the project",
-      "key": "ac31",
-      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "then": "404 naming the ids",
-      "when": "it is named in a declaration"
-    },
-    {
-      "given": "a task",
-      "key": "ac32",
-      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "then": "400",
-      "when": "the operator declares it depends on itself"
-    },
-    {
-      "given": "an existing edge",
-      "key": "ac33",
-      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "then": "201 with outcome `duplicate`; no second edge",
-      "when": "it is declared again"
-    },
-    {
-      "given": "a declared dependency",
-      "key": "ac34",
-      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "then": "204 and it no longer gates the dependent",
-      "when": "the operator removes it"
-    },
-    {
-      "given": "no such edge",
-      "key": "ac35",
-      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "then": "404 saying the task does not depend on it",
-      "when": "the operator removes it"
-    },
-    {
-      "given": "an approved document whose depends_on would close a cycle",
-      "key": "ac36",
-      "requirement": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "then": "the approval stands and the edge is recorded as unhonoured with reason `cycle`",
-      "when": "it is approved"
-    },
-    {
       "given": "a prerequisite whose accepted evidence commit is not on the main branch",
       "key": "ac37",
       "requirement": "a-task-s-checkout-carries-the-work-it-depends-on",
@@ -385,6 +329,69 @@
       "requirement": "a-conflicting-prerequisite-is-th-approval-waits-for-prerequisite",
       "then": "first 409 naming A and its commit with detail.unmerged_prerequisites[].commit_sha; then approval succeeds",
       "when": "B is approved, then approved again after the author merges, resolves and commits"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a scratch Hub on :8105 with a fresh database, a project with agent alice bound to a Claude runner on claude-haiku-4-5, and operator tasks A and B (scripts/drive/d1019_task_depends_on.py)",
+      "how_to_check": "py -3.11 scripts/drive/d1019_task_depends_on.py",
+      "key": "a-tasks-prerequisites-can-be-declared-at-creation-and-in-i-drive",
+      "requirement": "a-tasks-prerequisites-can-be-declared-at-creation-declare-paths",
+      "then": "D and C each list A in prerequisites (C created by alice's run); B's drawer lists A after the add and says it depends on nothing after the remove, matching GET /tasks/{B}; A's drawer shows the cycle refusal sentence and A's prerequisites stay empty. Fails on today's Hub at the first check (POST /tasks refuses depends_on as an extra field).",
+      "when": "the operator creates task D with depends_on [A] through POST /tasks; a real Haiku turn of alice is asked to create_task C with depends_on naming A's id; in Chromium the operator opens B's drawer, picks A in Depends on and adds it, removes it, then opens A's drawer and tries to add C"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with tasks A and B",
+      "how_to_check": "Hub route test",
+      "key": "a-tasks-prerequisites-can-be-declared-at-creatio-operator-create",
+      "requirement": "a-tasks-prerequisites-can-be-declared-at-creatio-create-declares",
+      "then": "the new task's prerequisites are A and B, and GET /tasks/{A} lists it among A's dependents",
+      "when": "the operator POSTs /tasks with depends_on [A, B]"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with task A and a run of agent a",
+      "how_to_check": "Hub route test",
+      "key": "a-tasks-prerequisites-can-be-declared-at-creation-a-agent-create",
+      "requirement": "a-tasks-prerequisites-can-be-declared-at-creatio-create-declares",
+      "then": "the task is created by a's run with prerequisite A",
+      "when": "the run POSTs /agent-actions/tasks with depends_on [A]"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with task A",
+      "how_to_check": "Hub route test",
+      "key": "a-tasks-prerequisites-can-be-declared-at-creatio-unknown-refused",
+      "requirement": "a-tasks-prerequisites-can-be-declared-at-creatio-create-declares",
+      "then": "each is refused 422 with the offending id in the detail, and the project has no new task and no new edge",
+      "when": "a creation names depends_on [A, task-nope], and another names its own id in depends_on"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the MCP create_task tool and the HTTP tool-surface rendering",
+      "how_to_check": "Hub test",
+      "key": "a-tasks-prerequisites-can-be-declared-at-creation-and-renderings",
+      "requirement": "a-tasks-prerequisites-can-be-declared-at-creatio-create-declares",
+      "then": "both describe depends_on, and the MCP call forwards it to POST /tasks",
+      "when": "test_tool_surface_matches_server.py runs, and the MCP tool is called with depends_on"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with one prerequisite, a project with two other tasks, and a stubbed dependency route that refuses with 409",
+      "how_to_check": "vitest",
+      "key": "a-tasks-prerequisites-can-be-declared-at-creation-and-in-drawer",
+      "requirement": "a-tasks-prerequisites-can-be-declared-at-creation-drawer-picker",
+      "then": "the section lists the prerequisite with its status, the picker offers only tasks that are not the task or its prerequisites, add and remove call the routes, and the refusal's sentence is shown",
+      "when": "the drawer renders, the operator picks a task and adds it, removes the prerequisite, and adds the one the route refuses"
+    },
+    {
+      "checked_by": "operator",
+      "given": "two hand-made tasks on the operator's own project",
+      "how_to_check": "operator uses the drawer",
+      "key": "a-tasks-prerequisites-can-be-declared-at-creation-and-reads-well",
+      "requirement": "a-tasks-prerequisites-can-be-declared-at-creation-drawer-picker",
+      "then": "they find the control without being told where it is, and the card shows the gate",
+      "when": "they open one's drawer and make it depend on the other"
     }
   ],
   "algorithms": [],
@@ -398,6 +405,9 @@
       "FR-14": "48c2eb1c297492c3a57b9e03584fbdfe1b26b2f13a9e0a4b9583733a63d60dd3",
       "FR-15": "6718d8b0958b63dd7b8d0807aa48459c155c63288206a052eb751d93db0d7136",
       "FR-16": "a24992f0932eb20adb723844bd83f261a39d0c18a9560dca7ad88104358e6649",
+      "FR-17": "a864eb3c374d1bef0483a4e9f38de31bba40635affde038177171a4f5d0e168a",
+      "FR-18": "ffeafbff6095468db5c7b86cbe3a563cc45d9cc583f60bd0a12b1030acef83e6",
+      "FR-19": "92796fbdd7b43980a8ffd9ef150fbccd5418c8e40be45c7d89b9d77337311d6f",
       "FR-2": "e06e0cf40231cdb62d259e27730620a2573d06fdf11c21952be90944165d49e4",
       "FR-3": "d1ce3224dd5a7b5d792e5a8d79f4b6324da0ab0ffe6f958e7f8d149d06f4af63",
       "FR-4": "16c6de9956ddd8e2d794ef511be417948331663a33eeea844ed4f577b8d34217",
@@ -407,7 +417,7 @@
       "FR-8": "3fb5e227f6b0c8c3520637e631466e4b82c9ad3a69b53e083617d4e45bdf346f",
       "FR-9": "8ddd27372a23cf5456d89b0d9a2ba995e7632b24ebbf946a6a075365aaa563ca"
     },
-    "high_water": 16,
+    "high_water": 19,
     "requirements": {
       "a-conflicting-prerequisite-is-th-approval-waits-for-prerequisite": "FR-16",
       "a-dependency-is-met-at-approval-not-at-completion": "FR-3",
@@ -416,17 +426,20 @@
       "a-dependency-that-regresses-after-a-dependent-has-started-do": "FR-4",
       "a-document-declares-the-order-of-its-own-tasks": "FR-1",
       "a-task-s-checkout-carries-the-work-it-depends-on": "FR-11",
+      "a-tasks-prerequisites-can-be-declared-at-creatio-create-declares": "FR-18",
+      "a-tasks-prerequisites-can-be-declared-at-creation-declare-paths": "FR-17",
+      "a-tasks-prerequisites-can-be-declared-at-creation-drawer-picker": "FR-19",
       "an-import-may-name-only-an-approved-document": "FR-7",
       "an-unmet-dependency-prevents-starting-and-nothing-else": "FR-2",
       "n1": "FR-12",
       "n2": "FR-13",
       "n3": "FR-14",
-      "n4": "FR-15",
-      "the-operator-can-declare-a-dependency-between-existing-tasks": "FR-10"
+      "n4": "FR-15"
     },
     "retired": {
       "a-task-belonging-to-no-document-cannot-be-given-a-dependency": "FR-8",
-      "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint": "FR-9"
+      "a-task-may-name-the-reviewer-it-needs-as-a-portable-hint": "FR-9",
+      "the-operator-can-declare-a-dependency-between-existing-tasks": "FR-10"
     }
   },
   "design": "D1 Gate placement. The gate runs inside task_transition_service.apply_transition, before the history row, on pending/assigned -> in_progress only, so every caller (operator, agent HTTP, tools, loops, run binding) is covered. blocked -> in_progress is exempt because a blocked task has already started; scheduler.candidate_is_startable makes the same exemption so the loop and the gate agree.\nD2 Met at approved. Nothing earlier counts; rejected is reported separately because its remedy is a decision, not waiting.\nD3 Join table. Edges are rows in task_dependencies (unique per pair, indexed both ways), not a JSON list, so the gate and the board can query either direction. Unhonoured document declarations are kept in task_dependency_references with a reason.\nD4 One writer. task_dependency_writer.add_dependency is the only creator of edges; it reports (added/duplicate/self/missing/cycle) rather than deciding. The operator route maps refusals to 400/404/409; document approval records them as unhonoured references so an approval never fails over a dependency.\nD5 Checkout seeding. Creation merges what task_integration.merge_targets would integrate for each direct prerequisite (accepted evidence at any status; branch tip only when approved), all-or-nothing. An existing branch catches up approved prerequisites only, never destructively. Direct prerequisites suffice because each link carries its own prerequisites' work.",
@@ -442,7 +455,6 @@
   },
   "hub": {
     "phase": "current",
-    "rigor": "sketch",
     "size": null,
     "step": null
   },
@@ -501,13 +513,6 @@
       "statement": "An imported entry SHALL name a document that is approved; an import naming a document in any other phase SHALL be reported as `import_not_approved`, blocking a proposal but not a submission."
     },
     {
-      "key": "the-operator-can-declare-a-dependency-between-existing-tasks",
-      "modal": "SHALL",
-      "party": null,
-      "rationale": "Without it the gate, the board and the dependency fields are reachable only if an agent authors ordering into an approved document. One writer means the graph cannot be built two different ways, and both paths gain the same cycle check.",
-      "statement": "The operator SHALL be able to add (`POST /tasks/{id}/dependencies`) and remove (`DELETE /tasks/{id}/dependencies/{depends_on}`) a dependency between any two tasks of the project, including tasks that belong to no document; both this path and document approval SHALL write edges through one shared writer that refuses self-dependencies, missing tasks and cycles."
-    },
-    {
       "key": "a-task-s-checkout-carries-the-work-it-depends-on",
       "modal": "SHALL",
       "party": null,
@@ -548,6 +553,27 @@
       "party": null,
       "rationale": "One implementation: the gate runs the same unmerged_prerequisites function the turn's notice is derived from, against refs/heads/<task branch>.",
       "statement": "Moving a task with its own checkout to approved SHALL be refused while any approved prerequisite's commit is not contained in the task's branch; the refusal (gate_unsatisfied, category unmerged_prerequisites) SHALL name the prerequisite task and commit."
+    },
+    {
+      "key": "a-tasks-prerequisites-can-be-declared-at-creation-declare-paths",
+      "modal": "SHALL",
+      "party": null,
+      "rationale": "Replaces task-dependencies' the-operator-can-declare-a-dependency-between-existing-tasks at fold (key kept): the route was the only path and nothing in the app or the tool surface reached it (overhaul-dependency-ui, F571).",
+      "statement": "The operator SHALL be able to add and remove a dependency between any two tasks of the project, including tasks that belong to no document, through POST /tasks/{id}/dependencies and DELETE /tasks/{id}/dependencies/{depends_on} and from the task's drawer; whoever creates a task, the operator or an agent, SHALL be able to declare its prerequisites when creating it; every path, and document approval, SHALL write edges through one shared writer that refuses self-dependencies, missing tasks and cycles."
+    },
+    {
+      "key": "a-tasks-prerequisites-can-be-declared-at-creatio-create-declares",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "One field on the shared create path keeps the operator and agent surfaces equal (agent-capability-plane). Refusing the whole creation rather than dropping the edge: an ordering silently lost is how the gate went unexercised before F36 (D2).",
+      "statement": "Task creation through POST /tasks, POST /agent-actions/tasks and the create_task tool MUST accept depends_on, a list of task ids of the same project, and MUST write one edge per id through the shared writer in the transaction that creates the task; an id that names no task of the project, or the new task's own id, MUST refuse the creation with 422 naming that id and MUST leave neither the task nor any edge. Both renderings of create_task (the MCP tool and the HTTP operation description) MUST describe the field."
+    },
+    {
+      "key": "a-tasks-prerequisites-can-be-declared-at-creation-drawer-picker",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator declares an ordering while looking at a task; a REST route is not a control (F571).",
+      "statement": "The task drawer MUST show a Depends on section listing the task's prerequisites, each with its title and status and a control that removes it, and a picker offering the project's other tasks that are not already its prerequisites; adding or removing MUST go through the dependency routes, and a refusal MUST be shown in the drawer as the route's sentence with the prerequisites left as they were. A task with no prerequisites MUST say it depends on nothing."
     }
   ],
   "schema_version": 1,

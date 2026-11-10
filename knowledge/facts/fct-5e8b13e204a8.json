@@ -1,0 +1,23 @@
+{
+  "id": "fct-5e8b13e204a8",
+  "kind": "fact",
+  "claim": "A spec with an acceptance drive written before the feature should either fix the route and field names for the implementing tasks or schedule a follow-up that re-points the drive once they ship.",
+  "citations": [
+    {
+      "source": "src-4a40052b8cca",
+      "quote": "The spec should either fix those names for the implementing tasks or schedule a follow-up that re-points the drive once they ship.",
+      "line_start": 8,
+      "line_end": 8
+    }
+  ],
+  "sources": [
+    "src-4a40052b8cca"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-07T00:55:31.623688Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

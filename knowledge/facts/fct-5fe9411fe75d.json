@@ -1,0 +1,23 @@
+{
+  "id": "fct-5fe9411fe75d",
+  "kind": "fact",
+  "claim": "After CRWTF-4, a check without report_path and rerun_command is judged as a whole, so the Hub's settings for this repo must match scripts/checks/check_settings.json.",
+  "citations": [
+    {
+      "source": "src-8488b99d3566",
+      "quote": "After CRWTF-4, a check without report_path and rerun_command is judged as a whole, so the Hub's settings for this repo must match scripts/checks/check_settings.json.",
+      "line_start": 12,
+      "line_end": 12
+    }
+  ],
+  "sources": [
+    "src-8488b99d3566"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-05T21:13:10.342703Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}
