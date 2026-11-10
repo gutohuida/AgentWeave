@@ -278,36 +278,44 @@
 .aw-settings-group-title { font-size: 13.5px; font-weight: 600; }
 .aw-settings-group-desc { margin-top: 2px; font-size: 12.5px; color: var(--text-3); max-width: 62ch; line-height: 1.45; }
 .aw-settings-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  display: flex;
+  flex-wrap: wrap;
   column-gap: 32px;
+  row-gap: 10px;
   align-items: center;
   padding: 14px 0;
   border-bottom: 1px solid var(--border);
   transition: opacity var(--dur-fast) ease;
+  container-type: inline-size;
 }
-.aw-settings-row[data-stacked="true"] { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
+.aw-settings-row[data-stacked="true"] > .aw-settings-row-text, .aw-settings-row[data-stacked="true"] > .aw-settings-row-control { flex-basis: 100%; }
 .aw-settings-row[data-inactive="true"] .aw-settings-row-text,
 .aw-settings-row[data-inactive="true"] .aw-settings-row-control { opacity: .45; }
-.aw-settings-row-text { min-width: 0; }
+/* Text keeps 240px; the control (280px, never under 220px) wraps below when both cannot fit. */
+.aw-settings-row-text { flex: 1 1 240px; min-width: min(240px, 100%); }
 .aw-settings-row-label { display: block; font-size: 13.5px; font-weight: 500; color: var(--text); }
 .aw-settings-row-desc { margin-top: 3px; max-width: 58ch; font-size: 12.5px; line-height: 1.45; color: var(--text-3); }
-.aw-settings-row-control { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
-.aw-settings-row[data-stacked="true"] .aw-settings-row-control { justify-content: flex-start; }
+.aw-settings-row-control { display: flex; flex: 1 1 280px; max-width: 300px; align-items: center; justify-content: flex-end; gap: 6px; min-width: min(220px, 100%); }
+.aw-settings-row[data-stacked="true"] .aw-settings-row-control { justify-content: flex-start; max-width: none; }
 .aw-settings-row-control > .aw-select-trigger, .aw-settings-row-control > .control-field { flex: 1; max-width: 280px; }
 .aw-settings-row[data-stacked="true"] .aw-settings-row-control > .control-field,
 .aw-settings-row[data-stacked="true"] .aw-settings-row-control > .aw-field { flex: 1; max-width: 640px; }
 .aw-settings-reset-slot { display: inline-flex; width: 22px; flex: none; justify-content: center; }
 .aw-settings-row[data-stacked="true"] .aw-settings-reset-slot { display: none; }
-.aw-settings-row-children { grid-column: 1 / -1; margin-top: 10px; }
+.aw-settings-row-children { flex: 0 0 100%; min-width: 0; margin-top: 10px; }
 @media (max-width: 720px) {
-  .aw-settings-row { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
   .aw-settings-row-control { justify-content: flex-start; }
+}
+/* Text 240 + gap 32 + control basis 280: below this the control has wrapped, so it takes the row's width like a stacked row. */
+@container (max-width: 551px) {
+  .aw-settings-row-control { justify-content: flex-start; max-width: none; }
+  .aw-settings-reset-slot { display: none; }
+  .aw-settings-row-control > .control-field, .aw-settings-row-control > .aw-field { flex: 1; max-width: 640px; }
 }
 
 .aw-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .aw-field-label { font-size: 12.5px; font-weight: 500; color: var(--text-2); }
-.aw-field-note { min-height: 16px; font-size: 11.5px; line-height: 16px; color: var(--text-3); }
+.aw-field-note { min-height: 16px; overflow-wrap: anywhere; font-size: 11.5px; line-height: 16px; color: var(--text-3); }
 .aw-field-note[data-tone="error"] { color: var(--red); }
 .aw-field-note[data-tone="warning"] { color: var(--amber); }
 

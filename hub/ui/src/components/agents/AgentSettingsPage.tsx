@@ -465,7 +465,7 @@ function WorkspaceLocation({ agent }: { agent: string }) {
         label="Working directory"
         description="The directory a turn runs in. Everything this agent reads or writes by relative path resolves from here."
       >
-        <div>
+        <div style={{ minWidth: 0 }}>
           <code
             className="block truncate text-xs"
             data-testid="agent-working-dir"
