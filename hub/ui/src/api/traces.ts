@@ -369,7 +369,7 @@ export async function downloadTraceExport(
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `traces-${projectId}-${since || 'start'}-${until || 'now'}.json`
+  anchor.download = `traces-${projectId}-${since?.slice(0, 10) || 'start'}-${until?.slice(0, 10) || 'now'}.json`
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
