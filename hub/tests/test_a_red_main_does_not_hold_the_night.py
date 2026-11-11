@@ -201,6 +201,24 @@ async def _configure(checks=(PYTEST,)) -> None:
     await set_main_branch("main")
 
 
+async def _flaked_before() -> None:
+    """The flaky test already listed from an earlier run, with no fix task: the run a test then
+    checks is its second flake, which is what files the task (`a-disturbed-check-run-is-not-a-pile-
+    of-flaky-tests`, FR-9)."""
+    async with async_session_factory() as session:
+        session.add(
+            KnownFailingTest(
+                id="kf-earlier",
+                project_id="proj-test",
+                check_name="pytest",
+                test="test_timing::test_flaky",
+                kind="flaky",
+                added_by_run="chk-earlier",
+            )
+        )
+        await session.commit()
+
+
 async def _checked(task_id: str) -> None:
     """*task_id*'s checks decided while it is held `under_review` (a failure of its own on
     `completed` work would return it to its builder, slice L), its status then restored."""
@@ -405,6 +423,7 @@ async def test_a_flake_is_recorded_on_approval(app, tmp_path, tmp_path_factory):
     await _loop()
     await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
     await _configure()
+    await _flaked_before()
     await _checked(TASK)
 
     run = await _latest_run(TASK)
@@ -459,6 +478,7 @@ async def test_a_fix_task_the_list_filed_is_reviewed_and_lands(app, tmp_path, tm
     await _loop(live=True, needs_evidence=None)
     await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
     await _configure()
+    await _flaked_before()
     await _checked(TASK)
 
     [fix] = await _fix_tasks()
@@ -500,6 +520,7 @@ async def test_a_fix_task_and_its_dedup_record_are_one_commit(
     await _loop()
     await _task(tmp_path, TASK, {"feature.py": "x = 1\n"})
     await _configure()
+    await _flaked_before()
     await _checked(TASK)
 
     async with async_session_factory() as session:
