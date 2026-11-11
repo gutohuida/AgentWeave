@@ -1706,6 +1706,21 @@ async def decide(
                 http_status=409,
             )
 
+    if decision == ACCEPTED and actor.kind != "operator":
+        # FR-7 of `evidence-review-sends-work-back-only-for-what-is-wrong-with-it`: a drive
+        # baseline listing a check that was not reached, or passed before the build, is not
+        # accepted. The operator's acceptance is unchanged (a non-goal of that change).
+        from . import drive_baseline
+
+        if drive_baseline.is_baseline(evidence):
+            bad = drive_baseline.bad_checks(evidence)
+            if bad:
+                raise EvidenceRefusedError(
+                    drive_baseline.not_failing_sentence(evidence.task_id or "its task", bad),
+                    code=drive_baseline.NOT_FAILING,
+                    http_status=409,
+                )
+
     if decision == REJECTED and not reason.strip():
         # A rejection is the author's only signal of what to fix (it reads it back through
         # `list_evidence`); recorded blank it leaves a retry loop. After the capability refusals,

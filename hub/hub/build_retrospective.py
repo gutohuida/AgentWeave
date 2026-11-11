@@ -70,6 +70,7 @@ from .db.models import (
     TurnUsage,
 )
 from .runner_events import redact_text_secrets
+from .task_transitions import SEND_BACK_EVIDENCE_ONLY
 from .worker import WorkerResult, run_worker
 
 logger = logging.getLogger(__name__)
@@ -600,13 +601,49 @@ def figures(record: BuildRecord, now: datetime) -> Dict[str, Any]:
         _add_usage(total, usage)
         if run.task_id in tasks:
             _add_usage(tasks[run.task_id], usage)
+    review = evidence_review_rows(record)
     return {
         "per_task_time": per_task,
+        "evidence_review_per_task": review,
+        "evidence_review_totals": {
+            name: sum(row[name] for row in review)
+            for name in ("evidence_only_send_backs", "reviewer_verified_acceptances")
+        },
         "time_totals": {name: round(sum(row[name] for row in per_task), 3) for name in times},
         "per_agent_cost": [{"agent": name, **row} for name, row in sorted(agents.items())],
         "per_task_cost": [{"task_id": task_id, **row} for task_id, row in tasks.items()],
         "cost_totals": total,
     }
+
+
+def evidence_review_rows(record: BuildRecord) -> List[Dict[str, Any]]:
+    """Per task, its send-backs classed evidence-only and the evidence its reviewer accepted with
+    its own reproduction (`evidence-review-sends-work-back-only-for-what-is-wrong-with-it`, FR-8):
+    the paperwork rounds, and the acceptances that replaced them."""
+    task_of = {row.id: row.task_id for row in record.evidence}
+    verified: Dict[str, int] = {}
+    for review in record.reviews:
+        if review.decision == "accepted" and (
+            review.reproduction_commit or review.reproduction_command
+        ):
+            task_id = task_of.get(review.evidence_id)
+            if task_id:
+                verified[task_id] = verified.get(task_id, 0) + 1
+    return [
+        {
+            "task_id": task.id,
+            "readable_id": task.readable_id,
+            "evidence_only_send_backs": sum(
+                1
+                for move in record.transitions
+                if move.task_id == task.id
+                and move.to_status == "revision_needed"
+                and move.reason_class == SEND_BACK_EVIDENCE_ONLY
+            ),
+            "reviewer_verified_acceptances": verified.get(task.id, 0),
+        }
+        for task in record.tasks
+    ]
 
 
 def question_wait(question: Question, now: datetime) -> float:
@@ -1109,6 +1146,10 @@ def build_report(
             "totals": computed["time_totals"],
         },
         "send_backs": send_backs,
+        "evidence_review": {
+            "per_task": computed["evidence_review_per_task"],
+            "totals": computed["evidence_review_totals"],
+        },
         "spec_missed": {
             "findings": sections["spec_missed"],
             "amendments": [

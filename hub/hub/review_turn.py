@@ -28,7 +28,7 @@ from typing import List, Optional, Set, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import blocking, requirement_evidence, traces, worktrees
+from . import blocking, drive_baseline, requirement_evidence, traces, worktrees
 from .db.models import Agent, Project, SpecDocument, Task
 from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 from .repo_hygiene import seed_repo_excludes
@@ -348,6 +348,7 @@ async def verdict_evidence_sentence(
         part
         for part in (
             await _dependencies_sentence(session, task),
+            await drive_baseline.review_sentence(session, task),
             await _other_requirements_sentence(session, task),
             _rejected_sentence(await rejected_identifiers(session, task)),
             _held_sentence(await held_identifiers(session, task)),
