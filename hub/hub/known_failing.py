@@ -158,7 +158,126 @@ async def view(session: AsyncSession, project_id: str) -> Dict[str, Any]:
         if ids
         else {}
     )
-    return {"entries": [entry_view(row, tasks.get(row.fix_task_id or "")) for row in rows]}
+    return {
+        "entries": [entry_view(row, tasks.get(row.fix_task_id or "")) for row in rows],
+        # Beside the list, never in it: a disturbed run names no test, so as an entry it would
+        # excuse every whole-check failure of its check at the gates (FR-2).
+        "disturbed": await disturbed_runs(session, project_id),
+    }
+
+
+#: How long a disturbed run stays beside the Overview's list (FR-2).
+DISTURBED_DAYS = 7
+
+
+async def disturbed_runs(
+    session: AsyncSession, project_id: str, *, now: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
+    """The disturbed runs the Logs hold for the last `DISTURBED_DAYS` days, newest first: each the
+    check, the run, how many tests failed and passed on the rerun, and the first run's output."""
+    from datetime import timedelta
+
+    from .db.models import EventLog
+
+    since = (now or _now()) - timedelta(days=DISTURBED_DAYS)
+    rows = (
+        await session.execute(
+            select(EventLog)
+            .where(
+                EventLog.project_id == project_id,
+                EventLog.event_type == DISTURBED_EVENT,
+                EventLog.timestamp >= since,
+            )
+            .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
+        )
+    ).scalars()
+    found: List[Dict[str, Any]] = []
+    for row in rows:
+        data = row.data if isinstance(row.data, dict) else {}
+        found.append(
+            {
+                "id": row.id,
+                "run_id": data.get("run_id"),
+                "task_id": data.get("task_id"),
+                "check": data.get("check"),
+                "failed": data.get("failed"),
+                "passed_on_rerun": data.get("passed_on_rerun"),
+                "threshold": data.get("threshold"),
+                "tests": list(data.get("tests") or []),
+                "first_run_output": data.get("first_run_output") or "",
+                "at": _iso(row.timestamp),
+            }
+        )
+    return found
+
+
+async def clear_stable_fix_tasks(session: AsyncSession, project_id: str) -> Dict[str, Any]:
+    """Close every open Hub-filed flaky fix task whose test is no longer on the list (FR-6), each
+    with a note saying why; a task whose test is still listed stays open. Returns the counts and
+    the ids: `{"closed", "left", "closed_ids", "left_ids"}`. The caller commits.
+
+    A fix task is the Hub's when a `FIX_TASK_EVENT` names it, and flaky when that event's kind for
+    its test is flaky (or, for an event that holds no kinds, its title says so). One that names
+    no test is not the pile this clears, and is neither closed nor counted."""
+    from . import flaky_tests
+    from .run_task_binding import release_bindings_to, release_reason
+    from .task_transition_service import TransitionRefusedError, apply_transition
+    from .task_transitions import operator
+
+    listed = {
+        flaky_tests.normalised_test(test)
+        for test in (
+            await session.execute(
+                select(KnownFailingTest.test).where(KnownFailingTest.project_id == project_id)
+            )
+        )
+        .scalars()
+        .all()
+        if test
+    }
+    # Task id -> the flaky tests its filing named; a task filed twice keeps the union.
+    named: Dict[str, Set[str]] = {}
+    for data in await flaky_tests._fix_events(session, project_id):
+        kinds = data.get("kinds") if isinstance(data.get("kinds"), dict) else {}
+        for test in data.get("tests") or []:
+            if kinds.get(test, FLAKY) == FLAKY:
+                named.setdefault(data["task_id"], set()).add(flaky_tests.normalised_test(str(test)))
+    tasks = (
+        (
+            await session.execute(
+                select(Task).where(
+                    Task.project_id == project_id,
+                    Task.id.in_(sorted(named)),
+                    Task.status.not_in(_CLOSED),
+                )
+            )
+        )
+        .scalars()
+        .all()
+        if named
+        else []
+    )
+    closed: List[str] = []
+    left: List[str] = []
+    for task in sorted(tasks, key=lambda t: t.id):
+        tests = named[task.id]
+        if tests & listed:
+            left.append(task.id)
+            continue
+        note = (
+            f"Closed by the operator's clear action: {', '.join(sorted(tests))} is no longer on the "
+            "known-failing list, so it has passed its runs and the flake is not outstanding."
+        )
+        try:
+            await apply_transition(session, task, "rejected", operator(), note=note)
+        except TransitionRefusedError:
+            left.append(task.id)  # not a move the map allows from here: the operator's to judge
+            continue
+        _note_on(task, note)
+        release_reason(task)
+        await release_bindings_to(session, task)
+        closed.append(task.id)
+    return {"closed": len(closed), "left": len(left), "closed_ids": closed, "left_ids": left}
 
 
 async def watching(project_id: str, checks: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
