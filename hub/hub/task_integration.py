@@ -303,20 +303,6 @@ class Target:
     task_id: Optional[str] = None
 
 
-def repository_artifact(evidence, footprint) -> bool:
-    """A message is never authority to merge the recorder's incidental checkout (F1168).
-
-    Empty locators keep the run's repository observation. Explicit locators must actually name
-    watched files or a commit. Apply this to legacy footprints too, without rewriting evidence.
-    """
-    return evidence.kind != "operator_signoff" and (
-        not evidence.locator
-        or bool(requirement_evidence.locator_commit(evidence.locator))
-        or bool(footprint.commit_named)
-        or "locator" in (footprint.watched_from or [])
-    )
-
-
 async def _targets(session: AsyncSession, task: Task, review_state: str) -> List[Target]:
     """Every footprint for *task* in *review_state* that names a commit, oldest first, undeduplicated.
 
@@ -381,7 +367,9 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
             task_id=evidence.task_id,
         )
         for footprint, evidence in rows
-        if footprint.commit_sha and repository_artifact(evidence, footprint)
+        # Task identity above and branch reachability in merge_targets establish ownership.
+        # A descriptive locator does not invalidate the task's own recorded commit.
+        if footprint.commit_sha
     ]
 
 
@@ -1027,12 +1015,7 @@ async def tasks_awaiting_this_commit(session: AsyncSession, evidence) -> List[Ta
             select(EvidenceFootprint).where(EvidenceFootprint.evidence_id == evidence.id)
         )
     ).scalar_one_or_none()
-    if (
-        footprint is None
-        or footprint.kind != "git"
-        or not footprint.commit_sha
-        or not repository_artifact(evidence, footprint)
-    ):
+    if footprint is None or footprint.kind != "git" or not footprint.commit_sha:
         return []
     if evidence.task_id:
         # F520: evidence another task recorded is a target of no task but its own until that task

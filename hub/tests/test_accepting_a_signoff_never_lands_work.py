@@ -10,6 +10,7 @@ from hub.db.models import RequirementEvidence, Run, Task, TaskLanding
 from .test_task_integration import (
     AGENT_EVIDENCE,
     BASE,
+    approve,
     builder,  # noqa: F401
     commit_on_branch,
     git,
@@ -137,7 +138,7 @@ async def test_accepting_taskless_legacy_footprint_creates_no_landing(
 
 
 @pytest.mark.asyncio
-async def test_explicit_message_locator_is_never_a_merge_target(
+async def test_operator_signoff_is_never_a_merge_target(
     app, auth_headers, builder, tmp_path  # noqa: F811
 ):
     task, _ = await setup(app, auth_headers, builder, tmp_path)
@@ -146,6 +147,7 @@ async def test_explicit_message_locator_is_never_a_merge_target(
         json={
             "identifier": "FR-1",
             "summary": "message",
+            "kind": "operator_signoff",
             "task_id": task,
             "locator": "Operator message to Architect",
         },
@@ -190,7 +192,10 @@ async def test_task_bound_evidence_cannot_merge_a_foreign_branch(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("locator", ["", "own.py"])
+@pytest.mark.parametrize(
+    "locator",
+    ["", "own.py", "hub/tests/test_x.py", "commit abc1234", "drive output log at C:/tmp/drive.log"],
+)
 async def test_accepting_awaiting_evidence_lands_its_own_task_branch(
     app, auth_headers, builder, tmp_path, locator  # noqa: F811
 ):
@@ -230,3 +235,39 @@ async def test_accepting_awaiting_evidence_lands_its_own_task_branch(
         assert len(landings) == 1
         assert landings[0].task_id == task
         assert landings[0].state == "landed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "locator", ["", "hub/tests/test_x.py", "commit {sha}", "drive output log at C:/tmp/drive.log"]
+)
+async def test_approval_lands_own_accepted_evidence_regardless_of_locator(
+    app, auth_headers, builder, tmp_path, locator  # noqa: F811
+):
+    """F1168 regression: descriptive locators must not strand the task's own commit."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+    task = await linked_task(app, auth_headers)
+    work = commit_on_branch(tmp_path, f"agentweave/task/{task}", "feature.py", "own\n")
+    async with async_session_factory() as session:
+        (await session.get(Run, "run-int")).workspace_dir = str(tmp_path)
+        await session.commit()
+    recorded = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "task_id": task, "locator": locator.format(sha=work[:7])},
+        headers=builder,
+    )
+    assert recorded.status_code == 201, recorded.text
+    assert recorded.json()["footprint"]["commit_sha"] == work
+    accepted = await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+    git(tmp_path, "checkout", "-q", "main")
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    assert git(tmp_path, "merge-base", "--is-ancestor", work, "main").returncode == 0
+    assert (tmp_path / "feature.py").read_text() == "own\n"
