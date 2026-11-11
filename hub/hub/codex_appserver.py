@@ -37,7 +37,8 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional
 
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
-from .pty_runner import resolve_executable
+from .process_job import ProcessJob
+from .pty_runner import resolve_executable, terminate_process_tree
 from .runner_commands import CODEX_MCP_ENV_NAMES, OPERATOR_POSTURE
 from .runner_events import (
     AccountingSample,
@@ -798,6 +799,8 @@ class AppServerProcess:
         self._stderr_task: Optional[asyncio.Task] = None
         self._stderr: Deque[str] = deque(maxlen=STDERR_TAIL_LINES)
         self._closed = False
+        #: Windows: everything the app-server starts, its commands' orphans included (F1162).
+        self._job: Optional[ProcessJob] = None
 
     @classmethod
     async def spawn(
@@ -814,9 +817,15 @@ class AppServerProcess:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            # Its own process group on POSIX, so a stop can end every command the turn started
+            # (`terminate_process_tree` kills the group) without reaching the Hub's own (F1162,
+            # the reason `copilot_acp` does the same). Windows holds the tree in a job instead.
+            **({} if os.name == "nt" else {"start_new_session": True}),
             **no_console_kwargs(),
         )
         session = cls(proc)
+        # Before the app-server has read its first request, so before it can start a command.
+        session._job = ProcessJob.for_pid(proc.pid)
         loop = asyncio.get_running_loop()
         session._reader_task = loop.create_task(session._read_loop())
         # `stderr` has been piped since this class was written and read by nothing. That is not
@@ -960,10 +969,26 @@ class AppServerProcess:
         return self._proc.returncode is None
 
     async def close(self, *, force: bool = False) -> None:
-        """Terminate the process and stop the reader task. Idempotent."""
+        """Terminate the process and stop the reader task. Idempotent.
+
+        *force* is a stop (F1162): it ends every process the turn started, not only the
+        app-server. Stopping a turn sends `turn/interrupt` first, and measured live on 0.167.1 the
+        app-server's shell then exited and left its command running, orphaned -- out of reach of a
+        tree walk, so the job (Windows) or the process group (POSIX) ends it. An ordinary close
+        leaves alone what the agent started on purpose (a server it is testing).
+        """
         if self._closed:
             return
         self._closed = True
+        job, self._job = self._job, None
+        if force:
+            if job is not None:
+                await asyncio.to_thread(job.terminate)
+            if self._proc.pid is not None:
+                with contextlib.suppress(Exception):
+                    await asyncio.to_thread(terminate_process_tree, self._proc.pid, True)
+        elif job is not None:
+            job.close()
         if self._reader_task is not None:
             self._reader_task.cancel()
         if self._stderr_task is not None:
