@@ -13,6 +13,7 @@ element for each of:
   * sideways scroll: the page, or a container, that scrolls horizontally;
   * an element outside the window: text or a control past the window's edge;
   * content spilling out of its own box (a non-wrapping value running past its row);
+  * text running past its own box (an unbroken value wider than the column it sits in);
   * a text column under 240px beside its control (a row's label and description squeezed to
     one word per line);
   * a runner warning (.aw-control-warning) wider than its column, or none rendering on the
@@ -190,7 +191,7 @@ def seed(api: Api, project_dir: Path, scratch: Path) -> Dict[str, Any]:
     git(project_dir, "commit", "-q", "-m", "first")
 
     project = api.call(
-        "POST", "/projects/open", {"path": str(project_dir), "name": long_name("The project with a very long name", 80)}
+        "POST", "/projects/open", {"path": str(project_dir), "name": long_name("name", 200)}
     )
     pid = project["id"]
     base = f"/projects/{pid}"
@@ -378,6 +379,18 @@ MEASURE_JS = r"""
     }
   }
 
+  // 3b. Text running past its own box: an unbroken token wider than its column is painted past
+  // the box's edge, under whatever sits beside it, while the box itself looks fine.
+  for (const el of all) {
+    if (!visible(el)) continue
+    const cs = getComputedStyle(el)
+    if (cs.overflowX !== 'visible' || cs.display === 'inline' || cs.display === 'contents') continue
+    if (!(el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)) continue
+    const hasText = Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim())
+    if (!hasText) continue
+    add('text-overflows-its-box', el, `text is ${el.scrollWidth}px wide in a ${el.clientWidth}px box`)
+  }
+
   // 4. A text column squeezed beside its control.
   const rows = [
     ['.aw-settings-row', '.aw-settings-row-text', '.aw-settings-row-control'],
@@ -420,8 +433,17 @@ FAULT_JS = r"""
   for (const w of document.querySelectorAll('.aw-control-warning'))
     w.style.cssText += ';white-space:nowrap;overflow-wrap:normal;word-break:keep-all'
 
+  // ...and revert the danger card's wrap rule, so an unbroken name runs out of its description.
+  for (const d of document.querySelectorAll('.aw-danger-desc'))
+    d.style.cssText += ';overflow-wrap:normal;word-break:normal'
+
   const row = document.querySelector('.aw-settings-row-text, .settings-row > div')
   if (!row) return false
+  const narrow = document.createElement('p')
+  narrow.setAttribute('data-fault', 'text-overflow')
+  narrow.textContent = 'y'.repeat(80)
+  narrow.style.cssText = 'display:block;width:120px;white-space:nowrap;overflow:visible'
+  row.appendChild(narrow)
   const span = document.createElement('span')
   span.setAttribute('data-fault', 'long-value')
   span.textContent = 'x'.repeat(80)
