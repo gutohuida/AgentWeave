@@ -73,19 +73,28 @@ export function resolveEnvironmentSection(raw: string | null | undefined): Envir
   return RETIRED_ENVIRONMENT_SECTIONS[raw] ?? null
 }
 
-/** Named for what an operator is trying to do, not for the shape of the data. *Context* and
- *  *Access* are defined here ahead of the checkpoint change that fills them; a section with
- *  nothing in it yet renders whatever settings exist at the time. */
-export const AGENT_SETTINGS_SECTIONS = [
-  'identity',
-  'execution',
-  'charter',
-  'interaction',
-  'context',
-  'access',
-  'workspace',
-] as const
+/** An agent's settings, in five sections. Permissions and Checkpoints carry the names of the project
+ *  sections they override. */
+export const AGENT_SETTINGS_SECTIONS = ['agent', 'running', 'permissions', 'checkpoints', 'workspace'] as const
 export type AgentSettingsSection = (typeof AGENT_SETTINGS_SECTIONS)[number]
+
+/** The seven sections the five replaced, and the one that holds what each held, so a saved link or a
+ *  toast never lands on a blank page. */
+const RETIRED_AGENT_SETTINGS_SECTIONS: Readonly<Record<string, AgentSettingsSection>> = {
+  identity: 'agent',
+  charter: 'agent',
+  execution: 'running',
+  interaction: 'running',
+  access: 'permissions',
+  context: 'checkpoints',
+}
+
+/** A section id as given by a link or a caller, resolved to one that exists; null if it names none. */
+export function resolveAgentSettingsSection(raw: string | null | undefined): AgentSettingsSection | null {
+  if (!raw) return null
+  if ((AGENT_SETTINGS_SECTIONS as readonly string[]).includes(raw)) return raw as AgentSettingsSection
+  return RETIRED_AGENT_SETTINGS_SECTIONS[raw] ?? null
+}
 
 /** The operator's own settings, for every project on this Hub. The sections are named for what the
  *  operator is trying to do: turn a sound off, switch to dark, point the app at another Hub. */
@@ -543,11 +552,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   // falls through rather than being coerced to one.
   const rawSettingsSection = params.get('settings')
   if (agent && rawSettingsSection !== null) {
-    const section: AgentSettingsSection = (
-      AGENT_SETTINGS_SECTIONS as readonly string[]
-    ).includes(rawSettingsSection)
-      ? (rawSettingsSection as AgentSettingsSection)
-      : DEFAULT_AGENT_SETTINGS_SECTION
+    const section = resolveAgentSettingsSection(rawSettingsSection) ?? DEFAULT_AGENT_SETTINGS_SECTION
     return agentSettingsDestination(projectId, agent, section)
   }
 

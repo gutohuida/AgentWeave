@@ -625,6 +625,56 @@ ROSTER_CONFIG_KEYS = (
 COPILOT_REVIEW_AGENTS = ("code-review", "security-review", "rubber-duck")
 
 
+async def _plain_runner_for(
+    session: AsyncSession, project_id: str, provider: Optional[str], model: Optional[str]
+) -> Runner:
+    """The project's plain runner for a provider and model: reused when there is one, else added to
+    the session (not committed). `model` None is the provider's own default. Raises 400 for a
+    provider or model the catalog does not declare."""
+    provider_entry = get_provider(provider)
+    model_entry = provider_entry.model(model) if provider_entry is not None and model else None
+    if provider_entry is None or (model and model_entry is None):
+        raise HTTPException(status_code=400, detail=undeclared_model_reason(provider, model))
+    existing_runner = await session.execute(
+        select(Runner).where(
+            Runner.project_id == project_id,
+            Runner.cli == provider,
+            Runner.model == model,
+        )
+        # Oldest first, and the rowid breaks a created_at tie (F177's order).
+        .order_by(Runner.created_at, literal_column("runners.rowid"))
+    )
+    # Only a plain runner is what the dialog promises (F600): one with flags or a model
+    # provider runs differently from "Claude Code, Haiku" -- it bound a permission-bypassing
+    # runner in the 2026-10-15 sweep. `None`, `[]` and a provider config of `None` are plain.
+    runner = next(
+        (
+            candidate
+            for candidate in existing_runner.scalars().all()
+            if not candidate.flags and not has_provider(candidate.provider_config)
+        ),
+        None,
+    )
+    if runner is None:
+        # An alias is named by what was chosen, not by its current target (design.md D1): a
+        # runner named for today's target would be a new F268 once the alias moves on.
+        if model_entry is None:
+            name_suffix = "default"
+        elif model_entry.id != model:
+            name_suffix = f"{model} (latest)"
+        else:
+            name_suffix = model_entry.label
+        runner = Runner(
+            id=f"runner-{short_id()}",
+            project_id=project_id,
+            name=f"{provider_entry.label} — {name_suffix}",
+            cli=provider,
+            model=model,
+        )
+        session.add(runner)
+    return runner
+
+
 @router.post("", response_model=OperatorAgentResponse, status_code=status.HTTP_201_CREATED)
 async def create_operator_agent(
     body: OperatorAgentCreate,
@@ -677,50 +727,10 @@ async def create_operator_agent(
         if runner is None or runner.project_id != project_id:
             raise HTTPException(status_code=404, detail=f"Runner '{body.runner_id}' not found")
     else:
-        # provider + model: atomic find-or-create (design.md). Reuses a matching runner
-        # already in this project rather than creating a duplicate; a runner created here
-        # is added to the session but not committed until the same commit as the agent
-        # below, so a failure anywhere before that commit leaves neither record behind.
-        provider_entry = get_provider(body.provider)
-        model_entry = provider_entry.model(body.model) if provider_entry is not None else None
-        if provider_entry is None or model_entry is None:
-            raise HTTPException(
-                status_code=400,
-                detail=undeclared_model_reason(body.provider, body.model),
-            )
-        existing_runner = await session.execute(
-            select(Runner).where(
-                Runner.project_id == project_id,
-                Runner.cli == body.provider,
-                Runner.model == body.model,
-            )
-            # Oldest first, and the rowid breaks a created_at tie (F177's order).
-            .order_by(Runner.created_at, literal_column("runners.rowid"))
-        )
-        # Only a plain runner is what the dialog promises (F600): one with flags or a model
-        # provider runs differently from "Claude Code, Haiku" -- it bound a permission-bypassing
-        # runner in the 2026-10-15 sweep. `None`, `[]` and a provider config of `None` are plain.
-        runner = next(
-            (
-                candidate
-                for candidate in existing_runner.scalars().all()
-                if not candidate.flags and not has_provider(candidate.provider_config)
-            ),
-            None,
-        )
-        if runner is None:
-            # An alias is named by what was chosen, not by its current target (design.md D1): a
-            # runner named for today's target would be a new F268 once the alias moves on.
-            is_alias = model_entry.id != body.model
-            name_suffix = f"{body.model} (latest)" if is_alias else model_entry.label
-            runner = Runner(
-                id=f"runner-{short_id()}",
-                project_id=project_id,
-                name=f"{provider_entry.label} — {name_suffix}",
-                cli=body.provider,
-                model=body.model,
-            )
-            session.add(runner)
+        # provider + model: atomic find-or-create (design.md). A runner created here is added to
+        # the session but not committed until the same commit as the agent below, so a failure
+        # anywhere before that commit leaves neither record behind.
+        runner = await _plain_runner_for(session, project_id, body.provider, body.model)
 
     if body.charter_id is not None:
         charter = await session.get(Charter, body.charter_id)
@@ -3376,6 +3386,8 @@ _PATCH_AGENT_FIELDS = frozenset(
     {
         "description",
         "runner_id",
+        "provider",  # with "model": the runner for them is found or made
+        "model",
         "charter_id",
         "config",
         "default_permission_mode",
@@ -3423,6 +3435,8 @@ async def patch_agent(
     # of how it was declared.
     _unrestricted_fields = {
         "runner_id",
+        "provider",
+        "model",
         *GRANT_FIELDS,
         "charter_id",
         "description",
@@ -3462,6 +3476,18 @@ async def patch_agent(
     # A symmetric guard on this branch would contradict D3 — see the charter_id branch below,
     # which does guard, because charter binding is exactly what archive() releases.
     runner_newly_bound = False
+    if "provider" in body or "model" in body:
+        # Choosing a model directly: the Hub finds the project's runner for it, or makes the one.
+        if "runner_id" in body:
+            raise HTTPException(
+                status_code=400, detail="Give runner_id or provider and model, not both"
+            )
+        if "provider" not in body:
+            raise HTTPException(status_code=400, detail="provider is required with model")
+        chosen = await _plain_runner_for(session, project_id, body["provider"], body.get("model"))
+        body = {**body, "runner_id": chosen.id}
+        del body["provider"]
+        body.pop("model", None)
     if "runner_id" in body:
         runner_id = body["runner_id"]
         if runner_id is not None:

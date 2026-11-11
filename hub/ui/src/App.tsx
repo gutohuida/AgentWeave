@@ -27,6 +27,7 @@ import {
   agentDestination,
   agentSettingsBackDestination,
   agentSettingsDestination,
+  resolveAgentSettingsSection,
   appSettingsDestination,
   destinationProjectId,
   environmentDestination,
@@ -311,7 +312,7 @@ export default function App() {
     if (value.startsWith('agent-settings:')) {
       const [, agentName, section] = value.split(':')
       navigateTo(agentSettingsDestination(
-        currentProjectId, agentName, section as Parameters<typeof agentSettingsDestination>[2],
+        currentProjectId, agentName, resolveAgentSettingsSection(section) ?? undefined,
       ))
       return
     }

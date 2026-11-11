@@ -260,7 +260,7 @@ describe('every navigation row exposes its actions through a visible menu', () =
 
     // Configuration is a page, not a 520px modal: it names its subject in the URL, so it is
     // linkable and survives a reload. The rail-hosted dialog could be neither.
-    expect(onOpenAgentSettings).toHaveBeenCalledWith('proj-a', 'claude', 'identity')
+    expect(onOpenAgentSettings).toHaveBeenCalledWith('proj-a', 'claude', 'agent')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     // The rail itself is untouched — settings still open "without unmounting" navigation.
     expect(screen.getByTestId('rail-agent-proj-a-claude')).toBeInTheDocument()

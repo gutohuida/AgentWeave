@@ -71,17 +71,17 @@ export function AgentPostureChips({ agent, onNavigate }: { agent: AgentSummary; 
           )
         })}
         {!agent.charter_id && (
-          <button type="button" className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} onClick={() => onNavigate(`agent-settings:${agent.name}:charter`)}>
+          <button type="button" className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} onClick={() => onNavigate(`agent-settings:${agent.name}:agent`)}>
             no charter
           </button>
         )}
         {!agent.runner_id && (
-          <button type="button" className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} onClick={() => onNavigate(`agent-settings:${agent.name}:execution`)}>
+          <button type="button" className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} onClick={() => onNavigate(`agent-settings:${agent.name}:running`)}>
             no runner
           </button>
         )}
         {cannotRun && (
-          <button type="button" className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title={launch?.reason ?? undefined} onClick={() => onNavigate(`agent-settings:${agent.name}:execution`)}>
+          <button type="button" className="aw-chip" data-pill="true" data-flag="true" style={CHIP_STYLE.flag} title={launch?.reason ?? undefined} onClick={() => onNavigate(`agent-settings:${agent.name}:running`)}>
             can't run
           </button>
         )}
@@ -145,7 +145,7 @@ function AgentDetails({ agent, onNavigate }: { agent: AgentSummary; onNavigate: 
       <dt>Waits for a permission</dt><dd>{wait(agent.permission_timeout_seconds, PERMISSION_WAIT_FALLBACK_SECONDS)}</dd>
       <dt>Waits for an answer</dt><dd>{wait(agent.question_timeout_seconds, QUESTION_WAIT_FALLBACK_SECONDS)}</dd>
       <dd className="col-span-2">
-        <button type="button" className="text-[11px] underline-offset-2 hover:underline" style={{ color: 'var(--text-2)' }} onClick={() => onNavigate(`agent-settings:${agent.name}:execution`)}>
+        <button type="button" className="text-[11px] underline-offset-2 hover:underline" style={{ color: 'var(--text-2)' }} onClick={() => onNavigate(`agent-settings:${agent.name}:running`)}>
           Agent settings
         </button>
       </dd>

@@ -365,7 +365,7 @@ export function Sidebar({
                       onOpenAgent={onOpenAgent}
                       onOpenConversation={onOpenConversation}
                       onNewConversation={onNewConversation}
-                      onOpenAgentSettings={(id, agent) => onOpenAgentSettings?.(id, agent, 'identity')}
+                      onOpenAgentSettings={(id, agent) => onOpenAgentSettings?.(id, agent, 'agent')}
                       onAddAgent={onAddAgent}
                     />
                   )}
