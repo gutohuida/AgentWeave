@@ -200,14 +200,14 @@
         "checkers": [],
         "chosen_by": "operator",
         "driver": "flow",
-        "ended_at": null,
+        "ended_at": "2026-11-11T04:52:58.707467+00:00",
         "id": "build-cb6a77f734b1",
         "landing": "main",
         "lead": null,
         "level": "reviewed",
         "pull_request": null,
         "started_at": "2026-11-10T17:39:02.882335+00:00",
-        "state": "running",
+        "state": "finished",
         "stop_reason": null,
         "tasks": {
           "agent-sections": {
@@ -225,6 +225,11 @@
           "style-drive": {
             "builder": "Developer",
             "checker": "QA2"
+          },
+          "task-5a94afabcfa3": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
           }
         },
         "window_end": null,

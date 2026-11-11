@@ -1,0 +1,484 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "project settings open on Project",
+      "how_to_check": "scripts/checks/settings_search_check.py step cross-scope",
+      "key": "ac-cross-scope",
+      "requirement": "search-on-settings",
+      "then": "results include the project's Checkpoints settings and the agent Checkpoints settings, each naming scope and section, label matches first",
+      "when": "the operator types 'checkpoint'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an agent's settings open",
+      "how_to_check": "settings_search_check.py step app-from-agent",
+      "key": "ac-app-from-agent",
+      "requirement": "search-on-settings",
+      "then": "the App setting for notification volume is listed and choosing it opens App settings at it",
+      "when": "the operator types 'volume'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with three agents",
+      "how_to_check": "settings_search_check.py step agents-listed",
+      "key": "ac-agents-listed",
+      "requirement": "agent-results-once",
+      "then": "the agent setting appears once with three agent names under it, and choosing the second opens that agent's Checkpoints at checkpoint mode",
+      "when": "the operator searches 'checkpoint mode'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the Overview tab",
+      "how_to_check": "settings_search_check.py step palette",
+      "key": "ac-palette",
+      "requirement": "palette-reaches-settings",
+      "then": "Project settings opens at Landing with the CI cutoff row highlighted",
+      "when": "the operator presses Ctrl K, types 'CI cutoff' and chooses the Settings result"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a search result for a row below the fold of its section at 960px",
+      "how_to_check": "settings_search_check.py step highlight",
+      "key": "ac-highlight-focus",
+      "requirement": "land-highlighted",
+      "then": "the row is in view, highlighted, still highlighted at 2s, and the focused element is its control",
+      "when": "it is chosen"
+    },
+    {
+      "checked_by": "agent",
+      "given": "any settings screen",
+      "how_to_check": "settings_search_check.py step no-match",
+      "key": "ac-no-match",
+      "requirement": "no-match-says-so",
+      "then": "a no-match message names the words and no result is listed",
+      "when": "the operator types 'zzqx'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the operator landed on Landing → CI cutoff by search",
+      "how_to_check": "settings_search_check.py step reload",
+      "key": "ac-reload",
+      "requirement": "location-names-setting",
+      "then": "both times Landing opens with CI cutoff highlighted",
+      "when": "the app is reloaded, then the operator goes elsewhere and presses Back"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the project's hop budget set to a non-default value",
+      "how_to_check": "settings_search_check.py step source",
+      "key": "ac-source-project",
+      "requirement": "source-shown",
+      "then": "the row reads Changed and names the default value",
+      "when": "Collaboration is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent A with its own checkpoint mode and agent B with none",
+      "how_to_check": "settings_search_check.py step source",
+      "key": "ac-source-agent",
+      "requirement": "source-shown",
+      "then": "A reads Agent's own with the project's mode, B reads From project with it",
+      "when": "each agent's Checkpoints is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent A's own checkpoint mode",
+      "how_to_check": "settings_search_check.py step reset (reads the agent through the Hub API after the click)",
+      "key": "ac-reset",
+      "requirement": "reset-one-action",
+      "then": "A's row reads From project with the project's mode, and the Hub's agent record has no checkpoint mode of its own",
+      "when": "the row's reset is used once"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agents A and B hold their own default permissions, C does not",
+      "how_to_check": "settings_search_check.py step overrides",
+      "key": "ac-overrides",
+      "requirement": "overrides-named",
+      "then": "default permissions names A and B, not C, and clicking B opens B's Permissions at default permissions; granted reach, with no agent holding its own, names nobody",
+      "when": "Project settings → Permissions is opened"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a project with only hop budget changed",
+      "how_to_check": "settings_search_check.py step changed-only",
+      "key": "ac-changed-only",
+      "requirement": "changed-only",
+      "then": "only Collaboration with hop budget is shown; turned off, all 14 sections return; on a project with nothing changed it says nothing is changed",
+      "when": "'Changed only' is turned on in project settings"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the built app",
+      "how_to_check": "run it, then repeat on a scratch edit removing one entry",
+      "key": "ac-findable",
+      "requirement": "every-row-findable",
+      "then": "it searches every settings row's own label in all three scopes and passes; with one row's search entry removed it fails naming that row",
+      "when": "`py -3.11 scripts/checks/settings_search_check.py --findable` runs"
+    },
+    {
+      "checked_by": "agent",
+      "given": "long values seeded and the new marks shown",
+      "how_to_check": "run it",
+      "key": "ac-long-values",
+      "requirement": "long-values-still-fit",
+      "then": "PASS at 960 and 1440px, dark and light",
+      "when": "`py -3.11 scripts/checks/long_values_check.py` runs"
+    }
+  ],
+  "algorithms": [
+    {
+      "name": "Matching a search",
+      "steps": [
+        "Split what was typed into words on spaces; ignore case and surrounding punctuation; fewer than two characters in total lists nothing.",
+        "A setting matches when every typed word is the start of some word in its label, description, section name or scope name.",
+        "Order: settings where every typed word starts a word in the label, then the rest; within each, App, then Project, then agent settings, then section order, then row order.",
+        "An agent setting is one result regardless of how many agents there are; its agent list is the project's non-archived agents in roster order."
+      ]
+    }
+  ],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "e2831f006d639f030c53b4c60bb58852f340ba7ae3a841edb88afb9b21b80325",
+      "FR-10": "6eb303f2cc0c316c73a963515afe613acdb6c48ec7813a977d5324afa04da25f",
+      "FR-11": "c047ab223967c6dc223788272faaedcda711f9b5540e9e5c496405b5e3313a69",
+      "FR-12": "5a48990564182cca16a50264b75db3c83016f6923cd10071b375f0803092691e",
+      "FR-2": "69cff2d7ef312c1fb3224bc85211126b577c3fe7f08ded1cd7a5078a3c738f48",
+      "FR-3": "42049c7603644f0ab35245ef587525877f2ad37ff5e0be296b8cdfb7d617e641",
+      "FR-4": "fa1b167c82c37c60360a758b5de9d83bb700d6d23758755c92ba8336949a7748",
+      "FR-5": "3568339e16a1d4994bd1625107d63c83454e3cebaf458315228bed5b95b6895d",
+      "FR-6": "7818beaa609a70b37c1dcd780e1be8841d37ecc2ed49a4a61f3e6794478fa2f2",
+      "FR-7": "f4a30506373fbadcfeb3d48ba8d993d60e4eee1e3e5889af7445633672124703",
+      "FR-8": "dbc3165dd76076d6e1a0d58b8f2b6c7888246e17a5488071fe7f1a9c15d07f0f",
+      "FR-9": "dd2f6a4846b09491d1129874cd1256c09b27e18510338bd683c9df88ae7d5a7a"
+    },
+    "high_water": 12,
+    "requirements": {
+      "agent-results-once": "FR-2",
+      "changed-only": "FR-10",
+      "every-row-findable": "FR-11",
+      "land-highlighted": "FR-4",
+      "location-names-setting": "FR-6",
+      "long-values-still-fit": "FR-12",
+      "no-match-says-so": "FR-5",
+      "overrides-named": "FR-9",
+      "palette-reaches-settings": "FR-3",
+      "reset-one-action": "FR-8",
+      "search-on-settings": "FR-1",
+      "source-shown": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "Developer",
+    "builder": "Developer",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer is free while slice 5 holds DeveloperSonnet2, so the two slices build side by side.",
+      "builder": "One Sonnet builder for three chained tasks that share files.",
+      "checker": "QA, not QA2, which is on slice 5's chain.",
+      "cron": "Same cadence as the other slices' flows.",
+      "mode": "UI-only slice on the components slice 2 settled; a flow builds and reviews it unattended.",
+      "stop": "Stop when its three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "Decisions (operator, 2026-11-11, \"yes to all\" on the Architect's recommendations):\n- An agent setting appears once in results with the agents listed under it, not once per agent and not only for the agent on screen.\n- A project setting that agents can override names the agents that hold their own value.\n- Search matches the words of a setting's label and description (plus its section and scope names), nothing curated.\n- Each scope gets a 'Changed only' view, not just a mark per row.\n\nWhy the findability check: a search index kept beside the screens drifts the first time someone adds a row and forgets it. A check that renders every section and searches every row's own label catches that at review, so search stays complete without anyone remembering.\n\nBuilding beside slice 5 (operator asked, 2026-11-11): this slice is built by Developer and checked by QA, so it does not queue behind slice 5's DeveloperSonnet2 and QA2. Both slices touch ProjectSettingsScreen.tsx (slice 5 puts its list above every section; this one adds search and 'Changed only' to the settings nav) and the committed UI bundle; whichever lands second merges master in and rebuilds the bundle, as slices 1, 2 and 4 did.",
+  "evidence": {
+    "checked": [
+      "hub/ui/src/components/palette/CommandPalette.tsx: APP_SETTINGS_ENTRIES is the only settings reach, three app sections by keyword",
+      "hub/ui/src/components/settings/SettingsNavLayout.tsx: no search or filter",
+      "hub/ui/src/components/ui/settings.tsx SettingsRow: reset shown only when `changed`, labelled Reset to default, no value named",
+      "hub/ui/src/components/agents/settings/AgentSettingsPages.tsx:244,285,311 and AgentSettingsSections.tsx:195,213: agent default permissions, reach grants, checkpoint mode and point follow the project when unset",
+      "hub/hub/reach.py:99 effective_grants: an agent's grants replace the project's",
+      "hub/ui/src/lib/navigation.ts: destinations carry a tab and a document anchor, no setting",
+      "SettingsRow counts per file (about 70 rows)",
+      "Slice 5's running build (build-4706c83501ba): DeveloperSonnet2+QA2 on setup-drive and setup-ui, DeveloperOpus+QA on setup-state"
+    ],
+    "limits": [
+      "Not driven: read from code only",
+      "Whether every app and project setting has a known default the UI can name was not checked row by row; the search-drive task finds any that do not"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": null,
+        "id": "build-e3af18ea2f3c",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-11T13:23:50.755991+00:00",
+        "state": "running",
+        "stop_reason": null,
+        "tasks": {
+          "search-and-landing": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "search-drive": {
+            "builder": "Developer",
+            "checker": "QA"
+          },
+          "value-sources": {
+            "builder": "Developer",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Agent settings in search: once per agent, only the agent on screen, or once with the agents listed? Resolved: once with the agents listed (operator, 2026-11-11).",
+      "resolved": true
+    },
+    {
+      "question": "Should a project setting name the agents that hold their own value? Resolved: yes (operator, 2026-11-11).",
+      "resolved": true
+    },
+    {
+      "question": "Search on label and description only, or also curated words? Resolved: label and description only; add words where a search is seen to fail (operator, 2026-11-11).",
+      "resolved": true
+    },
+    {
+      "question": "A 'Changed only' view, or a mark per row? Resolved: the view (operator, 2026-11-11).",
+      "resolved": true
+    }
+  ],
+  "problem": "Operator, 2026-11-10: it is hard to find the setting you want, both not knowing which of the three settings places (app, project, agent) holds it and not spotting it on the page once there. Slice 2 (signed off 2026-11-11) put every setting where its name says; this slice is the way to reach one without knowing where that is, and to see why it holds the value it does.\n\nCode as of master 2cc77dc (2026-11-11):\n- About 70 setting rows across the three scopes: app settings 3 sections, project settings 14 sections in four groups (ProjectSettingsScreen.tsx), agent settings 5 sections (agents/settings/AgentSettingsPages.tsx, AgentSettingsSections.tsx).\n- No search on the settings screens (SettingsNavLayout.tsx has none).\n- The command palette (palette/CommandPalette.tsx) searches agents, tasks, documents and conversations, and reaches the three App settings sections by keyword (APP_SETTINGS_ENTRIES). It reaches no project or agent setting, and no individual setting.\n- No location names a single setting: navigation carries a project tab and a spec document anchor (lib/navigation.ts), not a settings row.\n- Where a value comes from is shown in part. Most rows have a reset that appears only when the value differs from its default (ui/settings.tsx `changed`/`onReset`, labelled \"Reset to default\"), without saying what the default is. Agent Permissions and Checkpoints say the project's value where the agent has none of its own (slice 2 FR-10). Nothing on a project setting says which agents hold their own value instead, so a project change can silently not apply to some agents.\n- Four project settings can be overridden by an agent's own value: default permissions, granted reach (hub/hub/reach.py:99 `effective_grants`: the agent's grants replace the project's, they are not added), checkpoint mode and checkpoint point.",
+  "requirements": [
+    {
+      "key": "search-on-settings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator often does not know which of the three places holds a setting; a search confined to the open scope would not answer that.",
+      "statement": "App, project and agent settings each show a search field above their section list; typing lists every setting across all three scopes that matches by the rule in this document, each result naming the setting, its scope (App, Project or the agent) and its section, label matches listed before description-only matches."
+    },
+    {
+      "key": "agent-results-once",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "With eight agents, one row per agent buries every other result (operator, 2026-11-11).",
+      "statement": "A setting every agent has appears once in the results, with the project's non-archived agents listed under it; choosing an agent opens that agent's setting."
+    },
+    {
+      "key": "palette-reaches-settings",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Ctrl K is where the operator already looks for anything by name.",
+      "statement": "The command palette lists matching settings, by the same rule and with the same scope and section, under a Settings group, and choosing one lands on it as a search result does."
+    },
+    {
+      "key": "land-highlighted",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Finding a setting is not done until the eye is on it; long sections are where it is missed.",
+      "statement": "Choosing a result opens the setting's scope and section, scrolls its row into view, highlights the row for at least two seconds, and puts keyboard focus on its control."
+    },
+    {
+      "key": "no-match-says-so",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A search that matches no setting says that no setting matches the words typed, and lists nothing."
+    },
+    {
+      "key": "location-names-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "After landing on a setting, the app's location names that setting, so a reload or Back returns to it opened and highlighted as a search would."
+    },
+    {
+      "key": "source-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A reset button alone says something differs, not from what.",
+      "statement": "Every setting row whose value is not its default says where its value comes from: on app and project settings 'Changed' with the default it would otherwise have; on an agent setting that follows a project setting, 'Agent's own' with the project's value, or, when the agent has none of its own, 'From project' with that value."
+    },
+    {
+      "key": "reset-one-action",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A changed setting returns to the value it would otherwise have (the default, or for an agent the project's) in one action from its row, and the row then shows that value and no longer reads as changed."
+    },
+    {
+      "key": "overrides-named",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "An agent's own value replaces the project's (reach grants included, hub/hub/reach.py:99), so a project change can silently not apply to it.",
+      "statement": "On project settings, default permissions, granted reach, checkpoint mode and checkpoint point each name the non-archived agents that hold their own value for it, each name opening that agent's setting; when none does, nothing is shown."
+    },
+    {
+      "key": "changed-only",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each settings scope offers a 'Changed only' view that shows only settings whose value is not its default (for an agent, only its own values), hides sections with none, and says nothing is changed when there is none; turning it off restores the full list."
+    },
+    {
+      "key": "every-row-findable",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A search kept beside the screens drifts the first time a row is added without it.",
+      "statement": "A repeatable check, runnable on this machine with one command, fails naming the scope, section and label of any settings row that a search for its own label does not return, or that a result lands on the wrong row."
+    },
+    {
+      "key": "long-values-still-fit",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The long-values check from `settings-rows-that-hold-any-value` passes on every settings section with the search field, the source marks, the agent names and 'Changed only' shown, at 960 and 1440px, dark and light."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/settings-that-are-easy-to-find-and-match-the-app/spec.json",
+    "slice": "find-any-setting"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Searching settings by words from a setting's label or description, across app, project and agent settings, from the settings screens",
+      "Reaching the same settings from the command palette",
+      "Landing on a found setting: its section opened, the row scrolled into view and highlighted",
+      "A location that names one setting, surviving a reload",
+      "Per setting: whether it holds its default, a project value or an agent's own value, the value it would otherwise have, and a reset",
+      "On the four project settings agents can override: which agents hold their own value",
+      "A 'Changed only' view per scope",
+      "A check that every settings row is findable"
+    ],
+    "non_goals": [
+      "Moving, renaming or regrouping settings (slice 2, signed off)",
+      "The set-up list (slice 5)",
+      "Changing what any setting does on the Hub",
+      "Settings outside the settings screens (a conversation's permission choice, the Build dialog, a job's form)",
+      "Searching by value (which setting holds a given path or branch)",
+      "A curated list of extra search words per setting: operator, 2026-11-11, label and description first; words are added only where a search is seen to fail",
+      "Layouts narrower than 960px"
+    ]
+  },
+  "summary": "Type part of a setting's name or what it does and land on it, highlighted, across app, project and agent settings, from the settings screens and from the command palette. Every setting says whether it holds its default, a project value or an agent's own value, with the value it would otherwise have and a reset; a project setting names the agents that use their own; and each scope can show only what has been changed.",
+  "tasks": [
+    {
+      "builder": "Developer",
+      "builder_reason": "A browser drive on an existing harness is Sonnet work, and Developer is free while slice 5 holds DeveloperSonnet2.",
+      "checker": "QA",
+      "checker_reason": "QA2 is on slice 5's chain; QA's only slice 5 job is one migration review, so it is mostly free.",
+      "depends_on": [],
+      "description": "Write scripts/checks/settings_search_check.py on the harness scripts/checks/long_values_check.py uses (its own Hub on a temporary database, Playwright, never :8000 or :8010). Seed a project with three agents and the values each criterion names, and implement one step per criterion (cross-scope, app-from-agent, agents-listed, palette, highlight, no-match, reload, source, reset, overrides, changed-only) plus --findable, which walks every rendered settings row in all three scopes and searches its own label. It fails on master today; record that failing output as evidence. It is not added to the project's checks.",
+      "files": [
+        "scripts/checks/settings_search_check.py"
+      ],
+      "from": null,
+      "key": "search-drive",
+      "requirements": [
+        "search-on-settings",
+        "agent-results-once",
+        "palette-reaches-settings",
+        "land-highlighted",
+        "no-match-says-so",
+        "location-names-setting",
+        "source-shown",
+        "reset-one-action",
+        "overrides-named",
+        "changed-only",
+        "every-row-findable"
+      ],
+      "reviewer": null,
+      "title": "Settings search check"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "UI wiring is Sonnet work per the quota rule; Developer built slice 2's screens these sit on.",
+      "checker": "QA",
+      "checker_reason": "Free of slice 5's UI chain; checks by running settings_search_check.py.",
+      "depends_on": [
+        "search-drive"
+      ],
+      "description": "Make every settings row in app, project and agent settings findable by the matching rule: the search field on all three settings screens, a Settings group in the command palette (replacing APP_SETTINGS_ENTRIES' section-level entries with per-setting ones), landing (open scope and section, scroll, highlight, focus), the no-match message, and a navigation destination that names a setting so reload and Back return to it. Agent settings list once with the agents under them. Run settings_search_check.py steps cross-scope, app-from-agent, agents-listed, palette, highlight, no-match, reload and --findable to PASS, and long_values_check.py. If slice 5's set-up list has landed on master first, merge master in before rebuilding. Rebuild and commit the UI bundle.",
+      "files": [
+        "hub/ui/src/components/settings",
+        "hub/ui/src/components/agents/settings",
+        "hub/ui/src/components/palette",
+        "hub/ui/src/components/ui/settings.tsx",
+        "hub/ui/src/lib",
+        "hub/ui/src/styles",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "search-and-landing",
+      "requirements": [
+        "search-on-settings",
+        "agent-results-once",
+        "palette-reaches-settings",
+        "land-highlighted",
+        "no-match-says-so",
+        "location-names-setting",
+        "every-row-findable",
+        "long-values-still-fit"
+      ],
+      "reviewer": null,
+      "title": "Search settings and land on one"
+    },
+    {
+      "builder": "Developer",
+      "builder_reason": "Same files as search-and-landing; one builder keeps the chain in one head.",
+      "checker": "QA",
+      "checker_reason": "Same checker as the rest of the chain.",
+      "depends_on": [
+        "search-and-landing"
+      ],
+      "description": "On every settings row: the Changed / Agent's own / From project mark with the value it would otherwise have, and a reset to that value in one action. On project Permissions and Checkpoints: the agents holding their own default permissions, granted reach, checkpoint mode or checkpoint point, each linking to that agent's setting. A 'Changed only' view per scope. Run settings_search_check.py steps source, reset, overrides and changed-only, and the full check, to PASS, and long_values_check.py. Merge master in first if slice 5 has landed. Rebuild and commit the UI bundle.",
+      "files": [
+        "hub/ui/src/components/settings",
+        "hub/ui/src/components/agents/settings",
+        "hub/ui/src/components/ui/settings.tsx",
+        "hub/ui/src/styles",
+        "hub/ui/src/__tests__",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "value-sources",
+      "requirements": [
+        "source-shown",
+        "reset-one-action",
+        "overrides-named",
+        "changed-only",
+        "long-values-still-fit"
+      ],
+      "reviewer": null,
+      "title": "Where each value comes from"
+    }
+  ],
+  "title": "Find any setting and see where its value comes from"
+}

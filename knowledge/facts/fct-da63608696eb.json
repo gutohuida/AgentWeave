@@ -1,0 +1,29 @@
+{
+  "id": "fct-da63608696eb",
+  "kind": "fact",
+  "claim": "Acceptance criteria that only the operator can satisfy, such as sign-off against a mock, should be marked as operator-owned because agents cannot produce that evidence.",
+  "citations": [
+    {
+      "source": "src-a32fafc00b8c",
+      "quote": "Mark acceptance criteria that only the operator can satisfy, such as sign-off against a mock, as operator-owned.",
+      "line_start": 9,
+      "line_end": 9
+    },
+    {
+      "source": "src-a32fafc00b8c",
+      "quote": "Agents cannot produce that evidence, and treating it as agent work causes send-backs.",
+      "line_start": 9,
+      "line_end": 9
+    }
+  ],
+  "sources": [
+    "src-a32fafc00b8c"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-11T04:55:11.931365Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

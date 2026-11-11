@@ -1,0 +1,319 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "one task in each stage",
+      "how_to_check": "UI component test with fixtures in the order the tasks route returns them",
+      "key": "ac-every-stage",
+      "requirement": "stage-on-card",
+      "then": "each card shows its own stage label and no card shows two",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved task whose landing is checking",
+      "how_to_check": "Hub test through the tasks route with TaskLanding rows",
+      "key": "ac-approved-not-on-main",
+      "requirement": "stage-from-real-state",
+      "then": "its stage is 'checking', not 'on main'. After it lands, the stage is 'on main'.",
+      "when": "the tasks route is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "agent D holds tasks A and B and runs on A",
+      "how_to_check": "Hub test",
+      "key": "ac-working-only-bound",
+      "requirement": "stage-from-real-state",
+      "then": "A is 'being worked on' and B is 'not started'",
+      "when": "the tasks route is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "one landed, one held and one not-landed task",
+      "how_to_check": "UI component test",
+      "key": "ac-detail",
+      "requirement": "stage-detail",
+      "then": "the landed card shows the short commit id, the held card shows what it waits on, and the not-landed card shows its reason",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "operator",
+      "given": "one task on main and one approved task still checking",
+      "how_to_check": "Operator looks at the board on trial Hub :8010",
+      "key": "ac-distinct",
+      "requirement": "on-main-distinct",
+      "then": "they can tell which is on main without reading text",
+      "when": "the operator looks at the board"
+    },
+    {
+      "checked_by": "agent",
+      "given": "two approved tasks not on main and one task being worked on",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "ac-counts",
+      "requirement": "not-yet-on-main",
+      "then": "it shows 2 not yet on main and 1 being worked on, and revealing each lists exactly those tasks",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task checking on the open board",
+      "how_to_check": "Drive on :8010 with a real landing, timed",
+      "key": "ac-live",
+      "requirement": "stage-is-live",
+      "then": "within 5 seconds, with no reload, the card reads 'on main' and the not-on-main count drops by one",
+      "when": "its landing finishes"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task outside a flow completed while DeveloperSonnet2 holds it",
+      "how_to_check": "Hub test through the reassign route",
+      "key": "ac-builder-kept",
+      "requirement": "builder-survives-review",
+      "then": "it still records DeveloperSonnet2 as builder, and its holder is QA",
+      "when": "it is reassigned to QA for review"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task built by D, sent back, then completed while E holds it",
+      "how_to_check": "Hub test",
+      "key": "ac-builder-recompleted",
+      "requirement": "builder-survives-review",
+      "then": "its builder is E",
+      "when": "the task is read"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task under review built by D and reviewed by Q",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "ac-two-names",
+      "requirement": "builder-and-reviewer-shown",
+      "then": "both show 'built by D' and 'reviewing: Q' as separate labels",
+      "when": "the card and the drawer render"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "d5135cffd7415009a0be1c21510e02919de4248201db073b331df32573c0d95c",
+      "FR-10": "851fd7032a09522edb5538cd16b9462764697a9e61ffd23588272eac2e54df91",
+      "FR-11": "4ff01a0d8266762db28eeb4ecd225c7683584218c467bfb30b1d3dacdb5716e8",
+      "FR-12": "bd47780e79729083eb79a9c9a8fb3df18aeec7051d6810530012aaa6ca298e59",
+      "FR-13": "610045270418bcc17600d0e267ed554d5ad2b5d19dab9cb4d53e3f9f0b52de33",
+      "FR-14": "7f8475125e57cc52a17a50c7afa3fabde234abe57f8f90450b425bcb80d69bdd",
+      "FR-2": "817348cb7df94d580e065e534f92bf310ac927067243484944b05b1e0a757b21",
+      "FR-3": "e1fbda8edd03c0940651a8402a5c462f1067e55b942775695162a329e170eb42",
+      "FR-4": "0df37dfa5330670cfe1a6e8c400ebcf1ed48b401c360dabbfd6e7ac8afbdc982",
+      "FR-5": "78e2edef7188c48e760497422258ea9b46a49fea5ce36c029660ce6f34205deb",
+      "FR-6": "6eef692e25d753a6aa75fb0d6024348ecdb1e0bf0ec269522cfe85ee237d8147",
+      "FR-7": "7da2ecbe197794326c611c989f7675f95c138aac49e46133674f880b4ee0b8d0",
+      "FR-8": "7adf11a2a048e54e5985bd4a2f0877601f2e21a5cb1c1afaaaedeb75189e21a4",
+      "FR-9": "5da7e74d7bc874f3655e11fae7d7e8d17679d79f929763fa656de6b7a21d3689"
+    },
+    "high_water": 14,
+    "requirements": {
+      "builder-and-reviewer-shown": "FR-8",
+      "builder-survives-review": "FR-7",
+      "not-yet-on-main": "FR-13",
+      "on-main-distinct": "FR-12",
+      "stage-detail": "FR-11",
+      "stage-from-real-state": "FR-10",
+      "stage-is-live": "FR-14",
+      "stage-on-card": "FR-9"
+    },
+    "retired": {
+      "held-is-not-blocking": "FR-4",
+      "landed-looks-final": "FR-6",
+      "landing-state-on-card": "FR-5",
+      "readiness-is-live": "FR-3",
+      "readiness-names-blockers": "FR-2",
+      "restart-readiness": "FR-1"
+    }
+  },
+  "delivery": {
+    "agent": "DeveloperSonnet2",
+    "builder": "DeveloperSonnet2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "Developer is busy with another flow; Sonnet is enough for route and UI work of this size.",
+      "builder": "Same as agent.",
+      "checker": "QA2 is free and can drive the trial Hub for the live criteria.",
+      "cron": "Five minutes keeps a three-task chain moving.",
+      "mode": "Three chained tasks, each with a drive, suit a flow.",
+      "stop": "Stop once the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Does 'builder' mean the agent holding the task when it moved to completed, or every agent that ran on it? Resolved by the operator 2026-11-11: the holder at completion.",
+      "resolved": true
+    }
+  ],
+  "problem": "The facts that matter most about a task are hidden inside it. The operator cannot tell from the board whether approved work is already on main, still being checked, or failed to land, so they cannot decide whether it is time to test or restart. The project does not matter: this applies to any project, not only AgentWeave.\n- Landing state (queued, checking, landing, held, landed, not_landed, sent_back; TaskLanding model) is shown only in the drawer (TaskDetailDrawer.tsx:701).\n- An approved task looks the same whether it is on main or not.\n- When a task goes to review, `assignee` is overwritten with the reviewer (api/v1/tasks.py:2471; mender.py:321). The `builder` column is only set inside a build and names who was meant to build, not who did (models.py:913). So the developer's name disappears.\n- The working marker is wrong today; AW-94 fixes it, and this slice relies on that fix.\n\nThe operator rejected a \"safe to restart\" indicator on 2026-11-11: it would be AgentWeave-specific. The aim is clarity about each task, so the operator can draw that conclusion for any project.",
+  "requirements": [
+    {
+      "key": "stage-on-card",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every task card shows exactly one stage, readable without opening the task. The stages are: not started; being worked on; waiting for an answer or blocked; waiting for review; under review; sent back; approved, waiting to land; checking; landing; on main; landing held; did not land; closed without landing."
+    },
+    {
+      "key": "stage-from-real-state",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The status 'approved' says a reviewer agreed. It does not say the work reached main, and those are the moments the operator needs to tell apart.",
+      "statement": "A card's stage reflects what is actually happening, not only the task's status column. A task is 'being worked on' only while a run bound to that task is running. It is 'on main' only once its work has landed on the main branch. An approved task whose work has not landed is never shown as on main."
+    },
+    {
+      "key": "stage-detail",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A card at 'on main' shows the short commit id its work landed at. A card at 'landing held' shows what it waits on. A card at 'did not land' shows why, in one line."
+    },
+    {
+      "key": "on-main-distinct",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "On the board, a task that is on main is visually distinct from an approved task not yet on main. The operator can tell them apart without reading the stage text."
+    },
+    {
+      "key": "not-yet-on-main",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Without opening any task, the board shows how many tasks are approved but not yet on main, and lets the operator see which ones. The same applies to tasks being worked on."
+    },
+    {
+      "key": "stage-is-live",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A card's stage, and the counts from not-yet-on-main, change within 5 seconds of the underlying change (a run ending, a landing finishing), without a page reload."
+    },
+    {
+      "key": "builder-survives-review",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-11: one clear name, the holder at completion, rather than every agent that ran on the task.",
+      "statement": "When a task moves to completed, it records as its builder the agent holding it at that moment. That name stays unchanged when the task is handed to a reviewer or tester, inside or outside a flow. If the task is sent back and completed again, the builder becomes whoever holds it at that later completion."
+    },
+    {
+      "key": "builder-and-reviewer-shown",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "From 'waiting for review' onward, a card and the task drawer show the builder and the current reviewer as two separately labelled names. A task never reviewed shows only its builder."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/tasks-rework-roadmap/spec.json",
+    "slice": "glance"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A true stage on every card, through landing on main",
+      "Board-level view of what is not yet on main and what is being worked on",
+      "Recording and showing the builder separately from the reviewer"
+    ],
+    "non_goals": [
+      "Any 'safe to restart' indicator or other AgentWeave-specific readiness signal (operator, 2026-11-11)",
+      "Changing how landing itself works (queue, checks, batching)",
+      "Moving tasks outside a flow (slice loose-tasks)",
+      "Hiding finished tasks from the board (slice finding)",
+      "Visual redesign beyond what showing these stages needs (slice redesign)",
+      "The working-marker bug itself (AW-94); this slice builds on its fix"
+    ]
+  },
+  "summary": "Every card on the board shows the stage its task has really reached, all the way to \"on main\", along with who built it and who is reviewing it. The board separates work on main from approved work still on its way. From this the operator can work out, for any project, whether it is time to test, merge or restart, without opening a task.",
+  "tasks": [
+    {
+      "builder": "DeveloperSonnet2",
+      "checker": "QA2",
+      "depends_on": [],
+      "description": "Acceptance drive first: write the Hub tests and the :8010 drive step for the stage criteria, failing today. Then make the tasks route return each task's stage from real state (bound runs, landing rows), with stage detail. Show the stage on the card, live.",
+      "files": [
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/schemas/tasks.py",
+        "hub/ui/src/lib/taskCardStatus.ts",
+        "hub/ui/src/components/tasks/TaskCardCompact.tsx",
+        "hub/ui/src/api/tasks.ts"
+      ],
+      "from": null,
+      "key": "stage",
+      "requirements": [
+        "stage-on-card",
+        "stage-from-real-state",
+        "stage-detail",
+        "stage-is-live"
+      ],
+      "reviewer": null,
+      "title": "One true stage per card"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "checker": "QA2",
+      "depends_on": [
+        "stage"
+      ],
+      "description": "Make on-main cards visually distinct, and add the board-level counts of approved-but-not-on-main and being-worked-on, each revealing its tasks.",
+      "files": [
+        "hub/ui/src/components/tasks/BoardView.tsx",
+        "hub/ui/src/components/tasks/TasksScreen.tsx",
+        "hub/ui/src/components/tasks/TaskCardCompact.tsx"
+      ],
+      "from": null,
+      "key": "on-main",
+      "requirements": [
+        "on-main-distinct",
+        "not-yet-on-main"
+      ],
+      "reviewer": null,
+      "title": "On main vs not yet on main"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "checker": "QA2",
+      "depends_on": [
+        "on-main"
+      ],
+      "description": "Record the agent holding a task when it moves to completed as its builder, inside or outside a flow, and keep it through review hand-offs. Show builder and reviewer as separate labels on the card and in the drawer.",
+      "files": [
+        "hub/hub/db/models.py",
+        "hub/hub/task_transition_service.py",
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/schemas/tasks.py",
+        "hub/ui/src/components/tasks/TaskCardCompact.tsx",
+        "hub/ui/src/components/tasks/TaskDetailDrawer.tsx"
+      ],
+      "from": null,
+      "key": "builder",
+      "requirements": [
+        "builder-survives-review",
+        "builder-and-reviewer-shown"
+      ],
+      "reviewer": null,
+      "title": "Keep the builder through review"
+    }
+  ],
+  "title": "Where each task stands is visible on the board"
+}

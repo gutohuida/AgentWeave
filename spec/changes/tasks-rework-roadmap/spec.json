@@ -1,0 +1,78 @@
+{
+  "acceptance_criteria": [],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {},
+    "high_water": 0,
+    "requirements": {},
+    "retired": {}
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": null,
+    "step": null
+  },
+  "kind": "roadmap",
+  "lifecycle": "",
+  "open_questions": [],
+  "problem": "Raised by the operator on 2026-11-11, grounded in the code the same day:\n1. Finding tasks is hard. The spec picker (BoardScopePicker.tsx) lists specs alphabetically, so the operator must know a spec's name. Finished tasks are piling up on the board.\n2. Tasks outside a flow are hard to handle. These are quick fixes the operator or an agent tests, then merges directly. They behave as if bound by a flow's workflow, and when one task's work covers four others, the only clean exit for those four is Delete. The operator wants to move such tasks freely, or have the agent they are piloting do it. Seen live on 2026-11-11: an agent could not withdraw an unstarted pending task (409, 'pending' to 'rejected' refused).\n3. The most important facts about a task, such as whether its work is on main, still landing or failed, are hidden inside it. The operator cannot tell from the board whether it is time to test or restart, in this or any other project.\n4. Cards and the story view carry too much prose.\n5. The developer's name disappears when a task goes to review, because `assignee` is overwritten (api/v1/tasks.py:2471, mender.py:321).\n6. Every task an agent holds shows as being worked on while the agent runs on just one of them (api/v1/tasks.py:619-637). This is fixed outside the roadmap as AW-94.\n\nChanged 2026-11-11 after the first approval, at the operator's word: slice glance dropped its \"safe to restart\" indicator, which would be AgentWeave-specific, in favour of a true per-task stage. Slice finding now says when a task leaves the default board: once it is on main, with a switch to show finished tasks.",
+  "requirements": [],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The Tasks screen (board, list, drawer, story) and the status rules for tasks outside a flow",
+      "What the board shows about each task's real stage, including landing to main"
+    ],
+    "non_goals": [
+      "Any AgentWeave-specific readiness signal such as 'safe to restart'; the board serves any project",
+      "Changing how tasks inside a flow are built, checked or landed",
+      "The legacy openspec changes",
+      "Bug #6 (the working marker), fixed separately as AW-94"
+    ]
+  },
+  "slices": [
+    {
+      "builds_after": [],
+      "done": "With one task being worked on, one approved and still checking, and one on main, the operator tells all three apart and counts what is not yet on main without opening a task.",
+      "intent": "Every card shows its task's real stage through to 'on main', with the builder and reviewer named separately, and the board shows what is not yet on main, so the operator can decide when to test or restart in any project.",
+      "key": "glance",
+      "title": "Where each task stands is visible on the board"
+    },
+    {
+      "builds_after": [
+        "glance"
+      ],
+      "done": "The operator takes a loose completed task straight to done, closes four sibling tasks as covered by it, and has a piloted agent withdraw an unstarted one, with none of these refused.",
+      "intent": "A task that belongs to no flow is the operator's to move: to any status, closed as done elsewhere, or cancelled. The agent the operator is piloting can make the same moves on their behalf, and flow-only gates no longer hold such tasks.",
+      "key": "loose-tasks",
+      "title": "Tasks outside a flow move freely"
+    },
+    {
+      "builds_after": [
+        "glance"
+      ],
+      "done": "The spec whose tasks changed most recently is at the top of the filter list, the default board holds no task that is on main, and turning on 'show finished' shows them again.",
+      "intent": "The spec filter lists the most recently active specs first. A task leaves the default board once it is on main (or closed without landing), and a 'show finished' switch brings finished tasks back.",
+      "key": "finding",
+      "title": "Find a spec's tasks without knowing its name"
+    },
+    {
+      "builds_after": [
+        "glance",
+        "loose-tasks"
+      ],
+      "done": "The operator has reviewed the mock, and the board and story render the approved design against live data.",
+      "intent": "Cards and the story view carry less prose and more visual state, with motion and finish in AgentWeave's visual identity. They are mocked first from the real components fed fixtures, then wired up.",
+      "key": "redesign",
+      "title": "Task card and story redesign"
+    }
+  ],
+  "summary": "Rework the task screen and the handling of tasks so the operator can see where every task really stands, all the way to main, without opening it. Quick fixes outside a flow should be moveable without fighting the board, a spec's tasks findable without knowing its name, and cards and stories should read with less text. Everything is general to any project, not AgentWeave-specific.",
+  "tasks": [],
+  "title": "Tasks rework"
+}
