@@ -335,6 +335,16 @@ def drive(
     rail = page.evaluate(COUNT_JS, pid)
     c.ok("ac-live", "the rail count disappears without a reload", before and rail.get("row") and rail.get("count") is None, f"{rail}")
     c.shot(page, "7-live")
+    # ac-three-places, second half: with both items resolved, a Project settings section shows no list.
+    # Guarded by `before` so it cannot pass on a page that never showed the list.
+    open_url(page, settings("general"))
+    settle(page)
+    c.ok(
+        "ac-three-places",
+        "after resolving both, Project settings shows no list",
+        before and wait_no_list(page) and page.locator('[data-testid="setup-list"]').count() == 0,
+        "the list is still on a Project settings section, or was never shown",
+    )
 
     # ---- ac-cannot-run ---------------------------------------------------------------------
     # The Hub refuses to create an agent on a CLI it cannot find, so the agent is made first and the
@@ -366,6 +376,8 @@ def drive(
             "ghost" in page.url and "settings=running" in page.url and in_view(page, "text=Model"),
             f"url {page.url}",
         )
+    else:
+        c.ok("ac-links", "the can-run item opens that agent's Running -> Model", False, "no can-run item to click")
     context.close()
 
 
