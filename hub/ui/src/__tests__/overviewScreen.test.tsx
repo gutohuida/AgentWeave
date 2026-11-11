@@ -142,6 +142,21 @@ beforeEach(() => {
 })
 
 describe('the wired Overview', () => {
+  it('says "seen just now", not "seen now ago", for an entry seen seconds ago', () => {
+    const justNow = new Date().toISOString()
+    knownFailing = [
+      {
+        id: 'kf-fresh', check: 'hub-tests', test: 'tests/test_a.py::test_red', whole_check: false, kind: 'flaky',
+        first_seen: justNow, last_seen: justNow, added_by_run: 'chk-fresh01', passes: 1, fix_task: null,
+      },
+    ]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const row = within(screen.getByTestId('known-failing-list')).getByRole('listitem')
+    const [first, last] = Array.from(row.querySelectorAll('time'))
+    expect(first).toHaveTextContent(/^first seen just now$/)
+    expect(last).toHaveTextContent(/^last seen just now$/)
+  })
+
   it('shows the known-failing list, each entry with check, test, kind, first and last seen, and a link to its fix task', () => {
     // `failures-already-known-are-on-a-list-not-re-argued` FR-11, ac-shown. In the route's order:
     // most recently seen first.
