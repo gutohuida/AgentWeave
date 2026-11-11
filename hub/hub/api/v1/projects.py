@@ -123,6 +123,14 @@ class ProjectCheck(BaseModel):
     # judged as a whole; one saved before these existed has neither.
     report_path: Optional[str] = Field(default=None, max_length=255)
     rerun_command: Optional[str] = Field(default=None, max_length=2000)
+    # How many named tests failing in one run, all passing when re-run, make that run disturbed
+    # (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`, FR-7). `None` is the default, 3.
+    disturbed_threshold: Optional[int] = Field(
+        default=None,
+        ge=project_checks.MIN_DISTURBED_THRESHOLD,
+        le=10000,
+        description="a whole number of at least 2: how many tests failing at once make a disturbed run",
+    )
     # The command a task's pre-review run uses instead of `command` when the Hub knows the files
     # the task changed, its `{changed_files}` replaced by the path of a file listing them
     # (`a-check-can-run-only-the-tests-for-what-a-task-changed`, FR-1, FR-7). Never used at
