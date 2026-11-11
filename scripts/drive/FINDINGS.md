@@ -41685,3 +41685,25 @@ AW-81, AW-82 and AW-83 were built in AW-80's run (the Hub refused to let that ru
 **Tier:** 1
 
 `submit_spec_document` writes `spec/changes/<name>/spec.json` into the project's main checkout and leaves it uncommitted. The landing queue then refuses to integrate: PSWSN-1's batches `lbat-eb030e428212` (13:58) and `lbat-831e6ee6ae0f` (14:14) both failed with "the project's checkout has uncommitted changes to tracked files -- commit or stash them, then retry the integration". After `3608653 Commit spec and knowledge changes written by the Hub` cleared it, the Architect's next two submits (tasks-rework roadmap and slice glance) dirtied the checkout again while PSWSN-1's re-check was running. Expected: a write the Hub itself makes to a tracked file never blocks the Hub's own landing -- it is committed by the Hub when written, or the landing commits it first. Repro: approve a task, submit any spec document while its landing is queued, and read the batch's `error`.
+
+## F1168 (A) -- Accepting a sign-off tried to land the recording agent's unrelated branch onto main, then reopened a task that had already landed
+
+**Status:** open
+**Source:** found by the operator's own use (Architect, 2026-11-11)
+**Theme:** Evidence x Landing
+**Ready:** yes
+**Tier:** 0
+
+The operator accepted slice 2's sign-off `ev-f9a096f042b2` (kind `operator_signoff`, no `task_id`, locator "Operator message to Architect") at 16:36:29. Twenty milliseconds later the Hub created an `evidence` landing (`land-5a8215484316`, batch `lbat-7103573b1192`) for task SASSW-2 (`task-e5c9147da336`). That task had been approved at 22:29 the day before and had already landed as `5921e0b` at 00:38. The landing reported a conflict in `scripts/drive/FINDINGS.md` and moved the task from `approved` to `revision_needed` (`merge-needed`). As a result, the settings slice document reads "still building".
+
+Three defects, worst first:
+
+1. **A sign-off carries the recording agent's commit.** Its footprint `efp-ef14cbead9e7` names `8223805` on `agentweave/Architect`: the Architect's unrelated, unreviewed drive work (F1160-F1163 notes and e2e-loop skill edits). Evidence that has no artifact in the repository (an operator sign-off, whose locator is a message) should carry no git footprint.
+2. **Evidence with no task merges through any task.** `tasks_awaiting_this_commit` (`hub/hub/task_integration.py`, ~:985-1035) reads every approved task linked to the evidence's requirement that has not merged the footprint commit as "waiting" for it. So accepting it merges an arbitrary commit into main under SASSW-2's name. Only the conflict stopped unreviewed work reaching `master`.
+3. **A failed `evidence` landing reopens landed work.** A task whose own work is already on main (its `merged` integration `tint-7cb026cefb9a`; its branch has no commit beyond `master`) was sent back to `revision_needed`, although it had nothing left to land.
+
+**Expected:** accepting evidence lands only commits from the branch of the task the evidence belongs to. Evidence with no task, or with no repository artifact, merges nothing. A landing that cannot merge never moves a task whose own work has already landed.
+
+**Repro:** have an agent whose branch has commits that conflict with main record `operator_signoff` evidence for a requirement that an approved, landed task links. Accept the evidence as the operator, then read the task's status and its `task_landings` rows.
+
+**Repair after the fix:** the mender returns `task-e5c9147da336` to approved. Do not re-approve it before the fix lands, because the same waiting evidence would retry the same merge.
