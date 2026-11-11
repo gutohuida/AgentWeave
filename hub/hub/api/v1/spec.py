@@ -2590,6 +2590,7 @@ def _evidence_view(
     requirement=None,
     superseded_by=None,
     for_current_wording=None,
+    reviewer_review=None,
 ) -> dict:
     return {
         # Still being recorded: the run that recorded it is running, so its commit is about to be
@@ -2642,6 +2643,44 @@ def _evidence_view(
         # earlier wording, so a surface must not count it as the requirement's evidence. Null where
         # the requirement could not be read.
         "for_current_wording": for_current_wording,
+        # The two records side by side, each attributed (`evidence-review-sends-work-back-only-for-
+        # what-is-wrong-with-it`, FR-3): what the author recorded, kept as recorded, and what the
+        # reviewer ran itself on accepting it, with the commit the evidence was re-anchored to from
+        # the author's. `reviewer_record` is null where no reviewer reproduced or corrected it.
+        "author_record": {
+            "actor_kind": evidence.actor_kind,
+            "actor": evidence.actor,
+            "run_id": evidence.run_id,
+            "summary": evidence.summary,
+            "command": evidence.command,
+            "output": evidence.output,
+            "covers": evidence.covers,
+            "commit": (
+                reviewer_review.anchored_from_commit
+                if reviewer_review is not None
+                else (footprint.commit_sha if footprint is not None else None)
+            ),
+        },
+        "reviewer_record": _reviewer_record(reviewer_review),
+    }
+
+
+def _reviewer_record(review) -> Optional[dict]:
+    if review is None:
+        return None
+    return {
+        "review_id": review.id,
+        "decision": review.decision,
+        "actor_kind": review.actor_kind,
+        "actor": review.actor,
+        "run_id": review.run_id,
+        "command": review.reproduction_command,
+        "output": review.reproduction_output,
+        "commit": review.reproduction_commit,
+        "anchored_from_commit": review.anchored_from_commit,
+        "summary": review.corrected_summary,
+        "covers": review.corrected_covers,
+        "created_at": review.created_at.isoformat() if review.created_at else None,
     }
 
 
@@ -2665,6 +2704,7 @@ async def _evidence_views(
     reviews = (
         latest_reviews if latest_reviews is not None else await _latest_reviews_for(session, ids)
     )
+    reproduced = await _reviewer_reviews_for(session, ids)
     requirements = {
         row.id: row
         for row in (
@@ -2749,6 +2789,7 @@ async def _evidence_views(
                 for_current_wording=(
                     row.digest == requirement.digest if requirement is not None else None
                 ),
+                reviewer_review=reproduced.get(row.id),
             )
         )
     return views
@@ -2799,6 +2840,28 @@ async def _footprints_for(session: AsyncSession, evidence_ids) -> dict:
         (
             await session.execute(
                 select(EvidenceFootprint).where(EvidenceFootprint.evidence_id.in_(wanted))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {row.evidence_id: row for row in rows}
+
+
+async def _reviewer_reviews_for(session: AsyncSession, evidence_ids) -> dict:
+    """`{evidence_id: the latest review carrying a reviewer's reproduction}`, in one query (FR-3)."""
+    wanted = [row for row in evidence_ids if row]
+    if not wanted:
+        return {}
+    rows = (
+        (
+            await session.execute(
+                select(EvidenceReview)
+                .where(
+                    EvidenceReview.evidence_id.in_(wanted),
+                    EvidenceReview.reproduction_commit.is_not(None),
+                )
+                .order_by(EvidenceReview.sequence)
             )
         )
         .scalars()

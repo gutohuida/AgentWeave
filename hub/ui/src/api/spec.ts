@@ -586,6 +586,20 @@ export interface EvidencePiece {
   command?: string | null
   output?: string | null
   covers?: 'full' | 'partial' | null
+  /** What the reviewer ran itself on accepting it, beside the author's record, which the fields
+   *  above keep as recorded (`evidence-review-sends-work-back-only-for-what-is-wrong-with-it`,
+   *  FR-3). Null where no reviewer reproduced or corrected it; absent from a Hub before 0174. */
+  reviewer_record?: {
+    actor_kind: string
+    actor: string
+    run_id: string | null
+    command: string | null
+    output: string | null
+    commit: string | null
+    anchored_from_commit: string | null
+    summary: string | null
+    covers: 'full' | 'partial' | null
+  } | null
   /** The durable requirement this piece is about; `FR-n` alone repeats in every document. */
   requirement_id?: string
   /** The requirement in the document's own words; the statement is null when it cannot be read.
