@@ -157,6 +157,7 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/settings/ProjectSettingsScreen.tsx', 'useCharters', 1, 'BLANK', '', 'the Charters nav count, same shape'),
     ('components/settings/ProjectSettingsScreen.tsx', 'useManagerJobs', 1, 'BLANK', '', "the Manager nav's 'N on' is `undefined` when unread, so nothing is drawn"),
     ('components/settings/sections/BudgetsSection.tsx', 'useAgents', 1, 'BLANK', '', 'agent colour lookup for the per-agent rows'),
+    ('components/settings/SettingsSearch.tsx', 'useAgents', 1, 'BLANK', '', 'the agent names under an agent setting are missing; the result and its open button still work (:45)'),
     ('components/settings/sections/BudgetsSection.tsx', 'useProjectSettings', 1, 'BLANK', '', "the agent-budget row draws nothing while the settings are unread; the section's own rows still show"),
     ('components/settings/sections/GeneralSection.tsx', 'useMainBranchSuggestion', 1, 'BLANK', '', "`mainBranch ?? null`: the suggestion button does not appear (as ProjectSettingsPanel's row)"),
     ('components/settings/sections/GeneralSection.tsx', 'useModelCatalog', 1, 'BLANK', '', '`catalog?.providers` optional: the checkpoint model menu offers only the stored model, and runner labels show plain ids'),
