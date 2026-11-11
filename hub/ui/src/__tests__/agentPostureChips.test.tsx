@@ -71,11 +71,11 @@ describe('agent posture on the Overview card', () => {
     expect(grant).toHaveBeenCalledWith({ agent: 'beta', grant: 'can_accept_evidence', enabled: true })
   })
 
-  it("flags a missing charter and links to the agent's Charter section", () => {
+  it("flags a missing charter and links to the agent's Agent section", () => {
     const onNavigate = vi.fn()
     render(<AgentPostureChips agent={beta} onNavigate={onNavigate} />)
     fireEvent.click(screen.getByText('no charter'))
-    expect(onNavigate).toHaveBeenCalledWith('agent-settings:beta:charter')
+    expect(onNavigate).toHaveBeenCalledWith('agent-settings:beta:agent')
   })
 
   it('does not flag an agent that has a charter', () => {

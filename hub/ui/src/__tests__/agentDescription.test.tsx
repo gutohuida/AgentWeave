@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
@@ -10,6 +11,8 @@ let roster: AgentSummary[] = []
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   MIN_WAITING_SECONDS: 10,
   MAX_WAITING_SECONDS: 600,
@@ -51,7 +54,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderIdentity(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="identity" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="agent" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
 }
 
 const field = () => screen.getByLabelText('Description for codex-1')
@@ -110,15 +113,15 @@ describe('what an agent is for', () => {
     expect(describeMutate).not.toHaveBeenCalled()
   })
 
-  it('lives under Identity, not in any other section', () => {
+  it('lives under Agent, not in any other section', () => {
     // A section is a claim about what the operator came to do. "What this agent is for" is who it
     // is, not what it runs as.
     const identity = renderIdentity(agent())
     expect(field()).toBeInTheDocument()
     identity.unmount()
 
-    for (const section of ['execution', 'charter', 'interaction', 'workspace'] as const) {
-      const { unmount } = render(<AgentSettingsPage agent="codex-1" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    for (const section of ['running', 'permissions', 'checkpoints', 'workspace'] as const) {
+      const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
       expect(screen.queryByLabelText('Description for codex-1')).not.toBeInTheDocument()
       unmount()
     }

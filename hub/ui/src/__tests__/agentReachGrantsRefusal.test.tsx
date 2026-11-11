@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
@@ -14,6 +15,8 @@ let roster: AgentSummary[] = []
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   MIN_WAITING_SECONDS: 10,
   MAX_WAITING_SECONDS: 600,
@@ -63,7 +66,7 @@ const agent: AgentSummary = {
 
 function saveOwnReach() {
   roster = [agent]
-  render(<AgentSettingsPage agent="cla" section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+  render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="cla" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
   fireEvent.click(screen.getByRole('switch', { name: 'Own granted reach for cla' }))
 }
 

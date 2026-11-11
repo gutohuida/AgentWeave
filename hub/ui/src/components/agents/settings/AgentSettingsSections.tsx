@@ -7,21 +7,17 @@ import { MenuSelect } from '@/components/ui/menu'
 import { Field, SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settings'
 import { Switch } from '@/components/ui/switch'
 import { ReachGrantsChips } from '@/components/settings/ReachGrantsChips'
-import { permissionOptions, runnerOptions } from '@/components/settings/settingsOptions'
-import type { SelectOption } from '@/components/ui/menu'
+import { permissionOptions } from '@/components/settings/settingsOptions'
 import type { AgentSummary } from '@/api/agents'
 import type { ReachGrants } from '@/api/projects'
-import type { Runner } from '@/api/runners'
 import type { ControlValue } from '@/api/modelCatalog'
 import { formatDateTime } from '@/lib/format'
 
-/** An agent's settings: Identity, Execution and Access. (The charter binding has its own Charter
- *  section: a setting is editable from one place only.) Same rows, same grid and same
- *  apply-on-change model as Project settings. Fixes the review's Execution bug: each row sized
- *  its own label column, so "Granted reach" was squeezed to one word per line. */
+/** The Agent page's identity rows and the permission groups the Permissions page is built from.
+ *  Same rows, same grid and same apply-on-change model as Project settings. */
 
 export type AgentPatch = Partial<
-  Pick<AgentSummary, 'description' | 'runner_id' | 'charter_id' | 'default_permission_mode' | 'reach_grants' | 'can_read_checkpoints' | 'can_recall' | 'can_accept_evidence' | 'can_admin_specs'>
+  Pick<AgentSummary, 'description' | 'charter_id' | 'default_permission_mode' | 'reach_grants' | 'can_read_checkpoints' | 'can_recall' | 'can_accept_evidence' | 'can_admin_specs'>
 >
 
 export function AgentIdentitySettings({
@@ -36,7 +32,7 @@ export function AgentIdentitySettings({
   descriptionMax = 256,
   notices,
   children,
-  title = 'Identity',
+  title = 'Agent',
 }: {
   agent: AgentSummary
   now: Date
@@ -54,7 +50,7 @@ export function AgentIdentitySettings({
   notices?: React.ReactNode
   /** Groups shown before the archive zone (the charter, on the Agent page). */
   children?: React.ReactNode
-  /** The page heading; Identity by default, Agent once the charter joins it. */
+  /** The page heading. */
   title?: string
 }) {
   const archived = agent.lifecycle === 'archived'
@@ -178,91 +174,6 @@ export function AgentIdentitySettings({
   )
 }
 
-export function AgentExecutionSettings({
-  agent,
-  runners,
-  runnerOptions: runnerChoices,
-  permissionModes,
-  permissionUnset,
-  projectGrants,
-  runnerNotes,
-  permissionNote,
-  notices,
-  children,
-  onChange,
-}: {
-  agent: AgentSummary
-  runners: Runner[]
-  /** The runner menu, when the container names each runner's model (F268). */
-  runnerOptions?: SelectOption<string>[]
-  permissionModes: ControlValue[]
-  /** What clearing the default gives (the project's, or the runner's built-in), for the menu's
-   *  first choice. */
-  permissionUnset?: { label: string; detail: string }
-  /** The project's grants, shown when the agent inherits them. */
-  projectGrants: ReachGrants | null
-  /** What the Hub says about running this agent (cannot run, cannot collaborate), under the
-   *  runner menu. Replaces the plain "no runner" line when given. */
-  runnerNotes?: React.ReactNode
-  /** A caveat under the permissions menu (Claude's read-only commands under Ask me). */
-  permissionNote?: React.ReactNode
-  /** A refused save, under the page heading. */
-  notices?: React.ReactNode
-  /** Groups only some runners have (Copilot's review agents and GitHub server). */
-  children?: React.ReactNode
-  onChange: (patch: AgentPatch, said: string) => void
-}) {
-  return (
-    <SettingsPage icon="terminal" title="Execution" description={`What ${agent.name} runs as when you give it a turn.`}>
-      {notices}
-      <SettingsGroup title="Runs as">
-        <SettingsRow
-          label="Runner"
-          description="The CLI, model and flags this agent launches with."
-          control={
-            <span className="aw-control-stack">
-              <MenuSelect
-                label={`Runner for ${agent.name}`}
-                value={agent.runner_id ?? ''}
-                onChange={(v) => onChange({ runner_id: v || null }, v ? `${agent.name} runs on ${runners.find((r) => r.id === v)?.name}` : `${agent.name} has no runner`)}
-                options={runnerChoices ?? runnerOptions(runners, { label: 'No runner', detail: 'The agent cannot run until it has one' })}
-              />
-              {runnerNotes !== undefined ? (
-                runnerNotes
-              ) : agent.runner_id ? null : (
-                <span className="aw-control-warning" role="status">
-                  <Icon name="warning" size={12} /> This agent cannot run until it has one.
-                </span>
-              )}
-            </span>
-          }
-        />
-      </SettingsGroup>
-
-      <AgentPermissionGroup agent={agent} permissionModes={permissionModes} permissionUnset={permissionUnset} projectGrants={projectGrants} permissionNote={permissionNote} onChange={onChange} />
-      {children}
-    </SettingsPage>
-  )
-}
-
-export function AgentAccessSettings({
-  agent,
-  onChange,
-  notices,
-}: {
-  agent: AgentSummary
-  onChange: (patch: AgentPatch, said: string) => void
-  /** A refused save, under the page heading. */
-  notices?: React.ReactNode
-}) {
-  return (
-    <SettingsPage icon="lock" title="Access" description={`What ${agent.name} may read of other agents' work, and what it may decide.`}>
-      {notices}
-      <AgentAccessGroups agent={agent} onChange={onChange} />
-    </SettingsPage>
-  )
-}
-
 type PermissionGroupProps = {
   agent: AgentSummary
   permissionModes: ControlValue[]
@@ -289,7 +200,7 @@ export function AgentPermissionGroup({ agent, permissionModes, permissionUnset, 
               label={`Default permissions for ${agent.name}`}
               value={agent.default_permission_mode ?? ''}
               onChange={(v) => onChange({ default_permission_mode: v || null }, v ? `${agent.name}: ${permissionModes.find((m) => m.id === v)?.label}` : 'Default permissions follow the project again')}
-              options={permissionOptions(permissionModes, permissionUnset?.label ?? 'The project’s default', permissionUnset?.detail ?? 'Whatever Project settings → General says')}
+              options={permissionOptions(permissionModes, permissionUnset?.label ?? 'The project’s default', permissionUnset?.detail ?? 'Whatever Project settings → Permissions says')}
             />
             {permissionNote}
           </span>

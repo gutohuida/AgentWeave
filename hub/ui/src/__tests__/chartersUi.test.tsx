@@ -1,9 +1,11 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ChartersSection as ChartersPage } from '@/components/settings/sections/ChartersSection'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
+import { chooseMenuOption } from './support/menuSelect'
 
 const createMutate = vi.fn()
 const bindMutate = vi.fn()
@@ -41,6 +43,8 @@ vi.mock('@/api/charters', () => ({
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   MIN_WAITING_SECONDS: 10,
   MAX_WAITING_SECONDS: 600,
@@ -127,10 +131,10 @@ describe('charter management UI', () => {
 
   it('reassigns a charter from the agent settings page', async () => {
     const user = userEvent.setup()
-    render(<AgentSettingsPage agent="claude" section="charter" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude" section="agent" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
 
-    await user.selectOptions(screen.getByLabelText('Charter for claude'), 'charter-one')
-    expect(bindMutate).toHaveBeenCalledWith({ agent: 'claude', charterId: 'charter-one' })
+    await chooseMenuOption(user, 'Charter for claude', /Release Guardian/)
+    expect(bindMutate).toHaveBeenCalledWith({ agent: 'claude', charterId: 'charter-one' }, expect.any(Object))
   })
 
 })
