@@ -1425,15 +1425,18 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
         ),
         _Operation(
             tool="decide_evidence",
-            args="evidence_id, decision, reason",
+            args="evidence_id, decision, reason, command, output, commit, summary, covers",
             method="POST",
             path="/spec/evidence/{evidence_id}/decision",
-            fields=("decision", "reason"),
+            fields=("decision", "reason", "command", "output", "commit", "summary", "covers"),
             required=("decision",),
             text=(
                 "accept or reject somebody else's evidence; `decision` is `accepted` or "
                 "`rejected`. Only if the operator has granted you this, and never on evidence you "
-                "produced yourself."
+                "produced yourself. Reviewing a task, you may accept its evidence without the "
+                "grant by passing your own reproduction: `command`, `output` and `commit` (on the "
+                "task's branch, at or after the evidence's commit), and `summary`/`covers` to "
+                "correct the author's; approval then lands your commit."
             ),
         ),
         _Operation(
@@ -2850,7 +2853,8 @@ async def _render_hub_agent_context(
             "- When you review a task, your verdict decides the evidence recorded for it: "
             "approving accepts it, sending the task back rejects it, with your `notes` as the "
             "reason. Outside a verdict, `decide_evidence` will refuse you, so do not spend a turn "
-            "planning around it."
+            "planning around it -- except to accept a piece of the task you review with your own "
+            "reproduction (`command`, `output`, `commit`) on the task's current commit."
         )
         lines.append(
             "- `list_evidence` still works, and showing you the queue is not an invitation to "

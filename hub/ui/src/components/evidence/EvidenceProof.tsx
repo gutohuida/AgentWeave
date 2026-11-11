@@ -55,6 +55,36 @@ export function EvidenceReviews({ reviews }: { reviews: StoryReview[] }) {
   )
 }
 
+/** The reviewer's own reproduction, beside the author's proof above, attributed to it (FR-3). */
+function ReviewerRecord({ piece }: { piece: EvidencePiece }) {
+  const record = piece.reviewer_record
+  if (!record) return null
+  const who = record.actor_kind === 'operator' ? 'you' : record.actor
+  const moved =
+    record.commit && record.anchored_from_commit && record.commit !== record.anchored_from_commit
+  return (
+    <section className="aw-proof" data-testid={`evidence-reviewer-record-${piece.id}`}>
+      <span className="aw-proof-label">Reproduced by {who}</span>
+      {record.summary ? <p className="aw-proof-statement">{record.summary}</p> : null}
+      {record.covers ? (
+        <span>
+          <StatePill tone={record.covers === 'partial' ? 'amber' : 'green'}>
+            {record.covers === 'partial' ? 'covers part of it' : 'covers all of it'}
+          </StatePill>
+        </span>
+      ) : null}
+      {record.command ? <div className="aw-command">{record.command}</div> : null}
+      {record.output ? <pre className="aw-output">{record.output}</pre> : null}
+      {record.commit ? (
+        <div className="aw-tl-meta">
+          at {short(record.commit)}
+          {moved ? ` · re-anchored from the author's ${short(record.anchored_from_commit)}` : ''}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 export function EvidenceProof({ piece, open }: { piece: EvidencePiece; open: boolean }) {
   const diff = useEvidenceDiff(piece.id, open && !!piece.footprint?.commit_sha)
   const requirement = piece.requirement
@@ -97,6 +127,7 @@ export function EvidenceProof({ piece, open }: { piece: EvidencePiece; open: boo
           ) : null}
         </section>
       </div>
+      <ReviewerRecord piece={piece} />
       {piece.footprint?.commit_sha ? (
         diff.isLoading ? (
           <LoadingThread label="Loading the diff" size="inline" />
