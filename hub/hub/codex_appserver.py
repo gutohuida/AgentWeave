@@ -854,6 +854,10 @@ class AppServerProcess:
         self._stderr_task: Optional[asyncio.Task] = None
         self._stderr: Deque[str] = deque(maxlen=STDERR_TAIL_LINES)
         self._closed = False
+        #: Why the reader stopped hearing the child while it may still be running, or None. A
+        #: reader that ends quietly leaves a live child talking to nobody: no event, no
+        #: `turn/completed`, a turn that only its timeout can end.
+        self._output_lost: Optional[str] = None
         #: Windows: everything the app-server starts, its commands' orphans included (F1162).
         self._job: Optional[ProcessJob] = None
 
@@ -929,11 +933,38 @@ class AppServerProcess:
             stderr_tail=self.stderr_tail(),
         )
 
+    async def _read_line(self) -> bytes:
+        """The next whole stdout line, however long; ``b""`` at end of stream.
+
+        `readline()` cannot be used: a line over the stream's limit (64 KiB by default) raises
+        `ValueError` and discards what it buffered. One `item/completed` for a command that
+        printed a large file is such a line, and the exception ended this reader with the child
+        still running -- every later event, message and `turn/completed` went unheard
+        (2026-11-11, a Codex turn shown as working for as long as its timeout allowed).
+        `readuntil` leaves an overrunning line in the buffer, so it is taken in pieces instead.
+        """
+        stream = self._proc.stdout
+        assert stream is not None
+        parts: List[bytes] = []
+        while True:
+            try:
+                parts.append(await stream.readuntil(b"\n"))
+                return b"".join(parts)
+            except asyncio.LimitOverrunError as overrun:
+                parts.append(await stream.readexactly(overrun.consumed))
+            except asyncio.IncompleteReadError as eof:
+                parts.append(eof.partial)
+                return b"".join(parts)
+
+    def output_lost(self) -> Optional[str]:
+        """Why this session stopped reading the child's output early, or None."""
+        return self._output_lost
+
     async def _read_loop(self) -> None:
         assert self._proc.stdout is not None
         try:
             while True:
-                raw = await self._proc.stdout.readline()
+                raw = await self._read_line()
                 if not raw:
                     break
                 line = raw.decode("utf-8", errors="replace").strip()
@@ -955,6 +986,9 @@ class AppServerProcess:
                     await self._notifications.put(msg)
         except asyncio.CancelledError:
             pass
+        except Exception as exc:  # noqa: BLE001 - reported to the turn, never swallowed
+            logger.exception("reading the codex app-server's output failed")
+            self._output_lost = f"the Hub stopped reading the app-server's output: {exc!r}"
         finally:
             # Reap before reporting. Losing stdout means the process is going, but `returncode` is
             # only populated once it has been waited on — so without this the exit status is
@@ -1234,6 +1268,12 @@ async def run_turn(
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
                 status, error = "failed", "turn timed out with no turn/completed notification"
+                break
+            lost = session.output_lost()
+            if lost is not None:
+                # The child may still be working, but nothing it says can reach this loop again:
+                # waiting would only show a frozen turn until the deadline.
+                status, error = "failed", lost
                 break
             if not session.is_running():
                 # The common path, and the one whose bare string used to reach `Run.error` and the

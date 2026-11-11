@@ -162,14 +162,18 @@ async def _links(task_id):
         return list(result.scalars().all())
 
 
-async def record_and_accept(app, auth_headers, run_headers, identifier, summary="ran the tests"):
+async def record_and_accept(
+    app, auth_headers, run_headers, identifier, summary="ran the tests", *, task_id=None
+):
     """Record evidence as the agent and accept it as the operator.
 
     The footprint is captured from the workspace's HEAD *at this moment*, so the caller checks out
     the branch whose commit it wants named before calling this.
     """
     recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": identifier, "summary": summary}, headers=run_headers
+        AGENT_EVIDENCE,
+        json={"identifier": identifier, "summary": summary, "task_id": task_id},
+        headers=run_headers,
     )
     assert recorded.status_code == 201, recorded.text
     accepted = await app.post(
@@ -352,16 +356,16 @@ async def test_a_flow_task_merges_the_commit_its_evidence_names(
     task = await loop_task(app, auth_headers, loop, requirement_ids=["FR-1"])
     assert len(await _links(task)) == 1, "the guard requires a real requirement link"
 
-    demonstrated = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
-    await record_and_accept(app, auth_headers, builder, "FR-1")
+    demonstrated = commit_on_task_branch(tmp_path, task, "feature.py", "print('hi')\n")
+    await record_and_accept(app, auth_headers, builder, "FR-1", task_id=task)
 
-    tip = commit_on_task_branch(tmp_path, task, "later.py", "not demonstrated\n")
+    tip = commit_on_task_branch(tmp_path, task, "later.py", "not demonstrated\n", create=False)
     git(tmp_path, "checkout", "-q", "main")
     assert tip != demonstrated
 
     # F681: the undemonstrated tip refuses approval rather than being left behind silently.
     await assert_refused_for_the_tip_alone(app, auth_headers, task, tmp_path, tip, demonstrated)
-    git(tmp_path, "branch", "-q", "-f", worktrees.task_branch_name(task), "main")
+    git(tmp_path, "branch", "-q", "-f", worktrees.task_branch_name(task), demonstrated)
 
     approved = await drive_to(app, auth_headers, task, "approved")
     assert approved.status_code == 200, approved.text
@@ -399,16 +403,16 @@ async def test_a_documentless_loop_task_with_a_requirement_link_merges_its_evide
     links = await _links(task)
     assert len(links) == 1, f"the guard requires a real requirement link, got {links}"
 
-    demonstrated = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
-    await record_and_accept(app, auth_headers, builder, "FR-1")
+    demonstrated = commit_on_task_branch(tmp_path, task, "feature.py", "print('hi')\n")
+    await record_and_accept(app, auth_headers, builder, "FR-1", task_id=task)
 
-    tip = commit_on_task_branch(tmp_path, task, "later.py", "not demonstrated\n")
+    tip = commit_on_task_branch(tmp_path, task, "later.py", "not demonstrated\n", create=False)
     git(tmp_path, "checkout", "-q", "main")
     assert tip != demonstrated
 
     # F681: the undemonstrated tip refuses approval rather than being left behind silently.
     await assert_refused_for_the_tip_alone(app, auth_headers, task, tmp_path, tip, demonstrated)
-    git(tmp_path, "branch", "-q", "-f", worktrees.task_branch_name(task), "main")
+    git(tmp_path, "branch", "-q", "-f", worktrees.task_branch_name(task), demonstrated)
 
     approved = await drive_to(app, auth_headers, task, "approved")
     assert approved.status_code == 200, approved.text
@@ -508,7 +512,7 @@ async def test_a_declaration_of_no_evidence_wins_over_a_requirement_link(
 
 
 @pytest.mark.asyncio
-async def test_a_flow_task_with_only_awaiting_evidence_is_still_refused(
+async def test_a_flow_task_with_taskless_evidence_refuses_its_undemonstrated_branch(
     app, auth_headers, builder, tmp_path
 ):
     """4.3b, the regression D10 describes, caught at the gate rather than at the merge.
@@ -535,7 +539,10 @@ async def test_a_flow_task_with_only_awaiting_evidence_is_still_refused(
     refused = await approve(app, auth_headers, task)
     assert refused.status_code == 409, refused.text
     assert refused.json()["detail"]["code"] == "gate_unsatisfied"
-    assert refused.json()["detail"]["unaccepted"], refused.json()
+    # The taskless piece supplies no merge target. Its task branch's undemonstrated
+    # work still refuses approval, through the unlanded-work rule.
+    assert refused.json()["detail"]["unaccepted"] == [], refused.json()
+    assert refused.json()["detail"]["unlanded"], refused.json()
     assert "later.py" not in files_on(tmp_path, "main")
 
 

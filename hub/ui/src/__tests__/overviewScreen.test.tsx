@@ -1,8 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { Question } from '@/api/questions'
 import type { Stall } from '@/api/stalls'
-import type { KnownFailingEntry } from '@/api/knownFailing'
+import type { ClearStableResult, DisturbedRun, KnownFailingEntry } from '@/api/knownFailing'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
 
@@ -105,8 +105,13 @@ vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), us
 let knownFailing: KnownFailingEntry[] | null = null
 let knownFailingError: Error | null = null
 const knownFailingRefetch = vi.fn()
+let disturbedRuns: DisturbedRun[] = []
+let clearResult: ClearStableResult | undefined
+const clearMutate = vi.fn()
 vi.mock('@/api/knownFailing', () => ({
   useKnownFailing: () => ({ data: knownFailing, error: knownFailingError, refetch: knownFailingRefetch }),
+  useDisturbedRuns: () => ({ data: disturbedRuns }),
+  useClearStableFixTasks: () => ({ mutate: clearMutate, isPending: false, data: clearResult, error: null }),
 }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: accountingData }) }))
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))
@@ -141,8 +146,31 @@ beforeEach(() => {
   answerMutate.mockClear()
 })
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 describe('the wired Overview', () => {
+  it('says "seen just now", not "seen now ago", for an entry seen seconds ago', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T12:00:00Z'))
+    const justNow = '2026-10-20T11:59:50Z'
+    knownFailing = [
+      {
+        id: 'kf-fresh', check: 'hub-tests', test: 'tests/test_a.py::test_red', whole_check: false, kind: 'flaky',
+        first_seen: justNow, last_seen: justNow, added_by_run: 'chk-fresh01', passes: 1, fix_task: null,
+      },
+    ]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const row = within(screen.getByTestId('known-failing-list')).getByRole('listitem')
+    const [first, last] = Array.from(row.querySelectorAll('time'))
+    expect(first).toHaveTextContent(/^first seen just now$/)
+    expect(last).toHaveTextContent(/^last seen just now$/)
+  })
+
   it('shows the known-failing list, each entry with check, test, kind, first and last seen, and a link to its fix task', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-20T12:00:00Z'))
     // `failures-already-known-are-on-a-list-not-re-argued` FR-11, ac-shown. In the route's order:
     // most recently seen first.
     knownFailing = [
@@ -192,6 +220,34 @@ describe('the wired Overview', () => {
     // Nothing here is a thing that needs the operator: the old flaky row and its actions are gone.
     expect(screen.queryByText(/flaky tests? in the approval checks/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create a fix task' })).not.toBeInTheDocument()
+  })
+
+  it('shows a disturbed run beside the list, not in it (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests` FR-2)', () => {
+    knownFailing = []
+    disturbedRuns = [
+      { id: 'ev-1', run_id: 'chk-burst', task_id: 'task-1', check: 'hub-tests', failed: 5, passed_on_rerun: 5, threshold: 3, tests: [], first_run_output: 'first run printed this', at: '2026-10-20T09:30:00Z' },
+    ]
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    const list = screen.getByTestId('known-failing-list')
+    const disturbed = within(list).getByTestId('disturbed-ev-1')
+    expect(disturbed).toHaveTextContent('hub-tests · run chk-burst')
+    expect(disturbed).toHaveTextContent('5 failed, 5 passed when re-run')
+    expect(disturbed).toHaveTextContent('first run printed this')
+    // Not an entry: the list's own heading carries no count.
+    expect(within(list).getByRole('heading', { name: /Known failing tests/ })).not.toHaveTextContent('1')
+    disturbedRuns = []
+  })
+
+  it('closes the fix tasks of tests that left the list and says how many it closed and left (FR-6)', () => {
+    knownFailing = []
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /Close fix tasks for tests that left the list/ }))
+    expect(clearMutate).toHaveBeenCalledTimes(1)
+    clearResult = { closed: 2, left: 1, closed_ids: ['a', 'b'], left_ids: ['c'] }
+    clearMutate.mockClear()
+    render(<OverviewScreen onNavigate={vi.fn()} />)
+    expect(screen.getAllByText(/Closed 2, left 1 open\./).length).toBeGreaterThan(0)
+    clearResult = undefined
   })
 
   it('names a whole-check entry by its check, and says when the list is empty', () => {

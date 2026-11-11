@@ -158,7 +158,126 @@ async def view(session: AsyncSession, project_id: str) -> Dict[str, Any]:
         if ids
         else {}
     )
-    return {"entries": [entry_view(row, tasks.get(row.fix_task_id or "")) for row in rows]}
+    return {
+        "entries": [entry_view(row, tasks.get(row.fix_task_id or "")) for row in rows],
+        # Beside the list, never in it: a disturbed run names no test, so as an entry it would
+        # excuse every whole-check failure of its check at the gates (FR-2).
+        "disturbed": await disturbed_runs(session, project_id),
+    }
+
+
+#: How long a disturbed run stays beside the Overview's list (FR-2).
+DISTURBED_DAYS = 7
+
+
+async def disturbed_runs(
+    session: AsyncSession, project_id: str, *, now: Optional[datetime] = None
+) -> List[Dict[str, Any]]:
+    """The disturbed runs the Logs hold for the last `DISTURBED_DAYS` days, newest first: each the
+    check, the run, how many tests failed and passed on the rerun, and the first run's output."""
+    from datetime import timedelta
+
+    from .db.models import EventLog
+
+    since = (now or _now()) - timedelta(days=DISTURBED_DAYS)
+    rows = (
+        await session.execute(
+            select(EventLog)
+            .where(
+                EventLog.project_id == project_id,
+                EventLog.event_type == DISTURBED_EVENT,
+                EventLog.timestamp >= since,
+            )
+            .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
+        )
+    ).scalars()
+    found: List[Dict[str, Any]] = []
+    for row in rows:
+        data = row.data if isinstance(row.data, dict) else {}
+        found.append(
+            {
+                "id": row.id,
+                "run_id": data.get("run_id"),
+                "task_id": data.get("task_id"),
+                "check": data.get("check"),
+                "failed": data.get("failed"),
+                "passed_on_rerun": data.get("passed_on_rerun"),
+                "threshold": data.get("threshold"),
+                "tests": list(data.get("tests") or []),
+                "first_run_output": data.get("first_run_output") or "",
+                "at": _iso(row.timestamp),
+            }
+        )
+    return found
+
+
+async def clear_stable_fix_tasks(session: AsyncSession, project_id: str) -> Dict[str, Any]:
+    """Close every open Hub-filed flaky fix task whose test is no longer on the list (FR-6), each
+    with a note saying why; a task whose test is still listed stays open. Returns the counts and
+    the ids: `{"closed", "left", "closed_ids", "left_ids"}`. The caller commits.
+
+    A fix task is the Hub's when a `FIX_TASK_EVENT` names it, and flaky when that event's kind for
+    its test is flaky (or, for an event that holds no kinds, its title says so). One that names
+    no test is not the pile this clears, and is neither closed nor counted."""
+    from . import flaky_tests
+    from .run_task_binding import release_bindings_to, release_reason
+    from .task_transition_service import TransitionRefusedError, apply_transition
+    from .task_transitions import operator
+
+    listed = {
+        flaky_tests.normalised_test(test)
+        for test in (
+            await session.execute(
+                select(KnownFailingTest.test).where(KnownFailingTest.project_id == project_id)
+            )
+        )
+        .scalars()
+        .all()
+        if test
+    }
+    # Task id -> the flaky tests its filing named; a task filed twice keeps the union.
+    named: Dict[str, Set[str]] = {}
+    for data in await flaky_tests._fix_events(session, project_id):
+        kinds = data.get("kinds") if isinstance(data.get("kinds"), dict) else {}
+        for test in data.get("tests") or []:
+            if kinds.get(test, FLAKY) == FLAKY:
+                named.setdefault(data["task_id"], set()).add(flaky_tests.normalised_test(str(test)))
+    tasks = (
+        (
+            await session.execute(
+                select(Task).where(
+                    Task.project_id == project_id,
+                    Task.id.in_(sorted(named)),
+                    Task.status.not_in(_CLOSED),
+                )
+            )
+        )
+        .scalars()
+        .all()
+        if named
+        else []
+    )
+    closed: List[str] = []
+    left: List[str] = []
+    for task in sorted(tasks, key=lambda t: t.id):
+        tests = named[task.id]
+        if tests & listed:
+            left.append(task.id)
+            continue
+        note = (
+            f"Closed by the operator's clear action: {', '.join(sorted(tests))} is no longer on the "
+            "known-failing list, so it has passed its runs and the flake is not outstanding."
+        )
+        try:
+            await apply_transition(session, task, "rejected", operator(), note=note)
+        except TransitionRefusedError:
+            left.append(task.id)  # not a move the map allows from here: the operator's to judge
+            continue
+        _note_on(task, note)
+        release_reason(task)
+        await release_bindings_to(session, task)
+        closed.append(task.id)
+    return {"closed": len(closed), "left": len(left), "closed_ids": closed, "left_ids": left}
 
 
 async def watching(project_id: str, checks: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -213,6 +332,8 @@ class Observed:
     whole_check_failed: bool = False
     passed: Set[str] = field(default_factory=set)
     whole_check_passed: bool = False
+    #: The run was disturbed: its flakes count only where already listed (FR-1, FR-8).
+    disturbed: bool = False
 
 
 def _failed(result: Dict[str, Any]) -> bool:
@@ -235,6 +356,7 @@ def observe(result: Dict[str, Any]) -> Observed:
         if flaky.get("how") == "tests":
             tests = result.get("flaky_tests") or flaky.get("tests") or []
             seen.flaky = [str(t) for t in tests if t and t not in touched]
+            seen.disturbed = isinstance(result.get("disturbed"), dict)
     elif _failed(result):
         named = [str(t) for t in result.get("failed_tests") or [] if t]
         flaked = [str(t) for t in result.get("flaky_tests") or [] if t]
@@ -307,6 +429,14 @@ def fix_task_text(
         if not isinstance(result, dict) or result.get("name") != entry.check_name:
             continue
         first = (result.get("flaky") or {}).get("first") or {}
+        own = ""
+        if entry.test:
+            messages = result.get("failure_messages")
+            own = str(messages.get(entry.test) or "").strip() if isinstance(messages, dict) else ""
+        if own:
+            # The report's own message for this test, not the check's combined excerpt (FR-4).
+            lines += ["", "What the run printed:", "", own[-2000:]]
+            break
         text = str(
             result.get("failure_excerpt")
             or (result.get("output_tail") if not result.get("flaky") else "")
@@ -314,7 +444,16 @@ def fix_task_text(
             or ""
         ).strip()
         if text:
-            lines += ["", "What the run printed:", "", text[-2000:]]
+            if entry.test:
+                lines += [
+                    "",
+                    "The run's report holds no failure message for this test. What the run "
+                    "printed (the check's output, not this test's):",
+                    "",
+                    text[-2000:],
+                ]
+            else:
+                lines += ["", "What the run printed:", "", text[-2000:]]
         break
     lines += ["", f"Done when {test} passes on main."]
     if entry.kind == FLAKY:
@@ -448,6 +587,8 @@ async def record_run(run_id: str, *, on_main: Optional[str] = None) -> List[str]
 
 async def _record_run(run_id: str, *, on_main: Optional[str]) -> List[str]:
     added: List[_Added] = []
+    to_file: List[_Added] = []
+    disturbed: List[Dict[str, Any]] = []
     removed: List[Tuple[KnownFailingTest, str]] = []
     async with async_session_factory() as session:
         run: Any = await session.get(TaskCheckRun, run_id)
@@ -512,7 +653,23 @@ async def _record_run(run_id: str, *, on_main: Optional[str]) -> List[str]:
                     await session.delete(sighting)
                     sightings.pop((name, test))
             # Additions: flakes from any run (FR-2); failures only from a run on main's tree (FR-3).
-            new: List[Tuple[str, str]] = [(t, FLAKY) for t in seen.flaky]
+            if seen.disturbed:
+                disturbed.append(result)
+            # A flake listed already, with no fix task, flaking in a different run than the one that
+            # listed it: its second, so it gets its task (FR-8, FR-9). Disturbed or not.
+            for test in seen.flaky:
+                known = listed.get((check, test))
+                if (
+                    known is not None
+                    and known.kind == FLAKY
+                    and not known.fix_task_id
+                    and known.added_by_run != run.id
+                ):
+                    to_file.append(_Added(entry=known, run=run, found_by=found_by))
+            # A disturbed run lists none of its tests (FR-1); the listed ones were handled above.
+            new: List[Tuple[str, str]] = [
+                (t, FLAKY) for t in seen.flaky if not seen.disturbed or (check, t) in listed
+            ]
             if on_main:
                 new += [(t, FAILS_ON_MAIN) for t in seen.failing]
                 if seen.whole_check_failed:
@@ -537,6 +694,9 @@ async def _record_run(run_id: str, *, on_main: Optional[str]) -> List[str]:
                 session.add(entry)
                 listed[key] = entry
                 added.append(_Added(entry=entry, run=run, found_by=found_by))
+                if kind != FLAKY:
+                    # A first flake is listed and nothing more: its task waits for a second (FR-9).
+                    to_file.append(added[-1])
                 if key in sightings:
                     await session.delete(sightings.pop(key))
         for entry, commit in removed:
@@ -551,7 +711,8 @@ async def _record_run(run_id: str, *, on_main: Optional[str]) -> List[str]:
                     f"(check run {run.id}), so it came off the known-failing list.",
                 )
         await session.commit()
-        for item in added:
+        await _record_disturbed(session, run, disturbed)
+        for item in to_file:
             entry = item.entry
             existing = await _open_fix_task_for(session, project_id, entry.test, entry.check_name)
             if existing is not None and existing != entry.fix_task_id:
@@ -562,6 +723,54 @@ async def _record_run(run_id: str, *, on_main: Optional[str]) -> List[str]:
     if added or removed:
         await _announce(project_id)
     return [item.entry.id for item in added]
+
+
+DISTURBED_EVENT = "check_run_disturbed"
+
+
+async def _record_disturbed(session: AsyncSession, run: Any, results: List[Dict[str, Any]]) -> None:
+    """One Logs event per disturbed check result of *run*, written once however often the run is
+    read (FR-1). Information only: no list entry and no task, so no gate counts it."""
+    if not results:
+        return
+    from .db.models import EventLog
+    from .utils import persist_event
+
+    already = {
+        (data.get("run_id"), data.get("check"))
+        for data in (
+            await session.execute(
+                select(EventLog.data).where(
+                    EventLog.project_id == run.project_id, EventLog.event_type == DISTURBED_EVENT
+                )
+            )
+        )
+        .scalars()
+        .all()
+        if isinstance(data, dict)
+    }
+    for result in results:
+        check = str(result.get("name") or "check")
+        if (run.id, check) in already:
+            continue
+        info = result.get("disturbed") or {}
+        first = (result.get("flaky") or {}).get("first") or {}
+        await persist_event(
+            session,
+            run.project_id,
+            DISTURBED_EVENT,
+            {
+                "run_id": run.id,
+                "check": check,
+                "task_id": getattr(run, "task_id", None),
+                "failed": info.get("failed"),
+                "passed_on_rerun": info.get("passed_on_rerun"),
+                "threshold": info.get("threshold"),
+                "tests": list(first.get("failed_tests") or result.get("flaky_tests") or []),
+                "first_run_output": str(first.get("output_tail") or "")[-2000:],
+            },
+            severity="warn",
+        )
 
 
 async def _announce(project_id: str) -> None:

@@ -169,3 +169,54 @@ def test_the_run_failed_payload_carries_what_the_error_knows():
     assert fields["exit_code"] is None
     assert fields["method"] is None
     assert fields["error"] == "codex not found"
+
+
+@pytest.mark.asyncio
+async def test_a_notification_longer_than_the_stream_limit_is_delivered_and_reading_goes_on():
+    """One `item/completed` larger than asyncio's 64 KiB line limit must not end the reader.
+
+    Measured live 2026-11-11 (CodexSol, run-1522734a6958): a command printed a large file, its
+    `item/completed` line overran `readline()`'s limit, the `ValueError` killed `_read_loop`
+    silently, and the turn kept running with nothing reaching the Hub again -- no events, no
+    messages delivered, a timeline frozen on "working" while Codex went on running pytest.
+    """
+    session = await spawn_child(
+        "import json, sys\n"
+        "big = {'method': 'item/completed', 'params': {'item': {'type': 'commandExecution',"
+        " 'id': 'c1', 'aggregatedOutput': 'x' * 200000, 'exitCode': 0}}}\n"
+        "sys.stdout.write(json.dumps(big) + '\\n')\n"
+        "sys.stdout.write(json.dumps({'method': 'turn/completed', 'params': {}}) + '\\n')\n"
+        "sys.stdout.flush()\n"
+        "sys.stdin.readline()\n"
+    )
+    try:
+        first = await session.next_notification(timeout=10)
+        second = await session.next_notification(timeout=10)
+    finally:
+        await session.close()
+
+    assert first["method"] == "item/completed"
+    assert len(first["params"]["item"]["aggregatedOutput"]) == 200000
+    assert second["method"] == "turn/completed"
+
+
+@pytest.mark.asyncio
+async def test_a_reader_that_fails_while_the_child_lives_says_so():
+    """Whatever ends the reader early, a session that can no longer hear its child reports it."""
+
+    class _Breaking(AppServerProcess):
+        async def _read_line(self) -> bytes:
+            raise RuntimeError("unreadable")
+
+    session = await _Breaking.spawn(
+        [sys.executable, "-u", "-c", "import sys; sys.stdin.readline()"]
+    )
+    try:
+        for _ in range(200):
+            if session.output_lost() is not None:
+                break
+            await asyncio.sleep(0.05)
+        assert session.is_running()
+        assert "unreadable" in (session.output_lost() or "")
+    finally:
+        await session.close()

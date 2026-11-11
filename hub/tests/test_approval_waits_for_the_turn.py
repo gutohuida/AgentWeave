@@ -576,7 +576,13 @@ async def test_the_evidence_route_is_refused_inside_the_turn_too(app, auth_heade
     # The agent's branch, cut from main and holding none of the turn's work yet. Evidence is
     # recorded from here, which is where a real agent records it: mid-turn, before any commit.
     git(tmp_path, "checkout", "-q", "-b", AGENT_BRANCH)
-    evidence = await accept_evidence(app, auth_headers, run_headers)
+    task = await linked_task(app, auth_headers)
+    evidence = await accept_evidence(
+        app,
+        auth_headers,
+        run_headers,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     assert await footprint_sha(evidence) == base, (
@@ -584,7 +590,6 @@ async def test_the_evidence_route_is_refused_inside_the_turn_too(app, auth_heade
         "if it names the work, this test is reproducing something else"
     )
 
-    task = await linked_task(app, auth_headers)
     # The binding, not the authorship, is what the predicate reads — on this route as on the other.
     # In the shape the product produces they coincide: the agent working the task claims it, which
     # binds its run, and records its evidence from that same turn. Evidence recorded by *another*

@@ -153,10 +153,10 @@ async def _own_evidence_task(app, auth_headers, builder, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_an_ungranted_reviewer_is_told_the_approval_can_be_refused_and_what_then(
+async def test_taskless_evidence_does_not_tell_an_ungranted_reviewer_approval_is_refused(
     app, auth_headers, builder, tmp_path
 ):
-    """The LoopEngine shape: the reviewer holds no grant, and the evidence is awaiting."""
+    """F1168: taskless evidence cannot supply an awaiting merge or a refusal."""
     task, _evidence = await _gated_task(app, auth_headers, builder, tmp_path)
     await _reviewer("checker", granted=False)
 
@@ -164,17 +164,8 @@ async def test_an_ungranted_reviewer_is_told_the_approval_can_be_refused_and_wha
     context = await _review_context(task, "checker", tmp_path)
 
     for rendered in (briefing, context):
-        assert GATE in rendered
-        assert "`FR-1`" in rendered
-        assert "recorded outside any task" in rendered
-        # F563: no question is asked; a turn that ends with the approval refused is already
-        # surfaced to the operator with the gate's sentence (`F374-fix`).
-        assert "ask the operator with" not in rendered
-        assert "end your turn" in rendered
-        assert "Do not tell anyone the task is approved" in rendered
-        # `decide_evidence` takes the evidence id, so the sentence names it.
-        assert "`ev-" in rendered
-        assert "You can decide evidence" not in rendered
+        assert GATE not in rendered
+        assert "recorded outside any task" not in rendered
 
 
 @pytest.mark.asyncio
@@ -199,7 +190,7 @@ async def test_a_reviewer_is_told_its_verdict_decides_the_tasks_own_evidence(
 
 
 @pytest.mark.asyncio
-async def test_a_granted_reviewer_is_told_to_decide_the_evidence_before_approving(
+async def test_taskless_evidence_does_not_tell_a_granted_reviewer_to_decide_first(
     app, auth_headers, builder, tmp_path
 ):
     task, _evidence = await _gated_task(app, auth_headers, builder, tmp_path)
@@ -209,15 +200,15 @@ async def test_a_granted_reviewer_is_told_to_decide_the_evidence_before_approvin
     context = await _review_context(task, "tester", tmp_path)
 
     for rendered in (briefing, context):
-        assert GATE in rendered
-        assert "`decide_evidence` first" in rendered
+        assert GATE not in rendered
+        assert "`decide_evidence` first" not in rendered
         assert "Deciding evidence is the operator's, not yours" not in rendered
 
 
 @pytest.mark.asyncio
 async def test_both_channels_carry_the_same_sentence(app, auth_headers, builder, tmp_path):
     """The two channels are one helper's output, so they cannot disagree (the F45 pairing)."""
-    task, _evidence = await _gated_task(app, auth_headers, builder, tmp_path)
+    task, _evidence = await _own_evidence_task(app, auth_headers, builder, tmp_path)
     await _reviewer("checker", granted=False)
 
     async with async_session_factory() as session:

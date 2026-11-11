@@ -459,10 +459,6 @@ async def test_integration_targets_the_snapshot_commit_after_a_restamp(
     await make_document(app, auth_headers, builder)
     dirty(worktree, "feature.py", "print('hi')\n")
 
-    recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
-    )
-    assert recorded.status_code == 201, recorded.text
     created = await app.post(
         "/api/v1/projects/proj-test/tasks",
         json={"title": "Build it", "requirement_ids": ["FR-1"]},
@@ -471,6 +467,12 @@ async def test_integration_targets_the_snapshot_commit_after_a_restamp(
     assert created.status_code == 201, created.text
     task_id = created.json()["id"]
 
+    recorded = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "ran the tests", "task_id": task_id},
+        headers=builder,
+    )
+    assert recorded.status_code == 201, recorded.text
     accepted = await app.post(
         f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
         json={"decision": "accepted"},
@@ -510,11 +512,6 @@ async def test_retry_merges_the_snapshot_commit_after_a_restamp(
 
     await make_document(app, auth_headers, builder)
     dirty(worktree, "feature.py", "print('hi')\n")
-    recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
-    )
-    assert recorded.status_code == 201, recorded.text
-
     created = await app.post(
         "/api/v1/projects/proj-test/tasks",
         json={"title": "Build it", "requirement_ids": ["FR-1"]},
@@ -522,6 +519,13 @@ async def test_retry_merges_the_snapshot_commit_after_a_restamp(
     )
     assert created.status_code == 201, created.text
     task_id = created.json()["id"]
+    recorded = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "ran the tests", "task_id": task_id},
+        headers=builder,
+    )
+    assert recorded.status_code == 201, recorded.text
+
     accepted = await app.post(
         f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
         json={"decision": "accepted"},

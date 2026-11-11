@@ -236,7 +236,7 @@ async def record(
         await _refuse_a_reviewer_recording(session, actor.run_id, task_id, requirement)
 
     taken: Optional[Footprint] = None
-    if workspace is not None:
+    if workspace is not None and kind != "operator_signoff":
         # Design D7: the directory this actor's run was actually given, when there was a run.
         # The footprint's git runs off the loop (`blocking`, D1) and returns a plain `Footprint`.
         recorded_dir = await recorded_workspace_dir(session, actor.run_id)
@@ -368,7 +368,7 @@ async def record(
             )
         )
 
-    if workspace is not None:
+    if workspace is not None and kind != "operator_signoff":
         await capture_footprint(session, evidence, workspace, taken=taken)
 
     return evidence
@@ -752,7 +752,7 @@ async def capture_footprint(
     *,
     taken: Optional[Footprint] = None,
     main_branch: Optional[str] = None,
-) -> EvidenceFootprint:
+) -> Optional[EvidenceFootprint]:
     """What the implementation looked like when this evidence was produced.
 
     The root is derived from the evidence row rather than passed in, so the footprint and the
@@ -773,6 +773,8 @@ async def capture_footprint(
     the evidence is deliberately not refused (design D7) — what changes is that the row stops
     implying it describes everything the run did.
     """
+    if evidence.kind == "operator_signoff":
+        return None
     outside_writes = await outside_writes_for_run(session, evidence.run_id)
     if taken is None:
         # Resolved from the evidence row, keeping this function's stated principle: a later caller
@@ -2382,6 +2384,7 @@ async def restamp_run_footprints(
                 RequirementEvidence.project_id == project_id,
                 RequirementEvidence.run_id == run_id,
                 RequirementEvidence.actor_kind == "agent",
+                RequirementEvidence.kind != "operator_signoff",
             )
         )
     ).all()

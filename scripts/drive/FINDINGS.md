@@ -41595,3 +41595,25 @@ Four change documents (`agents-add-files-to-the-vault-by-path`, `an-operator-set
 **Tier:** 0
 
 Before today's spec tidy `spec/index.json` listed 11 of the 62 approved change documents. A `create_capability` act then regenerated it, so it is correct now, but it drifts again between such writes. **Expected:** every document the Hub writes appears in the index, and the index is regenerated from the rows rather than appended to.
+
+## F1168 (A) -- accepting a sign-off can land unrelated work and reopen an already landed task
+
+**Status:** fixed 2026-11-11 (Tier 0, AW-101). Sign-offs capture no git footprint; taskless evidence supplies no merge target; task-bound evidence targets only its recording task, with commits checked against that task's branch when it exists. A failed legacy evidence landing leaves an approved task alone when its own branch is already on main. Regression tests: `hub/tests/test_accepting_a_signoff_never_lands_work.py`. Trial drive: `py -3.11 scripts/drive/f1168_signoff.py --port 8011` passed: conflicting recorder branch, signoff footprint null, operator accepted, task approved, task_landings before=0 after=0, foreign commit absent from main. Final targeted regression run: 70 passed (6 warnings). Temporary trial Hub :8011 stopped after verification; the retained external fixture is documented in AW-101 notes.
+**Source:** drive (Architect, operator's incident 2026-11-11)
+**Theme:** Task ledger
+**Ready:** yes
+**Tier:** 0
+
+At 16:36:29 the operator accepted slice 2's sign-off `ev-f9a096f042b2`, kind `operator_signoff`, no task, locator "Operator message to Architect". Its footprint `efp-ef14cbead9e7` carried unrelated commit `8223805` from `agentweave/Architect`. Twenty milliseconds later the Hub created evidence landing `land-5a8215484316` / batch `lbat-7103573b1192` for SASSW-2 (`task-e5c9147da336`), already approved the previous day and landed as `5921e0b`. The unrelated commit conflicted in this ledger, so the task became revision_needed / merge-needed despite having no own work left to land.
+
+Three seams caused this: `requirement_evidence.record` footprinted a message; `task_integration.tasks_awaiting_this_commit` selected every approved task sharing the requirement; `landing_queue._send_back` reopened already landed work after the foreign merge failed. Expected: evidence without a task or repository artifact merges nothing; accepting task evidence merges only its own work; a failed evidence landing does not reverse an approved, landed task. The original SASSW-2 incident is left for the mender after this fix lands.
+
+## F1170 (A) -- one Codex output line over 64 KiB deafens the Hub to the rest of the turn
+
+**Status:** fixed 2026-11-11 (Tier 0). `hub/hub/codex_appserver.py`: `_read_loop` read the app-server's stdout with `readline()`, whose 64 KiB limit raises `ValueError` and discards the line; nothing caught it, so the reader task ended silently while Codex kept working. `_read_line` now takes a line of any length with `readuntil`, reading an overrunning line in pieces; any other reader failure is logged and recorded as `output_lost()`, which `run_turn` checks beside `is_running()` and ends the turn `failed` with that sentence instead of waiting for the deadline. Tests: `test_codex_appserver_process.py::test_a_notification_longer_than_the_stream_limit_is_delivered_and_reading_goes_on` (fails on the old reader by timeout), `::test_a_reader_that_fails_while_the_child_lives_says_so`, `test_codex_appserver_run_turn.py::...::test_lost_output_with_the_process_alive_fails_fast_not_after_full_timeout`. Not driven live: the fix reaches `:8000` only on the operator's restart.
+**Source:** found by driving -- the operator saw CodexSol "working" with nothing happening (DeveloperOpus, 2026-11-11)
+**Theme:** Runners
+**Ready:** yes
+**Tier:** 0
+
+CodexSol's run `run-1522734a6958` on AW-101 recorded ten outputs, the last a shell call at 20:32:31 that printed a large file. Nothing after it reached the Hub, although `codex.exe` was alive and went on to send a message (20:33:10, through MCP, so it did arrive) and start a pytest run (20:38:34). The run stayed `running` with no events until its turn timeout. A message CodexSol had sent to Architect, tagged with AW-101, also stayed queued behind that run's hold on the task's checkout, so Architect looked stuck too. **Expected:** a large output never ends the reader, and a reader that ends while the child lives ends the turn with that reason.

@@ -27,3 +27,17 @@ async def list_known_failing(
 ):
     project_id, _ = project
     return await known_failing.view(session, project_id)
+
+
+@checks_router.post("/known-failing/clear-stable")
+async def clear_stable_fix_tasks(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Close every open Hub-filed flaky fix task whose test is off the list, each with a note;
+    tasks whose test is still listed stay open. Says how many it closed and how many it left
+    (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`, FR-6)."""
+    project_id, _ = project
+    result = await known_failing.clear_stable_fix_tasks(session, project_id)
+    await session.commit()
+    return result

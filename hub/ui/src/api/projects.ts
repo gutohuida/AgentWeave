@@ -206,6 +206,9 @@ export interface ProjectCheck {
   /** Re-runs named tests: `{tests}` is replaced by their ids, `classname::name`, one argument each.
    *  The Hub refuses one without `{tests}`. */
   rerun_command?: string | null
+  /** How many named tests failing in one run, all passing when re-run, make that run disturbed: a
+   *  whole number of at least 2. Absent: 3 (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`). */
+  disturbed_threshold?: number | null
   /** What runs in a task's pre-review run in place of `command`, where the files the task changed
    *  are known: `{changed_files}` is replaced by the path of a file listing them. The Hub refuses
    *  one without `{changed_files}`. Landings and main runs keep running `command`. */

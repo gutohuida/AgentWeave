@@ -73,7 +73,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
 vi.mock('@/api/ledger', () => ({ useProjectLedger: () => ({ data: undefined }) }))
 vi.mock('@/api/queue', () => ({ useQueueStatuses: () => [] }))
 vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: [] }), useEndStall: () => ({ mutate: vi.fn() }) }))
-vi.mock('@/api/knownFailing', () => ({ useKnownFailing: () => ({ data: null }) }))
+vi.mock('@/api/knownFailing', () => ({ useKnownFailing: () => ({ data: null }), useDisturbedRuns: () => ({ data: [] }), useClearStableFixTasks: () => ({ mutate: () => {}, isPending: false, data: undefined, error: null }) }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: undefined }) }))
 // Not this test's subject; it reads hooks the mocks above do not provide.
 vi.mock('@/components/overview/AgentPostureChips', () => ({ AgentPostureChips: () => null }))

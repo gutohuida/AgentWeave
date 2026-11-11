@@ -39,8 +39,14 @@ async def _task_with_unlanded_work(app, auth_headers, run_headers, root):
     await make_document(app, auth_headers, run_headers)
     await set_main_branch("main")
     # Recorded while the checkout is on main: the footprint names main's tip, as the sweep's did.
-    await accept_evidence(app, auth_headers, run_headers, summary="task-less, at main's tip")
     task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        run_headers,
+        summary="task-less, at main's tip",
+        task_id=task,
+    )
     work = commit_on_branch(root, worktrees.task_branch_name(task), "README2.md", "the change\n")
     git(root, "checkout", "-q", "main")
     assert work not in commits_on(root, "main")
@@ -81,7 +87,13 @@ async def test_approval_refuses_while_the_task_branch_holds_work_nothing_merges(
 
     # The remedy the refusal names clears it: evidence recorded from the task's checkout.
     git(tmp_path, "checkout", "-q", worktrees.task_branch_name(task))
-    await accept_evidence(app, auth_headers, builder, summary="from the task's checkout")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="from the task's checkout",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     approved = await app.post(f"{TASKS}/{task}/land", headers=auth_headers)
@@ -150,7 +162,13 @@ async def _accepted_task_then_prerequisite_merge(app, auth_headers, run_headers,
     task = await linked_task(app, auth_headers)
     branch = worktrees.task_branch_name(task)
     work = commit_on_branch(root, branch, "README2.md", "the change\n")
-    await accept_evidence(app, auth_headers, run_headers, summary="from the task's checkout")
+    await accept_evidence(
+        app,
+        auth_headers,
+        run_headers,
+        summary="from the task's checkout",
+        task_id=task,
+    )
     git(root, "checkout", "-q", "main")
     prerequisite = commit_on_branch(root, "main", "other.py", "approved elsewhere\n", create=False)
     git(root, "checkout", "-q", branch)

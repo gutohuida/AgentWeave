@@ -145,14 +145,16 @@ async def linked_task(app, auth_headers, title="Build it"):
     return created.json()["id"]
 
 
-async def accept_evidence(app, auth_headers, run_headers, summary="ran the tests"):
+async def accept_evidence(app, auth_headers, run_headers, summary="ran the tests", *, task_id=None):
     """Record evidence as the agent and accept it as the operator.
 
     The footprint is captured from the workspace's HEAD *at this moment*, which is why every test
     below checks out the agent's branch before calling this and switches back afterwards.
     """
     recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": summary}, headers=run_headers
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": summary, "task_id": task_id},
+        headers=run_headers,
     )
     assert recorded.status_code == 201, recorded.text
     accepted = await app.post(
@@ -224,12 +226,17 @@ async def test_approving_a_task_puts_its_work_on_main(app, auth_headers, builder
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     assert work not in commits_on(tmp_path, "main")
 
-    task = await linked_task(app, auth_headers)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 
@@ -254,10 +261,15 @@ async def test_the_approve_response_itself_reports_the_merge(app, auth_headers, 
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 
@@ -280,10 +292,15 @@ async def test_the_approve_response_reports_a_skip_too(app, auth_headers, builde
     # Deliberately no main_branch set.
 
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 
@@ -304,10 +321,15 @@ async def test_a_task_list_row_says_whether_its_unmerged_approval_can_be_retried
     await make_document(app, auth_headers, builder)
     # Deliberately no main_branch set: the skip is the unretryable NO_MAIN_BRANCH.
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
     assert approved.json()["latest_integration"]["retryable"] is False
@@ -369,13 +391,18 @@ async def test_later_commits_on_the_branch_are_not_merged(app, auth_headers, bui
     # Groundwork this task's own demonstrated commit sits on top of, committed before the evidence.
     earlier = commit_on_branch(tmp_path, AGENT_BRANCH, "groundwork.py", "prep\n")
     demonstrated = commit_on_branch(tmp_path, AGENT_BRANCH, "done.py", "ok\n", create=False)
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
 
     # Work that happened after the evidence was accepted, on the same branch.
     later = commit_on_branch(tmp_path, AGENT_BRANCH, "not-yet.py", "wip\n", create=False)
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
 
     merged = commits_on(tmp_path, "main")
@@ -420,7 +447,12 @@ async def test_another_tasks_commits_do_not_ride_along(app, auth_headers, builde
     # This task's own branch, cut from main rather than from whatever the other task left behind.
     git(tmp_path, "checkout", "-q", "main")
     demonstrated = commit_on_branch(tmp_path, worktrees.task_branch_name(task), "done.py", "ok\n")
-    await accept_evidence(app, auth_headers, builder)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     assert (await approve(app, auth_headers, task)).status_code == 200
@@ -449,7 +481,13 @@ async def test_a_conflicting_branch_refuses_approval(app, auth_headers, builder,
     await set_main_branch("main")
 
     commit_on_branch(tmp_path, AGENT_BRANCH, "shared.txt", "from the agent\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
 
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "shared.txt").write_text("from the operator\n", encoding="utf-8")
@@ -457,7 +495,6 @@ async def test_a_conflicting_branch_refuses_approval(app, auth_headers, builder,
     git(tmp_path, "commit", "-q", "-m", "operator's own change")
     head_before = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
 
-    task = await linked_task(app, auth_headers)
     refused = await approve(app, auth_headers, task)
 
     assert refused.status_code == 409, refused.text
@@ -483,7 +520,13 @@ async def test_a_conflicting_branch_refuses_approval(app, auth_headers, builder,
         git(tmp_path, "commit", "-q", "-m", "resolve against main")
     resolved = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
 
-    await accept_evidence(app, auth_headers, builder, summary="re-ran after resolving")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="re-ran after resolving",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     approved = await drive_to(app, auth_headers, task, "approved")
@@ -506,13 +549,18 @@ async def test_a_failed_merge_leaves_the_approval_standing(app, auth_headers, bu
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "from the agent\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     # Untracked on main, and the merge wants to create it: git refuses rather than clobbering it.
     (tmp_path / "feature.py").write_text("someone's unsaved work\n", encoding="utf-8")
 
-    task = await linked_task(app, auth_headers)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 
@@ -546,14 +594,26 @@ async def test_work_on_two_branches_is_merged_from_both(app, auth_headers, build
     await set_main_branch("main")
 
     first = commit_on_branch(tmp_path, AGENT_BRANCH, "one.py", "1\n")
-    await accept_evidence(app, auth_headers, builder, summary="branch one")
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="branch one",
+        task_id=task,
+    )
 
     git(tmp_path, "checkout", "-q", "main")
     second = commit_on_branch(tmp_path, "agentweave/reviewer", "two.py", "2\n")
-    await accept_evidence(app, auth_headers, builder, summary="branch two")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="branch two",
+        task_id=task,
+    )
 
     git(tmp_path, "checkout", "-q", "main")
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
 
     merged = commits_on(tmp_path, "main")
@@ -579,8 +639,11 @@ async def test_rejected_evidence_merges_nothing(app, auth_headers, builder, tmp_
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
+    task = await linked_task(app, auth_headers)
     recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "not good enough"}, headers=builder
+        AGENT_EVIDENCE,
+        json={"task_id": task, "identifier": "FR-1", "summary": "not good enough"},
+        headers=builder,
     )
     assert recorded.status_code == 201, recorded.text
     rejected = await app.post(
@@ -591,9 +654,14 @@ async def test_rejected_evidence_merges_nothing(app, auth_headers, builder, tmp_
     assert rejected.status_code == 200, rejected.text
     git(tmp_path, "checkout", "-q", "main")
 
-    await accept_evidence(app, auth_headers, builder, summary="nothing new to merge")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="nothing new to merge",
+        task_id=task,
+    )
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     assert work not in commits_on(tmp_path, "main")
     assert (await integrations(app, auth_headers, task))[0]["outcome"] == "skipped"
@@ -616,10 +684,15 @@ async def test_a_commit_already_on_main_is_skipped_not_merged(app, auth_headers,
 
     # Evidence recorded while the checkout is on main, so the footprint names a commit that is
     # already there — exactly the shape the live run produced.
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     before = git(tmp_path, "rev-parse", "main").stdout.strip()
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
 
     recorded = await integrations(app, auth_headers, task)
@@ -637,11 +710,16 @@ async def test_already_integrated_wins_over_a_dirty_checkout(app, auth_headers, 
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
 
     (tmp_path / "README.md").write_text("edited by the operator\n", encoding="utf-8")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
 
     reason = (await integrations(app, auth_headers, task))[0]["reason"]
@@ -658,14 +736,19 @@ async def test_a_conflict_refuses_even_at_sketch_rigor(app, auth_headers, builde
     await set_main_branch("main")
 
     commit_on_branch(tmp_path, AGENT_BRANCH, "shared.txt", "agent\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
 
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "shared.txt").write_text("operator\n", encoding="utf-8")
     git(tmp_path, "add", "shared.txt")
     git(tmp_path, "commit", "-q", "-m", "conflict")
 
-    task = await linked_task(app, auth_headers)
     refused = await approve(app, auth_headers, task)
     assert refused.status_code == 409, refused.text
     assert refused.json()["detail"]["unmergeable"]
@@ -682,10 +765,15 @@ async def test_a_sketch_document_still_integrates(app, auth_headers, builder, tm
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     assert work in commits_on(tmp_path, "main")
 
@@ -704,10 +792,15 @@ async def test_no_configured_main_branch_skips_without_blocking(
     await make_document(app, auth_headers, builder)
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     assert work not in commits_on(tmp_path, "main")
 
@@ -723,11 +816,16 @@ async def test_a_dirty_checkout_skips_without_blocking(app, auth_headers, builde
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "README.md").write_text("edited by the operator\n", encoding="utf-8")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     assert work not in commits_on(tmp_path, "main")
 
@@ -754,11 +852,16 @@ async def test_a_dirty_checkout_skip_points_at_the_retry_not_at_approving_again(
     await set_main_branch("main")
 
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "README.md").write_text("edited by the operator\n", encoding="utf-8")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
 
     reason = (await integrations(app, auth_headers, task))[0]["reason"]
@@ -782,13 +885,18 @@ async def test_untracked_files_do_not_block_the_merge(app, auth_headers, builder
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     (tmp_path / "scratch.txt").write_text("not tracked by anything\n", encoding="utf-8")
     assert git(tmp_path, "status", "--porcelain").stdout.strip(), "expected untracked content"
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
 
     assert work in commits_on(tmp_path, "main")
@@ -804,10 +912,15 @@ async def test_a_checkout_on_another_branch_skips_without_blocking(
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     # Left on the agent's branch rather than main.
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     assert work not in commits_on(tmp_path, "main")
 
@@ -824,9 +937,14 @@ async def test_a_project_without_a_repository_approves_unchanged(
     """D7: a non-repository project is a supported shape, and must stay exactly as approvable."""
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
-    await accept_evidence(app, auth_headers, builder)
-
     task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
+
     assert (await approve(app, auth_headers, task)).status_code == 200
 
     recorded = await integrations(app, auth_headers, task)
@@ -848,9 +966,14 @@ async def test_git_unreadable_for_a_moment_refuses_approval_and_a_retry_merges(
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "from the agent\n")
-    await accept_evidence(app, auth_headers, builder)
-    git(tmp_path, "checkout", "-q", "main")
     task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
+    git(tmp_path, "checkout", "-q", "main")
 
     (tmp_path / ".git").rename(tmp_path / ".git-away")
     try:
@@ -884,12 +1007,17 @@ async def test_git_unreadable_does_not_approve_work_that_conflicts(
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     commit_on_branch(tmp_path, AGENT_BRANCH, "shared.txt", "from the agent\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "shared.txt").write_text("from the operator\n", encoding="utf-8")
     git(tmp_path, "add", "shared.txt")
     git(tmp_path, "commit", "-q", "-m", "operator's own change")
-    task = await linked_task(app, auth_headers)
 
     (tmp_path / ".git").rename(tmp_path / ".git-away")
     try:
@@ -923,37 +1051,33 @@ async def test_a_task_whose_worktree_exists_proves_the_project_was_a_repository(
 
 @pytest.mark.asyncio
 async def test_evidence_awaiting_review_merges_nothing(app, auth_headers, builder, tmp_path):
-    """Only accepted evidence names a commit to merge. Merging on unreviewed evidence would make
-    the review that gates the merge decorative.
-
-    **The approval is now refused rather than allowed to record a skip** — changed by
-    `approval-refuses-unaccepted-evidence` (F122), and the property this test names is unchanged and
-    now stated more strongly. It used to assert that approval succeeded and recorded
-    `NOTHING_TO_MERGE`, which was true of the merge and false about the world: the commit existed and
-    was waiting for a person, and the task went terminal at `approved` with its work on a branch
-    nothing merges. The refusal is what stops that, and the assertion that nothing reaches `main` is
-    kept verbatim, because it is the half that was always the point.
-
-    The full behaviour, including the acceptance that follows, lives in
-    `test_approval_refuses_unaccepted_evidence.py`.
-    """
+    """Awaiting evidence contributes no merge target until the task verdict accepts it."""
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
+    task = await linked_task(app, auth_headers)
     recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "not reviewed"}, headers=builder
+        AGENT_EVIDENCE,
+        json={"task_id": task, "identifier": "FR-1", "summary": "not reviewed"},
+        headers=builder,
     )
     assert recorded.status_code == 201, recorded.text
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
-    refused = await approve(app, auth_headers, task)
-    assert refused.status_code == 409, refused.text
-    assert work not in commits_on(tmp_path, "main")
+    from hub import task_integration
+    from hub.db.models import Task
 
-    assert await integrations(app, auth_headers, task) == []
+    async with async_session_factory() as session:
+        assert (
+            await task_integration.integration_targets(session, await session.get(Task, task)) == []
+        )
+    assert work not in commits_on(tmp_path, "main")
+    verdict = await approve(app, auth_headers, task)
+    assert verdict.status_code == 200, verdict.text
+    assert work in commits_on(tmp_path, "main")
+    assert (await integrations(app, auth_headers, task))[-1]["outcome"] == "merged"
 
 
 # ---------------------------------------------------------------------------
@@ -983,10 +1107,15 @@ async def test_nothing_pushes(app, auth_headers, builder, tmp_path):
     await set_main_branch("main")
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     assert work in commits_on(tmp_path, "main")
     # A push would have failed against a remote path that does not exist; the merge succeeded.
@@ -1011,10 +1140,15 @@ async def test_integration_records_are_append_only(app, auth_headers, builder, t
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     await approve(app, auth_headers, task)
 
     assert len(await integrations(app, auth_headers, task)) == 1
