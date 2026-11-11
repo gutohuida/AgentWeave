@@ -1,0 +1,23 @@
+{
+  "id": "fct-4f519803de0d",
+  "kind": "fact",
+  "claim": "In this project, every new Hub route needs a UI client in the same change because of the surface-ceiling ratchets.",
+  "citations": [
+    {
+      "source": "src-eb62b3d76e99",
+      "quote": "In this project, every new Hub route needs a UI client in the same change because of the surface-ceiling ratchets.",
+      "line_start": 11,
+      "line_end": 11
+    }
+  ],
+  "sources": [
+    "src-eb62b3d76e99"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-11T15:57:34.045341Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

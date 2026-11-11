@@ -146,14 +146,14 @@
         "checkers": [],
         "chosen_by": "operator",
         "driver": "flow",
-        "ended_at": null,
+        "ended_at": "2026-11-11T15:55:42.230964+00:00",
         "id": "build-4706c83501ba",
         "landing": "main",
         "lead": null,
         "level": "reviewed",
         "pull_request": null,
         "started_at": "2026-11-11T13:06:09.246984+00:00",
-        "state": "running",
+        "state": "finished",
         "stop_reason": null,
         "tasks": {
           "setup-drive": {
