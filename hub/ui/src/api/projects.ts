@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ApiError, fetchWithAuth, getJson, postJson, putJson } from './client'
+import { ApiError, deleteJson, fetchWithAuth, getJson, postJson, putJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 export interface ProjectAgentSummary {
@@ -24,6 +24,31 @@ export interface ProjectSummary {
   token_budget: number | null
   allow_agent_jobs: boolean
   agents: ProjectAgentSummary[]
+  /** What the project still needs before it can work (`a-project-says-what-it-still-needs`). The Hub
+   * always sends it; optional so fixtures written before it still type. */
+  setup?: ProjectSetup
+}
+
+/**
+ * One set-up item, as the Hub works it out. `id` is the key, except a can-run item's, which is
+ * `can-run-<agent>`. A can-run item's `reason`: `not_installed`, `not_logged_in`, `no_model`, or
+ * `cannot_run` (the probe's own sentence in `detail`).
+ */
+export interface ProjectSetupItem {
+  id: string
+  key: 'folder' | 'repository' | 'agent' | 'can-run'
+  /** Only the repository item. */
+  dismissable: boolean
+  agent: string | null
+  provider: string | null
+  reason: 'not_installed' | 'not_logged_in' | 'no_model' | 'cannot_run' | null
+  detail: string | null
+}
+
+/** The items still shown, and the ones dismissed while still unmet (listed in settings only). */
+export interface ProjectSetup {
+  items: ProjectSetupItem[]
+  dismissed: ProjectSetupItem[]
 }
 
 /** The project collection itself — instance-scoped, not project-scoped, so
@@ -281,6 +306,26 @@ export function useMakeRepository(projectId: string) {
       queryClient.setQueryData<ProjectSettings>(['project', projectId, 'settings'], settings)
       void queryClient.invalidateQueries({ queryKey: ['project', projectId, 'main-branch-suggestion'] })
       queryClient.removeQueries({ queryKey: ['project', projectId, 'repository-preview'] })
+    },
+  })
+}
+
+/**
+ * 'Not for this project' (`show: false`) or 'Show it again' (`show: true`) on a set-up item. The
+ * Hub accepts only the repository item; the answer is the project's summary, written into the rail's
+ * cache so all three places follow at once.
+ */
+export function useSetupDismissal(projectId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ item, show }: { item: string; show: boolean }) => {
+      const path = `/api/v1/projects/${projectId}/setup/dismissed/${encodeURIComponent(item)}`
+      return show ? deleteJson<ProjectSummary>(path) : putJson<ProjectSummary>(path)
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData<ProjectSummary[]>(['projects'], (current = []) =>
+        current.map((project) => project.id === projectId ? updated : project),
+      )
     },
   })
 }
