@@ -5587,7 +5587,12 @@ def record_evidence(
         summary: What you did and what it showed, in your own words. Anything that would let
             somebody else judge whether the requirement is met.
         kind: What sort of thing this is — `test_result`, `manual_observation`, and so on. Not a
-            closed list; use a word that describes it.
+            closed list; use a word that describes it. One kind is read by the Hub:
+            `drive_baseline`, which a document's acceptance-drive task needs accepted before it
+            is approved. Its output lists each check the drive covers, run on the pre-build
+            code, one line per check: `check <key>: reached=<yes|no>
+            failed_at_assertion=<yes|no> -- <detail>`. A check not reached, or not failing at
+            its own assertion, is not accepted.
         locator: Where the artifact lives, if it has one — a path, a command, a run id.
         document: Only needed when the same identifier exists in more than one document.
         task_id: The task this came out of, when there is one.
@@ -5887,6 +5892,8 @@ def read_model_record() -> Dict[str, Any]:
     millionths of a dollar, over priced turns only), with the tasks behind them. A task counts under
     the model that ran its build turns, not under the agent it was assigned to, since an agent can
     be rebound to another model. An unpriced turn is reported as unpriced, never as zero cost.
+    Each task also carries `evidence_only_send_backs` and `reviewer_verified_acceptances` (evidence
+    its reviewer accepted with its own reproduction), and each model the latter's total.
     Small samples are small: read `tasks_built` before trusting a ratio.
     """
     return _hub_request("GET", "/model-record")

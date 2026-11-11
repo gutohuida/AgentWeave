@@ -127,6 +127,17 @@ class GateUnsatisfiedError(TransitionRefusedError):
         self.refusal = refusal
 
 
+class DriveBaselineRefusedError(TransitionRefusedError):
+    """An acceptance drive approved without a baseline showing each check reached and failing at
+    its own assertion (`drive_baseline`). 409: the state of the work forbids it, not the asker."""
+
+    http_status = 409
+
+    def __init__(self, refusal) -> None:
+        super().__init__(refusal.detail())
+        self.refusal = refusal
+
+
 class DependencyUnmetError(TransitionRefusedError):
     """The task depends on work that is not `approved` yet (`task-dependencies` design D1/D2).
 
@@ -1135,6 +1146,13 @@ async def apply_transition(
             git_answers, _ = await ask_approval_git_first(
                 session, task, actor, override_checks_reason=reason
             )
+        # An acceptance drive is approved only on a baseline that shows each check reached and
+        # failing (`evidence-review-sends-work-back-only-for-what-is-wrong-with-it`, FR-6, FR-7).
+        # Asked here, before the write lock, because it reads the document's file. Work closed as
+        # already built started nothing, so there is no pre-build code to have a baseline on.
+        from . import drive_baseline
+
+        is_drive = not closing_with and await drive_baseline.is_acceptance_drive(session, task)
         # The approval accepts the task's evidence in the same savepoint the gate reads it in
         # (design D1): the gate judges the state it will merge from, and a refusal for any other
         # reason -- a conflict, failing checks -- rolls the acceptances back with it, so nothing is
@@ -1143,6 +1161,12 @@ async def apply_transition(
             decided = await _decide_evidence_with_verdict(
                 session, task, actor, "approved", verdict_reason
             )
+            if is_drive:
+                baseline_refusal = await drive_baseline.approval_refusal(
+                    session, task, is_operator=actor.is_operator
+                )
+                if baseline_refusal is not None:
+                    raise DriveBaselineRefusedError(baseline_refusal)
             with traces.answering_from(git_answers):
                 refusal, policy = await evaluate_approval(
                     session,

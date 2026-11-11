@@ -25,14 +25,49 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import InboundQueueEntry, Run, Task, TaskTransition, TurnUsage
-from .task_transitions import SEND_BACK_CLASSES
+from .db.models import (
+    EvidenceReview,
+    InboundQueueEntry,
+    RequirementEvidence,
+    Run,
+    Task,
+    TaskTransition,
+    TurnUsage,
+)
+from .task_transitions import SEND_BACK_CLASSES, SEND_BACK_EVIDENCE_ONLY
 
 UNKNOWN_MODEL = "unknown"
 _VERDICTS = ("approved", "revision_needed", "rejected")
+
+
+async def reviewer_verified_by_task(
+    session: AsyncSession, project_id: str, task_ids: Optional[List[str]] = None
+) -> Dict[str, int]:
+    """Per task, the evidence its reviewer accepted with its own reproduction
+    (`evidence-review-sends-work-back-only-for-what-is-wrong-with-it`, FR-8): the acceptances that
+    replaced an evidence-only send-back. Shared with the build retrospective."""
+    query = (
+        select(RequirementEvidence.task_id)
+        .join(EvidenceReview, EvidenceReview.evidence_id == RequirementEvidence.id)
+        .where(
+            RequirementEvidence.project_id == project_id,
+            RequirementEvidence.task_id.is_not(None),
+            EvidenceReview.decision == "accepted",
+            or_(
+                EvidenceReview.reproduction_commit.is_not(None),
+                EvidenceReview.reproduction_command.is_not(None),
+            ),
+        )
+    )
+    if task_ids is not None:
+        query = query.where(RequirementEvidence.task_id.in_(task_ids))
+    counts: Dict[str, int] = {}
+    for (task_id,) in (await session.execute(query)).all():
+        counts[task_id] = counts.get(task_id, 0) + 1
+    return counts
 
 
 def _row() -> Dict[str, Any]:
@@ -40,6 +75,7 @@ def _row() -> Dict[str, Any]:
         "tasks_built": 0,
         "tasks_approved": 0,
         "send_backs": {"total": 0, **dict.fromkeys(SEND_BACK_CLASSES, 0), "unclassified": 0},
+        "reviewer_verified_acceptances": 0,
         "turns": 0,
         "priced_turns": 0,
         "unpriced_turns": 0,
@@ -115,6 +151,8 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
         .all()
     )
 
+    verified = await reviewer_verified_by_task(session, project_id)
+
     by_task: Dict[str, List[Run]] = {}
     for run in runs:
         if run.task_id in tasks and run.id not in review_runs and run.id not in verdict_runs:
@@ -155,8 +193,11 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
                 "readable_id": task.readable_id,
                 "status": task.status,
                 "models_seen": sorted(set(named)),
+                "evidence_only_send_backs": 0,
+                "reviewer_verified_acceptances": verified.get(task_id, 0),
             }
         )
+        row["reviewer_verified_acceptances"] += verified.get(task_id, 0)
 
     for move in moves:
         model = model_of.get(move.task_id)
@@ -165,6 +206,10 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
         sends = models[model]["send_backs"]
         sends["total"] += 1
         sends[move.reason_class if move.reason_class in SEND_BACK_CLASSES else "unclassified"] += 1
+        if move.reason_class == SEND_BACK_EVIDENCE_ONLY:
+            for entry in models[model]["tasks"]:
+                if entry["task_id"] == move.task_id:
+                    entry["evidence_only_send_backs"] += 1
 
     return {
         "models": [{"model": name, **models[name]} for name in sorted(models)],
@@ -179,6 +224,8 @@ async def model_record(session: AsyncSession, project_id: str) -> Dict[str, Any]
             "dollar; an unpriced turn is counted in unpriced_turns and added to no cost. A task "
             "counts under the model of the run that completed it, else its latest build turn that names one; "
             "review and verdict turns are excluded, and "
-            "each turn's cost is under the model that ran it."
+            "each turn's cost is under the model that ran it. Per task, evidence_only_send_backs "
+            "counts its send-backs classed evidence-only, and reviewer_verified_acceptances the "
+            "evidence its reviewer accepted with its own reproduction."
         ),
     }

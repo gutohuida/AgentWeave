@@ -386,6 +386,36 @@ def approval_gaps(payload: SpecPayload) -> List[Finding]:
     return gaps
 
 
+def acceptance_drive_key(tasks: List[Tuple[str, bool, List[str]]]) -> Optional[str]:
+    """The key of the change's acceptance drive, or None where it has none (D3).
+
+    *tasks* are `(key, imported, depends_on)` in the document's order. The drive is the first local
+    task, where there are two or more, it depends on nothing, and every other local task depends on
+    it directly or transitively. Shared by approval's `no_acceptance_drive` gap and the approval
+    gate on the drive task itself (`drive_baseline`), so the two never disagree on which task it is.
+    """
+    local = [(key, deps) for key, imported, deps in tasks if not imported]
+    if len(local) < 2:
+        return None
+    first, first_deps = local[0]
+    edges = {key: list(deps) for key, _imported, deps in tasks}
+
+    def waits_on_first(key: str) -> bool:
+        seen, todo = set(), list(edges.get(key, []))
+        while todo:
+            dep = todo.pop()
+            if dep == first:
+                return True
+            if dep not in seen:
+                seen.add(dep)
+                todo.extend(edges.get(dep, []))
+        return False
+
+    if not first_deps and all(waits_on_first(key) for key, _deps in local[1:]):
+        return first
+    return None
+
+
 def _acceptance_drive_findings(payload: SpecPayload) -> List[Finding]:
     """A change of two or more tasks whose first is not the drive every other task waits on (D3).
 
@@ -398,20 +428,8 @@ def _acceptance_drive_findings(payload: SpecPayload) -> List[Finding]:
     if len(local) < 2:
         return []
     first = local[0]
-    edges = {t.key: list(t.depends_on) for t in payload.tasks}
-
-    def waits_on_first(key: str) -> bool:
-        seen, todo = set(), list(edges.get(key, []))
-        while todo:
-            dep = todo.pop()
-            if dep == first.key:
-                return True
-            if dep not in seen:
-                seen.add(dep)
-                todo.extend(edges.get(dep, []))
-        return False
-
-    if not first.depends_on and all(waits_on_first(t.key) for t in local[1:]):
+    shape = [(t.key, t.from_ is not None, list(t.depends_on)) for t in payload.tasks]
+    if acceptance_drive_key(shape) is not None:
         return []
     return [
         Finding(
