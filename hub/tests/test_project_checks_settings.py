@@ -16,7 +16,12 @@ CHECKS = [
 #: review and at landing unless given a phase (`checks-know-their-phase-...`, FR-1), and names no
 #: report or re-run command unless given them (`checks-report-which-tests-failed-...`, FR-1), and no
 #: command for a change (`a-check-can-run-only-the-tests-for-what-a-task-changed`, FR-7).
-NO_REPORT = {"report_path": None, "rerun_command": None, "change_command": None}
+NO_REPORT = {
+    "report_path": None,
+    "rerun_command": None,
+    "change_command": None,
+    "disturbed_threshold": None,
+}
 SAVED = [{**check, "paths": [], "fast": False, "phase": "both", **NO_REPORT} for check in CHECKS]
 
 

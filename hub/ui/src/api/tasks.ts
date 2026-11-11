@@ -229,6 +229,11 @@ export interface TaskCheckResult {
   sized_to_change?: boolean
   changed_file_count?: number
   full_because?: string
+  /** Set when many tests failed at once and every one passed when re-run: information, not a
+   *  failure (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`, FR-2). */
+  disturbed?: { failed: number; passed_on_rerun: number; threshold: number }
+  /** The first run of a check that failed and then passed when re-run. */
+  flaky?: { first?: { output_tail?: string } }
 }
 
 /** One run of the project's checks on the work this task's approval would merge. */

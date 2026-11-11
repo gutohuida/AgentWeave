@@ -94,6 +94,7 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
   const failing = (latest?.results ?? []).filter(failedResult)
   const skipped = (latest?.results ?? []).filter((result) => result.skipped)
   const sized = (latest?.results ?? []).filter((result) => result.sized_to_change)
+  const disturbed = (latest?.results ?? []).filter((result) => result.disturbed)
   const atLanding = data.at_landing ?? []
   // Every check is landing-only: nothing runs before review, so nothing is waited for here.
   const idleLabel = data.before_review === false ? 'Checks run at landing' : 'Checks have not run'
@@ -139,6 +140,18 @@ export function TaskChecksRow({ taskId }: { taskId: string }) {
           ))}
         </ul>
       )}
+      {/* A disturbed run is said with what the first run printed: information, not a failure. */}
+      {disturbed.map((result) => (
+        <details key={result.name} data-testid={`task-checks-disturbed-${taskId}-${result.name}`} className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+          <summary>
+            {result.name} · disturbed run: {result.disturbed!.failed} tests failed and {result.disturbed!.passed_on_rerun} passed when re-run
+            (run {latest!.id})
+          </summary>
+          <pre className="p-2 rounded overflow-x-auto max-h-48" style={{ background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}>
+            {(result.flaky?.first?.output_tail ?? '').slice(-1500)}
+          </pre>
+        </details>
+      ))}
       {/* A landing-only check is said too, as what it is: not passed, not skipped (FR-2). */}
       {atLanding.length > 0 && (
         <ul data-testid={`task-checks-at-landing-${taskId}`} className="text-[11px]" style={{ color: 'var(--text-2)' }}>

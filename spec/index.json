@@ -667,6 +667,14 @@
       "order": 1710
     },
     {
+      "path": "spec/changes/a-disturbed-check-run-is-not-a-pile-of-flaky-tests/spec.json",
+      "title": "A disturbed check run is not a pile of flaky tests",
+      "kind": "change-spec",
+      "status": "approved",
+      "parent": null,
+      "order": 2650
+    },
+    {
       "path": "spec/changes/a-document-names-its-default-reviewer/spec.json",
       "title": "A document names its default reviewer, and approval says who reviews",
       "kind": "change-spec",

@@ -1,0 +1,384 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "the trial Hub with a project whose check names a JUnit report and rerun command, scripted to fail 5 named tests on its first run and pass them on the rerun",
+      "how_to_check": "scripts/drive/disturbed_run_check.py against the trial Hub :8010, run on master first (fails at the task-count assertion) and on the branch (passes)",
+      "key": "ac-drive",
+      "requirement": "disturbed-run",
+      "then": "the task's check run reads disturbed, the known-failing list gains no entry, the Logs hold one disturbed event, and no fix task is created; on master today it creates 5 entries and 5 tasks",
+      "when": "a task's checks run"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check with threshold 3 whose first run fails 3 named tests, all passing on the rerun, none listed",
+      "how_to_check": "Hub test driving confirm_failure and record_run with a recorded report",
+      "key": "ac-burst",
+      "requirement": "disturbed-run",
+      "then": "the check passes, the known-failing list gains no entry, and no fix task is created",
+      "when": "the run is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the same check whose first run fails 2 named tests that pass on the rerun",
+      "how_to_check": "Hub test, same harness",
+      "key": "ac-below-threshold",
+      "requirement": "disturbed-run",
+      "then": "the run is not disturbed and both tests are listed flaky, with no fix task (FR-9)",
+      "when": "the run is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a run where 4 named tests failed, 3 passed on the rerun and 1 failed again",
+      "how_to_check": "Hub test, same harness",
+      "key": "ac-mixed",
+      "requirement": "disturbed-run",
+      "then": "the run is not disturbed: the reproduced failure is judged as today and the 3 are treated as flakes",
+      "when": "the run is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a disturbed run",
+      "how_to_check": "route tests on the check-run and known-failing routes, a gate test for the whole-check case, plus a screenshot from the drive",
+      "key": "ac-shown",
+      "requirement": "disturbed-visible",
+      "then": "each shows the disturbed run with the check, run id, the count and the first run's output; the known-failing list itself has no entry for it; a later whole-check failure of that check is not excused; the ledger has no new task",
+      "when": "the operator opens the task's check run, the Logs and the Overview"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a report where tests A and B failed with different messages, and only A's fix task is filed",
+      "how_to_check": "Hub test on fix_task_text with a two-failure report",
+      "key": "ac-own-message",
+      "requirement": "fix-task-quotes-its-test",
+      "then": "its description quotes A's message and not B's; with no message for A it uses the check's output and says it is the check's",
+      "when": "A's fix task is created"
+    },
+    {
+      "checked_by": "agent",
+      "given": "three open flaky fix tasks, two whose test is off the list and one still listed",
+      "how_to_check": "route test, plus vitest on the Overview known-failing list action",
+      "key": "ac-clear",
+      "requirement": "clear-the-pile",
+      "then": "the two are closed with a note, the listed one stays open, and the action reports 2 closed, 1 left",
+      "when": "the operator uses the clear action"
+    },
+    {
+      "checked_by": "operator",
+      "given": "this project's real ledger after the change lands on the operator's Hub (19 of 54 open fix tasks named an unlisted test on 2026-11-11)",
+      "how_to_check": "Operator presses it in the app; Architect counts the ledger before and after, read-only",
+      "key": "ac-clear-real",
+      "requirement": "clear-the-pile",
+      "then": "every closed task's test is off the list, and every task left open names a listed test",
+      "when": "the operator uses the clear action"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a check with a report and rerun command",
+      "how_to_check": "route test on the project checks route, plus vitest for the check editor field",
+      "key": "ac-threshold",
+      "requirement": "threshold-setting",
+      "then": "6 is stored and used by the next run; 1 is refused with a reason; a check saved without one uses 3",
+      "when": "the operator sets its disturbed threshold to 6, then tries 1"
+    },
+    {
+      "checked_by": "agent",
+      "given": "test A already listed flaky with no fix task, and a disturbed run where A and four unlisted tests failed then passed",
+      "how_to_check": "Hub test, same harness",
+      "key": "ac-known-flake",
+      "requirement": "known-flake-still-counts",
+      "then": "A's fix task is filed (its second flake, FR-9) and the four others are not listed",
+      "when": "the run is recorded"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a test flaking for the first time in a run that is not disturbed",
+      "how_to_check": "Hub test, same harness, two runs",
+      "key": "ac-first-flake",
+      "requirement": "second-flake-files",
+      "then": "after the first it is listed flaky and no fix task exists; after the second exactly one fix task is filed; the same run read twice does not file one",
+      "when": "the run is recorded, then a different check run flakes it again"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "431f322a260d1fa988efb2548092481bc47ed3979c2b26767526a800bf929f9c",
+      "FR-2": "95b2a989a55058a7aaf82d10e5cdfea8c2e0ac5f27eac24dfc75a400fd7c146d",
+      "FR-3": "a8cb669607a7180fafa9c986b76f17a77f7677fa67e6258040f727da255f3f9c",
+      "FR-4": "daf9cc2caec5e26fe9abfbfcc49d49cab1d37d3fa8b1b774b76733b639ac3a44",
+      "FR-5": "8abecd4654cfbc9655d481bc523a1b64cb00e35fa3bef13751bd69ecf52f0689",
+      "FR-6": "3ce73f300d5a3cad5db7cca29c5e70b6b8967248d9f166d26ab62047ff3003d3",
+      "FR-7": "6ee8dfcde3b4f8bbbc10cb5b8331594ee412b18f76c3d6c11f1f80932e013f0e",
+      "FR-8": "94a6a77089e6eec6e7469bc861bdb964b39e48c60ca5cae096dc63fa708f298b",
+      "FR-9": "6381904db5b895ca3672935ea43a5a69bdae0b31c8369344688d7a8b44a52688"
+    },
+    "high_water": 9,
+    "requirements": {
+      "clear-the-pile": "FR-6",
+      "disturbed-run": "FR-1",
+      "disturbed-visible": "FR-2",
+      "fix-task-quotes-its-test": "FR-4",
+      "known-flake-still-counts": "FR-8",
+      "second-flake-files": "FR-9",
+      "threshold-setting": "FR-7"
+    },
+    "retired": {
+      "one-open-task-per-test": "FR-5",
+      "single-flake-listed": "FR-3"
+    }
+  },
+  "delivery": {
+    "agent": "DeveloperSonnet2",
+    "builder": "DeveloperSonnet2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "DeveloperSonnet2 is free since slice 4 finished; Developer is on slice 5.",
+      "builder": "Sonnet by default for quota; the rules are contained in two Hub files.",
+      "checker": "QA2 checked slice 2 and knows the checks code paths.",
+      "cron": "Every five minutes, as the other builds.",
+      "mode": "Three chained tasks; a flow runs them in order without hand-offs.",
+      "stop": "Stop when the three tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "D1 Disturbed is decided per check run, from what that run and its rerun showed. No machine metrics are read: the rule must work in any project and on any machine.\nD2 The threshold belongs to each check, beside its report path and rerun command, and defaults to 3. A project with a large suite can raise it, and a check without a report never reaches the rule. On this project's history, 3, 4 and 5 behave the same; 2 would also make the eleven two-test runs disturbed.\nD3 A test that is already listed flaky keeps counting as a flake inside a disturbed run, so a real flake that happens to coincide with a busy moment is not lost. Every other test of a disturbed run counts as nothing: no listing, no task.\nD4 First flake: the test is listed, so checks do not hold it against anyone's work, and no task is filed. Second flake in a different check run while it is still listed: one fix task is filed. Replayed over this project's 69 flaking runs, threshold 3 with this rule gives 13 tests a task where today's rule gave 79.\nD5 No migration. A disturbed run is recorded on the check run's own result and as one event in the Logs. It is deliberately NOT a known-failing entry: an entry with no test excuses every whole-check failure of that check at the gates (`judge_result`, known_failing.py:881-908), and the list allows one such entry per check. A first flake is an ordinary flaky entry with no fix task; \"a different run\" is read from the entry's `added_by_run`. The threshold is one more field on the check's settings, which are stored as JSON.\nD6 Not respecified: one open fix task per test. `_open_fix_task_for` (known_failing.py:328-350) and `fix_tasks_by_test` (flaky_tests.py) already refuse a second open task for a test, including after its entry came off the list; the four-task case above was sequential, not a miss. The requirement drafted for it is retired.",
+  "evidence": {
+    "checked": [
+      "hub/hub/project_checks.py:1177-1250 confirm_failure: rerun alone, once; passes become flaky_tests",
+      "hub/hub/known_failing.py:449-566 _record_run: one FLAKY entry and one fix task per new flaky test; entry removed after 20 passes, task left open",
+      "hub/hub/known_failing.py:283-325 fix_task_text quotes the check's combined excerpt, not the test's",
+      "project_checks.py:701 TestReport.messages holds per-test failure text; a stored run keeps only the combined failure_excerpt",
+      "known_failing.py:881-908 judge_result: an entry with no test excuses a whole-check failure, so a disturbed run must not be one",
+      "known_failing.py:328-350 and flaky_tests.fix_tasks_by_test already refuse a second open fix task per test",
+      "hub/hub/api/v1/projects.py:97-122: checks are JSON settings with report_path and rerun_command; a new field needs no migration",
+      "Operator Hub DB (read-only, 2026-11-11): 81 Hub-filed fix tasks since 10-26, 54 open from 19 runs, six runs = 38 of them; 69 flaking runs (52 x1, 11 x2, then 5,7,7,8,8,10)",
+      "The four fix tasks for one test were each approved before the next was filed (task_transitions)",
+      "Replay of the proposed rule over the 69 runs: threshold 3 with second-flake filing gives 13 tests a task, against 79 today; 3, 4 and 5 identical; 2 gives 10",
+      "19 of the 54 open fix tasks name a test no longer listed (what the clear action would close today)",
+      "Three largest affected test files run alone: 102/102 passed twice"
+    ],
+    "limits": [
+      "The replay uses stored results; it cannot say which of the 13 remaining tests are really nondeterministic",
+      "Machine load during the specific runs is inferred from error text, not measured",
+      "Test ids switched from path to dotted form on 2026-11-06; one test appears both ways, so its flakes count as two tests",
+      "No migration is expected (D5), not yet confirmed by building"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperSonnet2",
+        "builders": [
+          "DeveloperSonnet2"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": null,
+        "id": "build-e4ac2fa85f34",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-11T17:20:20.701590+00:00",
+        "state": "running",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "hub-rules": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "ui-and-clear": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "small",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "What makes a run disturbed? Resolved (operator, 2026-11-11): a per-check setting, default 3.",
+      "resolved": true
+    },
+    {
+      "question": "Does a known flake inside a disturbed run still count? Resolved: yes.",
+      "resolved": true
+    },
+    {
+      "question": "When does a single flake get a fix task? Resolved: on its second flake in a separate run.",
+      "resolved": true
+    },
+    {
+      "question": "The existing tasks? Resolved: cleared with the new action once it lands; nothing closed by hand now.",
+      "resolved": true
+    }
+  ],
+  "problem": "Code as of agentweave/Architect 9f77d6c (2026-11-11); ledger read from the operator's Hub database read-only the same day.\n\n- **How a check failure becomes a fix task today.** `confirm_failure` (hub/hub/project_checks.py:1177-1250) reruns only the failed tests, alone and once. Each test that passes there goes into `flaky_tests`. `_record_run` (hub/hub/known_failing.py:449-566) then adds a FLAKY known-failing entry for each test and files a high-priority \"Fix flaky test <id>\" task for each new entry (`_file_fix_task`, :353).\n- **Load looks like flakiness.** The rerun runs a handful of tests with no neighbours, so it is nearly unloaded. A test that failed because the whole machine was loaded (git timing out, memory exhausted, a fixed sleep running out) passes there. It is filed as flaky, and nothing distinguishes it from a test that is really nondeterministic.\n- **The ledger shows it.** Since 2026-10-26 the Hub has filed 81 fix tasks in this project; 54 are still open (49 pending). Those 54 came from 19 check runs, and six runs produced 38 of them: runs that failed 5, 7, 7, 8, 8 and 10 tests, every one of which passed when rerun. Across all 69 runs that recorded a flake, 52 flaked one test, 11 flaked two, and the other six flaked five or more; none flaked three or four. The three largest affected test files, run alone, passed 102/102 twice.\n- **The same test, \"fixed\" three times.** test_a_turn_start_that_creates_its_checkout_never_stalls_the_loop had four fix tasks filed 11-01 to 11-03. They are not duplicates: each was approved before the next was filed, and de-duplication worked. The test kept failing after three approved fixes, which is what a load-induced failure looks like.\n- **A task can quote another test's failure.** Each task's \"What the run printed\" is the check's (`fix_task_text`, known_failing.py:283-325, reading `failure_excerpt`/`output_tail`), which concatenates every failing test's message. AW-77 names test_a_dependent_lands_after_its_prerequisite but quotes test_a_partial_land_without_a_restart. The report already holds a message for each test (`TestReport.messages`, project_checks.py:701).\n- **Stable tests keep their tasks.** A flaky entry comes off the list after 20 consecutive passing runs (`FLAKY_PASSES_TO_CLEAR`, known_failing.py:72), but its fix task stays open by design (\"closing it is the operator's\"). 19 of the 54 open tasks name a test no longer on the list.\n\n**Why it matters:** a real regression and a busy-machine blip produce the same task. The pile is too large to read, so a real one hides in it, and agents spend turns \"fixing\" tests that were never broken. Any project with a parallel suite on a shared machine gets this.",
+  "requirements": [
+    {
+      "key": "disturbed-run",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "A failure that hits many unrelated tests at once and vanishes when they run alone is the machine, not the tests: six such runs produced 38 of the 54 open fix tasks.",
+      "statement": "When a check run fails at least the check's disturbed threshold of named tests and every one of them passes on the rerun, the Hub records the run as disturbed: the check passes as a flake does today, and no test from it is listed or given a fix task except under FR-8."
+    },
+    {
+      "key": "disturbed-visible",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Not a list entry: an entry with no test would excuse every whole-check failure of that check at the gates (D5).",
+      "statement": "A disturbed run is shown on the task's check run, written once to the project's Logs, and shown beside (not in) the Overview's known-failing list for seven days, each naming the check, the run, how many tests failed and passed on the rerun, and the first run's output; it is information, not work: it creates no task and the gates never count it."
+    },
+    {
+      "key": "fix-task-quotes-its-test",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A fix task's \"What the run printed\" quotes the report's failure message for the test the task names, from the run that flaked it; only where the report holds none for that test does it fall back to the check's output, and it then says so."
+    },
+    {
+      "key": "clear-the-pile",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The operator can close, in one action from the known-failing list, every open Hub-filed flaky fix task whose test is no longer on the known-failing list, each closed with a note naming why; tasks whose test is still listed are left open, and the action says how many it closed and how many it left."
+    },
+    {
+      "key": "threshold-setting",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each check that names a report and a rerun command has a disturbed threshold, a whole number of at least 2, defaulting to 3, shown and changed where the check's report path and rerun command are."
+    },
+    {
+      "key": "known-flake-still-counts",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-11: a real flake that coincides with a busy moment must not be lost.",
+      "statement": "A test that fails inside a disturbed run and is already on the known-failing list as flaky is treated as flaking again exactly as if the run had not been disturbed."
+    },
+    {
+      "key": "second-flake-files",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-11: one flake is a sighting, two are a problem worth a task. Being listed already stops the checks holding it against anyone, so nothing waits on the task.",
+      "statement": "A test's first flake in a run that is not disturbed lists it as flaky with no fix task; its next flake in a different check run, while it is still listed, files its one fix task."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Recognising a disturbed run: at least the check's threshold of named tests failed in one run and all passed on the rerun",
+      "The threshold as a per-check setting, default 3, edited where the check is edited",
+      "Recording a disturbed run once, visibly on the check run and in the Logs and Overview, without per-test flaky entries or fix tasks",
+      "Keeping an already-listed flake counted when it fails inside a disturbed run",
+      "Filing a flaky fix task only on a test's second flake in a separate run",
+      "Each fix task quoting its own test's failure message",
+      "Closing, in one action, open flaky fix tasks whose test has come off the list, then using it on this project's existing pile"
+    ],
+    "non_goals": [
+      "Limiting how many checks or agent turns run at once on the machine (the load itself)",
+      "Reading machine metrics (CPU, memory) to decide anything",
+      "Fixing this repository's own nondeterministic tests (sleep-based waits, Windows lock races): a separate task",
+      "Changing how a reproduced failure or a fails-on-main failure is judged",
+      "Checks without a JUnit report and rerun command: they rerun whole and never list per-test flakes",
+      "Quarantining, skipping or retrying tests automatically",
+      "Closing fix tasks whose test is still on the list",
+      "Retroactively reclassifying entries already listed from past disturbed runs: they come off as their tests pass 20 runs, and the clear action then closes their tasks",
+      "Treating a test id spelled two ways (a dotted and a path form) as one test: seen once in this project, when its report format changed on 2026-11-06"
+    ]
+  },
+  "summary": "When a check fails many tests at once and every one of them passes when rerun, the Hub records one disturbed run. It does not list each test as flaky or file a fix task for each. A test that flakes is listed at once but gets a fix task only after it flakes in a second, separate run. Each fix task quotes its own test's failure. The operator can close, in one action, every fix task whose test has already proven stable. This applies to any project whose check names a JUnit report and a rerun command.",
+  "tasks": [
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "A script against the trial Hub's existing routes; Sonnet suffices and saves quota, and the same builder then carries the drive into hub-rules.",
+      "checker": "QA2",
+      "checker_reason": "QA2 checked slice 2's checks work and can confirm the baseline really fails at the task-count assertion on master.",
+      "depends_on": [],
+      "description": "Write scripts/drive/disturbed_run_check.py: against the trial Hub :8010, create a throwaway project whose check writes a JUnit report failing 5 named tests on the first run and passes them on the rerun (a tiny script driven by a marker file), run a task's checks, and assert the run reads disturbed, the known-failing list gains no entry, the Logs hold one disturbed event, and no fix task exists. Record a drive_baseline from master showing it reached the task-count assertion and failed there.",
+      "files": [
+        "scripts/drive/disturbed_run_check.py"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "disturbed-run"
+      ],
+      "reviewer": null,
+      "title": "Disturbed-run acceptance drive"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "The rules sit in two Hub files with exact line references in the design; one builder across the chain keeps the drive and the rules consistent, on Sonnet for quota.",
+      "checker": "QA2",
+      "checker_reason": "The risk is the gates excusing a real failure (D5); QA2 knows the checks code paths and must run the whole-check gate test, not read it.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "In the Hub: the per-check disturbed threshold (a field on the check's settings, normalised where the checks are read at project_checks.py:164, default 3, at least 2, refused otherwise); recognising a disturbed run and recording it on the check run's result and as one Logs event, never as a known-failing entry; keeping already-listed flakes counted inside one; listing a first flake without a task and filing on the second flake in a different run; quoting the test's own report message in its fix task. No migration: if one turns out to be needed, stop and say so. Hub tests for each criterion. Run the drive to PASS.",
+      "files": [
+        "hub/hub/project_checks.py",
+        "hub/hub/known_failing.py",
+        "hub/hub/flaky_tests.py",
+        "hub/hub/api/v1/projects.py",
+        "hub/tests"
+      ],
+      "from": null,
+      "key": "hub-rules",
+      "requirements": [
+        "disturbed-run",
+        "threshold-setting",
+        "known-flake-still-counts",
+        "second-flake-files",
+        "fix-task-quotes-its-test"
+      ],
+      "reviewer": null,
+      "title": "Disturbed runs and second-flake filing"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "builder_reason": "Builds on the result shape hub-rules defines, so the same builder avoids re-learning it; DeveloperSonnet2 built slice 4's settings UI.",
+      "checker": "QA2",
+      "checker_reason": "Same checker across the chain sees the whole feature; the clear action closes real tasks, so it needs a checker who drives it rather than reads it.",
+      "depends_on": [
+        "hub-rules"
+      ],
+      "description": "The disturbed run on a task's check run and beside the Overview known-failing list (last seven days, from the Logs events); the threshold field in the check editor; the route and the known-failing list action that closes open flaky fix tasks whose test is off the list, reporting closed and left counts. Route tests, vitest, a drive screenshot. Rebuild and commit the UI bundle (hub/ui/src with hub/hub/static/ui).",
+      "files": [
+        "hub/hub/api/v1/checks.py",
+        "hub/ui/src",
+        "hub/hub/static/ui"
+      ],
+      "from": null,
+      "key": "ui-and-clear",
+      "requirements": [
+        "disturbed-visible",
+        "threshold-setting",
+        "clear-the-pile"
+      ],
+      "reviewer": null,
+      "title": "Show disturbed runs, threshold field, clear the pile"
+    }
+  ],
+  "title": "A disturbed check run is not a pile of flaky tests"
+}
