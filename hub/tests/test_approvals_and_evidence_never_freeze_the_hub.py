@@ -55,9 +55,15 @@ async def _completed_task_with_accepted_work(app, auth_headers, builder, tmp_pat
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
-    await accept_evidence(app, auth_headers, builder)
-    git(tmp_path, "checkout", "-q", "main")
     task = await linked_task(app, auth_headers)
+    git(tmp_path, "branch", worktrees.task_branch_name(task), work)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
+    git(tmp_path, "checkout", "-q", "main")
     moved = await drive_to(app, auth_headers, task, "assigned", "in_progress", "completed")
     assert moved.status_code == 200, moved.text
     return task, work

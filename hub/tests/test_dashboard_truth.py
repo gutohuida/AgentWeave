@@ -448,6 +448,7 @@ async def _task_with_accepted_commit(
             id="ev-1",
             project_id="proj-test",
             requirement_id="req-1",
+            task_id="task-1",
             digest="d" * 64,
             kind="commit",
             actor_kind="agent",

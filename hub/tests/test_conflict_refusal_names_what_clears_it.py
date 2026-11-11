@@ -143,10 +143,12 @@ async def linked_task(app, auth_headers, *, title="Build it", requirements=("FR-
     return created.json()["id"]
 
 
-async def record_as_agent(app, run_headers, *, identifier="FR-1", summary="ran the tests"):
+async def record_as_agent(
+    app, run_headers, *, identifier="FR-1", summary="ran the tests", task_id=None
+):
     recorded = await app.post(
         AGENT_EVIDENCE,
-        json={"identifier": identifier, "summary": summary},
+        json={"identifier": identifier, "summary": summary, "task_id": task_id},
         headers=run_headers,
     )
     assert recorded.status_code == 201, recorded.text
@@ -210,15 +212,20 @@ async def conflicted(app, auth_headers, builder, tmp_path, *, requirements=(ALPH
     await set_main_branch("main")
 
     judged = commit_on_branch(tmp_path, AGENT_BRANCH, "shared.txt", "from the agent\n")
-    await accept_evidence(app, auth_headers, builder)
+    identifiers = tuple(f"FR-{index + 1}" for index in range(len(requirements)))
+    task = await linked_task(app, auth_headers, requirements=identifiers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
 
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "shared.txt").write_text("from the operator\n", encoding="utf-8")
     git(tmp_path, "add", "shared.txt")
     git(tmp_path, "commit", "-q", "-m", "the operator's own change")
 
-    identifiers = tuple(f"FR-{index + 1}" for index in range(len(requirements)))
-    task = await linked_task(app, auth_headers, requirements=identifiers)
     return task, judged
 
 
@@ -328,7 +335,13 @@ async def test_evidence_recorded_from_the_branch_supersedes_and_clears_it(
     resolved = resolve_on_branch(tmp_path)
     # Recorded *from a checkout of the branch the refusal names* — the condition the new remedy
     # states, and the whole of what makes it work.
-    await accept_evidence(app, auth_headers, builder, summary="re-ran after resolving")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="re-ran after resolving",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     async with async_session_factory() as session:
@@ -364,7 +377,7 @@ async def test_an_operator_naming_the_resolved_sha_supersedes_and_approval_merge
 
     recorded = await app.post(
         f"{BASE}/spec/evidence",
-        json={"identifier": "FR-1", "summary": "resolved it", "locator": resolved},
+        json={"task_id": task, "identifier": "FR-1", "summary": "resolved it", "locator": resolved},
         headers=auth_headers,
     )
     assert recorded.status_code == 201, recorded.text
@@ -399,7 +412,14 @@ async def test_fresh_evidence_for_a_different_requirement_supersedes(
     assert (await approve(app, auth_headers, task)).status_code == 409
 
     resolved = resolve_on_branch(tmp_path)
-    await accept_evidence(app, auth_headers, builder, identifier="FR-2", summary="the other one")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        identifier="FR-2",
+        summary="the other one",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     async with async_session_factory() as session:
@@ -420,7 +440,13 @@ async def test_a_restamp_does_not_reorder_the_evidence(app, auth_headers, builde
     """
     task, judged = await conflicted(app, auth_headers, builder, tmp_path)
     resolved = resolve_on_branch(tmp_path)
-    await accept_evidence(app, auth_headers, builder, summary="re-ran after resolving")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="re-ran after resolving",
+        task_id=task,
+    )
 
     async with async_session_factory() as session:
         stamps_before = dict(
@@ -490,7 +516,13 @@ async def test_an_agent_whose_workspace_is_gone_does_not_supersede(
         assert worktrees.existing_worktree(Path(tmp_path), "builder") is None
     git(tmp_path, "checkout", "-q", "main")
 
-    await accept_evidence(app, auth_headers, builder, summary="recorded from the wrong tree")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="recorded from the wrong tree",
+        task_id=task,
+    )
 
     async with async_session_factory() as session:
         row = await session.get(Task, task)

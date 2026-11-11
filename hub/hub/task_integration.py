@@ -32,7 +32,6 @@ from typing import Collection, Dict, List, Optional, Tuple
 
 from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from . import blocking, git_facts, requirement_evidence, traces, worktrees
 from .db.models import (
@@ -313,8 +312,8 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
     would drift, and a filter added to one and not the other produces either a refusal nothing can
     clear or a silent non-merge — which is the defect this whole capability exists to end.
 
-    Evidence is reached through `TaskRequirementLink`, and then only evidence this task recorded, or
-    that no task recorded (the operator's, or an agent's outside any task), counts: **a task's work
+    Evidence is reached through `TaskRequirementLink`, and only evidence this task recorded
+    counts: **a task's work
     is its own commits** (`a-task-s-checks-and-merges-use-its-own-work-...`, FR-1, D1). A
     requirement is shared by design -- a drive task serves every requirement it drives -- and a
     commit is not, so evidence another task recorded against a shared requirement is that task's
@@ -327,10 +326,9 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
     F520 first let another task's evidence count "once that task is approved". That clause is
     retired (operator, 2026-10-29): it made a sibling's commit the completion check's target, so a
     pass of the sibling's tree was reused for work that broke two tests, and it made a dependent's
-    approval wait for a commit of a task it did not depend on. An id naming no task row counts as
-    before, as no recorder at all.
+    approval wait for a commit of a task it did not depend on. Taskless evidence can establish
+    requirement coverage but cannot supply anybody's merge target (F1168).
     """
-    recorder = aliased(Task)
     assumed = ASSUMED_ACCEPTED.get()
     state_matches = RequirementEvidence.review_state == review_state
     if assumed and review_state == requirement_evidence.ACCEPTED:
@@ -348,18 +346,14 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
                 TaskRequirementLink,
                 TaskRequirementLink.requirement_id == RequirementEvidence.requirement_id,
             )
-            .outerjoin(recorder, recorder.id == RequirementEvidence.task_id)
             .where(
                 TaskRequirementLink.task_id == task.id,
                 RequirementEvidence.project_id == task.project_id,
                 state_matches,
                 EvidenceFootprint.kind == "git",
                 EvidenceFootprint.commit_sha.is_not(None),
-                or_(
-                    RequirementEvidence.task_id.is_(None),
-                    RequirementEvidence.task_id == task.id,
-                    recorder.id.is_(None),
-                ),
+                RequirementEvidence.task_id == task.id,
+                RequirementEvidence.kind != "operator_signoff",
             )
             .order_by(EvidenceFootprint.observed_at.asc())
         )
@@ -373,6 +367,8 @@ async def _targets(session: AsyncSession, task: Task, review_state: str) -> List
             task_id=evidence.task_id,
         )
         for footprint, evidence in rows
+        # Task identity above and branch reachability in merge_targets establish ownership.
+        # A descriptive locator does not invalidate the task's own recorded commit.
         if footprint.commit_sha
     ]
 
@@ -666,6 +662,18 @@ async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[T
     """
     if await evidence_governs(session, task) and not await review_alone_gates(session, task):
         accepted = await _targets(session, task, requirement_evidence.ACCEPTED)
+        # A task-bound row can still have been captured from a recorder's unrelated checkout.
+        # Where the task has its own branch, only commits actually on that branch can land.
+        tip = await blocking.run(task_branch_tip, root, task.id)
+        if tip:
+            accepted = [
+                target
+                for target in accepted
+                if await blocking.run(
+                    requirement_evidence.is_reachable_from, root, target.commit_sha, tip
+                )
+                is True
+            ]
         return await blocking.run(reduce_by_ancestry, root, accepted)
     tip = await blocking.run(task_branch_tip, root, task.id)
     if tip is None:
@@ -1000,6 +1008,8 @@ async def tasks_awaiting_this_commit(session: AsyncSession, evidence) -> List[Ta
     Correctness does not rest on this predicate being exact; only noise does. `integrate` self-guards
     by asking git whether the commit is reachable, before it asks anything about the working tree.
     """
+    if not evidence.task_id or evidence.kind == "operator_signoff":
+        return []
     footprint = (
         await session.execute(
             select(EvidenceFootprint).where(EvidenceFootprint.evidence_id == evidence.id)
@@ -1026,6 +1036,7 @@ async def tasks_awaiting_this_commit(session: AsyncSession, evidence) -> List[Ta
             .where(
                 TaskRequirementLink.requirement_id == evidence.requirement_id,
                 Task.project_id == evidence.project_id,
+                Task.id == evidence.task_id,
                 Task.status == "approved",
                 Task.id.not_in(already),
             )
