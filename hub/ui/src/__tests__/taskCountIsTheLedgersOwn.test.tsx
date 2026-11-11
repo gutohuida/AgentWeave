@@ -60,6 +60,7 @@ let page: { tasks: Task[]; total: number; has_more: boolean } = CUT_PAGE
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'worker' }], isLoading: false }),
 }))
+vi.mock('@/components/overview/ProjectSetupList', () => ({ ProjectSetupList: () => null }))
 vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: [] }),
   useAnswerQuestion: () => ({ mutate: vi.fn() }),

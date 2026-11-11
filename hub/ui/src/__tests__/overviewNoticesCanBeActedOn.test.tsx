@@ -47,6 +47,11 @@ const endStallMutate = vi.fn()
 const retryMutate = vi.fn()
 const toastSpy = vi.fn()
 
+// The set-up list reads the project collection; these tests have no project with anything to set up.
+vi.mock('@/api/projects', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/projects')>()),
+  useProjects: () => ({ data: [] }),
+}))
 vi.mock('@/lib/toast', () => ({ toast: (input: unknown) => toastSpy(input) }))
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({

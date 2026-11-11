@@ -141,6 +141,7 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/layout/RecencyView.tsx', 'useProjectConversations', 1, 'MISREPORT', '', '`open.data?.conversations ?? []` (:55) and `archivedCount ?? 0` (:56)'),
     ('components/layout/RecencyView.tsx', 'useProjectConversations', 2, 'MISREPORT', '', "`archived.data?.conversations ?? []` (:57) behind 'Show archived (0)' (:150)"),
     ('components/layout/Sidebar.tsx', 'useProjects', 1, 'MISREPORT', '', "`projects.map` (:364, :504) is the sidebar's project list"),
+    ('components/overview/ProjectSetupList.tsx', 'useProjects', 1, 'SUPPRESSED', '', "`setup` undefined: no list renders, so a failed read shows no needs rather than a false one"),
     ('components/projects/DirectoryPicker.tsx', 'useDirectoryListing', 1, 'MISREPORT', '', '\'No subdirectories\' (:162-163) — while the branch immediately above it renders the server\'s *stated* refusal, "Can\'t read this directory: {reason}" (:158-161)'),
     ('components/projects/DirectoryPicker.tsx', 'useFilesystemRoots', 1, 'MISREPORT', 'PICKER', '`roots = rootsData?.roots ?? []` (:47) leaves the roots strip empty'),
     ('components/projects/ProjectManagerModal.tsx', 'useNativeDialogAvailability', 1, 'BLANK', '', '`nativeAvailability?.available` (:141, :169) falls back to the manual path — deliberate degradation'),

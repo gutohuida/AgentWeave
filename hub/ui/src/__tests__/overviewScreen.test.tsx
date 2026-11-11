@@ -44,6 +44,7 @@ const updateTaskMutate = vi.fn()
 vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: [{ name: 'builder', status: 'idle', message_count: 0, active_task_count: 0, runner_id: 'r1' }], isLoading: false }),
 }))
+vi.mock('@/components/overview/ProjectSetupList', () => ({ ProjectSetupList: () => null }))
 vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: questionsError ? undefined : questions, error: questionsError }),
   useAnswerQuestion: () => ({ mutate: answerMutate }),

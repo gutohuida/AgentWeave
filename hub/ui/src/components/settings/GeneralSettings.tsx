@@ -761,6 +761,7 @@ function ProjectRows({
         >
           {!folderAvailable && onRelocate ? (
             <form
+              id="locate-project"
               className="flex items-center gap-2"
               onSubmit={(e) => {
                 e.preventDefault()
