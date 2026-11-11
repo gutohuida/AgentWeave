@@ -27,12 +27,11 @@ from hub.db.models import (
     Loop,
     RequirementEvidence,
     Run,
-    RunDivergence,
     Task,
 )
 from hub.run_divergence import evaluate_run_end
 from hub.run_task_binding import bind_run_to_task
-from hub.scheduler import DECISION_STALLED, decide_firing
+from hub.scheduler import DECISION_IN_FLIGHT, decide_firing
 
 from . import test_approval_refuses_unaccepted_evidence as _unaccepted
 from .test_a_flow_names_what_it_cannot_staff import _flow, _roster
@@ -42,24 +41,29 @@ pytestmark = pytest.mark.asyncio
 
 # Re-exported by assignment: importing the fixture by name would trip F811 in every signature.
 builder = _unaccepted.builder
-# Unbound evidence since vis-D4: a task's own awaiting piece is decided by the verdict on it and
-# never holds its review, so the hold is staged with evidence the verdict does not decide.
-a_task_with_awaiting_evidence = _unaccepted.a_task_with_unbound_awaiting_evidence
+# The diagnostic evaluates the gate before a verdict. Only the task's own evidence can
+# supply the awaiting commit; taskless evidence cannot hold its review (F1168).
+a_task_with_awaiting_evidence = _unaccepted.a_task_with_awaiting_evidence
 
 BETA = "beta"
 GAMMA = "gamma"
 GATE_SENTENCE = "has been recorded and nobody has judged it"
 
 
-async def _held_review(app, auth_headers, builder, bind_runner, tmp_path, *, grant_gamma=False):
+async def _held_review(
+    app, auth_headers, builder, bind_runner, tmp_path, *, grant_gamma=False, taskless=False
+):
     """A task under review by `beta`, with evidence awaiting, and `beta`'s silent review run."""
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     await _roster(app, auth_headers, bind_runner, BETA, GAMMA)
-    task_id, _evidence, _work = await a_task_with_awaiting_evidence(
-        app, auth_headers, builder, tmp_path
+    make_work = (
+        _unaccepted.a_task_with_unbound_awaiting_evidence
+        if taskless
+        else a_task_with_awaiting_evidence
     )
+    task_id, _evidence, _work = await make_work(app, auth_headers, builder, tmp_path)
     async with async_session_factory() as db:
         if grant_gamma:
             gamma = (await db.execute(select(Agent).where(Agent.name == GAMMA))).scalars().one()
@@ -114,24 +118,22 @@ async def _queued_for(agent):
         )
 
 
-async def test_an_availability_picked_reviewer_is_not_restaffed_past_a_hold(
-    app, auth_headers, builder, bind_runner, tmp_path
+@pytest.mark.parametrize("taskless", [False, True], ids=["own", "taskless"])
+async def test_awaiting_evidence_does_not_hold_an_availability_picked_reviewer(
+    app, auth_headers, builder, bind_runner, tmp_path, taskless
 ):
-    """1.1. Fails on the code before this change: restaffed to `gamma`."""
-    task_id, run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
-
+    """Own evidence is decided by the verdict; taskless evidence cannot supply a merge target."""
+    _task_id, run_id = await _held_review(
+        app, auth_headers, builder, bind_runner, tmp_path, taskless=taskless
+    )
     assert await evaluate_run_end(run_id) is not None
-
-    assert await _queued_for(GAMMA) == []
-    async with async_session_factory() as db:
-        assert (await db.get(Task, task_id)).assignee == BETA
+    assert len(await _queued_for(GAMMA)) == 1
     payload = await _diverged_payload(run_id)
-    assert payload["outcome"] == "surfaced"
-    assert GATE_SENTENCE in payload["reason"]
-    assert "no agent is free" not in payload["reason"]
+    assert payload["outcome"] == "restaffed"
+    assert GATE_SENTENCE not in payload["reason"]
 
 
-async def test_the_hold_reason_does_not_count_the_ending_review_as_a_live_turn(
+async def test_own_evidence_does_not_hold_the_ending_review_as_a_live_turn(
     app, auth_headers, builder, bind_runner, tmp_path
 ):
     """F458. `evaluate_run_end` runs while the ending run is still in the live set, and the hold
@@ -143,8 +145,8 @@ async def test_the_hold_reason_does_not_count_the_ending_review_as_a_live_turn(
         assert await evaluate_run_end(run_id) is not None
 
     payload = await _diverged_payload(run_id)
-    assert payload["outcome"] == "surfaced"
-    assert GATE_SENTENCE in payload["reason"]
+    assert payload["outcome"] == "restaffed"
+    assert GATE_SENTENCE not in payload["reason"]
     assert "still running the turn" not in payload["reason"]
     assert "clears itself" not in payload["reason"]
 
@@ -166,7 +168,7 @@ async def test_a_reviewer_granted_the_decision_is_still_restaffed(
     assert (await _diverged_payload(run_id))["outcome"] == "restaffed"
 
 
-async def test_a_declared_reviewer_is_surfaced_with_the_gate_sentence(
+async def test_a_declared_reviewer_with_own_evidence_is_surfaced_without_an_operator_hold(
     app, auth_headers, builder, bind_runner, tmp_path
 ):
     """1.3. The declaration is stubbed (`_review_was_declared`): what is under test is the branch."""
@@ -180,8 +182,8 @@ async def test_a_declared_reviewer_is_surfaced_with_the_gate_sentence(
 
     payload = await _diverged_payload(run_id)
     assert payload["outcome"] == "surfaced"
-    assert GATE_SENTENCE in payload["reason"]
-    assert "asking this one again" not in payload["reason"]
+    assert GATE_SENTENCE not in payload["reason"]
+    assert "asking this one again" in payload["reason"]
     assert await _queued_for(GAMMA) == []
 
 
@@ -264,7 +266,7 @@ async def test_the_predicates_git_is_bounded_and_off_the_loop(
             await requirement_gate.evaluate(db, task)
             plain = list(seen)
 
-    assert hold is not None
+    assert hold is None  # The verdict can decide this task's own evidence.
     main = threading.main_thread()
     assert held and all(
         t == task_integration.DIAGNOSTIC_GIT_TIMEOUT_SECONDS and th is not main for t, th in held
@@ -272,10 +274,10 @@ async def test_the_predicates_git_is_bounded_and_off_the_loop(
     assert plain and all(t == 60 for t, _ in plain)
 
 
-async def test_the_flow_says_the_approval_waits_on_the_operator(
+async def test_the_flow_waits_for_the_restaffed_review_without_an_evidence_hold(
     app, auth_headers, builder, bind_runner, tmp_path
 ):
-    """1.7. After 1.1 the wedge's sentence names the remedy, not "Ask beta again", within 500."""
+    """Own awaiting evidence does not turn an active review into an operator approval wedge."""
     task_id, run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
     assert await evaluate_run_end(run_id) is not None
     async with async_session_factory() as db:
@@ -283,16 +285,12 @@ async def test_the_flow_says_the_approval_waits_on_the_operator(
         task = await db.get(Task, task_id)
         task.title = "T" * 300
         task.loop_id = loop.id
-        readable = task.readable_id
         await db.commit()
         decision = await decide_firing(db, await db.get(Loop, loop.id), default_agent=GAMMA)
 
-    assert decision.kind == DECISION_STALLED, decision
-    reason = decision.stall_reason
-    assert readable and reason.startswith(f"Approval of {readable}")
-    assert "accept or reject the evidence" in reason
-    assert "Ask beta again" not in reason
-    assert len(reason) <= 500
+    assert decision.kind == DECISION_IN_FLIGHT, decision
+    assert decision.stall_reason is None
+    assert decision.approvals == ()
 
 
 async def test_a_wedged_review_with_nothing_to_hold_never_reaches_the_gate(
@@ -317,13 +315,14 @@ async def test_a_wedged_review_with_nothing_to_hold_never_reaches_the_gate(
 
 
 async def _decide_the_awaiting_evidence(app, auth_headers, task_id, decision, reason=""):
-    # The held review's evidence is unbound (vis-D4), so it is found by its state, not its task.
+    # Decide the held task's own awaiting evidence.
     async with async_session_factory() as db:
         [evidence] = (
             (
                 await db.execute(
                     select(RequirementEvidence).where(
                         RequirementEvidence.project_id == "proj-test",
+                        RequirementEvidence.task_id == task_id,
                         RequirementEvidence.review_state == "awaiting",
                     )
                 )
@@ -355,44 +354,21 @@ async def _review_entries_for(agent, task_id):
         )
 
 
-async def test_accepting_the_evidence_a_review_waited_on_asks_the_reviewer_again(
-    app, auth_headers, builder, bind_runner, tmp_path
+@pytest.mark.parametrize("decision", ["accepted", "rejected"])
+async def test_deciding_own_evidence_does_not_duplicate_a_restaffed_review(
+    app, auth_headers, builder, bind_runner, tmp_path, decision
 ):
-    """F621: on the sweep the operator accepted the evidence a tester's verdict waited on, and the
-    flow then skipped every tick with "Ask tester again" -- a request the app has no control for.
-    The decision that lifts the hold is the operator's answer, so the held review is asked again."""
+    """F1168: no operator hold exists here, so deciding evidence asks no previous reviewer again."""
     task_id, run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
     assert await evaluate_run_end(run_id) is not None
-    assert (await _diverged_payload(run_id))["outcome"] == "surfaced"
-
+    assert (await _diverged_payload(run_id))["outcome"] == "restaffed"
+    before = await _review_entries_for(GAMMA, task_id)
+    assert len(before) == 1
     with patch("hub.turn_scheduler.schedule_agent", _no_schedule):
-        await _decide_the_awaiting_evidence(app, auth_headers, task_id, "accepted")
-
-    [entry] = await _review_entries_for(BETA, task_id)
-    assert entry.divergence_source_run_id == run_id
-    async with async_session_factory() as db:
-        [divergence] = (
-            (await db.execute(select(RunDivergence).where(RunDivergence.run_id == run_id)))
-            .scalars()
-            .all()
-        )
-        assert divergence.outcome == "retried"
-        assert (await db.get(Task, task_id)).assignee == BETA
-
-
-async def test_rejecting_that_evidence_asks_the_reviewer_for_its_send_back(
-    app, auth_headers, builder, bind_runner, tmp_path
-):
-    """A rejection lifts the hold too: the reviewer's verdict (a send-back) can now be recorded,
-    and without it the task would sit under review with nobody acting."""
-    task_id, run_id = await _held_review(app, auth_headers, builder, bind_runner, tmp_path)
-    assert await evaluate_run_end(run_id) is not None
-
-    with patch("hub.turn_scheduler.schedule_agent", _no_schedule):
-        await _decide_the_awaiting_evidence(app, auth_headers, task_id, "rejected", "wrong commit")
-
-    [entry] = await _review_entries_for(BETA, task_id)
-    assert "revision_needed" in entry.content
+        await _decide_the_awaiting_evidence(app, auth_headers, task_id, decision, "wrong commit")
+    assert await _review_entries_for(BETA, task_id) == []
+    assert [e.id for e in await _review_entries_for(GAMMA, task_id)] == [e.id for e in before]
+    assert (await _diverged_payload(run_id))["outcome"] == "restaffed"
 
 
 async def test_a_decision_with_no_held_review_on_record_asks_nobody(

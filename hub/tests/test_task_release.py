@@ -142,14 +142,16 @@ async def make_document(app, auth_headers, run_headers):
     assert saved.status_code == 200, saved.text
 
 
-async def accept_evidence(app, auth_headers, run_headers):
+async def accept_evidence(app, auth_headers, run_headers, *, task_id):
     """Record evidence as the agent and accept it as the operator.
 
     The footprint is taken from the workspace's HEAD at this moment, so the caller arranges for the
     work being claimed to be checked out first.
     """
     recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran it"}, headers=run_headers
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "ran it", "task_id": task_id},
+        headers=run_headers,
     )
     assert recorded.status_code == 201, recorded.text
     accepted = await app.post(
@@ -300,7 +302,7 @@ async def test_release_does_not_move_the_frozen_target(
     work = work_in(checkout, "feature.py", "print('hi')\n", "the task's work")
 
     git(tmp_path, "merge", "-q", "--ff-only", work)
-    await accept_evidence(app, auth_headers, builder)
+    await accept_evidence(app, auth_headers, builder, task_id=task)
     git(tmp_path, "reset", "-q", "--hard", "HEAD~1")
     # Left uncommitted in the checkout: release snapshots it onto the branch.
     (checkout / "half-done.py").write_text("x = 1\n", encoding="utf-8")
@@ -382,7 +384,7 @@ async def test_review_still_resolves_and_checks_out_after_release(
     work = work_in(checkout, "feature.py", "print('hi')\n", "the task's work")
 
     git(tmp_path, "merge", "-q", "--ff-only", work)
-    evidence_id = await accept_evidence(app, auth_headers, builder)
+    evidence_id = await accept_evidence(app, auth_headers, builder, task_id=task)
     git(tmp_path, "reset", "-q", "--hard", "HEAD~1")
     # `commit_for_task_review` asks which evidence belongs to the *task*, which a real run gets
     # from its task binding. This run has none, so the link is made directly.
@@ -553,7 +555,7 @@ async def test_approving_one_task_ships_none_of_another_tasks_work(
         run = await session.get(Run, "run-rel")
         run.workspace_dir = str(checkout)
         await session.commit()
-    await accept_evidence(app, auth_headers, builder)
+    await accept_evidence(app, auth_headers, builder, task_id=task)
 
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text

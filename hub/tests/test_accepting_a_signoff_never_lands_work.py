@@ -187,3 +187,46 @@ async def test_task_bound_evidence_cannot_merge_a_foreign_branch(
             await task_integration.merge_targets(session, await session.get(Task, task), tmp_path)
             == []
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("locator", ["", "own.py"])
+async def test_accepting_awaiting_evidence_lands_its_own_task_branch(
+    app, auth_headers, builder, tmp_path, locator  # noqa: F811
+):
+    """The exclusion must preserve the positive path: own awaiting work lands when accepted."""
+    task, _ = await setup(app, auth_headers, builder, tmp_path)
+    work = commit_on_branch(tmp_path, f"agentweave/task/{task}", "own.py", "own\n")
+    async with async_session_factory() as session:
+        (await session.get(Run, "run-int")).workspace_dir = str(tmp_path)
+        await session.commit()
+    recorded = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "task_id": task, "locator": locator},
+        headers=builder,
+    )
+    assert recorded.status_code == 201, recorded.text
+    async with async_session_factory() as session:
+        evidence = await session.get(RequirementEvidence, recorded.json()["id"])
+        own_task = await session.get(Task, task)
+        assert evidence.review_state == "awaiting"
+        assert [
+            t.commit_sha for t in await task_integration.awaiting_targets(session, own_task)
+        ] == [work]
+        assert [
+            t.id for t in await task_integration.tasks_awaiting_this_commit(session, evidence)
+        ] == [task]
+    git(tmp_path, "checkout", "-q", "main")
+    accepted = await app.post(
+        f"{BASE}/spec/evidence/{recorded.json()['id']}/decision",
+        json={"decision": "accepted"},
+        headers=auth_headers,
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert git(tmp_path, "merge-base", "--is-ancestor", work, "main").returncode == 0
+    async with async_session_factory() as session:
+        assert (await session.get(Task, task)).status == "approved"
+        landings = (await session.execute(select(TaskLanding))).scalars().all()
+        assert len(landings) == 1
+        assert landings[0].task_id == task
+        assert landings[0].state == "landed"

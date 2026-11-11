@@ -166,7 +166,7 @@ async def test_accepted_evidence_for_an_unlinked_requirement_is_refused_with_the
 
 
 @pytest.mark.asyncio
-async def test_a_refusal_for_evidence_awaiting_a_decision_names_it_and_accepting_it_lands(
+async def test_taskless_evidence_neither_refuses_approval_nor_lands_on_acceptance(
     app, auth_headers, builder, tmp_path
 ):
     make_repo(tmp_path)
@@ -177,17 +177,14 @@ async def test_a_refusal_for_evidence_awaiting_a_decision_names_it_and_accepting
     evidence_id = await record(app, builder, "FR-1", None)
     git(tmp_path, "checkout", "-q", "main")
 
-    refused = await approve(app, auth_headers, task)
-    assert refused.status_code == 409, refused.text
-    waiting = refused.json()["detail"]["unaccepted"]
-    assert [(e["evidence_id"], e["identifier"], e["commit_sha"]) for e in waiting] == [
-        (evidence_id, "FR-1", work)
-    ]
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    assert work not in commits_on(tmp_path, "main")
 
     await decide(app, auth_headers, evidence_id)
     landed = await app.patch(f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers)
     assert landed.status_code == 200, landed.text
-    assert work in commits_on(tmp_path, "main")
+    assert work not in commits_on(tmp_path, "main")
 
 
 @pytest.mark.asyncio
