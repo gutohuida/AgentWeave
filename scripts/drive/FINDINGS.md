@@ -41595,3 +41595,13 @@ Four change documents (`agents-add-files-to-the-vault-by-path`, `an-operator-set
 **Tier:** 0
 
 Before today's spec tidy `spec/index.json` listed 11 of the 62 approved change documents. A `create_capability` act then regenerated it, so it is correct now, but it drifts again between such writes. **Expected:** every document the Hub writes appears in the index, and the index is regenerated from the rows rather than appended to.
+
+## F1170 (A) -- one Codex output line over 64 KiB deafens the Hub to the rest of the turn
+
+**Status:** fixed 2026-11-11 (Tier 0). `hub/hub/codex_appserver.py`: `_read_loop` read the app-server's stdout with `readline()`, whose 64 KiB limit raises `ValueError` and discards the line; nothing caught it, so the reader task ended silently while Codex kept working. `_read_line` now takes a line of any length with `readuntil`, reading an overrunning line in pieces; any other reader failure is logged and recorded as `output_lost()`, which `run_turn` checks beside `is_running()` and ends the turn `failed` with that sentence instead of waiting for the deadline. Tests: `test_codex_appserver_process.py::test_a_notification_longer_than_the_stream_limit_is_delivered_and_reading_goes_on` (fails on the old reader by timeout), `::test_a_reader_that_fails_while_the_child_lives_says_so`, `test_codex_appserver_run_turn.py::...::test_lost_output_with_the_process_alive_fails_fast_not_after_full_timeout`. Not driven live: the fix reaches `:8000` only on the operator's restart.
+**Source:** found by driving -- the operator saw CodexSol "working" with nothing happening (DeveloperOpus, 2026-11-11)
+**Theme:** Runners
+**Ready:** yes
+**Tier:** 0
+
+CodexSol's run `run-1522734a6958` on AW-101 recorded ten outputs, the last a shell call at 20:32:31 that printed a large file. Nothing after it reached the Hub, although `codex.exe` was alive and went on to send a message (20:33:10, through MCP, so it did arrive) and start a pytest run (20:38:34). The run stayed `running` with no events until its turn timeout. A message CodexSol had sent to Architect, tagged with AW-101, also stayed queued behind that run's hold on the task's checkout, so Architect looked stuck too. **Expected:** a large output never ends the reader, and a reader that ends while the child lives ends the turn with that reason.
