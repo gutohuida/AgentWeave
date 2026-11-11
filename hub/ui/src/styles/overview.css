@@ -87,6 +87,9 @@
 .aw-ov-row-icon[data-kind="main"] { color: var(--red); background: color-mix(in oklab, var(--red) 12%, var(--surface-2)); }
 .aw-ov-row-icon[data-kind="flaky"] { color: var(--amber); background: color-mix(in oklab, var(--amber) 12%, var(--surface-2)); }
 .aw-ov-kf-row:hover { background: transparent; }
+/* A disturbed-run row has no icon cell, so its text must take the whole row, not the 26px icon column. */
+.aw-ov-kf-disturbed .aw-ov-row { grid-template-columns: minmax(0, 1fr); }
+.aw-ov-kf-disturbed .aw-ov-row-text { min-width: 0; width: 100%; }
 .aw-ov-row-text { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
 .aw-ov-row-title { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .aw-ov-row-title strong { font-weight: 600; color: var(--agent-accent, var(--text)); }

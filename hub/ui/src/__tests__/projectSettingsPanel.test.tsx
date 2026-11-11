@@ -60,7 +60,7 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null; change_command?: string | null }> | null
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null; disturbed_threshold?: number | null; change_command?: string | null }> | null
   checks_give_way?: boolean
 } {
   return {
@@ -398,6 +398,39 @@ describe('Project settings → General, applied on change', () => {
     await user.clear(within(dialog).getByLabelText('Re-run command'))
     await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
     expect(lastPatch()).toEqual({ checks: [{ name: 'unit', command: 'pytest --junitxml=report.xml', timeout_seconds: 900 }] })
+  })
+
+  // `a-disturbed-check-run-is-not-a-pile-of-flaky-tests` FR-7 ac-threshold.
+  it('sets the disturbed threshold beside the report and re-run command, refusing less than 2', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'unit', command: 'pytest', timeout_seconds: 900, report_path: 'report.xml', rerun_command: 'python rerun.py {tests}' }],
+    }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-report-0')).toHaveTextContent('disturbed at 3')
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    const dialog = await screen.findByRole('dialog')
+    const field = within(dialog).getByLabelText('Disturbed threshold')
+    expect(field).toHaveValue('')
+    await user.type(field, '1')
+    expect(within(dialog).getByRole('alert')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
+    await user.clear(field)
+    await user.type(field, '6')
+    await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch().checks).toEqual([
+      { name: 'unit', command: 'pytest', timeout_seconds: 900, report_path: 'report.xml', rerun_command: 'python rerun.py {tests}', disturbed_threshold: 6 },
+    ])
+  })
+
+  it('has no threshold field for a check without a report and re-run command', async () => {
+    const user = userEvent.setup()
+    settings = { ...makeSettings(), checks: [{ name: 'unit', command: 'npm test', timeout_seconds: 900 }] }
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByLabelText('Disturbed threshold')).not.toBeInTheDocument()
   })
 
   // FR-1 placeholder-required: said in the dialog before the save.

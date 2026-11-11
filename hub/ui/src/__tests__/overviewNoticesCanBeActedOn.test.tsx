@@ -84,7 +84,7 @@ vi.mock('@/api/queue', () => ({
 }))
 vi.mock('@/api/stalls', () => ({ useOpenStalls: () => ({ data: openStalls }), useEndStall: () => ({ mutate: endStallMutate }) }))
 // The known-failing list is a list to read, not a row that needs the operator (FR-11).
-vi.mock('@/api/knownFailing', () => ({ useKnownFailing: () => ({ data: null }) }))
+vi.mock('@/api/knownFailing', () => ({ useKnownFailing: () => ({ data: null }), useDisturbedRuns: () => ({ data: [] }), useClearStableFixTasks: () => ({ mutate: () => {}, isPending: false, data: undefined, error: null }) }))
 vi.mock('@/api/accounting', () => ({ useAccounting: () => ({ data: { budget: { exhausted: false } } }) }))
 
 function question(overrides: Partial<Question> = {}): Question {
