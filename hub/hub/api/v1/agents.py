@@ -65,6 +65,7 @@ from ...model_catalog import (
     undeclared_model_reason,
 )
 from ...output_recording import record_agent_output
+from ...project_setup import publish_setup_changed
 from ...reach import validated_grants
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
@@ -766,6 +767,7 @@ async def create_operator_agent(
     }
     await persist_event(session, project_id, "agent_created", payload, agent=agent.name)
     await sse_manager.broadcast(project_id, "agent_created", payload)
+    await publish_setup_changed(project_id)
     # After the broadcast, so nothing this does can stop the UI learning of the agent (D4 (a)).
     await write_copilot_home_after_commit(session, project_id, agent)
     return OperatorAgentResponse(
@@ -3160,6 +3162,7 @@ async def request_agent(
     # and a failed event must not skip the start (F349, design D3a/D4).
     await persist_accepted_event(project_id, "agent_requested", payload, agent=source_run.agent)
     await sse_manager.broadcast(project_id, "agent_requested", payload)
+    await publish_setup_changed(project_id)
     await persist_accepted_event(project_id, "queue_entry_queued", payload, agent=body.name)
     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
 
@@ -3578,6 +3581,10 @@ async def patch_agent(
         # D4 (b): before the re-drain below, so a turn it starts finds the file current.
         await write_copilot_home_after_commit(session, project_id, agent_row)
 
+    if "runner_id" in body:
+        # Choosing a model can resolve, or raise, the agent's can-run set-up item.
+        await publish_setup_changed(project_id)
+
     if runner_newly_bound:
         # Binding a runner is the repair the refusal names, so it has to be a redrain site — the
         # same shape `POST /relocate` already has for "project workspace is unavailable". Without
@@ -3737,6 +3744,7 @@ async def archive_agent(
     }
     await persist_event(session, project_id, "agent_archived", event_payload, agent=agent_row.name)
     await sse_manager.broadcast(project_id, "agent_archived", event_payload)
+    await publish_setup_changed(project_id)
 
     response = {
         "name": agent_row.name,
@@ -3777,6 +3785,7 @@ async def unarchive_agent(
         session, project_id, "agent_unarchived", event_payload, agent=agent_row.name
     )
     await sse_manager.broadcast(project_id, "agent_unarchived", event_payload)
+    await publish_setup_changed(project_id)
 
     return {
         "name": agent_row.name,

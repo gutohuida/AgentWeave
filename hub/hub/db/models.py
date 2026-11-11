@@ -3689,3 +3689,21 @@ class MainCheckRun(Base):
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (Index("ix_main_check_runs_project", "project_id", "main_sha", "reason"),)
+
+
+class SetupDismissal(Base):
+    """A set-up item the operator dismissed for a project (`a-project-says-what-it-still-needs`,
+    FR-3, migration 0175).
+
+    Only the repository item can be dismissed (`project_setup.DISMISSABLE`); the route refuses any
+    other. A project with no row has nothing dismissed, which is how every project created before
+    this table reads. Showing the item again deletes the row.
+    """
+
+    __tablename__ = "setup_dismissals"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    item: Mapped[str] = mapped_column(String(32), nullable=False)
+    dismissed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (PrimaryKeyConstraint("project_id", "item", name="pk_setup_dismissals"),)

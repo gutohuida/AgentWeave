@@ -16,6 +16,7 @@ from ...db.engine import get_session
 from ...db.models import Agent, ManagerJob, Project, Runner
 from ...launchability import probe_agent
 from ...model_catalog import get_provider, undeclared_model_reason
+from ...project_setup import publish_setup_changed
 from ...runner_adapters import ADAPTERS
 from ...runner_flag_rules import posture_flags_problem
 from ...runner_provider import (
@@ -236,6 +237,8 @@ async def update_runner(
 
     await session.commit()
     await session.refresh(runner)
+    # A new model or provider changes whether the agents bound to it can run (their set-up items).
+    await publish_setup_changed(project_id)
     return runner
 
 
