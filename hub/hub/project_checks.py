@@ -74,6 +74,8 @@ logger = logging.getLogger(__name__)
 CHECKS_DIR = Path(".agentweave") / "checks"
 MAX_CONCURRENT_RUNS = 2
 OUTPUT_TAIL_CHARS = 4000
+#: How much of one test's own failure message a result keeps (a fix task quotes it).
+TEST_MESSAGE_CHARS = 1500
 # How long a check's output may stay open after its process exited before the run stops reading.
 OUTPUT_DRAIN_SECONDS = 5
 DEFAULT_TIMEOUT_SECONDS = 900
@@ -129,6 +131,21 @@ PHASE_BOTH = "both"
 PHASES = (PHASE_REVIEW, PHASE_LANDING, PHASE_BOTH)
 
 
+#: A run that fails this many named tests, every one passing on the rerun, is disturbed unless the
+#: check says otherwise (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`, FR-1, FR-7).
+DEFAULT_DISTURBED_THRESHOLD = 3
+MIN_DISTURBED_THRESHOLD = 2
+
+
+def disturbed_threshold(check: Dict[str, Any]) -> int:
+    """*check*'s disturbed threshold: its own whole number of at least 2, else the default. A stored
+    value below the least (saved by hand) reads as the default."""
+    value = check.get("disturbed_threshold")
+    if isinstance(value, bool) or not isinstance(value, int) or value < MIN_DISTURBED_THRESHOLD:
+        return DEFAULT_DISTURBED_THRESHOLD
+    return value
+
+
 def configured_checks(
     project: Optional[Project], phase: Optional[str] = None
 ) -> List[Dict[str, Any]]:
@@ -162,6 +179,7 @@ def configured_checks(
                     # The report and re-run command (FR-1); `None` for a check without them.
                     "report_path": str(check.get("report_path") or "").strip() or None,
                     "rerun_command": str(check.get("rerun_command") or "").strip() or None,
+                    "disturbed_threshold": disturbed_threshold(check),
                     # The command for a change (`a-check-can-run-only-the-tests-for-what-a-task-
                     # changed`, FR-1); `None` for a check without one.
                     "change_command": str(check.get("change_command") or "").strip() or None,
@@ -838,6 +856,15 @@ def _judge_by_report(
     excerpt = failure_excerpt(report, failing)
     if excerpt:
         result["failure_excerpt"] = excerpt
+    # Each test's own message, so a fix task quotes its test's failure and not the others'
+    # (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`, FR-4).
+    messages = {
+        test: report.messages[test][:TEST_MESSAGE_CHARS]
+        for test in failing
+        if report.messages.get(test)
+    }
+    if messages:
+        result["failure_messages"] = messages
 
 
 def _shell_argument(test: str) -> Optional[str]:
@@ -1238,6 +1265,15 @@ def confirm_failure(
     result["flaky"] = {**attempt, "first": first}
     if how == "tests":
         result["flaky_tests"] = node_ids
+        threshold = disturbed_threshold(check)
+        if len(node_ids) >= threshold:
+            # Many tests failing at once that all pass alone is the machine, not the tests
+            # (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`, FR-1).
+            result["disturbed"] = {
+                "failed": len(node_ids),
+                "passed_on_rerun": len(node_ids),
+                "threshold": threshold,
+            }
     result["exit_code"], result["timed_out"] = 0, False
     result["duration_seconds"] = round(
         float(result.get("duration_seconds") or 0) + float(again["duration_seconds"] or 0), 1

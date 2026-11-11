@@ -199,9 +199,16 @@ async def test_ac_entry_each_entry_carries_its_fields_on_the_route(app, auth_hea
     assert flaky["added_by_run"] == run_id and lint["added_by_run"] == main_id
     for entry in (flaky, lint):
         assert entry["first_seen"] and entry["last_seen"], entry
-        assert entry["fix_task"]["id"].startswith("task-"), entry
-    assert flaky["fix_task"]["assignee"] == "builder"
+    # A first flake is listed with no task; its second, in another run, files one (FR-9).
+    assert flaky["fix_task"] is None
+    assert lint["fix_task"]["id"].startswith("task-"), lint
     assert lint["fix_task"]["assignee"] is None
+    assert await known_failing.record_run(await _run_row("chk-flake2", [_flaked(TEST_B)])) == []
+    flaky = {e["check"]: e for e in (await app.get(ROUTE, headers=auth_headers)).json()["entries"]}[
+        "pytest"
+    ]
+    assert flaky["fix_task"]["id"].startswith("task-"), flaky
+    assert flaky["fix_task"]["assignee"] == "builder"
 
 
 def _rows(conn, table: str) -> list:
@@ -300,6 +307,12 @@ async def test_ac_flaky_a_flake_is_listed_and_the_task_is_not_sent_back(
     [entry] = await _entries()
     assert (entry.test, entry.kind, entry.added_by_run) == (FLAKY_ID, "flaky", run_id)
     assert await _status(TASK) == "completed"
+    assert entry.fix_task_id is None  # a first flake files nothing (FR-9)
+    again = await known_failing.record_run(
+        await _run_row("chk-second", [_flaked(FLAKY_ID)], task_id=TASK)
+    )
+    assert again == []
+    [entry] = await _entries()
     fix = await _get(Task, entry.fix_task_id)
     # The loop's developer owns it (`_loop`'s job agent), and it is on no loop (FR-5, FR-6).
     assert (fix.assignee, fix.status, fix.loop_id, fix.build_id) == (
@@ -542,7 +555,7 @@ async def test_ac_owner_one_fix_task_assigned_to_the_builds_developer(app):
         )
     [fix] = named_b
     assert fix.id == entries[TEST_B].fix_task_id and fix.assignee == "DeveloperOpus"
-    for part in ("pytest", TEST_B, "flaky", "chk-o1"):
+    for part in ("pytest", TEST_B, "flaky", "chk-o2"):  # found by the run that flaked it again
         assert part in fix.description, (part, fix.description)
     main_fix = await _get(Task, entries[TEST_A].fix_task_id)
     assert main_fix.assignee is None and "mchk-o3" in main_fix.description
@@ -552,6 +565,7 @@ async def test_ac_not_started_a_fix_task_is_on_no_loop_and_no_turn_starts(app):
     await _loop(live=True)
     await _plain_task(TASK, loop_id="loop-red-main", assignee="builder")
     await known_failing.record_run(await _run_row("chk-ns", [_flaked(TEST_B)]))
+    await known_failing.record_run(await _run_row("chk-ns2", [_flaked(TEST_B)]))
     [entry] = await _entries()
 
     # What would start an assigned task outside a flow, asked as its backstop sweep asks it.
