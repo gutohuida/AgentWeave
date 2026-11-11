@@ -40,7 +40,12 @@ async def _completed_task_its_author_holds(app, auth_headers, run_headers, root)
     await set_main_branch("main")
     task = await linked_task(app, auth_headers)
     commit_on_branch(root, worktrees.task_branch_name(task), "README2.md", "the change\n")
-    evidence = await accept_evidence(app, auth_headers, run_headers, task_id=task, )
+    evidence = await accept_evidence(
+        app,
+        auth_headers,
+        run_headers,
+        task_id=task,
+    )
     git(root, "checkout", "-q", "main")
     moved = await drive_to(app, auth_headers, task, "assigned", "in_progress", "completed")
     assert moved.status_code == 200, moved.text

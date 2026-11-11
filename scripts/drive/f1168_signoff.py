@@ -8,13 +8,13 @@ Only the trial profile and ports 8010/8011 are allowed. Keeps its fixture for in
 import argparse
 import json
 import os
-from pathlib import Path
 import secrets
 import sqlite3
 import subprocess
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 
 def main():

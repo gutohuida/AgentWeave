@@ -57,7 +57,12 @@ async def test_an_approval_that_merges_redrains_the_queue(
     await set_main_branch("main")
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
     task = await linked_task(app, auth_headers)
-    await accept_evidence(app, auth_headers, builder, task_id=task, )
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     with patch("hub.turn_scheduler.redrain_queued_agents", new=AsyncMock()) as redrain:
@@ -79,7 +84,12 @@ async def test_a_retry_that_merges_redrains_the_queue(
     await make_document(app, auth_headers, builder)
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
     task = await linked_task(app, auth_headers)
-    await accept_evidence(app, auth_headers, builder, task_id=task, )
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     with patch("hub.turn_scheduler.redrain_queued_agents", new=AsyncMock()) as redrain:

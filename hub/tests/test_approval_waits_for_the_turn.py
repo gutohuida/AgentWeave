@@ -577,7 +577,12 @@ async def test_the_evidence_route_is_refused_inside_the_turn_too(app, auth_heade
     # recorded from here, which is where a real agent records it: mid-turn, before any commit.
     git(tmp_path, "checkout", "-q", "-b", AGENT_BRANCH)
     task = await linked_task(app, auth_headers)
-    evidence = await accept_evidence(app, auth_headers, run_headers, task_id=task, )
+    evidence = await accept_evidence(
+        app,
+        auth_headers,
+        run_headers,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     assert await footprint_sha(evidence) == base, (

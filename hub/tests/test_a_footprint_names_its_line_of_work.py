@@ -159,11 +159,16 @@ async def test_approval_merges_the_descendant_when_an_older_commit_was_observed_
     c = commit_on_branch(tmp_path, AGENT_BRANCH, "c.txt", "c\n")
     d = commit_on_branch(tmp_path, AGENT_BRANCH, "d.txt", "d\n", create=False)
     task = await linked_task(app, auth_headers)
-    await accept_evidence(app, auth_headers, builder, task_id=task, )  # footprint at D, observed first
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )  # footprint at D, observed first
     git(tmp_path, "checkout", "-q", "main")
     recorded = await app.post(
         f"{BASE}/spec/evidence",
-        json={"identifier": "FR-1", "summary": "checked C", "locator": c},
+        json={"identifier": "FR-1", "summary": "checked C", "locator": c, "task_id": task},
         headers=auth_headers,
     )
     assert recorded.status_code == 201, recorded.text

@@ -163,7 +163,12 @@ async def approved_on_a_dirty_checkout(app, auth_headers, builder, tmp_path):
     await set_main_branch("main")
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "README.md", "the task's line\n")
     task = await linked_task(app, auth_headers)
-    await accept_evidence(app, auth_headers, builder, task_id=task, )
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "notes.txt").write_text("tracked\n", encoding="utf-8")
     git(tmp_path, "add", "notes.txt")
