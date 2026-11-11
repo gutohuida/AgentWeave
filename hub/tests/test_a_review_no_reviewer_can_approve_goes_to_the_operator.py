@@ -130,7 +130,7 @@ async def test_awaiting_evidence_does_not_hold_an_availability_picked_reviewer(
     assert len(await _queued_for(GAMMA)) == 1
     payload = await _diverged_payload(run_id)
     assert payload["outcome"] == "restaffed"
-    assert GATE_SENTENCE not in payload["reason"]
+    assert "reason" not in payload  # A successful restaff has no hold diagnostic.
 
 
 async def test_own_evidence_does_not_hold_the_ending_review_as_a_live_turn(
@@ -146,9 +146,7 @@ async def test_own_evidence_does_not_hold_the_ending_review_as_a_live_turn(
 
     payload = await _diverged_payload(run_id)
     assert payload["outcome"] == "restaffed"
-    assert GATE_SENTENCE not in payload["reason"]
-    assert "still running the turn" not in payload["reason"]
-    assert "clears itself" not in payload["reason"]
+    assert "reason" not in payload  # No stale live-turn or evidence-hold diagnostic.
 
 
 async def test_a_reviewer_granted_the_decision_is_still_restaffed(
