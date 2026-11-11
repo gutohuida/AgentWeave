@@ -89,3 +89,49 @@ async def test_an_ordinary_close_leaves_what_the_agent_started(tmp_path):
         from hub.pty_runner import terminate_process_tree
 
         terminate_process_tree(sleeper)
+
+
+def _tree_script(tmp_path):
+    """A root that stays up, a child that stays up, and the child's long grandchild."""
+    pids = tmp_path / "pids.txt"
+    (tmp_path / "leaf.py").write_text(SLEEPER, encoding="utf-8")
+    (tmp_path / "branch.py").write_text(
+        "import subprocess, sys, time\n"
+        f"leaf = subprocess.Popen([sys.executable, {str(tmp_path / 'leaf.py')!r}])\n"
+        f"open({str(pids)!r}, 'w').write(f'{{__import__(\"os\").getpid()}} {{leaf.pid}}')\n"
+        "for _ in range(600): time.sleep(0.1)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "root.py").write_text(
+        "import subprocess, sys, time\n"
+        f"subprocess.Popen([sys.executable, {str(tmp_path / 'branch.py')!r}])\n"
+        "for _ in range(600): time.sleep(0.1)\n",
+        encoding="utf-8",
+    )
+    return [sys.executable, str(tmp_path / "root.py")], pids
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="POSIX ends the process group at close")
+@pytest.mark.timeout(120)
+async def test_ending_the_commands_leaves_the_app_server_to_answer(tmp_path):
+    """Measured live: `py.exe` left the job at creation, so the stop must end the app-server's
+    descendants before `turn/interrupt` lets Codex end the shell and orphan them."""
+    cmd, pids = _tree_script(tmp_path)
+    session = await AppServerProcess.spawn(cmd, cwd=str(tmp_path))
+    deadline = time.monotonic() + 30
+    while not (pids.exists() and len(pids.read_text().split()) == 2):
+        assert time.monotonic() < deadline, "the tree never started"
+        await asyncio.sleep(0.05)
+    branch, leaf = (int(p) for p in pids.read_text().split())
+    try:
+        await session.end_commands()
+
+        assert await _gone(branch) and await _gone(leaf)
+        assert session.is_running()
+    finally:
+        await session.close(force=True)
+        for pid in (branch, leaf):
+            if pid_alive(pid):
+                from hub.pty_runner import terminate_process_tree
+
+                terminate_process_tree(pid)

@@ -32,12 +32,13 @@ import contextlib
 import json
 import logging
 import os
+import re
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple
 
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
-from .process_job import ProcessJob
+from .process_job import ProcessJob, terminate_descendants
 from .pty_runner import resolve_executable, terminate_process_tree
 from .runner_commands import CODEX_MCP_ENV_NAMES, OPERATOR_POSTURE
 from .runner_events import (
@@ -359,6 +360,56 @@ def decide_approval(
     return {"decision": "decline"}
 
 
+#: Codex's Windows command wrapper: `format!("{:?} -Command {:?}", exe, cmd)`, measured on
+#: 0.167.1 (2026-11-11, `testbed/scratch/f325probe/probe4.py`). Two Rust-debug-quoted strings.
+_QUOTED = r'"((?:[^"\\]|\\.)*)"'
+_SHELL_WRAPPER = re.compile(rf"\A{_QUOTED} -Command {_QUOTED}\Z", re.DOTALL)
+_POWERSHELL_EXES = frozenset({"powershell.exe", "pwsh.exe"})
+_RUST_ESCAPE = re.compile(r"\\(?:u\{([0-9a-fA-F]{1,6})\}|(.))", re.DOTALL)
+_RUST_SIMPLE_ESCAPES = {"\\": "\\", '"': '"', "'": "'", "n": "\n", "r": "\r", "t": "\t", "0": "\0"}
+
+
+def _rust_unquote(body: str) -> Optional[str]:
+    """The string a Rust `{:?}` rendering came from, or None for an escape it never produces."""
+    failed = False
+
+    def _one(match: "re.Match[str]") -> str:
+        nonlocal failed
+        if match.group(1) is not None:
+            return chr(int(match.group(1), 16))
+        simple = _RUST_SIMPLE_ESCAPES.get(match.group(2))
+        if simple is None:
+            failed = True
+            return ""
+        return simple
+
+    text = _RUST_ESCAPE.sub(_one, body)
+    return None if failed else text
+
+
+def unwrap_shell_command(command: str) -> Optional[Tuple[str, str]]:
+    """`("PowerShell", <the command the model wrote>)` when *command* is exactly Codex's Windows
+    wrapper around it, else None (F1161).
+
+    On Windows, a command approval's `command` is `"<...\\powershell.exe>" -Command "<cmd>"`, both
+    halves Rust-debug-quoted: every backslash doubled and every `"` escaped. Judged as it came, the
+    Hub's own `Set-Content` of an arguments file read as something else and a spec turn's one kept
+    write was declined. Exactly that shape: one quoted PowerShell executable, ` -Command `, one
+    quoted string, nothing before or after, and no escape Rust does not emit. Anything else is
+    None and is judged as it came, as before.
+    """
+    match = _SHELL_WRAPPER.match(command)
+    if match is None:
+        return None
+    exe = _rust_unquote(match.group(1))
+    inner = _rust_unquote(match.group(2))
+    if exe is None or inner is None:
+        return None
+    if exe.replace("/", "\\").rsplit("\\", 1)[-1].lower() not in _POWERSHELL_EXES:
+        return None
+    return "PowerShell", inner
+
+
 def _is_hub_own_call(method: str, subject: Dict[str, Any], workspace: Optional[str]) -> bool:
     """A spec turn's one kept write (`a-run-reaches-the-hub-without-mcp` D16), by the rule Claude's
     and Copilot's runs are judged by (`mcp_server._hub_own_call`): a command that is exactly one
@@ -377,6 +428,10 @@ def _is_hub_own_call(method: str, subject: Dict[str, Any], workspace: Optional[s
         if method == COMMAND_APPROVAL_METHOD:
             command = subject.get("command")
             shell = "PowerShell" if os.name == "nt" else "Bash"
+            # F1161: on Windows the approval names the shell invocation, not the command.
+            unwrapped = unwrap_shell_command(command) if isinstance(command, str) else None
+            if unwrapped is not None:
+                shell, command = unwrapped
             return isinstance(command, str) and bool(
                 mcp_server._hub_own_call(shell, {"command": command}, workspace=workspace)
             )
@@ -968,6 +1023,17 @@ class AppServerProcess:
     def is_running(self) -> bool:
         return self._proc.returncode is None
 
+    async def end_commands(self) -> None:
+        """End every process the app-server started, leaving the app-server itself to answer the
+        interrupt that follows (F1162). Windows only; POSIX ends the group at close. Never raises.
+        """
+        if self._proc.pid is None or not self.is_running():
+            return
+        with contextlib.suppress(Exception):
+            ended = await asyncio.to_thread(terminate_descendants, self._proc.pid)
+            if ended:
+                logger.info("stopping a Codex turn ended its commands: %s", ended)
+
     async def close(self, *, force: bool = False) -> None:
         """Terminate the process and stop the reader task. Idempotent.
 
@@ -1155,6 +1221,9 @@ async def run_turn(
         while True:
             if should_interrupt is not None and should_interrupt() and not interrupted:
                 interrupted = True
+                # F1162: end what the turn is running while its tree is still whole. Interrupting
+                # first let Codex end its shell and orphan the command, out of every reach.
+                await session.end_commands()
                 # Best-effort: if interrupt itself can't be delivered, the deadline/process-
                 # death checks below still guarantee this loop ends.
                 with contextlib.suppress(AppServerError, asyncio.TimeoutError):
