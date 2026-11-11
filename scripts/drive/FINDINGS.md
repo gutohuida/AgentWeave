@@ -41669,3 +41669,11 @@ With two approved change documents in a project (each has an `FR-1`), the Codex 
 **Tier:** 0
 
 The first submit carried problem, scope and evidence, no requirements, and four `open_questions` with `resolved: false`. The answer was `blocking: []`, `ready_to_approve: true`, with `no_requirements` and four `unresolved_question` entries only under `warnings`. The tool's own description says an unresolved question "blocks the document" and that `ready_to_approve` "is false while anything blocks or any such approval gap is present". Either the field or the description is wrong; an author (or a cheap model) reading the field would tell the operator an empty document is ready. Repro: create a change-spec, submit it with `open_questions: [{"question": "x", "resolved": false}]` and no requirements; read `ready_to_approve`.
+
+## F1166 (C) -- a hand-made task whose work landed with another task cannot be closed
+
+**Status:** open
+**Found:** 2026-11-11, Architect, closing AW-81/82/83 after AW-80 (477c655) landed their fixes
+**Tier:** 1
+
+AW-81, AW-82 and AW-83 were built in AW-80's run (the Hub refused to let that run move them: "a run takes at most one task"), so they stayed `pending` while their work merged with AW-80. `update_task(AW-81, status=approved)` answers 409 "From 'pending' the available transitions are: assigned, in_progress". The only way out is in_progress -> completed, which runs checks and stages a review of a task branch that holds nothing. A spec document has `already_built` for this; a hand-made task has no "done elsewhere, by <task/commit>" close. Expected: a task can be closed as landed by another task or commit, naming it, without a build or review.
