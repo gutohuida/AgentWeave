@@ -1,1 +1,0 @@
-import{a6 as a,cK as s,cj as o}from"./index-C78GmEpN.js";let c=0;const n=o(e=>({request:null,ask:t=>e({request:{...t,nonce:++c}}),clear:()=>e({request:null})}));function u(e,t){n.getState().ask(t),a(s(e,"activity"))}export{u as o,n as u};
