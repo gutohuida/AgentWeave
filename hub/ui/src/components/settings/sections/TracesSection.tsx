@@ -21,7 +21,10 @@ const RANGE_WORDS: Record<TraceRange, string> = {
 /** The instant a range starts at, as the Hub's `since` (an ISO datetime); none for all of them. */
 function sinceFor(range: TraceRange): string | undefined {
   const span = SPAN_MS[range]
-  return span === null ? undefined : new Date(Date.now() - span).toISOString()
+  if (span === null) return undefined
+  const start = new Date()
+  start.setTime(start.getTime() - span)
+  return start.toISOString()
 }
 
 /** Project settings → Traces, on the Hub. Retention, the collector switch and the endpoint apply
