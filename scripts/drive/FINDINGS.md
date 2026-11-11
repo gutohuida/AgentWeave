@@ -41677,3 +41677,11 @@ The first submit carried problem, scope and evidence, no requirements, and four 
 **Tier:** 1
 
 AW-81, AW-82 and AW-83 were built in AW-80's run (the Hub refused to let that run move them: "a run takes at most one task"), so they stayed `pending` while their work merged with AW-80. `update_task(AW-81, status=approved)` answers 409 "From 'pending' the available transitions are: assigned, in_progress". The only way out is in_progress -> completed, which runs checks and stages a review of a task branch that holds nothing. A spec document has `already_built` for this; a hand-made task has no "done elsewhere, by <task/commit>" close. Expected: a task can be closed as landed by another task or commit, naming it, without a build or review.
+
+## F1167 (B) -- a spec document written through the Hub leaves the project checkout dirty, and the next landing is refused for it
+
+**Status:** open
+**Found:** 2026-11-11, Architect, after the power outage, checking the PSWSN and FASSW builds on proj-d85a82bf4216
+**Tier:** 1
+
+`submit_spec_document` writes `spec/changes/<name>/spec.json` into the project's main checkout and leaves it uncommitted. The landing queue then refuses to integrate: PSWSN-1's batches `lbat-eb030e428212` (13:58) and `lbat-831e6ee6ae0f` (14:14) both failed with "the project's checkout has uncommitted changes to tracked files -- commit or stash them, then retry the integration". After `3608653 Commit spec and knowledge changes written by the Hub` cleared it, the Architect's next two submits (tasks-rework roadmap and slice glance) dirtied the checkout again while PSWSN-1's re-check was running. Expected: a write the Hub itself makes to a tracked file never blocks the Hub's own landing -- it is committed by the Hub when written, or the landing commits it first. Repro: approve a task, submit any spec document while its landing is queued, and read the batch's `error`.
