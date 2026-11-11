@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
@@ -14,6 +15,8 @@ let roster: AgentSummary[] = []
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   MIN_WAITING_SECONDS: 10,
   MAX_WAITING_SECONDS: 600,
@@ -71,7 +74,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderExecution(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="running" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
 }
 
 const checkbox = (label: string) => screen.getByLabelText(`Consult ${label} for cp5`)
@@ -122,10 +125,7 @@ describe('a copilot agent has a review-agents setting', () => {
   it('adds an entry to the stored list on check', () => {
     renderExecution(agent({ runner: 'copilot', config: { copilot_review_agents: ['code-review'] } }))
     fireEvent.click(checkbox('security-review'))
-    expect(reviewAgentsMutate).toHaveBeenCalledWith({
-      agent: 'cp5',
-      agents: ['code-review', 'security-review'],
-    })
+    expect(reviewAgentsMutate).toHaveBeenCalledWith({ agent: 'cp5', agents: ['code-review', 'security-review'] }, expect.any(Object))
   })
 
   it('removes an entry from the stored list on uncheck', () => {
@@ -133,7 +133,7 @@ describe('a copilot agent has a review-agents setting', () => {
       agent({ runner: 'copilot', config: { copilot_review_agents: ['code-review', 'rubber-duck'] } }),
     )
     fireEvent.click(checkbox('code-review'))
-    expect(reviewAgentsMutate).toHaveBeenCalledWith({ agent: 'cp5', agents: ['rubber-duck'] })
+    expect(reviewAgentsMutate).toHaveBeenCalledWith({ agent: 'cp5', agents: ['rubber-duck'] }, expect.any(Object))
   })
 
   it('states that on a provider runner these agents may not run', () => {
@@ -141,13 +141,13 @@ describe('a copilot agent has a review-agents setting', () => {
     expect(screen.getByText(/On a provider runner, Copilot's review agents may not run\./)).toBeInTheDocument()
   })
 
-  it('lives under Execution, not in any other section', () => {
+  it('lives under Running, not in any other section', () => {
     const execution = renderExecution(agent({ runner: 'copilot' }))
     expect(checkbox('code-review')).toBeInTheDocument()
     execution.unmount()
 
-    for (const section of ['identity', 'charter', 'interaction', 'workspace'] as const) {
-      const { unmount } = render(<AgentSettingsPage agent="cp5" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    for (const section of ['agent', 'permissions', 'checkpoints', 'workspace'] as const) {
+      const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="cp5" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
       expect(screen.queryByLabelText('Consult code-review for cp5')).not.toBeInTheDocument()
       unmount()
     }
@@ -195,13 +195,13 @@ describe('a copilot agent has a GitHub-server setting', () => {
   it('turning it on PATCHes the agent', () => {
     renderExecution(agent({ runner: 'copilot' }))
     fireEvent.click(githubCheckbox())
-    expect(githubMcpMutate).toHaveBeenCalledWith({ agent: 'cp5', enabled: true })
+    expect(githubMcpMutate).toHaveBeenCalledWith({ agent: 'cp5', enabled: true }, expect.any(Object))
   })
 
   it('turning it off PATCHes the agent', () => {
     renderExecution(agent({ runner: 'copilot', config: { copilot_github_mcp: true } }))
     fireEvent.click(githubCheckbox())
-    expect(githubMcpMutate).toHaveBeenCalledWith({ agent: 'cp5', enabled: false })
+    expect(githubMcpMutate).toHaveBeenCalledWith({ agent: 'cp5', enabled: false }, expect.any(Object))
   })
 
   // Slice 5 D9a (F485): Copilot loads only read-only GitHub tools and runs them without asking,
@@ -225,13 +225,13 @@ describe('a copilot agent has a GitHub-server setting', () => {
     expect(screen.queryByText(/card/)).not.toBeInTheDocument()
   })
 
-  it('lives under Execution, not in any other section', () => {
+  it('lives under Running, not in any other section', () => {
     const execution = renderExecution(agent({ runner: 'copilot' }))
     expect(githubCheckbox()).toBeInTheDocument()
     execution.unmount()
 
-    for (const section of ['identity', 'charter', 'interaction', 'workspace'] as const) {
-      const { unmount } = render(<AgentSettingsPage agent="cp5" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    for (const section of ['agent', 'permissions', 'checkpoints', 'workspace'] as const) {
+      const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="cp5" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
       expect(screen.queryByLabelText('Enable the GitHub MCP server for cp5')).not.toBeInTheDocument()
       unmount()
     }

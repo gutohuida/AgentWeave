@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -13,6 +14,8 @@ let roster: AgentSummary[] = []
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   MIN_WAITING_SECONDS: 10,
   MAX_WAITING_SECONDS: 600,
@@ -50,7 +53,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderIdentity(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="identity" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="agent" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
 }
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => {

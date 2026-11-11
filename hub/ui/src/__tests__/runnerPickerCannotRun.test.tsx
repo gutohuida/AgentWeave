@@ -24,9 +24,12 @@ vi.mock('@/api/agents', async (importOriginal) => {
 })
 
 let runnersError: Error | null = null
-vi.mock('@/api/runners', () => ({
+vi.mock('@/api/runners', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/runners')>()),
   useRunners: () => (runnersError ? { data: undefined, isLoading: false, error: runnersError } : { data: runners, isLoading: false, error: null }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
 }))
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => ({
@@ -41,7 +44,7 @@ function renderExecution(summary: { name: string; runner_id?: string | null }) {
   roster = [summary]
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <AgentSettingsPage agent={summary.name} section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />
+      <AgentSettingsPage agent={summary.name} section="running" onSelectSection={vi.fn()} onBack={vi.fn()} />
     </QueryClientProvider>,
   )
 }
@@ -69,16 +72,7 @@ describe('the runner picker says when an agent cannot run (F179)', () => {
     renderExecution(unbound)
 
     expect(screen.getByRole('status')).toHaveTextContent(`This agent cannot run: ${NO_RUNNER}`)
-    expect(screen.getByRole('button', { name: 'Runner for q1' })).toHaveTextContent('No runner')
-  })
-
-  it('offers no runner as the choice that cannot run, said on its own line', async () => {
-    const user = userEvent.setup()
-    launchability = { agents: { q1: { present: false, authorized: false, runnable: false, reason: NO_RUNNER } } }
-    renderExecution(unbound)
-    const [first] = await openMenuSelect(user, 'Runner for q1')
-    expect(first).toHaveTextContent('No runner')
-    expect(first).toHaveTextContent('The agent cannot run until it has one')
+    expect(screen.getByRole('button', { name: 'Model for q1' })).toHaveTextContent('Choose a model')
   })
 
   it('shows any other reason the Hub gives, not only the unbound one', () => {
@@ -111,7 +105,7 @@ describe('the runner picker says when an agent cannot run (F179)', () => {
     // Unbound is known without the Hub: it cannot run. Anything else waits for the verdict.
     launchability = undefined
     renderExecution(unbound)
-    expect(screen.getByRole('status')).toHaveTextContent('This agent cannot run until it has a runner.')
+    expect(screen.getByRole('status')).toHaveTextContent('This agent cannot run until it has a model.')
   })
 
   it('says nothing for a bound agent before the verdict has loaded', () => {
@@ -129,22 +123,17 @@ describe('the runner picker says when an agent cannot run (F179)', () => {
     launchabilityError = null
   })
 
-  it('names each same-named runner apart by its model (F268)', async () => {
+  it('lists every model of every provider, plus each provider’s own default (FR-9)', async () => {
     const user = userEvent.setup()
-    // Served in `created_at` order, the order `list_runners` returns (`runners.py:82`).
-    runners = [
-      { id: 'runner-opus', name: 'Twin', cli: 'claude', model: 'claude-opus-5' },
-      { id: 'runner-haiku', name: 'Twin', cli: 'claude', model: 'claude-haiku-4-5-20251001' },
-    ]
     launchability = {
       agents: { q1: { runner: 'claude', present: true, authorized: true, runnable: true, reason: null } },
     }
-    renderExecution({ ...bound, runner_id: 'runner-opus' })
+    renderExecution(bound)
 
-    const twins = (await openMenuSelect(user, 'Runner for q1')).filter((o) => o.textContent?.startsWith('Twin'))
-    expect(twins.map((o) => o.textContent)).toEqual([
-      expect.stringContaining('Opus 5 · claude'),
-      expect.stringContaining('Haiku 4.5 · claude'),
-    ])
+    const labels = (await openMenuSelect(user, 'Model for q1')).map((o) => o.textContent ?? '')
+    for (const provider of MODEL_CATALOG_FIXTURE.providers) {
+      expect(labels.some((label) => label.startsWith(`${provider.label} · its default`))).toBe(true)
+      for (const model of provider.models) expect(labels.some((label) => label.startsWith(`${provider.label} · ${model.label}`))).toBe(true)
+    }
   })
 })

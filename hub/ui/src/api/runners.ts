@@ -161,6 +161,23 @@ export function useUpdateAgentWaiting() {
   })
 }
 
+/** Run an agent on a provider and model chosen directly. The Hub binds it to the project's runner
+ *  for them, making that runner only when the project has none; `model` null is the provider's own
+ *  default. */
+export function useBindAgentModel() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ agent, provider, model }: { agent: string; provider: string; model: string | null }) =>
+      patchJson(`/api/v1/projects/${projectId}/agents/${agent}`, { provider, model }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
+      // A runner may have been made for it.
+      return queryClient.invalidateQueries({ queryKey: ['project', projectId, 'runners'] })
+    },
+  })
+}
+
 export function useBindAgentRunner() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()

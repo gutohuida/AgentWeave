@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,6 +13,8 @@ let roster: AgentSummary[] = []
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   MIN_WAITING_SECONDS: 10,
   MAX_WAITING_SECONDS: 600,
@@ -58,7 +61,7 @@ function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
 
 function renderExecution(summary: AgentSummary) {
   roster = [summary]
-  return render(<AgentSettingsPage agent={summary.name} section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent={summary.name} section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
 }
 
 const control = () => menuSelect('Default permissions for codex-1')
@@ -152,13 +155,13 @@ describe('an agent has a default permission posture', () => {
     expect(control()).toBeInTheDocument()
   })
 
-  it('lives under Execution, not in any other section', () => {
+  it('lives under Permissions, not in any other section', () => {
     const execution = renderExecution(agent())
     expect(control()).toBeInTheDocument()
     execution.unmount()
 
-    for (const section of ['identity', 'charter', 'interaction', 'workspace'] as const) {
-      const { unmount } = render(<AgentSettingsPage agent="codex-1" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    for (const section of ['agent', 'running', 'checkpoints', 'workspace'] as const) {
+      const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section={section} onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
       expect(screen.queryByRole('button', { name: 'Default permissions for codex-1' })).not.toBeInTheDocument()
       unmount()
     }

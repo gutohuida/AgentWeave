@@ -78,7 +78,7 @@ PROJECT_SECTIONS = (
     "traces",
     "diagnostics",
 )
-AGENT_SECTIONS = ("identity", "execution", "charter", "interaction", "context", "access", "workspace")
+AGENT_SECTIONS = ("agent", "running", "permissions", "checkpoints", "workspace")
 # Selector that must be on the page before a section is measured (its seeded data has loaded).
 SECTION_READY = {"Agent:workspace": '[data-testid="agent-working-dir"]'}
 
@@ -251,7 +251,7 @@ def seed(api: Api, project_dir: Path, scratch: Path) -> Dict[str, Any]:
             },
         )
 
-    # An agent the Hub reports as not runnable, so Agent -> Execution shows a real runner warning
+    # An agent the Hub reports as not runnable, so Agent -> Running shows a real runner warning
     # ("This agent cannot run: <reason>") with a long reason: the agent's own config pins a runner
     # CLI that is not a file. The Hub puts that path in the reason verbatim.
     broken = agents[-1]
@@ -470,8 +470,8 @@ def targets(project_id: str, agent: str, broken_agent: str) -> List[Dict[str, st
     # The agent the Hub reports as not runnable: its runner picker carries a long warning.
     out.append(
         {
-            "label": "Agent:execution (runner warning)",
-            "query": f"project={project_id}&agent={broken_agent}&settings=execution",
+            "label": "Agent:running (runner warning)",
+            "query": f"project={project_id}&agent={broken_agent}&settings=running",
             "expect_warning": "1",
         }
     )
