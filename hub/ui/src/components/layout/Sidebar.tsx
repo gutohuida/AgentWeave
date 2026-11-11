@@ -331,7 +331,7 @@ export function Sidebar({
                           className="aw-icon-button"
                           aria-label={`Configure ${project.name}`}
                           title="Project settings"
-                          onClick={() => onOpenEnvironment?.(project.id, 'settings')}
+                          onClick={() => onOpenEnvironment?.(project.id, 'general')}
                         >
                           <Icon name="settings" size={13} />
                         </button>

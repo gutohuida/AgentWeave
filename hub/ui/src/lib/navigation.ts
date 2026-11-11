@@ -38,18 +38,40 @@ export const TAB_LABELS: Record<ProjectTab, string> = {
   activity: 'Activity',
 }
 
+/** Project settings' sections, in the order the side list shows them (grouped there). `general` is
+ *  the Project section: General's old id, kept because that is what the route and URLs carry. */
 export const ENVIRONMENT_SECTIONS = [
-  'quality',
-  'instructions',
-  'runners',
-  'charters',
-  'manager',
-  'worktrees',
-  'diagnostics',
+  'general',
+  'collaboration',
+  'permissions',
   'budgets',
-  'settings',
+  'instructions',
+  'charters',
+  'checkpoints',
+  'manager',
+  'checks',
+  'landing',
+  'worktrees',
+  'spec-steps',
+  'traces',
+  'diagnostics',
 ] as const
 export type EnvironmentSection = (typeof ENVIRONMENT_SECTIONS)[number]
+
+/** Sections that no longer exist, and the one that holds what they held: General (`settings`),
+ *  Quality and Runners all open Project, so a saved link or a toast never lands on a blank page. */
+const RETIRED_ENVIRONMENT_SECTIONS: Readonly<Record<string, EnvironmentSection>> = {
+  settings: 'general',
+  quality: 'general',
+  runners: 'general',
+}
+
+/** A section id as given by a link or a caller, resolved to one that exists; null if it names none. */
+export function resolveEnvironmentSection(raw: string | null | undefined): EnvironmentSection | null {
+  if (!raw) return null
+  if ((ENVIRONMENT_SECTIONS as readonly string[]).includes(raw)) return raw as EnvironmentSection
+  return RETIRED_ENVIRONMENT_SECTIONS[raw] ?? null
+}
 
 /** Named for what an operator is trying to do, not for the shape of the data. *Context* and
  *  *Access* are defined here ahead of the checkpoint change that fills them; a section with
@@ -265,7 +287,12 @@ export function environmentDestination(
   projectId: string,
   section: EnvironmentSection = DEFAULT_ENVIRONMENT_SECTION,
 ): Extract<WorkspaceDestination, { kind: 'project' }> {
-  return { kind: 'project', projectId, tab: 'environment', environmentSection: section }
+  return {
+    kind: 'project',
+    projectId,
+    tab: 'environment',
+    environmentSection: resolveEnvironmentSection(section) ?? DEFAULT_ENVIRONMENT_SECTION,
+  }
 }
 
 /** `document` defaults to null — most navigations to a conversation are not carrying one. The
@@ -540,12 +567,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   const rawTab = params.get('tab')
   if (rawTab === 'environment') {
     const rawSection = params.get('section')
-    const section: EnvironmentSection = (ENVIRONMENT_SECTIONS as readonly string[]).includes(
-      rawSection ?? '',
-    )
-      ? (rawSection as EnvironmentSection)
-      : DEFAULT_ENVIRONMENT_SECTION
-    return environmentDestination(projectId, section)
+    return environmentDestination(projectId, resolveEnvironmentSection(rawSection) ?? DEFAULT_ENVIRONMENT_SECTION)
   }
   const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
     ? (rawTab as ProjectTab)

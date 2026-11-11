@@ -20,11 +20,30 @@ import { SettingsLoading, SettingsNotice, SettingsPage } from '@/components/ui/s
 import { runnerModelPart } from '@/lib/runnerLabel'
 import { toast } from '@/lib/toast'
 import { useConfigStore } from '@/store/configStore'
-import { GeneralSettings } from '../GeneralSettings'
+import {
+  ChecksSettings,
+  CheckpointsSettings,
+  CollaborationSettings,
+  LandingSettings,
+  PermissionsSettings,
+  ProjectBasicsSettings,
+} from '../GeneralSettings'
 import { MakeRepositoryOffer } from '../MakeRepositoryOffer'
 import { catalogModelOptions, runnerChoiceOptions } from '../settingsOptions'
 
-/** Project settings → General, on the Hub. Each change is its own save, sending only the fields
+/** The sections General split into; each one reads and saves through this container's hooks. */
+export type ProjectPart = 'general' | 'collaboration' | 'permissions' | 'checks' | 'landing' | 'checkpoints'
+
+const PARTS: Record<ProjectPart, { icon: string; title: string; description: string; Page: typeof ProjectBasicsSettings }> = {
+  general: { icon: 'folder', title: 'Project', description: 'What this project is called and where it lives on this machine.', Page: ProjectBasicsSettings },
+  collaboration: { icon: 'forum', title: 'Collaboration', description: 'How far agents may pass work between themselves before you are asked.', Page: CollaborationSettings },
+  permissions: { icon: 'lock', title: 'Permissions', description: "What agents may do when nobody said otherwise. An agent's own settings win over these.", Page: PermissionsSettings },
+  checks: { icon: 'verified_user', title: 'Checks', description: 'What must pass before approved work lands.', Page: ChecksSettings },
+  landing: { icon: 'git_merge', title: 'Landing', description: 'Where approved work goes: merged into the main branch, or onto a pull request.', Page: LandingSettings },
+  checkpoints: { icon: 'book_marked', title: 'Checkpoints', description: "When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.", Page: CheckpointsSettings },
+}
+
+/** Project settings → one of the sections General split into, on the Hub. Each change is its own save, sending only the fields
  *  it changed (the route merges onto what is stored), so a change made in another section since
  *  this page loaded is never written back over. */
 /** Whether *runner*'s CLI declares *model*, by id or alias: the Hub checks `checkpoint_model` against
@@ -40,7 +59,8 @@ function runnerDeclaresModel(
   return resolveCatalogModel(entry, model) !== null
 }
 
-export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => void }) {
+export function GeneralSection({ part = 'general' }: { part?: ProjectPart }) {
+  const { icon, title, description, Page } = PARTS[part]
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: projects = [], error: projectsError, refetch: refetchProjects } = useProjects()
   const project = projects.find((item) => item.id === projectId)
@@ -69,7 +89,7 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
     // A failed read is not a slow one, and the rows stay hidden: nothing can be saved over
     // settings that were never read.
     return (
-      <SettingsPage icon="settings" title="General" description="How agents work together in this project, what they may reach, and where approved work lands.">
+      <SettingsPage icon={icon} title={title} description={description}>
         <SettingsNotice
           tone="error"
           title="This project's settings could not be loaded."
@@ -83,7 +103,7 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
   }
   if (!settings || !project) {
     return (
-      <SettingsPage icon="settings" title="General" description="How agents work together in this project, what they may reach, and where approved work lands.">
+      <SettingsPage icon={icon} title={title} description={description}>
         <SettingsLoading label="Loading project settings" rows={5} />
       </SettingsPage>
     )
@@ -131,7 +151,7 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
 
   return (
     <>
-      <GeneralSettings
+      <Page
         settings={shown}
         runnerOptions={runnerChoiceOptions(
           runners,
@@ -219,7 +239,6 @@ export function GeneralSection({ onNavigate }: { onNavigate?: (page: string) => 
             { onSuccess: () => toast({ title: 'Project folder updated', tone: 'success' }) },
           )
         }
-        onOpenBudgets={onNavigate ? () => onNavigate('budgets') : undefined}
         onDeleteProject={() => setDeleting(true)}
       />
       <DeleteProjectDialog project={deleting ? project : null} onClose={() => setDeleting(false)} onDeleted={() => setDeleting(false)} />

@@ -62,15 +62,20 @@ MIN_TEXT_COLUMN = 240
 
 APP_SECTIONS = ("notifications", "appearance", "connection")
 PROJECT_SECTIONS = (
-    "quality",
-    "instructions",
-    "runners",
-    "charters",
-    "manager",
-    "worktrees",
-    "diagnostics",
+    "general",
+    "collaboration",
+    "permissions",
     "budgets",
-    "settings",
+    "instructions",
+    "charters",
+    "checkpoints",
+    "manager",
+    "checks",
+    "landing",
+    "worktrees",
+    "spec-steps",
+    "traces",
+    "diagnostics",
 )
 AGENT_SECTIONS = ("identity", "execution", "charter", "interaction", "context", "access", "workspace")
 # Selector that must be on the page before a section is measured (its seeded data has loaded).
