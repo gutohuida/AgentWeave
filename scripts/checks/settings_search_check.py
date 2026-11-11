@@ -128,7 +128,7 @@ class Ctx:
         self.page.goto("about:blank")
         self.page.goto(f"{self.ui}/?{query}", wait_until="domcontentloaded", timeout=120000)
         try:
-            self.page.wait_for_load_state("networkidle", timeout=30000)
+            self.page.wait_for_load_state("networkidle", timeout=4000)
         except Exception:  # noqa: BLE001
             pass
         if rows:
