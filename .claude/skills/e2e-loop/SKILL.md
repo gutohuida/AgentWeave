@@ -41,8 +41,10 @@ covered because a route returned 200 — see Step 5.
   2026-09-28; only an undeclared name is a 400 — but measured 2026-10-23, the alias `haiku` now
   runs `claude-haiku-5-5`, so bind the full id). **Never press the native folder dialog
   (`POST /fs/native-dialog/open`) unattended**: it pops a real Tk window on the operator's desktop
-  (2026-10-23, a person answered it). **Codex is undrivable on
-  this machine** — every Codex-only path is *not reached*; say so. Copilot runs over ACP; a stub
+  (2026-10-23, a person answered it). **Codex is drivable again
+  since 2026-11-11** (a subscription bought for testing; CLI logged in via ChatGPT) — bind the
+  smallest model, `gpt-6-luna`, and read Codex's own transcript under
+  `~/.codex/sessions/<date>/rollout-*-<runs.session_id>.jsonl`. Copilot runs over ACP; a stub
   provider (`testbed/drive1005-*/stub_provider.py`) drives Copilot runners and whole flows at zero
   spend when a path needs no real judgement.
 - **The Hub spends money on its own, too.** Manager jobs (conversation titles, vault distillation,

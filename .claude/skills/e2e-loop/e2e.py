@@ -176,6 +176,12 @@ def cmd_hub_up(profile, port):
     path = PROFILES / profile / "agentweave.db"
     path.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
+    # Run from inside an agent turn, this shell carries the parent run's HUB_URL and AW_* run
+    # variables; inherited, they send every run this Hub launches to the parent Hub (F1160).
+    for name in [k for k in env if k == "HUB_URL" or k.startswith("AW_RUN") or k in (
+        "AW_AGENT_IDENTITY", "AW_TURN_DEPTH", "AW_CAN_ADMIN_SPECS", "AW_WORKSPACE_DIR", "AW_PORT",
+        "AW_QUESTION_TIMEOUT", "AW_PERMISSION_POSTURE", "AW_REACH_GRANTS")]:
+        env.pop(name)
     # A forward-slash C:/ path. A /c/Users form silently creates a stray database elsewhere.
     env["DATABASE_URL"] = "sqlite+aiosqlite:///" + str(path).replace("\\", "/")
     log = pathlib.Path(os.environ.get("TEMP", str(HOME))) / f"agentweave-hub-{port}.log"

@@ -27575,6 +27575,7 @@ Neither repair needs a spec.
 
 ## F325 (A) — on Codex's default transport a run never receives its canonical context, so a bound charter reaches no Codex agent
 
+**Re-verified live 2026-11-11 (Architect, first real Codex drive):** still bites -- neither the planner's turn prompts nor its Codex session instructions contained its Spec Author charter, the team roster or the project instructions, though `.agentweave/context/planner.md` holds all three.
 **Status:** open. Filed 2026-09-12 by the day window's `D-7`, from research 2026-09-12 §3, and
 verified against the code at `34014e0` by reading. **Read, not run:** live reproduction is not
 possible, because Codex is undrivable (the plan was cancelled on 2026-08-29). No proposal.
@@ -33640,7 +33641,7 @@ Fix: add `AW_QUESTION_TIMEOUT` to both lists (slice 1 moves them into one `CODEX
 
 ## F462 (B) — a specification turn on Codex app-server keeps its write tools
 
-**Status:** fixed (Tier 2, 2026-10-07, change `a-codex-app-server-spec-turn-keeps-no-write-tools`, `spdoc-4e84aebf7712`, operator approved). Two breaks, not one: `CodexAppServerTransport.run_turn` dropped the flag, **and** `trigger_agent_directly`'s `_execute_run` call never passed it, so the RPC executor always got `False` -- the dispatch-seam test caught the second after the transport fix alone went green. A spec turn's thread now starts `read-only` (`on-request`, or `untrusted` under Ask me; never `never`), its file changes and sandbox escapes are declined (Ask me still carries a command to the operator) and Full access grants no permissions, except the Hub's own call (`mcp_server._hub_own_call`: a calls-root `.json` file, one `aw-tool` invocation), which a shim-told spec turn needs to submit its document. Test: `test_a_codex_app_server_spec_turn_keeps_no_write_tools.py` (20 of 20 failed before). **Not driven:** Codex is undrivable here; what a real binary does with the policy is unobserved.
+**Status:** fixed (Tier 2, 2026-10-07, change `a-codex-app-server-spec-turn-keeps-no-write-tools`, `spdoc-4e84aebf7712`, operator approved). Two breaks, not one: `CodexAppServerTransport.run_turn` dropped the flag, **and** `trigger_agent_directly`'s `_execute_run` call never passed it, so the RPC executor always got `False` -- the dispatch-seam test caught the second after the transport fix alone went green. A spec turn's thread now starts `read-only` (`on-request`, or `untrusted` under Ask me; never `never`), its file changes and sandbox escapes are declined (Ask me still carries a command to the operator) and Full access grants no permissions, except the Hub's own call (`mcp_server._hub_own_call`: a calls-root `.json` file, one `aw-tool` invocation), which a shim-told spec turn needs to submit its document. Test: `test_a_codex_app_server_spec_turn_keeps_no_write_tools.py` (20 of 20 failed before). **Not driven:** Codex is undrivable here; what a real binary does with the policy is unobserved. **Driven 2026-11-11:** the policy holds (`read-only`), but a shim-told first turn never attempts the allowed write -- see F1161.
 Originally: open, filed 2026-09-28 from code (not driven). Found in `each-runner-cli-is-one-adapter` R2 (design D11) and confirmed by its Opus review.
 
 F4's rule — a turn triggered with a specification document open loses file-write tools, "regardless of phase, rigor or permission posture" — is applied by passing `restrict_spec_writes=bool(spec_document)` to `build_command` (`agent_trigger.py:1227`). For Codex app-server, the default Codex transport (`uses_app_server`, `agent_trigger.py:1210`), that argv is unused: the turn goes through `codex_appserver.run_turn`, which receives neither `restrict_spec_writes` nor the runner's flags (`codex_appserver.py` has no such parameter). So a Codex agent on a spec turn can write files; only `codex exec` honours the restriction (`runner_commands.py:336`).
@@ -41608,3 +41609,55 @@ Before the tidy, `spec/index.json` counted 11 approved change documents while `s
 **Tier:** 0
 
 The tool description (`hub/hub/mcp_server.py:5354`) says "An unresolved one blocks the document", but a submit with three unresolved questions answered `blocking: []`, `ready_to_approve: true`, and listed them only as `unresolved_question` warnings. The warning is the intended behaviour (`hub/hub/spec_payload.py:370`: "Approving with an unresolved question is allowed but warns"), so the description is what is wrong. An author who trusts it believes the document cannot be approved while a question is open, and may tell the operator so. **Expected:** the description says an unresolved question is a warning approval lists, not a block.
+
+## F1160 (B) -- a Hub started from inside an agent run sends every run it launches to the *parent* Hub, with a credential that Hub never issued
+
+**Status:** open
+**Source:** found driving Codex end to end (Architect, 2026-11-11, scratch Hub :8030)
+**Theme:** Runs x Hub identity
+**Ready:** yes
+**Tier:** 0
+
+An agent run's environment carries `HUB_URL` (its own Hub) and `AW_RUN_TOKEN`. A Hub started from that shell inherits both, and `trigger_agent` takes `HUB_URL` from `os.environ` ahead of its own bound address (`hub/hub/api/v1/agent_trigger.py:1992-1994`), so every run the child Hub launches is told the parent's address. Driven: the Architect's turn (a run of the operator's :8000 Hub) started a scratch Hub on :8030 via `e2e.py hub-up` (`.claude/skills/e2e-loop/e2e.py:178` copies `os.environ` unscrubbed); the first Codex turn's `aw-tool list_tasks` and `record_evidence` answered `{"ok": false, "error": {"kind": "rejected", "detail": "Invalid or inactive run credential", "status": 401}}`, and :8030's access log has no `agent-actions` request at all -- the calls went to **:8000**, which refused them (no write happened). Restarting :8030 with `HUB_URL`/`AW_*` unset fixed it at once (`list_tasks` over MCP, `plane_surface: mcp`). This bites exactly the dogfooding case: any agent that starts a Hub to drive it (QA, e2e) points that Hub's agents at the operator's real instance. Distinct from F526 (no `HUB_URL` at all). **Expected:** a Hub drops inherited run variables (`AW_RUN_TOKEN`, `AW_RUN_ID`, `AW_AGENT_IDENTITY`, …) at startup and refuses or warns on a `HUB_URL` whose port is not its own; `hub-up` scrubs them too.
+
+## F1161 (B) -- a Codex agent's first turn on a specification document cannot write it: told to write an arguments file and, in the same prompt, that it has no file-write tool
+
+**Status:** open
+**Source:** found driving Codex end to end (Architect, 2026-11-11)
+**Theme:** Spec documents x Codex
+**Ready:** yes
+**Tier:** 0
+
+An agent's first run is told the `aw-tool` call path, since no earlier run proved MCP `connected` (`launchability.described_access_path`, `hub/hub/launchability.py:317`). On a spec turn the Codex thread starts `read-only` (`codex_appserver._thread_policy`, F462), and the Hub means to accept the one arguments-file write when Codex asks. But the turn prompt Codex received says both "write the tool's arguments as one JSON object to a `.json` file inside `.agentweave/calls/` … with your file-writing tool" **and** "You have no file-write tool this turn" (read from the Codex rollout of the planner's first run, gpt-6-luna). The agent believed the second, never attempted the write, and ended: "I can't write the spec document in this turn: the workspace is read-only, and the required `aw-tool` call needs its arguments in a JSON file." Its second turn was told MCP and submitted the document at once. F462's fix note says "Not driven: Codex is undrivable here"; this is the first live observation. **Expected:** a shim-told spec turn is told plainly that the one `.agentweave/calls/*.json` write is allowed (or a spec turn on a runner with a connected server is told MCP even on the first run).
+
+## F1162 (B) -- Stop on a Codex run leaves the command the agent was running alive
+
+**Status:** open
+**Source:** found driving Codex end to end (Architect, 2026-11-11)
+**Theme:** Runs x Codex x Resilience
+**Ready:** yes
+**Tier:** 0
+
+A Codex turn running `py -3.11 -c "import time; [time.sleep(1) for i in range(150)]"` was stopped through `POST /agent/builder/stop` (200, `status: stopping`); the run row went `stopped`, exit 1. Twelve seconds later `py.exe` (pid 13976) and its `python.exe` child (30996) were still running, their PowerShell parent (32368) gone -- orphaned, and holding the agent's worktree as cwd; I killed them by hand. The Claude-side cousin is F987 (an `aw-tool ask_user` tree surviving Stop). **Expected:** Stop ends the run's whole process tree on Windows, including commands the app-server's shell spawned.
+
+## F1163 (C) -- `update_task` refuses `requirement_ids` on a task that already belongs to a document, as soon as a second document declares the same identifier
+
+**Status:** open
+**Source:** found driving Codex end to end (Architect, 2026-11-11)
+**Theme:** Tasks x Requirements
+**Ready:** yes
+**Tier:** 0
+
+With two approved change documents in a project (each has an `FR-1`), the Codex reviewer's `update_task` (`task_id`, `status: approved`, `requirement_ids: ["FR-1","FR-2"]`) on a task whose `spec_document_id` is set answered 422 "FR-1 is declared by more than one document in this project; name the document it belongs to". `hub/hub/api/v1/tasks.py:2282-2283` resolves with `document_path=body.spec_document` only, never the task's own document. The agent recovered by dropping `requirement_ids`. Every project with two documents hits this. **Expected:** with no `spec_document` in the body, identifiers resolve within the task's own document.
+
+## F1164 (D) -- Codex drive notes: expiry read as rejection, encoding, model adherence
+
+**Status:** open
+**Source:** found driving Codex end to end (Architect, 2026-11-11)
+**Theme:** Codex
+**Ready:** no
+**Tier:** 0
+
+(1) An "Ask me" card left unanswered went `expired` after ~2 min and the Codex agent said "approval for the write was rejected" -- it cannot tell an expiry from a denial. (2) The builder wrote `é` through Windows PowerShell 5.1 twice and corrupted the files' encoding before switching to `\u00e9` escapes; it recovered, but every non-ASCII edit on Windows costs turns. (3) Every Codex shell call prints the operator's PowerShell profile error ("Cannot dot-source this command because it was defined in a different language mode"). (4) gpt-6-luna skipped `set_spec_size` when asked, and the planner recorded uninvited "specification evidence" with no task, which stays `awaiting` with nothing that will ever decide it.
+
+**What held on this drive (Codex 0.167.1, gpt-6-luna; Claude Haiku 4.5 for the mixed team):** the catalog read from Codex's CLI cache; an undeclared Codex model refused naming the eight declared; launchability `runnable`; the MCP path (`list_tasks`, `rename_spec_document`, `submit_spec_document`, `record_evidence`, `submit_checkpoint_notes`, `update_task`, `ask_user`) and the `aw-tool` path (reviewer's first run, including a legible 422 and recovery); a flow with a Codex builder and Claude reviewer, and the reverse, each staged its review, accepted evidence and merged into `master` with tests green; `ask_user` blocked and resumed with the answer; an "Ask me" card carried Codex's reason and the Workspace-only verdict, and allow wrote the file. Not reached: Codex under Full access, Codex checkpoints/compaction, Codex as flow lead, budgets for Codex runs, the dashboard (bundle `ui_stale`).
