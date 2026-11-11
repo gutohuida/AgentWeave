@@ -50,6 +50,8 @@ interface AgentSettingsPageProps {
   onBack: () => void
   /** The operator's own settings (sound, appearance, the Hub), linked from the section list. */
   onOpenAppSettings?: () => void
+  /** The setting the location names, to land on. */
+  setting?: string | null
 }
 
 const SECTIONS: ReadonlyArray<{ id: AgentSettingsSection; label: string; icon: string }> = [
@@ -68,7 +70,7 @@ const SECTIONS: ReadonlyArray<{ id: AgentSettingsSection; label: string; icon: s
  * change with a toast. The old seven section ids are resolved to these before they get here
  * (`resolveAgentSettingsSection`).
  */
-export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onOpenAppSettings }: AgentSettingsPageProps) {
+export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onOpenAppSettings, setting }: AgentSettingsPageProps) {
   // `all`, not the default open roster: an archived agent must still resolve here, because this
   // is the only surface that can unarchive it.
   const { data: roster = [], isLoading } = useAgents('all')
@@ -101,6 +103,8 @@ export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onO
         back={{ label: `Back to ${agent}`, onClick: onBack }}
         items={SECTIONS}
         active={section}
+        agent={agent}
+        landing={setting}
         onSelect={onSelectSection}
         footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
       >

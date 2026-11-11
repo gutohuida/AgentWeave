@@ -12,6 +12,7 @@ import {
 } from '@/components/layout/Sidebar'
 import { Toaster } from '@/components/ui/toast'
 import { openCommandPalette } from '@/lib/palette'
+import { settingDestination } from '@/lib/settingsIndex'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
 import { CommandPalette } from '@/components/palette/CommandPalette'
 import { ProjectManagerModal, type ProjectManagerMode } from '@/components/projects/ProjectManagerModal'
@@ -443,6 +444,7 @@ export default function App() {
       <AgentSettingsPage
         agent={settingsDestination.agent}
         section={settingsDestination.section}
+        setting={settingsDestination.setting}
         onSelectSection={(section) =>
           navigateTo(agentSettingsDestination(settingsDestination.projectId, settingsDestination.agent, section))
         }
@@ -462,6 +464,7 @@ export default function App() {
     content = (
       <AppSettingsScreen
         section={appSettingsDest.section}
+        setting={appSettingsDest.setting}
         onSelectSection={(section) => navigateTo(appSettingsDestination(appSettingsDest.projectId, section))}
         onOpenSetup={() => setSetupOpen(true)}
         back={
@@ -606,6 +609,7 @@ export default function App() {
       projectContent = (
         <ProjectSettingsScreen
           section={destination.environmentSection}
+          setting={destination.setting}
           onSelectSection={(section) => navigateTo(environmentDestination(destination.projectId, section))}
           onNavigate={navigate}
           onOpenAppSettings={() => navigateTo(appSettingsDestination(destination.projectId))}
@@ -766,7 +770,10 @@ export default function App() {
           useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
           navigateTo(projectDestination(currentProjectId, 'tasks'))
         }}
-        onOpenAppSettings={(section) => navigateTo(appSettingsDestination(currentProjectId || null, section))}
+        onOpenSetting={(entry, agent) => {
+          const target = settingDestination(entry, currentProjectId || null, agent)
+          if (target) navigateTo(target)
+        }}
         onOpenProjectSettings={
           currentProject ? () => navigateTo(environmentDestination(currentProject.id, 'general')) : undefined
         }

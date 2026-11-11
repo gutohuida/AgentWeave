@@ -31,6 +31,7 @@ export function AppSettingsScreen({
   onSelectSection,
   onOpenSetup,
   back,
+  setting,
 }: {
   section: AppSettingsSection
   onSelectSection: (section: AppSettingsSection) => void
@@ -38,6 +39,8 @@ export function AppSettingsScreen({
   onOpenSetup: () => void
   /** Where the operator came from, when they came from a project. */
   back?: { label: string; onClick: () => void }
+  /** The setting the location names, to land on. */
+  setting?: string | null
 }) {
   let body: React.ReactNode
   switch (section) {
@@ -67,6 +70,7 @@ export function AppSettingsScreen({
         title="App settings"
         subtitle="Yours, on this Hub"
         back={back}
+        landing={setting}
         items={SECTIONS}
         active={section}
         onSelect={onSelectSection}

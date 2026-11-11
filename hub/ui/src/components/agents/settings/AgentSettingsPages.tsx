@@ -437,6 +437,7 @@ export function AgentWorkspaceSettings({
             {taskCheckouts.map((c) => (
               <SettingsRow
                 key={c.task_id}
+                listItem
                 label={c.title || c.task_id}
                 description={
                   <>
@@ -462,6 +463,7 @@ export function AgentWorkspaceSettings({
         {sessions.map((s) => (
           <SettingsRow
             key={s.id}
+            listItem
             label={<span className="font-mono text-[12px]" title={s.id}>{s.id.length > 18 ? `${s.id.slice(0, 8)}…${s.id.slice(-6)}` : s.id}</span>}
             description={<span className="aw-path">{s.path}</span>}
             control={

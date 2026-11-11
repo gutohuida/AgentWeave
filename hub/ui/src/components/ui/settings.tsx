@@ -75,6 +75,7 @@ export function SettingsRow({
   onReset,
   stacked,
   inactive,
+  listItem,
   children,
 }: {
   label: React.ReactNode
@@ -89,12 +90,14 @@ export function SettingsRow({
   stacked?: boolean
   /** Greyed while the setting it depends on is off (still focusable, still readable). */
   inactive?: boolean
+  /** One entry of a list (a step, a checkpoint, a session), not a setting: search does not look for it. */
+  listItem?: boolean
   /** Anything that belongs to the row below the label/control line (nested rows, a list). */
   children?: React.ReactNode
 }) {
   const Label = htmlFor ? 'label' : 'div'
   return (
-    <div className="aw-settings-row" data-stacked={stacked ? 'true' : 'false'} data-inactive={inactive ? 'true' : 'false'}>
+    <div className="aw-settings-row" data-stacked={stacked ? 'true' : 'false'} data-inactive={inactive ? 'true' : 'false'} {...(listItem ? { 'data-list-item': 'true' } : {})}>
       <div className="aw-settings-row-text">
         <Label className="aw-settings-row-label" {...(htmlFor ? { htmlFor } : {})}>
           {label}
