@@ -1,7 +1,22 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { GeneralSection } from '@/components/settings/sections/GeneralSection'
+import { AgentBudget } from '@/components/settings/sections/BudgetsSection'
+import { GeneralSection as GeneralPart, type ProjectPart } from '@/components/settings/sections/GeneralSection'
+
+/** The sections General split into, all open at once: these tests are about the rows and how they
+ *  save, which the split does not change. Which section holds which row is checked on its own below. */
+const PARTS: ProjectPart[] = ['general', 'collaboration', 'permissions', 'checks', 'landing', 'checkpoints']
+function GeneralSection() {
+  return (
+    <>
+      {PARTS.map((part) => (
+        <GeneralPart key={part} part={part} />
+      ))}
+      <AgentBudget />
+    </>
+  )
+}
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { useConfigStore } from '@/store/configStore'
 import type { AgentSummary } from '@/api/agents'
@@ -164,14 +179,14 @@ describe('Project settings → General, applied on change', () => {
 
   it('says the project could not be read, rather than waiting on a skeleton for it', () => {
     projectsError = new Error('500')
-    render(<GeneralSection />)
+    render(<GeneralPart />)
     expect(screen.queryByLabelText('Loading project settings')).toBeNull()
     expect(screen.getByRole('alert')).toHaveTextContent("This project's settings could not be loaded.")
   })
 
   it('warns that the checkpoint runner menu is incomplete when the runners cannot be read', () => {
     runnersError = new Error('500')
-    render(<GeneralSection />)
+    render(<GeneralPart part="checkpoints" />)
     expect(screen.getByTestId('settings-runners-error')).toHaveTextContent("This project's runners could not be read.")
   })
 
@@ -593,21 +608,29 @@ describe('Project settings → General, applied on change', () => {
     expect(update).toHaveBeenCalledTimes(1)
   })
 
-  it('groups its rows under headings, Collaboration first and Project last', () => {
-    render(<GeneralSection />)
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Collaboration', 'Reach', 'Integration', 'Checkpointing', 'Project', 'Delete project',
-    ])
+  it('holds each setting on the one section the operator expects, none on two', () => {
+    const rowsOf = (part: ProjectPart) => {
+      const { unmount } = render(<GeneralPart part={part} />)
+      const labels = [...document.querySelectorAll('.aw-settings-row-label')].map((n) => n.textContent ?? '')
+      unmount()
+      return labels
+    }
+    const has = (labels: string[], ...names: string[]) => names.every((name) => labels.some((label) => label.includes(name)))
+    expect(has(rowsOf('general'), 'Name', 'Folder')).toBe(true)
+    expect(has(rowsOf('collaboration'), 'Agents may start jobs', 'Hop budget', 'Deliveries per turn')).toBe(true)
+    expect(has(rowsOf('collaboration'), 'Agent budget')).toBe(false)
+    expect(has(rowsOf('permissions'), 'Default permissions')).toBe(true)
+    expect(has(rowsOf('checks'), 'Generated files')).toBe(true)
+    expect(has(rowsOf('landing'), 'Main branch')).toBe(true)
+    expect(has(rowsOf('landing'), 'Generated files')).toBe(false)
+    expect(has(rowsOf('general'), 'Hop budget')).toBe(false)
   })
 
-  it('leaves the token limit to Budgets: no field here, and a way there', () => {
-    const onNavigate = vi.fn()
-    render(<GeneralSection onNavigate={onNavigate} />)
+  it('leaves the token limit to Budgets: no field on any section', () => {
+    render(<GeneralSection />)
     expect(screen.queryByLabelText(/token budget/i)).toBeNull()
     commit('Hop budget', '9')
     expect(lastPatch()).toEqual({ hop_budget: 9 })
-    fireEvent.click(screen.getByRole('button', { name: 'Open Budgets' }))
-    expect(onNavigate).toHaveBeenCalledWith('budgets')
   })
 
   it('says agent budget caps agents an agent asks for, not agents running at once', () => {
@@ -815,7 +838,7 @@ describe('F197 a failed settings query', () => {
   })
 
   it('names the failure with a Retry instead of a skeleton that never ends, and shows no rows', () => {
-    render(<GeneralSection />)
+    render(<GeneralPart part="collaboration" />)
     expect(screen.getByRole('alert')).toHaveTextContent(/settings could not be loaded/i)
     expect(screen.getByRole('alert')).toHaveTextContent('settings route is down')
     expect(screen.queryByLabelText('Loading project settings')).not.toBeInTheDocument()

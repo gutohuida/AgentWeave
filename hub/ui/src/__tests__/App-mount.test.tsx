@@ -113,7 +113,7 @@ vi.mock('@/components/activity/ActivityScreen', () => ({
 vi.mock('@/components/settings/ProjectSettingsScreen', () => ({
   ProjectSettingsScreen: ({ section, onSelectSection }: { section: string; onSelectSection: (s: string) => void }) => (
     <div data-testid="page-settings" data-section={section}>
-      <button onClick={() => onSelectSection('runners')}>Runners section</button>
+      <button onClick={() => onSelectSection('worktrees')}>Worktrees section</button>
     </div>
   ),
 }))
@@ -277,20 +277,26 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
   it('opens Project settings at General from the top bar and from a project row, with its own section nav', () => {
     render(withQueryClient(<App />))
     fireEvent.click(screen.getByTestId('topbar-settings'))
-    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'settings')
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'general')
     expect(screen.getByTestId('topbar-settings')).toHaveAttribute('aria-current', 'page')
     // No tab is current while settings are open.
     expect(screen.getByTestId('project-tab-overview')).not.toHaveAttribute('aria-current')
 
-    fireEvent.click(screen.getByText('Runners section'))
-    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'runners')
-    expect(window.location.search).toContain('runners')
+    fireEvent.click(screen.getByText('Worktrees section'))
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'worktrees')
+    expect(window.location.search).toContain('worktrees')
 
     fireEvent.click(screen.getByTestId('project-tab-overview'))
     fireEvent.click(screen.getAllByRole('button', { name: /^Configure /i })[0])
-    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'settings')
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'general')
     // The rail stays the project tree on a settings screen (operator, 2026-10-20).
     expect(screen.getByTestId('rail-project-proj-test')).toBeInTheDocument()
+  })
+
+  it.each(['settings', 'quality', 'runners'])('opens Project when a saved link names the removed %s section', (old) => {
+    window.history.pushState(null, '', `?project=proj-test&tab=environment&section=${old}`)
+    render(withQueryClient(<App />))
+    expect(screen.getByTestId('page-settings')).toHaveAttribute('data-section', 'general')
   })
 
   it('mounts a direct agent conversation URL straight into the conversation view', () => {

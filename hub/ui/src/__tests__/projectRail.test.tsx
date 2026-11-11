@@ -99,7 +99,7 @@ describe('phase 5 project collection rail', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Configure Website' })[0])
     fireEvent.click(screen.getByTestId('rail-add-agent-proj-a'))
     // The project's gear opens Project settings at General, as the top bar's gear does.
-    expect(onOpenEnvironment).toHaveBeenCalledWith('proj-a', 'settings')
+    expect(onOpenEnvironment).toHaveBeenCalledWith('proj-a', 'general')
     expect(onAddAgent).toHaveBeenCalledWith('proj-a')
   })
 

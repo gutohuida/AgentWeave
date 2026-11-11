@@ -49,6 +49,13 @@ vi.mock('@/api/agents', async (importOriginal) => ({
   useAgents: () => ({ data: [], isLoading: false }),
 }))
 
+vi.mock('@/api/projects', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/projects')>()),
+  // The agent budget row reads the project's settings; these tests are about the usage above it.
+  useProjectSettings: () => ({ data: undefined }),
+  useUpdateProjectSettings: () => ({ mutate: vi.fn() }),
+}))
+
 function baseSnapshot(): AccountingSnapshot {
   return {
     project: {

@@ -15,7 +15,6 @@ import { TracesSettings, type TraceRange } from '@/components/settings/TracesSet
 import type { JourneyStep } from '@/api/spec'
 import type { TraceSettings } from '@/api/traces'
 import { ManagerSettings } from '@/components/settings/ManagerSettings'
-import { RunnersSettings } from '@/components/settings/RunnersSettings'
 import { ChartersSettings } from '@/components/settings/ChartersSettings'
 import { BudgetsSettings } from '@/components/settings/BudgetsSettings'
 import { DiagnosticsSettings, InstructionsSettings, WorktreesSettings } from '@/components/settings/OtherSettings'
@@ -139,7 +138,6 @@ export default function Settings({ route, go, now }: ScreenProps) {
 
   const counts: Partial<Record<SettingsSection, React.ReactNode>> = {
     manager: `${jobs.filter((j) => j.enabled).length} on`,
-    runners: runners.length,
     charters: charters.length,
   }
 
@@ -227,18 +225,6 @@ export default function Settings({ route, go, now }: ScreenProps) {
             setJobs((js) => js.map((j) => (j.key === key ? { ...j, ...input } : j)))
             say(said)
           }}
-        />
-      )
-      break
-    case 'runners':
-      body = (
-        <RunnersSettings
-          runners={runners}
-          modelLabel={(r) => modelsFor(r).find((m) => m.id === r.model)?.label ?? null}
-          usedBy={(r) => agents.filter((a) => a.runner_id === r.id).length + jobs.filter((j) => j.runner_id === r.id).length}
-          onNew={() => toast({ title: 'New runner', description: 'Opens the runner dialog (unchanged in this mock).' })}
-          onEdit={(r) => toast({ title: `Edit ${r.name}`, description: 'Opens the runner dialog (unchanged in this mock).' })}
-          onDelete={(r) => toast({ title: `${r.name} deleted`, action: { label: 'Undo', onClick: () => say(`${r.name} restored`) } })}
         />
       )
       break
