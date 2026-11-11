@@ -181,6 +181,28 @@ async def test_a_drive_with_a_baseline_failing_at_each_check_is_approved(
 
 
 @pytest.mark.asyncio
+async def test_an_agent_recorded_already_built_row_does_not_exempt_the_drive(
+    app, auth_headers, author, tmp_path
+):
+    """Only the operator's close-as-already-built exempts a drive from its baseline: a row of kind
+    `already_built` its builder recorded is ordinary evidence, and the reviewer's approval of it
+    is still refused for the missing baseline."""
+    task, evidence = await staged_drive(
+        app, auth_headers, author, tmp_path, kind="already_built", output="nothing to baseline"
+    )
+    async with async_session_factory() as session:
+        assert (await session.get(RequirementEvidence, evidence)).actor_kind != "operator"
+    reviewer = await reviewing_run(task)
+    refused = await app.patch(
+        f"{AGENT_TASKS}/{task}", json={"status": "approved"}, headers=reviewer
+    )
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["code"] == drive_baseline.MISSING
+    assert await status_of(task) == "under_review"
+    assert await state_of(evidence) == "awaiting"
+
+
+@pytest.mark.asyncio
 async def test_a_task_that_is_not_the_drive_is_not_gated(app, auth_headers, author, tmp_path):
     """The control: the document's other task approves on ordinary evidence."""
     task, _evidence = await staged_drive(
