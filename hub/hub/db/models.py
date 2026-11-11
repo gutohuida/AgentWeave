@@ -3171,6 +3171,17 @@ class EvidenceReview(Base):
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    # A reviewer's own reproduction on an acceptance (`evidence-review-sends-work-back-only-for-
+    # what-is-wrong-with-it`, FR-1, FR-3): what it ran, the tail of what that printed, and the commit
+    # it ran on, which the evidence's footprint was re-anchored to from `anchored_from_commit`. Its
+    # corrections of the piece's summary and covers sit beside the author's, which the evidence row
+    # keeps as recorded. Null on every review that carried none.
+    reproduction_command: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reproduction_output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reproduction_commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    anchored_from_commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    corrected_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    corrected_covers: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("sequence", name="pk_evidence_reviews"),

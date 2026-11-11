@@ -1810,6 +1810,14 @@ class EvidenceRecord(RequestModel):
 class EvidenceDecision(RequestModel):
     decision: str = Field(max_length=16)
     reason: str = Field(default="", max_length=10000)
+    # A reviewer's own reproduction on an acceptance, and its corrections (`evidence-review-sends-
+    # work-back-only-for-what-is-wrong-with-it`, FR-1, FR-3). Open only to the run reviewing the
+    # evidence's task; the author's record is kept beside it.
+    command: Optional[str] = Field(default=None, max_length=10000)
+    output: Optional[str] = Field(default=None, max_length=200000)
+    commit: Optional[str] = Field(default=None, max_length=64)
+    summary: Optional[str] = Field(default=None, max_length=10000)
+    covers: Optional[str] = Field(default=None, max_length=16)
 
 
 async def _find_document(session, project_id: str, ref: str):
@@ -2072,6 +2080,13 @@ async def decide_evidence(
             decision=body.decision,
             reason=body.reason,
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            reproduction=requirement_evidence.Reproduction(
+                command=body.command,
+                output=body.output,
+                commit=body.commit,
+                summary=body.summary,
+                covers=body.covers,
+            ),
         )
     except requirement_evidence.EvidenceRefusedError as exc:
         # 403 for the two capability refusals; the refusal itself overrides that where it is a
