@@ -491,9 +491,12 @@ def run(args: argparse.Namespace, ui: str, api: lv.Api, main: Dict[str, Any], em
                 try:
                     STEPS[name](ctx)
                     print(f"  ok    {name}")
+                    print(f"check {name}: reached=yes failed_at_assertion=no -- passed")
                 except Fail as exc:
                     failures.append(f"{name}: {exc}")
                     print(f"  FAIL  {name}: {exc}")
+                    # The drive-baseline line the Hub reads: the page was reached, the step's own assertion failed.
+                    print(f"check {name}: reached=yes failed_at_assertion=yes -- {exc}")
                 except Exception as exc:  # noqa: BLE001
                     failures.append(f"{name}: {type(exc).__name__}: {str(exc).splitlines()[0] if str(exc) else ''}")
                     print(f"  FAIL  {name}: {failures[-1].split(': ', 1)[1]}")
@@ -507,6 +510,7 @@ def run(args: argparse.Namespace, ui: str, api: lv.Api, main: Dict[str, Any], em
                 page = context.new_page()
                 page.set_default_timeout(TIMEOUT)
                 failures = findable(Ctx(page, ui, api, main, empty), args.inject_fault)
+                print(f"check findable: reached=yes failed_at_assertion={'yes' if failures else 'no'} -- {failures[0] if failures else 'passed'}")
                 context.close()
         finally:
             browser.close()
