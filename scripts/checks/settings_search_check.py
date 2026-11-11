@@ -194,6 +194,14 @@ class Ctx:
             raise Fail(f"the row /{label_re}/ shows no source ([data-testid=setting-source])") from None
 
 
+CI_CUTOFF = re.compile(r"^\s*CI asking stops after", re.I)
+
+
+def has_word(text: str, word: str) -> bool:
+    """Whole-word match, so 'Off' is not found inside 'Offer me one'."""
+    return re.search(rf"(?<![A-Za-z]){re.escape(word)}(?![A-Za-z])", text, re.I) is not None
+
+
 def expect(cond: bool, message: str) -> None:
     if not cond:
         raise Fail(message)
@@ -234,7 +242,7 @@ def step_agents_listed(c: Ctx) -> None:
     idx = c.find("agent", "checkpoint")
     c.page.locator(RESULT).nth(idx).locator('[data-testid="settings-search-agent"]').nth(1).click(timeout=TIMEOUT)
     h = c.highlighted()
-    expect(re.search("checkpoint", h["label"], re.I) is not None, f"landed on {h['label']!r}, not the checkpoint mode row")
+    expect(h["label"].strip().lower() == "checkpoints", f"landed on {h['label']!r}, not the checkpoint mode row")
     expect("agent=bravo" in h["url"], f"the second agent is bravo; landed at {h['url']}")
 
 
@@ -252,14 +260,23 @@ def step_palette(c: Ctx) -> None:
     c.page.wait_for_timeout(600)
     h = c.highlighted()
     expect("section=landing" in h["url"], f"Project settings did not open at Landing: {h['url']}")
-    expect(re.search("CI", h["label"]) is not None, f"landed on {h['label']!r}, not the CI cutoff row")
+    expect(CI_CUTOFF.search(h["label"]) is not None, f"landed on {h['label']!r}, not the CI cutoff row")
 
 
 def step_highlight(c: Ctx) -> None:
-    c.page.set_viewport_size({"width": 960, "height": lv.HEIGHT})
+    c.page.set_viewport_size({"width": 960, "height": 600})
+    c.project("landing")
+    below = c.page.evaluate(
+        """(re) => { const rx = new RegExp(re, 'i');
+             const l = Array.from(document.querySelectorAll('.aw-settings-row-label')).find((e) => rx.test(e.textContent));
+             return l ? l.getBoundingClientRect().top >= window.innerHeight : null }""",
+        "CI asking stops after",
+    )
+    expect(below is not None, "Landing has no 'CI asking stops after' row")
+    expect(below, "the CI cutoff row is not below the fold at 960px before the search; the step proves nothing")
     c.project("general")
     c.type("CI cutoff")
-    c.open_result(c.find("project", "CI", "Landing|landing"))
+    c.open_result(c.find("project", CI_CUTOFF.pattern, "Landing|landing"))
     h = c.highlighted()
     expect(h["inView"], "the row is not scrolled into view")
     expect(h["focusInside"], "keyboard focus is not on the row's control")
@@ -284,15 +301,15 @@ def step_no_match(c: Ctx) -> None:
 def step_reload(c: Ctx) -> None:
     c.project("general")
     c.type("CI cutoff")
-    c.open_result(c.find("project", "CI", "Landing|landing"))
+    c.open_result(c.find("project", CI_CUTOFF.pattern, "Landing|landing"))
     first = c.highlighted()
     c.page.reload(wait_until="domcontentloaded")
     second = c.highlighted()
-    expect(second["label"] == first["label"] and "section=landing" in second["url"], "after a reload Landing → CI cutoff is not highlighted")
+    expect(CI_CUTOFF.search(second["label"]) is not None and second["label"] == first["label"] and "section=landing" in second["url"], "after a reload Landing → CI cutoff is not highlighted")
     c.project("general")
     c.page.go_back(wait_until="domcontentloaded")
     third = c.highlighted()
-    expect(third["label"] == first["label"] and "section=landing" in third["url"], "after Back, Landing → CI cutoff is not highlighted")
+    expect(CI_CUTOFF.search(third["label"]) is not None and third["label"] == first["label"] and "section=landing" in third["url"], "after Back, Landing → CI cutoff is not highlighted")
 
 
 def step_source_project(c: Ctx) -> None:
@@ -307,10 +324,10 @@ def step_source_agent(c: Ctx) -> None:
     words = {"off": "Off", "offered": "Offer me one", "automatic": "Automatic"}
     c.agent("alpha", "checkpoints")
     a = c.source_of("checkpoint")
-    expect("own" in a.lower() and words.get(project_mode, str(project_mode)).lower() in a.lower(), f"agent A reads {a!r}; want Agent's own with the project's mode {project_mode!r}")
+    expect(has_word(a, "own") and has_word(a, words.get(project_mode, str(project_mode))), f"agent A reads {a!r}; want Agent's own with the project's mode {project_mode!r}")
     c.agent("bravo", "checkpoints")
     b = c.source_of("checkpoint")
-    expect("from project" in b.lower() and words.get(project_mode, str(project_mode)).lower() in b.lower(), f"agent B reads {b!r}; want From project with {project_mode!r}")
+    expect("from project" in b.lower() and has_word(b, words.get(project_mode, str(project_mode))), f"agent B reads {b!r}; want From project with {project_mode!r}")
 
 
 def step_reset(c: Ctx) -> None:
@@ -350,7 +367,8 @@ def step_changed_only(c: Ctx) -> None:
     c.page.wait_for_timeout(500)
     shown = [t.strip() for t in sections().all_inner_texts()]
     expect(len(shown) == 1 and "Collaboration" in shown[0], f"Changed only shows sections {shown}, want only Collaboration")
-    c.project("collaboration")
+    c.page.locator('nav[aria-label="Project settings"] [data-slot="settings-nav-item"]', has_text="Collaboration").first.click(timeout=TIMEOUT)
+    c.page.wait_for_selector(ROW, timeout=TIMEOUT)
     expect("hop" in " ".join(c.page.locator(".aw-settings-row-label").all_inner_texts()).lower() and c.page.locator(ROW).count() == 1, "Collaboration under Changed only does not show just hop budget")
     toggle = c.page.locator('[data-testid="changed-only"]').first
     toggle.click()
