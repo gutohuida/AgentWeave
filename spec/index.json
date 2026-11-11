@@ -1411,6 +1411,14 @@
       "order": 2090
     },
     {
+      "path": "spec/changes/find-a-spec-s-tasks-without-knowing-its-name/spec.json",
+      "title": "Find a spec's tasks without knowing its name",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2620
+    },
+    {
       "path": "spec/changes/find-any-setting-and-see-where-its-value-comes-from/spec.json",
       "title": "Find any setting and see where its value comes from",
       "kind": "change-spec",
@@ -1675,10 +1683,26 @@
       "order": 1480
     },
     {
+      "path": "spec/changes/task-card-and-story-redesign/spec.json",
+      "title": "Task card and story redesign",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2630
+    },
+    {
+      "path": "spec/changes/tasks-outside-a-flow-move-freely/spec.json",
+      "title": "Tasks outside a flow move freely",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2640
+    },
+    {
       "path": "spec/changes/tasks-rework-roadmap/spec.json",
       "title": "Tasks rework",
       "kind": "roadmap",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 2590
     },

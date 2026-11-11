@@ -1,0 +1,247 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "spec P whose last task moved an hour ago and spec Q whose last task moved a week ago, with Q alphabetically first",
+      "how_to_check": "Hub or UI test with fixtures in the order the route returns them; reversing that order must fail it",
+      "key": "ac-recency",
+      "requirement": "picker-recency",
+      "then": "P is listed above Q",
+      "when": "the operator opens the filter"
+    },
+    {
+      "checked_by": "agent",
+      "given": "spec P with tag 'tasks board', last activity 2 hours ago and 3 unfinished tasks",
+      "how_to_check": "UI component test",
+      "key": "ac-entry",
+      "requirement": "picker-entry",
+      "then": "P's entry shows 'tasks board', '2 h' and 3",
+      "when": "the filter opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec tagged 'tasks board' whose title does not contain 'board'",
+      "how_to_check": "UI component test",
+      "key": "ac-search",
+      "requirement": "picker-search",
+      "then": "that spec is listed",
+      "when": "the operator types 'board'"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task of spec P",
+      "how_to_check": "Hub test for uniqueness plus UI component test",
+      "key": "ac-tag",
+      "requirement": "short-tag",
+      "then": "its card shows P's tag; two specs in the project never share a tag",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "five tasks on main, one cancelled and two in progress",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "ac-hidden",
+      "requirement": "finished-hidden",
+      "then": "it shows the two in progress and says 6 finished are hidden",
+      "when": "the default board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the board hiding finished tasks",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "ac-show",
+      "requirement": "show-finished",
+      "then": "finished tasks are shown, marked, and the switch is still on",
+      "when": "the operator turns on 'show finished' and reloads"
+    },
+    {
+      "checked_by": "agent",
+      "given": "'show finished' off and a finished task titled 'Fix flaky test X'",
+      "how_to_check": "UI component test",
+      "key": "ac-search-finished",
+      "requirement": "search-finds-finished",
+      "then": "that task appears, marked finished",
+      "when": "the operator searches 'flaky test X'"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "94d8984cbcb48e12ce0f3a4c0c684e7e7a3576002716a85c32c2e0089bd07bb0",
+      "FR-2": "72bc13e8665e8744cc8949443a7513effc5b718b6ee81b5aa72e64edd11262c7",
+      "FR-3": "58e1dd24da9a02a4e37048a2b9536322f35791641b96c80ec3dd7a694421ae83",
+      "FR-4": "2749f4cd19b1874cabd63fb270c6f615ddedad262e752730fd803fb998e53cb3",
+      "FR-5": "923b9f295166fd579c49a95630695d5cf63d8776c6b0bc29b64d5ac92a9012c7",
+      "FR-6": "f3b2cef67d44e171eee287f960066b8bbaf9d58f4f215c1848a5e656a6cc18e1",
+      "FR-7": "898897316a0a4ab12d8208973ec79adef85863a377d9203cf0bf01812fe5ca33"
+    },
+    "high_water": 7,
+    "requirements": {
+      "finished-hidden": "FR-5",
+      "picker-entry": "FR-2",
+      "picker-recency": "FR-1",
+      "picker-search": "FR-3",
+      "search-finds-finished": "FR-7",
+      "short-tag": "FR-4",
+      "show-finished": "FR-6"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperSonnet2",
+    "builder": "DeveloperSonnet2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "UI and a small route change: Sonnet is enough.",
+      "builder": "Same as agent.",
+      "checker": "QA2 drives the board on :8010.",
+      "cron": "Five minutes keeps it moving.",
+      "mode": "Two chained tasks suit a short flow.",
+      "stop": "Stop once both tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [
+      "BoardScopePicker.tsx:23-71: options All, Building, No spec, then one per spec; typed text is a substring match on title",
+      "TasksScreen.tsx:90-97: a chosen spec filters by spec document id on the server",
+      "The board already loads tasks with excludeArchivedCompleted (seen in QA's thread review); how that relates to 'finished' needs reading before the build"
+    ],
+    "limits": [
+      "'On main' and 'closed without landing' come from slices glance and loose-tasks; this slice is built after them"
+    ]
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Who sets a spec's short tag: derived automatically from the title, written by the spec's author, or both (derived, then editable)? (Proposed: the author writes it, with a derived fallback.)",
+      "resolved": false
+    }
+  ],
+  "problem": "The operator has to know a spec's name to filter by it. The scope picker (BoardScopePicker.tsx:23-71) lists specs alphabetically and matches typed text against long sentence-like titles. Meanwhile the board keeps accumulating finished tasks (322 tasks in this project on 2026-11-11), and a card does not say which spec it belongs to.",
+  "requirements": [
+    {
+      "key": "picker-recency",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The spec filter lists specs ordered by the most recent activity on any of their tasks (created or moved), newest first. 'All', 'Building' and 'No spec' stay at the top."
+    },
+    {
+      "key": "picker-entry",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Each spec in the filter shows its short tag, how long ago its last task activity was ('2 h', '3 days'), and how many of its tasks are not finished."
+    },
+    {
+      "key": "picker-search",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Typing in the filter matches any spec whose short tag or title contains the typed text, case-insensitively, keeping the recency order."
+    },
+    {
+      "key": "short-tag",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Every spec has a short tag of at most 24 characters, unique within the project. Every card of a task belonging to a spec shows that tag."
+    },
+    {
+      "key": "finished-hidden",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "By default the board shows no finished task. A task is finished when it is on main or closed without landing. The board states how many finished tasks it is hiding."
+    },
+    {
+      "key": "show-finished",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A 'show finished' switch on the board brings finished tasks back into view, marked as finished. The choice is remembered per project."
+    },
+    {
+      "key": "search-finds-finished",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": "Looking up one old task should not require switching the whole board to show everything.",
+      "statement": "The board's search also finds finished tasks while 'show finished' is off, showing them marked as finished."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/tasks-rework-roadmap/spec.json",
+    "slice": "finding"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "Ordering, labelling and searching the spec filter",
+      "A short tag per spec shown on cards",
+      "Hiding finished tasks with a switch to show them"
+    ],
+    "non_goals": [
+      "Deleting or archiving tasks from the database",
+      "Filters other than by spec (agent chips and search stay as they are, apart from search reaching finished tasks)",
+      "The card's visual design (slice redesign)"
+    ]
+  },
+  "summary": "The spec filter puts the specs with the most recent task activity first. Every card carries a short tag naming its spec. Tasks that are finished leave the default board, and a 'show finished' switch brings them back.",
+  "tasks": [
+    {
+      "builder": "DeveloperSonnet2",
+      "checker": "QA2",
+      "depends_on": [],
+      "description": "Acceptance drive first. Give specs a short tag, order the filter by last task activity, show tag, recency and unfinished count, and match search on tag or title.",
+      "files": [
+        "hub/ui/src/components/tasks/BoardScopePicker.tsx",
+        "hub/ui/src/components/tasks/TaskCardCompact.tsx",
+        "hub/hub/api/v1/tasks.py"
+      ],
+      "from": null,
+      "key": "picker",
+      "requirements": [
+        "picker-recency",
+        "picker-entry",
+        "picker-search",
+        "short-tag"
+      ],
+      "reviewer": null,
+      "title": "Spec filter by recency, with tags"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "checker": "QA2",
+      "depends_on": [
+        "picker"
+      ],
+      "description": "Hide finished tasks by default with a count, add the remembered 'show finished' switch, and let search reach finished tasks.",
+      "files": [
+        "hub/ui/src/components/tasks/TasksScreen.tsx",
+        "hub/ui/src/components/tasks/BoardView.tsx"
+      ],
+      "from": null,
+      "key": "finished",
+      "requirements": [
+        "finished-hidden",
+        "show-finished",
+        "search-finds-finished"
+      ],
+      "reviewer": null,
+      "title": "Finished tasks leave the board"
+    }
+  ],
+  "title": "Find a spec's tasks without knowing its name"
+}
