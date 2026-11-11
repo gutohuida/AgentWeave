@@ -65,6 +65,10 @@ class _FakeSession:
             stderr_tail=self._stderr_tail,
         )
 
+    async def end_commands(self):
+        # Recorded among the requests, so a test can tell what a stop did first (F1162).
+        self.sent_requests.append(("<end_commands>", None))
+
     async def close(self, force=False):
         self._running = False
         self.closed_with_force = force
@@ -875,6 +879,9 @@ class TestRunTurnInterrupt:
         assert outcome.status == "interrupted"
         assert "turn/interrupt" in [m for m, _ in fake.sent_requests]
         assert fake.closed_with_force is True
+        # F1162: the turn's commands are ended before the interrupt, while the tree is whole.
+        methods = [m for m, _ in fake.sent_requests]
+        assert methods.index("<end_commands>") < methods.index("turn/interrupt")
 
 
 class TestRunTurnReportsRefusals:

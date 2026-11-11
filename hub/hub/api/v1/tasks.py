@@ -2280,7 +2280,11 @@ async def update_task_for_actor(
     if body.requirement_ids:
         try:
             named = await resolve_identifiers(
-                session, project_id, body.requirement_ids, document_path=body.spec_document
+                session,
+                project_id,
+                body.requirement_ids,
+                document_path=body.spec_document,
+                own_document_id=task.spec_document_id,
             )
         except LinkRefusedError as refusal:
             raise HTTPException(status_code=422, detail=str(refusal)) from refusal

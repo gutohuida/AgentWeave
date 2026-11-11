@@ -1862,7 +1862,12 @@ async def _trigger_agent_directly(
         session, project_id, spec_document
     )
     spec_notice = spec_turn_notice(
-        spec_phase, path=spec_document, is_unwritten=spec_is_unwritten, kind=spec_kind
+        spec_phase,
+        path=spec_document,
+        is_unwritten=spec_is_unwritten,
+        kind=spec_kind,
+        # F1161: a run told the call command keeps its arguments-file write, and is told so.
+        access_path=described_path,
     )
     if spec_notice:
         notices.append(spec_notice)
@@ -2177,6 +2182,9 @@ async def _trigger_agent_directly(
                 # The stream transports carry it in `cmd`; an RPC transport reads no argv, so the
                 # restriction has to arrive by its own parameter or it reaches nothing (F462).
                 restrict_spec_writes=bool(spec_document),
+                # F325: the canonical context, for a transport that reads no argv to find the
+                # context file on (Codex app-server). The same text the file above holds.
+                developer_instructions=rendered_context["context"],
                 cli=probe["cli"],
                 prompt=prompt,
                 yolo=yolo,
@@ -3289,6 +3297,7 @@ async def _execute_run(
     told_access_path: Optional[str] = None,
     restrict_spec_writes: bool = False,
     setup_events: Sequence[Any] = (),
+    developer_instructions: Optional[str] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -3371,6 +3380,7 @@ async def _execute_run(
             told_access_path=told_access_path,
             restrict_spec_writes=restrict_spec_writes,
             pre_turn_events=setup_events,
+            developer_instructions=developer_instructions,
         )
         return
 
@@ -4452,6 +4462,7 @@ async def _execute_rpc_run(
     restrict_spec_writes: bool = False,
     pre_turn_events: Sequence[Any] = (),
     told_access_path: Optional[str] = None,
+    developer_instructions: Optional[str] = None,
 ) -> None:
     """The executor every RPC transport shares (Codex `app-server`, Copilot ACP).
 
@@ -4498,6 +4509,8 @@ async def _execute_rpc_run(
             restrict_spec_writes=restrict_spec_writes,
             # What this run was told (D12): the runner's own MCP failure message is worded for it.
             told_access_path=told_access_path,
+            # F325: the canonical context; argv carries it on the stream transports.
+            developer_instructions=developer_instructions,
         )
         # The harness's report about the Hub's server, recorded only for a run given it (D1).
         on_mcp_status = (
