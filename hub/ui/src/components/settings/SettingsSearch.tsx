@@ -42,7 +42,7 @@ export function SettingsSearchResults({
   onChosen: () => void
 }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
-  const { data: roster = [] } = useAgents()
+  const { data: roster = [], error: rosterError } = useAgents()
   const matches = searchSettings(query)
   const words = query.trim()
 
@@ -71,6 +71,11 @@ export function SettingsSearchResults({
   }
   return (
     <div className="aw-settings-search-results">
+      {rosterError ? (
+        <p className="aw-settings-search-note" role="alert" data-testid="settings-search-agents-error">
+          The agent list could not be loaded, so agents are not shown under agent settings.
+        </p>
+      ) : null}
       <ul className="aw-settings-search-list" aria-label="Matching settings">
         {matches.map(({ entry }) => {
           const opens = entry.scope === 'agent' ? (agent ?? roster[0]?.name ?? null) : null
