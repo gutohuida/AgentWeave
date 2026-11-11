@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from hub import landing_queue, task_integration
 from hub.db.engine import async_session_factory
-from hub.db.models import RequirementEvidence, Task, TaskLanding
+from hub.db.models import RequirementEvidence, Run, Task, TaskLanding
 
 from .test_task_integration import (
     AGENT_EVIDENCE,
@@ -33,8 +33,8 @@ async def setup(app, auth_headers, run_headers, root):
 
 @pytest.mark.asyncio
 async def test_message_signoff_has_no_git_footprint(
-    app, auth_headers, builder, tmp_path
-):  # noqa: F811
+    app, auth_headers, builder, tmp_path  # noqa: F811
+):
     await setup(app, auth_headers, builder, tmp_path)
     commit_on_branch(tmp_path, "agentweave/builder", "README.md", "unreviewed\n")
     recorded = await app.post(
@@ -167,9 +167,12 @@ async def test_task_bound_evidence_cannot_merge_a_foreign_branch(
     app, auth_headers, builder, tmp_path  # noqa: F811
 ):
     task, base = await setup(app, auth_headers, builder, tmp_path)
-    own = commit_on_branch(tmp_path, f"agentweave/task/{task}", "own.py", "own\n")
+    commit_on_branch(tmp_path, f"agentweave/task/{task}", "own.py", "own\n")
     git(tmp_path, "checkout", "-q", "main")
-    foreign = commit_on_branch(tmp_path, "agentweave/builder", "foreign.py", "foreign\n")
+    commit_on_branch(tmp_path, "agentweave/builder", "foreign.py", "foreign\n")
+    async with async_session_factory() as session:
+        (await session.get(Run, "run-int")).workspace_dir = str(tmp_path)
+        await session.commit()
     response = await app.post(
         AGENT_EVIDENCE,
         json={"identifier": "FR-1", "summary": "wrong checkout", "task_id": task},

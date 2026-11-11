@@ -1051,20 +1051,7 @@ async def test_a_task_whose_worktree_exists_proves_the_project_was_a_repository(
 
 @pytest.mark.asyncio
 async def test_evidence_awaiting_review_merges_nothing(app, auth_headers, builder, tmp_path):
-    """Only accepted evidence names a commit to merge. Merging on unreviewed evidence would make
-    the review that gates the merge decorative.
-
-    **The approval is now refused rather than allowed to record a skip** — changed by
-    `approval-refuses-unaccepted-evidence` (F122), and the property this test names is unchanged and
-    now stated more strongly. It used to assert that approval succeeded and recorded
-    `NOTHING_TO_MERGE`, which was true of the merge and false about the world: the commit existed and
-    was waiting for a person, and the task went terminal at `approved` with its work on a branch
-    nothing merges. The refusal is what stops that, and the assertion that nothing reaches `main` is
-    kept verbatim, because it is the half that was always the point.
-
-    The full behaviour, including the acceptance that follows, lives in
-    `test_approval_refuses_unaccepted_evidence.py`.
-    """
+    """Awaiting evidence contributes no merge target until the task verdict accepts it."""
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -1079,11 +1066,18 @@ async def test_evidence_awaiting_review_merges_nothing(app, auth_headers, builde
     assert recorded.status_code == 201, recorded.text
     git(tmp_path, "checkout", "-q", "main")
 
-    refused = await approve(app, auth_headers, task)
-    assert refused.status_code == 409, refused.text
-    assert work not in commits_on(tmp_path, "main")
+    from hub import task_integration
+    from hub.db.models import Task
 
-    assert await integrations(app, auth_headers, task) == []
+    async with async_session_factory() as session:
+        assert (
+            await task_integration.integration_targets(session, await session.get(Task, task)) == []
+        )
+    assert work not in commits_on(tmp_path, "main")
+    verdict = await approve(app, auth_headers, task)
+    assert verdict.status_code == 200, verdict.text
+    assert work in commits_on(tmp_path, "main")
+    assert (await integrations(app, auth_headers, task))[-1]["outcome"] == "merged"
 
 
 # ---------------------------------------------------------------------------

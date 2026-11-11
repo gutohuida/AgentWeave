@@ -41595,3 +41595,15 @@ Four change documents (`agents-add-files-to-the-vault-by-path`, `an-operator-set
 **Tier:** 0
 
 Before today's spec tidy `spec/index.json` listed 11 of the 62 approved change documents. A `create_capability` act then regenerated it, so it is correct now, but it drifts again between such writes. **Expected:** every document the Hub writes appears in the index, and the index is regenerated from the rows rather than appended to.
+
+## F1168 (A) -- accepting a sign-off can land unrelated work and reopen an already landed task
+
+**Status:** fixed 2026-11-11 (Tier 0, AW-101). Sign-offs capture no git footprint; taskless evidence supplies no merge target; task-bound evidence targets only its recording task, with commits checked against that task's branch when it exists. A failed legacy evidence landing leaves an approved task alone when its own branch is already on main. Regression tests: `hub/tests/test_accepting_a_signoff_never_lands_work.py`. Trial drive: `py -3.11 scripts/drive/f1168_signoff.py --port 8011` passed: conflicting recorder branch, signoff footprint null, operator accepted, task approved, task_landings before=0 after=0, foreign commit absent from main.
+**Source:** drive (Architect, operator's incident 2026-11-11)
+**Theme:** Task ledger
+**Ready:** yes
+**Tier:** 0
+
+At 16:36:29 the operator accepted slice 2's sign-off `ev-f9a096f042b2`, kind `operator_signoff`, no task, locator "Operator message to Architect". Its footprint `efp-ef14cbead9e7` carried unrelated commit `8223805` from `agentweave/Architect`. Twenty milliseconds later the Hub created evidence landing `land-5a8215484316` / batch `lbat-7103573b1192` for SASSW-2 (`task-e5c9147da336`), already approved the previous day and landed as `5921e0b`. The unrelated commit conflicted in this ledger, so the task became revision_needed / merge-needed despite having no own work left to land.
+
+Three seams caused this: `requirement_evidence.record` footprinted a message; `task_integration.tasks_awaiting_this_commit` selected every approved task sharing the requirement; `landing_queue._send_back` reopened already landed work after the foreign merge failed. Expected: evidence without a task or repository artifact merges nothing; accepting task evidence merges only its own work; a failed evidence landing does not reverse an approved, landed task. The original SASSW-2 incident is left for the mender after this fix lands.
