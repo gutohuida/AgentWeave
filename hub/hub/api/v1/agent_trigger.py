@@ -1862,7 +1862,12 @@ async def _trigger_agent_directly(
         session, project_id, spec_document
     )
     spec_notice = spec_turn_notice(
-        spec_phase, path=spec_document, is_unwritten=spec_is_unwritten, kind=spec_kind
+        spec_phase,
+        path=spec_document,
+        is_unwritten=spec_is_unwritten,
+        kind=spec_kind,
+        # F1161: a run told the call command keeps its arguments-file write, and is told so.
+        access_path=described_path,
     )
     if spec_notice:
         notices.append(spec_notice)

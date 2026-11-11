@@ -358,12 +358,28 @@ EXPLORING_ASKS_IN_REPLY = (
 )
 
 
+#: What a spec turn's notice says about writes, told MCP (no write at all) or the call command.
+SPEC_TURN_NO_WRITE = (
+    "You have no file-write tool this turn. If you notice something in the code that needs "
+    "fixing, record it with `create_task` instead of trying to change it directly."
+)
+SHIM_SPEC_TURN_WRITE = (
+    "You may write exactly one kind of file this turn: an `aw-tool` call's arguments file under "
+    "`.agentweave/calls/`, written as your tool access above describes. That write is how you "
+    "reach AgentWeave, `submit_spec_document` included, so make it even if your sandbox says the "
+    "workspace is read-only: the write asks for approval, and AgentWeave grants it for that "
+    "directory only. Write nothing else; if you notice something in the code that needs fixing, "
+    "record it with `create_task` instead of trying to change it directly."
+)
+
+
 def spec_turn_notice(
     phase: Optional[str],
     *,
     path: Optional[str] = None,
     is_unwritten: bool = False,
     kind: Optional[str] = None,
+    access_path: str = "mcp",
 ) -> Optional[str]:
     """One short block, carried in the **turn prompt**, for a turn with a document open.
 
@@ -386,6 +402,10 @@ def spec_turn_notice(
 
     `None` when no document is open, so an ordinary turn carries nothing.
 
+    `access_path` is what the run is told it reaches the Hub with. A run told `shim` keeps one
+    write, its call's arguments file (D16), and is told so (F1161): told flatly it had no write, a
+    Codex spec turn believed that over the access notice and never submitted its document.
+
     `kind`, when `"change-spec"` and `phase == "exploring"`, adds one line asking how the work
     will be built, before the unwritten-path line. `kind=None` adds nothing, keeping the output
     byte-identical to before this parameter existed.
@@ -399,8 +419,7 @@ def spec_turn_notice(
         # F4 (`openspec/changes/2026-08-17-authoring-rigor-and-scope`): mechanically true by the
         # time this notice is read, not aspirational — stated so a refused write is recognized
         # rather than discovered by trial and error.
-        "You have no file-write tool this turn. If you notice something in the code that needs "
-        "fixing, record it with `create_task` instead of trying to change it directly.",
+        (SHIM_SPEC_TURN_WRITE if access_path == "shim" else SPEC_TURN_NO_WRITE),
     ]
     if phase == "exploring":
         lines += [
