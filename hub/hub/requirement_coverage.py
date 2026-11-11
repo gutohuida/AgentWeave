@@ -46,7 +46,14 @@ from .db.models import (
     Task,
     TaskRequirementLink,
 )
-from .requirement_evidence import ACCEPTED, AWAITING, HELD, REJECTED, open_drift_for
+from .requirement_evidence import (
+    ACCEPTED,
+    AWAITING,
+    HELD,
+    REJECTED,
+    corrected_covers,
+    open_drift_for,
+)
 from .spec_identity import natural_key
 
 DRIFTING = "drifting"
@@ -204,10 +211,17 @@ def _integration(footprints: List[EvidenceFootprint]) -> str:
     return INTEGRATION_UNKNOWN
 
 
-def partial_only(accepted: List[RequirementEvidence]) -> bool:
+def partial_only(
+    accepted: List[RequirementEvidence], corrected: Optional[Dict[str, str]] = None
+) -> bool:
     """Whether every accepted piece says `covers: partial` (F706). A piece that says `full`, or says
-    nothing (every piece recorded before `covers` existed), covers the requirement."""
-    return bool(accepted) and all((item.covers or "") == PARTIAL for item in accepted)
+    nothing (every piece recorded before `covers` existed), covers the requirement. *corrected* is
+    the reviewer's correction where its acceptance made one (`corrected_covers`); it outranks the
+    author's."""
+    corrected = corrected or {}
+    return bool(accepted) and all(
+        (corrected.get(item.id) or item.covers or "") == PARTIAL for item in accepted
+    )
 
 
 def _in_progress_reason(
@@ -215,13 +229,14 @@ def _in_progress_reason(
     accepted: List[RequirementEvidence],
     evidence: List[RequirementEvidence],
     digest: str,
+    corrected: Optional[Dict[str, str]] = None,
 ) -> Optional[str]:
     """Why an `in_progress` requirement is not demonstrated, where its evidence says: every accepted
     piece is partial (F706), or nothing current was accepted and a send-back held some of it.
     `_state` has already returned for any current piece awaiting or rejected."""
     if state != IN_PROGRESS:
         return None
-    if partial_only(accepted):
+    if partial_only(accepted, corrected):
         return PARTIAL_ONLY
     if not accepted and any(
         item.digest == digest and item.review_state == HELD for item in evidence
@@ -238,6 +253,7 @@ def _state(
     linked: List[Task],
     retired: bool = False,
     amendment_unreviewed: bool = False,
+    corrected: Optional[Dict[str, str]] = None,
 ) -> str:
     current = [item for item in evidence if item.digest == digest]
     accepted = [item for item in current if item.review_state == ACCEPTED]
@@ -254,7 +270,7 @@ def _state(
         return STALE
     if awaiting:
         return AWAITING_REVIEW
-    if accepted and not partial_only(accepted):
+    if accepted and not partial_only(accepted, corrected):
         return VERIFIED
     if accepted:
         # F706 (operator, 2026-10-18): every accepted current piece says it demonstrates only part
@@ -364,6 +380,9 @@ async def requirement_coverage(
         tasks_by_requirement.setdefault(requirement_id, []).append(task)
 
     drifting = await open_drift_for(session, ids)
+    corrected = await corrected_covers(
+        session, [row.id for row in evidence_rows if row.review_state == ACCEPTED]
+    )
     from .spec_amendments import unreviewed_relaxing
 
     held = await unreviewed_relaxing(session, {r.document_id for r in requirements})
@@ -410,6 +429,7 @@ async def requirement_coverage(
             linked=linked,
             retired=requirement.state == "retired",
             amendment_unreviewed=(requirement.document_id, requirement.identifier) in held,
+            corrected=corrected,
         )
         accepted = [
             item
@@ -429,7 +449,9 @@ async def requirement_coverage(
                 accepted_count=len(accepted),
                 linked_task_ids=[task.id for task in linked],
                 served_by=served_by,
-                reason=_in_progress_reason(state, accepted, evidence, requirement.digest),
+                reason=_in_progress_reason(
+                    state, accepted, evidence, requirement.digest, corrected
+                ),
             )
         )
 

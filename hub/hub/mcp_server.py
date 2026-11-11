@@ -5894,7 +5894,14 @@ def read_model_record() -> Dict[str, Any]:
 
 @_tool()
 def decide_evidence(
-    evidence_id: str, decision: EvidenceDecision, reason: str = ""
+    evidence_id: str,
+    decision: EvidenceDecision,
+    reason: str = "",
+    command: str = "",
+    output: str = "",
+    commit: str = "",
+    summary: str = "",
+    covers: str = "",
 ) -> Dict[str, Any]:
     """Accept or reject evidence somebody else recorded.
 
@@ -5917,19 +5924,45 @@ def decide_evidence(
     commit is about to be replaced, so the Hub refuses with `recording_run_live` (HTTP 409). Decide
     after the run has ended; the Hub sends you a note in this conversation when it does.
 
+    **Reviewing a task, you may accept its evidence with your own reproduction**, without the grant:
+    re-run the author's demonstration and pass `command`, `output` and `commit` (the commit you ran
+    it on; omitted, your checkout's HEAD). Use it when the task's branch has moved past the commit
+    the evidence names (a master merge, a fix) and the demonstration still passes there: the
+    evidence is re-anchored to your commit, and approving the task lands it. The commit must be on
+    the task's own branch and at or after the evidence's commit, or it is refused with
+    `reproduction_commit_off_branch` / `reproduction_commit_before_evidence`, and the evidence stays
+    awaiting. `summary` and `covers` correct the author's wording; the author's record is kept
+    beside yours. You verify, you do not author: a piece its author marked `partial` cannot be made
+    `full` (`missing_piece`), nothing is accepted for a requirement whose evidence the operator
+    rejected on this task (`operator_rejected_requirement`), and you cannot record evidence on the
+    task you review. A part nothing demonstrates goes back to the builder: send the task back with
+    `revision_needed`, naming the missing piece.
+
     Args:
         evidence_id: From `list_evidence`.
         decision: `accepted` or `rejected`.
         reason: Why. This is the durable record of the judgement, so say what you checked. Required
             for a rejection (the Hub refuses a blank one, 422): it is what the author reads to fix it.
+        command: Your reproduction: the command you ran, as you ran it. Acceptance only.
+        output: What it printed, as it came (its tail is kept).
+        commit: The commit you ran it on, on the task's own branch.
+        summary: Your correction of the author's summary, kept beside it.
+        covers: Your correction of `covers` (`full` or `partial`).
 
-    Returns the evidence `id` and its new `review_state`.
+    Returns the evidence `id` and its new `review_state`, with `author_record` and
+    `reviewer_record` side by side.
     """
-    return _hub_request(
-        "POST",
-        f"/spec/evidence/{evidence_id}/decision",
-        {"decision": decision, "reason": reason},
-    )
+    body: Dict[str, Any] = {"decision": decision, "reason": reason}
+    for name, value in (
+        ("command", command),
+        ("output", output),
+        ("commit", commit),
+        ("summary", summary),
+        ("covers", covers),
+    ):
+        if value:
+            body[name] = value
+    return _hub_request("POST", f"/spec/evidence/{evidence_id}/decision", body)
 
 
 def _announce_adapter_online() -> None:

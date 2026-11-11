@@ -284,8 +284,11 @@ def drive(state):
             (root / "OTHER.md").write_text("main moved on\n", encoding="utf-8")
             d.git(root, "add", "OTHER.md")
             d.git(root, "commit", "-q", "-m", "main moves on")
+            # On a line of its own: a builder's NOTE.md without a trailing newline otherwise
+            # becomes `notefixed ...`, and B rightly fails the criterion (run 230122, ERSWB-2).
+            existing = (worktree / "NOTE.md").read_text(encoding="utf-8")
             with open(worktree / "NOTE.md", "a", encoding="utf-8") as fh:
-                fh.write(FIX_LINE + "\n")
+                fh.write(("" if existing.endswith("\n") else "\n") + FIX_LINE + "\n")
             d.git(worktree, "add", "NOTE.md")
             d.git(worktree, "commit", "-q", "-m", "fix after the evidence")
             d.git(worktree, "merge", "--no-ff", "--no-edit", "main")
