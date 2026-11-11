@@ -1,5 +1,5 @@
 import { Icon } from '@/components/common/Icon'
-import { formatAgo, formatDateTime } from '@/lib/format'
+import { formatAgoLong, formatDateTime } from '@/lib/format'
 import type { ClearStableResult, DisturbedRun, KnownFailingEntry } from '@/api/knownFailing'
 
 /**
@@ -126,7 +126,7 @@ function Seen({ label, at, now }: { label: string; at: string | null; now: Date 
   if (!at) return <span>{label} unknown</span>
   return (
     <time dateTime={at} title={formatDateTime(at, now)}>
-      {label} {formatAgo(at, now)} ago
+      {label} {formatAgoLong(at, now)}
     </time>
   )
 }
