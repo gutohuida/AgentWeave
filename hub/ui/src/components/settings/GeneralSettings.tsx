@@ -361,7 +361,8 @@ function ChecksRows({
                     {check.report_path ? (
                       <span data-testid={`project-check-report-${i}`} title={check.rerun_command ? `Re-runs failing tests with ${check.rerun_command}` : 'Re-runs failing tests by running the whole check'}>
                         report {check.report_path}
-                        {check.rerun_command ? ', re-runs by test' : ''} ·{' '}
+                        {check.rerun_command ? ', re-runs by test' : ''}
+                        {check.rerun_command ? `, disturbed at ${check.disturbed_threshold ?? 3}` : ''} ·{' '}
                       </span>
                     ) : null}
                     {check.phase === 'review' || check.phase === 'landing' ? (
@@ -945,6 +946,8 @@ function CheckDialog({
   const [reportPath, setReportPath] = React.useState(initial?.report_path ?? '')
   const [rerun, setRerun] = React.useState(initial?.rerun_command ?? '')
   const [changeCommand, setChangeCommand] = React.useState(initial?.change_command ?? '')
+  const [threshold, setThreshold] = React.useState(initial?.disturbed_threshold ? String(initial.disturbed_threshold) : '')
+  const thresholdError = threshold.trim() ? wholeNumber(2, 10000, 'tests')(threshold) : undefined
   const rerunError = rerunCommandError(rerun)
   const changeError = changeCommandError(changeCommand)
   const phaseError = fast && phase === 'landing' ? FAST_NOT_LANDING_ONLY : undefined
@@ -952,7 +955,7 @@ function CheckDialog({
   // refuses it too, and this says so before the save.
   const timeoutError = wholeNumber(10, fast ? FAST_CHECK_MAX_SECONDS : 3600, 'seconds')(timeout)
   const patterns = [...new Set(paths.split(/[\n,]/).map((p) => p.trim()).filter(Boolean))]
-  const ready = name.trim() && command.trim() && !timeoutError && !phaseError && !rerunError && !changeError
+  const ready = name.trim() && command.trim() && !timeoutError && !phaseError && !rerunError && !changeError && !thresholdError
   return (
     <Dialog
       open={open}
@@ -968,6 +971,7 @@ function CheckDialog({
           setReportPath(initial?.report_path ?? '')
           setRerun(initial?.rerun_command ?? '')
           setChangeCommand(initial?.change_command ?? '')
+          setThreshold(initial?.disturbed_threshold ? String(initial.disturbed_threshold) : '')
         }
       }}
     >
@@ -996,6 +1000,8 @@ function CheckDialog({
                   // Neither is sent when empty: a check without a report reads as having neither.
                   ...(reportPath.trim() ? { report_path: reportPath.trim() } : {}),
                   ...(rerun.trim() ? { rerun_command: rerun.trim() } : {}),
+                  // Only a check with a report and a rerun command has one; empty reads as 3.
+                  ...(rerun.trim() && reportPath.trim() && threshold.trim() ? { disturbed_threshold: Number(threshold) } : {}),
                   ...(changeCommand.trim() ? { change_command: changeCommand.trim() } : {}),
                 })
                 setOpen(false)
@@ -1056,6 +1062,16 @@ function CheckDialog({
           >
             <Input id="c-rerun" className="font-mono" value={rerun} placeholder="python rerun_pytest.py {tests}" aria-invalid={Boolean(rerunError)} onChange={(e) => setRerun(e.target.value)} />
           </Field>
+          {reportPath.trim() && rerun.trim() ? (
+            <Field
+              label="Disturbed threshold"
+              htmlFor="c-disturbed"
+              error={thresholdError}
+              hint="Optional, at least 2, 3 when empty. When this many tests fail in one run and every one passes when re-run, the run is recorded as disturbed: no test is listed as flaky and no fix task is filed."
+            >
+              <Input id="c-disturbed" inputMode="numeric" className="tabular" style={{ width: 96 }} value={threshold} placeholder="3" aria-invalid={Boolean(thresholdError)} onChange={(e) => setThreshold(e.target.value)} />
+            </Field>
+          ) : null}
           <Field
             label="Command for a change"
             htmlFor="c-change"
