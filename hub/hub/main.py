@@ -37,6 +37,7 @@ from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
 from .db.engine import SQLITE_BUSY_TIMEOUT_SECONDS, describe_journal, engine, init_db
+from .inherited_run_env import drop_inherited_run_environment
 from .provider_allowance import arm_held_queues
 from .run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
 from .run_task_binding import TaskBindingError
@@ -603,6 +604,9 @@ async def log_journal_mode() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # F1160: a Hub started inside an agent's run must not hand that run's credential and address
+    # to its own runs -- dropped before anything below (the startup re-drain) can start one.
+    drop_inherited_run_environment()
     _log_database_before_opening()
     await init_db()
     await log_journal_mode()
