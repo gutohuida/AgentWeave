@@ -41707,3 +41707,22 @@ Three defects, worst first:
 **Repro:** have an agent whose branch has commits that conflict with main record `operator_signoff` evidence for a requirement that an approved, landed task links. Accept the evidence as the operator, then read the task's status and its `task_landings` rows.
 
 **Repair after the fix:** the mender returns `task-e5c9147da336` to approved. Do not re-approve it before the fix lands, because the same waiting evidence would retry the same merge.
+
+## F1169 (B) -- A task checkout half-deleted by cleanup blocks every later turn on the task, and the agent reads as having work it can never start
+
+**Status:** open
+**Source:** found by the operator's own use (Architect, 2026-11-11)
+**Theme:** Worktrees x Inbound queue
+**Ready:** yes
+**Tier:** 0
+
+AW-101 (`task-810f7f7f382b`) was approved at 19:23, and its checkout's directory was modified at 19:23. After that the directory had no `.git` file and was not in `git worktree list`: 3678 of the branch's 5895 files were left, with nothing changed or untracked. An orphaned trial Hub (PID 15664, `uvicorn` on :8010, started 18:04 by CodexSol's timed-out first turn) had its working directory in the checkout's `hub/`, so Windows refused to delete it. The checks then sent the task back (19:44), and every message to CodexSol failed three times with "Could not prepare the checkout ... refusing existing path ... it is not the registered git worktree". The Hub then withdrew each one (`entry-894e25419459`). CodexSol showed as having work, but no turn could start, and nothing told the operator why. The refusal says "the next turn runs `git worktree prune` and provisions the checkout itself", but no turn ever ran.
+
+**Expected:**
+- Removing a checkout never leaves a half-deleted, unregistered directory. If a file is locked, the Hub keeps it registered, or it retries the removal before the next turn needs the path.
+- A turn that finds a stale directory containing nothing that isn't on the branch clears it and provisions a fresh checkout.
+- A refusal that needs a person reaches the operator as a stall, not as three silent withdrawals.
+
+**Also:** a Hub an agent starts inside its own checkout outlives the agent's turn. Three more `uvicorn hub.main:app` processes started between 18:58 and 19:04 are still listening on ports 63149, 65279 and 54469, and their parents are gone.
+
+**Repaired by hand:** Architect stopped PID 15664, removed the directory and pruned, then resent the message. CodexSol's turn `run-1522734a6958` started at 20:32 on a freshly created checkout.
