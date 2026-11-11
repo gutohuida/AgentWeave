@@ -169,7 +169,7 @@ function currentModel(agent: AgentSummary, runners: ReturnType<typeof useRunners
 function AgentSection({ agent }: { agent: AgentSummary }) {
   const description = useUpdateAgentDescription()
   const bindCharter = useBindAgentCharter()
-  const { data: charters = [] } = useCharters()
+  const { data: charters = [], error: chartersError } = useCharters()
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { run: write, notices } = usePatchWrites()
   const apply = (patch: AgentPatch, said: string) => {
@@ -213,6 +213,7 @@ function AgentSection({ agent }: { agent: AgentSummary }) {
         ) : undefined
       }
     >
+      {chartersError ? <span className="aw-row-note" role="status">Could not load the charters, so the list is incomplete.</span> : null}
       <AgentCharterGroup
         agent={agent}
         charters={charters.map((charter) => ({ value: charter.id, label: charter.name }))}
@@ -231,7 +232,7 @@ function RunningSection({ agent }: { agent: AgentSummary }) {
   const { run, notices } = usePatchWrites()
   const { data: runners = [], error: runnersError } = useRunners()
   const { data: catalog, error: catalogError } = useModelCatalog()
-  const { data: providerLaunch } = useProviderLaunchability()
+  const { data: providerLaunch, error: providerLaunchError } = useProviderLaunchability()
   const { data: launchability, error: launchabilityError } = useAgentLaunchability()
   const model = currentModel(agent, runners)
   const verdict = launchability?.agents[agent.name]
@@ -274,6 +275,7 @@ function RunningSection({ agent }: { agent: AgentSummary }) {
         </span>
       ) : null}
       {!verdict && launchabilityError ? <span className="aw-row-note" role="status">Could not check whether this agent can run.</span> : null}
+      {providerLaunchError ? <span className="aw-row-note" role="status">Could not check which coding agents are installed; every provider is listed.</span> : null}
       {catalogError ? <span className="aw-row-note" role="status">Could not load the model catalog; the list of models is incomplete.</span> : null}
       {/* An empty list here would read as "no model is bound". */}
       {runnersError ? (
@@ -319,7 +321,7 @@ function PermissionsSection({ agent }: { agent: AgentSummary }) {
   const reach = useUpdateAgentReachGrants()
   const grant = useUpdateAgentGrant()
   const { run, notices } = usePatchWrites()
-  const { data: catalog } = useModelCatalog()
+  const { data: catalog, error: catalogError } = useModelCatalog()
   const options = permissionModeValues(catalog)
   const apply = (patch: AgentPatch, said: string) => {
     const name = agent.name
@@ -349,6 +351,8 @@ function PermissionsSection({ agent }: { agent: AgentSummary }) {
           <span className="aw-row-note" data-testid="ask-me-readonly-note">
             Claude Code still runs commands it treats as read-only (such as <code>echo</code> or <code>git status</code>) without asking; writes and other commands come to you.
           </span>
+        ) : catalogError ? (
+          <span className="aw-row-note" role="status">Could not load the permission modes, so the list is incomplete.</span>
         ) : null
       }
       notices={notices}

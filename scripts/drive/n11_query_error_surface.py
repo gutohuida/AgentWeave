@@ -125,7 +125,6 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/agents/AgentOutputPanel.tsx', 'useAgentChatHistory', 1, 'MISREPORT', '', '`timelineEntries = chat.data?.entries ?? []` (:350) — the transcript reads as empty'),
     ('components/agents/AgentOutputPanel.tsx', 'useAgentRecentChat', 1, 'MISREPORT', '', 'the same `chat` (:349-350) when no conversation is selected'),
     ('components/agents/AgentOutputPanel.tsx', 'useCheckpoints', 1, 'SUPPRESSED', '', '`offeredCheckpoint` undefined (:490) — the checkpoint offer does not render'),
-    ('components/agents/AgentSettingsControls.tsx', 'useCharters', 1, 'MISREPORT', 'PICKER', 'same shape for charters (:263, :282)'),
     ('components/agents/AgentSettingsPage.tsx', 'useAgents', 1, 'MISREPORT', '', "`roster.find` (:43) fails and the page renders 'This agent is no longer in the roster.' (:55)"),
     ('components/agents/AgentSettingsPage.tsx', 'useAgentSessions', 1, 'MISREPORT', '', "'No sessions yet.' (:451)"),
     ('components/agents/ComposerModelControls.tsx', 'useModelCatalog', 1, 'SUPPRESSED', '', 'the model controls do not render; the file states this intent for an undeclared provider (:167)'),
