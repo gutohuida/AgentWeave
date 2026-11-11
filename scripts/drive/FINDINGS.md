@@ -27575,8 +27575,15 @@ Neither repair needs a spec.
 
 ## F325 (A) — on Codex's default transport a run never receives its canonical context, so a bound charter reaches no Codex agent
 
-**Status:** open. Filed 2026-09-12 by the day window's `D-7`, from research 2026-09-12 §3, and
-verified against the code at `34014e0` by reading. **Read, not run:** live reproduction is not
+**Status:** fixed 2026-11-11 (AW-80, task-ad1e7a89cff6, branch `agentweave/task/task-ad1e7a89cff6`) --
+the trigger hands the rendered context to `codex_appserver.run_turn` (`developer_instructions`); a
+new thread gets it as `thread/start`'s `developerInstructions`, and a resumed one as the leading
+block of `turn/start`'s input, because Codex 0.167.1 records no `developerInstructions` sent on
+`thread/resume` (driven against the binary: the rollout kept the first marker, not the second;
+`baseInstructions` is honoured on resume but replaces Codex's own). Test:
+`hub/tests/test_a_codex_app_server_run_receives_its_context.py`. Was: open. Filed 2026-09-12 by
+the day window's `D-7`, from research 2026-09-12 §3, and verified against the code at `34014e0` by
+reading. **Read, not run:** live reproduction is not
 possible, because Codex is undrivable (the plan was cancelled on 2026-08-29). No proposal.
 
 **The claim.** Every turn renders the canonical context: charter, operating profile, the tool

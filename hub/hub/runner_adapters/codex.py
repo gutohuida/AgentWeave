@@ -212,6 +212,7 @@ class CodexAppServerTransport(RpcTransport):
             told_access_path=req.told_access_path,
             on_mcp_status=cb.on_mcp_status,
             restrict_spec_writes=req.restrict_spec_writes,
+            developer_instructions=req.developer_instructions,
         )
 
 

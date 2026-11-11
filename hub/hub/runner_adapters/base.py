@@ -146,6 +146,9 @@ class RpcTurnRequest:
     # Only the config keys a turn reads (`copilot_github_mcp`), filled by the trigger -- never the
     # agent's whole config, which carries its `env_vars` (slice 5, review 2026-09-28, finding 14).
     agent_config: Mapping[str, Any] = field(default_factory=dict)
+    # Codex's app-server (F325): the run's whole canonical context, sent as the thread's developer
+    # instructions because this transport reads no argv for `model_instructions_file` to ride on.
+    developer_instructions: Optional[str] = None
 
 
 @dataclass(frozen=True)

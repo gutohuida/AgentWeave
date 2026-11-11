@@ -79,6 +79,30 @@ TRANSPORT_SENTINELS = (APP_SERVER_OPT_IN_FLAG, APP_SERVER_OPT_OUT_FLAG)
 # Server->client methods this Hub must answer. Verified against
 # `codex app-server generate-json-schema` (CLI 0.146.0) and a live protocol trace.
 ELICITATION_METHOD = "mcpServer/elicitation/request"
+#: Leads a resumed thread's turn input when it carries the run's context (F325).
+RESUMED_CONTEXT_HEAD = (
+    "AgentWeave context for this turn. It is current, and replaces any earlier copy of it in "
+    "this conversation, including the developer instructions this thread started with."
+)
+
+
+def turn_input(prompt: str, context: Optional[str]) -> List[Dict[str, Any]]:
+    """`turn/start`'s input: the prompt, led by *context* when a resumed thread needs it.
+
+    A resumed thread is given its context here, not on `thread/resume`. Measured against Codex
+    0.167.1 on 2026-11-11: `thread/resume` accepts `developerInstructions` (and
+    `config.developer_instructions`) and records neither, so the thread keeps the context its
+    first turn started with and a charter edit or a roster change never reaches it. The one
+    instruction field it does honour on resume, `baseInstructions`, replaces Codex's own base
+    instructions. A block of its own, like the prompt, so neither is read as part of the other.
+    """
+    blocks: List[Dict[str, Any]] = []
+    if context:
+        blocks.append({"type": "text", "text": f"{RESUMED_CONTEXT_HEAD}\n\n{context}"})
+    blocks.append({"type": "text", "text": prompt})
+    return blocks
+
+
 COMMAND_APPROVAL_METHOD = "item/commandExecution/requestApproval"
 FILE_CHANGE_APPROVAL_METHOD = "item/fileChange/requestApproval"
 PERMISSIONS_APPROVAL_METHOD = "item/permissions/requestApproval"
@@ -1002,6 +1026,7 @@ async def run_turn(
     told_access_path: Optional[str] = None,
     on_mcp_status: "Optional[Callable[[str], Awaitable[Any]]]" = None,
     restrict_spec_writes: bool = False,
+    developer_instructions: Optional[str] = None,
 ) -> TurnOutcome:
     """Drive one Codex turn over `app-server`: spawn, initialize, start-or-resume a thread,
     start a turn, answer every server request, map every item/usage notification to the
@@ -1041,6 +1066,12 @@ async def run_turn(
         }
         if model:
             thread_params["model"] = model
+        # The run's canonical context (F325) -- what Claude gets through
+        # `--append-system-prompt-file` and `codex exec` through `model_instructions_file`. A new
+        # thread takes it as `developerInstructions`: a developer message, Codex's own base
+        # instructions left in place. A resumed one cannot -- see `turn_input`.
+        if developer_instructions and not resume_thread_id:
+            thread_params["developerInstructions"] = developer_instructions
         # `config` is the app-server's `config.toml`-override map, and it carries two unrelated
         # things: the MCP server this Hub injects, and whatever `-c KEY=VALUE` pairs the run's
         # controls render (`model_reasoning_effort` today). It used to exist only when there was
@@ -1073,7 +1104,10 @@ async def run_turn(
 
         turn_response = await session.request(
             "turn/start",
-            {"threadId": thread_id, "input": [{"type": "text", "text": prompt}]},
+            {
+                "threadId": thread_id,
+                "input": turn_input(prompt, developer_instructions if resume_thread_id else None),
+            },
         )
         turn_id = turn_response["result"]["turn"]["id"]
 
