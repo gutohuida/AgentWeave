@@ -388,6 +388,7 @@ ROW_LABELS_JS = """() => Array.from(document.querySelectorAll('.aw-settings-row-
 def findable(c: Ctx, inject_fault: bool) -> List[str]:
     c.strict = False
     rows: List[Tuple[str, str, str]] = []  # (scope, section, label)
+    enum_problems: List[str] = []
     pages: List[Tuple[str, str, Callable[[], None]]] = []
     for s in lv.APP_SECTIONS:
         pages.append(("app", s, lambda s=s: c.app(s)))
@@ -397,12 +398,29 @@ def findable(c: Ctx, inject_fault: bool) -> List[str]:
         pages.append(("agent", s, lambda s=s: c.agent(AGENTS[0], s)))
     for scope, section, go in pages:
         go()
-        c.page.wait_for_timeout(800)
-        for label in dict.fromkeys(c.page.evaluate(ROW_LABELS_JS)):
+        # Wait for the section's rows, then until the row count has held still for 1s, so
+        # late-rendering rows are not skipped; a section that never renders a row fails the walk.
+        try:
+            c.page.wait_for_selector(".aw-settings-row-label", timeout=30000)
+        except Exception:  # noqa: BLE001
+            # Editor-only sections (instructions, charters, ...) have no rows; the count shows it.
+            print(f"  {scope:8} {section:20} 0 rows (none rendered within 30s)")
+            continue
+        labels: List[str] = []
+        stable = 0
+        for _ in range(60):
+            now = list(dict.fromkeys(c.page.evaluate(ROW_LABELS_JS)))
+            stable = stable + 1 if now == labels else 0
+            labels = now
+            if stable >= 4:
+                break
+            c.page.wait_for_timeout(250)
+        print(f"  {scope:8} {section:20} {len(labels)} rows")
+        for label in labels:
             rows.append((scope, section, label))
     opener = {(sc, se): g for sc, se, g in pages}
     print(f"found {len(rows)} settings rows in {len(pages)} sections")
-    problems: List[str] = []
+    problems: List[str] = list(enum_problems)
     last: Optional[Tuple[str, str]] = None
     for n, (scope, section, label) in enumerate(rows):
         who = f"{scope} / {section} / {label!r}"
