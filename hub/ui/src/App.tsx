@@ -14,6 +14,7 @@ import { Toaster } from '@/components/ui/toast'
 import { openCommandPalette } from '@/lib/palette'
 import { settingDestination } from '@/lib/settingsIndex'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
+import { setupTitle } from '@/components/overview/setupItems'
 import { CommandPalette } from '@/components/palette/CommandPalette'
 import { ProjectManagerModal, type ProjectManagerMode } from '@/components/projects/ProjectManagerModal'
 import { useSpecDocuments } from '@/api/spec'
@@ -613,6 +614,7 @@ export default function App() {
           onSelectSection={(section) => navigateTo(environmentDestination(destination.projectId, section))}
           onNavigate={navigate}
           onOpenAppSettings={() => navigateTo(appSettingsDestination(destination.projectId))}
+          onAddAgent={() => setAgentCreateProjectId(destination.projectId)}
         />
       )
     }
@@ -682,6 +684,7 @@ export default function App() {
             // folder it initialises, so "create" never needed a separate entry point.
             onAddProject={() => setProjectManagerMode('open')}
             onOpenAppSettings={() => navigateTo(appSettingsDestination(currentProjectId || null))}
+            setupFor={(id) => (projects ?? []).find((p) => p.id === id)?.setup?.items.map(setupTitle) ?? []}
             appSettingsActive={destination.kind === 'app-settings'}
             compact={sidebarCollapsed}
             onCompactChange={setSidebarCollapsed}

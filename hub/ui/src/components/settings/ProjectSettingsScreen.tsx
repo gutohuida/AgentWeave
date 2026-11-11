@@ -14,6 +14,7 @@ import { ManagerSection } from './sections/ManagerSection'
 import { SpecStepsSection } from './sections/SpecStepsSection'
 import { TracesSection } from './sections/TracesSection'
 import { WorktreesSection } from './sections/WorktreesSection'
+import { ProjectSetupList } from '@/components/overview/ProjectSetupList'
 
 /** The section list, grouped as the operator approved it (`settings-in-the-app-s-style-where-you-expect-them`).
  *  General is gone: its groups are sections of their own, and its old id lands on Project. */
@@ -48,6 +49,7 @@ export function ProjectSettingsScreen({
   onNavigate,
   onOpenAppSettings,
   setting,
+  onAddAgent,
 }: {
   section: EnvironmentSection
   onSelectSection: (section: EnvironmentSection) => void
@@ -57,6 +59,8 @@ export function ProjectSettingsScreen({
   onOpenAppSettings?: () => void
   /** The setting the location names, to land on. */
   setting?: string | null
+  /** Opens the Add-agent dialog, for the set-up list's agent item. */
+  onAddAgent?: () => void
 }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
   const { data: projects = [] } = useProjects()
@@ -116,6 +120,7 @@ export function ProjectSettingsScreen({
         onSelect={onSelectSection}
         footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
       >
+        <ProjectSetupList place="settings" showDismissed={section === 'general'} onAddAgent={onAddAgent} />
         {body}
       </SettingsNavLayout>
     </div>

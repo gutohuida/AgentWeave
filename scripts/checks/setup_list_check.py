@@ -95,9 +95,11 @@ TOP_JS = r"""
   const list = document.querySelector('[data-testid="setup-list"]')
   if (!list) return null
   const r = list.getBoundingClientRect()
+  const scroller = list.closest('.workspace-content, .aw-settings-scroll') || document.body
   const seen = []
   for (const el of document.querySelectorAll('main h1, main h2, main [data-testid], .aw-settings-row, .settings-row')) {
     if (list.contains(el) || el.contains(list)) continue
+    if (!scroller.contains(el)) continue  // the app's own chrome (top bar, tabs) is not content
     const b = el.getBoundingClientRect()
     if (b.width > 0 && b.height > 0 && b.bottom <= r.top + 1 && b.top >= 0) seen.push(el.getAttribute('data-testid') || el.className)
   }
@@ -298,6 +300,10 @@ def drive(
     if wait_for_list(page):
         page.get_by_role("button", name="Not for this project").click()
         gone = True
+        try:  # the dismissal is a request: wait for the item to leave rather than read mid-flight
+            page.locator('[data-testid="setup-item-repository"]').wait_for(state="detached", timeout=SHORT)
+        except Exception:  # noqa: BLE001
+            pass
         left = read_items(page)
         c.ok("ac-dismiss", "Overview no longer lists the repository item", "repository" not in keys(left), f"{keys(left)}")
         open_url(page, settings("general"))
@@ -337,7 +343,9 @@ def drive(
     c.shot(page, "7-live")
     # ac-three-places, second half: with both items resolved, a Project settings section shows no list.
     # Guarded by `before` so it cannot pass on a page that never showed the list.
-    open_url(page, settings("general"))
+    # (A section other than Project: the repository item is still dismissed, and Project settings ->
+    # Project is where a dismissed item is listed with its way back.)
+    open_url(page, settings("checks"))
     settle(page)
     c.ok(
         "ac-three-places",
