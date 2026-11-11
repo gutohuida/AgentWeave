@@ -41612,7 +41612,7 @@ The tool description (`hub/hub/mcp_server.py:5354`) says "An unresolved one bloc
 
 ## F1160 (B) -- a Hub started from inside an agent run sends every run it launches to the *parent* Hub, with a credential that Hub never issued
 
-**Status:** open
+**Status:** fixed 7b6701f on agentweave/task/task-ad1e7a89cff6 (DeveloperOpus, AW-80..83); held live with real Codex 0.167.1 in the Architect re-drive 2026-11-11; lands when AW-80 is approved
 **Source:** found driving Codex end to end (Architect, 2026-11-11, scratch Hub :8030)
 **Theme:** Runs x Hub identity
 **Ready:** yes
@@ -41622,7 +41622,7 @@ An agent run's environment carries `HUB_URL` (its own Hub) and `AW_RUN_TOKEN`. A
 
 ## F1161 (B) -- a Codex agent's first turn on a specification document cannot write it: told to write an arguments file and, in the same prompt, that it has no file-write tool
 
-**Status:** open
+**Status:** fixed 45f7ed8 + 7182363 on agentweave/task/task-ad1e7a89cff6 (DeveloperOpus, AW-80..83); held live with real Codex 0.167.1 in the Architect re-drive 2026-11-11; lands when AW-80 is approved
 **Source:** found driving Codex end to end (Architect, 2026-11-11)
 **Theme:** Spec documents x Codex
 **Ready:** yes
@@ -41632,7 +41632,7 @@ An agent's first run is told the `aw-tool` call path, since no earlier run prove
 
 ## F1162 (B) -- Stop on a Codex run leaves the command the agent was running alive
 
-**Status:** open
+**Status:** fixed cc638df + 7182363 on agentweave/task/task-ad1e7a89cff6 (DeveloperOpus, AW-80..83); held live with real Codex 0.167.1 in the Architect re-drive 2026-11-11; lands when AW-80 is approved
 **Source:** found driving Codex end to end (Architect, 2026-11-11)
 **Theme:** Runs x Codex x Resilience
 **Ready:** yes
@@ -41642,7 +41642,7 @@ A Codex turn running `py -3.11 -c "import time; [time.sleep(1) for i in range(15
 
 ## F1163 (C) -- `update_task` refuses `requirement_ids` on a task that already belongs to a document, as soon as a second document declares the same identifier
 
-**Status:** open
+**Status:** fixed cc638df on agentweave/task/task-ad1e7a89cff6 (DeveloperOpus, AW-80..83); held live with real Codex 0.167.1 in the Architect re-drive 2026-11-11; lands when AW-80 is approved
 **Source:** found driving Codex end to end (Architect, 2026-11-11)
 **Theme:** Tasks x Requirements
 **Ready:** yes
