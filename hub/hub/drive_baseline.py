@@ -194,6 +194,13 @@ async def approval_refusal(
         .scalars()
         .all()
     )
+    # Work closed as already built started nothing, so there is no pre-build code to have run a
+    # baseline on. Read from the evidence rather than the closing call, so every path that
+    # approves it (at once at level fast, or later once its evidence is decided) agrees.
+    from .already_built import EVIDENCE_KIND as ALREADY_BUILT
+
+    if any((row.kind or "").strip().lower() == ALREADY_BUILT for row in rows):
+        return None
     baselines = [row for row in rows if is_baseline(row)]
     listed = [row for row in baselines if checks_of(row)]
     if not listed:

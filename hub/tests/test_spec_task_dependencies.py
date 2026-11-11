@@ -11,7 +11,16 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, Run, SpecDocument, Task, TaskDependency, TaskDependencyReference
+from hub.db.models import (
+    Agent,
+    RequirementEvidence,
+    Run,
+    SpecDocument,
+    SpecRequirement,
+    Task,
+    TaskDependency,
+    TaskDependencyReference,
+)
 from hub.spec_lifecycle import Actor
 from hub.spec_payload import SCHEMA_VERSION
 
@@ -423,6 +432,38 @@ TASKS_BASE = "/api/v1/projects/proj-test/tasks"
 PATH_CHAIN = "spec/changes/dep-chain/spec.json"
 
 
+async def _accepted_drive_baseline(task_id):
+    """An accepted `drive_baseline` row on *task_id*, its one check reached and failing."""
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        requirement = (
+            (
+                await session.execute(
+                    select(SpecRequirement).where(
+                        SpecRequirement.document_id == task.spec_document_id
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        session.add(
+            RequirementEvidence(
+                id=f"ev-baseline-{task_id}",
+                project_id=task.project_id,
+                requirement_id=requirement.id,
+                task_id=task_id,
+                digest=requirement.digest,
+                kind="drive_baseline",
+                actor_kind="agent",
+                actor="author",
+                summary="check c-alpha: reached=yes failed_at_assertion=yes -- nothing was due",
+                review_state="accepted",
+            )
+        )
+        await session.commit()
+
+
 async def _patch_status(app, auth_headers, task_id, status):
     return await app.patch(f"{TASKS_BASE}/{task_id}", json={"status": status}, headers=auth_headers)
 
@@ -463,6 +504,10 @@ async def test_the_whole_chain_gates_hop_by_hop_on_approved_not_completed(
     # C cannot start either -- it depends on B, which has not even been assigned yet.
     c_gated = await _patch_status(app, auth_headers, c_id, "in_progress")
     assert c_gated.status_code == 409, c_gated.text
+
+    # A is the chain's first task, so its document's acceptance drive: it is approved only on an
+    # accepted drive baseline (`evidence-review-sends-work-back-only-for-what-is-wrong-with-it`).
+    await _accepted_drive_baseline(a_id)
 
     # A reaches approved -- B unblocks.
     for status in ("under_review", "approved"):
