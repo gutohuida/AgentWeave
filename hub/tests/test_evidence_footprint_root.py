@@ -399,18 +399,20 @@ async def test_approving_work_from_a_worktree_puts_it_on_main(
     agent_commit = commit_in(worktree, "feature.py", "print('shipped')\n")
 
     await make_document(app, auth_headers, builder)
-    recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "tests pass"}, headers=builder
-    )
-    assert recorded.status_code == 201, recorded.text
-    await _accept(app, auth_headers, recorded.json()["id"])
-
     tasks = "/api/v1/projects/proj-test/tasks"
     created = await app.post(
         tasks, json={"title": "Build it", "requirement_ids": ["FR-1"]}, headers=auth_headers
     )
     assert created.status_code == 201, created.text
     task_id = created.json()["id"]
+
+    recorded = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "tests pass", "task_id": task_id},
+        headers=builder,
+    )
+    assert recorded.status_code == 201, recorded.text
+    await _accept(app, auth_headers, recorded.json()["id"])
 
     # Coverage tells the truth before the merge — the statement B3 built and this makes reachable.
     before = await app.get(f"{BASE}/spec/coverage", headers=auth_headers)
@@ -673,18 +675,21 @@ async def test_merging_works_in_a_repository_with_no_configured_identity(
     assert agent_commit, "the Hub must be able to commit in the worktree without configuration"
 
     await make_document(app, auth_headers, builder)
-    recorded = await app.post(
-        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "tests pass"}, headers=builder
-    )
-    assert recorded.status_code == 201, recorded.text
-    await _accept(app, auth_headers, recorded.json()["id"])
-
     tasks = "/api/v1/projects/proj-test/tasks"
     created = await app.post(
         tasks, json={"title": "Build it", "requirement_ids": ["FR-1"]}, headers=auth_headers
     )
     assert created.status_code == 201, created.text
     task_id = created.json()["id"]
+
+    recorded = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "tests pass", "task_id": task_id},
+        headers=builder,
+    )
+    assert recorded.status_code == 201, recorded.text
+    await _accept(app, auth_headers, recorded.json()["id"])
+
     for status in ("assigned", "in_progress", "completed", "under_review", "approved"):
         moved = await app.patch(f"{tasks}/{task_id}", json={"status": status}, headers=auth_headers)
         assert moved.status_code == 200, moved.text

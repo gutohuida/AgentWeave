@@ -162,13 +162,13 @@ async def approved_on_a_dirty_checkout(app, auth_headers, builder, tmp_path):
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "README.md", "the task's line\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(app, auth_headers, builder, task_id=task, )
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "notes.txt").write_text("tracked\n", encoding="utf-8")
     git(tmp_path, "add", "notes.txt")
     git(tmp_path, "commit", "-q", "-m", "notes")
     (tmp_path / "notes.txt").write_text("tracked\nthe operator's half-written thought\n")
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     await stalls.drain()
     assert (await integrations(app, auth_headers, task))[0]["outcome"] == "skipped"

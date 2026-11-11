@@ -73,9 +73,9 @@ async def test_a_cleared_main_branch_survives_reopening_and_nothing_merges(
     assert cleared.json()["main_branch"] is None
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
-    await accept_evidence(app, auth_headers, builder)
-    git(tmp_path, "checkout", "-q", "master")
     task = await linked_task(app, auth_headers)
+    await accept_evidence(app, auth_headers, builder, task_id=task, )
+    git(tmp_path, "checkout", "-q", "master")
     assert (await approve(app, auth_headers, task)).status_code == 200
     assert [row["outcome"] for row in await integrations(app, auth_headers, task)] == ["skipped"]
 

@@ -158,7 +158,8 @@ async def test_approval_merges_the_descendant_when_an_older_commit_was_observed_
     await set_main_branch("main")
     c = commit_on_branch(tmp_path, AGENT_BRANCH, "c.txt", "c\n")
     d = commit_on_branch(tmp_path, AGENT_BRANCH, "d.txt", "d\n", create=False)
-    await accept_evidence(app, auth_headers, builder)  # footprint at D, observed first
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(app, auth_headers, builder, task_id=task, )  # footprint at D, observed first
     git(tmp_path, "checkout", "-q", "main")
     recorded = await app.post(
         f"{BASE}/spec/evidence",
@@ -168,7 +169,6 @@ async def test_approval_merges_the_descendant_when_an_older_commit_was_observed_
     assert recorded.status_code == 201, recorded.text
     assert recorded.json()["footprint"]["branch"] == AGENT_BRANCH
 
-    task = await linked_task(app, auth_headers)
     async with async_session_factory() as session:
         row = await session.get(Task, task)
         observed = await task_integration.integration_targets(session, row)
