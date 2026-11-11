@@ -41598,7 +41598,7 @@ Before today's spec tidy `spec/index.json` listed 11 of the 62 approved change d
 
 ## F1168 (A) -- accepting a sign-off can land unrelated work and reopen an already landed task
 
-**Status:** fixed 2026-11-11 (Tier 0, AW-101). Sign-offs capture no git footprint; taskless evidence supplies no merge target; task-bound evidence targets only its recording task, with commits checked against that task's branch when it exists. A failed legacy evidence landing leaves an approved task alone when its own branch is already on main. Regression tests: `hub/tests/test_accepting_a_signoff_never_lands_work.py`. Trial drive: `py -3.11 scripts/drive/f1168_signoff.py --port 8011` passed: conflicting recorder branch, signoff footprint null, operator accepted, task approved, task_landings before=0 after=0, foreign commit absent from main.
+**Status:** fixed 2026-11-11 (Tier 0, AW-101). Sign-offs capture no git footprint; taskless evidence supplies no merge target; task-bound evidence targets only its recording task, with commits checked against that task's branch when it exists. A failed legacy evidence landing leaves an approved task alone when its own branch is already on main. Regression tests: `hub/tests/test_accepting_a_signoff_never_lands_work.py`. Trial drive: `py -3.11 scripts/drive/f1168_signoff.py --port 8011` passed: conflicting recorder branch, signoff footprint null, operator accepted, task approved, task_landings before=0 after=0, foreign commit absent from main. Final targeted regression run: 70 passed (6 warnings). Temporary trial Hub :8011 stopped after verification; the retained external fixture is documented in AW-101 notes.
 **Source:** drive (Architect, operator's incident 2026-11-11)
 **Theme:** Task ledger
 **Ready:** yes
