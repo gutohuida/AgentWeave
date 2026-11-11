@@ -32,6 +32,13 @@ from ...db.models import Agent, AgentHeartbeat, OperatorCredential, Project, Run
 from ...model_catalog import permission_mode_values, undeclared_model_reason
 from ...project_checks import FAST_CHECK_MAX_SECONDS
 from ...project_lifecycle import ProjectLifecycleService, RepositoryOfferError
+from ...project_setup import (
+    ProjectSetup,
+    dismiss,
+    project_setup,
+    publish_setup_changed,
+    show_again,
+)
 from ...project_workspace import (
     ProjectPathError,
     ProjectWorkspaceError,
@@ -74,6 +81,8 @@ class ProjectSummary(BaseModel):
     token_budget: Optional[int]
     allow_agent_jobs: bool
     agents: List[ProjectAgentSummary]
+    # What the project still needs before it can work (`a-project-says-what-it-still-needs`).
+    setup: ProjectSetup = ProjectSetup()
 
 
 class ProjectPathRequest(RequestModel):
@@ -446,7 +455,9 @@ ProjectSettingsUpdate = create_model(  # type: ignore[call-overload]
 )
 
 
-async def _project_summary(session: AsyncSession, project: Project) -> ProjectSummary:
+async def _project_summary(
+    session: AsyncSession, project: Project, *, verdicts: Optional[Dict[str, dict]] = None
+) -> ProjectSummary:
     # The second roster, and the one the navigation rail actually draws from — `Sidebar` reads
     # `useProjects()`, not `useAgents()`. Archived agents are excluded here as well as in
     # `list_agents`; filtering only that one endpoint left an archived agent still listed in the
@@ -525,6 +536,7 @@ async def _project_summary(session: AsyncSession, project: Project) -> ProjectSu
         token_budget=project.token_budget,
         allow_agent_jobs=project.allow_agent_jobs,
         agents=agent_summaries,
+        setup=await project_setup(session, project, verdicts=verdicts),
     )
 
 
@@ -552,7 +564,9 @@ async def list_projects(
     for project in projects:
         await _refresh_project_observation(session, project)
     await session.commit()
-    return [await _project_summary(session, project) for project in projects]
+    # One launchability probe per runner for the whole list, not one per project that shares it.
+    verdicts: Dict[str, dict] = {}
+    return [await _project_summary(session, project, verdicts=verdicts) for project in projects]
 
 
 @router.post("/open", response_model=ProjectSummary)
@@ -860,6 +874,7 @@ async def make_repository(
     await _integrate_what_was_waiting_for_a_branch(session, project_id)
     settings_now = await _project_settings(session, project)
     await sse_manager.broadcast(project_id, "project_settings_updated", settings_now.model_dump())
+    await publish_setup_changed(project_id)
     return settings_now
 
 
@@ -1320,7 +1335,52 @@ async def relocate_project(
         "project_relocated",
         {"id": project.id, "name": project.name, "directory_state": project.directory_state},
     )
+    await publish_setup_changed(project.id)
     return await _project_summary(session, project)
+
+
+async def _setup_dismissal(project_id: str, item: str, session: AsyncSession, undo: bool):
+    project = await _operator_project_row(project_id, session)
+    try:
+        await (show_again if undo else dismiss)(session, project_id, item)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "setup_item_not_dismissable",
+                "message": (
+                    f"'{item}' cannot be dismissed: only the repository item can be. Without a "
+                    "folder, an agent, or an agent that runs, nothing in this project works."
+                ),
+            },
+        ) from exc
+    summary = await _project_summary(session, project)
+    await publish_setup_changed(project_id)
+    return summary
+
+
+@router.put("/{project_id}/setup/dismissed/{item}", response_model=ProjectSummary)
+async def dismiss_setup_item(
+    item: str,
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> ProjectSummary:
+    """'Not for this project': hide a set-up item in every place it shows, across restarts.
+
+    Only `repository` is accepted (`a-project-says-what-it-still-needs`, FR-3); any other item
+    answers 400 and records nothing.
+    """
+    return await _setup_dismissal(project_identity[0], item, session, undo=False)
+
+
+@router.delete("/{project_id}/setup/dismissed/{item}", response_model=ProjectSummary)
+async def show_setup_item_again(
+    item: str,
+    project_identity: Tuple[str, str] = Depends(get_operator_project),
+    session: AsyncSession = Depends(get_session),
+) -> ProjectSummary:
+    """'Show it again': undo a dismissal. Idempotent; the same items as dismissal are accepted."""
+    return await _setup_dismissal(project_identity[0], item, session, undo=True)
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
