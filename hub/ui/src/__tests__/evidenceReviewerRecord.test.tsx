@@ -7,7 +7,9 @@ import type { EvidencePiece } from '@/api/spec'
 
 /* FR-3 of `evidence-review-sends-work-back-only-for-what-is-wrong-with-it`: a piece a reviewer
  * accepted with its own reproduction shows the reviewer's record beside the author's, attributed.
- * The fixture is the list route's payload (`spec._evidence_view`'s keys). */
+ * The fixture is the list route's payload (`spec._evidence_view`'s keys). Only the app's
+ * evidence view renders this; the record itself is asserted at the routes, in
+ * `hub/tests/test_a_reviewer_verifies_evidence.py`. */
 
 function piece(reviewer: EvidencePiece['reviewer_record']): EvidencePiece {
   return {
