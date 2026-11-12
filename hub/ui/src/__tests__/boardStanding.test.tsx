@@ -42,3 +42,15 @@ describe('board counts', () => {
     expect(within(screen.getByTestId('board-list-working')).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Title w1'])
   })
 })
+
+describe('builder and reviewer', () => {
+  it('shows both as separate labels under review, only the builder once approved', () => {
+    const a = render(<TaskCardCompact task={task('a', { status: 'under_review', stage: 'under_review', builder: 'D', assignee: 'Q' })} now={NOW} onOpen={() => {}} />)
+    expect(screen.getByTestId('task-built-by-a').textContent).toBe('built by D')
+    expect(screen.getByTestId('task-reviewing-a').textContent).toBe('reviewing: Q')
+    a.unmount()
+    render(<TaskCardCompact task={task('b', { stage: 'checking', builder: 'D', assignee: 'Q' })} now={NOW} onOpen={() => {}} />)
+    expect(screen.getByTestId('task-built-by-b').textContent).toBe('built by D')
+    expect(screen.queryByTestId('task-reviewing-b')).toBeNull()
+  })
+})

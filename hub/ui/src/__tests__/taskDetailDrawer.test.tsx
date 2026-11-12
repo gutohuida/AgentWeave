@@ -636,3 +636,16 @@ describe('the prerequisite picker names candidates by readable id', () => {
     expect(option.value).toBe('task-aaaaaaaaaaaa')
   })
 })
+
+describe('builder and reviewer, separately labelled (where-each-task-stands, FR-8)', () => {
+  it('names both from waiting for review, and only the builder once it is not being reviewed', () => {
+    const under = makeTask({ status: 'under_review', stage: 'under_review', builder: 'D', assignee: 'Q' })
+    const first = renderDrawer(under, () => {})
+    expect(screen.getByTestId('task-built-by-task-1').textContent).toBe('built by D')
+    expect(screen.getByTestId('task-reviewing-task-1').textContent).toBe('reviewing: Q')
+    first.unmount()
+    renderDrawer(makeTask({ status: 'in_progress', stage: 'working', builder: 'D', assignee: 'D' }), () => {})
+    expect(screen.queryByTestId('task-built-by-task-1')).toBeNull()
+    expect(screen.queryByTestId('task-reviewing-task-1')).toBeNull()
+  })
+})

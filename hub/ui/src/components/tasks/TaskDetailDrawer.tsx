@@ -36,6 +36,7 @@ import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
+import { builderAndReviewer } from '@/lib/taskStage'
 
 /**
  * What approving this task is about to write, said beside the control that does it (F9).
@@ -273,6 +274,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     !story.isError && (Array.isArray(story.data?.events) || story.fetchStatus === 'fetching')
   const panelRef = useRef<HTMLDivElement>(null)
   const open = task !== null
+  const people = task ? builderAndReviewer(task) : { builder: null, reviewer: null }
   const [refusal, setRefusal] = useState<string | null>(null)
   // Set when Land was refused by failing checks alone: the operator may land anyway, saying why.
   const [checksOverride, setChecksOverride] = useState(false)
@@ -801,6 +803,17 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
 
           {/* The build covering it (`a-build-has-a-driver-a-level-and-its-people`): the level its
               approval is governed at, the builder it was declared with, and who checks it. */}
+          {people.builder && (
+            <Field label="Built by">
+              <span data-testid={`task-built-by-${task.id}`}>built by {people.builder}</span>
+            </Field>
+          )}
+          {people.reviewer && (
+            <Field label="Reviewing">
+              <span data-testid={`task-reviewing-${task.id}`}>reviewing: {people.reviewer}</span>
+            </Field>
+          )}
+
           {task.build_id && (
             <Field label="Build">
               <span className="truncate block" data-testid={`task-build-${task.id}`}>
