@@ -138,6 +138,157 @@ async def builds_of(session: AsyncSession, document_id: str) -> List[Build]:
     )
 
 
+async def project_rows(session: AsyncSession, project_id: str) -> List[Dict[str, Any]]:
+    """Every build of every document in the project, running and ended, whatever drives it, one
+    row each (`the-side-panel-s-running-tab`, FR-2): the document's title, the build's loop where it
+    has one, its tasks' progress and the blocking questions its work is waiting on.
+
+    Newest first, the order `builds_of` gives one document's. Titles, loops, task counts and
+    questions are each one grouped read, not one per document; only the spend is read per build."""
+    from .db.models import AIJob, Question
+
+    builds = list(
+        (
+            await session.execute(
+                select(Build)
+                .where(Build.project_id == project_id)
+                .order_by(Build.created_at.desc(), Build.id.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not builds:
+        return []
+    build_ids = [b.id for b in builds]
+    titles = dict(
+        (
+            await session.execute(
+                select(SpecDocument.id, SpecDocument.title).where(
+                    SpecDocument.id.in_({b.document_id for b in builds})
+                )
+            )
+        ).all()
+    )
+    loops: Dict[str, Tuple[Loop, Optional[AIJob]]] = {}
+    loop_ids = {b.loop_id for b in builds if b.loop_id}
+    if loop_ids:
+        for loop, job in (
+            await session.execute(
+                select(Loop, AIJob)
+                .join(AIJob, AIJob.id == Loop.job_id)
+                .where(Loop.id.in_(loop_ids))
+            )
+        ).all():
+            loops[loop.id] = (loop, job)
+
+    counts: Dict[str, Dict[str, int]] = {}
+    for build_id, task_status, number in (
+        await session.execute(
+            select(Task.build_id, Task.status, func.count(Task.id))
+            .where(Task.build_id.in_(build_ids))
+            .group_by(Task.build_id, Task.status)
+        )
+    ).all():
+        entry = counts.setdefault(build_id, {"total": 0, "done": 0})
+        entry["total"] += number
+        if task_status == "approved":
+            entry["done"] += number
+
+    # Which build each open question belongs to: the task it parked, a run bound to one of the
+    # build's tasks, or the lead's build conversation.
+    task_build = dict(
+        (
+            await session.execute(
+                select(Task.id, Task.build_id).where(Task.build_id.in_(build_ids))
+            )
+        ).all()
+    )
+    lead_build = {b.lead_conversation_id: b.id for b in builds if b.lead_conversation_id}
+    run_build = dict(
+        (
+            await session.execute(
+                select(Run.id, Run.task_id).where(
+                    Run.project_id == project_id, Run.task_id.in_(list(task_build))
+                )
+            )
+        ).all()
+    )
+    questions: Dict[str, List[Question]] = {}
+    waiting = (
+        (
+            await session.execute(
+                select(Question)
+                .where(
+                    Question.project_id == project_id,
+                    Question.blocking.is_(True),
+                    Question.answered.is_(False),
+                    Question.declined.is_(False),
+                    Question.wait_ended_at.is_(None),
+                )
+                .order_by(Question.created_at, Question.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for question in waiting:
+        owner = (
+            task_build.get(question.blocked_task_id)
+            or task_build.get(run_build.get(question.created_by_run_id))
+            or lead_build.get(question.conversation_id)
+        )
+        if owner:
+            questions.setdefault(owner, []).append(question)
+
+    rows: List[Dict[str, Any]] = []
+    for build in builds:
+        pair = loops.get(build.loop_id or "")
+        asked = questions.get(build.id, [])
+        spent, _ = await spend(session, build)
+        progress = counts.get(build.id, {"total": 0, "done": 0})
+        rows.append(
+            {
+                "id": build.id,
+                "document_id": build.document_id,
+                "document_title": titles.get(build.document_id) or "",
+                "state": build.state,
+                "driver": build.driver,
+                "level": build.level,
+                "lead": build.lead,
+                "loop_id": build.loop_id,
+                "loop": (
+                    {
+                        "id": pair[0].id,
+                        "name": pair[1].name if pair[1] is not None else "",
+                        "enabled": bool(pair[1].enabled) if pair[1] is not None else False,
+                    }
+                    if pair
+                    else None
+                ),
+                "tasks_total": progress["total"],
+                "tasks_done": progress["done"],
+                "spent_usd": usd(spent),
+                "stop_reason": build.stop_reason,
+                "created_at": _iso(build.created_at),
+                "stopped_at": _iso(build.stopped_at),
+                "open_questions": len(asked),
+                "question": (
+                    {
+                        "id": asked[0].id,
+                        "question": asked[0].question,
+                        "from_agent": asked[0].from_agent,
+                        "conversation_id": asked[0].conversation_id,
+                        "created_at": _iso(asked[0].created_at),
+                    }
+                    if asked
+                    else None
+                ),
+            }
+        )
+    return rows
+
+
 async def build_of_loop(session: AsyncSession, loop_id: Optional[str]) -> Optional[Build]:
     if not loop_id:
         return None
