@@ -56,6 +56,15 @@
     },
     {
       "checked_by": "agent",
+      "given": "two approved changes naming alpha with the same first-approval time, the one whose path sorts later created first",
+      "how_to_check": "Hub test with the approval times forced equal.",
+      "key": "ac-tie-insertion",
+      "requirement": "waiting-list",
+      "then": "the one created first is listed first, every time it is read",
+      "when": "alpha's waiting list is read"
+    },
+    {
+      "checked_by": "agent",
       "given": "three capabilities, two of them named by open changes",
       "how_to_check": "Drive.",
       "key": "ac-affects",
@@ -130,7 +139,7 @@
       "FR-2": "fb2f5122bf7b6ac04426754806f47dc301fdc2b9b4eb45ff82852c8c216d7f7f",
       "FR-3": "66fac6bdca8ca5ce3345bb69940b85d380b03586d363eb2ec8602d45c92d30df",
       "FR-4": "50efe9481e5469aa4afaffdfdfe624bb25b9bdf6c8e98651573f549e75a48459",
-      "FR-5": "2d42ab763665855d26a5a8e9ccda049e2157857f6f52f85da5b5eb3ef09479c2",
+      "FR-5": "89cd61f27ac6107a7b26c820020f0317ffd698e7231ccf08d8877fa71498d791",
       "FR-6": "68cfb7e08d2c5f3428e5bee99868484dc1bec07f4bc5bfb1fbd68820201680ad",
       "FR-7": "65b368697aae283f4cb8950fd31b3110ff70bf9ba4fcd5ed315be633c97c2ee6",
       "FR-8": "f807dad7bcc1a7e753d8fd641251c4af4cadb75a65e01abafd1cbd2ad9b65e64",
@@ -167,7 +176,7 @@
     "stop_at": null,
     "stop_when_queue_empties": true
   },
-  "design": "D1. The link is content, carried in the change's payload, not a database column. It is validated on save and survives every submission, like `roadmap`. It needs no migration, so this is Tier 1. Rejected: a link table, because it would let the link and the document disagree, and the document is the source.\n\nD2. The waiting lists are computed from the parsed documents the spec lists already reuse (commit cda8adb, spec-list-cost), plus spec_document_merges to tell which changes are folded. Rejected: a stored reverse index, which would have to be kept in step on every save, fold and archive.\n\nD3. An author may change the link only while exploring, because an approved document refuses submissions. After approval, the operator changes it through a route, and a spec-admin agent through a new tidy op. Neither changes requirement digests, so approval stands.\n\nD4. The fold keeps every choice it has today. Only its starting target changes; an off-link fold is allowed and recorded.\n\nLESSONS FROM SLICE 1, applied here:\n- The drive and the UI disagreed on element names (AOTCT-4, evidence for FR-1/6/10/13 rejected). The test ids below are part of the contract, and the drive asserts only these.\n- A list ordered by wall clock was random within a tick (AOTCT-2). Every list here names a total order.\n\nCONTRACT:\n- Payload field on change-spec: `capabilities: {\"changes\": [<capability path>], \"creates\": [{\"title\": str}]}`. It is optional; absent means none.\n- Submission refusal code `capability_unknown`. Warning code `capability_unnamed`.\n- Capability read: `waiting_changes: [{path, title, phase, built: bool, first_approved_at | null}]`, ordered by first_approved_at ascending with nulls last, then path.\n- Change read: `folded_into: <capability path> | null`.\n- read_spec_document accepts `include=waiting` on a capability.\n- Operator route: `PUT /documents/{path}/capabilities` with body {changes, creates, reason}. It returns the document, or 409 with `change_folded`.\n- Spec list rows for capabilities carry `waiting_count`.\n- Tidy op `set_capabilities(path, changes, creates, reason)`. The tidy op `fold` with no `capability` uses the single named capability, or refuses with `capability_ambiguous` (several named) or `capability_unnamed` (none named).\n- The fold record carries `fold_target_not_named: true` when the target is not named.\n- UI test ids:\n  - On a change's page: `change-capabilities` (the named list), `change-capabilities-edit`.\n  - On a capability's page: `capability-waiting-list`, whose rows are `capability-waiting-row` with `data-path` and `data-built`.\n  - On the spec list: `capability-waiting-count`.\n  - In the fold dialog: `fold-target` (its value is the selected path) and `fold-create-named`.\n\nGUARDS: none relaxed. Existing fold tests keep passing because a change with no link falls back to today's picker.",
+  "design": "D1. The link is content, carried in the change's payload, not a database column. It is validated on save and survives every submission, like `roadmap`. It needs no migration, so this is Tier 1. Rejected: a link table, because it would let the link and the document disagree, and the document is the source.\n\nD2. The waiting lists are computed from the parsed documents the spec lists already reuse (commit cda8adb, spec-list-cost), plus spec_document_merges to tell which changes are folded. Rejected: a stored reverse index, which would have to be kept in step on every save, fold and archive.\n\nD3. An author may change the link only while exploring, because an approved document refuses submissions. After approval, the operator changes it through a route, and a spec-admin agent through a new tidy op. Neither changes requirement digests, so approval stands.\n\nD4. The fold keeps every choice it has today. Only its starting target changes; an off-link fold is allowed and recorded.\n\nLESSONS FROM SLICE 1, applied here:\n- The drive and the UI disagreed on element names (AOTCT-4, evidence for FR-1/6/10/13 rejected). The test ids below are part of the contract, and the drive asserts only these.\n- A list ordered by wall clock was random within a tick (AOTCT-2). Every list here names a total order, and ties on a timestamp fall back to insertion order before anything else (vault fact fct-094e0ecc1706).\n\nCONTRACT:\n- Payload field on change-spec: `capabilities: {\"changes\": [<capability path>], \"creates\": [{\"title\": str}]}`. It is optional; absent means none.\n- Submission refusal code `capability_unknown`. Warning code `capability_unnamed`.\n- Capability read: `waiting_changes: [{path, title, phase, built: bool, first_approved_at | null}]`, ordered by first_approved_at ascending with nulls last, then by the document's creation order (insertion order, not a timestamp), then path.\n- Change read: `folded_into: <capability path> | null`.\n- read_spec_document accepts `include=waiting` on a capability.\n- Operator route: `PUT /documents/{path}/capabilities` with body {changes, creates, reason}. It returns the document, or 409 with `change_folded`.\n- Spec list rows for capabilities carry `waiting_count`.\n- Tidy op `set_capabilities(path, changes, creates, reason)`. The tidy op `fold` with no `capability` uses the single named capability, or refuses with `capability_ambiguous` (several named) or `capability_unnamed` (none named).\n- The fold record carries `fold_target_not_named: true` when the target is not named.\n- UI test ids:\n  - On a change's page: `change-capabilities` (the named list), `change-capabilities-edit`.\n  - On a capability's page: `capability-waiting-list`, whose rows are `capability-waiting-row` with `data-path` and `data-built`.\n  - On the spec list: `capability-waiting-count`.\n  - In the fold dialog: `fold-target` (its value is the selected path) and `fold-create-named`.\n\nGUARDS: none relaxed. Existing fold tests keep passing because a change with no link falls back to today's picker.",
   "evidence": {
     "checked": [
       "slice 1 on master (495d00a): AOTCT-1..5 approved and merged. The rejections were fixed: test ids spec-filter-superseded, spec-archive-selected and spec-superseded-select are in SpecTidyPanel.tsx, and _tidy_events orders by created_at then rowid (spec_lifecycle.py:786-799)",
@@ -180,9 +189,53 @@
     ]
   },
   "hub": {
-    "phase": "exploring",
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus2",
+        "builders": [
+          "QA2",
+          "DeveloperOpus2",
+          "Developer"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": null,
+        "id": "build-3f7a769d89ce",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-12T09:10:50.269998+00:00",
+        "state": "running",
+        "stop_reason": null,
+        "tasks": {
+          "drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "hub": {
+            "builder": "DeveloperOpus2",
+            "checker": "QA"
+          },
+          "run-drive": {
+            "builder": "QA2",
+            "checker": "QA"
+          },
+          "ui": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
     "size": null,
-    "step": "intake"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "Ships as slice 2 of 'The specs stay true and easy to work with'. Once built, the spec-admin agent names the capability of this repository's unfolded changes, which slice 3 then folds automatically.",
@@ -221,8 +274,8 @@
       "key": "waiting-list",
       "modal": "MUST",
       "party": null,
-      "rationale": "Slice 1's tidy list failed review because acts in the same clock tick came back in random order. Every list this slice adds names a total order.",
-      "statement": "Each capability lists the changes that name it and are neither folded nor archived. Each entry shows the change's title, phase, and whether every one of its tasks is approved. Entries are ordered by first approval, oldest first, with changes never approved after them, and the path breaks every tie."
+      "rationale": "Slice 1's tidy list failed review because acts in the same clock tick came back in random order. Every list this slice adds names a total order. The clock ticks only about every 15 ms on Windows, so an 'oldest first' list falls back to the order the records were created before anything else (vault fact fct-094e0ecc1706); the path is only the last resort.",
+      "statement": "Each capability lists the changes that name it and are neither folded nor archived. Each entry shows the change's title, phase, and whether every one of its tasks is approved. Entries are ordered by first approval, oldest first, with changes never approved after them. Changes that tie are ordered by which was created first, and the path breaks any tie that remains."
     },
     {
       "key": "affects-view",
@@ -259,7 +312,7 @@
   },
   "schema_version": 1,
   "scope": {
-    "in": [
+    "in_scope": [
       "A field on a change document naming the existing capabilities it changes, and any new capability it will create",
       "Validation of the named capabilities on submission, and a warning when a change names none",
       "Changing the link while the change is not yet folded, by its authors, the operator, or a spec-admin agent",
@@ -267,7 +320,6 @@
       "A view of which open changes affect any capability, for the operator in the app and for agents through read_spec_document",
       "The fold (operator dialog and agent tidy fold) defaulting to the named capability"
     ],
-    "in_scope": [],
     "non_goals": [
       "Guessing the capability of existing changes automatically; the spec-admin agent sets them as tidy acts",
       "Folding automatically when a build finishes (slice a-finished-build-folds-itself)",
@@ -311,7 +363,7 @@
       "depends_on": [
         "drive"
       ],
-      "description": "The payload field and its validation (capability_unknown, capability_unnamed). waiting_changes, folded_into and waiting_count on reads. read_spec_document include=waiting. The operator PUT route. The tidy op set_capabilities, and tidy fold's default target and refusals. fold_target_not_named on the fold record. Hub tests, including one that fails if the waiting order is reversed.",
+      "description": "The payload field and its validation (capability_unknown, capability_unnamed). waiting_changes, folded_into and waiting_count on reads. read_spec_document include=waiting. The operator PUT route. The tidy op set_capabilities, and tidy fold's default target and refusals. fold_target_not_named on the fold record. Hub tests, including one that fails if the waiting order is reversed and one where tied approval times fall back to creation order.",
       "files": [
         "hub/hub/spec_payload.py",
         "hub/hub/spec_completeness.py",

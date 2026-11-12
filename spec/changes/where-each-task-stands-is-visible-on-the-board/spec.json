@@ -184,9 +184,47 @@
     "limits": []
   },
   "hub": {
-    "phase": "exploring",
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperSonnet2",
+        "builders": [
+          "DeveloperSonnet2"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": null,
+        "id": "build-5b37e5671872",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-12T09:03:29.192140+00:00",
+        "state": "running",
+        "stop_reason": null,
+        "tasks": {
+          "builder": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "on-main": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          },
+          "stage": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
     "size": "small",
-    "step": "intake"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "",
@@ -293,7 +331,9 @@
   "tasks": [
     {
       "builder": "DeveloperSonnet2",
+      "builder_reason": "A read-side route field plus card UI, in code DeveloperSonnet2 already knows from the flaky-test and board tasks; Sonnet is enough and spares Opus quota.",
       "checker": "QA2",
+      "checker_reason": "QA2 is free, reviewed the last settings build, and can drive the trial Hub :8010 for the live-update and landing criteria.",
       "depends_on": [],
       "description": "Acceptance drive first: write the Hub tests and the :8010 drive step for the stage criteria, failing today. Then make the tasks route return each task's stage from real state (bound runs, landing rows), the time it entered that stage, stage detail and what it waits on. Show all of it on the card, live.",
       "files": [
@@ -318,7 +358,9 @@
     },
     {
       "builder": "DeveloperSonnet2",
+      "builder_reason": "UI-only work on top of the stage task's own card and route changes; the same builder keeps the context and the same-file chain.",
       "checker": "QA2",
+      "checker_reason": "QA2 checks the stage task already, so it can confirm the counts against the stages it just verified and drive the board on :8010.",
       "depends_on": [
         "stage"
       ],
@@ -339,7 +381,9 @@
     },
     {
       "builder": "DeveloperSonnet2",
+      "builder_reason": "It continues the same route and card files as the first two tasks; the transition-service change is a small write at one edge, which Sonnet handles with the migration checklist in .claude/rules.",
       "checker": "QA2",
+      "checker_reason": "QA2 has seen both earlier tasks' cards and can check the builder label alongside them; the review hand-off it checks is one QA2 performs itself.",
       "depends_on": [
         "on-main"
       ],

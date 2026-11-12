@@ -222,14 +222,14 @@
         "checkers": [],
         "chosen_by": "operator",
         "driver": "flow",
-        "ended_at": null,
+        "ended_at": "2026-11-12T05:35:37.429822+00:00",
         "id": "build-e3af18ea2f3c",
         "landing": "main",
         "lead": null,
         "level": "reviewed",
         "pull_request": null,
         "started_at": "2026-11-11T13:23:50.755991+00:00",
-        "state": "running",
+        "state": "finished",
         "stop_reason": null,
         "tasks": {
           "search-and-landing": {

@@ -582,7 +582,7 @@
       "path": "spec/changes/a-change-names-the-capabilities-it-changes/spec.json",
       "title": "A change names the capabilities it changes",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 1670
     },
@@ -2038,7 +2038,7 @@
       "path": "spec/changes/where-each-task-stands-is-visible-on-the-board/spec.json",
       "title": "Where each task stands is visible on the board",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 2600
     },

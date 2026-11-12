@@ -181,14 +181,14 @@
         "checkers": [],
         "chosen_by": "operator",
         "driver": "flow",
-        "ended_at": null,
+        "ended_at": "2026-11-11T19:35:21.838326+00:00",
         "id": "build-e4ac2fa85f34",
         "landing": "main",
         "lead": null,
         "level": "reviewed",
         "pull_request": null,
         "started_at": "2026-11-11T17:20:20.701590+00:00",
-        "state": "running",
+        "state": "finished",
         "stop_reason": null,
         "tasks": {
           "drive": {
@@ -198,6 +198,11 @@
           "hub-rules": {
             "builder": "DeveloperSonnet2",
             "checker": "QA2"
+          },
+          "task-f263d0baf6da": {
+            "builder": null,
+            "builder_default": true,
+            "checker": null
           },
           "ui-and-clear": {
             "builder": "DeveloperSonnet2",
