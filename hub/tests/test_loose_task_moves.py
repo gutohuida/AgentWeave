@@ -133,3 +133,60 @@ async def test_moving_a_task_does_not_change_its_holder(app):
         await apply_transition(session, task, "revision_needed", operator())
         await apply_transition(session, task, "pending", operator())
         assert task.assignee == "D"
+
+
+async def _token_run(run_id: str, agent: str, initiator: str) -> dict[str, str]:
+    from hub.agent_auth import hash_run_token
+
+    token = f"aw_run_{run_id}-secret"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id=run_id,
+                project_id="proj-test",
+                agent=agent,
+                status="running",
+                initiator=initiator,
+                started_at=datetime.now(timezone.utc),
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def test_update_task_over_the_agent_route_follows_the_runs_initiator(app):
+    """ac-piloted and ac-send-back through /agent-actions/tasks, the route the MCP update_task uses."""
+    piloted = await _token_run("run-api-piloted", "A", "operator")
+    flow = await _token_run("run-api-flow", "A", "autonomous")
+    async with async_session_factory() as session:
+        await _task(session, "task-api-ok", "completed", assignee="D")
+        await _task(session, "task-api-no", "completed", assignee="D")
+        await _task(session, "task-api-back", "completed", assignee="D")
+        await session.commit()
+
+    refused = await app.patch(
+        "/api/v1/agent-actions/tasks/task-api-no", headers=flow, json={"status": "approved"}
+    )
+    assert refused.status_code == 409, refused.text
+    refused = await app.patch(
+        "/api/v1/agent-actions/tasks/task-api-back",
+        headers=flow,
+        json={"status": "revision_needed", "notes": "redo"},
+    )
+    assert refused.status_code == 409, refused.text
+
+    ok = await app.patch(
+        "/api/v1/agent-actions/tasks/task-api-ok", headers=piloted, json={"status": "approved"}
+    )
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["status"] == "approved"
+
+    back = await app.patch(
+        "/api/v1/agent-actions/tasks/task-api-back",
+        headers=piloted,
+        json={"status": "revision_needed", "notes": "redo"},
+    )
+    assert back.status_code == 200, back.text
+    assert back.json()["status"] == "revision_needed"
+    assert back.json()["assignee"] == "D"
