@@ -5282,6 +5282,7 @@ def submit_spec_document(
     roadmap: Optional[Dict[str, Any]] = None,
     already_built: Optional[Dict[str, Any]] = None,
     capabilities: Optional[Dict[str, Any]] = None,
+    tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Write a specification document. You supply structure; the Hub renders the document.
 
@@ -5387,6 +5388,10 @@ def submit_spec_document(
       `{"document": "<roadmap path>", "slice": "<slice key>"}`. Approving it is refused until that
       roadmap is approved and holds that slice. Include it in every later submission.
 
+    `tag` — a short name for the spec, at most 24 characters, that its task cards show on the
+      board. Unique in the project: a tag another spec holds is refused, naming that spec. Left out,
+      the Hub derives one from the title.
+
     `capabilities` — on a change document, the capabilities it changes:
       `{"changes": ["<capability path>", ...], "creates": [{"title": "<new capability>"}]}`.
       Each path must be a current capability of this project (read the spec list or the index);
@@ -5425,6 +5430,7 @@ def submit_spec_document(
         "roadmap": roadmap,
         "already_built": already_built,
         "capabilities": capabilities,
+        "tag": tag,
     }
     # Before anything is sent. These are annotated `Any` so that a wrong shape reaches this check
     # rather than being refused by the framework's own validator, whose message was the finding

@@ -148,10 +148,13 @@ export function TasksScreen({
         (board): ScopeSpec => ({
           id: board.spec_document_id!,
           title: board.title ?? specTitles.get(board.spec_document_id!) ?? board.spec_document_id!,
-          count: board.total,
+          tag: board.tag ?? board.title ?? board.spec_document_id!,
+          unfinished: board.outstanding,
+          lastActivity: board.last_activity ?? null,
         }),
       )
   }, [boardsData, specTitles])
+  const specTags = React.useMemo(() => new Map(pickerSpecs.map((spec) => [spec.id, spec.tag])), [pickerSpecs])
   const noSpecCount = (boardsData?.boards ?? []).find((board) => !board.spec_document_id)?.total ?? 0
   const scopeName =
     scope.kind === 'none' ? 'No spec' : scope.kind === 'building' ? 'Building' : scope.kind === 'spec'
@@ -382,6 +385,7 @@ export function TasksScreen({
           agents={agents}
           tallies={tallies}
           workingTaskIds={working}
+          specTags={specTags}
           view={view}
           onViewChange={setView}
           folds={folds}
