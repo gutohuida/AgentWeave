@@ -158,6 +158,11 @@ async def _refusal_for(session: AsyncSession, task: Task, outcome: str) -> Optio
     return None
 
 
+async def offered_outcomes(session: AsyncSession, task: Task) -> List[str]:
+    """The closes the operator can ask for on *task* now: those `close_tasks` would not refuse it."""
+    return [o for o in OUTCOMES if await _refusal_for(session, task, o) is None]
+
+
 async def close_tasks(
     session: AsyncSession,
     project_id: str,

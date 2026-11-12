@@ -9,6 +9,7 @@ import { groupByStanding } from '@/lib/taskStage'
 import { taskStatusTone } from '@/lib/taskStatusColors'
 import { BoardColumn, type ColumnDropState } from './BoardColumn'
 import { TaskCardCompact, type RequirementTally } from './TaskCardCompact'
+import { CloseForm } from './LooseTaskActions'
 import '@/styles/board.css'
 
 export type TasksView = 'board' | 'dependencies'
@@ -93,6 +94,15 @@ export function BoardView({
 }) {
   const [agentFilter, setAgentFilter] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState('')
+  // Picking several tasks to close at once (`tasks-outside-a-flow-move-freely`, FR-9).
+  const [selecting, setSelecting] = React.useState(false)
+  const [picked, setPicked] = React.useState<ReadonlySet<string>>(new Set())
+  const togglePicked = (id: string) =>
+    setPicked((current) => {
+      const next = new Set(current)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
 
   const colorOf = React.useMemo(() => new Map(agents.map((a) => [a.name, a.color_index])), [agents])
   const [revealed, setRevealed] = React.useState<'notOnMain' | 'working' | null>(null)
@@ -155,7 +165,32 @@ export function BoardView({
             className="aw-board-search-input"
           />
         </label>
+        <button
+          type="button"
+          data-slot="filter-chip"
+          data-testid="board-select-toggle"
+          className="aw-filter-chip"
+          data-active={selecting ? 'true' : 'false'}
+          aria-pressed={selecting}
+          onClick={() => {
+            setSelecting(!selecting)
+            setPicked(new Set())
+          }}
+        >
+          Select
+        </button>
       </div>
+
+      {selecting && picked.size > 0 ? (
+        <div className="aw-board-notice" data-testid="board-close-bar">
+          <strong>{picked.size} selected</strong>
+          <CloseForm
+            taskIds={[...picked]}
+            outcomes={['done_elsewhere', 'cancelled']}
+            onDone={() => setPicked(new Set())}
+          />
+        </div>
+      ) : null}
 
       {notices}
 
@@ -235,6 +270,7 @@ export function BoardView({
                       tally={tallies[task.id]}
                       working={workingTaskIds.has(task.id)}
                       selected={task.id === selectedTaskId}
+                      select={selecting ? { checked: picked.has(task.id), onToggle: () => togglePicked(task.id) } : undefined}
                       now={now}
                       onOpen={onOpenTask}
                       onRetryIntegration={onRetryIntegration}

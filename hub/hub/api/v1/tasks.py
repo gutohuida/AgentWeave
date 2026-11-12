@@ -2778,6 +2778,9 @@ async def task_moves(
     actor = Actor(kind=ACTOR_OPERATOR)
     moves = []
     targets = set(allowed_targets(task.status, ACTOR_OPERATOR))
+    if task.loop_id is None:
+        # A loose task moves by hand: the free moves, each still put to the mover decision below.
+        targets |= set(free_targets(task.status))
     if task.status == "completed" and task.build_id:
         # A level's own edge (slice D): at Fast, completed work is approved without a review.
         targets.add("approved")
@@ -2791,7 +2794,17 @@ async def task_moves(
         reviewers = await _reviewers_for(session, task, actor)
         if reviewers and "under_review" not in moves:
             moves = sorted([*moves, "under_review"])
-    return {"task_id": task.id, "status": task.status, "moves": moves, "reviewers": reviewers}
+    closes = await loose_close.offered_outcomes(session, task)
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "moves": moves,
+        "reviewers": reviewers,
+        # The ways a loose task can be closed, by the same refusals the close route applies, so
+        # the drawer offers exactly what the Hub will do (`tasks-outside-a-flow-move-freely`, FR-10).
+        "loose": task.loop_id is None,
+        "closes": closes,
+    }
 
 
 async def _reviewers_for(session: AsyncSession, task: Task, actor: Actor) -> List[str]:
