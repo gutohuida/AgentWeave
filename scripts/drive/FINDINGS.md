@@ -40924,7 +40924,7 @@ Repro: Architect submitted the document; the answer was `blocking: []`, `ready_t
 
 ## F1086 (B) -- the Hub's own knowledge-vault output dirties the project checkout and blocks its own landing
 
-**Status:** open 2026-10-29. Found by reading the ledger of `spdoc-a7d41f10be14` (Architect).
+**Status:** fixed 2026-11-12 (`4ac1ec8`, on `agentweave/DeveloperOpus`): integration does not count the Hub's own writes. `hub/hub/hub_writes.py` records the digest of every Hub write to `spec/index.json`, the journey, document files and `knowledge/`, and `hub_written_documents` exempts each file that still holds it (a hand edit stays dirty); a landing batch now asks the checkout question before its checks as well as after (`hub/tests/test_hub_writes_do_not_block_landing.py`). Opened 2026-10-29. Found by reading the ledger of `spdoc-a7d41f10be14` (Architect).
 **Source:** ledger
 **Theme:** Worktrees & integration
 **Ready:** yes

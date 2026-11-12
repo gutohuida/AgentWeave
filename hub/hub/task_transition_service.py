@@ -1635,7 +1635,7 @@ async def hub_written_documents(session: AsyncSession, workspace, project_id: st
     holds no one's work but the Hub's. An operator's edit to the same file changes the hash and
     counts as theirs, as it should.
     """
-    from . import spec_documents, spec_lifecycle
+    from . import hub_writes, spec_documents, spec_lifecycle
     from .db.models import SpecDocument
 
     rows = (
@@ -1654,6 +1654,9 @@ async def hub_written_documents(session: AsyncSession, workspace, project_id: st
                 continue
             if content is not None and spec_lifecycle.digest(content) == content_digest:
                 written.add(path)
+        # Every other file the Hub writes into the checkout, by the digest of its write (F1086,
+        # F1167): `spec/index.json`, the journey, and the vault's `knowledge/` records.
+        written |= hub_writes.still_written(workspace.root)
         return written
 
     # The files are read off the loop (`blocking`, D1); the rows were read on it, above.

@@ -60,6 +60,7 @@ from typing import Any, Dict, Iterable, List, Optional, Protocol, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import hub_writes
 from .db.models import Project, VaultSettings
 from .project_workspace import canonical_path_key
 
@@ -170,6 +171,7 @@ class LocalVaultStorage:
         for attempt in range(_BUSY_RETRIES):
             try:
                 os.replace(temporary, path)
+                _record_hub_write(root, relative, data)
                 return
             except PermissionError:
                 if attempt == _BUSY_RETRIES - 1:
@@ -199,6 +201,18 @@ class LocalVaultStorage:
     def delete(self, root: str, relative: str) -> None:
         with contextlib.suppress(FileNotFoundError, NotADirectoryError):
             self._path(root, relative).unlink()
+            _record_hub_write(root, relative, None)
+
+
+def _record_hub_write(root: str, relative: str, data: Optional[bytes]) -> None:
+    """Record a write under a project's tracked `knowledge/` as the Hub's own (F1167), so it does
+    not count as an uncommitted change that blocks a landing (`hub_writes`). A private location is
+    not the project's checkout, so nothing is recorded for it; neither is a directory that merely
+    shares the name, outside a project (no `.agentweave` beside it)."""
+    folder = Path(root)
+    if folder.name != TRACKED_DIRECTORY or not (folder.parent / ".agentweave").is_dir():
+        return
+    hub_writes.record(folder.parent, f"{TRACKED_DIRECTORY}/{Path(relative).as_posix()}", data)
 
 
 storage: VaultStorage = LocalVaultStorage()

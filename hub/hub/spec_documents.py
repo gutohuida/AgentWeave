@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from . import hub_writes
 from .project_workspace import ProjectPathError, ProjectWorkspace
 from .spec_manifest import (
     INDEX_PATH,
@@ -306,6 +307,7 @@ def write_legacy(workspace: ProjectWorkspace, path: str, content: str) -> Path:
     resolved = _legacy_file(workspace, path)
     resolved.parent.mkdir(parents=True, exist_ok=True)
     resolved.write_text(content, encoding="utf-8", newline="\n")
+    hub_writes.record(workspace.root, path, content.encode("utf-8"))
     return resolved
 
 
@@ -320,6 +322,7 @@ def remove_converted(workspace: ProjectWorkspace, path: str) -> None:
         resolved = workspace.resolve_relative(validate_spec_path(path))
     if resolved.is_file():
         resolved.unlink()
+        hub_writes.record(workspace.root, resolved.relative_to(workspace.root), None)
 
 
 def document_updated_at(workspace: ProjectWorkspace, path: str) -> str:
@@ -343,6 +346,7 @@ def write_document(workspace: ProjectWorkspace, path: str, content: str) -> Path
     resolved.parent.mkdir(parents=True, exist_ok=True)
     # `newline`: text mode writes CRLF on Windows, a whole-file change in a project (F524).
     resolved.write_text(content, encoding="utf-8", newline="\n")
+    hub_writes.record(workspace.root, path, content.encode("utf-8"))
     return resolved
 
 
@@ -363,6 +367,8 @@ def move_document(workspace: ProjectWorkspace, old_path: str, new_path: str) -> 
     destination.parent.mkdir(parents=True, exist_ok=True)
     if source.is_file():
         source.replace(destination)
+        hub_writes.record(workspace.root, old_path, None)
+        hub_writes.record_file(workspace.root, new_path)
     _prune_if_empty(workspace, source.parent)
     return destination
 
@@ -377,6 +383,7 @@ def delete_document_file(workspace: ProjectWorkspace, path: str) -> None:
     resolved = workspace.resolve_relative(path)
     if resolved.is_file():
         resolved.unlink()
+        hub_writes.record(workspace.root, path, None)
     _prune_if_empty(workspace, resolved.parent)
 
 
@@ -554,6 +561,7 @@ def _write_index_text(workspace: ProjectWorkspace, text: str) -> Path:
         with contextlib.suppress(OSError):
             temporary.unlink()
         raise
+    hub_writes.record(workspace.root, INDEX_RELATIVE, text.encode("utf-8"))
     return resolved
 
 
