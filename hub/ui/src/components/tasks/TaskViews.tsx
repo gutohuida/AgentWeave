@@ -37,6 +37,7 @@ function isFailure(result: TaskCheckResult): boolean {
 export function TaskWorkView({
   task,
   checks,
+  checksError,
   now,
   onRerunChecks,
   coverage,
@@ -45,6 +46,8 @@ export function TaskWorkView({
 }: {
   task: Task
   checks: TaskCheckRun | null
+  /** Why the checks could not be read; shown instead of claiming they have not run. */
+  checksError?: string | null
   now?: Date
   onRerunChecks?: () => void
   /** Each requirement's state in its document's coverage, by requirement id. */
@@ -112,7 +115,9 @@ export function TaskWorkView({
         aside={checks?.ended_at ? formatAgo(checks.ended_at, now) : checks?.state === 'running' ? 'running now' : undefined}
         action={checks && checks.state !== 'running' && onRerunChecks ? { label: 'Run again', glyph: 'refresh', onClick: onRerunChecks } : undefined}
       >
-        {!checks ? (
+        {!checks && checksError ? (
+          <p className="aw-tview-empty" role="alert">The checks could not be read: {checksError}</p>
+        ) : !checks ? (
           <p className="aw-tview-empty">The project’s checks have not run on this work yet.</p>
         ) : (
           <ul className="aw-tview-list">

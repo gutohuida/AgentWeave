@@ -307,6 +307,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   // The Work view's checks: the latest run on the work approval would merge.
   const checksQuery = useTaskChecks(task?.id ?? '', task !== null)
   const latestChecks = checksQuery.data?.runs?.[0] ?? null
+  // A failed read is said as one, not shown as checks that have not run.
+  const checksError = checksQuery.error ? (checksQuery.error instanceof Error ? checksQuery.error.message : String(checksQuery.error)) : null
   const rerunChecks = useRerunTaskChecks(task?.id ?? '')
   const storyAvailable =
     !story.isError && (Array.isArray(story.data?.events) || story.fetchStatus === 'fetching')
@@ -621,6 +623,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             task={task}
             documentPathById={documentPathById}
             checks={latestChecks}
+            checksError={checksError}
             onRerunChecks={() => rerunChecks.mutate()}
             canOpenRequirement={(link) => Boolean(onOpenRequirement && documentPathById.get(link.document_id))}
             onOpenRequirement={
