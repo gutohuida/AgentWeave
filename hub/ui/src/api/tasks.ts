@@ -38,6 +38,12 @@ export interface Task {
   /** The holder this task waits for while they run another turn, and since when (F1112). */
   waiting_on?: string | null
   waiting_since?: string | null
+  /** The stage the task has really reached (`hub/task_stage.py`), when it entered it, its detail
+   *  (short commit id, why a landing did not happen) and what it waits on. */
+  stage?: string | null
+  stage_since?: string | null
+  stage_detail?: string | null
+  stage_waits_on?: string | null
   requirements?: string[]
   acceptance_criteria?: string[]
   deliverables?: string[]
