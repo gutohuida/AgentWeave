@@ -18,6 +18,8 @@ import {
   useSetDivergenceHandling,
   useTaskIntegrationPreview,
   useTaskStory,
+  useTaskChecks,
+  useRerunTaskChecks,
   useTasks,
   useReassignTask,
   useUpdateTask,
@@ -32,6 +34,7 @@ import { PullRequestLine } from '@/components/spec/PullRequestLine'
 import { gateBodyOf, overrideOffered, type GateBody } from '@/components/tasks/gateRefusal'
 import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { TaskStory } from '@/components/tasks/TaskStory'
+import { TaskWorkView } from '@/components/tasks/TaskViews'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { CloseForm } from './LooseTaskActions'
@@ -169,18 +172,22 @@ function ApprovalReport({ taskId, entries }: { taskId: string; entries: Approval
   )
 }
 
-/** Story | Details, a segmented switch whose thumb slides between the two. */
+type TaskView = 'story' | 'work' | 'details'
+
+/** Story | Work | Details, a segmented switch whose thumb slides between them. Work is what the task
+ *  is checked against and how that stands (`task-card-and-story-redesign`). */
 function ViewSwitch({
   view,
   onChange,
   taskId,
 }: {
-  view: 'story' | 'details'
-  onChange: (view: 'story' | 'details') => void
+  view: TaskView
+  onChange: (view: TaskView) => void
   taskId: string
 }) {
-  const options: { key: 'story' | 'details'; label: string }[] = [
+  const options: { key: TaskView; label: string }[] = [
     { key: 'story', label: 'Story' },
+    { key: 'work', label: 'Work' },
     { key: 'details', label: 'Details' },
   ]
   const active = options.findIndex((option) => option.key === view)
@@ -189,7 +196,7 @@ function ViewSwitch({
       <span
         className="aw-segmented-thumb"
         aria-hidden="true"
-        style={{ width: 'calc(50% - 2px)', transform: `translateX(${active * 100}%)` }}
+        style={{ width: `calc(${100 / options.length}% - 2px)`, transform: `translateX(${active * 100}%)` }}
       />
       {options.map((option) => (
         <button
@@ -267,10 +274,14 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   // The story is the default view (slice task-story): it answers "is this done, and how did it get
   // here?" before the controls. A Hub that predates `/story` answers 404, and the drawer then keeps
   // the details view without offering a switch that leads nowhere.
-  const [view, setView] = useState<'story' | 'details'>('story')
+  const [view, setView] = useState<TaskView>('story')
   // Offered only while the story is loading or has loaded: an error (a Hub before `/story`) or a
   // query that cannot run leaves the details view, with no switch that leads nowhere.
   const story = useTaskStory(task?.id ?? '', task !== null)
+  // The Work view's checks: the latest run on the work approval would merge.
+  const checksQuery = useTaskChecks(task?.id ?? '', task !== null)
+  const latestChecks = checksQuery.data?.runs?.[0] ?? null
+  const rerunChecks = useRerunTaskChecks(task?.id ?? '')
   const storyAvailable =
     !story.isError && (Array.isArray(story.data?.events) || story.fetchStatus === 'fetching')
   const panelRef = useRef<HTMLDivElement>(null)
@@ -579,6 +590,20 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         <TaskIntegrationNote taskId={task.id} status={task.status} />
         {storyAvailable && view === 'story' ? (
           <TaskStory taskId={task.id} />
+        ) : storyAvailable && view === 'work' ? (
+          <TaskWorkView
+            task={task}
+            checks={latestChecks}
+            onRerunChecks={() => rerunChecks.mutate()}
+            onOpenRequirement={
+              onOpenRequirement
+                ? (link) => {
+                    const documentPath = documentPathById.get(link.document_id)
+                    if (documentPath) onOpenRequirement(documentPath, link.anchor ? link.anchor.replace(/^#/, '') : link.identifier)
+                  }
+                : undefined
+            }
+          />
         ) : (
         <>
         {/* The ticket's own facts, together. The card carried status, priority, assignee, agent

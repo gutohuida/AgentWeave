@@ -712,3 +712,6 @@
 @media (prefers-reduced-motion: reduce) {
   .aw-sheet, .aw-sheet-backdrop, .aw-ckpt-head svg { animation: none; transition: none; }
 }
+
+/* An evidence summary in the story holds two lines; the proof holds it whole (task-card-and-story-redesign). */
+.aw-story-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

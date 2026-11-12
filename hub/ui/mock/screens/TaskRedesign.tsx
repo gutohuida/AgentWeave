@@ -2,9 +2,10 @@ import * as React from 'react'
 import type { RequirementLink, StoryEvent, Task, TaskCheckRun, TaskStory } from '@/api/tasks'
 import { BoardColumn } from '@/components/tasks/BoardColumn'
 import { TaskCard } from '@/components/tasks/TaskCard'
-import { TaskDialog } from '@/components/tasks/TaskDialog'
-import { TaskSheet, type TaskSheetAction } from '@/components/tasks/TaskSheet'
+import { useQueryClient } from '@tanstack/react-query'
+import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer'
 import { toast } from '@/lib/toast'
+import { PROJECT_ID } from '../fixtures'
 import { Icon } from '@/components/common/Icon'
 import { STAGE_LABELS } from '@/lib/taskStage'
 import type { ScreenProps } from '../routes'
@@ -165,24 +166,6 @@ function checksOf(m: MockTask, now: Date): TaskCheckRun | null {
   }
 }
 
-const ACTION_WORDS: Record<TaskSheetAction, string> = {
-  start: 'Start work',
-  'open-conversation': 'Opens the agent’s conversation',
-  answer: 'Opens the question to answer',
-  'hand-to-reviewer': 'Pick a reviewer',
-  approve: 'Approve',
-  'send-back': 'Send back, naming what fails',
-  'retry-landing': 'Landing again',
-  reopen: 'Reopen',
-  move: 'Move to another status',
-  'close-done-elsewhere': 'Close as done elsewhere',
-  cancel: 'Cancel this task',
-  priority: 'Change priority',
-  'rerun-checks': 'Running the checks again',
-  rename: 'Rename',
-  'copy-id': 'Copied its id',
-  delete: 'Delete this task',
-}
 
 const COLUMNS: Array<{ key: string; label: string; statuses: string[]; tone: string | null }> = [
   { key: 'todo', label: 'To do', statuses: ['pending', 'assigned'], tone: null },
@@ -205,7 +188,7 @@ function storyOf(now: Date, task: Task): TaskStory {
   })
   const run = (agent: string, seconds: number, cost: number, status = 'completed'): StoryEvent => ({
     kind: 'run', id: id(), at: at(seconds / 60 + 1), agent, status, ended_at: status === 'running' ? null : ago(now, minute - seconds / 60), duration_seconds: status === 'running' ? null : seconds,
-    model: agent.startsWith('QA') ? 'claude-opus-5-5' : 'claude-sonnet-5-5', runner: 'claude', cost_usd: cost, tokens: 120_000, premium_requests: null, ai_nano_aiu: null, conversation_id: null, error: null,
+    model: agent.startsWith('QA') ? 'claude-opus-5-5' : 'claude-sonnet-5-5', runner: 'claude', cost_usd: cost, tokens: 120_000, premium_requests: null, ai_nano_aiu: null, conversation_id: 'conv-e3aba2c5956a', error: null,
   })
   const evidence = (summary: string, decision?: 'accepted' | 'rejected'): StoryEvent => ({
     kind: 'evidence', id: id(), at: at(2),
@@ -251,10 +234,6 @@ export default function TaskRedesign({ now }: ScreenProps) {
   const [parade, setParade] = React.useState(0)
   const [playing, setPlaying] = React.useState(false)
   const [drawerOpen, setDrawerOpen] = React.useState(true)
-  // How an opened task is shown: the centred dialog the board uses today (default), or the side sheet.
-  const [openAs, setOpenAs] = React.useState<'dialog' | 'sheet'>(() =>
-    window.location.hash.includes('open=sheet') ? 'sheet' : 'dialog',
-  )
   const open = (id: string) => {
     setSelectedId(id)
     setDrawerOpen(true)
@@ -273,6 +252,7 @@ export default function TaskRedesign({ now }: ScreenProps) {
   }
   const selected = all.find((m) => m.task.id === selectedId) ?? all[6]
   const sheetTask = React.useMemo(() => detailed(selected, all), [selected, all])
+  const queryClient = useQueryClient()
   const story = React.useMemo(() => {
     // mock state: the summary's evidence counts follow the task's requirement states.
     const base = storyOf(now, selected.task)
@@ -280,6 +260,15 @@ export default function TaskRedesign({ now }: ScreenProps) {
     const count = (state: string) => links.filter((l) => l.state === state).length
     return { ...base, summary: { ...base.summary, evidence: { accepted: count('verified'), rejected: count('rejected'), awaiting: count('evidence_awaiting_review') } } }
   }, [now, selected.task, sheetTask])
+  // mock state: today's dialog reads the story and the checks through its hooks; the mock answers
+  // from the cache under the same keys (mock/README.md), so the dialog on screen is the real one.
+  queryClient.setQueryData(['project', PROJECT_ID, 'tasks', selected.task.id, 'story'], story)
+  const checks = checksOf(selected, now)
+  queryClient.setQueryData(['project', PROJECT_ID, 'task', selected.task.id, 'checks'], {
+    configured: true,
+    running: checks?.state === 'running',
+    runs: checks ? [checks] : [],
+  })
 
   return (
     <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', height: '100%', minHeight: 0, overflow: 'hidden' }}>
@@ -296,14 +285,6 @@ export default function TaskRedesign({ now }: ScreenProps) {
             <Icon name={playing ? 'pause' : 'play_arrow'} size={12} /> {playing ? 'Stop' : 'Play'}
           </button>
           <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{STAGE_LABELS[PARADE[parade]]}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-2)' }}>Open a task as:</span>
-          <div className="aw-segmented" role="group" aria-label="Open a task as">
-            {(['dialog', 'sheet'] as const).map((mode) => (
-              <button key={mode} type="button" data-slot="segment" className="aw-segmented-option" aria-pressed={openAs === mode} data-active={openAs === mode ? "true" : "false"} onClick={() => setOpenAs(mode)}>
-                {mode === 'dialog' ? 'Dialog (as today)' : 'Side sheet'}
-              </button>
-            ))}
-          </div>
         </div>
         <div className="aw-board-scroll">
           <div className="aw-board-columns">
@@ -329,39 +310,13 @@ export default function TaskRedesign({ now }: ScreenProps) {
           </div>
         </div>
       </div>
-      {drawerOpen && openAs === 'dialog' ? (
-        <TaskDialog
+      {drawerOpen ? (
+        <TaskDetailDrawer
           key={selected.task.id}
           task={sheetTask}
-          story={story}
-          checks={checksOf(selected, now)}
-          specTag={selected.specTag}
-          colorOf={colorOf}
-          now={now}
-          onAction={(action: TaskSheetAction) => toast({ title: ACTION_WORDS[action], description: 'Mock: nothing changes.' })}
-          onOpenTask={open}
           onClose={() => setDrawerOpen(false)}
+          onOpenRequirement={(path, anchor) => toast({ title: `Opens ${anchor}`, description: `In ${path}. Mock: nothing navigates.` })}
         />
-      ) : null}
-      {drawerOpen && openAs === 'sheet' ? (
-        <aside
-          className="aw-tview-host"
-          style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 520, borderLeft: '1px solid var(--border)', overflow: 'auto', background: 'var(--surface)', boxShadow: '-12px 0 32px rgb(0 0 0 / .18)', zIndex: 5 }}
-          aria-label="Task drawer"
-        >
-          <TaskSheet
-            key={selected.task.id}
-            task={sheetTask}
-            story={story}
-            checks={checksOf(selected, now)}
-            specTag={selected.specTag}
-            colorOf={colorOf}
-            now={now}
-            onAction={(action: TaskSheetAction) => toast({ title: ACTION_WORDS[action], description: 'Mock: nothing changes.' })}
-            onOpenTask={open}
-            onClose={() => setDrawerOpen(false)}
-          />
-        </aside>
       ) : null}
     </div>
   )

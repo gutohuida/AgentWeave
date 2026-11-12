@@ -222,7 +222,7 @@ function EvidenceItem({
       }
     >
       {piece.summary ? (
-        <p className="text-[12.5px] leading-relaxed" style={{ color: 'var(--text-2)' }}>
+        <p className="aw-story-clamp text-[12.5px] leading-relaxed" style={{ color: 'var(--text-2)' }} title={piece.summary}>
           {piece.summary}
         </p>
       ) : null}
@@ -284,15 +284,16 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           icon="arrow_forward"
           head={
             <>
-              <span>
-                <strong>{who}</strong> {event.origin === 'runtime' ? 'was moved to' : 'moved it to'}
+              <strong>{who}</strong>
+              <Icon name="arrow_forward" size={11} aria-label={event.origin === 'runtime' ? 'was moved to' : 'moved it to'} />
+              <span title={`from ${STATUS_LABEL[event.from] ?? event.from}`}>
+                <StatePill tone={statusTone(event.to)}>{STATUS_LABEL[event.to] ?? event.to}</StatePill>
               </span>
-              <StatePill tone={statusTone(event.to)}>{STATUS_LABEL[event.to] ?? event.to}</StatePill>
             </>
           }
           meta={
             <>
-              from {STATUS_LABEL[event.from] ?? event.from} · <Time value={event.at} />
+              <Time value={event.at} />
               {event.run_id && runs.get(event.run_id) ? (
                 <>
                   {' · '}
@@ -301,7 +302,7 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
                     conversationId={runs.get(event.run_id)!.conversation_id}
                     testId={`story-transition-run-${event.id}`}
                   >
-                    in its conversation
+                    conversation
                   </ConversationLink>
                 </>
               ) : null}
@@ -325,7 +326,8 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
     case 'run': {
       const running = event.status === 'running'
       const failed = ['failed', 'interrupted', 'stopped'].includes(event.status)
-      const parts = [duration(event.duration_seconds), count(event.tokens)].filter(Boolean)
+      const parts = [event.model, duration(event.duration_seconds)].filter(Boolean)
+      const cost = spend(event.cost_usd, event.ai_nano_aiu)
       return (
         <TimelineItem
           key={event.id}
@@ -335,11 +337,11 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           live={running}
           head={
             <span>
-              <strong>{event.agent}</strong> {running ? 'is working' : 'worked'}
-              {event.model ? <span className="aw-tl-meta"> · {event.model}</span> : null}
+              <strong>{event.agent}</strong>
+              {running ? ' is working' : ''}
             </span>
           }
-          aside={spend(event.cost_usd, event.ai_nano_aiu) ?? undefined}
+          aside={cost ? <span title={count(event.tokens) || undefined}>{cost}</span> : undefined}
           meta={
             <>
               {parts.length ? `${parts.join(' · ')} · ` : ''}
@@ -554,6 +556,92 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
   }
 }
 
+/** How many routine steps in a row fold into one row that opens. */
+const FOLD_AT = 4
+const ROUTINE_MOVES: ReadonlySet<string> = new Set(['pending', 'assigned', 'in_progress', 'under_review'])
+
+/** A step that went as expected and needs no reading to follow the task: a hand-off, a claim, a run
+ *  that ended normally, evidence not rejected, checks that passed. Milestones (created, completed,
+ *  approved, sent back, landed or not, closed), every failure and anything waiting on the operator
+ *  are never routine, so folding can hide only what went as expected
+ *  (`task-card-and-story-redesign`, FR-6; the milestone list is the spec's open question). */
+function isRoutine(event: StoryEvent): boolean {
+  switch (event.kind) {
+    case 'transition':
+      return ROUTINE_MOVES.has(event.to) && !event.override_reason
+    case 'run':
+      return !['failed', 'interrupted', 'stopped', 'running'].includes(event.status) && !event.error
+    case 'evidence':
+      return event.evidence.review_state !== 'rejected'
+    case 'check':
+      return event.state === 'passed'
+    default:
+      return false
+  }
+}
+
+function actorOf(event: StoryEvent): string | null {
+  switch (event.kind) {
+    case 'run':
+      return event.agent
+    case 'transition':
+      return event.actor_kind === 'operator' ? 'you' : event.actor
+    case 'evidence':
+      return event.evidence.actor_kind === 'operator' ? 'you' : event.evidence.actor
+    default:
+      return null
+  }
+}
+
+/** The story's events as rows and folds, in the route's order. */
+function groupRoutine(events: StoryEvent[]): Array<{ fold: false; event: StoryEvent; index: number } | { fold: true; id: string; events: Array<{ event: StoryEvent; index: number }> }> {
+  const out: Array<{ fold: false; event: StoryEvent; index: number } | { fold: true; id: string; events: Array<{ event: StoryEvent; index: number }> }> = []
+  let run: Array<{ event: StoryEvent; index: number }> = []
+  const flush = () => {
+    if (run.length >= FOLD_AT) out.push({ fold: true, id: `fold-${run[0].event.kind}-${run[0].event.id}`, events: run })
+    else for (const item of run) out.push({ fold: false, ...item })
+    run = []
+  }
+  events.forEach((event, index) => {
+    if (isRoutine(event)) {
+      run.push({ event, index })
+      return
+    }
+    flush()
+    out.push({ fold: false, event, index })
+  })
+  flush()
+  return out
+}
+
+function FoldedSteps({ id, count, actors, from, to, index, onOpen }: { id: string; count: number; actors: string[]; from: string | null; to: string | null; index: number; onOpen: () => void }) {
+  return (
+    <TimelineItem
+      tone="neutral"
+      icon="more_horiz"
+      index={index}
+      testId={`story-fold-${id}`}
+      head={
+        <button type="button" className="aw-link" aria-expanded={false} onClick={onOpen} data-testid={`story-fold-open-${id}`}>
+          {count} routine steps
+        </button>
+      }
+      meta={
+        <>
+          {actors.length ? `${actors.slice(0, 3).join(', ')}${actors.length > 3 ? '…' : ''} · ` : ''}
+          <Time value={from} />
+          {to && to !== from ? (
+            <>
+              {' – '}
+              <Time value={to} />
+            </>
+          ) : null}
+        </>
+      }
+    />
+  )
+}
+
 function Loading() {
   return (
     <LoadingThread label="Loading the story" />
@@ -565,8 +653,10 @@ export function TaskStory({ taskId }: { taskId: string }) {
   // Events seen on the first render stay quiet; one that arrives later glows once. Its arrival
   // time is kept, so a refetch inside the glow (a run's events come in bursts) does not cut it off.
   const arrived = useRef<Map<string, number> | null>(null)
+  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => {
     arrived.current = null
+    setUnfolded(new Set())
   }, [taskId])
 
   if (isLoading) return <Loading />
@@ -581,11 +671,28 @@ export function TaskStory({ taskId }: { taskId: string }) {
       runs.set(event.id, { agent: event.agent, conversation_id: event.conversation_id })
     }
   }
-  const items = data.events.map((event, index) => {
+  const row = (event: StoryEvent, index: number) => {
     const key = `${event.kind}-${event.id}`
     if (!times.has(key)) times.set(key, firstRender ? 0 : now)
     const fresh = now - (times.get(key) ?? 0) < FRESH_MS
     return renderEvent(event, fresh ? 0 : index, fresh, runs)
+  }
+  const items = groupRoutine(data.events).flatMap((item) => {
+    if (!item.fold) return [row(item.event, item.index)]
+    if (unfolded.has(item.id)) return item.events.map(({ event, index }) => row(event, index))
+    const actors = Array.from(new Set(item.events.map(({ event }) => actorOf(event)).filter((a): a is string => Boolean(a))))
+    return [
+      <FoldedSteps
+        key={item.id}
+        id={item.id}
+        count={item.events.length}
+        actors={actors}
+        from={item.events[0].event.at}
+        to={item.events[item.events.length - 1].event.at}
+        index={item.events[0].index}
+        onOpen={() => setUnfolded((current) => new Set(current).add(item.id))}
+      />,
+    ]
   })
   arrived.current = times
 
