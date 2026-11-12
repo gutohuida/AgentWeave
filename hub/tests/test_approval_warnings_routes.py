@@ -8,6 +8,7 @@ acceptance drive is `scripts/drive/d1012_approval_warnings.py`.
 import pytest
 from sqlalchemy import select
 
+from hub import spec_service
 from hub.db.engine import async_session_factory
 from hub.db.models import SpecDocument, SpecDocumentEvent
 
@@ -195,7 +196,10 @@ async def test_a_clean_approval_records_that_it_overrode_nothing_and_a_reopen_fo
     await _create(app, auth_headers)
     await _submit(app, run_headers, _checked())
     await _place(step="build", size="large")
-    assert (await _check(app, auth_headers)).json()["warnings"] == []
+    # Notes gate nothing: a change naming no capability draws `capability_unnamed` (FR-3 of
+    # `a-change-names-the-capabilities-it-changes`), and approval still overrides nothing.
+    warnings = (await _check(app, auth_headers)).json()["warnings"]
+    assert [w for w in warnings if w["code"] not in spec_service.NOTE_CODES] == []
 
     approved = await _phase(app, auth_headers, "approved")
 

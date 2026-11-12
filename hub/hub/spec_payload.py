@@ -413,6 +413,25 @@ class RoadmapLink(_Part):
     slice: str = Field(description="The key of the roadmap slice this document specifies.")
 
 
+class CreatedCapability(_Part):
+    """A capability a change will create, named by its title until it exists."""
+
+    title: str = Field(description="The new capability's title.")
+
+
+class CapabilityLink(_Part):
+    """The capabilities a change document changes (`a-change-names-the-capabilities-it-changes`)."""
+
+    changes: List[str] = Field(
+        default_factory=list,
+        description="Paths of the project's current capability documents this change changes.",
+    )
+    creates: List[CreatedCapability] = Field(
+        default_factory=list,
+        description="Capabilities this change will create, each by title.",
+    )
+
+
 class SpecPayload(_Part):
     """What `submit_spec_document` accepts."""
 
@@ -453,6 +472,11 @@ class SpecPayload(_Part):
     roadmap: Optional[RoadmapLink] = Field(
         default=None,
         description="The roadmap slice this change document specifies, when it is one.",
+    )
+    capabilities: Optional[CapabilityLink] = Field(
+        default=None,
+        description="The existing capabilities this change document changes, and any new one it "
+        "creates. Only on a change-spec document.",
     )
 
 
@@ -502,6 +526,8 @@ def _check_kind_shape(payload: SpecPayload) -> None:
                 "a roadmap does not name a roadmap slice; only a change document does",
                 field="roadmap",
             )
+    if payload.capabilities is not None:
+        check_capability_link(payload.capabilities, kind=payload.kind)
     if payload.roadmap is not None and payload.kind != "change-spec":
         raise PayloadError(
             "only a change document names the roadmap slice it specifies", field="roadmap"
@@ -529,6 +555,33 @@ def _check_kind_shape(payload: SpecPayload) -> None:
 #: Fields `spec_reading.requirement_view` adds to a requirement. The Hub owns them (identity lives in
 #: `aw_identity`), so a submission carrying them back is a read being resubmitted, never an edit.
 READ_VIEW_FIELDS = ("identifier", "state", "anchor")
+
+
+def check_capability_link(link: CapabilityLink, *, kind: str = "change-spec") -> None:
+    """The link's shape: on a change only, no empty or repeated entry. Whether each path names a
+    current capability of the project is the save's question (`spec_capability_links`)."""
+    if kind != "change-spec":
+        raise PayloadError(
+            "only a change document names the capabilities it changes", field="capabilities"
+        )
+    for index, path in enumerate(link.changes):
+        if not path.strip():
+            raise PayloadError(
+                "names an empty capability path", field=f"capabilities.changes[{index}]"
+            )
+    duplicate = _duplicate([path.strip() for path in link.changes])
+    if duplicate is not None:
+        raise PayloadError(f"names {duplicate} twice", field="capabilities.changes")
+    for index, created in enumerate(link.creates):
+        if not created.title.strip():
+            raise PayloadError(
+                "a capability to create needs a title", field=f"capabilities.creates[{index}].title"
+            )
+    duplicate = _duplicate([created.title.strip().casefold() for created in link.creates])
+    if duplicate is not None:
+        raise PayloadError(
+            f"creates a capability titled {duplicate!r} twice", field="capabilities.creates"
+        )
 
 
 def _is_criterion(value: Any) -> bool:
@@ -790,7 +843,7 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     and a slice document carry them.
     """
     data = payload.model_dump(mode="json", by_alias=True)
-    for key in ("delivery", "roadmap", "already_built"):
+    for key in ("delivery", "roadmap", "already_built", "capabilities"):
         if data.get(key) is None:
             data.pop(key, None)
     # An unset tester (on by default, tester-amends D4) must not change the bytes of every stored
