@@ -227,6 +227,30 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'loops'] })
   })
 
+  it('refetches the Running tab builds when a task, a question, a run, a job or a build changes (FR-9)', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const events = ['task_updated', 'question_asked', 'question_answered', 'run_completed', 'job_fired', 'build_updated', 'build_stopped']
+    for (const type of events) {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+      fetchSpy.mockResolvedValue(makeSSEResponse([`event: ${type}
+data: {"project_id":"proj-1","id":"x","agent":"claude","run_id":"run-1"}
+
+`]))
+      function Probe() {
+        useSSE()
+        return null
+      }
+      const view = render(
+        <QueryClientProvider client={client}>
+          <Probe />
+        </QueryClientProvider>
+      )
+      await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'builds'] }), { timeout: 3000 })
+      view.unmount()
+    }
+  })
+
   it('refetches the budget displays when the settings route changes the project (F237)', async () => {
     const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })

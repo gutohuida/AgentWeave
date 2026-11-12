@@ -533,6 +533,8 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // so the loops list/detail refetch here rather than staying stale until something else
           // invalidates them.
           inv({ queryKey: ['project', pid, 'loops'] })
+          // The Running tab's builds carry the same counts, and the worker line comes from the loops.
+          inv({ queryKey: ['project', pid, 'builds'] })
           // Approving or rejecting a task releases its checkout (F250).
           inv({ queryKey: ['project', pid, 'worktrees'] })
           inv({ queryKey: ['project', pid, 'worktree-conflicts'] })
@@ -545,6 +547,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'build_stopped':
           // Stopping a build changes the shown phase with no task event and no `spec_updated`.
           invalidateSpecShownPhase(inv, pid)
+          inv({ queryKey: ['project', pid, 'builds'] })
           inv({ queryKey: ['project', pid, 'reopeningWarnings'] })
           break
         case 'queue_entry_abandoned': {
@@ -582,6 +585,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'question_asked':
         case 'question_answered':
           inv({ queryKey: ['project', pid, 'questions'] })
+          // A build waiting on the question reads Needs you until it is answered (Running tab).
+          inv({ queryKey: ['project', pid, 'builds'] })
+          inv({ queryKey: ['project', pid, 'loops'] })
           // A card's waits-on line names the asking agent.
           inv({ queryKey: ['project', pid, 'tasks'] })
           inv({ queryKey: ['project', pid, 'status'] })
@@ -627,6 +633,7 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
             // before this broadcasts) — the loops list/detail's `firing_active` would otherwise
             // stay stuck true until something else happened to refetch it.
             inv({ queryKey: ['project', pid, 'loops'] })
+            inv({ queryKey: ['project', pid, 'builds'] })
             // A run's end expires its unanswered permission requests and flips a question's
             // `asker_waiting` without any permission_/question_ event, and those two lists are no
             // longer polled: one refetch per run end (never per line) picks both up.
@@ -684,6 +691,8 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'job_deleted':
         case 'job_fired': {
           inv({ queryKey: ['project', pid, 'jobs'] })
+          // A build's loop is a job: its creation and firings change the Running tab's builds.
+          inv({ queryKey: ['project', pid, 'builds'] })
           const d = event.data as { id?: string }
           if (d?.id) {
             inv({ queryKey: ['project', pid, 'jobs', d.id] })
