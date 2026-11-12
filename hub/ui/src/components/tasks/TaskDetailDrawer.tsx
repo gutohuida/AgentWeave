@@ -25,9 +25,8 @@ import {
   useUpdateTask,
 } from '@/api/tasks'
 import { useAgents } from '@/api/agents'
-import { useSpecDocuments } from '@/api/spec'
+import { useSpecCoverageMany, useSpecDocuments } from '@/api/spec'
 import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
-import { TaskChecksRow } from '@/components/tasks/TaskChecksRow'
 import { LandingRemedies, LandWait } from '@/components/tasks/LandingRefusal'
 import { TaskLanding } from '@/components/tasks/TaskLanding'
 import { PullRequestLine } from '@/components/spec/PullRequestLine'
@@ -180,13 +179,16 @@ function ViewSwitch({
   view,
   onChange,
   taskId,
+  withStory,
 }: {
   view: TaskView
   onChange: (view: TaskView) => void
   taskId: string
+  /** False against a Hub without the story route: Work and Details are still offered. */
+  withStory: boolean
 }) {
   const options: { key: TaskView; label: string }[] = [
-    { key: 'story', label: 'Story' },
+    ...(withStory ? [{ key: 'story' as const, label: 'Story' }] : []),
     { key: 'work', label: 'Work' },
     { key: 'details', label: 'Details' },
   ]
@@ -213,6 +215,33 @@ function ViewSwitch({
   )
 }
 
+/** The Work view with how each requirement's evidence stands: the coverage of every document the
+ *  task's links name, the same read the card's tally makes (`useRequirementTallies`). Read only
+ *  while Work is open. */
+function WorkView({
+  task,
+  documentPathById,
+  ...rest
+}: Omit<React.ComponentProps<typeof TaskWorkView>, 'coverage'> & { documentPathById: ReadonlyMap<string, string> }) {
+  const paths = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (task.requirement_links ?? [])
+            .map((link) => documentPathById.get(link.document_id))
+            .filter((path): path is string => Boolean(path)),
+        ),
+      ),
+    [task.requirement_links, documentPathById],
+  )
+  const queries = useSpecCoverageMany(paths)
+  const coverage = new Map<string, string>()
+  for (const query of queries) {
+    for (const requirement of query.data?.requirements ?? []) coverage.set(requirement.requirement_id, requirement.state)
+  }
+  return <TaskWorkView task={task} coverage={coverage} {...rest} />
+}
+
 function statusLabel(status: string): string {
   return status.replace(/_/g, ' ')
 }
@@ -221,10 +250,7 @@ function statusLabel(status: string): string {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <p
-        className="text-[10px] font-semibold uppercase tracking-wide mb-1"
-        style={{ color: 'var(--text-3)' }}
-      >
+      <p className="text-[11px] mb-0.5" style={{ color: 'var(--text-3)' }}>
         {label}
       </p>
       <div className="text-[12.5px] min-w-0" style={{ color: 'var(--text)' }}>
@@ -284,6 +310,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const rerunChecks = useRerunTaskChecks(task?.id ?? '')
   const storyAvailable =
     !story.isError && (Array.isArray(story.data?.events) || story.fetchStatus === 'fetching')
+  // Without a story the drawer opens on Details, as it always has.
+  const shownView: TaskView = view === 'story' && !storyAvailable ? 'details' : view
   const panelRef = useRef<HTMLDivElement>(null)
   const open = task !== null
   const people = task ? builderAndReviewer(task) : { builder: null, reviewer: null }
@@ -567,11 +595,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         </button>
       </div>
 
-      {storyAvailable && (
-        <div className="shrink-0 px-6 pt-3" data-testid={`task-drawer-views-${task.id}`}>
-          <ViewSwitch view={view} onChange={setView} taskId={task.id} />
-        </div>
-      )}
+      <div className="shrink-0 px-6 pt-3" data-testid={`task-drawer-views-${task.id}`}>
+        <ViewSwitch view={shownView} onChange={setView} taskId={task.id} withStory={storyAvailable} />
+      </div>
 
       {/* The scrolling region. Deliberately the only element in this panel with `overflow: auto` —
           everything above and below it is `shrink-0`, so a long description or many chips scrolls
@@ -588,13 +614,15 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         {/* Where the failure is read is where it is acted on (F823): the card behind this panel
             carried the only Try again. Above both views, so Story and Details offer it alike. */}
         <TaskIntegrationNote taskId={task.id} status={task.status} />
-        {storyAvailable && view === 'story' ? (
+        {shownView === 'story' ? (
           <TaskStory taskId={task.id} />
-        ) : storyAvailable && view === 'work' ? (
-          <TaskWorkView
+        ) : shownView === 'work' ? (
+          <WorkView
             task={task}
+            documentPathById={documentPathById}
             checks={latestChecks}
             onRerunChecks={() => rerunChecks.mutate()}
+            canOpenRequirement={(link) => Boolean(onOpenRequirement && documentPathById.get(link.document_id))}
             onOpenRequirement={
               onOpenRequirement
                 ? (link) => {
@@ -606,12 +634,495 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           />
         ) : (
         <>
+        {/* Inline rather than a second modal: the drawer closes on a click outside its panel
+            and on Escape, and a nested dialog would take both with it. */}
+        {confirmingDelete && (
+          <div
+            data-testid={`task-delete-confirm-${task.id}`}
+            className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded px-2 py-1.5 text-[11px]"
+            style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+            // Escape cancels the confirm and only the confirm: it says it answered the key, so the
+            // drawer's own handler (a bubble-phase listener on `document`) stands down, as the
+            // blocking-reason field does. Focus goes back to Delete (F1030).
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return
+              event.preventDefault()
+              setConfirmingDelete(false)
+              deleteButtonRef.current?.focus()
+            }}
+          >
+            <span className="flex-1">
+              Delete this task? Its own prerequisites, links, transitions and evidence go with it.
+              This cannot be undone.
+              {/* F825: deleting a prerequisite frees whatever waited on it, so the confirm names it. */}
+              {(task.dependents ?? []).length > 0 && (
+                <span data-testid={`task-delete-releases-${task.id}`} className="block mt-1">
+                  {(task.dependents ?? []).length === 1
+                    ? '1 task waits on this one: '
+                    : `${(task.dependents ?? []).length} tasks wait on this one: `}
+                  {(task.dependents ?? []).map((d) => d.title).join(', ')} — they will be free to
+                  start.
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              ref={cancelDeleteRef}
+              className="px-2 py-0.5 rounded hover:bg-[var(--row-hover)]"
+              onClick={() => setConfirmingDelete(false)}
+              disabled={deleteTask.isPending}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-testid="delete-confirm"
+              className="px-2 py-0.5 rounded"
+              style={{ color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 40%, transparent)' }}
+              disabled={deleteTask.isPending}
+              onClick={() =>
+                deleteTask.mutate(
+                  { id: task.id },
+                  {
+                    onSuccess: () => {
+                      setConfirmingDelete(false)
+                      onClose()
+                    },
+                    onError: (error: unknown) => {
+                      setConfirmingDelete(false)
+                      setRefusal(readableApiError(error, 'The Hub refused to delete this task.'))
+                    },
+                  },
+                )
+              }
+            >
+              {deleteTask.isPending ? 'Deleting…' : 'Delete task'}
+            </button>
+          </div>
+        )}
+
+        {/* Naming what a hand-set block waits for. Required by the Hub, so the control collects it
+            rather than sending a status that would be refused. */}
+        {blockingReason !== null && (
+          <div
+            data-testid={`task-block-reason-${task.id}`}
+            className="rounded px-2 py-1.5"
+            style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}
+          >
+            <label className="text-[11px]" style={{ color: 'var(--text-2)' }}>
+              What is this waiting for?
+            </label>
+            <input
+              ref={blockingReasonRef}
+              value={blockingReason}
+              onChange={(e) => setBlockingReason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  // Say we answered the key. The drawer's Escape handler is a bubble-phase listener
+                  // on `document` (`useDialogFocus`) and would otherwise close the whole ticket as
+                  // well: one Escape has to undo one thing — abandoning this reason — not two.
+                  e.preventDefault()
+                  setBlockingReason(null)
+                }
+              }}
+              placeholder="e.g. the staging API key"
+              className="mt-1 w-full rounded px-2 py-1 text-xs"
+              style={{
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                color: 'var(--text)',
+              }}
+            />
+            <div className="mt-1.5 flex items-center gap-2">
+              <button
+                data-testid={`task-block-confirm-${task.id}`}
+                // F315: the write and the refetch behind it take a second or two, and a second
+                // press in that window wrote the same move again. Pending, it says so and refuses.
+                disabled={!blockingReason.trim() || updateTask.isPending}
+                aria-busy={updateTask.isPending}
+                onClick={() => {
+                  const reason = blockingReason.trim()
+                  if (!reason) return
+                  setRefusal(null)
+                  updateTask.mutate(
+                    { id: task.id, status: 'blocked', blocked_reason: reason },
+                    {
+                      onSuccess: () => setBlockingReason(null),
+                      onError: (error: unknown) =>
+                        setRefusal(readableApiError(error, 'The Hub refused this change.')),
+                    },
+                  )
+                }}
+                className="rounded px-2 py-0.5 text-[11px]"
+                style={{
+                  background: blockingReason.trim() ? blockedAccent : 'var(--surface-3)',
+                  color: blockingReason.trim() ? 'var(--bg)' : 'var(--text-3)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {updateTask.isPending ? 'Marking waiting…' : 'Mark waiting'}
+              </button>
+              <button
+                onClick={() => setBlockingReason(null)}
+                className="text-[11px]"
+                style={{ color: 'var(--text-3)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* A refused move. The Hub's detail names the current status and what is reachable from
+            it, so it is shown as written rather than replaced with a generic failure — a board
+            that offered a move which has since become illegal should say which, not just "error". */}
+        {refusal && (
+          <p
+            data-testid={`task-status-refusal-${task.id}`}
+            className="text-[11px] p-2 rounded whitespace-pre-line"
+            style={{
+              color: 'var(--amber)',
+              background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
+            }}
+          >
+            {refusal}
+          </p>
+        )}
+        {refusal && refusalBody && task.status === 'completed' && (
+          <LandingRemedies taskId={task.id} body={refusalBody} />
+        )}
+        {closing && taskMoves?.closes?.includes(closing) && (
+          <CloseForm
+            key={closing}
+            taskIds={[task.id]}
+            outcomes={[closing]}
+            onDone={() => setClosing(null)}
+            onDismiss={() => setClosing(null)}
+          />
+        )}
+        {pickingReviewer && task.status === 'completed' && (
+          <div
+            data-testid={`task-review-picker-${task.id}`}
+            className="flex flex-wrap items-center gap-2 text-[11px]"
+          >
+            <span style={{ color: 'var(--text-2)' }}>Who reviews it?</span>
+            {(taskMoves?.reviewers ?? []).map((name) => (
+              <button
+                key={name}
+                type="button"
+                data-testid={`task-review-pick-${name}`}
+                disabled={updateTask.isPending}
+                className="px-2 py-0.5 rounded"
+                style={{ border: '1px solid var(--border)' }}
+                onClick={() =>
+                  updateTask.mutate(
+                    { id: task.id, status: 'under_review', assignee: name },
+                    {
+                      onSuccess: () => setPickingReviewer(false),
+                      onError: (error: unknown) =>
+                        setRefusal(readableApiError(error, 'The Hub refused this change.')),
+                    },
+                  )
+                }
+              >
+                {name}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="text-[11px]"
+              style={{ color: 'var(--text-3)' }}
+              onClick={() => setPickingReviewer(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {refusal && checksOverride && task.status === 'completed' && (
+          <div className="flex items-center gap-2 text-[11px]">
+            <input
+              aria-label="Why land over the failing checks"
+              value={overrideReason}
+              onChange={(event) => setOverrideReason(event.target.value)}
+              placeholder="Why land anyway (recorded with the approval)"
+              className="control-field flex-1 px-2 py-1"
+            />
+            <button
+              type="button"
+              data-testid={`task-land-anyway-${task.id}`}
+              disabled={!overrideReason.trim() || landTask.isPending}
+              title={overrideReason.trim() ? undefined : 'Say why you are landing over the failing checks first'}
+              className="px-2 py-0.5 rounded"
+              style={{
+                color: 'var(--amber)',
+                border: '1px solid color-mix(in srgb, var(--amber) 35%, transparent)',
+                ...(!overrideReason.trim() || landTask.isPending ? DISABLED_LOOK : {}),
+              }}
+              onClick={() =>
+                landTask.mutate(
+                  { id: task.id, override_checks_reason: overrideReason.trim() },
+                  {
+                    onSuccess: (landed) => {
+                      setRefusal(null)
+                      setChecksOverride(false)
+                      setApprovalReport(landed.approval_report ?? [])
+                    },
+                    onError: (error: unknown) => {
+                      const body = gateBodyOf(error)
+                      setRefusal(readableApiError(error, 'The Hub refused this landing.'))
+                      setRefusalBody(body)
+                      setChecksOverride(body ? overrideOffered(body) : false)
+                    },
+                  },
+                )
+              }
+            >
+              Land anyway
+            </button>
+          </div>
+        )}
+
+        {approvalReport.length > 0 && (
+          <ApprovalReport taskId={task.id} entries={approvalReport} />
+        )}
+
+        {/* F60: the record that this work went ahead without an answer. Above the description
+            because it changes how everything below it should be read. */}
+        {/* fix-D14 (F659): on an approved task the decision is history: one line. */}
+        {task.proceeded_without_answer_reason && task.status === 'approved' && (
+          <p
+            data-testid={`task-proceeded-history-detail-${task.id}`}
+            className="text-[11px]"
+            style={{ color: 'var(--text-3)' }}
+          >
+            Earlier, decided without you:{' '}
+            {task.proceeded_without_answer_reason.replace(/^Proceeded without your answer:\s*/, '')}
+          </p>
+        )}
+        {task.proceeded_without_answer_reason && task.status !== 'approved' && (
+          <div
+            data-testid={`task-proceeded-detail-${task.id}`}
+            className="text-[11px] p-2 rounded"
+            style={{
+              color: 'var(--text-2)',
+              background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
+            }}
+          >
+            <p className="font-medium" style={{ color: 'var(--amber)' }}>Decided without you</p>
+            <p className="mt-0.5">{task.proceeded_without_answer_reason}</p>
+          </div>
+        )}
+
+        {/* Full description */}
+        {task.description && (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Description</p>
+            <p
+              className="text-[12.5px] leading-relaxed p-3 rounded"
+              style={{ color: 'var(--text)', background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}
+            >
+              {task.description}
+            </p>
+          </div>
+        )}
+
+        {/* What this task waits on. The Hub has always been able to record "B needs A"
+            (`POST /tasks/{id}/dependencies`); this is the only place on screen that reaches it.
+            The picker offers every other task that is not already a prerequisite — the ones that
+            would form a cycle included, because the Hub is what knows and its refusal sentence is
+            shown below the control (`design.md` D5, decision night-1010-4), not a guess made here
+            that hides a candidate without saying why. */}
+        <div data-testid={`task-dependencies-${task.id}`}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Waits on</p>
+          {(task.prerequisites ?? []).length === 0 ? (
+            <p
+              className="text-[12.5px]"
+              style={{ color: 'var(--text-3)' }}
+              data-testid={`task-dependencies-empty-${task.id}`}
+            >
+              This task depends on nothing.
+            </p>
+          ) : (
+            <ul className="aw-tview-deps">
+              {(task.prerequisites ?? []).map((prerequisite) => (
+                <li
+                  key={prerequisite.id}
+                  className="aw-tview-dep"
+                  data-testid={`task-dependency-${task.id}-${prerequisite.id}`}
+                >
+                  <Icon name={prerequisite.status === 'approved' ? 'circle_check_big' : 'circle_dashed'} size={13} />
+                  <code className="aw-tcard-id">{prerequisite.readable_id ?? prerequisite.id}</code>
+                  <span className="flex-1 min-w-0 truncate">{prerequisite.title}</span>
+                  <span className="aw-tview-dep-status">{prerequisite.status.replace(/_/g, ' ')}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove prerequisite ${prerequisite.title}`}
+                    data-testid={`task-dependency-remove-${task.id}-${prerequisite.id}`}
+                    disabled={removeDependency.isPending}
+                    onClick={() => {
+                      setDependencyRefusal(null)
+                      removeDependency.mutate(
+                        { id: task.id, dependsOn: prerequisite.id },
+                        {
+                          onError: (error) =>
+                            setDependencyRefusal(
+                              readableApiError(error, 'The Hub could not remove that prerequisite.'),
+                            ),
+                        },
+                      )
+                    }}
+                    style={{ color: 'var(--text-3)' }}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-2 flex items-center gap-2">
+            <select
+              aria-label="Add a prerequisite"
+              data-testid={`task-dependency-picker-${task.id}`}
+              value={pickedPrerequisite}
+              onChange={(event) => setPickedPrerequisite(event.target.value)}
+              className="text-[12.5px] min-w-0 flex-1"
+              style={{ background: 'var(--surface-2)', color: 'var(--text)', borderRadius: 6, padding: '4px 6px' }}
+            >
+              <option value="">Choose a task…</option>
+              {(taskPage?.tasks ?? [])
+                .filter(
+                  (candidate) =>
+                    candidate.id !== task.id &&
+                    !(task.prerequisites ?? []).some((p) => p.id === candidate.id),
+                )
+                .map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.title} ({candidate.readable_id ?? candidate.id})
+                  </option>
+                ))}
+            </select>
+            <button
+              type="button"
+              data-testid={`task-dependency-add-${task.id}`}
+              disabled={!pickedPrerequisite || addDependency.isPending}
+              onClick={() => {
+                setDependencyRefusal(null)
+                addDependency.mutate(
+                  { id: task.id, dependsOn: pickedPrerequisite },
+                  {
+                    onSuccess: () => setPickedPrerequisite(''),
+                    onError: (error) =>
+                      setDependencyRefusal(
+                        readableApiError(error, 'The Hub refused that prerequisite.'),
+                      ),
+                  },
+                )
+              }}
+              className="text-[12.5px] font-medium"
+              style={{ color: 'var(--accent)' }}
+            >
+              Add
+            </button>
+          </div>
+          {taskPageError && (
+            <p
+              role="alert"
+              className="text-[11px] mt-1"
+              style={{ color: 'var(--red)' }}
+              data-testid={`task-dependency-picker-error-${task.id}`}
+            >
+              {readableApiError(taskPageError, "The project's tasks could not be read, so none can be offered.")}
+            </p>
+          )}
+          {dependencyRefusal && (
+            <p
+              role="alert"
+              className="text-[11px] mt-1"
+              style={{ color: 'var(--red)' }}
+              data-testid={`task-dependency-refusal-${task.id}`}
+            >
+              {dependencyRefusal}
+            </p>
+          )}
+          {(task.dependents ?? []).length > 0 ? (
+            <div className="mt-3" data-testid={`task-dependents-${task.id}`}>
+              <p className="text-[11px] mb-1" style={{ color: 'var(--text-2)' }}>Needed by</p>
+              <ul className="aw-tview-deps">
+                {(task.dependents ?? []).map((dependent) => (
+                  <li key={dependent.id} className="aw-tview-dep">
+                    <Icon name={dependent.status === 'approved' ? 'circle_check_big' : 'circle_dashed'} size={13} />
+                    <code className="aw-tcard-id">{dependent.readable_id ?? dependent.id}</code>
+                    <span className="flex-1 min-w-0 truncate">{dependent.title}</span>
+                    <span className="aw-tview-dep-status">{dependent.status.replace(/_/g, ' ')}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+
+        {/* References that named no requirement this project has. Shown rather than dropped:
+            a task that quietly lost a reference is the failure the links exist to prevent. */}
+        {task.unresolved_requirements && task.unresolved_requirements.length > 0 && (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Unresolved</p>
+            <ul className="text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text-3)' }}>
+              {task.unresolved_requirements.map((item) => (
+                <li key={item.reference}>
+                  {item.reference} — {item.reason}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Requirements, as the caller wrote them */}
+        {task.requirements && task.requirements.length > 0 && (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Requirements (as written)</p>
+            <ul className="list-disc list-inside text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
+              {task.requirements.map((req, i) => (
+                <li key={i}>{req}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Deliverables */}
+        {task.deliverables && task.deliverables.length > 0 && (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Deliverables</p>
+            <ul className="list-disc list-inside text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
+              {task.deliverables.map((deliverable, i) => (
+                <li key={i}>{deliverable}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Notes */}
+        {task.notes && (
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Notes</p>
+            <p
+              className="text-[12.5px] leading-relaxed p-3 rounded"
+              style={{ color: 'var(--text)', background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}
+            >
+              {task.notes}
+            </p>
+          </div>
+        )}
+
+        <div className="aw-tview-section" data-testid={`task-facts-${task.id}`}>
+          <header><h3>Facts</h3></header>
         {/* The ticket's own facts, together. The card carried status, priority, assignee, agent
             state and age; this panel showed none of them and offered only a bare "…" menu, so
             opening a ticket lost information rather than gaining it — exactly backwards for the
             surface with the most room. */}
         <div
-          className="task-detail-facts grid gap-x-6 gap-y-4 p-3"
+          className="aw-tview-facts-grid"
           style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
         >
           <Field label="Status">
@@ -925,540 +1436,11 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             </Field>
           )}
         </div>
-        {/* Inline rather than a second modal: the drawer closes on a click outside its panel
-            and on Escape, and a nested dialog would take both with it. */}
-        {confirmingDelete && (
-          <div
-            data-testid={`task-delete-confirm-${task.id}`}
-            className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded px-2 py-1.5 text-[11px]"
-            style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
-            // Escape cancels the confirm and only the confirm: it says it answered the key, so the
-            // drawer's own handler (a bubble-phase listener on `document`) stands down, as the
-            // blocking-reason field does. Focus goes back to Delete (F1030).
-            onKeyDown={(event) => {
-              if (event.key !== 'Escape') return
-              event.preventDefault()
-              setConfirmingDelete(false)
-              deleteButtonRef.current?.focus()
-            }}
-          >
-            <span className="flex-1">
-              Delete this task? Its own prerequisites, links, transitions and evidence go with it.
-              This cannot be undone.
-              {/* F825: deleting a prerequisite frees whatever waited on it, so the confirm names it. */}
-              {(task.dependents ?? []).length > 0 && (
-                <span data-testid={`task-delete-releases-${task.id}`} className="block mt-1">
-                  {(task.dependents ?? []).length === 1
-                    ? '1 task waits on this one: '
-                    : `${(task.dependents ?? []).length} tasks wait on this one: `}
-                  {(task.dependents ?? []).map((d) => d.title).join(', ')} — they will be free to
-                  start.
-                </span>
-              )}
-            </span>
-            <button
-              type="button"
-              ref={cancelDeleteRef}
-              className="px-2 py-0.5 rounded hover:bg-[var(--row-hover)]"
-              onClick={() => setConfirmingDelete(false)}
-              disabled={deleteTask.isPending}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              data-testid="delete-confirm"
-              className="px-2 py-0.5 rounded"
-              style={{ color: 'var(--red)', border: '1px solid color-mix(in srgb, var(--red) 40%, transparent)' }}
-              disabled={deleteTask.isPending}
-              onClick={() =>
-                deleteTask.mutate(
-                  { id: task.id },
-                  {
-                    onSuccess: () => {
-                      setConfirmingDelete(false)
-                      onClose()
-                    },
-                    onError: (error: unknown) => {
-                      setConfirmingDelete(false)
-                      setRefusal(readableApiError(error, 'The Hub refused to delete this task.'))
-                    },
-                  },
-                )
-              }
-            >
-              {deleteTask.isPending ? 'Deleting…' : 'Delete task'}
-            </button>
-          </div>
-        )}
-
-        {/* Naming what a hand-set block waits for. Required by the Hub, so the control collects it
-            rather than sending a status that would be refused. */}
-        {blockingReason !== null && (
-          <div
-            data-testid={`task-block-reason-${task.id}`}
-            className="rounded px-2 py-1.5"
-            style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}
-          >
-            <label className="text-[11px]" style={{ color: 'var(--text-2)' }}>
-              What is this waiting for?
-            </label>
-            <input
-              ref={blockingReasonRef}
-              value={blockingReason}
-              onChange={(e) => setBlockingReason(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  // Say we answered the key. The drawer's Escape handler is a bubble-phase listener
-                  // on `document` (`useDialogFocus`) and would otherwise close the whole ticket as
-                  // well: one Escape has to undo one thing — abandoning this reason — not two.
-                  e.preventDefault()
-                  setBlockingReason(null)
-                }
-              }}
-              placeholder="e.g. the staging API key"
-              className="mt-1 w-full rounded px-2 py-1 text-xs"
-              style={{
-                background: 'var(--surface-2)',
-                border: '1px solid var(--border)',
-                color: 'var(--text)',
-              }}
-            />
-            <div className="mt-1.5 flex items-center gap-2">
-              <button
-                data-testid={`task-block-confirm-${task.id}`}
-                // F315: the write and the refetch behind it take a second or two, and a second
-                // press in that window wrote the same move again. Pending, it says so and refuses.
-                disabled={!blockingReason.trim() || updateTask.isPending}
-                aria-busy={updateTask.isPending}
-                onClick={() => {
-                  const reason = blockingReason.trim()
-                  if (!reason) return
-                  setRefusal(null)
-                  updateTask.mutate(
-                    { id: task.id, status: 'blocked', blocked_reason: reason },
-                    {
-                      onSuccess: () => setBlockingReason(null),
-                      onError: (error: unknown) =>
-                        setRefusal(readableApiError(error, 'The Hub refused this change.')),
-                    },
-                  )
-                }}
-                className="rounded px-2 py-0.5 text-[11px]"
-                style={{
-                  background: blockingReason.trim() ? blockedAccent : 'var(--surface-3)',
-                  color: blockingReason.trim() ? 'var(--bg)' : 'var(--text-3)',
-                  border: '1px solid var(--border)',
-                }}
-              >
-                {updateTask.isPending ? 'Marking waiting…' : 'Mark waiting'}
-              </button>
-              <button
-                onClick={() => setBlockingReason(null)}
-                className="text-[11px]"
-                style={{ color: 'var(--text-3)' }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* A refused move. The Hub's detail names the current status and what is reachable from
-            it, so it is shown as written rather than replaced with a generic failure — a board
-            that offered a move which has since become illegal should say which, not just "error". */}
-        {refusal && (
-          <p
-            data-testid={`task-status-refusal-${task.id}`}
-            className="text-[11px] p-2 rounded whitespace-pre-line"
-            style={{
-              color: 'var(--amber)',
-              background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
-            }}
-          >
-            {refusal}
-          </p>
-        )}
-        {refusal && refusalBody && task.status === 'completed' && (
-          <LandingRemedies taskId={task.id} body={refusalBody} />
-        )}
-        {closing && taskMoves?.closes?.includes(closing) && (
-          <CloseForm
-            key={closing}
-            taskIds={[task.id]}
-            outcomes={[closing]}
-            onDone={() => setClosing(null)}
-            onDismiss={() => setClosing(null)}
-          />
-        )}
-        {pickingReviewer && task.status === 'completed' && (
-          <div
-            data-testid={`task-review-picker-${task.id}`}
-            className="flex flex-wrap items-center gap-2 text-[11px]"
-          >
-            <span style={{ color: 'var(--text-2)' }}>Who reviews it?</span>
-            {(taskMoves?.reviewers ?? []).map((name) => (
-              <button
-                key={name}
-                type="button"
-                data-testid={`task-review-pick-${name}`}
-                disabled={updateTask.isPending}
-                className="px-2 py-0.5 rounded"
-                style={{ border: '1px solid var(--border)' }}
-                onClick={() =>
-                  updateTask.mutate(
-                    { id: task.id, status: 'under_review', assignee: name },
-                    {
-                      onSuccess: () => setPickingReviewer(false),
-                      onError: (error: unknown) =>
-                        setRefusal(readableApiError(error, 'The Hub refused this change.')),
-                    },
-                  )
-                }
-              >
-                {name}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="text-[11px]"
-              style={{ color: 'var(--text-3)' }}
-              onClick={() => setPickingReviewer(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-        {refusal && checksOverride && task.status === 'completed' && (
-          <div className="flex items-center gap-2 text-[11px]">
-            <input
-              aria-label="Why land over the failing checks"
-              value={overrideReason}
-              onChange={(event) => setOverrideReason(event.target.value)}
-              placeholder="Why land anyway (recorded with the approval)"
-              className="control-field flex-1 px-2 py-1"
-            />
-            <button
-              type="button"
-              data-testid={`task-land-anyway-${task.id}`}
-              disabled={!overrideReason.trim() || landTask.isPending}
-              title={overrideReason.trim() ? undefined : 'Say why you are landing over the failing checks first'}
-              className="px-2 py-0.5 rounded"
-              style={{
-                color: 'var(--amber)',
-                border: '1px solid color-mix(in srgb, var(--amber) 35%, transparent)',
-                ...(!overrideReason.trim() || landTask.isPending ? DISABLED_LOOK : {}),
-              }}
-              onClick={() =>
-                landTask.mutate(
-                  { id: task.id, override_checks_reason: overrideReason.trim() },
-                  {
-                    onSuccess: (landed) => {
-                      setRefusal(null)
-                      setChecksOverride(false)
-                      setApprovalReport(landed.approval_report ?? [])
-                    },
-                    onError: (error: unknown) => {
-                      const body = gateBodyOf(error)
-                      setRefusal(readableApiError(error, 'The Hub refused this landing.'))
-                      setRefusalBody(body)
-                      setChecksOverride(body ? overrideOffered(body) : false)
-                    },
-                  },
-                )
-              }
-            >
-              Land anyway
-            </button>
-          </div>
-        )}
-
-        {approvalReport.length > 0 && (
-          <ApprovalReport taskId={task.id} entries={approvalReport} />
-        )}
-
-        {/* F60: the record that this work went ahead without an answer. Above the description
-            because it changes how everything below it should be read. */}
-        {/* fix-D14 (F659): on an approved task the decision is history: one line. */}
-        {task.proceeded_without_answer_reason && task.status === 'approved' && (
-          <p
-            data-testid={`task-proceeded-history-detail-${task.id}`}
-            className="text-[11px]"
-            style={{ color: 'var(--text-3)' }}
-          >
-            Earlier, decided without you:{' '}
-            {task.proceeded_without_answer_reason.replace(/^Proceeded without your answer:\s*/, '')}
-          </p>
-        )}
-        {task.proceeded_without_answer_reason && task.status !== 'approved' && (
-          <div
-            data-testid={`task-proceeded-detail-${task.id}`}
-            className="text-[11px] p-2 rounded"
-            style={{
-              color: 'var(--text-2)',
-              background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
-            }}
-          >
-            <p className="font-medium" style={{ color: 'var(--amber)' }}>Decided without you</p>
-            <p className="mt-0.5">{task.proceeded_without_answer_reason}</p>
-          </div>
-        )}
-
-        {/* Full description */}
-        {task.description && (
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Description</p>
-            <p
-              className="text-[12.5px] leading-relaxed p-3 rounded"
-              style={{ color: 'var(--text)', background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}
-            >
-              {task.description}
-            </p>
-          </div>
-        )}
-
-        {/* What this task waits on. The Hub has always been able to record "B needs A"
-            (`POST /tasks/{id}/dependencies`); this is the only place on screen that reaches it.
-            The picker offers every other task that is not already a prerequisite — the ones that
-            would form a cycle included, because the Hub is what knows and its refusal sentence is
-            shown below the control (`design.md` D5, decision night-1010-4), not a guess made here
-            that hides a candidate without saying why. */}
-        <div data-testid={`task-dependencies-${task.id}`}>
-          <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Depends on</p>
-          {(task.prerequisites ?? []).length === 0 ? (
-            <p
-              className="text-[12.5px]"
-              style={{ color: 'var(--text-3)' }}
-              data-testid={`task-dependencies-empty-${task.id}`}
-            >
-              This task depends on nothing.
-            </p>
-          ) : (
-            <ul className="text-[12.5px] space-y-1" style={{ color: 'var(--text)' }}>
-              {(task.prerequisites ?? []).map((prerequisite) => (
-                <li
-                  key={prerequisite.id}
-                  className="flex items-center gap-2"
-                  data-testid={`task-dependency-${task.id}-${prerequisite.id}`}
-                >
-                  <span className="flex-1 min-w-0 truncate">{prerequisite.title}</span>
-                  <code className="text-[11px]" style={{ color: 'var(--text-3)' }}>{prerequisite.readable_id ?? prerequisite.id}</code>
-                  <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                    {prerequisite.status.replace(/_/g, ' ')}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Remove prerequisite ${prerequisite.title}`}
-                    data-testid={`task-dependency-remove-${task.id}-${prerequisite.id}`}
-                    disabled={removeDependency.isPending}
-                    onClick={() => {
-                      setDependencyRefusal(null)
-                      removeDependency.mutate(
-                        { id: task.id, dependsOn: prerequisite.id },
-                        {
-                          onError: (error) =>
-                            setDependencyRefusal(
-                              readableApiError(error, 'The Hub could not remove that prerequisite.'),
-                            ),
-                        },
-                      )
-                    }}
-                    style={{ color: 'var(--text-3)' }}
-                  >
-                    <Icon name="close" size={14} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="mt-2 flex items-center gap-2">
-            <select
-              aria-label="Add a prerequisite"
-              data-testid={`task-dependency-picker-${task.id}`}
-              value={pickedPrerequisite}
-              onChange={(event) => setPickedPrerequisite(event.target.value)}
-              className="text-[12.5px] min-w-0 flex-1"
-              style={{ background: 'var(--surface-2)', color: 'var(--text)', borderRadius: 6, padding: '4px 6px' }}
-            >
-              <option value="">Choose a task…</option>
-              {(taskPage?.tasks ?? [])
-                .filter(
-                  (candidate) =>
-                    candidate.id !== task.id &&
-                    !(task.prerequisites ?? []).some((p) => p.id === candidate.id),
-                )
-                .map((candidate) => (
-                  <option key={candidate.id} value={candidate.id}>
-                    {candidate.title} ({candidate.readable_id ?? candidate.id})
-                  </option>
-                ))}
-            </select>
-            <button
-              type="button"
-              data-testid={`task-dependency-add-${task.id}`}
-              disabled={!pickedPrerequisite || addDependency.isPending}
-              onClick={() => {
-                setDependencyRefusal(null)
-                addDependency.mutate(
-                  { id: task.id, dependsOn: pickedPrerequisite },
-                  {
-                    onSuccess: () => setPickedPrerequisite(''),
-                    onError: (error) =>
-                      setDependencyRefusal(
-                        readableApiError(error, 'The Hub refused that prerequisite.'),
-                      ),
-                  },
-                )
-              }}
-              className="text-[12.5px] font-medium"
-              style={{ color: 'var(--accent)' }}
-            >
-              Add
-            </button>
-          </div>
-          {taskPageError && (
-            <p
-              role="alert"
-              className="text-[11px] mt-1"
-              style={{ color: 'var(--red)' }}
-              data-testid={`task-dependency-picker-error-${task.id}`}
-            >
-              {readableApiError(taskPageError, "The project's tasks could not be read, so none can be offered.")}
-            </p>
-          )}
-          {dependencyRefusal && (
-            <p
-              role="alert"
-              className="text-[11px] mt-1"
-              style={{ color: 'var(--red)' }}
-              data-testid={`task-dependency-refusal-${task.id}`}
-            >
-              {dependencyRefusal}
-            </p>
-          )}
         </div>
-
-        {/* What this task is checked against. `requirements` below is the caller's prose and
-            can say things no identifier can; these are the links the approval gate enforces —
-            unchanged in behaviour from the old inline expansion, per `design.md` D8, except for
-            one addition (6.3): where a link's evidence was rejected, the reason
-            (`latest_rejection_reason`) is shown too — the one place it has ever reached a screen.
-            Driven by `requirement_links` directly, not the card's `requirement_ids`-scoped tally
-            (`useRequirementTallies`) — a link can exist here without being in `requirement_ids`, and
-            this list has always shown every one, same as before this change. */}
-        {task.requirement_links && task.requirement_links.length > 0 && (
-          <div data-testid={`task-serves-${task.id}`}>
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Serves</p>
-            <ul className="text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
-              {task.requirement_links.map((link) => {
-                const documentPath = documentPathById.get(link.document_id)
-                const anchor = link.anchor ? link.anchor.replace(/^#/, '') : link.identifier
-                const clickable = Boolean(onOpenRequirement && documentPath)
-                return (
-                  <li key={link.requirement_id}>
-                    <button
-                      type="button"
-                      disabled={!clickable}
-                      onClick={() => {
-                        if (clickable) onOpenRequirement!(documentPath!, anchor)
-                      }}
-                      style={{
-                        color: 'inherit',
-                        cursor: clickable ? 'pointer' : 'default',
-                        textAlign: 'left',
-                      }}
-                    >
-                      <code className="text-[11px]">{link.identifier}</code>
-                      {link.statement ? ` — ${link.statement}` : null}
-                      {link.state !== 'active' && (
-                        <span className="ml-1 text-[10px]" style={{ color: 'var(--text-3)' }}>
-                          ({link.state})
-                        </span>
-                      )}
-                    </button>
-                    {link.has_rejected_evidence && link.latest_rejection_reason && (
-                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--red)' }}>
-                        Rejected: {link.latest_rejection_reason}
-                      </p>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        )}
-
-        {/* References that named no requirement this project has. Shown rather than dropped:
-            a task that quietly lost a reference is the failure the links exist to prevent. */}
-        {task.unresolved_requirements && task.unresolved_requirements.length > 0 && (
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Unresolved</p>
-            <ul className="text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text-3)' }}>
-              {task.unresolved_requirements.map((item) => (
-                <li key={item.reference}>
-                  {item.reference} — {item.reason}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Requirements, as the caller wrote them */}
-        {task.requirements && task.requirements.length > 0 && (
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Requirements (as written)</p>
-            <ul className="list-disc list-inside text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
-              {task.requirements.map((req, i) => (
-                <li key={i}>{req}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Acceptance Criteria */}
-        {task.acceptance_criteria && task.acceptance_criteria.length > 0 && (
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Acceptance Criteria</p>
-            <ul className="list-disc list-inside text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
-              {task.acceptance_criteria.map((criterion, i) => (
-                <li key={i}>{criterion}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Deliverables */}
-        {task.deliverables && task.deliverables.length > 0 && (
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Deliverables</p>
-            <ul className="list-disc list-inside text-[12.5px] leading-relaxed space-y-1.5" style={{ color: 'var(--text)' }}>
-              {task.deliverables.map((deliverable, i) => (
-                <li key={i}>{deliverable}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Notes */}
-        {task.notes && (
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-3)' }}>Notes</p>
-            <p
-              className="text-[12.5px] leading-relaxed p-3 rounded"
-              style={{ color: 'var(--text)', background: 'var(--surface-3)', whiteSpace: 'pre-wrap' }}
-            >
-              {task.notes}
-            </p>
-          </div>
-        )}
 
         {/* Who moved it, when, and under what policy (F203). Below the task's own fields because
             it answers a question asked after reading them, and above the neglect policy because
             that is a setting rather than a record. */}
-        {/* The project's checks on the work approval would merge, which approval waits for. */}
-        <TaskChecksRow taskId={task.id} />
 
         <TaskTransitionHistory taskId={task.id} open />
 

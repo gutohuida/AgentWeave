@@ -72,12 +72,18 @@ const STATEMENTS = [
   'A task whose latest checks failed shows, before review, a marker on its card naming how many checks failed.',
 ]
 
-function link(identifier: string, statement: string, state: string, rejected?: string): RequirementLink {
+// mock state: a link's own `state` is its lifecycle (active); how its evidence stands is the
+// document's coverage, seeded below. The id carries the coverage state so one fixture document can
+// hold every combination.
+const MOCK_DOCUMENT = { id: 'spdoc-mock', path: 'spec/changes/task-card-and-story-redesign/spec.json' }
+const COVERAGE_STATES = ['verified', 'evidence_awaiting_review', 'rejected', 'in_progress']
+
+function link(identifier: string, statement: string, coverage: string, rejected?: string): RequirementLink {
   return {
     identifier,
-    requirement_id: `req-${identifier}`,
-    document_id: 'spdoc-mock',
-    state,
+    requirement_id: `req-${identifier}-${coverage}`,
+    document_id: MOCK_DOCUMENT.id,
+    state: 'active',
     statement,
     modal: 'MUST',
     has_rejected_evidence: Boolean(rejected),
@@ -257,13 +263,21 @@ export default function TaskRedesign({ now }: ScreenProps) {
     // mock state: the summary's evidence counts follow the task's requirement states.
     const base = storyOf(now, selected.task)
     const links = sheetTask.requirement_links ?? []
-    const count = (state: string) => links.filter((l) => l.state === state).length
+    const count = (state: string) => links.filter((l) => l.requirement_id.endsWith(`-${state}`)).length
     return { ...base, summary: { ...base.summary, evidence: { accepted: count('verified'), rejected: count('rejected'), awaiting: count('evidence_awaiting_review') } } }
   }, [now, selected.task, sheetTask])
   // mock state: today's dialog reads the story and the checks through its hooks; the mock answers
   // from the cache under the same keys (mock/README.md), so the dialog on screen is the real one.
   queryClient.setQueryData(['project', PROJECT_ID, 'tasks', selected.task.id, 'story'], story)
   const checks = checksOf(selected, now)
+  queryClient.setQueryData(['project', PROJECT_ID, 'specDocuments'], {
+    documents: [{ ...MOCK_DOCUMENT, title: 'Task card and story redesign', kind: 'change-spec', phase: 'exploring' }],
+  })
+  queryClient.setQueryData(['project', PROJECT_ID, 'specCoverage', MOCK_DOCUMENT.path], {
+    requirements: ['FR-1', 'FR-2', 'FR-3'].flatMap((identifier) =>
+      COVERAGE_STATES.map((state) => ({ identifier, requirement_id: `req-${identifier}-${state}`, state })),
+    ),
+  })
   queryClient.setQueryData(['project', PROJECT_ID, 'task', selected.task.id, 'checks'], {
     configured: true,
     running: checks?.state === 'running',

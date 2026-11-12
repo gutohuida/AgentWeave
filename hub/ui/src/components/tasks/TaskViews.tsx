@@ -19,9 +19,12 @@ const REQUIREMENT_STATE: Record<string, { glyph: string; word: string; tone: str
   rejected: { glyph: 'error', word: 'Evidence rejected', tone: 'failed' },
 }
 
-function requirementState(link: RequirementLink) {
-  if (link.has_rejected_evidence && link.state !== 'verified') return REQUIREMENT_STATE.rejected
-  return REQUIREMENT_STATE[link.state] ?? { glyph: 'circle_dashed', word: 'No evidence yet', tone: 'idle' }
+/** How a requirement's evidence stands. `coverage` is the requirement's state in its document's
+ *  coverage (the same read the card's tally makes); `link.state` is the requirement's own lifecycle
+ *  (active or retired), never its evidence. */
+function requirementState(link: RequirementLink, coverage: string | undefined) {
+  if (link.has_rejected_evidence && coverage !== 'verified') return REQUIREMENT_STATE.rejected
+  return (coverage ? REQUIREMENT_STATE[coverage] : undefined) ?? { glyph: 'circle_dashed', word: 'No evidence yet', tone: 'idle' }
 }
 
 function isFailure(result: TaskCheckResult): boolean {
@@ -36,39 +39,53 @@ export function TaskWorkView({
   checks,
   now,
   onRerunChecks,
+  coverage,
   onOpenRequirement,
+  canOpenRequirement,
 }: {
   task: Task
   checks: TaskCheckRun | null
   now?: Date
   onRerunChecks?: () => void
+  /** Each requirement's state in its document's coverage, by requirement id. */
+  coverage?: ReadonlyMap<string, string>
   /** Opens the requirement in its document; absent, the identifier is plain text. */
   onOpenRequirement?: (link: RequirementLink) => void
+  /** Whether a requirement resolves to a document it can open in; one that does not is disabled. */
+  canOpenRequirement?: (link: RequirementLink) => boolean
 }) {
   const links = task.requirement_links ?? []
   const criteria = task.acceptance_criteria ?? []
   return (
     <div className="aw-tview-sections">
-      <Section testId={`task-serves-${task.id}`} title="Requirements" aside={links.length ? `${links.filter((l) => l.state === 'verified').length} of ${links.length} accepted` : undefined}>
+      <Section testId={`task-serves-${task.id}`} title="Requirements" aside={links.length ? `${links.filter((l) => coverage?.get(l.requirement_id) === 'verified').length} of ${links.length} accepted` : undefined}>
         {links.length === 0 ? (
           <p className="aw-tview-empty">This task serves no requirement.</p>
         ) : (
           <ul className="aw-tview-list">
             {links.map((link) => {
-              const state = requirementState(link)
+              const state = requirementState(link, coverage?.get(link.requirement_id))
               return (
                 <li key={link.requirement_id} className="aw-tview-req" data-tone={state.tone}>
                   <Icon name={state.glyph} size={14} />
                   <div>
                     <span className="aw-tview-req-head">
                       {onOpenRequirement ? (
-                        <button type="button" data-slot="requirement-link" className="aw-tcard-id aw-tview-req-link" onClick={() => onOpenRequirement(link)} title="Open it in its document">
+                        <button
+                          type="button"
+                          data-slot="requirement-link"
+                          className="aw-tcard-id aw-tview-req-link"
+                          disabled={canOpenRequirement ? !canOpenRequirement(link) : false}
+                          onClick={() => onOpenRequirement(link)}
+                          title="Open it in its document"
+                        >
                           {link.identifier}
                         </button>
                       ) : (
                         <span className="aw-tcard-id">{link.identifier}</span>
                       )}
                       <span className="aw-tview-req-state">{state.word}</span>
+                      {link.state !== 'active' ? <span className="aw-tview-req-life">({link.state})</span> : null}
                     </span>
                     {link.statement ? <p className="aw-tview-req-text">{link.statement}</p> : null}
                     {link.has_rejected_evidence && link.latest_rejection_reason ? <p className="aw-tview-req-why">{link.latest_rejection_reason}</p> : null}
