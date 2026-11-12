@@ -17,6 +17,8 @@ import { useDocumentTasks } from '@/api/tasks'
 import { useCheckVaultWarnings, useVaultChecked, useVaultWarnings } from '@/api/vault'
 import { toast } from '@/lib/toast'
 import { SpecApprovalReport } from '../SpecApprovalReport'
+import { CapabilityWaitingList } from '../CapabilityWaitingList'
+import { ChangeCapabilities } from '../ChangeCapabilities'
 import { SpecCoverageBar } from '../SpecCoverageBar'
 import { SpecDriftPanel } from '../SpecDriftPanel'
 import { SpecHealthLine, type HealthFactKey } from '../SpecHealthLine'
@@ -144,6 +146,8 @@ export function SpecDocumentFacts({
 
   return (
     <div data-testid="spec-document-facts" className={inHeader ? 'aw-sp-head-facts' : undefined}>
+      {record?.kind === 'change-spec' ? <ChangeCapabilities record={record} /> : null}
+      {record?.kind === 'capability' ? <CapabilityWaitingList record={record} /> : null}
       {record?.acronym ? <AcronymEditor path={path} acronym={record.acronym} /> : null}
       {unread ? (
         <p className="aw-spec-message" data-tone="warn" data-testid="spec-facts-unread">

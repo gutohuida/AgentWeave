@@ -114,7 +114,7 @@ describe('folding a finished change', () => {
     ]
     renderBar()
     await userEvent.click(screen.getByTestId('fold-open'))
-    const offered = Array.from(screen.getByTestId('fold-capability').querySelectorAll('option')).map(
+    const offered = Array.from(screen.getByTestId('fold-target').querySelectorAll('option')).map(
       (option) => option.textContent,
     )
     expect(offered).toEqual(['Choose…', 'Widgets'])
@@ -129,7 +129,7 @@ describe('folding a finished change', () => {
   it('folds the draft with the operator’s edits and archives by default', async () => {
     renderBar()
     await userEvent.click(screen.getByTestId('fold-open'))
-    await userEvent.selectOptions(screen.getByTestId('fold-capability'), CAP)
+    await userEvent.selectOptions(screen.getByTestId('fold-target'), CAP)
 
     expect(screen.getByTestId('fold-req-key-glow')).toHaveValue('widgets-glow-glow')
     const statement = screen.getByTestId('fold-req-statement-glow')
@@ -153,7 +153,7 @@ describe('folding a finished change', () => {
     draft = { ...(draft as object), collisions: ['widgets-glow-dim'] }
     renderBar()
     await userEvent.click(screen.getByTestId('fold-open'))
-    await userEvent.selectOptions(screen.getByTestId('fold-capability'), CAP)
+    await userEvent.selectOptions(screen.getByTestId('fold-target'), CAP)
 
     expect(screen.getByTestId('fold-req-collision-dim')).toBeInTheDocument()
     expect(screen.getByTestId('fold-confirm')).toBeDisabled()
@@ -172,7 +172,7 @@ describe('folding a finished change', () => {
     )
     renderBar()
     await userEvent.click(screen.getByTestId('fold-open'))
-    await userEvent.selectOptions(screen.getByTestId('fold-capability'), CAP)
+    await userEvent.selectOptions(screen.getByTestId('fold-target'), CAP)
     await userEvent.click(screen.getByTestId('fold-confirm'))
 
     expect(await screen.findByTestId('fold-error')).toHaveTextContent(/open tasks/)
@@ -207,7 +207,7 @@ describe('folding a finished change', () => {
   it('retires what the change supersedes in the same fold (F533)', async () => {
     renderBar()
     await userEvent.click(screen.getByTestId('fold-open'))
-    await userEvent.selectOptions(screen.getByTestId('fold-capability'), CAP)
+    await userEvent.selectOptions(screen.getByTestId('fold-target'), CAP)
     await userEvent.click(screen.getByTestId('fold-retire-toggle'))
     await userEvent.click(screen.getByTestId('fold-retire-req-old-rule'))
     await userEvent.click(screen.getByTestId('fold-retire-crit-exist-c'))
@@ -224,7 +224,7 @@ describe('folding a finished change', () => {
   it('filters what can be retired by text', async () => {
     renderBar()
     await userEvent.click(screen.getByTestId('fold-open'))
-    await userEvent.selectOptions(screen.getByTestId('fold-capability'), CAP)
+    await userEvent.selectOptions(screen.getByTestId('fold-target'), CAP)
     await userEvent.click(screen.getByTestId('fold-retire-toggle'))
     await userEvent.type(screen.getByTestId('fold-retire-filter'), 'never')
 

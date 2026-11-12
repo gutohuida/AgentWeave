@@ -130,7 +130,7 @@ def main():
         page.locator('[data-testid="spec-phase"]').wait_for(timeout=30000)
         try:
             page.locator('[data-testid="fold-open"]').click(timeout=10000)
-            page.locator('[data-testid="fold-capability"]').select_option(CAPABILITY)
+            page.locator('[data-testid="fold-target"]').select_option(CAPABILITY)
             page.locator('[data-testid="fold-req-key-glow"]').wait_for(timeout=10000)
             page.locator('[data-testid="fold-retire-toggle"]').click(timeout=10000)
             page.locator('[data-testid="fold-retire-req-old-rule"]').check()
