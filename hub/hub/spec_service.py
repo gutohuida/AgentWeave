@@ -29,6 +29,7 @@ from . import (
     spec_journey,
     spec_lifecycle,
     spec_naming,
+    spec_tags,
     traces,
 )
 from .db.models import (
@@ -301,6 +302,12 @@ async def _apply_and_write(
     Shared by `save_document` and an accepted or applied amendment (`spec_amendments`), so every
     write gets identity minting, rendering, reindexing and completeness reporting the same way.
     """
+    if payload.tag is not None:
+        try:
+            await spec_tags.claim(session, document, payload.tag)
+        except spec_tags.TagTakenError as exc:
+            raise SaveRefusedError(str(exc), code="tag_taken", field_path="tag") from exc
+
     previous_map, high_water = spec_identity.read_identity(stored_before)
 
     keys = [requirement.key for requirement in payload.requirements]

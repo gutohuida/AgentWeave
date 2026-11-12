@@ -8,7 +8,23 @@ import type { BoardScope } from '@/store/boardScopeStore'
 export interface ScopeSpec {
   id: string
   title: string
-  count: number
+  /** The short tag cards and the list name the spec by. */
+  tag: string
+  /** Tasks of the spec that are not finished. */
+  unfinished: number
+  /** When one of its tasks was last created or moved. */
+  lastActivity: string | null
+}
+
+/** How long ago, in the picker's words: '5 min', '2 h', '3 days'. */
+function sinceLabel(value: string, now: Date = new Date()): string {
+  const minutes = Math.max(0, (now.getTime() - new Date(value).getTime()) / 60_000)
+  if (minutes < 1) return 'now'
+  if (minutes < 60) return `${Math.round(minutes)} min`
+  const hours = minutes / 60
+  if (hours < 24) return `${Math.round(hours)} h`
+  const days = Math.round(hours / 24)
+  return `${days} ${days === 1 ? 'day' : 'days'}`
 }
 
 interface Option {
@@ -16,6 +32,9 @@ interface Option {
   label: string
   count: number | null
   scope: BoardScope
+  /** What a typed search also looks at, besides the label. */
+  title?: string
+  since?: string | null
 }
 
 /** The board's scope control: a button naming the scope that opens a list of All, Building, No spec and the
@@ -59,15 +78,22 @@ export function BoardScopePicker({
     { key: 'none', label: 'No spec', count: noSpecCount, scope: { kind: 'none' } },
     ...specs.map((spec) => ({
       key: spec.id,
-      label: spec.title,
-      count: spec.count,
+      label: spec.tag,
+      title: spec.title,
+      since: spec.lastActivity ? sinceLabel(spec.lastActivity) : null,
+      count: spec.unfinished,
       scope: { kind: 'spec', id: spec.id } as BoardScope,
     })),
   ]
   const typed = filter.trim().toLowerCase()
-  // A typed title looks for a spec: All and No spec are not specs and do not answer to it.
+  // Typed text looks for a spec by its tag or its title: All and No spec are not specs and do not
+  // answer to it. The order is the one given, most recently active first.
   const offered = typed
-    ? options.filter((option) => option.scope.kind === 'spec' && option.label.toLowerCase().includes(typed))
+    ? options.filter(
+        (option) =>
+          option.scope.kind === 'spec' &&
+          (option.label.toLowerCase().includes(typed) || (option.title ?? '').toLowerCase().includes(typed)),
+      )
     : options
 
   return (
@@ -118,7 +144,8 @@ export function BoardScopePicker({
                 onChoose(option.scope)
               }}
             >
-              <span className="truncate">{option.label}</span>
+              <span className="truncate" title={option.title}>{option.label}</span>
+              {option.since ? <span className="aw-board-scope-since" data-testid={`board-scope-since-${option.key}`}>{option.since}</span> : null}
               {option.count !== null ? <span className="aw-filter-chip-count">{option.count}</span> : null}
             </button>
           ))}
