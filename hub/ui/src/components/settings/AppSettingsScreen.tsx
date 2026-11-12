@@ -45,8 +45,8 @@ export function AppSettingsScreen({
   /** The setting the location names, to land on. */
   setting?: string | null
 }) {
-  const { data: windowsKinds } = useWindowsNotifyKinds()
-  const changed = appChangedSections(loadNotifyPrefs(), windowsKinds)
+  const { data: windowsKinds, isError: windowsKindsFailed } = useWindowsNotifyKinds()
+  const changed = windowsKindsFailed ? undefined : appChangedSections(loadNotifyPrefs(), windowsKinds)
   let body: React.ReactNode
   switch (section) {
     case 'notifications':
@@ -77,6 +77,7 @@ export function AppSettingsScreen({
         back={back}
         landing={setting}
         changed={changed}
+        changedUnavailable={windowsKindsFailed}
         items={SECTIONS}
         active={section}
         onSelect={onSelectSection}

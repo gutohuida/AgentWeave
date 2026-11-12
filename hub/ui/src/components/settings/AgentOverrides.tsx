@@ -18,8 +18,9 @@ export type OverriddenSetting = keyof typeof HOLDS
  *  Nothing is drawn when none does. */
 export function AgentOverrides({ setting, section, agentLabel }: { setting: OverriddenSetting; section: AgentSettingsSection; agentLabel: string }) {
   const projectId = useConfigStore((state) => state.selectedProjectId)
-  const { data: agents = [] } = useAgents()
+  const { data: agents = [], isError } = useAgents()
   const holders = agents.filter((agent) => agent.lifecycle !== 'archived' && HOLDS[setting](agent))
+  if (isError) return <p className="aw-settings-row-overrides" data-testid="setting-overrides-unavailable">Agents with their own could not be read.</p>
   if (!projectId || holders.length === 0) return null
   return (
     <p className="aw-settings-row-overrides" data-testid="setting-overrides">

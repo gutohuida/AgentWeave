@@ -69,9 +69,10 @@ export function ProjectSettingsScreen({
   const project = projects.find((item) => item.id === projectId)
   const { data: charters } = useCharters()
   const { data: jobs } = useManagerJobs()
-  const { data: stored } = useProjectSettings(projectId ?? null)
-  const { data: traces } = useTraceSettings()
-  const changed = React.useMemo(() => projectChangedSections(stored, traces), [stored, traces])
+  const { data: stored, isError: storedFailed } = useProjectSettings(projectId ?? null)
+  const { data: traces, isError: tracesFailed } = useTraceSettings()
+  const changedUnavailable = storedFailed || tracesFailed
+  const changed = React.useMemo(() => (changedUnavailable ? undefined : projectChangedSections(stored, traces)), [changedUnavailable, stored, traces])
 
   const meta: Partial<Record<EnvironmentSection, React.ReactNode>> = {
     manager: jobs ? `${jobs.filter((job) => job.enabled).length} on` : undefined,
@@ -123,6 +124,7 @@ export function ProjectSettingsScreen({
         active={section}
         landing={setting}
         changed={changed}
+        changedUnavailable={changedUnavailable}
         onSelect={onSelectSection}
         footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
       >

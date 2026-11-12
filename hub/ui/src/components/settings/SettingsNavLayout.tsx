@@ -35,6 +35,7 @@ export function SettingsNavLayout<T extends string>({
   agent,
   landing,
   changed,
+  changedUnavailable,
   children,
 }: {
   title: string
@@ -53,6 +54,8 @@ export function SettingsNavLayout<T extends string>({
   landing?: string | null
   /** The sections holding a value that is not its default; given, the scope offers 'Changed only'. */
   changed?: ReadonlySet<T>
+  /** The query that says which settings are changed failed: say so instead of offering a view that would lie. */
+  changedUnavailable?: boolean
   children: React.ReactNode
 }) {
   const [query, setQuery] = React.useState('')
@@ -85,6 +88,10 @@ export function SettingsNavLayout<T extends string>({
             <Switch size="sm" checked={changedOnly} onCheckedChange={setChangedOnly} aria-label="Changed only" data-testid="changed-only" />
             Changed only
           </label>
+        ) : changedUnavailable ? (
+          <p className="aw-settings-changed-empty" data-testid="changed-unavailable">
+            Changed only is unavailable: the settings could not be read.
+          </p>
         ) : null}
         <ul className="aw-settings-nav-list">
           {shownItems.map((item, index) => (
