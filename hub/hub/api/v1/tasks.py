@@ -20,6 +20,7 @@ from ... import (
     spec_identity,
     spec_lifecycle,
     spec_reading,
+    spec_tags,
     task_dependency_writer,
     task_stage,
 )
@@ -1293,35 +1294,48 @@ async def task_boards(
     """
     project_id, _ = project
     rows = await session.execute(
-        select(Task.spec_document_id, Task.status).where(Task.project_id == project_id)
+        select(Task.spec_document_id, Task.status, Task.created_at, Task.updated).where(
+            Task.project_id == project_id
+        )
     )
     totals: dict[Optional[str], int] = {}
     outstanding: dict[Optional[str], int] = {}
-    for spec_document_id, task_status in rows:
+    last_activity: dict[Optional[str], datetime] = {}
+    for spec_document_id, task_status, created_at, updated in rows:
         totals[spec_document_id] = totals.get(spec_document_id, 0) + 1
         if task_status not in TERMINAL_FOR_BINDING:
             outstanding[spec_document_id] = outstanding.get(spec_document_id, 0) + 1
+        # A task's activity is its creation or its last move, whichever is later.
+        moved = max(created_at, updated)
+        if spec_document_id not in last_activity or moved > last_activity[spec_document_id]:
+            last_activity[spec_document_id] = moved
 
     document_ids = [doc_id for doc_id in totals if doc_id is not None]
     titles: dict[str, str] = {}
+    tags: dict[str, str] = {}
     if document_ids:
         doc_rows = await session.execute(
             select(SpecDocument.id, SpecDocument.title).where(SpecDocument.id.in_(document_ids))
         )
         titles = dict(doc_rows.all())
+        tags = await spec_tags.ensure_tags(session, project_id)
+        await session.commit()
 
     boards = [
         {
             "spec_document_id": doc_id,
             "title": titles.get(doc_id) if doc_id is not None else None,
+            "tag": tags.get(doc_id) if doc_id is not None else None,
             "total": total,
             "outstanding": outstanding.get(doc_id, 0),
+            "last_activity": last_activity[doc_id].isoformat(),
         }
         for doc_id, total in totals.items()
     ]
-    # Documents first (creation order via id is arbitrary; sort by title for a stable picker),
-    # the "no document" board last — it is the overflow bucket D9 describes, not a project.
-    boards.sort(key=lambda board: (board["spec_document_id"] is None, board["title"] or ""))
+    # Documents first, the one whose tasks moved most recently on top, so the picker opens on what
+    # is being worked; the "no document" board last, as the overflow bucket D9 describes.
+    boards.sort(key=lambda board: board["last_activity"], reverse=True)
+    boards.sort(key=lambda board: board["spec_document_id"] is None)
     return {"boards": boards}
 
 

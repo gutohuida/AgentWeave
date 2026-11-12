@@ -401,7 +401,10 @@ def free_targets(from_status: str) -> FrozenSet[str]:
     """Where a free mover (`task_transition_service.is_free_mover`) may move a loose task."""
     if from_status not in TRANSITIONS:
         return frozenset()
-    return _FREE_REOPEN.get(from_status, STATUSES - {from_status})
+    # `blocked` stays the machine's: a task is waiting on a person because a question went
+    # unanswered, so a free move to it from a status that has no such edge would assert a wait
+    # that never happened (the map's own `-> blocked` edges are unchanged).
+    return _FREE_REOPEN.get(from_status, STATUSES - {from_status, STATUS_BLOCKED})
 
 
 def allowed_map_for(actor_kind: str) -> Dict[str, Tuple[str, ...]]:

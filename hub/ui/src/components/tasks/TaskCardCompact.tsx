@@ -54,6 +54,7 @@ export function TaskCardCompact({
   colorIndex,
   tally,
   working,
+  specTag,
   now,
   selected,
   onOpen,
@@ -69,6 +70,8 @@ export function TaskCardCompact({
   tally?: RequirementTally | null
   /** The assignee has a live run on this task. */
   working?: boolean
+  /** The short tag of the spec this task belongs to. */
+  specTag?: string
   now?: Date
   selected?: boolean
   onOpen: (taskId: string) => void
@@ -133,6 +136,11 @@ export function TaskCardCompact({
           {task.title}
         </span>
         <span className="aw-task-card-meta">
+          {specTag ? (
+            <span className="aw-task-card-spec" data-testid={`task-spec-tag-${task.id}`} title={`Spec: ${specTag}`}>
+              {specTag}
+            </span>
+          ) : null}
           {tally && tally.total > 0 ? (
             <span
               className="aw-task-card-reqs"

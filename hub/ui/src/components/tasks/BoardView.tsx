@@ -50,6 +50,7 @@ export function BoardView({
   agents,
   tallies,
   workingTaskIds,
+  specTags,
   view,
   onViewChange,
   folds,
@@ -71,6 +72,8 @@ export function BoardView({
   tallies: Record<string, RequirementTally>
   /** Tasks whose assignee has a live run on them. */
   workingTaskIds: ReadonlySet<string>
+  /** Each spec's short tag by document id, shown on its tasks' cards. */
+  specTags?: ReadonlyMap<string, string>
   view: TasksView
   onViewChange: (view: TasksView) => void
   /** Column key → folded. Absent means "folded when empty". */
@@ -269,6 +272,7 @@ export function BoardView({
                       colorIndex={task.assignee ? colorOf.get(task.assignee) : null}
                       tally={tallies[task.id]}
                       working={workingTaskIds.has(task.id)}
+                      specTag={task.spec_document_id ? specTags?.get(task.spec_document_id) : undefined}
                       selected={task.id === selectedTaskId}
                       select={selecting ? { checked: picked.has(task.id), onToggle: () => togglePicked(task.id) } : undefined}
                       now={now}
