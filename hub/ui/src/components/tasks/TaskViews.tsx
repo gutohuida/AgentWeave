@@ -38,6 +38,7 @@ export function TaskWorkView({
   task,
   checks,
   checksError,
+  earlierChecks,
   now,
   onRerunChecks,
   coverage,
@@ -48,6 +49,8 @@ export function TaskWorkView({
   checks: TaskCheckRun | null
   /** Why the checks could not be read; shown instead of claiming they have not run. */
   checksError?: string | null
+  /** The runs before the latest, newest first; behind the Earlier runs control. */
+  earlierChecks?: TaskCheckRun[]
   now?: Date
   onRerunChecks?: () => void
   /** Each requirement's state in its document's coverage, by requirement id. */
@@ -126,6 +129,7 @@ export function TaskWorkView({
             ))}
           </ul>
         )}
+        {earlierChecks?.length ? <EarlierRuns runs={earlierChecks} now={now} /> : null}
       </Section>
 
       <Section title="Landing">
@@ -134,6 +138,36 @@ export function TaskWorkView({
           <span>{landingSentence(task)}</span>
         </p>
       </Section>
+    </div>
+  )
+}
+
+/** The checks of the runs before the latest, closed until asked for. */
+function EarlierRuns({ runs, now }: { runs: TaskCheckRun[]; now?: Date }) {
+  const [open, setOpen] = React.useState(false)
+  return (
+    <div className="aw-tview-earlier">
+      <button type="button" data-slot="earlier-runs" className="aw-tview-mini" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={12} />
+        Earlier runs ({runs.length})
+      </button>
+      {open ? (
+        <ul className="aw-tview-list" data-testid="earlier-runs">
+          {runs.map((run) => (
+            <li key={run.id} data-tone={run.state === 'passed' ? 'done' : 'failed'}>
+              <span className="aw-tview-aside">
+                {run.state}
+                {run.ended_at ? ` · ${formatAgo(run.ended_at, now)}` : ''}
+              </span>
+              <ul className="aw-tview-list">
+                {run.results.map((result) => (
+                  <CheckRow key={result.name} result={result} />
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }
