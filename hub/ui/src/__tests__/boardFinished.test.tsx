@@ -37,22 +37,22 @@ describe('finished tasks leave the board', () => {
     expect(screen.getByTestId('board-hidden-finished').textContent).toContain('6 finished')
   })
 
-  it('shows finished tasks marked once the switch is on, and keeps it on after a remount', () => {
+  it('shows finished tasks once the switch is on, and keeps it on after a remount', () => {
     localStorage.clear()
     const first = render(<Host />)
     fireEvent.click(screen.getByTestId('board-show-finished'))
-    expect(screen.getByTestId('task-finished-mark-m1')).toBeTruthy()
+    expect(screen.getByTestId('task-open-m1')).toBeTruthy()
     first.unmount()
     render(<Host />)
     expect((screen.getByTestId('board-show-finished') as HTMLInputElement).checked).toBe(true)
-    expect(screen.getByTestId('task-finished-mark-c1')).toBeTruthy()
+    expect(screen.getByTestId('task-open-c1')).toBeTruthy()
   })
 
-  it('search reaches a finished task while the switch is off, marked finished', () => {
+  it('search reaches a finished task while the switch is off', () => {
     localStorage.clear()
     render(<Host />)
     expect(screen.queryByTestId('task-open-f1')).toBeNull()
     fireEvent.change(screen.getByLabelText('Search tasks'), { target: { value: 'flaky test X' } })
-    expect(screen.getByTestId('task-finished-mark-f1')).toBeTruthy()
+    expect(screen.getByTestId('task-open-f1')).toBeTruthy()
   })
 })

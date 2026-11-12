@@ -60,6 +60,9 @@
 .aw-tcard-marker[data-kind="critical"] { color: var(--amber); background: color-mix(in oklab, var(--amber) 13%, transparent); }
 
 .aw-tcard-people { color: var(--text-3); }
+.aw-tcard[data-actions="true"] .aw-tcard-people { padding-right: 52px; }
+.aw-tcard-actions { position: absolute; right: 8px; bottom: 7px; display: inline-flex; gap: 2px; z-index: 1; }
+.aw-tcard[data-dragging="true"] { opacity: .5; }
 .aw-tcard-tag {
   flex: none; max-width: 7.5em; overflow: hidden; text-overflow: ellipsis;
   padding: 0 6px; height: 17px; line-height: 17px; border-radius: 4px;
@@ -86,7 +89,7 @@
 .aw-thread-line { right: 0; background: var(--border); }
 .aw-thread-fill {
   width: var(--thread-fill); background: var(--thread-tone);
-  transition: width var(--dur-slow) var(--ease), background-color var(--dur-base) var(--ease);
+  transition: width var(--dur-base) var(--ease), background-color var(--dur-base) var(--ease);
 }
 /* A cut thread runs solid to the knot where it broke; that knot is drawn struck through. */
 .aw-thread-knot {
