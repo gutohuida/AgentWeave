@@ -11,6 +11,15 @@
     },
     {
       "checked_by": "agent",
+      "given": "a hand-created pending task linked to a spec requirement and in no flow or loop",
+      "how_to_check": "Hub test through PATCH /tasks/{id}",
+      "key": "ac-spec-linked-loose",
+      "requirement": "loose-defined",
+      "then": "the move succeeds",
+      "when": "the operator cancels it"
+    },
+    {
+      "checked_by": "agent",
       "given": "a loose pending task",
       "how_to_check": "Hub test",
       "key": "ac-any-move",
@@ -101,13 +110,18 @@
     }
   ],
   "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
   "aw_identity": {
     "digests": {
-      "FR-1": "cd5c3bf559c0731ecafc17a1f382c7db2cf363bc7da5d1d4131edd41a7d55c1b",
+      "FR-1": "28ecc56a2430bb60a37e29bcaf68291bb9da77c7a1b7a2f9690dc21cece2e626",
       "FR-10": "d8124bf6a716e8ccd1ecf91ba4f7cda1f349dbf79d5c8e0283c63f645e2c1f92",
       "FR-2": "0b8d3d5e03b786e3fc2b0a5ef2cbd1950a85d15902d06473f61cc539fc5f8db1",
-      "FR-3": "22d031872bb4b2ebae6d702434c2457785f5ef7816c8dd31d9b4b5dce8aa4d0c",
-      "FR-4": "a7aa076b63eeba0377251d4ff144c167800e9d992c2c69f14ed5662f6db03ee4",
+      "FR-3": "1f9e0c5cbb652a4185e95f7ec676040b92596102f5516ebdfe9ec3ccb3d6a283",
+      "FR-4": "2caa23d311332a06076f4e3cc1ca7747fd1b8a8a14232340eb4df00f033fef6e",
       "FR-5": "980466f569102ad2c8467dcd3428d4752418c4b7ca437a2f27b0fb5fa76827f7",
       "FR-6": "5a4993f80d8babb3d39e446ad0008e7b3971d2017c9c9a5c929d266816150769",
       "FR-7": "6dcb3fa22f6fd435dfb39396a3bdaf2ac242db7da548c46c2117fe45fb538946",
@@ -129,6 +143,12 @@
     },
     "retired": {}
   },
+  "capabilities": {
+    "changes": [
+      "spec/capabilities/task-lifecycle-governance/spec.json"
+    ],
+    "creates": []
+  },
   "delivery": {
     "agent": "DeveloperSonnet2",
     "builder": "DeveloperSonnet2",
@@ -137,7 +157,7 @@
     "mode": "flow",
     "reasons": {
       "agent": "Sonnet builds; the rules are narrow and well grounded.",
-      "builder": "Same as agent.",
+      "builder": "Same as agent; one builder keeps the chained same-file tasks in order.",
       "checker": "Status rules other modules rely on deserve an Opus check that drives the trial Hub.",
       "cron": "Five minutes keeps the chain moving.",
       "mode": "Three chained tasks, each with tests and a drive.",
@@ -151,37 +171,75 @@
   "evidence": {
     "checked": [
       "task_transitions.py:101-157: the operator-only edges, the same for every task; completed to approved is absent",
-      "Runs record an initiator, 'operator' or 'autonomous' (e.g. build_retrospective.py:1319), which piloted-agent would rest on",
+      "Agent turns record initiator 'operator' when any entry in the turn came from the operator, else 'autonomous' (turn_scheduler.py:499-502); piloted-agent rests on this",
       "Live refusals 2026-11-11: AW-94 'pending' to 'rejected' and 'completed' to 'revision_needed' (409); F1166 for AW-81/82/83"
     ],
     "limits": [
-      "Not yet checked: whether the initiator is set to 'operator' on every path by which the operator's message starts an agent run",
+      "A turn that carries an operator message beside autonomous input counts as operator-initiated (turn_scheduler.py:499-502); accepted as the meaning of 'piloted'",
       "Not yet checked: which other modules read task status and would be surprised by the new moves (landing queue, mender, flow dispatch)"
     ]
   },
   "hub": {
-    "phase": "exploring",
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperSonnet2",
+        "builders": [
+          "DeveloperSonnet2"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-12T17:40:08.550202+00:00",
+        "id": "build-3ec8eec2d018",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-12T15:50:34.350899+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "actions": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA"
+          },
+          "closes": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA"
+          },
+          "moves": {
+            "builder": "DeveloperSonnet2",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
     "size": "large",
-    "step": "intake"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "",
   "open_questions": [
     {
-      "question": "Is 'loose' the right line: any task in no flow or loop, including one written against a spec but created by hand? (Proposed: yes.)",
-      "resolved": false
+      "question": "Is 'loose' the right line: any task in no flow or loop, including one written against a spec but created by hand? Operator 2026-11-12: yes.",
+      "resolved": true
     },
     {
-      "question": "Is 'piloted' an operator-initiated run, meaning a run started because the operator messaged that agent? (Proposed: yes; runs fired by flows, loops and jobs keep today's moves.)",
-      "resolved": false
+      "question": "Is 'piloted' an operator-initiated run, meaning a run started because the operator messaged that agent? Operator 2026-11-12: yes; flow, loop and job runs keep today's moves.",
+      "resolved": true
     },
     {
-      "question": "Are done here, done elsewhere (naming a task or commit on main) and cancelled the right set of closes?",
-      "resolved": false
+      "question": "Are done here, done elsewhere (naming a task or commit on main) and cancelled the right set of closes? Operator 2026-11-12: yes.",
+      "resolved": true
     },
     {
-      "question": "Should a completed loose task be approvable with no reviewer (proposed), or should review stay with an explicit skip?",
-      "resolved": false
+      "question": "Should a completed loose task be approvable with no reviewer, or should review stay with an explicit skip? Operator 2026-11-12: approvable with no reviewer.",
+      "resolved": true
     }
   ],
   "problem": "Quick fixes are usually hand-made tasks that the operator, or an agent they are directing, tests and then asks to merge. They are held to the same moves a flow's tasks are (task_transitions.py:101-157), and the moves that matter for this way of working are refused. Cases from 2026-11-11 alone:\n- F1166: AW-81, AW-82 and AW-83 were built inside AW-80's run and landed with it (477c655). They could not be closed: 'pending' allows only assigned and in_progress. The only exit was a fake build and review of an empty branch, or Delete.\n- AW-94 could not be withdrawn before it started: 'pending' to 'rejected' was refused to the agent the operator was directing.\n- AW-94 could not be sent straight back after it completed: 'completed' allows only under_review. Taking the detour made the sender its holder for a moment, so the developer's name was lost (api/v1/tasks.py:2471).\n- The operator can approve a completed task only through Land, and the board offers no plain cancel.",
@@ -190,8 +248,8 @@
       "key": "loose-defined",
       "modal": "MUST",
       "party": null,
-      "rationale": "Flows rely on their moves to hand work between builder and checker; loosening them there would break the mechanism the operator says works well.",
-      "statement": "A task is loose when it is not in any flow's or loop's queue. Every rule in this document applies only to loose tasks. A task in a flow keeps exactly the moves it has today."
+      "rationale": "Flows rely on their moves to hand work between builder and checker; loosening them there would break the mechanism the operator says works well. A hand-made task written against a spec is still worked by hand, so it gets the hand moves (operator, 2026-11-12).",
+      "statement": "A task is loose when it is not in any flow's or loop's queue, whether or not it is linked to a specification document. Every rule in this document applies only to loose tasks. A task in a flow or loop keeps exactly the moves it has today."
     },
     {
       "key": "operator-any-move",
@@ -204,15 +262,15 @@
       "key": "piloted-agent",
       "modal": "MUST",
       "party": null,
-      "rationale": "The operator directs quick fixes through the agent they are talking to; agents running unattended should not gain the same reach.",
-      "statement": "A run started by the operator's own message (an operator-initiated run) can make every move on a loose task that the operator can. A run started by a flow, loop or scheduled job cannot. It keeps today's moves."
+      "rationale": "The operator directs quick fixes through the agent they are talking to; agents running unattended should not gain the same reach (operator, 2026-11-12).",
+      "statement": "A run started by the operator's own message (an operator-initiated run, one whose turn carries operator input) can make every move on a loose task that the operator can. A run started by a flow, loop or scheduled job cannot. It keeps today's moves."
     },
     {
       "key": "approve-without-review",
       "modal": "MUST",
       "party": null,
-      "rationale": null,
-      "statement": "The operator or a piloted run can approve a completed loose task directly, with no reviewer. Approving still sends it through the project's landing, checks included."
+      "rationale": "For quick fixes the operator or the agent they direct has already tested the work; a mandatory reviewer or skip step is ceremony. The project's checks remain the guard (operator, 2026-11-12).",
+      "statement": "The operator or a piloted run can approve a completed loose task directly, with no reviewer and no recorded skip. Approving still sends it through the project's landing, checks included."
     },
     {
       "key": "send-back-direct",
@@ -232,7 +290,7 @@
       "key": "close-done-elsewhere",
       "modal": "MUST",
       "party": null,
-      "rationale": null,
+      "rationale": "Together with approve-and-land (done here) and cancel, this is the complete set of ways a loose task ends (operator, 2026-11-12).",
       "statement": "A loose task can be closed as 'done elsewhere', naming another task or a commit. It is refused unless the named task's work is on main, or the named commit is on main. Once closed, the task's stage is 'on main' at that commit, and no build, check or review runs for it."
     },
     {
@@ -264,7 +322,7 @@
   "schema_version": 1,
   "scope": {
     "in_scope": [
-      "Moves, approval, send-back and closes for tasks in no flow or loop",
+      "Moves, approval, send-back and closes for tasks in no flow or loop, including hand-made tasks written against a spec",
       "The same moves for operator-initiated agent runs",
       "Plain drawer actions and multi-select close"
     ],
@@ -272,14 +330,17 @@
       "Any change to the moves of tasks in a flow or loop",
       "Landing without the project's checks",
       "Giving unattended (flow, loop or job) runs new moves",
-      "Deleting tasks; Delete stays as it is"
+      "Deleting tasks; Delete stays as it is",
+      "Close outcomes beyond done here (approve and land), done elsewhere and cancelled"
     ]
   },
   "summary": "A task outside a flow is moved freely by the operator, and by the agent the operator is piloting. It can be approved without a reviewer, sent straight back to its builder, closed as done by another task or commit, or cancelled, singly or several at once. Tasks inside a flow keep today's rules.",
   "tasks": [
     {
       "builder": "DeveloperSonnet2",
+      "builder_reason": "Sonnet suits narrow, well-grounded transition rules, and one builder keeps the three same-file tasks in order.",
       "checker": "QA",
+      "checker_reason": "Status rules that the landing queue, mender and flow dispatch rely on deserve an Opus check that drives the trial Hub.",
       "depends_on": [],
       "description": "Acceptance drive first: Hub tests for the move criteria, failing today. Then give loose tasks the operator's free moves, extend them to operator-initiated runs, allow approval without a reviewer and a direct send-back to the builder, and stop moves from changing the holder.",
       "files": [
@@ -302,7 +363,9 @@
     },
     {
       "builder": "DeveloperSonnet2",
+      "builder_reason": "Same builder as 'moves', whose files this task edits next.",
       "checker": "QA",
+      "checker_reason": "The on-main check and the close stages touch landing; QA checked 'moves' and knows the new edges.",
       "depends_on": [
         "moves"
       ],
@@ -325,7 +388,9 @@
     },
     {
       "builder": "DeveloperSonnet2",
+      "builder_reason": "Same builder: the UI consumes the moves route it built, so it knows the answer's shape.",
       "checker": "QA",
+      "checker_reason": "QA can drive the drawer and multi-select close end to end against the rules it already checked.",
       "depends_on": [
         "closes"
       ],

@@ -38,6 +38,33 @@
     },
     {
       "checked_by": "agent",
+      "given": "a spec submitted with tag 'tasks board'",
+      "how_to_check": "Hub test through submit_spec_document plus UI component test",
+      "key": "ac-tag-written",
+      "requirement": "short-tag",
+      "then": "their cards show 'tasks board'",
+      "when": "its tasks render on the board"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an existing spec with no written tag, and a second spec whose derived tag would collide with the first",
+      "how_to_check": "Hub test",
+      "key": "ac-tag-derived",
+      "requirement": "short-tag",
+      "then": "both show a tag of at most 24 characters and the two tags differ",
+      "when": "the board renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a spec already tagged 'tasks board'",
+      "how_to_check": "Hub test through submit_spec_document",
+      "key": "ac-tag-written-collision",
+      "requirement": "short-tag",
+      "then": "the submission is answered with the collision named, and the existing tag is unchanged",
+      "when": "another spec is submitted with the same written tag"
+    },
+    {
+      "checked_by": "agent",
       "given": "five tasks on main, one cancelled and two in progress",
       "how_to_check": "UI component test plus a drive on :8010",
       "key": "ac-hidden",
@@ -65,12 +92,17 @@
     }
   ],
   "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
   "aw_identity": {
     "digests": {
       "FR-1": "94d8984cbcb48e12ce0f3a4c0c684e7e7a3576002716a85c32c2e0089bd07bb0",
       "FR-2": "72bc13e8665e8744cc8949443a7513effc5b718b6ee81b5aa72e64edd11262c7",
       "FR-3": "58e1dd24da9a02a4e37048a2b9536322f35791641b96c80ec3dd7a694421ae83",
-      "FR-4": "2749f4cd19b1874cabd63fb270c6f615ddedad262e752730fd803fb998e53cb3",
+      "FR-4": "0dd3964bd30410941e707c90026bdd28dc7abb7c5493f1d412c943668462e2a6",
       "FR-5": "923b9f295166fd579c49a95630695d5cf63d8776c6b0bc29b64d5ac92a9012c7",
       "FR-6": "f3b2cef67d44e171eee287f960066b8bbaf9d58f4f215c1848a5e656a6cc18e1",
       "FR-7": "898897316a0a4ab12d8208973ec79adef85863a377d9203cf0bf01812fe5ca33"
@@ -87,14 +119,22 @@
     },
     "retired": {}
   },
+  "capabilities": {
+    "changes": [],
+    "creates": [
+      {
+        "title": "Task board"
+      }
+    ]
+  },
   "delivery": {
-    "agent": "DeveloperSonnet2",
-    "builder": "DeveloperSonnet2",
+    "agent": "Developer",
+    "builder": "Developer",
     "checker": "QA2",
     "cron": "*/5 * * * *",
     "mode": "flow",
     "reasons": {
-      "agent": "UI and a small route change: Sonnet is enough.",
+      "agent": "UI and a small route change: Sonnet is enough, and DeveloperSonnet2 is busy with loose-tasks.",
       "builder": "Same as agent.",
       "checker": "QA2 drives the board on :8010.",
       "cron": "Five minutes keeps it moving.",
@@ -113,20 +153,55 @@
       "The board already loads tasks with excludeArchivedCompleted (seen in QA's thread review); how that relates to 'finished' needs reading before the build"
     ],
     "limits": [
-      "'On main' and 'closed without landing' come from slices glance and loose-tasks; this slice is built after them"
+      "'Closed without landing' comes from slice loose-tasks, building in parallel; until it lands, only tasks on main (and today's rejected tasks) count as finished",
+      "BoardView.tsx is also edited by loose-tasks' 'actions' task (multi-select close); expect a small merge at the end"
     ]
   },
   "hub": {
-    "phase": "exploring",
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "Developer",
+        "builders": [
+          "Developer"
+        ],
+        "checker": "QA2",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-12T16:58:40.784826+00:00",
+        "id": "build-e2b6c7ebe249",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-12T15:50:57.920541+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "finished": {
+            "builder": "Developer",
+            "checker": "QA2"
+          },
+          "picker": {
+            "builder": "Developer",
+            "checker": "QA2"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
     "size": "small",
-    "step": "intake"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "",
   "open_questions": [
     {
-      "question": "Who sets a spec's short tag: derived automatically from the title, written by the spec's author, or both (derived, then editable)? (Proposed: the author writes it, with a derived fallback.)",
-      "resolved": false
+      "question": "Who sets a spec's short tag: derived automatically from the title, written by the spec's author, or both? Operator 2026-11-12: the author writes it, with a derived fallback.",
+      "resolved": true
     }
   ],
   "problem": "The operator has to know a spec's name to filter by it. The scope picker (BoardScopePicker.tsx:23-71) lists specs alphabetically and matches typed text against long sentence-like titles. Meanwhile the board keeps accumulating finished tasks (322 tasks in this project on 2026-11-11), and a card does not say which spec it belongs to.",
@@ -156,8 +231,8 @@
       "key": "short-tag",
       "modal": "MUST",
       "party": null,
-      "rationale": null,
-      "statement": "Every spec has a short tag of at most 24 characters, unique within the project. Every card of a task belonging to a spec shows that tag."
+      "rationale": "A written tag reads well; the derived fallback means existing specs, and authors who skip the field, still get one (operator, 2026-11-12).",
+      "statement": "Every spec has a short tag of at most 24 characters, unique within the project. The spec's author may write it when submitting the document; a spec with no written tag gets one derived from its title. Every card of a task belonging to a spec shows that tag."
     },
     {
       "key": "finished-hidden",
@@ -189,26 +264,30 @@
   "scope": {
     "in_scope": [
       "Ordering, labelling and searching the spec filter",
-      "A short tag per spec shown on cards",
+      "A short tag per spec, written by its author or derived, shown on cards",
       "Hiding finished tasks with a switch to show them"
     ],
     "non_goals": [
       "Deleting or archiving tasks from the database",
       "Filters other than by spec (agent chips and search stay as they are, apart from search reaching finished tasks)",
-      "The card's visual design (slice redesign)"
+      "The card's visual design (slice redesign)",
+      "Editing a derived tag in place from the board; a tag is changed by resubmitting the spec"
     ]
   },
-  "summary": "The spec filter puts the specs with the most recent task activity first. Every card carries a short tag naming its spec. Tasks that are finished leave the default board, and a 'show finished' switch brings them back.",
+  "summary": "The spec filter puts the specs with the most recent task activity first. Every card carries a short tag naming its spec, written by the spec's author or derived from its title. Tasks that are finished leave the default board, and a 'show finished' switch brings them back.",
   "tasks": [
     {
-      "builder": "DeveloperSonnet2",
+      "builder": "Developer",
+      "builder_reason": "DeveloperSonnet2 is building the loose-tasks slice; Developer (Sonnet) is free, and this is UI plus a small route change.",
       "checker": "QA2",
+      "checker_reason": "QA2 checked the glance slice on the same board and drives it on :8010.",
       "depends_on": [],
-      "description": "Acceptance drive first. Give specs a short tag, order the filter by last task activity, show tag, recency and unfinished count, and match search on tag or title.",
+      "description": "Acceptance drive first. Give specs a short tag (written by the author through submit_spec_document, else derived from the title, unique per project), order the filter by last task activity, show tag, recency and unfinished count, and match search on tag or title.",
       "files": [
         "hub/ui/src/components/tasks/BoardScopePicker.tsx",
         "hub/ui/src/components/tasks/TaskCardCompact.tsx",
-        "hub/hub/api/v1/tasks.py"
+        "hub/hub/api/v1/tasks.py",
+        "hub/hub/spec_payload.py"
       ],
       "from": null,
       "key": "picker",
@@ -222,8 +301,10 @@
       "title": "Spec filter by recency, with tags"
     },
     {
-      "builder": "DeveloperSonnet2",
+      "builder": "Developer",
+      "builder_reason": "Same builder as 'picker', which it follows on the same screen.",
       "checker": "QA2",
+      "checker_reason": "Same checker: it drives the board on :8010 with finished and unfinished tasks.",
       "depends_on": [
         "picker"
       ],

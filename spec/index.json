@@ -531,6 +531,14 @@
       "order": 530
     },
     {
+      "path": "spec/changes/a-better-prompting-experience-references-and-commands-in-the-composer/spec.json",
+      "title": "A better prompting experience: references and commands in the composer",
+      "kind": "roadmap",
+      "status": "exploring",
+      "parent": null,
+      "order": 2670
+    },
+    {
       "path": "spec/changes/a-build-has-a-driver-a-level-and-its-people/spec.json",
       "title": "A build has a driver, a level and its people",
       "kind": "change-spec",
@@ -913,6 +921,14 @@
       "status": "archived",
       "parent": null,
       "order": 1210
+    },
+    {
+      "path": "spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers/spec.json",
+      "title": "A side panel worth keeping open: activity, changes, files, terminal and peers",
+      "kind": "roadmap",
+      "status": "exploring",
+      "parent": null,
+      "order": 2690
     },
     {
       "path": "spec/changes/a-spec-document-is-stored-as-its-payload/spec.json",
@@ -1422,7 +1438,7 @@
       "path": "spec/changes/find-a-spec-s-tasks-without-knowing-its-name/spec.json",
       "title": "Find a spec's tasks without knowing its name",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 2620
     },
@@ -1433,6 +1449,14 @@
       "status": "approved",
       "parent": null,
       "order": 2580
+    },
+    {
+      "path": "spec/changes/finished-documents-leave-the-live-view/spec.json",
+      "title": "Finished documents leave the live view",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2660
     },
     {
       "path": "spec/changes/flows-that-do-not-stall-after-the-october-25-retrospective/spec.json",
@@ -1595,6 +1619,14 @@
       "order": 1460
     },
     {
+      "path": "spec/changes/reference-a-spec-in-a-sentence-from-the-composer/spec.json",
+      "title": "Reference a spec in a sentence from the composer",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2680
+    },
+    {
       "path": "spec/changes/requested-changes-on-a-pull-request-come-back-to-the-builder/spec.json",
       "title": "Requested changes come back to the builder",
       "kind": "change-spec",
@@ -1702,7 +1734,7 @@
       "path": "spec/changes/tasks-outside-a-flow-move-freely/spec.json",
       "title": "Tasks outside a flow move freely",
       "kind": "change-spec",
-      "status": "exploring",
+      "status": "approved",
       "parent": null,
       "order": 2640
     },
@@ -1921,6 +1953,14 @@
       "status": "archived",
       "parent": null,
       "order": 1560
+    },
+    {
+      "path": "spec/changes/the-side-panel-s-running-tab-builds-loops-and-jobs-and-what-needs-me/spec.json",
+      "title": "The side panel's Running tab: builds, loops and jobs, and what needs me",
+      "kind": "change-spec",
+      "status": "exploring",
+      "parent": null,
+      "order": 2700
     },
     {
       "path": "spec/changes/the-spec-header-redesigned/spec.json",

@@ -202,14 +202,14 @@
         "checkers": [],
         "chosen_by": "operator",
         "driver": "flow",
-        "ended_at": null,
+        "ended_at": "2026-11-12T12:08:17.582952+00:00",
         "id": "build-3f7a769d89ce",
         "landing": "main",
         "lead": null,
         "level": "reviewed",
         "pull_request": null,
         "started_at": "2026-11-12T09:10:50.269998+00:00",
-        "state": "running",
+        "state": "finished",
         "stop_reason": null,
         "tasks": {
           "drive": {
