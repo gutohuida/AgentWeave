@@ -388,6 +388,25 @@ def is_allowed(from_status: str, to_status: str, actor_kind: str) -> bool:
     return to_status in allowed_targets(from_status, actor_kind)
 
 
+#: A task outside any flow or loop is moved by hand (`tasks-outside-a-flow-move-freely`, FR-2): the
+#: operator, and a run the operator started, move it from any open status to any other. Closed work
+#: reopens to `pending`, and approved work that has not landed can be sent straight back.
+_FREE_REOPEN: Mapping[str, FrozenSet[str]] = {
+    "approved": frozenset({"pending", "revision_needed"}),
+    "rejected": frozenset({"pending"}),
+}
+
+
+def free_targets(from_status: str) -> FrozenSet[str]:
+    """Where a free mover (`task_transition_service.is_free_mover`) may move a loose task."""
+    if from_status not in TRANSITIONS:
+        return frozenset()
+    # `blocked` stays the machine's: a task is waiting on a person because a question went
+    # unanswered, so a free move to it from a status that has no such edge would assert a wait
+    # that never happened (the map's own `-> blocked` edges are unchanged).
+    return _FREE_REOPEN.get(from_status, STATUSES - {from_status, STATUS_BLOCKED})
+
+
 def allowed_map_for(actor_kind: str) -> Dict[str, Tuple[str, ...]]:
     """The whole map as one actor sees it — `{from_status: (reachable, ...)}`.
 

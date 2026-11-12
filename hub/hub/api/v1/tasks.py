@@ -78,6 +78,7 @@ from ...task_transition_service import (
     guard_entry_status,
     history_for,
     hub_written_documents,
+    is_free_mover,
     retry_integration,
     run_fast_checks_before_completion,
 )
@@ -90,6 +91,7 @@ from ...task_transitions import (
     Actor,
     allowed_map_for,
     allowed_targets,
+    free_targets,
     operator,
 )
 from ...utils import persist_event, short_id
@@ -1849,7 +1851,7 @@ _SEND_BACK_STATUSES = ("revision_needed", "rejected")
 
 
 async def _failing_pieces_for(
-    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
+    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor, free: bool = False
 ) -> Optional[Dict[str, str]]:
     """The evidence a send-back names as failing, as `{evidence_id: reason}`; None for any other move.
 
@@ -1889,7 +1891,10 @@ async def _failing_pieces_for(
     sending_back = (
         body.status in _SEND_BACK_STATUSES
         and body.status != task.status
-        and body.status in allowed_targets(task.status, actor.kind)
+        and (
+            body.status in allowed_targets(task.status, actor.kind)
+            or (free and body.status in free_targets(task.status))
+        )
     )
     if named and body.status not in _SEND_BACK_STATUSES:
         raise HTTPException(
@@ -1941,7 +1946,11 @@ async def _failing_pieces_for(
 
 
 def _send_back_reason(
-    task: Task, body: TaskUpdate, actor: Actor, failing_pieces: Optional[Dict[str, str]]
+    task: Task,
+    body: TaskUpdate,
+    actor: Actor,
+    failing_pieces: Optional[Dict[str, str]],
+    free: bool = False,
 ) -> Tuple[Optional[str], Optional[str]]:
     """Why this move sends *task* back: `(reason_class, sentence)`, or `(None, None)` for any other
     move (FR-8/FR-9). Asked after `_failing_pieces_for`, so the move is already known to be legal and
@@ -1955,7 +1964,10 @@ def _send_back_reason(
     if not (
         body.status == "revision_needed"
         and body.status != task.status
-        and body.status in allowed_targets(task.status, actor.kind)
+        and (
+            body.status in allowed_targets(task.status, actor.kind)
+            or (free and body.status in free_targets(task.status))
+        )
     ):
         return None, None
     named = (body.reason_class or "").strip() or None
@@ -1974,7 +1986,7 @@ def _send_back_reason(
     sentence = _verdict_text(body.notes)
     if not sentence and failing_pieces:
         sentence = " ".join(reason for reason in failing_pieces.values() if reason) or None
-    if actor.is_operator:
+    if actor.is_operator or free:
         return named, sentence
     if named is None:
         raise HTTPException(
@@ -2100,9 +2112,10 @@ async def update_task_for_actor(
             )
     # The verdict's failing pieces, resolved and refused before any write
     # (`each-piece-of-evidence-is-judged-on-its-own`).
-    failing_pieces = await _failing_pieces_for(session, task, body, actor)
+    free = await is_free_mover(session, task, actor)
+    failing_pieces = await _failing_pieces_for(session, task, body, actor, free)
     # Why it goes back, required of a reviewer (FR-9) and refused before any write.
-    reason_class, send_back_reason = _send_back_reason(task, body, actor, failing_pieces)
+    reason_class, send_back_reason = _send_back_reason(task, body, actor, failing_pieces, free)
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
