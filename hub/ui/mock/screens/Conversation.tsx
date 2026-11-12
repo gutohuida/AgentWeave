@@ -11,6 +11,10 @@ import { ConversationComposerDock } from '@/components/conversation/Conversation
 import { NewConversationIntro, type ConversationStarter } from '@/components/conversation/NewConversationIntro'
 import { BuildPlanDialog } from '@/components/spec/BuildPlanDialog'
 import { SpecSidePanel } from '@/components/spec/page/SpecWorkspace'
+import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
+import { RunningTab } from '@/components/panel/RunningTab'
+import { runningItems } from '@/components/panel/runningModel'
+import { usePanelTabsStore, type TabId } from '@/store/panelTabsStore'
 import { SpecOpenPicker } from '@/components/spec/page/SpecOpenPicker'
 import { useListPreferences } from '@/components/spec/page/hooks'
 import { CONVERSATION_DEFAULT_WIDTH, CONVERSATION_MIN_WIDTH, SPEC_DOC_MIN_WIDTH } from '@/components/spec/specPreferences'
@@ -23,6 +27,7 @@ import architectChat from '../fixtures/chat_architect_9cdda4.json'
 import modelCatalog from '../fixtures/model_catalog.json'
 import type { ScreenProps } from '../routes'
 import { useSpecMock } from '../specMock'
+import { RUNNING_BUILDS, RUNNING_JOBS, RUNNING_LOOPS } from '../runningMock'
 
 const CHATS: Record<string, ChatHistoryResponse> = {
   'conv-e3aba2c5956a': builderChat as unknown as ChatHistoryResponse,
@@ -74,12 +79,57 @@ export default function Conversation(props: ScreenProps) {
           <div className="flex h-full flex-none flex-col" style={{ width: CONVERSATION_DEFAULT_WIDTH, minWidth: CONVERSATION_MIN_WIDTH }}>
             <ConversationMock {...props} />
           </div>
-          <SpecPanelMock picking={panel === 'specs'} go={props.go} route={props.route} />
+          {panel === 'running' ? (
+            <RunningPanelMock go={props.go} now={props.now} />
+          ) : (
+            <SpecPanelMock picking={panel === 'specs'} go={props.go} route={props.route} />
+          )}
         </div>
       ) : (
         <ConversationMock {...props} />
       )}
     </QueryClientProvider>
+  )
+}
+
+/** The side panel's Running tab (roadmap `a-side-panel-worth-keeping-open-…`, slice `activity-tab`),
+ *  in the app's own panel shell. The shell's `loops` tab is shown as Running: the tab replaces it. */
+function RunningPanelMock({ go, now }: { go: ScreenProps['go']; now: Date }) {
+  React.useEffect(() => {
+    const store = usePanelTabsStore.getState()
+    for (const id of ['specs', 'files', 'loops'] as const) store.openTab(PROJECT_ID, id)
+    store.activateTab(PROJECT_ID, 'loops')
+  }, [])
+  const items = React.useMemo(() => runningItems({ builds: RUNNING_BUILDS, loops: RUNNING_LOOPS, jobs: RUNNING_JOBS, now }), [now])
+  const live = items.filter((i) => i.phase === 'needs-you' || i.phase === 'working').length
+  const describe = (id: TabId): PanelTabDescriptor =>
+    id === 'loops' ? { id, label: 'Running', icon: 'monitoring', count: live } : id === 'files' ? { id, label: 'Files', icon: 'folder_open' } : { id, label: 'Specs', icon: 'menu_book' }
+  return (
+    <div className="h-full min-w-0 flex-1" style={{ minWidth: SPEC_DOC_MIN_WIDTH, borderLeft: '1px solid var(--border)' }} data-testid="running-panel">
+      <PanelShell
+        projectId={PROJECT_ID}
+        availableTabs={(['specs', 'files', 'loops'] as const).map(describe)}
+        describeTab={describe}
+        renderTabContent={(tab) =>
+          tab.id === 'loops' ? (
+            <RunningTab
+              items={items}
+              colorIndexOf={(name) => agents.find((a) => a.name === name)?.color_index}
+              onOpen={(item) =>
+                item.kind === 'job'
+                  ? go({ kind: 'tab', tab: 'jobs' })
+                  : toast({ title: item.kind === 'build' ? 'Opens the spec at its builds' : 'Opens the loop', description: item.title })
+              }
+              onAttend={(item) =>
+                toast({ title: item.attention?.kind === 'question' ? 'Opens the question to answer' : 'Shows what is stuck', description: item.title })
+              }
+            />
+          ) : (
+            <p style={{ padding: 16, fontSize: 13, color: 'var(--text-3)' }}>Unchanged by this mock: Running is the tab to look at.</p>
+          )
+        }
+      />
+    </div>
   )
 }
 

@@ -163,3 +163,17 @@ http://localhost:5199/mock.html#conversation-trace/conv-b7158addff32   # QA, 17 
 
 Approved by the operator on 2026-11-06 as it renders ("Perfect. Loved it."), including the author's choices: gaps over
 20 minutes fold, an unfolded turn's spans draw on its own scale, overlapping axis labels move to hover text.
+
+## The side panel's Running tab (mock, 2026-11-12)
+
+Roadmap `spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers`,
+slice `activity-tab`. It replaces the panel's Loops tab, and is named Running because the project
+already has an Activity tab. The component is `src/components/panel/RunningTab.tsx`, with its pure
+rules (which group a build, loop or job falls in, what it says it is doing, the filters) in
+`runningModel.ts`; `src/styles/running-panel.css` styles it. It is drawn in the app's own
+`PanelShell`. Every state is hand-written in `mock/runningMock.ts` (`// mock state`), apart from the
+replica's two finished builds.
+
+```
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/running
+```
