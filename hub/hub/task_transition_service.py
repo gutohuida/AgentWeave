@@ -1226,6 +1226,11 @@ async def apply_transition(
             lead += "."
         note = f"{lead} {decided}" if lead else decided
 
+    # The builder is whoever holds the task as it completes, inside or outside a flow, and stays
+    # through the hand-off to a reviewer (`where-each-task-stands-is-visible-on-the-board`, FR-7).
+    # Completed again after a send-back, it becomes whoever holds it then.
+    if to_status == "completed" and task.assignee:
+        task.builder = task.assignee
     task.status = to_status
     transition = TaskTransition(
         id=f"ttr-{short_id()}",

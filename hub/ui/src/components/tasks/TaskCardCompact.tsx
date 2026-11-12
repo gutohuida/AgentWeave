@@ -3,7 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
 import type { Task } from '@/api/tasks'
 import { cardStatus } from '@/lib/taskCardStatus'
-import { formatStageAge, stageLabel } from '@/lib/taskStage'
+import { builderAndReviewer, formatStageAge, stageLabel } from '@/lib/taskStage'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatAgo, formatDateTime } from '@/lib/format'
 import '@/styles/board.css'
@@ -78,6 +78,7 @@ export function TaskCardCompact({
   move?: CardMoveProps
 }) {
   const status = cardStatus(task, working)
+  const people = builderAndReviewer(task)
   const clock = useMinuteClock(now)
   const color = agentColorVars(colorIndex)
   return (
@@ -181,6 +182,16 @@ export function TaskCardCompact({
               {task.stage_since ? (
                 <span data-testid={`task-stage-age-${task.id}`}> · {formatStageAge(task.stage_since, clock)}</span>
               ) : null}
+            </span>
+          ) : null}
+          {people.builder ? (
+            <span className="aw-task-card-age" data-testid={`task-built-by-${task.id}`}>
+              built by {people.builder}
+            </span>
+          ) : null}
+          {people.reviewer ? (
+            <span className="aw-task-card-age" data-testid={`task-reviewing-${task.id}`}>
+              reviewing: {people.reviewer}
             </span>
           ) : null}
           {task.stage_waits_on ? (
