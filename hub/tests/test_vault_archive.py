@@ -193,7 +193,8 @@ def test_the_archive_routes_have_a_client() -> None:
     # 19 -> 22 2026-11-09: AOTCT-2 added four paths (hold, archive-batch, tidy-acts, reviewed)
     # whose page is AOTCT-4, which owes them back. 22 -> 23 2026-11-12: CNCC-2 (spdoc-f214c91aac0e)
     # added PUT /documents/{path}/capabilities, whose client CNCC-3 added: 23 -> 22.
-    assert len(orphans) <= 22, f"clientless routes grew past the ratchet: {len(orphans)}"
+    # 22 -> 23 2026-11-12: TOFMF-2 added POST /tasks/close, whose client is TOFMF-3.
+    assert len(orphans) <= 23, f"clientless routes grew past the ratchet: {len(orphans)}"
 
 
 def test_ui_client_reaches_archive_restore_and_archived_list() -> None:

@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Annotated, Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
+from typing import Annotated, Any, Awaitable, Callable, Dict, List, Literal, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -14,6 +14,7 @@ from ... import (
     deletion,
     dependency_gate,
     loop_history,
+    loose_close,
     project_workspace,
     readable_ids,
     spec_identity,
@@ -2536,6 +2537,67 @@ class LandRequest(RequestModel):
     """Land's optional body: the operator's reason to land over failing checks (F605)."""
 
     override_checks_reason: Optional[str] = Field(default=None, max_length=2000)
+
+
+class CloseTasksRequest(RequestModel):
+    """Close loose tasks without landing them here (`tasks-outside-a-flow-move-freely`, FR-7..FR-9)."""
+
+    tasks: List[str] = Field(min_length=1, max_length=200)
+    outcome: Literal["done_elsewhere", "cancelled"]
+    # Done elsewhere: the task whose work is on main, or a commit on it -- one of the two.
+    by_task: Optional[str] = None
+    commit: Optional[str] = None
+    # Cancelled: why, optionally.
+    reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+@router.post("/close")
+async def close_tasks(
+    body: CloseTasksRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Close one or several loose tasks, as done elsewhere or cancelled.
+
+    A task that cannot close (in a flow, already closed, a turn running on it) is named in
+    `refused` with its reason; the others still close. 409/422 when the request itself cannot be
+    answered: no main branch, a named task that is not on main (`task_not_on_main`), a commit that
+    is not (`commit_not_on_main`). Nothing changes on those.
+    """
+    project_id, _ = project
+    workspace = None
+    if body.outcome == "done_elsewhere":
+        try:
+            workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        except project_workspace.ProjectWorkspaceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": f"Project workspace is unavailable: {exc}",
+                    "code": "no_workspace",
+                },
+            ) from exc
+    try:
+        result = await loose_close.close_tasks(
+            session,
+            project_id,
+            body.tasks,
+            body.outcome,
+            by_task=body.by_task,
+            commit=body.commit,
+            reason=body.reason,
+            workspace=workspace,
+        )
+    except loose_close.CloseRefusedError as exc:
+        raise HTTPException(
+            status_code=exc.http_status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    for entry in result["closed"]:
+        defer_broadcast(
+            session, project_id, "task_updated", {"id": entry["id"], "status": entry["status"]}
+        )
+    await session.commit()
+    return result
 
 
 @router.post("/{task_id}/land", response_model=TaskResponse)
