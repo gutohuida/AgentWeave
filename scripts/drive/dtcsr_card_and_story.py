@@ -217,10 +217,66 @@ CARD_LINES_JS = r"""
 }
 """
 
-# Whether *name* is shown whole in the card: some visible element's own text holds the full name,
-# and neither it nor an ancestor up to the card clips it (overflow with an ellipsis or a cut).
+# Whether a text is rendered whole in the card. Range rects report where the text is laid out
+# whether or not it is painted, so the text is clipped (cut, or ellipsized) exactly when its rect
+# runs past the rect of an element between it and the page that clips its overflow. A scrollWidth
+# walk misses this (an inline-flex name inside an overflow-hidden line reports no overflow of its
+# own), and inner_text returns the full string even when CSS paints an ellipsis (TCSR-1 send-back).
+TEXT_WHOLE_JS_BODY = r"""
+  const textWhole = (root, text) => {
+    if (!root) return { shown: false, whole: false, why: 'element not in the card' }
+    const nodes = []
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    let n, all = ''
+    while ((n = walker.nextNode())) { nodes.push([n, all.length]); all += n.textContent }
+    const want = text == null ? all.trim() : text
+    const at = all.indexOf(want)
+    if (!want || at < 0) return { shown: false, whole: false, why: 'text not in the element' }
+    const pos = (i) => {
+      for (let k = nodes.length - 1; k >= 0; k--) if (nodes[k][1] <= i) return [nodes[k][0], i - nodes[k][1]]
+    }
+    const range = document.createRange()
+    range.setStart(...pos(at))
+    range.setEnd(...pos(at + want.length - 1)); range.setEnd(range.endContainer, range.endOffset + 1)
+    const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0)
+    if (!rects.length) return { shown: false, whole: false, why: 'text has no rendered box' }
+    const left = Math.min(...rects.map((r) => r.left)), right = Math.max(...rects.map((r) => r.right))
+    const top = Math.min(...rects.map((r) => r.top)), bottom = Math.max(...rects.map((r) => r.bottom))
+    let el = range.commonAncestorContainer
+    if (el.nodeType !== 1) el = el.parentElement
+    for (; el && el !== document.documentElement; el = el.parentElement) {
+      const st = getComputedStyle(el)
+      if (st.display === 'none' || st.visibility === 'hidden')
+        return { shown: false, whole: false, why: `hidden by <${el.tagName.toLowerCase()} class="${el.className}">` }
+      // Chromium clips a <button>'s content whatever its overflow says; contain and clip-path clip too.
+      const forced = el.tagName === 'BUTTON' || /paint|strict|content/.test(st.contain) || st.clipPath !== 'none'
+      const clipX = forced || st.overflowX !== 'visible', clipY = forced || st.overflowY !== 'visible'
+      if (!clipX && !clipY) continue
+      const b = el.getBoundingClientRect()
+      const cut = (clipX && (left < b.left - 1 || right > b.right + 1)) || (clipY && (top < b.top - 1 || bottom > b.bottom + 1))
+      if (cut) return { shown: true, whole: false,
+        why: `clipped by <${el.tagName.toLowerCase()} class="${el.className}">: text ${Math.round(left)}-${Math.round(right)}px, box ${Math.round(b.left)}-${Math.round(b.right)}px` }
+    }
+    // Laid out inside every clip, but something else may be painted over it (an action button).
+    for (const r of rects) {
+      for (const f of [0.02, 0.5, 0.98]) {
+        const x = r.left + r.width * f, y = r.top + r.height / 2
+        const top = document.elementFromPoint(x, y)
+        if (top && !top.contains(range.startContainer) && !(range.commonAncestorContainer.contains && range.commonAncestorContainer.contains(top)))
+          return { shown: true, whole: false,
+            why: `covered at ${Math.round(x)}px by <${top.tagName.toLowerCase()} class="${top.className && top.className.baseVal !== undefined ? top.className.baseVal : top.className}">` }
+      }
+    }
+    const host = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement
+    return { shown: true, whole: true, why: `text ${Math.round(left)}-${Math.round(right)}px in <${host.tagName.toLowerCase()} class="${host.className}">` }
+  }
+"""
+
+# Whether *name* is shown whole in the card: the smallest element holding the full name, with the
+# name's rendered text inside every clipping ancestor.
 NAME_WHOLE_JS = r"""
 ([id, name]) => {
+""" + TEXT_WHOLE_JS_BODY + r"""
   const btn = document.querySelector(`[data-testid="task-open-${id}"]`)
   if (!btn) return null
   const card = btn.parentElement
@@ -229,12 +285,24 @@ NAME_WHOLE_JS = r"""
     if ((el.textContent || '').includes(name) && (!best || best.contains(el))) best = el
   }
   if (!best) return { shown: false, whole: false, why: 'name not in the card' }
-  for (let el = best; el && el !== card.parentElement; el = el.parentElement) {
-    if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).overflow !== 'visible')
-      return { shown: true, whole: false, why: `clipped by <${el.tagName.toLowerCase()} class="${el.className}">` }
-  }
-  const r = best.getBoundingClientRect()
-  return { shown: r.width > 0, whole: r.width > 0, why: '' }
+  return textWhole(best, name)
+}
+"""
+
+# The waits-on line and the time at stage: whether each shows, and whether waits-on is whole.
+# FR-3: when both do not fit, waits-on is kept and time at stage gives way.
+WAITS_JS = r"""
+(id) => {
+""" + TEXT_WHOLE_JS_BODY + r"""
+  const btn = document.querySelector(`[data-testid="task-open-${id}"]`)
+  if (!btn) return null
+  const card = btn.parentElement
+  const waitsEl = document.querySelector(`[data-testid="task-stage-waits-on-${id}"]`) || card.querySelector('.aw-tcard-waits')
+  const ageEl = document.querySelector(`[data-testid="task-stage-age-${id}"]`) || card.querySelector('.aw-tcard-age')
+  const waits = waitsEl ? textWhole(waitsEl, null) : { shown: false, whole: false, why: 'no waits-on element' }
+  const age = ageEl ? textWhole(ageEl, null) : { shown: false, whole: false, why: 'no time-at-stage element' }
+  return { waitsText: waitsEl ? (waitsEl.textContent || '').trim() : '', waits,
+           ageText: ageEl ? (ageEl.textContent || '').trim() : '', ageShown: age.shown, ageWhole: age.whole }
 }
 """
 
@@ -476,15 +544,19 @@ def board_checks(browser, pid, theme, t, stage_tasks, motion_tasks, failed_names
     # ── ac-budget (FR-3)
     m = page.evaluate(CARD_LINES_JS, [t["budget"], "Decide the migration rollback"]) if board else None
     reviewer = page.evaluate(NAME_WHOLE_JS, [t["budget"], REVIEWER]) if board else None
-    waits = None
-    if board:
-        loc = page.locator(f"[data-testid='task-stage-waits-on-{t['budget']}'], "
-                           f"[data-testid='task-open-{t['budget']}'] .aw-tcard-waits")
-        waits = loc.first.inner_text().strip() if loc.count() and loc.first.is_visible() else ""
-    ok = bool(m) and m["lines"] <= 2 and bool(waits) and bool(reviewer) and reviewer["whole"]
+    w = page.evaluate(WAITS_JS, t["budget"]) if board else None
+    waits_ok = bool(w) and w["waits"]["shown"] and w["waits"]["whole"]
+    # Time at stage gives way first: it may only show while waits-on is shown whole.
+    age_ok = bool(w) and (waits_ok or not w["ageShown"])
+    ok = (bool(m) and m["lines"] <= 2 and waits_ok and age_ok
+          and bool(reviewer) and reviewer["whole"])
     line(f"ac-budget{tag}", board and bool(m) and m["titleFound"], not ok,
          f"lines below title={m and m['lines']} (max 2) at card width {m and round(m['width'])}px; "
-         f"waits-on={waits!r}; reviewer {REVIEWER!r} whole={reviewer and reviewer['whole']} "
+         f"waits-on={(w or {}).get('waitsText')!r} shown={w and w['waits']['shown']} "
+         f"whole={w and w['waits']['whole']} {(w or {}).get('waits', {}).get('why', '')}; "
+         f"time at stage={(w or {}).get('ageText')!r} shown={w and w['ageShown']} whole={w and w['ageWhole']} "
+         f"(gives way first: {age_ok}); "
+         f"reviewer {REVIEWER!r} whole={reviewer and reviewer['whole']} "
          f"{(reviewer or {}).get('why', '')}; texts={m and m['texts'][:8]}")
 
     # ── ac-checks (FR-5)
