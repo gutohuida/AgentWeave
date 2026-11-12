@@ -30,7 +30,13 @@ async def _make_task(session, task_id: str, status: str = "pending", project="pr
 
 
 def _run(run_id: str, agent: str = "worker", **kwargs) -> Run:
-    return Run(id=run_id, project_id="proj-test", agent=agent, status="running", **kwargs)
+    return Run(
+        id=run_id,
+        project_id="proj-test",
+        agent=agent,
+        status="running",
+        **{"initiator": "autonomous", **kwargs},
+    )
 
 
 # ---------------------------------------------------------------------------

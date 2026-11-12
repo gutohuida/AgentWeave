@@ -34,6 +34,7 @@ from .task_transitions import (
     STATUS_BLOCKED,
     Actor,
     allowed_targets,
+    free_targets,
     is_allowed,
     refusal_detail,
 )
@@ -482,6 +483,20 @@ class MoveVerdict:
         return str(self.refusal) if self.refusal is not None else None
 
 
+async def is_free_mover(session: AsyncSession, task: Task, actor: Actor) -> bool:
+    """Whether *actor* moves *task* by hand (`tasks-outside-a-flow-move-freely`, FR-1..FR-3).
+
+    The task is loose -- in no flow's or loop's queue, linked to a specification or not -- and the
+    actor is the operator, or a run the operator started with their own message (`Run.initiator`).
+    A run a flow, loop or job started keeps the map's edges, and so does every task in a flow."""
+    if task.loop_id is not None:
+        return False
+    if actor.is_operator:
+        return True
+    run = await session.get(Run, actor.run_id) if actor.run_id else None
+    return run is not None and run.initiator == "operator"
+
+
 async def decide_move(
     session: AsyncSession, task: Task, to_status: str, actor: Actor
 ) -> MoveVerdict:
@@ -495,6 +510,15 @@ async def decide_move(
     the state of the work rather than who is asking.
     """
     if to_status == task.status:
+        return MoveVerdict(allowed=True)
+    if to_status in free_targets(task.status) and await is_free_mover(session, task, actor):
+        # A move by hand: no map edge, no author/reviewer separation, and the mover never becomes
+        # the holder (FR-6). The reviewer-is-not-the-author guard stays: it refuses a state that
+        # would name the author as its own reviewer, whoever asks.
+        try:
+            await _guard_reviewer_is_not_the_author(session, task, to_status, actor)
+        except TransitionRefusedError as refusal:
+            return MoveVerdict(allowed=False, refusal=refusal)
         return MoveVerdict(allowed=True)
     if task.status == "completed" and to_status == "approved" and task.build_id:
         # The one edge a level adds (`a-build-has-a-driver-a-level-and-its-people`, D4): at Fast,
@@ -1056,7 +1080,9 @@ async def apply_transition(
     # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
     # author/reviewer guard because it answers the same kind of question — is this actor entitled to
     # this move — rather than the gates below, which ask about the state of the work.
-    await _guard_run_holds_the_task(session, task, to_status, actor)
+    free_move = to_status in free_targets(from_status) and await is_free_mover(session, task, actor)
+    if not (free_move and to_status == "completed"):
+        await _guard_run_holds_the_task(session, task, to_status, actor)
 
     # The dependency gate, on the edges that *begin* work: `pending -> in_progress` and
     # `assigned -> in_progress`. Not `-> assigned` and not `-> rejected`: a whole wave can be routed
@@ -1144,7 +1170,7 @@ async def apply_transition(
         # transaction holds the write lock (`approved-work-merges-in-batches`, D3).
         if git_answers is None:
             git_answers, _ = await ask_approval_git_first(
-                session, task, actor, override_checks_reason=reason
+                session, task, actor, override_checks_reason=reason, own_work=free_move
             )
         # An acceptance drive is approved only on a baseline that shows each check reached and
         # failing (`evidence-review-sends-work-back-only-for-what-is-wrong-with-it`, FR-6, FR-7).
@@ -1159,7 +1185,7 @@ async def apply_transition(
         # recorded as accepted by an approval that did not happen.
         async with session.begin_nested():
             decided = await _decide_evidence_with_verdict(
-                session, task, actor, "approved", verdict_reason
+                session, task, actor, "approved", verdict_reason, own_work=free_move
             )
             if is_drive:
                 baseline_refusal = await drive_baseline.approval_refusal(
@@ -1402,6 +1428,7 @@ async def _decide_evidence_with_verdict(
     to_status: str,
     verdict_reason: Optional[str],
     failing_pieces: Optional[Dict[str, str]] = None,
+    own_work: bool = False,
 ) -> Optional[str]:
     """The verdict on *task* decides the evidence recorded for it (vis-D4), piece by piece: a
     send-back rejects only *failing_pieces* and holds the rest. Returns the history's account of
@@ -1422,7 +1449,10 @@ async def _decide_evidence_with_verdict(
         # A Fast build has no reviewer (slice D, D4): its builder, lead or flow approving completed
         # work accepts the builder's own evidence, which a reviewer-less approval would otherwise
         # leave awaiting and refuse as "nobody has judged it".
-        own_work=bool(
+        # A loose task approved by hand has no reviewer either (`tasks-outside-a-flow-move-freely`,
+        # FR-4): whoever approves it accepts its builder's evidence.
+        own_work=own_work
+        or bool(
             to_status == "approved"
             and task.build_id
             and task.level == "fast"
@@ -1692,6 +1722,7 @@ async def ask_approval_git_first(
     actor: Actor,
     *,
     override_checks_reason: Optional[str] = None,
+    own_work: bool = False,
 ):
     """`(answers, refusal)`: approval's gate asked before anything is written, with the evidence the
     verdict would accept read as accepted, every git answer kept for the transaction to read
@@ -1705,6 +1736,7 @@ async def ask_approval_git_first(
         task,
         actor=evidence_actor(actor),
         decision=requirement_evidence.ACCEPTED,
+        own_work=own_work,
     )
     token = task_integration.ASSUMED_ACCEPTED.set(frozenset(evidence.id for evidence, _ in pieces))
     try:

@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Annotated, Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
+from typing import Annotated, Any, Awaitable, Callable, Dict, List, Literal, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -14,6 +14,7 @@ from ... import (
     deletion,
     dependency_gate,
     loop_history,
+    loose_close,
     project_workspace,
     readable_ids,
     spec_identity,
@@ -77,6 +78,7 @@ from ...task_transition_service import (
     guard_entry_status,
     history_for,
     hub_written_documents,
+    is_free_mover,
     retry_integration,
     run_fast_checks_before_completion,
 )
@@ -89,6 +91,7 @@ from ...task_transitions import (
     Actor,
     allowed_map_for,
     allowed_targets,
+    free_targets,
     operator,
 )
 from ...utils import persist_event, short_id
@@ -1835,7 +1838,7 @@ _SEND_BACK_STATUSES = ("revision_needed", "rejected")
 
 
 async def _failing_pieces_for(
-    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
+    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor, free: bool = False
 ) -> Optional[Dict[str, str]]:
     """The evidence a send-back names as failing, as `{evidence_id: reason}`; None for any other move.
 
@@ -1875,7 +1878,10 @@ async def _failing_pieces_for(
     sending_back = (
         body.status in _SEND_BACK_STATUSES
         and body.status != task.status
-        and body.status in allowed_targets(task.status, actor.kind)
+        and (
+            body.status in allowed_targets(task.status, actor.kind)
+            or (free and body.status in free_targets(task.status))
+        )
     )
     if named and body.status not in _SEND_BACK_STATUSES:
         raise HTTPException(
@@ -1927,7 +1933,11 @@ async def _failing_pieces_for(
 
 
 def _send_back_reason(
-    task: Task, body: TaskUpdate, actor: Actor, failing_pieces: Optional[Dict[str, str]]
+    task: Task,
+    body: TaskUpdate,
+    actor: Actor,
+    failing_pieces: Optional[Dict[str, str]],
+    free: bool = False,
 ) -> Tuple[Optional[str], Optional[str]]:
     """Why this move sends *task* back: `(reason_class, sentence)`, or `(None, None)` for any other
     move (FR-8/FR-9). Asked after `_failing_pieces_for`, so the move is already known to be legal and
@@ -1941,7 +1951,10 @@ def _send_back_reason(
     if not (
         body.status == "revision_needed"
         and body.status != task.status
-        and body.status in allowed_targets(task.status, actor.kind)
+        and (
+            body.status in allowed_targets(task.status, actor.kind)
+            or (free and body.status in free_targets(task.status))
+        )
     ):
         return None, None
     named = (body.reason_class or "").strip() or None
@@ -1960,7 +1973,7 @@ def _send_back_reason(
     sentence = _verdict_text(body.notes)
     if not sentence and failing_pieces:
         sentence = " ".join(reason for reason in failing_pieces.values() if reason) or None
-    if actor.is_operator:
+    if actor.is_operator or free:
         return named, sentence
     if named is None:
         raise HTTPException(
@@ -2086,9 +2099,10 @@ async def update_task_for_actor(
             )
     # The verdict's failing pieces, resolved and refused before any write
     # (`each-piece-of-evidence-is-judged-on-its-own`).
-    failing_pieces = await _failing_pieces_for(session, task, body, actor)
+    free = await is_free_mover(session, task, actor)
+    failing_pieces = await _failing_pieces_for(session, task, body, actor, free)
     # Why it goes back, required of a reviewer (FR-9) and refused before any write.
-    reason_class, send_back_reason = _send_back_reason(task, body, actor, failing_pieces)
+    reason_class, send_back_reason = _send_back_reason(task, body, actor, failing_pieces, free)
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
@@ -2509,6 +2523,67 @@ class LandRequest(RequestModel):
     """Land's optional body: the operator's reason to land over failing checks (F605)."""
 
     override_checks_reason: Optional[str] = Field(default=None, max_length=2000)
+
+
+class CloseTasksRequest(RequestModel):
+    """Close loose tasks without landing them here (`tasks-outside-a-flow-move-freely`, FR-7..FR-9)."""
+
+    tasks: List[str] = Field(min_length=1, max_length=200)
+    outcome: Literal["done_elsewhere", "cancelled"]
+    # Done elsewhere: the task whose work is on main, or a commit on it -- one of the two.
+    by_task: Optional[str] = None
+    commit: Optional[str] = None
+    # Cancelled: why, optionally.
+    reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+@router.post("/close")
+async def close_tasks(
+    body: CloseTasksRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Close one or several loose tasks, as done elsewhere or cancelled.
+
+    A task that cannot close (in a flow, already closed, a turn running on it) is named in
+    `refused` with its reason; the others still close. 409/422 when the request itself cannot be
+    answered: no main branch, a named task that is not on main (`task_not_on_main`), a commit that
+    is not (`commit_not_on_main`). Nothing changes on those.
+    """
+    project_id, _ = project
+    workspace = None
+    if body.outcome == "done_elsewhere":
+        try:
+            workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        except project_workspace.ProjectWorkspaceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": f"Project workspace is unavailable: {exc}",
+                    "code": "no_workspace",
+                },
+            ) from exc
+    try:
+        result = await loose_close.close_tasks(
+            session,
+            project_id,
+            body.tasks,
+            body.outcome,
+            by_task=body.by_task,
+            commit=body.commit,
+            reason=body.reason,
+            workspace=workspace,
+        )
+    except loose_close.CloseRefusedError as exc:
+        raise HTTPException(
+            status_code=exc.http_status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    for entry in result["closed"]:
+        defer_broadcast(
+            session, project_id, "task_updated", {"id": entry["id"], "status": entry["status"]}
+        )
+    await session.commit()
+    return result
 
 
 @router.post("/{task_id}/land", response_model=TaskResponse)
