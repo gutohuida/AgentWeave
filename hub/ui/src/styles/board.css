@@ -205,3 +205,21 @@ input.aw-board-search-input { height: 28px; padding: 0 10px 0 28px; font-size: 1
 }
 .aw-board-scope-option:hover, .aw-board-scope-option[aria-selected='true'] { background: var(--muted); }
 .aw-board-scope-empty { padding: 6px 8px; font-size: 12px; color: var(--muted-foreground); }
+
+/* The one stage a card is at (FR-9). */
+.aw-task-card-stage { font-size: 11.5px; font-weight: 600; color: var(--text-1); }
+.aw-task-card-stage[data-stage="on_main"] { color: var(--green); }
+.aw-task-card-stage[data-stage="did_not_land"], .aw-task-card-stage[data-stage="sent_back"] { color: var(--red); }
+
+/* A task whose work is on main reads differently from an approved one still on its way (FR-12). */
+.aw-task-card[data-on-main="true"] { border-left: 3px solid var(--green); background: color-mix(in oklab, var(--green) 7%, var(--surface, transparent)); }
+.aw-task-card-on-main { display: inline-flex; align-items: center; color: var(--green); }
+
+/* Board-level counts (FR-13). */
+.aw-board-standing { display: flex; flex-direction: column; flex: none; border-bottom: 1px solid var(--border-region); }
+.aw-board-standing-counts { display: flex; gap: 8px; padding: 6px 16px; }
+.aw-board-standing-count { font-size: 12.5px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2); }
+.aw-board-standing-count[aria-expanded="true"] { background: var(--muted); color: var(--text-1); }
+.aw-board-standing-count strong { font-weight: 700; color: var(--text-1); margin-right: 4px; }
+.aw-board-standing-list { margin: 0; padding: 4px 16px 8px 32px; font-size: 12.5px; color: var(--text-2); }
+.aw-board-standing-list button { text-align: left; }
