@@ -35,6 +35,7 @@ async def make_run(
     async with async_session_factory() as session:
         session.add(
             Run(
+                initiator="autonomous",
                 id=run_id,
                 project_id="proj-test",
                 agent=agent,
@@ -1584,7 +1585,15 @@ async def test_a_second_run_binding_to_a_parked_task_leaves_it_parked(app):
     await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
 
     async with async_session_factory() as session:
-        session.add(Run(id="run-second", project_id="proj-test", agent="worker", status="running"))
+        session.add(
+            Run(
+                id="run-second",
+                project_id="proj-test",
+                agent="worker",
+                status="running",
+                initiator="autonomous",
+            )
+        )
         await session.commit()
     async with async_session_factory() as session:
         second = await session.get(Run, "run-second")
