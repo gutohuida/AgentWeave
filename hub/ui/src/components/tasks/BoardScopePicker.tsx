@@ -3,6 +3,7 @@ import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { BoardScope } from '@/store/boardScopeStore'
+import { hubDate } from '@/lib/hubTime'
 
 /** One spec the picker offers: every spec in the project that holds at least one task. */
 export interface ScopeSpec {
@@ -18,7 +19,7 @@ export interface ScopeSpec {
 
 /** How long ago, in the picker's words: '5 min', '2 h', '3 days'. */
 function sinceLabel(value: string, now: Date = new Date()): string {
-  const minutes = Math.max(0, (now.getTime() - new Date(value).getTime()) / 60_000)
+  const minutes = Math.max(0, (now.getTime() - hubDate(value).getTime()) / 60_000)
   if (minutes < 1) return 'now'
   if (minutes < 60) return `${Math.round(minutes)} min`
   const hours = minutes / 60
