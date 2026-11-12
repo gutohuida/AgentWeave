@@ -395,6 +395,8 @@ export interface SpecListEntry {
    *  `the-spec-header-redesigned`): "Ready to approve", "2 amendments to review", "Ready to build",
    *  "Ready to fold". Null when it waits on nobody, or on an agent. */
   waiting?: string | null
+  /** A capability: how many open changes name it. */
+  waitingCount?: number
 }
 
 export type ListOrder = 'changed' | 'phase' | 'title' | 'roadmap' | 'attention'
