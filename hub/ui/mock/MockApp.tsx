@@ -25,6 +25,7 @@ function parseHash(): MockRoute {
     return { kind: 'app-settings', section }
   }
   if (kind === 'gallery') return { kind: 'gallery' }
+  if (kind === 'task-redesign') return { kind: 'task-redesign' }
   if (kind === 'thread') return { kind: 'thread' }
   if (kind === 'traces') return { kind: 'traces' }
   if (kind === 'conversation-trace') return { kind: 'conversation-trace', conversationId: a || null }
@@ -45,6 +46,8 @@ function toHash(route: MockRoute): string {
       return `app-settings/${route.section}`
     case 'gallery':
       return 'gallery'
+    case 'task-redesign':
+      return 'task-redesign'
     case 'thread':
       return 'thread'
     case 'traces':

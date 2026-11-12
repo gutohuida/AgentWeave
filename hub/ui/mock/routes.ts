@@ -10,6 +10,8 @@ export type MockRoute =
   | { kind: 'agent-settings'; agent: string; section: AgentSettingsSection }
   | { kind: 'app-settings'; section: AppSettingsSection }
   | { kind: 'gallery' }
+  /** The task card and story redesign (`task-card-and-story-redesign`). */
+  | { kind: 'task-redesign' }
   | { kind: 'thread' }
   /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }

@@ -4,6 +4,7 @@ import type { MockRoute, ScreenProps } from '../routes'
 type ScreenComponent = React.ComponentType<ScreenProps>
 
 const Gallery = React.lazy(() => import('./Gallery'))
+const TaskRedesign = React.lazy(() => import('./TaskRedesign'))
 const Overview = React.lazy(() => import('./Overview'))
 const Tasks = React.lazy(() => import('./Tasks'))
 const Spec = React.lazy(() => import('./Spec'))
@@ -23,6 +24,8 @@ export function screenFor(route: MockRoute): ScreenComponent {
   switch (route.kind) {
     case 'gallery':
       return Gallery
+    case 'task-redesign':
+      return TaskRedesign
     case 'thread':
       return Thread
     case 'traces':
@@ -47,6 +50,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'gallery', label: 'Primitives & motion', route: { kind: 'gallery' } },
   { id: 'overview', label: 'Overview', route: { kind: 'tab', tab: 'overview' } },
   { id: 'tasks', label: 'Tasks', route: { kind: 'tab', tab: 'tasks' } },
+  { id: 'task-redesign', label: 'Tasks · Card and story redesign', route: { kind: 'task-redesign' } },
   { id: 'spec', label: 'Spec', route: { kind: 'tab', tab: 'spec' } },
   { id: 'checkpoints', label: 'Checkpoints', route: { kind: 'tab', tab: 'checkpoints' } },
   { id: 'vault', label: 'Vault', route: { kind: 'tab', tab: 'vault' } },
