@@ -5,7 +5,7 @@ import { Segmented } from '@/components/ui/segmented'
 import type { AgentSummary } from '@/api/agents'
 import type { Task } from '@/api/tasks'
 import { agentColorVars } from '@/lib/agentColors'
-import { groupByStanding } from '@/lib/taskStage'
+import { groupByStanding, isFinished } from '@/lib/taskStage'
 import { taskStatusTone } from '@/lib/taskStatusColors'
 import { BoardColumn, type ColumnDropState } from './BoardColumn'
 import { TaskCardCompact, type RequirementTally } from './TaskCardCompact'
@@ -55,6 +55,8 @@ export function BoardView({
   onViewChange,
   folds,
   onFoldsChange,
+  showFinished = false,
+  onShowFinishedChange,
   selectedTaskId,
   onOpenTask,
   onRetryIntegration,
@@ -79,6 +81,9 @@ export function BoardView({
   /** Column key → folded. Absent means "folded when empty". */
   folds: Record<string, boolean>
   onFoldsChange: (folds: Record<string, boolean>) => void
+  /** Whether finished tasks (on main, or closed without landing) are shown; the container remembers it. */
+  showFinished?: boolean
+  onShowFinishedChange?: (show: boolean) => void
   selectedTaskId?: string | null
   onOpenTask: (taskId: string) => void
   onRetryIntegration: (taskId: string) => void
@@ -111,9 +116,16 @@ export function BoardView({
   const [revealed, setRevealed] = React.useState<'notOnMain' | 'working' | null>(null)
   const standing = React.useMemo(() => groupByStanding(tasks), [tasks])
   const q = query.trim().toLowerCase()
+  const matchesQuery = (t: Task) =>
+    t.title.toLowerCase().includes(q) || t.id.includes(q) || (t.readable_id ?? '').toLowerCase().includes(q)
+  // Finished tasks stay off the board unless the switch is on; a search still reaches them.
   const visible = tasks.filter(
-    (t) => (!agentFilter || t.assignee === agentFilter) && (!q || t.title.toLowerCase().includes(q) || t.id.includes(q) || (t.readable_id ?? '').toLowerCase().includes(q)),
+    (t) =>
+      (!agentFilter || t.assignee === agentFilter) &&
+      (!q || matchesQuery(t)) &&
+      (showFinished || !isFinished(t) || Boolean(q)),
   )
+  const hiddenFinished = tasks.filter((t) => isFinished(t) && !visible.includes(t)).length
 
   return (
     <div className="aw-board">
@@ -157,6 +169,15 @@ export function BoardView({
             )
           })}
         </div>
+        <label className="aw-board-finished-switch">
+          <input
+            type="checkbox"
+            data-testid="board-show-finished"
+            checked={showFinished}
+            onChange={(e) => onShowFinishedChange?.(e.target.checked)}
+          />
+          Show finished
+        </label>
         <label className="aw-board-search">
           <Icon name="search" size={13} />
           <Input
@@ -232,6 +253,12 @@ export function BoardView({
         </div>
       ) : null}
 
+      {view === 'board' && !showFinished ? (
+        <div className="aw-board-hidden-count" data-testid="board-hidden-finished">
+          {hiddenFinished} finished {hiddenFinished === 1 ? 'task is' : 'tasks are'} hidden
+        </div>
+      ) : null}
+
       {view === 'dependencies' ? (
         <div className="aw-board-scroll">{children}</div>
       ) : (
@@ -272,6 +299,7 @@ export function BoardView({
                       colorIndex={task.assignee ? colorOf.get(task.assignee) : null}
                       tally={tallies[task.id]}
                       working={workingTaskIds.has(task.id)}
+                      finished={isFinished(task)}
                       specTag={task.spec_document_id ? specTags?.get(task.spec_document_id) : undefined}
                       selected={task.id === selectedTaskId}
                       select={selecting ? { checked: picked.has(task.id), onToggle: () => togglePicked(task.id) } : undefined}

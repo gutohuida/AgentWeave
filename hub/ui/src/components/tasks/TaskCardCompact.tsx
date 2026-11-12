@@ -55,6 +55,7 @@ export function TaskCardCompact({
   tally,
   working,
   specTag,
+  finished,
   now,
   selected,
   onOpen,
@@ -72,6 +73,8 @@ export function TaskCardCompact({
   working?: boolean
   /** The short tag of the spec this task belongs to. */
   specTag?: string
+  /** The task is on main or closed without landing. */
+  finished?: boolean
   now?: Date
   selected?: boolean
   onOpen: (taskId: string) => void
@@ -93,6 +96,7 @@ export function TaskCardCompact({
       data-task-id={task.id}
       data-selected={selected ? 'true' : 'false'}
       data-status-tone={status?.tone ?? 'none'}
+      data-finished={finished ? 'true' : 'false'}
       data-on-main={task.stage === 'on_main' ? 'true' : 'false'}
       data-dragging={move?.dragging ? 'true' : 'false'}
       draggable={move ? true : undefined}
@@ -136,6 +140,11 @@ export function TaskCardCompact({
           {task.title}
         </span>
         <span className="aw-task-card-meta">
+          {finished ? (
+            <span className="aw-task-card-spec" data-testid={`task-finished-mark-${task.id}`}>
+              finished
+            </span>
+          ) : null}
           {specTag ? (
             <span className="aw-task-card-spec" data-testid={`task-spec-tag-${task.id}`} title={`Spec: ${specTag}`}>
               {specTag}

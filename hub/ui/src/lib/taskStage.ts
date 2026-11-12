@@ -80,3 +80,8 @@ export function groupByStanding<T extends { stage?: string | null }>(tasks: T[])
     working: tasks.filter((t) => t.stage === 'working'),
   }
 }
+
+/** A finished task is on main, or closed without landing. */
+export function isFinished(task: { stage?: string | null }): boolean {
+  return task.stage === 'on_main' || task.stage === 'closed'
+}
