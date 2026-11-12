@@ -2,7 +2,7 @@ import type { SpecDocumentRecord } from '@/api/spec'
 
 /** The open changes naming a capability, in the order the Hub returns them
  *  (`a-change-names-the-capabilities-it-changes` FR-5). Never re-sorted here. */
-export function CapabilityWaitingList({ record, onOpen }: { record: SpecDocumentRecord; onOpen?: (path: string) => void }) {
+export function CapabilityWaitingList({ record }: { record: SpecDocumentRecord }) {
   const waiting = record.waiting_changes ?? []
   return (
     <div className="flex flex-col gap-1 text-xs" style={{ color: 'var(--text-3)' }}>
@@ -16,9 +16,7 @@ export function CapabilityWaitingList({ record, onOpen }: { record: SpecDocument
             data-path={change.path}
             data-built={change.built ? 'true' : 'false'}
           >
-            <button type="button" className="underline" onClick={() => onOpen?.(change.path)}>
-              {change.title}
-            </button>{' '}
+            <span>{change.title}</span>{' '}
             — {change.phase}
             {change.built ? ', built' : ''}
           </li>

@@ -20,6 +20,7 @@ from ... import (
     spec_lifecycle,
     spec_reading,
     task_dependency_writer,
+    task_stage,
 )
 from ...agent_activity import latest_activity_by_agent
 from ...agent_roster import assignee_refusal
@@ -612,6 +613,7 @@ async def _attach_assignee_liveness(
     ever report.
     """
     await _attach_queue_state(session, responses, project_id)
+    await task_stage.attach_stages(session, responses, project_id=project_id)
     assignees = {response.assignee for response in responses if response.assignee}
     if not assignees:
         return responses

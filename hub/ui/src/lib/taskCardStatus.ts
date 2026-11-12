@@ -36,8 +36,12 @@ const STALLED_DETAIL = 'A run worked on this and ended without changing its stat
  *  outcome, a dropped run (divergence), a prerequisite that regressed under running work, a gate
  *  on a prerequisite (F19, red when that prerequisite was rejected), and live work (D12). */
 export function cardStatus(task: Task, working?: boolean): CardStatus | null {
+  // A card shows one stage (`where-each-task-stands-is-visible-on-the-board`, FR-9). When the Hub
+  // reports `task.stage`, the stage chip owns every line that only restates a stage (waiting,
+  // gated, sent back, working, under review); this line keeps the facts that are not a stage.
+  const staged = Boolean(task.stage)
   const waiting = task.blocked_reason ?? task.awaiting_answer_reason
-  if (waiting || task.status === 'blocked') {
+  if (!staged && (waiting || task.status === 'blocked')) {
     const why = waiting ?? 'an answer from you'
     // A wait does not make an earlier dropped run less true (F902): say both.
     if (task.has_open_divergence) {
@@ -81,7 +85,10 @@ export function cardStatus(task: Task, working?: boolean): CardStatus | null {
       detail: 'This work is under way, but a task it depends on no longer reads approved.',
     }
   }
-  if (task.dependency_state === 'gated_on_rejected' || task.dependency_state === 'gated') {
+  if (
+    task.dependency_state === 'gated_on_rejected' ||
+    (task.dependency_state === 'gated' && !staged)
+  ) {
     const blocking = (task.prerequisites ?? []).filter((p) => p.status !== 'approved')
     const rejected = task.dependency_state === 'gated_on_rejected'
     return {
@@ -97,9 +104,11 @@ export function cardStatus(task: Task, working?: boolean): CardStatus | null {
         : 'Cannot start yet — a prerequisite has not been approved.',
     }
   }
-  if (task.status === 'revision_needed') return { tone: 'revision', reason: 'revision', text: 'Sent back for changes' }
-  if (working) return { tone: 'working', reason: 'working', text: `${task.assignee ?? 'An agent'} is working on it` }
-  if (task.status === 'under_review') return { tone: 'review', reason: 'review', text: 'Waiting for a review' }
+  if (!staged) {
+    if (task.status === 'revision_needed') return { tone: 'revision', reason: 'revision', text: 'Sent back for changes' }
+    if (working) return { tone: 'working', reason: 'working', text: `${task.assignee ?? 'An agent'} is working on it` }
+    if (task.status === 'under_review') return { tone: 'review', reason: 'review', text: 'Waiting for a review' }
+  }
   if (proceeded) {
     return { tone: 'decided', reason: 'decided-without-you', text: 'Decided without you earlier', detail: proceeded }
   }

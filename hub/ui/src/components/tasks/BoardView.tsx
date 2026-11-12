@@ -5,6 +5,7 @@ import { Segmented } from '@/components/ui/segmented'
 import type { AgentSummary } from '@/api/agents'
 import type { Task } from '@/api/tasks'
 import { agentColorVars } from '@/lib/agentColors'
+import { groupByStanding } from '@/lib/taskStage'
 import { taskStatusTone } from '@/lib/taskStatusColors'
 import { BoardColumn, type ColumnDropState } from './BoardColumn'
 import { TaskCardCompact, type RequirementTally } from './TaskCardCompact'
@@ -94,6 +95,8 @@ export function BoardView({
   const [query, setQuery] = React.useState('')
 
   const colorOf = React.useMemo(() => new Map(agents.map((a) => [a.name, a.color_index])), [agents])
+  const [revealed, setRevealed] = React.useState<'notOnMain' | 'working' | null>(null)
+  const standing = React.useMemo(() => groupByStanding(tasks), [tasks])
   const q = query.trim().toLowerCase()
   const visible = tasks.filter(
     (t) => (!agentFilter || t.assignee === agentFilter) && (!q || t.title.toLowerCase().includes(q) || t.id.includes(q) || (t.readable_id ?? '').toLowerCase().includes(q)),
@@ -155,6 +158,41 @@ export function BoardView({
       </div>
 
       {notices}
+
+      {view === 'board' ? (
+        <div className="aw-board-standing" data-testid="board-standing">
+          <div className="aw-board-standing-counts">
+            {([
+              ['notOnMain', 'not yet on main'],
+              ['working', 'being worked on'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className="aw-board-standing-count"
+                data-testid={`board-count-${key}`}
+                aria-expanded={revealed === key}
+                onClick={() => setRevealed(revealed === key ? null : key)}
+              >
+                <strong>{standing[key].length}</strong>
+                {label}
+              </button>
+            ))}
+          </div>
+          {revealed ? (
+            <ul className="aw-board-standing-list" data-testid={`board-list-${revealed}`}>
+              {standing[revealed].map((t) => (
+                <li key={t.id}>
+                  <button type="button" onClick={() => onOpenTask(t.id)}>
+                    {t.readable_id ? `${t.readable_id} ` : ''}
+                    {t.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       {view === 'dependencies' ? (
         <div className="aw-board-scroll">{children}</div>

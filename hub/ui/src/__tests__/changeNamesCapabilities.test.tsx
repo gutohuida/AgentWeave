@@ -124,6 +124,8 @@ describe('a capability', () => {
     const rows = screen.getAllByTestId('capability-waiting-row')
     expect(rows.map((r) => r.getAttribute('data-path'))).toEqual(['spec/changes/built/spec.json', 'spec/changes/unbuilt/spec.json'])
     expect(rows.map((r) => r.getAttribute('data-built'))).toEqual(['true', 'false'])
+    // Titles are plain text: nothing on the row looks clickable but does nothing.
+    expect(screen.queryAllByRole('button')).toHaveLength(0)
   })
 
   it("shows waiting_count on the spec list's capability rows", () => {

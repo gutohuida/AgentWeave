@@ -582,6 +582,8 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'question_asked':
         case 'question_answered':
           inv({ queryKey: ['project', pid, 'questions'] })
+          // A card's waits-on line names the asking agent.
+          inv({ queryKey: ['project', pid, 'tasks'] })
           inv({ queryKey: ['project', pid, 'status'] })
           break
         case 'agent_created':
@@ -636,6 +638,8 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           // heartbeat — without this, the running/idle badge would never
           // update for a direct-spawn run.
           inv(agentListFilter(pid))
+          // A card is "being worked on" only while a run bound to it is running.
+          inv({ queryKey: ['project', pid, 'tasks'] })
           inv({ queryKey: ['project', pid, 'accounting'] })
           // A run's spend and divergence are ledger lanes.
           refreshWorkSoon(queryClient, pid)
