@@ -46,6 +46,7 @@ async def builder():
         session.add(Agent(id="ag-piece-b", project_id="proj-test", name="builder"))
         session.add(
             Run(
+                initiator="autonomous",
                 id="run-piece-b",
                 project_id="proj-test",
                 agent="builder",
@@ -65,6 +66,7 @@ async def reviewer():
         session.add(Agent(id="ag-piece-r", project_id="proj-test", name="reviewer"))
         session.add(
             Run(
+                initiator="autonomous",
                 id="run-piece-r",
                 project_id="proj-test",
                 agent="reviewer",

@@ -170,6 +170,7 @@ async def _builder_task(tmp_path: Path, *, content: str, status="in_progress") -
         )
         session.add(
             Run(
+                initiator="autonomous",
                 id=BUILDER_RUN,
                 project_id="proj-test",
                 agent=BUILDER,
@@ -632,6 +633,7 @@ async def _completed_outside_a_flow(tmp_path: Path, *, content="x = 1\n") -> str
         db.add(task)
         db.add(
             Run(
+                initiator="autonomous",
                 id="run-checks-qa",
                 project_id="proj-test",
                 agent="QA",
