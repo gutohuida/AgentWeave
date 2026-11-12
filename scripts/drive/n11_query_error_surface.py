@@ -149,6 +149,7 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/spec/SpecCoverageBar.tsx', 'useSpecCoverage', 1, 'BLANK', '', '`if (!data …) return null` (:87)'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useTaskIntegrationPreview', 1, 'SUPPRESSED', '', "`if (!canApprove || !data) return null` (:36) drops the 'Approving will not merge anything' warning"),
     ('components/tasks/TaskDetailDrawer.tsx', 'useAllowedTransitions', 1, 'SUPPRESSED', '', '`moves = allowed?.transitions?.[status] ?? []` (:191) — every status button disappears'),
+    ('components/tasks/TaskDetailDrawer.tsx', 'useTaskChecks', 1, 'BLANK', '', 'latest check run shown on the task card (:309); unread, the checks row is absent'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useAgents', 1, 'BLANK', '', 'assignee name list (:153)'),
     ('components/tasks/TaskDetailDrawer.tsx', 'useSpecDocuments', 1, 'BLANK', '', 'document-path map (:158)'),
     ('components/tasks/TaskIntegrationNote.tsx', 'useTaskIntegrations', 1, 'SUPPRESSED', '', '`if (rows.length === 0) return null` (:39) removes the integration outcome and its retry button'),
