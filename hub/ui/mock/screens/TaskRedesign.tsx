@@ -2,6 +2,7 @@ import * as React from 'react'
 import type { RequirementLink, StoryEvent, Task, TaskCheckRun, TaskStory } from '@/api/tasks'
 import { BoardColumn } from '@/components/tasks/BoardColumn'
 import { TaskCard } from '@/components/tasks/TaskCard'
+import { TaskDialog } from '@/components/tasks/TaskDialog'
 import { TaskSheet, type TaskSheetAction } from '@/components/tasks/TaskSheet'
 import { toast } from '@/lib/toast'
 import { Icon } from '@/components/common/Icon'
@@ -250,6 +251,10 @@ export default function TaskRedesign({ now }: ScreenProps) {
   const [parade, setParade] = React.useState(0)
   const [playing, setPlaying] = React.useState(false)
   const [drawerOpen, setDrawerOpen] = React.useState(true)
+  // How an opened task is shown: the centred dialog the board uses today (default), or the side sheet.
+  const [openAs, setOpenAs] = React.useState<'dialog' | 'sheet'>(() =>
+    window.location.hash.includes('open=sheet') ? 'sheet' : 'dialog',
+  )
   const open = (id: string) => {
     setSelectedId(id)
     setDrawerOpen(true)
@@ -291,6 +296,14 @@ export default function TaskRedesign({ now }: ScreenProps) {
             <Icon name={playing ? 'pause' : 'play_arrow'} size={12} /> {playing ? 'Stop' : 'Play'}
           </button>
           <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{STAGE_LABELS[PARADE[parade]]}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-2)' }}>Open a task as:</span>
+          <div className="aw-segmented" role="group" aria-label="Open a task as">
+            {(['dialog', 'sheet'] as const).map((mode) => (
+              <button key={mode} type="button" data-slot="segment" className="aw-segmented-option" aria-pressed={openAs === mode} data-active={openAs === mode ? "true" : "false"} onClick={() => setOpenAs(mode)}>
+                {mode === 'dialog' ? 'Dialog (as today)' : 'Side sheet'}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="aw-board-scroll">
           <div className="aw-board-columns">
@@ -316,9 +329,23 @@ export default function TaskRedesign({ now }: ScreenProps) {
           </div>
         </div>
       </div>
-      {drawerOpen ? (
+      {drawerOpen && openAs === 'dialog' ? (
+        <TaskDialog
+          key={selected.task.id}
+          task={sheetTask}
+          story={story}
+          checks={checksOf(selected, now)}
+          specTag={selected.specTag}
+          colorOf={colorOf}
+          now={now}
+          onAction={(action: TaskSheetAction) => toast({ title: ACTION_WORDS[action], description: 'Mock: nothing changes.' })}
+          onOpenTask={open}
+          onClose={() => setDrawerOpen(false)}
+        />
+      ) : null}
+      {drawerOpen && openAs === 'sheet' ? (
         <aside
-          className="aw-sheet-host"
+          className="aw-tview-host"
           style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 520, borderLeft: '1px solid var(--border)', overflow: 'auto', background: 'var(--surface)', boxShadow: '-12px 0 32px rgb(0 0 0 / .18)', zIndex: 5 }}
           aria-label="Task drawer"
         >

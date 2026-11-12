@@ -50,6 +50,7 @@ export function TaskSheet({
   colorOf,
   now,
   initialTab = 'story',
+  layout = 'sheet',
   onAction,
   onOpenTask,
   onClose,
@@ -61,6 +62,9 @@ export function TaskSheet({
   colorOf?: (agent: string) => number | null | undefined
   now?: Date
   initialTab?: TaskSheetTab
+  /** `sheet`: one column, for a side panel. `dialog`: two columns, for the centred dialog the board
+   *  opens a task in. */
+  layout?: 'sheet' | 'dialog'
   onAction: (action: TaskSheetAction) => void
   onOpenTask?: (taskId: string) => void
   onClose: () => void
@@ -72,99 +76,135 @@ export function TaskSheet({
   const met = links.filter((link) => link.state === 'verified').length
   const primary = primaryAction(task)
   const attention = attentionOf(task, failedChecks)
-  return (
-    <section className="aw-sheet" aria-label={`Task ${task.readable_id ?? ''} ${task.title}`}>
-      <header className="aw-sheet-head">
-        <div className="aw-sheet-ids">
-          {task.readable_id ? <span className="aw-tcard-id">{task.readable_id}</span> : null}
-          {specTag ? <span className="aw-tcard-tag">{specTag}</span> : null}
-          {task.priority === 'critical' ? (
-            <span className="aw-tcard-marker" data-kind="critical">
-              <Icon name="flag" size={11} /> Critical
-            </span>
-          ) : null}
-          <button type="button" data-slot="icon-button" className="aw-icon-button aw-sheet-close" aria-label="Close" title="Close" onClick={onClose}>
-            <Icon name="close" size={15} />
-          </button>
-        </div>
-        <h2 className="aw-sheet-title">
-          <button type="button" data-slot="drawer-title" title="Rename" onClick={() => onAction('rename')}>
-            {task.title}
-          </button>
-        </h2>
-      </header>
-
-      {attention ? (
-        <div className="aw-sheet-attention" data-tone={attention.tone} role="status">
-          <Icon name={attention.glyph} size={14} />
-          <div>
-            <strong>{attention.title}</strong>
-            {attention.text ? <p>{attention.text}</p> : null}
-          </div>
-        </div>
-      ) : null}
-
-      <TaskSummaryHeader task={task} summary={story?.summary} specTag={undefined} failedChecks={failedChecks} colorOf={colorOf} now={now} />
-
-      <div className="aw-sheet-actions">
-        {primary ? (
-          <Button variant="primary" size="sm" onClick={() => onAction(primary.action)}>
-            <Icon name={primary.glyph} size={13} />
-            {primary.label}
-          </Button>
-        ) : (
-          <span className="aw-sheet-nothing">{nothingToDo(task)}</span>
-        )}
-        {task.stage === 'under_review' ? (
-          <Button variant="outline" size="sm" onClick={() => onAction('send-back')}>
-            <Icon name="restart_alt" size={13} />
-            Send back
-          </Button>
+  const head = (
+    <header className="aw-tview-head">
+      <div className="aw-tview-ids">
+        {task.readable_id ? <span className="aw-tcard-id">{task.readable_id}</span> : null}
+        {specTag ? <span className="aw-tcard-tag">{specTag}</span> : null}
+        {task.priority === 'critical' ? (
+          <span className="aw-tcard-marker" data-kind="critical">
+            <Icon name="flag" size={11} /> Critical
+          </span>
         ) : null}
-        <Menu>
-          <MenuTrigger data-slot="menu-trigger" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} aw-sheet-more`} aria-label="More actions">
-            <Icon name="more_horiz" size={14} />
-            More
-          </MenuTrigger>
-          <MenuContent align="end">
-            <MenuLabel>Move this task</MenuLabel>
-            <MenuItem icon="arrow_forward" onSelect={() => onAction('move')}>Move to another status…</MenuItem>
-            <MenuItem icon="task_alt" onSelect={() => onAction('close-done-elsewhere')}>Close as done elsewhere…</MenuItem>
-            <MenuItem icon="remove_circle" onSelect={() => onAction('cancel')}>Cancel this task…</MenuItem>
-            <MenuLabel>Change</MenuLabel>
-            <MenuItem icon="flag" onSelect={() => onAction('priority')}>Change priority…</MenuItem>
-            <MenuItem icon="edit" onSelect={() => onAction('rename')}>Rename</MenuItem>
-            <MenuItem icon="content_copy" onSelect={() => onAction('copy-id')}>Copy its id</MenuItem>
-            <MenuItem icon="delete" onSelect={() => onAction('delete')}>Delete…</MenuItem>
-          </MenuContent>
-        </Menu>
+        <button type="button" data-slot="icon-button" className="aw-icon-button aw-tview-close" aria-label="Close" title="Close" onClick={onClose}>
+          <Icon name="close" size={15} />
+        </button>
       </div>
+      <h2 className="aw-tview-title" id={`task-sheet-title-${task.id}`}>
+        <button type="button" data-slot="drawer-title" title="Rename" onClick={() => onAction('rename')}>
+          {task.title}
+        </button>
+      </h2>
+    </header>
+  )
 
-      <div className="aw-sheet-tabs" role="tablist" aria-label="Task view">
-        <Tab id="story" current={tab} onSelect={setTab} label="Story" count={story?.events.length} />
-        <Tab id="work" current={tab} onSelect={setTab} label="Work" count={links.length ? `${met}/${links.length}` : undefined} alert={failedChecks > 0 || links.some((l) => l.has_rejected_evidence)} />
-        <Tab id="details" current={tab} onSelect={setTab} label="Details" />
+  const banner = attention ? (
+    <div className="aw-tview-attention" data-tone={attention.tone} role="status">
+      <Icon name={attention.glyph} size={14} />
+      <div>
+        <strong>{attention.title}</strong>
+        {attention.text ? <p>{attention.text}</p> : null}
       </div>
+    </div>
+  ) : null
 
-      <div className="aw-sheet-body" role="tabpanel">
-        {tab === 'story' ? (
-          story ? <TaskTimeline key={task.id} events={story.events} now={now} /> : <p className="aw-sheet-empty">No story yet.</p>
-        ) : tab === 'work' ? (
-          <WorkTab task={task} checks={checks ?? null} now={now} onAction={onAction} />
-        ) : (
-          <DetailsTab task={task} now={now} onOpenTask={onOpenTask} />
-        )}
-      </div>
+  const summary = <TaskSummaryHeader task={task} summary={story?.summary} specTag={undefined} failedChecks={failedChecks} colorOf={colorOf} now={now} />
+
+  const actions = (
+    <div className="aw-tview-actions">
+      {primary ? (
+        <Button variant="primary" size="sm" onClick={() => onAction(primary.action)}>
+          <Icon name={primary.glyph} size={13} />
+          {primary.label}
+        </Button>
+      ) : (
+        <span className="aw-tview-nothing">{nothingToDo(task)}</span>
+      )}
+      {task.stage === 'under_review' ? (
+        <Button variant="outline" size="sm" onClick={() => onAction('send-back')}>
+          <Icon name="restart_alt" size={13} />
+          Send back
+        </Button>
+      ) : null}
+      <Menu>
+        <MenuTrigger data-slot="menu-trigger" className={`${buttonVariants({ variant: 'ghost', size: 'sm' })} aw-tview-more`} aria-label="More actions">
+          <Icon name="more_horiz" size={14} />
+          More
+        </MenuTrigger>
+        <MenuContent align="end">
+          <MenuLabel>Move this task</MenuLabel>
+          <MenuItem icon="arrow_forward" onSelect={() => onAction('move')}>Move to another status…</MenuItem>
+          <MenuItem icon="task_alt" onSelect={() => onAction('close-done-elsewhere')}>Close as done elsewhere…</MenuItem>
+          <MenuItem icon="remove_circle" onSelect={() => onAction('cancel')}>Cancel this task…</MenuItem>
+          <MenuLabel>Change</MenuLabel>
+          <MenuItem icon="flag" onSelect={() => onAction('priority')}>Change priority…</MenuItem>
+          <MenuItem icon="edit" onSelect={() => onAction('rename')}>Rename</MenuItem>
+          <MenuItem icon="content_copy" onSelect={() => onAction('copy-id')}>Copy its id</MenuItem>
+          <MenuItem icon="delete" onSelect={() => onAction('delete')}>Delete…</MenuItem>
+        </MenuContent>
+      </Menu>
+    </div>
+  )
+
+  const tabs = (
+    <div className="aw-tview-tabs" role="tablist" aria-label="Task view">
+      <Tab id="story" current={tab} onSelect={setTab} label="Story" count={story?.events.length} />
+      <Tab id="work" current={tab} onSelect={setTab} label="Work" count={links.length ? `${met}/${links.length}` : undefined} alert={failedChecks > 0 || links.some((l) => l.has_rejected_evidence)} />
+      <Tab id="details" current={tab} onSelect={setTab} label="Details" />
+    </div>
+  )
+
+  const body = (
+    <div className="aw-tview-body" role="tabpanel">
+      {tab === 'story' ? (
+        story ? <TaskTimeline key={task.id} events={story.events} now={now} /> : <p className="aw-tview-empty">No story yet.</p>
+      ) : tab === 'work' ? (
+        <WorkTab task={task} checks={checks ?? null} now={now} onAction={onAction} />
+      ) : (
+        <DetailsTab task={task} now={now} onOpenTask={onOpenTask} />
+      )}
+    </div>
+  )
+
+  if (layout === 'dialog') {
+    // Two columns: what the task is and what happened on the left, scrolling on its own; where it
+    // stands and what to do about it in a rail on the right, always in view.
+    return (
+      <section className="aw-tview" data-layout="dialog" aria-labelledby={`task-sheet-title-${task.id}`}>
+        {head}
+        <div className="aw-dialog-columns">
+          <div className="aw-dialog-main">
+            {banner}
+            {tabs}
+            {body}
+          </div>
+          <aside className="aw-dialog-rail" aria-label="Where it stands">
+            {summary}
+            {actions}
+          </aside>
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="aw-tview" data-layout="sheet" aria-labelledby={`task-sheet-title-${task.id}`}>
+      {head}
+      {banner}
+      {summary}
+      {actions}
+      {tabs}
+      {body}
     </section>
   )
 }
 
 function Tab({ id, current, onSelect, label, count, alert }: { id: TaskSheetTab; current: TaskSheetTab; onSelect: (tab: TaskSheetTab) => void; label: string; count?: number | string; alert?: boolean }) {
   return (
-    <button type="button" data-slot="tab" role="tab" aria-selected={current === id} className="aw-sheet-tab" onClick={() => onSelect(id)}>
+    <button type="button" data-slot="tab" role="tab" aria-selected={current === id} className="aw-tview-tab" onClick={() => onSelect(id)}>
       {label}
-      {count != null ? <span className="aw-sheet-tab-count">{count}</span> : null}
-      {alert ? <span className="aw-sheet-tab-alert" aria-label="needs attention" /> : null}
+      {count != null ? <span className="aw-tview-tab-count">{count}</span> : null}
+      {alert ? <span className="aw-tview-tab-alert" aria-label="needs attention" /> : null}
     </button>
   )
 }
@@ -242,24 +282,24 @@ function WorkTab({ task, checks, now, onAction }: { task: Task; checks: TaskChec
   const links = task.requirement_links ?? []
   const criteria = task.acceptance_criteria ?? []
   return (
-    <div className="aw-sheet-sections">
+    <div className="aw-tview-sections">
       <Section title="Requirements" aside={links.length ? `${links.filter((l) => l.state === 'verified').length} of ${links.length} accepted` : undefined}>
         {links.length === 0 ? (
-          <p className="aw-sheet-empty">This task serves no requirement.</p>
+          <p className="aw-tview-empty">This task serves no requirement.</p>
         ) : (
-          <ul className="aw-sheet-list">
+          <ul className="aw-tview-list">
             {links.map((link) => {
               const state = requirementState(link)
               return (
-                <li key={link.requirement_id} className="aw-sheet-req" data-tone={state.tone}>
+                <li key={link.requirement_id} className="aw-tview-req" data-tone={state.tone}>
                   <Icon name={state.glyph} size={14} />
                   <div>
-                    <span className="aw-sheet-req-head">
+                    <span className="aw-tview-req-head">
                       <span className="aw-tcard-id">{link.identifier}</span>
-                      <span className="aw-sheet-req-state">{state.word}</span>
+                      <span className="aw-tview-req-state">{state.word}</span>
                     </span>
-                    {link.statement ? <p className="aw-sheet-req-text">{link.statement}</p> : null}
-                    {link.has_rejected_evidence && link.latest_rejection_reason ? <p className="aw-sheet-req-why">{link.latest_rejection_reason}</p> : null}
+                    {link.statement ? <p className="aw-tview-req-text">{link.statement}</p> : null}
+                    {link.has_rejected_evidence && link.latest_rejection_reason ? <p className="aw-tview-req-why">{link.latest_rejection_reason}</p> : null}
                   </div>
                 </li>
               )
@@ -270,7 +310,7 @@ function WorkTab({ task, checks, now, onAction }: { task: Task; checks: TaskChec
 
       {criteria.length ? (
         <Section title="Acceptance criteria">
-          <ul className="aw-sheet-criteria">
+          <ul className="aw-tview-criteria">
             {criteria.map((criterion, index) => (
               <li key={index}>{criterion}</li>
             ))}
@@ -284,9 +324,9 @@ function WorkTab({ task, checks, now, onAction }: { task: Task; checks: TaskChec
         action={checks && checks.state !== 'running' ? { label: 'Run again', glyph: 'refresh', onClick: () => onAction('rerun-checks') } : undefined}
       >
         {!checks ? (
-          <p className="aw-sheet-empty">The project’s checks have not run on this work yet.</p>
+          <p className="aw-tview-empty">The project’s checks have not run on this work yet.</p>
         ) : (
-          <ul className="aw-sheet-list">
+          <ul className="aw-tview-list">
             {checks.results.map((result) => (
               <CheckRow key={result.name} result={result} />
             ))}
@@ -295,7 +335,7 @@ function WorkTab({ task, checks, now, onAction }: { task: Task; checks: TaskChec
       </Section>
 
       <Section title="Landing">
-        <p className="aw-sheet-landing">
+        <p className="aw-tview-landing">
           <Icon name={stageVisual(task.stage).glyph} size={13} />
           <span>{landingSentence(task)}</span>
         </p>
@@ -310,15 +350,15 @@ function CheckRow({ result }: { result: TaskCheckResult }) {
   const tone = result.skipped ? 'idle' : failed ? (result.preexisting ? 'needs-you' : 'failed') : 'done'
   const word = result.skipped ? 'skipped' : result.timed_out ? 'timed out' : failed ? (result.preexisting ? 'fails on main too' : 'failed') : 'passed'
   return (
-    <li className="aw-sheet-check" data-tone={tone}>
-      <button type="button" data-slot="check-row" className="aw-sheet-check-head" aria-expanded={failed ? open : undefined} disabled={!failed} onClick={() => setOpen((o) => !o)}>
+    <li className="aw-tview-check" data-tone={tone}>
+      <button type="button" data-slot="check-row" className="aw-tview-check-head" aria-expanded={failed ? open : undefined} disabled={!failed} onClick={() => setOpen((o) => !o)}>
         <Icon name={result.skipped ? 'circle_dashed' : failed ? 'x' : 'check'} size={13} />
-        <span className="aw-sheet-check-name">{result.name}</span>
-        <span className="aw-sheet-check-word">{word}</span>
-        <span className="aw-sheet-check-time">{Math.round(result.duration_seconds)}s</span>
+        <span className="aw-tview-check-name">{result.name}</span>
+        <span className="aw-tview-check-word">{word}</span>
+        <span className="aw-tview-check-time">{Math.round(result.duration_seconds)}s</span>
         {failed ? <Icon name={open ? 'expand_less' : 'expand_more'} size={12} /> : null}
       </button>
-      {open ? <pre className="aw-sheet-output">{result.output_tail}</pre> : null}
+      {open ? <pre className="aw-tview-output">{result.output_tail}</pre> : null}
     </li>
   )
 }
@@ -348,13 +388,13 @@ function landingSentence(task: Task): string {
 
 function DetailsTab({ task, now, onOpenTask }: { task: Task; now?: Date; onOpenTask?: (taskId: string) => void }) {
   return (
-    <div className="aw-sheet-sections">
+    <div className="aw-tview-sections">
       <Section title="Description">
-        {task.description ? <p className="aw-sheet-prose">{task.description}</p> : <p className="aw-sheet-empty">No description.</p>}
+        {task.description ? <p className="aw-tview-prose">{task.description}</p> : <p className="aw-tview-empty">No description.</p>}
       </Section>
       {task.prerequisites?.length || task.dependents?.length ? (
         <Section title="Linked tasks">
-          <div className="aw-sheet-links">
+          <div className="aw-tview-links">
             {task.prerequisites?.length ? <Links label="Waits on" refs={task.prerequisites} onOpenTask={onOpenTask} /> : null}
             {task.dependents?.length ? <Links label="Needed by" refs={task.dependents} onOpenTask={onOpenTask} /> : null}
           </div>
@@ -362,11 +402,11 @@ function DetailsTab({ task, now, onOpenTask }: { task: Task; now?: Date; onOpenT
       ) : null}
       {task.notes ? (
         <Section title="Notes">
-          <p className="aw-sheet-prose">{task.notes}</p>
+          <p className="aw-tview-prose">{task.notes}</p>
         </Section>
       ) : null}
       <Section title="Facts">
-        <dl className="aw-sheet-facts">
+        <dl className="aw-tview-facts">
           <Fact label="Created">{formatDateTime(task.created_at, now)}</Fact>
           <Fact label="Updated">{formatAgo(task.updated, now)}</Fact>
           {task.assigner ? <Fact label="Assigned by">{task.assigner}</Fact> : null}
@@ -384,13 +424,13 @@ function DetailsTab({ task, now, onOpenTask }: { task: Task; now?: Date; onOpenT
 
 function Links({ label, refs, onOpenTask }: { label: string; refs: TaskDependencyRef[]; onOpenTask?: (taskId: string) => void }) {
   return (
-    <div className="aw-sheet-links-group">
-      <span className="aw-sheet-links-label">{label}</span>
+    <div className="aw-tview-links-group">
+      <span className="aw-tview-links-label">{label}</span>
       {refs.map((ref) => (
-        <button key={ref.id} type="button" data-slot="task-link" className="aw-sheet-link" onClick={() => onOpenTask?.(ref.id)}>
+        <button key={ref.id} type="button" data-slot="task-link" className="aw-tview-link" onClick={() => onOpenTask?.(ref.id)}>
           <Icon name={ref.status === 'approved' ? 'circle_check_big' : 'circle_dashed'} size={12} />
           {ref.readable_id ? <span className="aw-tcard-id">{ref.readable_id}</span> : null}
-          <span className="aw-sheet-link-title">{ref.title}</span>
+          <span className="aw-tview-link-title">{ref.title}</span>
         </button>
       ))}
     </div>
@@ -408,12 +448,12 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 
 function Section({ title, aside, action, children }: { title: string; aside?: string; action?: { label: string; glyph: string; onClick: () => void }; children: React.ReactNode }) {
   return (
-    <section className="aw-sheet-section">
+    <section className="aw-tview-section">
       <header>
         <h3>{title}</h3>
-        {aside ? <span className="aw-sheet-aside">{aside}</span> : null}
+        {aside ? <span className="aw-tview-aside">{aside}</span> : null}
         {action ? (
-          <button type="button" data-slot="mini-action" className="aw-sheet-mini" onClick={action.onClick}>
+          <button type="button" data-slot="mini-action" className="aw-tview-mini" onClick={action.onClick}>
             <Icon name={action.glyph} size={12} />
             {action.label}
           </button>

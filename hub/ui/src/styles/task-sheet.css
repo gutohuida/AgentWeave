@@ -1,133 +1,193 @@
 /* The opened task, redesigned (`task-card-and-story-redesign`): the side sheet the board opens.
    Tokens from index.css only; motion on the brand's --ease, stilled under reduced motion. */
 
-.aw-sheet { display: flex; flex-direction: column; min-height: 100%; background: var(--surface); }
-.aw-sheet-head { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: stretch; gap: 6px; padding: 14px 16px 12px; }
-.aw-sheet-ids { display: flex; align-items: center; gap: 8px; min-height: 22px; }
-.aw-sheet-ids .aw-tcard-id { margin-right: 0; }
-.aw-sheet-close { margin-left: auto; }
-.aw-sheet-title { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.32; text-wrap: pretty; }
-.aw-sheet-title button { text-align: left; color: var(--text); border-radius: var(--radius-sm); cursor: text; }
-.aw-sheet-title button:hover { background: var(--surface-2); }
+.aw-tview { display: flex; flex-direction: column; min-height: 100%; background: var(--surface); }
+.aw-tview-head { display: grid; gap: 6px; padding: 14px 16px 12px; }
+.aw-tview-ids { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.aw-tview-ids .aw-tcard-id { margin-right: 0; }
+.aw-tview-close { margin-left: auto; }
+.aw-tview-title { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.32; text-wrap: pretty; }
+.aw-tview-title button { text-align: left; color: var(--text); border-radius: var(--radius-sm); cursor: text; }
+.aw-tview-title button:hover { background: var(--surface-2); }
 
-.aw-sheet-attention {
+.aw-tview-attention {
   display: flex; gap: 10px; align-items: flex-start; margin: 0 16px 4px; padding: 10px 12px;
   border-radius: var(--radius-md); color: var(--tone);
   background: color-mix(in oklab, var(--tone) 10%, transparent);
   border: 1px solid color-mix(in oklab, var(--tone) 30%, transparent);
-  animation: aw-sheet-rise var(--dur-base) var(--ease);
+  animation: aw-tview-rise var(--dur-base) var(--ease);
 }
-.aw-sheet-attention[data-tone="needs-you"] { --tone: var(--amber); }
-.aw-sheet-attention[data-tone="failed"] { --tone: var(--red); }
-.aw-sheet-attention > svg { flex: none; margin-top: 2px; }
-.aw-sheet-attention strong { font-size: 12.5px; font-weight: 600; }
-.aw-sheet-attention p { margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text); }
+.aw-tview-attention[data-tone="needs-you"] { --tone: var(--amber); }
+.aw-tview-attention[data-tone="failed"] { --tone: var(--red); }
+.aw-tview-attention > svg { flex: none; margin-top: 2px; }
+.aw-tview-attention strong { font-size: 12.5px; font-weight: 600; }
+.aw-tview-attention p { margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text); }
 
-.aw-sheet .aw-tsum { border-bottom: none; padding-top: 10px; }
-.aw-sheet-actions { display: flex; align-items: center; gap: 8px; padding: 0 16px 14px; border-bottom: 1px solid var(--border); }
-.aw-sheet-primary, .aw-sheet-secondary {
+.aw-tview .aw-tsum { border-bottom: none; padding-top: 10px; }
+.aw-tview-actions { display: flex; align-items: center; gap: 8px; padding: 0 16px 14px; border-bottom: 1px solid var(--border); }
+.aw-tview-primary, .aw-tview-secondary {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
   border-radius: var(--radius-md); font-size: 12.5px; font-weight: 500;
   transition: background-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.aw-sheet-primary { background: var(--primary); color: var(--primary-foreground, var(--bg)); }
-.aw-sheet-primary:hover { filter: brightness(1.08); }
-.aw-sheet-primary:active, .aw-sheet-secondary:active { transform: translateY(1px); }
-.aw-sheet-secondary { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
-.aw-sheet-secondary:hover { background: var(--surface-2); }
-.aw-sheet-more { margin-left: auto; }
-.aw-sheet-nothing { font-size: 12.5px; color: var(--text-2); }
+.aw-tview-primary { background: var(--primary); color: var(--primary-foreground, var(--bg)); }
+.aw-tview-primary:hover { filter: brightness(1.08); }
+.aw-tview-primary:active, .aw-tview-secondary:active { transform: translateY(1px); }
+.aw-tview-secondary { border: 1px solid var(--border); color: var(--text); background: var(--surface); }
+.aw-tview-secondary:hover { background: var(--surface-2); }
+.aw-tview-more { margin-left: auto; }
+.aw-tview-nothing { font-size: 12.5px; color: var(--text-2); }
 
-.aw-sheet-tabs {
+.aw-tview-tabs {
   display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--border);
   position: sticky; top: 0; background: var(--surface); z-index: 2;
 }
-.aw-sheet-tab {
+.aw-tview-tab {
   position: relative; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px;
   font-size: 12.5px; font-weight: 500; color: var(--text-2);
 }
-.aw-sheet-tab:hover { color: var(--text); }
-.aw-sheet-tab[aria-selected="true"] { color: var(--text); }
-.aw-sheet-tab[aria-selected="true"]::after {
+.aw-tview-tab:hover { color: var(--text); }
+.aw-tview-tab[aria-selected="true"] { color: var(--text); }
+.aw-tview-tab[aria-selected="true"]::after {
   content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px;
-  background: var(--text); animation: aw-sheet-tab-in var(--dur-base) var(--ease);
+  background: var(--text); animation: aw-tview-tab-in var(--dur-base) var(--ease);
 }
-.aw-sheet-tab-count { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.aw-sheet-tab-alert { width: 6px; height: 6px; border-radius: 999px; background: var(--red); }
-.aw-sheet-body { flex: 1; }
-.aw-sheet-empty { margin: 0; font-size: 12.5px; color: var(--text-3); }
-.aw-sheet-body > .aw-sheet-empty { padding: 16px; }
+.aw-tview-tab-count { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aw-tview-tab-alert { width: 6px; height: 6px; border-radius: 999px; background: var(--red); }
+.aw-tview-body { flex: 1; }
+.aw-tview-empty { margin: 0; font-size: 12.5px; color: var(--text-3); }
+.aw-tview-body > .aw-tview-empty { padding: 16px; }
 
-.aw-sheet-sections { display: grid; gap: 20px; padding: 16px; animation: aw-sheet-rise var(--dur-base) var(--ease); }
-.aw-sheet-section > header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.aw-sheet-section h3 { margin: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
-.aw-sheet-aside { font-size: 11.5px; color: var(--text-2); }
-.aw-sheet-mini {
+.aw-tview-sections { display: grid; gap: 20px; padding: 16px; animation: aw-tview-rise var(--dur-base) var(--ease); }
+.aw-tview-section > header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.aw-tview-section h3 { margin: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.aw-tview-aside { font-size: 11.5px; color: var(--text-2); }
+.aw-tview-mini {
   margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px;
   border-radius: var(--radius-sm); font-size: 11.5px; color: var(--text-2); border: 1px solid var(--border);
 }
-.aw-sheet-mini:hover { background: var(--surface-2); color: var(--text); }
-.aw-sheet-list {
+.aw-tview-mini:hover { background: var(--surface-2); color: var(--text); }
+.aw-tview-list {
   list-style: none; margin: 0; padding: 0; display: grid;
   border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden;
 }
-.aw-sheet-list > li + li { border-top: 1px solid var(--border); }
+.aw-tview-list > li + li { border-top: 1px solid var(--border); }
 
-.aw-sheet-req { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding: 10px 12px; --tone: var(--text-3); }
-.aw-sheet-req[data-tone="done"] { --tone: var(--green); }
-.aw-sheet-req[data-tone="info"] { --tone: var(--blue); }
-.aw-sheet-req[data-tone="failed"] { --tone: var(--red); }
-.aw-sheet-req > svg { color: var(--tone); margin-top: 1px; }
-.aw-sheet-req-head { display: flex; align-items: center; gap: 8px; }
-.aw-sheet-req-state { font-size: 11.5px; font-weight: 500; color: var(--tone); }
-.aw-sheet-req-text {
+.aw-tview-req { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding: 10px 12px; --tone: var(--text-3); }
+.aw-tview-req[data-tone="done"] { --tone: var(--green); }
+.aw-tview-req[data-tone="info"] { --tone: var(--blue); }
+.aw-tview-req[data-tone="failed"] { --tone: var(--red); }
+.aw-tview-req > svg { color: var(--tone); margin-top: 1px; }
+.aw-tview-req-head { display: flex; align-items: center; gap: 8px; }
+.aw-tview-req-state { font-size: 11.5px; font-weight: 500; color: var(--tone); }
+.aw-tview-req-text {
   margin: 3px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text);
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
-.aw-sheet-req-why { margin: 4px 0 0; font-size: 12px; color: var(--red); }
-.aw-sheet-criteria { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 12.5px; line-height: 1.45; color: var(--text); }
-.aw-sheet-criteria li::marker { color: var(--text-3); }
+.aw-tview-req-why { margin: 4px 0 0; font-size: 12px; color: var(--red); }
+.aw-tview-criteria { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 12.5px; line-height: 1.45; color: var(--text); }
+.aw-tview-criteria li::marker { color: var(--text-3); }
 
-.aw-sheet-check { --tone: var(--text-3); }
-.aw-sheet-check[data-tone="done"] { --tone: var(--green); }
-.aw-sheet-check[data-tone="failed"] { --tone: var(--red); }
-.aw-sheet-check[data-tone="needs-you"] { --tone: var(--amber); }
-.aw-sheet-check-head {
+.aw-tview-check { --tone: var(--text-3); }
+.aw-tview-check[data-tone="done"] { --tone: var(--green); }
+.aw-tview-check[data-tone="failed"] { --tone: var(--red); }
+.aw-tview-check[data-tone="needs-you"] { --tone: var(--amber); }
+.aw-tview-check-head {
   display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 12px;
   text-align: left; font-size: 12.5px; color: var(--text);
 }
-.aw-sheet-check-head:disabled { cursor: default; opacity: 1; }
-.aw-sheet-check-head:not(:disabled):hover { background: var(--surface-2); }
-.aw-sheet-check-head > svg:first-child { color: var(--tone); }
-.aw-sheet-check-name { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
-.aw-sheet-check-word { font-size: 11.5px; color: var(--tone); font-weight: 500; }
-.aw-sheet-check-time { margin-left: auto; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.aw-sheet-output {
+.aw-tview-check-head:disabled { cursor: default; opacity: 1; }
+.aw-tview-check-head:not(:disabled):hover { background: var(--surface-2); }
+.aw-tview-check-head > svg:first-child { color: var(--tone); }
+.aw-tview-check-name { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
+.aw-tview-check-word { font-size: 11.5px; color: var(--tone); font-weight: 500; }
+.aw-tview-check-time { margin-left: auto; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aw-tview-output {
   margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto; background: var(--surface-2);
   border-top: 1px solid var(--border); font-size: 11.5px; line-height: 1.5; color: var(--text-2); white-space: pre-wrap;
-  animation: aw-sheet-rise var(--dur-base) var(--ease);
+  animation: aw-tview-rise var(--dur-base) var(--ease);
 }
-.aw-sheet-landing { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; color: var(--text); }
-.aw-sheet-prose { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text); white-space: pre-wrap; }
-.aw-sheet-links { display: grid; gap: 12px; }
-.aw-sheet-links-group { display: grid; gap: 4px; }
-.aw-sheet-links-label { font-size: 11.5px; color: var(--text-2); }
-.aw-sheet-link {
+.aw-tview-landing { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; color: var(--text); }
+.aw-tview-prose { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text); white-space: pre-wrap; }
+.aw-tview-links { display: grid; gap: 12px; }
+.aw-tview-links-group { display: grid; gap: 4px; }
+.aw-tview-links-label { font-size: 11.5px; color: var(--text-2); }
+.aw-tview-link {
   display: flex; align-items: center; gap: 8px; min-width: 0; height: 30px; padding: 0 10px;
   border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12.5px; color: var(--text); text-align: left;
 }
-.aw-sheet-link:hover { background: var(--surface-2); }
-.aw-sheet-link-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.aw-sheet-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
-.aw-sheet-facts dt { font-size: 11px; color: var(--text-3); }
-.aw-sheet-facts dd { margin: 2px 0 0; font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
-.aw-sheet-facts code { font-size: 11.5px; color: var(--text-2); }
+.aw-tview-link:hover { background: var(--surface-2); }
+.aw-tview-link-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-tview-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
+.aw-tview-facts dt { font-size: 11px; color: var(--text-3); }
+.aw-tview-facts dd { margin: 2px 0 0; font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+.aw-tview-facts code { font-size: 11.5px; color: var(--text-2); }
 
 /* The sheet slides in over the board, as today's drawer does. */
-.aw-sheet-host { animation: aw-sheet-in var(--dur-base) var(--ease); }
-@keyframes aw-sheet-in { from { transform: translateX(24px); opacity: 0; } }
-@keyframes aw-sheet-rise { from { opacity: 0; transform: translateY(-3px); } }
-@keyframes aw-sheet-tab-in { from { transform: scaleX(.4); opacity: 0; } }
+.aw-tview-host { animation: aw-tview-in var(--dur-base) var(--ease); }
+@keyframes aw-tview-in { from { transform: translateX(24px); opacity: 0; } }
+@keyframes aw-tview-rise { from { opacity: 0; transform: translateY(-3px); } }
+@keyframes aw-tview-tab-in { from { transform: scaleX(.4); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .aw-sheet-host, .aw-sheet-attention, .aw-sheet-sections, .aw-sheet-output, .aw-sheet-tab::after { animation: none !important; }
+  .aw-tview-host, .aw-tview-attention, .aw-tview-sections, .aw-tview-output, .aw-tview-tab::after { animation: none !important; }
+}
+
+/* ── The opened task as a centred dialog ─────────────────────────────── */
+/* The board opens a task the way it does today (TaskDetailDrawer, the operator's call of
+   2026-08-17): a panel floating in the middle over the board, dimmed and slightly blurred so the
+   ticket is the subject and the board is still there to return to. Same scrim and blur as today. */
+.aw-task-scrim {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center; padding: 3vh 24px;
+  background: rgba(0, 0, 0, 0.32); backdrop-filter: blur(1.5px);
+  animation: aw-scrim-in var(--dur-base) var(--ease);
+}
+.aw-task-dialog {
+  width: min(980px, 100%); height: min(760px, 94vh); max-height: 94vh;
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border-hi);
+  border-radius: var(--radius-content, 10px); overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28), inset 0 1px var(--lift-hi);
+  animation: aw-task-dialog-in var(--dur-base) var(--ease);
+}
+.aw-tview[data-layout="dialog"] { flex: 1; min-height: 0; }
+.aw-tview[data-layout="dialog"] .aw-tview-head { padding: 18px 22px 14px; }
+.aw-tview[data-layout="dialog"] .aw-tview-title { font-size: 19px; }
+.aw-dialog-columns {
+  flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 324px;
+  border-top: 1px solid var(--border);
+}
+/* Each column scrolls on its own, so the rail stays in view while a long story scrolls. */
+.aw-dialog-main { min-height: 0; overflow: auto; }
+.aw-dialog-main .aw-tview-attention { margin: 14px 20px 2px; }
+.aw-dialog-main .aw-tview-tabs { padding: 0 16px; }
+.aw-dialog-main .aw-tl, .aw-dialog-main .aw-tview-sections { padding-left: 22px; padding-right: 22px; }
+.aw-dialog-rail {
+  min-height: 0; overflow: auto; border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+}
+.aw-dialog-rail .aw-tsum { padding: 16px 18px 14px; gap: 16px; }
+.aw-dialog-rail .aw-thread[data-compact="false"] { margin: 4px 6px 0; }
+.aw-dialog-rail .aw-tsum-people { grid-template-columns: 1fr; gap: 10px; }
+.aw-dialog-rail .aw-tsum-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.aw-dialog-rail .aw-tsum-stats > div + div { border-left: none; }
+.aw-dialog-rail .aw-tsum-stats > div:nth-child(even) { border-left: 1px solid var(--border); }
+.aw-dialog-rail .aw-tsum-stats > div:nth-child(n + 3) { border-top: 1px solid var(--border); }
+.aw-dialog-rail .aw-tview-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 18px 18px; border-bottom: none;
+}
+.aw-dialog-rail .aw-tview-actions > :first-child { grid-column: 1 / -1; }
+.aw-dialog-rail .aw-tview-more { margin-left: 0; justify-content: center; }
+.aw-dialog-rail .aw-tview-nothing { grid-column: 1 / -1; line-height: 1.45; }
+
+@media (max-width: 760px) {
+  .aw-dialog-columns { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .aw-dialog-main, .aw-dialog-rail { overflow: visible; }
+  .aw-dialog-rail { order: -1; border-left: none; border-bottom: 1px solid var(--border); }
+}
+
+@keyframes aw-scrim-in { from { opacity: 0; } }
+@keyframes aw-task-dialog-in { from { opacity: 0; transform: translateY(6px) scale(0.99); } }
+@media (prefers-reduced-motion: reduce) {
+  .aw-task-scrim, .aw-task-dialog { animation: none !important; }
 }
