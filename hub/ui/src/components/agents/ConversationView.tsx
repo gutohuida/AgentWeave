@@ -452,6 +452,7 @@ export function ConversationView({
       insertIntoComposer,
       panelActiveTabId,
       runningItems,
+      runningLoadFailed,
       openRunningItem,
       attendRunningItem,
       buildsRequest,
