@@ -614,7 +614,9 @@ function groupRoutine(events: StoryEvent[]): Array<{ fold: false; event: StoryEv
   return out
 }
 
-function FoldedSteps({ id, count, actors, from, to, index, onOpen }: { id: string; count: number; actors: string[]; from: string | null; to: string | null; index: number; onOpen: () => void }) {
+function FoldedSteps({ id, count, actors, from, to, index, onOpen, events }: { id: string; count: number; actors: string[]; from: string | null; to: string | null; index: number; onOpen: () => void; events: StoryEvent[] }) {
+  // Folding hides the rows, never their links: each run's trace and conversation stay reachable.
+  const runs = events.filter((event): event is Extract<StoryEvent, { kind: 'run' }> => event.kind === 'run')
   return (
     <TimelineItem
       tone="neutral"
@@ -638,7 +640,27 @@ function FoldedSteps({ id, count, actors, from, to, index, onOpen }: { id: strin
           ) : null}
         </>
       }
-    />
+    >
+      {runs.length ? (
+        <div className="aw-tl-meta" style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
+          {runs.map((run) => (
+            <span key={run.id}>
+              {run.agent}
+              {run.conversation_id ? (
+                <>
+                  {' · '}
+                  <ConversationLink agent={run.agent} conversationId={run.conversation_id} testId={`story-run-conversation-${run.id}`}>
+                    conversation
+                  </ConversationLink>
+                </>
+              ) : null}
+              {' · '}
+              <TraceButton runId={run.id} label="trace" testId={`story-run-trace-${run.id}`} />
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </TimelineItem>
   )
 }
 
@@ -690,6 +712,7 @@ export function TaskStory({ taskId }: { taskId: string }) {
         from={item.events[0].event.at}
         to={item.events[item.events.length - 1].event.at}
         index={item.events[0].index}
+        events={item.events.map(({ event }) => event)}
         onOpen={() => setUnfolded((current) => new Set(current).add(item.id))}
       />,
     ]
