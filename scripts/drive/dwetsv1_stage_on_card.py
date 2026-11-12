@@ -128,7 +128,6 @@ def drive():
     live = made["id"]
 
     rows = {k: routerow(pid, v) for k, v in t.items()}
-    has_stage = all(r.get("stage") for r in rows.values())
 
     # ---- route-level checks
     reached = bool(rows["checking"])
