@@ -113,6 +113,8 @@ def agent_record(api: lv.Api, base: str, name: str) -> Dict[str, Any]:
 class Ctx:
     def __init__(self, page: Any, ui: str, api: lv.Api, main: Dict[str, Any], empty: Dict[str, Any]) -> None:
         self.page, self.ui, self.api, self.main, self.empty = page, ui, api, main, empty
+        self.only: List[str] = []  # --only scope/section limits the walk to those sections
+        self.list_rows = False  # --list prints every row the walk finds
         self.strict = True  # --findable sets it False: a section with no rows is simply empty
 
     def project(self, section: str, pid: Optional[str] = None) -> None:
@@ -160,7 +162,7 @@ class Ctx:
     def find(self, scope: str, label_re: str, section: Optional[str] = None) -> int:
         """Index of the result for this scope, label and (optionally) section; raises if there is none."""
         for i, r in enumerate(self.results()):
-            if r["scope"] == scope and re.search(label_re, r["label"] or "", re.I) and (section is None or r["section"] == section):
+            if r["scope"] == scope and re.search(label_re, r["label"] or "", re.I) and (section is None or re.fullmatch(section, r["section"] or "", re.I) is not None):
                 return i
         raise Fail(f"no {scope} result matching /{label_re}/" + (f" in {section}" if section else "") + f"; results: {self.results()}")
 
@@ -168,11 +170,11 @@ class Ctx:
         self.page.locator(RESULT).nth(index).locator('[data-testid="settings-search-open"]').click(timeout=TIMEOUT)
         self.page.wait_for_timeout(500)
 
-    def highlighted(self) -> Dict[str, Any]:
+    def highlighted(self, when: str = "after choosing the result") -> Dict[str, Any]:
         try:
             self.page.locator(HIGHLIGHTED).first.wait_for(state="visible", timeout=TIMEOUT)
         except Exception:  # noqa: BLE001
-            raise Fail("no row is highlighted after choosing the result") from None
+            raise Fail(f"no row is highlighted {when}") from None
         return self.page.evaluate(
             """(sel) => { const r = document.querySelector(sel); const b = r.getBoundingClientRect();
                  return { label: (r.querySelector('.aw-settings-row-label')||{}).textContent || '',
@@ -304,11 +306,14 @@ def step_reload(c: Ctx) -> None:
     c.open_result(c.find("project", CI_CUTOFF.pattern, "Landing|landing"))
     first = c.highlighted()
     c.page.reload(wait_until="domcontentloaded")
-    second = c.highlighted()
+    second = c.highlighted("after a reload")
     expect(CI_CUTOFF.search(second["label"]) is not None and second["label"] == first["label"] and "section=landing" in second["url"], "after a reload Landing → CI cutoff is not highlighted")
-    c.project("general")
+    # Elsewhere, inside the app (a new history entry); Back then returns to the landed address.
+    c.page.locator('nav[aria-label="Project settings"] [data-slot="settings-nav-item"]', has_text="Collaboration").first.click(timeout=TIMEOUT)
+    c.page.wait_for_selector(ROW, timeout=TIMEOUT)
+    expect("section=collaboration" in c.page.url, f"going elsewhere did not leave Landing: {c.page.url}")
     c.page.go_back(wait_until="domcontentloaded")
-    third = c.highlighted()
+    third = c.highlighted("after Back")
     expect(CI_CUTOFF.search(third["label"]) is not None and third["label"] == first["label"] and "section=landing" in third["url"], "after Back, Landing → CI cutoff is not highlighted")
 
 
@@ -399,7 +404,8 @@ STEPS: Dict[str, Callable[[Ctx], None]] = {
 # --findable: every rendered row, searched by its own label
 # --------------------------------------------------------------------------------------------
 
-ROW_LABELS_JS = """() => Array.from(document.querySelectorAll('.aw-settings-row-label'))
+# A list entry (a step, a session, a checkout) is not a setting: the row marks itself data-list-item.
+ROW_LABELS_JS = """() => Array.from(document.querySelectorAll('.aw-settings-row:not([data-list-item="true"]) .aw-settings-row-label'))
   .map((l) => l.textContent.replace(/\\s+/g, ' ').trim()).filter(Boolean)"""
 
 
@@ -414,6 +420,8 @@ def findable(c: Ctx, inject_fault: bool) -> List[str]:
         pages.append(("project", s, lambda s=s: c.project(s)))
     for s in lv.AGENT_SECTIONS:
         pages.append(("agent", s, lambda s=s: c.agent(AGENTS[0], s)))
+    if c.only:
+        pages = [p for p in pages if f"{p[0]}/{p[1]}" in c.only]
     for scope, section, go in pages:
         go()
         # Wait for the section's rows, then until the row count has held still for 1s, so
@@ -434,6 +442,9 @@ def findable(c: Ctx, inject_fault: bool) -> List[str]:
                 break
             c.page.wait_for_timeout(250)
         print(f"  {scope:8} {section:20} {len(labels)} rows")
+        if c.list_rows:
+            for label in labels:
+                print(f"      {label}")
         for label in labels:
             rows.append((scope, section, label))
     opener = {(sc, se): g for sc, se, g in pages}
@@ -509,7 +520,10 @@ def run(args: argparse.Namespace, ui: str, api: lv.Api, main: Dict[str, Any], em
                 )
                 page = context.new_page()
                 page.set_default_timeout(TIMEOUT)
-                failures = findable(Ctx(page, ui, api, main, empty), args.inject_fault)
+                walk = Ctx(page, ui, api, main, empty)
+                walk.list_rows = args.list
+                walk.only = args.only or []
+                failures = findable(walk, args.inject_fault)
                 print(f"check findable: reached=yes failed_at_assertion={'yes' if failures else 'no'} -- {failures[0] if failures else 'passed'}")
                 context.close()
         finally:
@@ -528,6 +542,8 @@ def main() -> int:
     ap.add_argument("--findable", action="store_true")
     ap.add_argument("--step", action="append", choices=list(STEPS))
     ap.add_argument("--inject-fault", action="store_true", help="with --findable: search the first row's label misspelt, to see the check fail")
+    ap.add_argument("--only", action="append", metavar="SCOPE/SECTION", help="with --findable: walk only this section (app/appearance, project/landing, agent/running); repeatable")
+    ap.add_argument("--list", action="store_true", help="with --findable: print every row the walk finds")
     ap.add_argument("--keep", action="store_true")
     args = ap.parse_args()
 

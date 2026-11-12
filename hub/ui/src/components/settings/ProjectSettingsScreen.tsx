@@ -48,6 +48,7 @@ export function ProjectSettingsScreen({
   onSelectSection,
   onNavigate,
   onOpenAppSettings,
+  setting,
   onAddAgent,
 }: {
   section: EnvironmentSection
@@ -56,6 +57,8 @@ export function ProjectSettingsScreen({
   onNavigate?: (value: string) => void
   /** Where sound, notifications, appearance and the Hub connection are: the operator's own. */
   onOpenAppSettings?: () => void
+  /** The setting the location names, to land on. */
+  setting?: string | null
   /** Opens the Add-agent dialog, for the set-up list's agent item. */
   onAddAgent?: () => void
 }) {
@@ -113,6 +116,7 @@ export function ProjectSettingsScreen({
         subtitle={project?.name}
         items={SECTIONS.map((item) => ({ ...item, meta: meta[item.id] }))}
         active={section}
+        landing={setting}
         onSelect={onSelectSection}
         footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
       >

@@ -329,3 +329,42 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 .aw-step-form { display: flex; flex-direction: column; gap: 4px; padding: 12px 0 4px; max-width: 640px; }
 .aw-range { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .aw-row-value { font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Searching settings, and landing on one (find-any-setting-and-see-where-its-value-comes-from) */
+.aw-settings-search { position: relative; margin: 0 0 10px; }
+.aw-settings-search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+.aw-settings-search-input {
+  width: 100%; height: 30px; padding: 0 8px 0 27px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); font-size: 13px; color: var(--text);
+}
+.aw-settings-search-input::placeholder { color: var(--text-3); }
+.aw-settings-search-input:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-settings-search-results { padding: 20px 28px 40px; max-width: 760px; }
+.aw-settings-search-note { margin: 4px 0; font-size: 13px; color: var(--text-3); overflow-wrap: anywhere; }
+.aw-settings-search-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.aw-settings-search-item { border-bottom: 1px solid var(--border); }
+.aw-settings-search-open {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 9px 8px; border-radius: var(--radius-md); text-align: left;
+  transition: background-color var(--dur-fast) ease;
+}
+.aw-settings-search-open:hover:not(:disabled) { background: var(--row-hover); }
+.aw-settings-search-open:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-settings-search-label { font-size: 13.5px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
+.aw-settings-search-where { font-size: 11.5px; color: var(--text-3); }
+.aw-settings-search-desc { font-size: 12.5px; line-height: 1.45; color: var(--text-3); overflow-wrap: anywhere; }
+.aw-settings-search-agents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 8px 9px; }
+.aw-settings-search-agents-label { font-size: 11.5px; color: var(--text-3); }
+.aw-settings-search-agent {
+  max-width: 100%; padding: 2px 9px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; text-align: left;
+}
+.aw-settings-search-agent:hover { background: var(--row-hover); color: var(--text); }
+.aw-settings-search-agent:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+/* The row a search landed on. */
+.aw-settings-row[data-highlighted="true"] {
+  background: color-mix(in oklab, var(--ring) 16%, transparent);
+  box-shadow: inset 0 0 0 2px var(--ring);
+  border-radius: var(--radius-md);
+}
+@media (max-width: 860px) { .aw-settings-search { flex: none; min-width: 180px; margin: 0 8px 0 0; } }
