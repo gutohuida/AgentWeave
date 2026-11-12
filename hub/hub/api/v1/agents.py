@@ -1280,7 +1280,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             args=(
                 "path, title, kind, summary, problem, design, lifecycle, scope, requirements, "
                 "acceptance_criteria, tasks, algorithms, evidence, open_questions, delivery, "
-                "slices, roadmap, already_built"
+                "slices, roadmap, already_built, capabilities"
             ),
             method="POST",
             path="/spec/documents",
@@ -1309,13 +1309,17 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "change document specifies; it can be approved once that roadmap is. Each "
                 "entry in `tasks` lists the repo-relative paths it will edit in `files`, and "
                 "names sibling task keys in `depends_on`: chain two tasks only where they share "
-                "a path or one needs what another builds."
+                "a path or one needs what another builds. `capabilities` names what a change "
+                'changes: `{"changes": [<capability path>, ...], "creates": [{"title": ...}]}`; '
+                "a path that is not a current capability is refused `capability_unknown`, and "
+                "naming none draws the `capability_unnamed` warning."
             ),
             http_note=(
                 "This is the one operation whose request is not flat: everything after `path` — "
                 "`title`, `kind`, `summary`, `problem`, `design`, `lifecycle`, `scope`, "
                 "`requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, "
-                "`open_questions`, `delivery`, `slices`, `roadmap`, `already_built` — goes inside "
+                "`open_questions`, `delivery`, `slices`, `roadmap`, `already_built`, `capabilities` "
+                "— goes inside "
                 "the `document` "
                 "object, and a key you "
                 "have nothing for is left out rather than sent as null."
@@ -1484,7 +1488,8 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                     args=(
                         "path, op, reason, capability, requirements, retire, retire_criteria, "
                         "algorithms, retire_algorithms, criteria, title, area, fold_from, "
-                        "requirement, statement, code_wins, successor, roadmap, slice"
+                        "requirement, statement, code_wins, successor, roadmap, slice, changes, "
+                        "creates"
                     ),
                     method="POST",
                     path="/spec/documents/tidy",
@@ -1508,6 +1513,8 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                         "successor",
                         "roadmap",
                         "slice",
+                        "changes",
+                        "creates",
                     ),
                     required=("path", "op"),
                     text=(
@@ -1519,7 +1526,10 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                         "`area` and `fold_from`), `edit_capability` (`requirement` gets a new "
                         "`statement`, or `retire` true; `code_wins` `{cited}` when you change it "
                         "to match the code, naming the file you read), `supersede` (optional "
-                        "`successor`), `clear_superseded`, or `set_slice` (`roadmap`, `slice`). "
+                        "`successor`), `clear_superseded`, `set_slice` (`roadmap`, `slice`), or "
+                        "`set_capabilities` (`changes`, current capability paths, and `creates`, "
+                        "`[{title}]`; refused `change_folded` once folded). A `fold` with no "
+                        "`capability` folds into the one the change names. "
                         "Each act applies at once and is listed for the operator with your "
                         "`reason`, which is required. Refused with `code` `operators_act` for "
                         "approving, archiving, holding or deciding anything; `document_held` on a "
