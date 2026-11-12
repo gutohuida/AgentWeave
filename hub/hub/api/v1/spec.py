@@ -4790,6 +4790,18 @@ async def check_build_pull_request(
     }
 
 
+@router.get("/builds")
+async def list_builds(
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Every build of every document in the project, newest first, each with its document's title,
+    its loop, its tasks' progress and the blocking question its work is waiting on: what the side
+    panel's Running tab lists, without opening each document (`the-side-panel-s-running-tab`)."""
+    project_id, _ = project
+    return {"builds": await builds.project_rows(session, project_id)}
+
+
 @router.get("/reopening-warnings")
 async def reopening_warnings(
     project: Tuple[str, str] = Depends(get_project),
