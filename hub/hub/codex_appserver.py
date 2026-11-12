@@ -32,12 +32,14 @@ import contextlib
 import json
 import logging
 import os
+import re
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional, Tuple
 
 from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
-from .pty_runner import resolve_executable
+from .process_job import ProcessJob, terminate_descendants
+from .pty_runner import resolve_executable, terminate_process_tree
 from .runner_commands import CODEX_MCP_ENV_NAMES, OPERATOR_POSTURE
 from .runner_events import (
     AccountingSample,
@@ -79,6 +81,30 @@ TRANSPORT_SENTINELS = (APP_SERVER_OPT_IN_FLAG, APP_SERVER_OPT_OUT_FLAG)
 # Server->client methods this Hub must answer. Verified against
 # `codex app-server generate-json-schema` (CLI 0.146.0) and a live protocol trace.
 ELICITATION_METHOD = "mcpServer/elicitation/request"
+#: Leads a resumed thread's turn input when it carries the run's context (F325).
+RESUMED_CONTEXT_HEAD = (
+    "AgentWeave context for this turn. It is current, and replaces any earlier copy of it in "
+    "this conversation, including the developer instructions this thread started with."
+)
+
+
+def turn_input(prompt: str, context: Optional[str]) -> List[Dict[str, Any]]:
+    """`turn/start`'s input: the prompt, led by *context* when a resumed thread needs it.
+
+    A resumed thread is given its context here, not on `thread/resume`. Measured against Codex
+    0.167.1 on 2026-11-11: `thread/resume` accepts `developerInstructions` (and
+    `config.developer_instructions`) and records neither, so the thread keeps the context its
+    first turn started with and a charter edit or a roster change never reaches it. The one
+    instruction field it does honour on resume, `baseInstructions`, replaces Codex's own base
+    instructions. A block of its own, like the prompt, so neither is read as part of the other.
+    """
+    blocks: List[Dict[str, Any]] = []
+    if context:
+        blocks.append({"type": "text", "text": f"{RESUMED_CONTEXT_HEAD}\n\n{context}"})
+    blocks.append({"type": "text", "text": prompt})
+    return blocks
+
+
 COMMAND_APPROVAL_METHOD = "item/commandExecution/requestApproval"
 FILE_CHANGE_APPROVAL_METHOD = "item/fileChange/requestApproval"
 PERMISSIONS_APPROVAL_METHOD = "item/permissions/requestApproval"
@@ -334,6 +360,56 @@ def decide_approval(
     return {"decision": "decline"}
 
 
+#: Codex's Windows command wrapper: `format!("{:?} -Command {:?}", exe, cmd)`, measured on
+#: 0.167.1 (2026-11-11, `testbed/scratch/f325probe/probe4.py`). Two Rust-debug-quoted strings.
+_QUOTED = r'"((?:[^"\\]|\\.)*)"'
+_SHELL_WRAPPER = re.compile(rf"\A{_QUOTED} -Command {_QUOTED}\Z", re.DOTALL)
+_POWERSHELL_EXES = frozenset({"powershell.exe", "pwsh.exe"})
+_RUST_ESCAPE = re.compile(r"\\(?:u\{([0-9a-fA-F]{1,6})\}|(.))", re.DOTALL)
+_RUST_SIMPLE_ESCAPES = {"\\": "\\", '"': '"', "'": "'", "n": "\n", "r": "\r", "t": "\t", "0": "\0"}
+
+
+def _rust_unquote(body: str) -> Optional[str]:
+    """The string a Rust `{:?}` rendering came from, or None for an escape it never produces."""
+    failed = False
+
+    def _one(match: "re.Match[str]") -> str:
+        nonlocal failed
+        if match.group(1) is not None:
+            return chr(int(match.group(1), 16))
+        simple = _RUST_SIMPLE_ESCAPES.get(match.group(2))
+        if simple is None:
+            failed = True
+            return ""
+        return simple
+
+    text = _RUST_ESCAPE.sub(_one, body)
+    return None if failed else text
+
+
+def unwrap_shell_command(command: str) -> Optional[Tuple[str, str]]:
+    """`("PowerShell", <the command the model wrote>)` when *command* is exactly Codex's Windows
+    wrapper around it, else None (F1161).
+
+    On Windows, a command approval's `command` is `"<...\\powershell.exe>" -Command "<cmd>"`, both
+    halves Rust-debug-quoted: every backslash doubled and every `"` escaped. Judged as it came, the
+    Hub's own `Set-Content` of an arguments file read as something else and a spec turn's one kept
+    write was declined. Exactly that shape: one quoted PowerShell executable, ` -Command `, one
+    quoted string, nothing before or after, and no escape Rust does not emit. Anything else is
+    None and is judged as it came, as before.
+    """
+    match = _SHELL_WRAPPER.match(command)
+    if match is None:
+        return None
+    exe = _rust_unquote(match.group(1))
+    inner = _rust_unquote(match.group(2))
+    if exe is None or inner is None:
+        return None
+    if exe.replace("/", "\\").rsplit("\\", 1)[-1].lower() not in _POWERSHELL_EXES:
+        return None
+    return "PowerShell", inner
+
+
 def _is_hub_own_call(method: str, subject: Dict[str, Any], workspace: Optional[str]) -> bool:
     """A spec turn's one kept write (`a-run-reaches-the-hub-without-mcp` D16), by the rule Claude's
     and Copilot's runs are judged by (`mcp_server._hub_own_call`): a command that is exactly one
@@ -352,6 +428,10 @@ def _is_hub_own_call(method: str, subject: Dict[str, Any], workspace: Optional[s
         if method == COMMAND_APPROVAL_METHOD:
             command = subject.get("command")
             shell = "PowerShell" if os.name == "nt" else "Bash"
+            # F1161: on Windows the approval names the shell invocation, not the command.
+            unwrapped = unwrap_shell_command(command) if isinstance(command, str) else None
+            if unwrapped is not None:
+                shell, command = unwrapped
             return isinstance(command, str) and bool(
                 mcp_server._hub_own_call(shell, {"command": command}, workspace=workspace)
             )
@@ -774,6 +854,12 @@ class AppServerProcess:
         self._stderr_task: Optional[asyncio.Task] = None
         self._stderr: Deque[str] = deque(maxlen=STDERR_TAIL_LINES)
         self._closed = False
+        #: Why the reader stopped hearing the child while it may still be running, or None. A
+        #: reader that ends quietly leaves a live child talking to nobody: no event, no
+        #: `turn/completed`, a turn that only its timeout can end.
+        self._output_lost: Optional[str] = None
+        #: Windows: everything the app-server starts, its commands' orphans included (F1162).
+        self._job: Optional[ProcessJob] = None
 
     @classmethod
     async def spawn(
@@ -790,9 +876,15 @@ class AppServerProcess:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            # Its own process group on POSIX, so a stop can end every command the turn started
+            # (`terminate_process_tree` kills the group) without reaching the Hub's own (F1162,
+            # the reason `copilot_acp` does the same). Windows holds the tree in a job instead.
+            **({} if os.name == "nt" else {"start_new_session": True}),
             **no_console_kwargs(),
         )
         session = cls(proc)
+        # Before the app-server has read its first request, so before it can start a command.
+        session._job = ProcessJob.for_pid(proc.pid)
         loop = asyncio.get_running_loop()
         session._reader_task = loop.create_task(session._read_loop())
         # `stderr` has been piped since this class was written and read by nothing. That is not
@@ -841,11 +933,38 @@ class AppServerProcess:
             stderr_tail=self.stderr_tail(),
         )
 
+    async def _read_line(self) -> bytes:
+        """The next whole stdout line, however long; ``b""`` at end of stream.
+
+        `readline()` cannot be used: a line over the stream's limit (64 KiB by default) raises
+        `ValueError` and discards what it buffered. One `item/completed` for a command that
+        printed a large file is such a line, and the exception ended this reader with the child
+        still running -- every later event, message and `turn/completed` went unheard
+        (2026-11-11, a Codex turn shown as working for as long as its timeout allowed).
+        `readuntil` leaves an overrunning line in the buffer, so it is taken in pieces instead.
+        """
+        stream = self._proc.stdout
+        assert stream is not None
+        parts: List[bytes] = []
+        while True:
+            try:
+                parts.append(await stream.readuntil(b"\n"))
+                return b"".join(parts)
+            except asyncio.LimitOverrunError as overrun:
+                parts.append(await stream.readexactly(overrun.consumed))
+            except asyncio.IncompleteReadError as eof:
+                parts.append(eof.partial)
+                return b"".join(parts)
+
+    def output_lost(self) -> Optional[str]:
+        """Why this session stopped reading the child's output early, or None."""
+        return self._output_lost
+
     async def _read_loop(self) -> None:
         assert self._proc.stdout is not None
         try:
             while True:
-                raw = await self._proc.stdout.readline()
+                raw = await self._read_line()
                 if not raw:
                     break
                 line = raw.decode("utf-8", errors="replace").strip()
@@ -867,6 +986,9 @@ class AppServerProcess:
                     await self._notifications.put(msg)
         except asyncio.CancelledError:
             pass
+        except Exception as exc:  # noqa: BLE001 - reported to the turn, never swallowed
+            logger.exception("reading the codex app-server's output failed")
+            self._output_lost = f"the Hub stopped reading the app-server's output: {exc!r}"
         finally:
             # Reap before reporting. Losing stdout means the process is going, but `returncode` is
             # only populated once it has been waited on — so without this the exit status is
@@ -935,11 +1057,38 @@ class AppServerProcess:
     def is_running(self) -> bool:
         return self._proc.returncode is None
 
+    async def end_commands(self) -> None:
+        """End every process the app-server started, leaving the app-server itself to answer the
+        interrupt that follows (F1162). Windows only; POSIX ends the group at close. Never raises.
+        """
+        if self._proc.pid is None or not self.is_running():
+            return
+        with contextlib.suppress(Exception):
+            ended = await asyncio.to_thread(terminate_descendants, self._proc.pid)
+            if ended:
+                logger.info("stopping a Codex turn ended its commands: %s", ended)
+
     async def close(self, *, force: bool = False) -> None:
-        """Terminate the process and stop the reader task. Idempotent."""
+        """Terminate the process and stop the reader task. Idempotent.
+
+        *force* is a stop (F1162): it ends every process the turn started, not only the
+        app-server. Stopping a turn sends `turn/interrupt` first, and measured live on 0.167.1 the
+        app-server's shell then exited and left its command running, orphaned -- out of reach of a
+        tree walk, so the job (Windows) or the process group (POSIX) ends it. An ordinary close
+        leaves alone what the agent started on purpose (a server it is testing).
+        """
         if self._closed:
             return
         self._closed = True
+        job, self._job = self._job, None
+        if force:
+            if job is not None:
+                await asyncio.to_thread(job.terminate)
+            if self._proc.pid is not None:
+                with contextlib.suppress(Exception):
+                    await asyncio.to_thread(terminate_process_tree, self._proc.pid, True)
+        elif job is not None:
+            job.close()
         if self._reader_task is not None:
             self._reader_task.cancel()
         if self._stderr_task is not None:
@@ -1002,6 +1151,7 @@ async def run_turn(
     told_access_path: Optional[str] = None,
     on_mcp_status: "Optional[Callable[[str], Awaitable[Any]]]" = None,
     restrict_spec_writes: bool = False,
+    developer_instructions: Optional[str] = None,
 ) -> TurnOutcome:
     """Drive one Codex turn over `app-server`: spawn, initialize, start-or-resume a thread,
     start a turn, answer every server request, map every item/usage notification to the
@@ -1041,6 +1191,12 @@ async def run_turn(
         }
         if model:
             thread_params["model"] = model
+        # The run's canonical context (F325) -- what Claude gets through
+        # `--append-system-prompt-file` and `codex exec` through `model_instructions_file`. A new
+        # thread takes it as `developerInstructions`: a developer message, Codex's own base
+        # instructions left in place. A resumed one cannot -- see `turn_input`.
+        if developer_instructions and not resume_thread_id:
+            thread_params["developerInstructions"] = developer_instructions
         # `config` is the app-server's `config.toml`-override map, and it carries two unrelated
         # things: the MCP server this Hub injects, and whatever `-c KEY=VALUE` pairs the run's
         # controls render (`model_reasoning_effort` today). It used to exist only when there was
@@ -1073,7 +1229,10 @@ async def run_turn(
 
         turn_response = await session.request(
             "turn/start",
-            {"threadId": thread_id, "input": [{"type": "text", "text": prompt}]},
+            {
+                "threadId": thread_id,
+                "input": turn_input(prompt, developer_instructions if resume_thread_id else None),
+            },
         )
         turn_id = turn_response["result"]["turn"]["id"]
 
@@ -1096,6 +1255,9 @@ async def run_turn(
         while True:
             if should_interrupt is not None and should_interrupt() and not interrupted:
                 interrupted = True
+                # F1162: end what the turn is running while its tree is still whole. Interrupting
+                # first let Codex end its shell and orphan the command, out of every reach.
+                await session.end_commands()
                 # Best-effort: if interrupt itself can't be delivered, the deadline/process-
                 # death checks below still guarantee this loop ends.
                 with contextlib.suppress(AppServerError, asyncio.TimeoutError):
@@ -1106,6 +1268,12 @@ async def run_turn(
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
                 status, error = "failed", "turn timed out with no turn/completed notification"
+                break
+            lost = session.output_lost()
+            if lost is not None:
+                # The child may still be working, but nothing it says can reach this loop again:
+                # waiting would only show a frozen turn until the deadline.
+                status, error = "failed", lost
                 break
             if not session.is_running():
                 # The common path, and the one whose bare string used to reach `Run.error` and the

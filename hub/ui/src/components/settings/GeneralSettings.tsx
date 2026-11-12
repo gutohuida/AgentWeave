@@ -10,6 +10,7 @@ import type { CheckPhase, GeneratedFiles, CheckUsualDuration, CheckUsualDuration
 import type { ControlValue } from '@/api/modelCatalog'
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { CommittedInput } from './CommittedInput'
+import { AgentOverrides } from './AgentOverrides'
 import { PROJECT_DEFAULTS, permissionOptions, wholeNumber } from './settingsOptions'
 import { ReachGrantsChips } from './ReachGrantsChips'
 
@@ -168,7 +169,6 @@ export interface GeneralSettingsProps {
   onChange: (patch: Partial<ProjectSettings>, said: string) => void
   /** Rebind a project whose folder has moved. */
   onRelocate?: (path: string) => void
-  onOpenBudgets?: () => void
   /** Opens the type-to-confirm delete dialog the container owns. */
   onDeleteProject: () => void
 }
@@ -182,7 +182,8 @@ function CollaborationRows({ settings, onChange }: RowsProps) {
           label="Agents may start jobs, flows and loops"
           description="Off: an agent asking to start a job, flow or loop is refused, and you are asked instead."
           changed={settings.allow_agent_jobs !== PROJECT_DEFAULTS.allow_agent_jobs}
-          onReset={() => onChange({ allow_agent_jobs: PROJECT_DEFAULTS.allow_agent_jobs }, 'Agents may start jobs again')}
+          origin={{ kind: 'changed', other: 'Off' }}
+          onReset={() => onChange({ allow_agent_jobs: PROJECT_DEFAULTS.allow_agent_jobs }, 'Agents may no longer start jobs')}
           control={
             <Switch
               aria-label="Agents may start jobs, flows and loops"
@@ -196,6 +197,7 @@ function CollaborationRows({ settings, onChange }: RowsProps) {
           htmlFor="s-hops"
           description="How many agent-to-agent hops a chain may take before it pauses for you."
           changed={settings.hop_budget !== PROJECT_DEFAULTS.hop_budget}
+          origin={{ kind: 'changed', other: String(PROJECT_DEFAULTS.hop_budget) }}
           onReset={() => onChange({ hop_budget: PROJECT_DEFAULTS.hop_budget }, `Hop budget reset to ${PROJECT_DEFAULTS.hop_budget}`)}
           control={
             <CommittedInput
@@ -214,6 +216,7 @@ function CollaborationRows({ settings, onChange }: RowsProps) {
           htmlFor="s-cap"
           description="The most queued messages one agent turn takes in."
           changed={settings.turn_delivery_cap !== PROJECT_DEFAULTS.turn_delivery_cap}
+          origin={{ kind: 'changed', other: String(PROJECT_DEFAULTS.turn_delivery_cap) }}
           onReset={() => onChange({ turn_delivery_cap: PROJECT_DEFAULTS.turn_delivery_cap }, `Deliveries per turn reset to ${PROJECT_DEFAULTS.turn_delivery_cap}`)}
           control={
             <CommittedInput
@@ -239,6 +242,7 @@ export function AgentBudgetRow({ settings, onChange }: RowsProps) {
           htmlFor="s-agents"
           description="How many agents the project may hold before an agent asking for another is refused. Adding one yourself is never limited."
           changed={settings.agent_budget !== PROJECT_DEFAULTS.agent_budget}
+          origin={{ kind: 'changed', other: String(PROJECT_DEFAULTS.agent_budget) }}
           onReset={() => onChange({ agent_budget: PROJECT_DEFAULTS.agent_budget }, `Agent budget reset to ${PROJECT_DEFAULTS.agent_budget}`)}
           control={
             <CommittedInput
@@ -262,6 +266,8 @@ function PermissionRows({ settings, permissionModes, onChange }: RowsProps & Pic
           label="Default permissions"
           description="For every run whose conversation and agent have not chosen. Full access allows everything, Copilot and specification turns included."
           changed={Boolean(settings.default_permission_mode)}
+          origin={{ kind: 'changed', other: 'Each runner’s own' }}
+          overrides={<AgentOverrides setting="default_permission_mode" section="permissions" agentLabel="Default permissions" />}
           onReset={() => onChange({ default_permission_mode: null }, 'Default permissions reset to each runner’s own')}
           control={
             <MenuSelect
@@ -279,6 +285,10 @@ function PermissionRows({ settings, permissionModes, onChange }: RowsProps & Pic
           label="Granted reach"
           description="Under Workspace only: folders and hosts an agent may use beyond its workspace (a shell command needs read and write). A guardrail against mistakes, not a sandbox; writes outside are still recorded on the run."
           stacked
+          changed={Boolean(settings.reach_grants?.roots.length || settings.reach_grants?.hosts.length)}
+          origin={{ kind: 'changed', other: 'nothing beyond the workspace' }}
+          overrides={<AgentOverrides setting="reach_grants" section="permissions" agentLabel="Own granted reach" />}
+          onReset={() => onChange({ reach_grants: { roots: [], hosts: [] } }, 'Granted reach cleared')}
           control={<ReachGrantsChips grants={settings.reach_grants} onChange={(g) => onChange({ reach_grants: g }, 'Granted reach updated')} />}
         />
     </>
@@ -362,7 +372,8 @@ function ChecksRows({
                     {check.report_path ? (
                       <span data-testid={`project-check-report-${i}`} title={check.rerun_command ? `Re-runs failing tests with ${check.rerun_command}` : 'Re-runs failing tests by running the whole check'}>
                         report {check.report_path}
-                        {check.rerun_command ? ', re-runs by test' : ''} ·{' '}
+                        {check.rerun_command ? ', re-runs by test' : ''}
+                        {check.rerun_command ? `, disturbed at ${check.disturbed_threshold ?? 3}` : ''} ·{' '}
                       </span>
                     ) : null}
                     {check.phase === 'review' || check.phase === 'landing' ? (
@@ -420,6 +431,7 @@ function ChecksRows({
           label="Checks give way to me"
           description="Every process a check starts runs below normal priority, so your own work on this machine comes first. Checks marked fast keep normal priority; only the other checks give way. On an idle machine the checks still get all of it."
           changed={(settings.checks_give_way ?? false) !== PROJECT_DEFAULTS.checks_give_way}
+          origin={{ kind: 'changed', other: 'Off' }}
           onReset={() => onChange({ checks_give_way: false }, 'Checks run at normal priority again')}
           control={
             <Switch
@@ -442,6 +454,7 @@ function GeneratedFilesRow({ settings, onChange }: RowsProps) {
           label="Generated files"
           description="Files a command rebuilds from other files (a lockfile, a bundle). When work lands and only these files conflict, the Hub rebuilds them instead of sending the task back. Paths are comma-separated globs; the timeout is 1 to 3600 seconds. Empty the paths to turn it off."
           changed={Boolean(settings.generated_files)}
+          origin={{ kind: 'changed', other: 'Off' }}
           onReset={() => onChange({ generated_files: null }, 'Generated files cleared')}
           control={<GeneratedFilesEditor value={settings.generated_files ?? null} onSave={(v) => onChange({ generated_files: v }, v ? 'Generated files saved' : 'Generated files cleared')} />}
         />
@@ -455,6 +468,7 @@ function PullRequestRows({ settings, onChange }: RowsProps) {
           label="Land builds as pull requests"
           description="A build may put its approved work on one GitHub pull request instead of merging into the main branch. Pushing publishes the work, so this is off until you turn it on. It needs a GitHub remote and a logged-in GitHub CLI."
           changed={(settings.pr_landing ?? false) !== PROJECT_DEFAULTS.pr_landing}
+          origin={{ kind: 'changed', other: 'Off' }}
           onReset={() => onChange({ pr_landing: false }, 'Builds no longer land as pull requests')}
           control={
             <Switch
@@ -471,6 +485,7 @@ function PullRequestRows({ settings, onChange }: RowsProps) {
           label="One commit per build"
           description="With pull request landing on, the build branch carries a single commit holding the whole build instead of one commit per task. A push replaces it only if nobody else has pushed to the branch."
           changed={(settings.pr_single_commit ?? false) !== PROJECT_DEFAULTS.pr_single_commit}
+          origin={{ kind: 'changed', other: 'Off' }}
           onReset={() => onChange({ pr_single_commit: false }, 'One commit per task again')}
           control={
             <Switch
@@ -488,6 +503,7 @@ function PullRequestRows({ settings, onChange }: RowsProps) {
           label="The PR's CI is the full check"
           description="A pull request build pushes approved work without running the landing checks here; the checks that count on GitHub decide whether the PR is ready or the latest task goes back. It needs pull request landing on, and turns off with it. It also needs required checks on GitHub or a list of check names below."
           changed={(settings.pr_ci_full_check ?? false) !== PROJECT_DEFAULTS.pr_ci_full_check}
+          origin={{ kind: 'changed', other: 'Off' }}
           onReset={() => onChange({ pr_ci_full_check: false }, 'Landing checks run here again')}
           control={
             <Switch
@@ -505,6 +521,7 @@ function PullRequestRows({ settings, onChange }: RowsProps) {
           htmlFor="s-pr-ci-names"
           description="Comma-separated. Used only where GitHub marks no check required on the base branch."
           changed={(settings.pr_ci_check_names ?? []).length > 0}
+          origin={{ kind: 'changed', other: 'none' }}
           onReset={() => onChange({ pr_ci_check_names: [] }, 'CI check names cleared')}
           control={
             <CommittedInput
@@ -525,6 +542,7 @@ function PullRequestRows({ settings, onChange }: RowsProps) {
           htmlFor="s-pr-ci-interval"
           description="While a counted check is pending, the Hub asks GitHub this often. Whole minutes, 1 to 60."
           changed={(settings.pr_ci_interval_minutes ?? 2) !== PROJECT_DEFAULTS.pr_ci_interval_minutes}
+          origin={{ kind: 'changed', other: `${PROJECT_DEFAULTS.pr_ci_interval_minutes} minutes` }}
           onReset={() => onChange({ pr_ci_interval_minutes: PROJECT_DEFAULTS.pr_ci_interval_minutes }, 'CI interval reset to 2 minutes')}
           control={
             <CommittedInput
@@ -544,6 +562,7 @@ function PullRequestRows({ settings, onChange }: RowsProps) {
           htmlFor="s-pr-ci-cutoff"
           description="After a push, asking on the interval stops this long with a counted check still unconcluded, and the build shows that CI has not finished. Whole minutes, 5 to 1440, and not shorter than the interval."
           changed={(settings.pr_ci_cutoff_minutes ?? 60) !== PROJECT_DEFAULTS.pr_ci_cutoff_minutes}
+          origin={{ kind: 'changed', other: `${PROJECT_DEFAULTS.pr_ci_cutoff_minutes} minutes` }}
           onReset={() => onChange({ pr_ci_cutoff_minutes: PROJECT_DEFAULTS.pr_ci_cutoff_minutes }, 'CI cutoff reset to 60 minutes')}
           control={
             <CommittedInput
@@ -585,6 +604,8 @@ function CheckpointRows({
         <SettingsRow
           label="Checkpoints"
           changed={settings.checkpoint_mode !== PROJECT_DEFAULTS.checkpoint_mode}
+          origin={{ kind: 'changed', other: 'Offer me one' }}
+          overrides={<AgentOverrides setting="checkpoint_mode" section="checkpoints" agentLabel="Checkpoints" />}
           onReset={() => onChange({ checkpoint_mode: PROJECT_DEFAULTS.checkpoint_mode }, 'Checkpoints reset to Offer me one')}
           control={
             <MenuSelect
@@ -605,6 +626,8 @@ function CheckpointRows({
           inactive={settings.checkpoint_mode === 'off'}
           description={reading ? `Reached at ${reading}. Empty: the built-in point.` : 'How full the context gets before a checkpoint is written. Empty: the built-in point.'}
           changed={stored != null}
+          origin={{ kind: 'changed', other: 'the built-in point' }}
+          overrides={<AgentOverrides setting="checkpoint_point" section="checkpoints" agentLabel="Checkpoint at" />}
           onReset={() => clearThreshold('Checkpoint point reset to the built-in one')}
           control={
             <span className="flex items-center gap-1.5">
@@ -762,6 +785,7 @@ function ProjectRows({
         >
           {!folderAvailable && onRelocate ? (
             <form
+              id="locate-project"
               className="flex items-center gap-2"
               onSubmit={(e) => {
                 e.preventDefault()
@@ -791,48 +815,6 @@ function DangerZone({ settings, onDeleteProject }: Pick<GeneralSettingsProps, 's
           Delete project…
         </Button>
       </section>
-  )
-}
-
-/** Today's single General page, kept until the app is wired to the sections below
- *  (`settings-in-the-app-s-style-where-you-expect-them`). */
-export function GeneralSettings(props: GeneralSettingsProps) {
-  const { settings, notices, onChange, onOpenBudgets } = props
-  return (
-    <SettingsPage icon="settings" title="General" description="How agents work together in this project, what they may reach, and where approved work lands.">
-      {notices}
-      <SettingsGroup title="Collaboration">
-        <CollaborationRows settings={settings} onChange={onChange} />
-        <AgentBudgetRow settings={settings} onChange={onChange} />
-        {onOpenBudgets ? (
-          <SettingsRow
-            label="Token limit"
-            description="Set in Budgets, beside the usage it limits."
-            control={
-              <Button variant="outline" size="sm" onClick={onOpenBudgets}>
-                Open Budgets
-              </Button>
-            }
-          />
-        ) : null}
-      </SettingsGroup>
-      <SettingsGroup title="Reach" description="What agents may do when nobody said otherwise. An agent's own settings win over these.">
-        <PermissionRows {...props} />
-      </SettingsGroup>
-      <SettingsGroup title="Integration" description="Where approved work lands, and what must pass first.">
-        <MainBranchRow {...props} />
-        <ChecksRows {...props} />
-        <GeneratedFilesRow {...props} />
-        <PullRequestRows {...props} />
-      </SettingsGroup>
-      <SettingsGroup title="Checkpointing" description="When a conversation's context fills, the Hub writes a checkpoint so a fresh conversation can continue the work.">
-        <CheckpointRows {...props} />
-      </SettingsGroup>
-      <SettingsGroup title="Project">
-        <ProjectRows {...props} />
-      </SettingsGroup>
-      <DangerZone {...props} />
-    </SettingsPage>
   )
 }
 
@@ -987,6 +969,8 @@ function CheckDialog({
   const [reportPath, setReportPath] = React.useState(initial?.report_path ?? '')
   const [rerun, setRerun] = React.useState(initial?.rerun_command ?? '')
   const [changeCommand, setChangeCommand] = React.useState(initial?.change_command ?? '')
+  const [threshold, setThreshold] = React.useState(initial?.disturbed_threshold ? String(initial.disturbed_threshold) : '')
+  const thresholdError = threshold.trim() ? wholeNumber(2, 10000, 'tests')(threshold) : undefined
   const rerunError = rerunCommandError(rerun)
   const changeError = changeCommandError(changeCommand)
   const phaseError = fast && phase === 'landing' ? FAST_NOT_LANDING_ONLY : undefined
@@ -994,7 +978,7 @@ function CheckDialog({
   // refuses it too, and this says so before the save.
   const timeoutError = wholeNumber(10, fast ? FAST_CHECK_MAX_SECONDS : 3600, 'seconds')(timeout)
   const patterns = [...new Set(paths.split(/[\n,]/).map((p) => p.trim()).filter(Boolean))]
-  const ready = name.trim() && command.trim() && !timeoutError && !phaseError && !rerunError && !changeError
+  const ready = name.trim() && command.trim() && !timeoutError && !phaseError && !rerunError && !changeError && !thresholdError
   return (
     <Dialog
       open={open}
@@ -1010,6 +994,7 @@ function CheckDialog({
           setReportPath(initial?.report_path ?? '')
           setRerun(initial?.rerun_command ?? '')
           setChangeCommand(initial?.change_command ?? '')
+          setThreshold(initial?.disturbed_threshold ? String(initial.disturbed_threshold) : '')
         }
       }}
     >
@@ -1038,6 +1023,8 @@ function CheckDialog({
                   // Neither is sent when empty: a check without a report reads as having neither.
                   ...(reportPath.trim() ? { report_path: reportPath.trim() } : {}),
                   ...(rerun.trim() ? { rerun_command: rerun.trim() } : {}),
+                  // Only a check with a report and a rerun command has one; empty reads as 3.
+                  ...(rerun.trim() && reportPath.trim() && threshold.trim() ? { disturbed_threshold: Number(threshold) } : {}),
                   ...(changeCommand.trim() ? { change_command: changeCommand.trim() } : {}),
                 })
                 setOpen(false)
@@ -1098,6 +1085,16 @@ function CheckDialog({
           >
             <Input id="c-rerun" className="font-mono" value={rerun} placeholder="python rerun_pytest.py {tests}" aria-invalid={Boolean(rerunError)} onChange={(e) => setRerun(e.target.value)} />
           </Field>
+          {reportPath.trim() && rerun.trim() ? (
+            <Field
+              label="Disturbed threshold"
+              htmlFor="c-disturbed"
+              error={thresholdError}
+              hint="Optional, at least 2, 3 when empty. When this many tests fail in one run and every one passes when re-run, the run is recorded as disturbed: no test is listed as flaky and no fix task is filed."
+            >
+              <Input id="c-disturbed" inputMode="numeric" className="tabular" style={{ width: 96 }} value={threshold} placeholder="3" aria-invalid={Boolean(thresholdError)} onChange={(e) => setThreshold(e.target.value)} />
+            </Field>
+          ) : null}
           <Field
             label="Command for a change"
             htmlFor="c-change"

@@ -1,0 +1,29 @@
+{
+  "id": "fct-56c43bb30d21",
+  "kind": "fact",
+  "claim": "An acceptance-drive check must not read a task's current status or notes after further flow firings; it should assert from task_transitions and from durable evidence-review reasons instead.",
+  "citations": [
+    {
+      "source": "src-cda6f833f05b",
+      "quote": "An acceptance-drive check must not read a task's current status or notes after further flow firings, because a firing hands a sent-back task straight to its builder.",
+      "line_start": 8,
+      "line_end": 8
+    },
+    {
+      "source": "src-cda6f833f05b",
+      "quote": "Assert from task_transitions and from durable evidence-review reasons instead.",
+      "line_start": 8,
+      "line_end": 8
+    }
+  ],
+  "sources": [
+    "src-cda6f833f05b"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-11T03:01:48.298256Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

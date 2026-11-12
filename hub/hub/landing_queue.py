@@ -1139,6 +1139,17 @@ async def _run_one_batch(
     if not chosen:
         await _end_batch(batch_id, "failed", error="nothing left to land")
         return True
+    # The checkout's half of landing, asked before the checks rather than only after them (F1086):
+    # a dirty checkout refused a batch half an hour of checks later. `_land_batch` asks again.
+    async with async_session_factory() as session:
+        hub_written = await _hub_written(session, project_id)
+        await session.commit()
+    obstacle = await blocking.run(
+        task_integration.checkout_obstacle, root, main_branch, hub_written
+    )
+    if obstacle is not None:
+        await _not_landed(batch_id, chosen, main_branch, obstacle)
+        return False
 
     chain = await blocking.run(
         build_chain,
@@ -2149,6 +2160,25 @@ async def _send_back(
         landing = await session.get(TaskLanding, landing_id)
         if landing is None:
             return False
+        if landing.kind == "evidence":
+            # Old queued evidence landings can name foreign commits. A failed attempt is not a
+            # new verdict on work whose own branch has already landed (F1168).
+            from . import project_workspace, requirement_evidence
+
+            task = await session.get(Task, landing.task_id)
+            project = await session.get(Project, landing.project_id)
+            if task is not None and project is not None and project.main_branch:
+                root = (await project_workspace.resolve_project_workspace(session, project.id)).root
+                tip = await blocking.run(task_integration.task_branch_tip, root, task.id)
+                landed = tip and await blocking.run(
+                    requirement_evidence.is_reachable_from, root, tip, project.main_branch
+                )
+                if landed is True:
+                    landing.state, landing.reason, landing.ended_at = NOT_LANDED, report, _now()
+                    landing.batch_id = batch_id
+                    await session.commit()
+                    await _announce(session, [landing_id])
+                    return False
         # Read before the first write, so no git runs under the write lock: the send-back holds the
         # task's accepted evidence, less what already landed
         # (`a-checks-send-back-returns-the-task-s-accepted-evidence`, FR-2).

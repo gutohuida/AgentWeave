@@ -171,10 +171,9 @@
     ]
   },
   "hub": {
-    "phase": "approved",
-    "rigor": "sketch",
+    "phase": "archived",
     "size": "large",
-    "step": "delivery"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "Tier 2, because of the additive index migration and because the UI bundle reaches the operator's live app. The acceptance drive is written and failing before the build. The build ships with the drive green on copies of the operator's and trial databases. Merging to master stays the operator's call.",

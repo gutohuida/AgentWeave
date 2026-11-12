@@ -38,6 +38,12 @@ export interface Task {
   /** The holder this task waits for while they run another turn, and since when (F1112). */
   waiting_on?: string | null
   waiting_since?: string | null
+  /** The stage the task has really reached (`hub/task_stage.py`), when it entered it, its detail
+   *  (short commit id, why a landing did not happen) and what it waits on. */
+  stage?: string | null
+  stage_since?: string | null
+  stage_detail?: string | null
+  stage_waits_on?: string | null
   requirements?: string[]
   acceptance_criteria?: string[]
   deliverables?: string[]
@@ -229,6 +235,11 @@ export interface TaskCheckResult {
   sized_to_change?: boolean
   changed_file_count?: number
   full_because?: string
+  /** Set when many tests failed at once and every one passed when re-run: information, not a
+   *  failure (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests`, FR-2). */
+  disturbed?: { failed: number; passed_on_rerun: number; threshold: number }
+  /** The first run of a check that failed and then passed when re-run. */
+  flaky?: { first?: { output_tail?: string } }
 }
 
 /** One run of the project's checks on the work this task's approval would merge. */
@@ -773,8 +784,12 @@ export function useTaskBoard(specDocumentId: string | null) {
 export interface TaskBoardSummary {
   spec_document_id: string | null
   title: string | null
+  /** The spec's short tag; null for the no-spec board. */
+  tag?: string | null
   total: number
   outstanding: number
+  /** When a task of this board was last created or moved (ISO). Boards come newest first. */
+  last_activity?: string
 }
 
 export function useTaskBoards() {
@@ -1087,6 +1102,38 @@ export interface TaskMoves {
   moves: string[]
   /** Open agents the operator may hand a completed task to for review, never its author. */
   reviewers?: string[]
+  /** The task is in no flow or loop, so it moves by hand. */
+  loose?: boolean
+  /** The closes the Hub will accept for this task now: `done_elsewhere`, `cancelled`. */
+  closes?: CloseOutcome[]
+}
+
+export type CloseOutcome = 'done_elsewhere' | 'cancelled'
+
+export interface CloseTasksResult {
+  outcome: CloseOutcome
+  commit: string | null
+  closed: { id: string; readable_id?: string | null; status: string }[]
+  /** A task that could not close, with the Hub's reason; the others closed anyway. */
+  refused: { task: string; reason: string; code: string }[]
+}
+
+/** Close loose tasks as done elsewhere (naming a task or a commit on main) or as cancelled. */
+export function useCloseTasks() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (body: {
+      tasks: string[]
+      outcome: CloseOutcome
+      by_task?: string
+      commit?: string
+      reason?: string
+    }) => postJson<CloseTasksResult>(`/api/v1/projects/${projectId}/tasks/close`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+    },
+  })
 }
 
 export function useTaskMoves(taskId: string | null) {

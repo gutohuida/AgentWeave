@@ -8,10 +8,11 @@ import threading
 
 import pytest
 
+import hub.main as hub_main
 from hub import project_lifecycle
 from hub.api.v1 import fs_browse
 
-from ._loop_lag import STALL_LIMIT, LagProbe
+from ._loop_lag import STALL_LIMIT, LagProbe, slow_git
 
 # Only a blocked loop ever waits this out, so it can be far above any delay a loaded machine adds.
 _STALL = 60.0
@@ -43,9 +44,6 @@ async def _health_answers_during(app, stall: _Stall, slow_request) -> bool:
     """Whether /health answered while the slow call was held, with the call made off the loop and
     the loop never held past the probe's limit meanwhile: a share's call made on the loop holds it
     for as long as the share does, and a 250 ms hold anywhere in the request still counts."""
-    # /health computes its UI staleness warning with git on the loop, once per 30 s (F1128): a
-    # stall of the probing request's own, not of the path this guards. Paid before the window.
-    assert (await app.get("/health")).status_code == 200
     async with LagProbe() as probe:
         task = asyncio.create_task(slow_request())
         while not stall.entered.is_set():
@@ -149,3 +147,19 @@ async def test_a_slow_project_relocate_does_not_block_other_requests(
     )
 
     assert answered
+
+
+@pytest.mark.asyncio
+async def test_health_works_out_its_ui_staleness_warning_off_the_loop(app):
+    """F1128: an expired staleness cache made `/health` run git two or three times, and stat every
+    UI source file, on the loop's thread, so every poll of it once per TTL froze the Hub."""
+    hub_main._reset_ui_staleness_cache()
+    try:
+        with slow_git(threading.current_thread()) as git:
+            response = await app.get("/health")
+    finally:
+        hub_main._reset_ui_staleness_cache()
+
+    assert response.status_code == 200
+    assert git.calls, "the staleness check asked git nothing: this test exercised nothing"
+    assert not git.on_loop, [call.argv for call in git.on_loop]

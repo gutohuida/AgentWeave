@@ -20,12 +20,15 @@ vi.mock('@/api/agents', async (importOriginal) => {
   return { ...actual, useAgents: () => ({ data: roster, isLoading: false }), useAgentLaunchability: () => ({ data: launchability, error: null }) }
 })
 
-vi.mock('@/api/runners', () => ({
+vi.mock('@/api/runners', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/runners')>()),
   useRunners: () => ({
     data: [{ id: 'runner-codex', name: 'Codex', cli: 'codex', model: null }],
     isLoading: false,
   }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
 }))
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => ({
@@ -40,7 +43,7 @@ function renderExecution(summary: { name: string }) {
   roster = [summary]
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <AgentSettingsPage agent={summary.name} section="execution" onSelectSection={vi.fn()} onBack={vi.fn()} />
+      <AgentSettingsPage agent={summary.name} section="running" onSelectSection={vi.fn()} onBack={vi.fn()} />
     </QueryClientProvider>,
   )
 }

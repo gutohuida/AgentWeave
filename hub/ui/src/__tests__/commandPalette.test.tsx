@@ -178,20 +178,36 @@ describe('command palette — the four action kinds', () => {
 
 describe('command palette — settings', () => {
   const settings = () => ({
-    onOpenAppSettings: vi.fn(),
+    onOpenSetting: vi.fn(),
     onOpenProjectSettings: vi.fn(),
     onOpenAgentSettings: vi.fn(),
   })
 
-  it.each(['notif', 'sound', 'settings'])('opens App settings at Sound and notifications on Enter after typing %s', async (typed) => {
+  it.each([
+    ['volume', 'Volume'],
+    ['sound', 'Sound'],
+    ['theme', 'Theme'],
+  ])('lists the App setting for %s and opens it on Enter', async (typed, label) => {
     const callbacks = settings()
     renderPalette(callbacks)
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
     const input = await screen.findByPlaceholderText(PLACEHOLDER)
     await userEvent.type(input, typed)
     await userEvent.keyboard('{Enter}')
-    expect(callbacks.onOpenAppSettings).toHaveBeenCalledWith('notifications')
+    expect(callbacks.onOpenSetting).toHaveBeenCalledTimes(1)
+    expect(callbacks.onOpenSetting.mock.calls[0][0]).toMatchObject({ scope: 'app', label })
     expect(callbacks.onOpenProjectSettings).not.toHaveBeenCalled()
+  })
+
+  it('finds a project setting by its description words, naming scope and section', async () => {
+    const callbacks = settings()
+    renderPalette({ ...callbacks, agents: [{ name: 'claude' }] })
+    fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER), 'CI cutoff')
+    const option = screen.getByRole('option', { name: /CI asking stops after/ })
+    expect(option).toHaveTextContent('Project settings · Landing')
+    await userEvent.click(option)
+    expect(callbacks.onOpenSetting.mock.calls[0][0]).toMatchObject({ scope: 'project', section: 'landing', label: 'CI asking stops after' })
   })
 
   it('lists Project settings and each open agent’s settings under "settings"', async () => {
@@ -206,10 +222,10 @@ describe('command palette — settings', () => {
 
   it('offers App settings but no project or agent settings with no project open', async () => {
     const callbacks = settings()
-    renderPalette({ onOpenAppSettings: callbacks.onOpenAppSettings })
+    renderPalette({ onOpenSetting: callbacks.onOpenSetting })
     fireEvent.keyDown(document, { key: 'k', ctrlKey: true })
-    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER), 'settings')
-    expect(screen.getByRole('option', { name: /Sound and notifications/ })).toBeInTheDocument()
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER), 'volume')
+    expect(screen.getByRole('option', { name: /Volume/ })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Project settings/ })).toBeNull()
     expect(screen.queryByRole('option', { name: /claude settings/ })).toBeNull()
   })

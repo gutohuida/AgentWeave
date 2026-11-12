@@ -38,32 +38,63 @@ export const TAB_LABELS: Record<ProjectTab, string> = {
   activity: 'Activity',
 }
 
+/** Project settings' sections, in the order the side list shows them (grouped there). `general` is
+ *  the Project section: General's old id, kept because that is what the route and URLs carry. */
 export const ENVIRONMENT_SECTIONS = [
-  'quality',
-  'instructions',
-  'runners',
-  'charters',
-  'manager',
-  'worktrees',
-  'diagnostics',
+  'general',
+  'collaboration',
+  'permissions',
   'budgets',
-  'settings',
+  'instructions',
+  'charters',
+  'checkpoints',
+  'manager',
+  'checks',
+  'landing',
+  'worktrees',
+  'spec-steps',
+  'traces',
+  'diagnostics',
 ] as const
 export type EnvironmentSection = (typeof ENVIRONMENT_SECTIONS)[number]
 
-/** Named for what an operator is trying to do, not for the shape of the data. *Context* and
- *  *Access* are defined here ahead of the checkpoint change that fills them; a section with
- *  nothing in it yet renders whatever settings exist at the time. */
-export const AGENT_SETTINGS_SECTIONS = [
-  'identity',
-  'execution',
-  'charter',
-  'interaction',
-  'context',
-  'access',
-  'workspace',
-] as const
+/** Sections that no longer exist, and the one that holds what they held: General (`settings`),
+ *  Quality and Runners all open Project, so a saved link or a toast never lands on a blank page. */
+const RETIRED_ENVIRONMENT_SECTIONS: Readonly<Record<string, EnvironmentSection>> = {
+  settings: 'general',
+  quality: 'general',
+  runners: 'general',
+}
+
+/** A section id as given by a link or a caller, resolved to one that exists; null if it names none. */
+export function resolveEnvironmentSection(raw: string | null | undefined): EnvironmentSection | null {
+  if (!raw) return null
+  if ((ENVIRONMENT_SECTIONS as readonly string[]).includes(raw)) return raw as EnvironmentSection
+  return RETIRED_ENVIRONMENT_SECTIONS[raw] ?? null
+}
+
+/** An agent's settings, in five sections. Permissions and Checkpoints carry the names of the project
+ *  sections they override. */
+export const AGENT_SETTINGS_SECTIONS = ['agent', 'running', 'permissions', 'checkpoints', 'workspace'] as const
 export type AgentSettingsSection = (typeof AGENT_SETTINGS_SECTIONS)[number]
+
+/** The seven sections the five replaced, and the one that holds what each held, so a saved link or a
+ *  toast never lands on a blank page. */
+const RETIRED_AGENT_SETTINGS_SECTIONS: Readonly<Record<string, AgentSettingsSection>> = {
+  identity: 'agent',
+  charter: 'agent',
+  execution: 'running',
+  interaction: 'running',
+  access: 'permissions',
+  context: 'checkpoints',
+}
+
+/** A section id as given by a link or a caller, resolved to one that exists; null if it names none. */
+export function resolveAgentSettingsSection(raw: string | null | undefined): AgentSettingsSection | null {
+  if (!raw) return null
+  if ((AGENT_SETTINGS_SECTIONS as readonly string[]).includes(raw)) return raw as AgentSettingsSection
+  return RETIRED_AGENT_SETTINGS_SECTIONS[raw] ?? null
+}
 
 /** The operator's own settings, for every project on this Hub. The sections are named for what the
  *  operator is trying to do: turn a sound off, switch to dark, point the app at another Hub. */
@@ -135,7 +166,7 @@ export type WorkspaceDestination =
       checkpointTrigger?: string | null
       checkpointConversation?: string | null
     }
-  | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection }
+  | { kind: 'project'; projectId: string; tab: 'environment'; environmentSection: EnvironmentSection; setting?: string }
   // `agent` is null only on the new-conversation surface reached from the recency view, where
   // no agent is implied by where the operator started — that surface asks for one.
   //
@@ -152,11 +183,11 @@ export type WorkspaceDestination =
   // Its own kind rather than an `ENVIRONMENT_SECTIONS` entry: those address a project and carry no
   // subject, so they cannot say *which* agent is being configured. `agent` is non-null by
   // construction — there is no such thing as configuring no agent.
-  | { kind: 'agent-settings'; projectId: string; agent: string; section: AgentSettingsSection }
+  | { kind: 'agent-settings'; projectId: string; agent: string; section: AgentSettingsSection; setting?: string }
   // The operator's own settings. `projectId` is the project the operator came from, kept so the rail
   // and the way back still know where they were; it is null with no project open, which is the
   // point of this being a destination of its own (the app has no other settings entry there).
-  | { kind: 'app-settings'; projectId: string | null; section: AppSettingsSection }
+  | { kind: 'app-settings'; projectId: string | null; section: AppSettingsSection; setting?: string }
   | { kind: 'zero' }
 
 /** A project destination that is one of the tabs (not the project's configuration). */
@@ -264,8 +295,16 @@ export function goTo(destination: WorkspaceDestination): void {
 export function environmentDestination(
   projectId: string,
   section: EnvironmentSection = DEFAULT_ENVIRONMENT_SECTION,
+  /** The row to land on: its label. Part of the location, so a reload or Back returns to it. */
+  setting?: string | null,
 ): Extract<WorkspaceDestination, { kind: 'project' }> {
-  return { kind: 'project', projectId, tab: 'environment', environmentSection: section }
+  return {
+    kind: 'project',
+    projectId,
+    tab: 'environment',
+    environmentSection: resolveEnvironmentSection(section) ?? DEFAULT_ENVIRONMENT_SECTION,
+    ...(setting ? { setting } : {}),
+  }
 }
 
 /** `document` defaults to null — most navigations to a conversation are not carrying one. The
@@ -293,15 +332,17 @@ export function agentSettingsDestination(
   projectId: string,
   agent: string,
   section: AgentSettingsSection = DEFAULT_AGENT_SETTINGS_SECTION,
+  setting?: string | null,
 ): Extract<WorkspaceDestination, { kind: 'agent-settings' }> {
-  return { kind: 'agent-settings', projectId, agent, section }
+  return { kind: 'agent-settings', projectId, agent, section, ...(setting ? { setting } : {}) }
 }
 
 export function appSettingsDestination(
   projectId: string | null,
   section: AppSettingsSection = DEFAULT_APP_SETTINGS_SECTION,
+  setting?: string | null,
 ): Extract<WorkspaceDestination, { kind: 'app-settings' }> {
-  return { kind: 'app-settings', projectId, section }
+  return { kind: 'app-settings', projectId, section, ...(setting ? { setting } : {}) }
 }
 
 /** The project a destination belongs to, or null when it belongs to none (the zero state, and App
@@ -431,12 +472,14 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   if (destination.kind === 'app-settings') {
     if (destination.projectId) params.set('project', destination.projectId)
     params.set('appSettings', destination.section)
+    if (destination.setting) params.set('setting', destination.setting)
     return `?${params.toString()}`
   }
   params.set('project', destination.projectId)
   if (destination.kind === 'agent-settings') {
     params.set('agent', destination.agent)
     params.set('settings', destination.section)
+    if (destination.setting) params.set('setting', destination.setting)
     return `?${params.toString()}`
   }
   if (destination.kind === 'conversation') {
@@ -452,6 +495,7 @@ export function serializeDestination(destination: WorkspaceDestination): string 
   params.set('tab', destination.tab)
   if (destination.tab === 'environment') {
     params.set('section', destination.environmentSection ?? DEFAULT_ENVIRONMENT_SECTION)
+    if (destination.setting) params.set('setting', destination.setting)
   }
   if (destination.tab === 'checkpoints') {
     if (destination.checkpoint) params.set('checkpoint', destination.checkpoint)
@@ -503,7 +547,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
     const section: AppSettingsSection = (APP_SETTINGS_SECTIONS as readonly string[]).includes(rawAppSection)
       ? (rawAppSection as AppSettingsSection)
       : DEFAULT_APP_SETTINGS_SECTION
-    return appSettingsDestination(projectId || null, section)
+    return appSettingsDestination(projectId || null, section, params.get('setting'))
   }
   if (!projectId) return null
 
@@ -516,12 +560,8 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   // falls through rather than being coerced to one.
   const rawSettingsSection = params.get('settings')
   if (agent && rawSettingsSection !== null) {
-    const section: AgentSettingsSection = (
-      AGENT_SETTINGS_SECTIONS as readonly string[]
-    ).includes(rawSettingsSection)
-      ? (rawSettingsSection as AgentSettingsSection)
-      : DEFAULT_AGENT_SETTINGS_SECTION
-    return agentSettingsDestination(projectId, agent, section)
+    const section = resolveAgentSettingsSection(rawSettingsSection) ?? DEFAULT_AGENT_SETTINGS_SECTION
+    return agentSettingsDestination(projectId, agent, section, params.get('setting'))
   }
 
   // The agentless new-conversation surface has no `agent` to key on, so the sentinel is what
@@ -540,12 +580,7 @@ export function parseDestination(search: string): WorkspaceDestination | null {
   const rawTab = params.get('tab')
   if (rawTab === 'environment') {
     const rawSection = params.get('section')
-    const section: EnvironmentSection = (ENVIRONMENT_SECTIONS as readonly string[]).includes(
-      rawSection ?? '',
-    )
-      ? (rawSection as EnvironmentSection)
-      : DEFAULT_ENVIRONMENT_SECTION
-    return environmentDestination(projectId, section)
+    return environmentDestination(projectId, resolveEnvironmentSection(rawSection) ?? DEFAULT_ENVIRONMENT_SECTION, params.get('setting'))
   }
   const tab: ProjectTab = (PROJECT_TABS as readonly string[]).includes(rawTab ?? '')
     ? (rawTab as ProjectTab)

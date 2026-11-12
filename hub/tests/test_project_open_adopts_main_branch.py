@@ -12,12 +12,15 @@ suggestion route's `chosen`. So these assert on the stored value, which is the t
 """
 
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
 
 from hub.db.engine import async_session_factory
 from hub.db.models import Project
+
+from ._loop_lag import slow_git
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -100,3 +103,27 @@ async def test_opening_a_plain_directory_adopts_nothing(
 
     assert opened.status_code == 200, opened.text
     assert await stored_main_branch(project.id) is None
+
+
+@pytest.mark.asyncio
+async def test_opening_and_suggesting_ask_git_off_the_loop(
+    app, auth_headers, bind_project_workspace, tmp_path
+) -> None:
+    """F1131: the detection ran `git rev-parse` on the loop's thread, once for a folder that is
+    not a repository and up to once per `MAIN_BRANCH_NAMES` entry for one that is, so every other
+    request and stream waited while a project opened or its settings asked for a suggestion."""
+    repo = init_repo(tmp_path / "repo")
+    project = await bind_project_workspace(repo)
+
+    with slow_git(threading.current_thread()) as log:
+        opened = await app.post(
+            "/api/v1/projects/open", json={"path": str(repo)}, headers=auth_headers
+        )
+        suggestion = await app.get(
+            f"/api/v1/projects/{project.id}/main-branch-suggestion", headers=auth_headers
+        )
+
+    assert opened.status_code == 200, opened.text
+    assert suggestion.json() == {"suggestion": "master", "chosen": "master", "is_repository": True}
+    assert log.calls, "no git was asked: this test exercised nothing"
+    assert not log.on_loop, [call.argv for call in log.on_loop]

@@ -55,15 +55,26 @@ async def payloads_for_documents(
         .all()
     )
 
+    from . import blocking
+
+    # The reads resolve each path and read its file, so off the loop: a task view or move on a
+    # busy disk otherwise held the whole Hub for them (F1132).
+    located = [(row.id, row.path) for row in rows]
+    return await blocking.run(_read_payloads, workspace, located)
+
+
+def _read_payloads(
+    workspace: ProjectWorkspace, located: List[Tuple[str, str]]
+) -> Dict[str, Optional[Dict[str, Any]]]:
     payloads: Dict[str, Optional[Dict[str, Any]]] = {}
-    for row in rows:
+    for document_id, path in located:
         try:
-            content = spec_documents.read_document(workspace, row.path)
+            content = spec_documents.read_document(workspace, path)
         except Exception:
             # A path that no longer resolves, a directory that moved, a permission problem. The
             # wording is unavailable; that is all this means.
             content = None
-        payloads[row.id] = spec_documents.parse_stored(content)
+        payloads[document_id] = spec_documents.parse_stored(content)
     return payloads
 
 

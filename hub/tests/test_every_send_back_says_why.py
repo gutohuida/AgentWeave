@@ -56,6 +56,7 @@ async def reviewer():
         session.add(Agent(id="ag-sendback-r", project_id="proj-test", name="reviewer"))
         session.add(
             Run(
+                initiator="autonomous",
                 id="run-sendback-r",
                 project_id="proj-test",
                 agent="reviewer",

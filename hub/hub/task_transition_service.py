@@ -34,6 +34,7 @@ from .task_transitions import (
     STATUS_BLOCKED,
     Actor,
     allowed_targets,
+    free_targets,
     is_allowed,
     refusal_detail,
 )
@@ -119,6 +120,17 @@ class GateUnsatisfiedError(TransitionRefusedError):
     *state* of the work is what forbids it. Carries the structured refusal so a surface can render
     each blocking requirement rather than parse a sentence.
     """
+
+    http_status = 409
+
+    def __init__(self, refusal) -> None:
+        super().__init__(refusal.detail())
+        self.refusal = refusal
+
+
+class DriveBaselineRefusedError(TransitionRefusedError):
+    """An acceptance drive approved without a baseline showing each check reached and failing at
+    its own assertion (`drive_baseline`). 409: the state of the work forbids it, not the asker."""
 
     http_status = 409
 
@@ -471,6 +483,20 @@ class MoveVerdict:
         return str(self.refusal) if self.refusal is not None else None
 
 
+async def is_free_mover(session: AsyncSession, task: Task, actor: Actor) -> bool:
+    """Whether *actor* moves *task* by hand (`tasks-outside-a-flow-move-freely`, FR-1..FR-3).
+
+    The task is loose -- in no flow's or loop's queue, linked to a specification or not -- and the
+    actor is the operator, or a run the operator started with their own message (`Run.initiator`).
+    A run a flow, loop or job started keeps the map's edges, and so does every task in a flow."""
+    if task.loop_id is not None:
+        return False
+    if actor.is_operator:
+        return True
+    run = await session.get(Run, actor.run_id) if actor.run_id else None
+    return run is not None and run.initiator == "operator"
+
+
 async def decide_move(
     session: AsyncSession, task: Task, to_status: str, actor: Actor
 ) -> MoveVerdict:
@@ -484,6 +510,15 @@ async def decide_move(
     the state of the work rather than who is asking.
     """
     if to_status == task.status:
+        return MoveVerdict(allowed=True)
+    if to_status in free_targets(task.status) and await is_free_mover(session, task, actor):
+        # A move by hand: no map edge, no author/reviewer separation, and the mover never becomes
+        # the holder (FR-6). The reviewer-is-not-the-author guard stays: it refuses a state that
+        # would name the author as its own reviewer, whoever asks.
+        try:
+            await _guard_reviewer_is_not_the_author(session, task, to_status, actor)
+        except TransitionRefusedError as refusal:
+            return MoveVerdict(allowed=False, refusal=refusal)
         return MoveVerdict(allowed=True)
     if task.status == "completed" and to_status == "approved" and task.build_id:
         # The one edge a level adds (`a-build-has-a-driver-a-level-and-its-people`, D4): at Fast,
@@ -1045,7 +1080,9 @@ async def apply_transition(
     # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
     # author/reviewer guard because it answers the same kind of question — is this actor entitled to
     # this move — rather than the gates below, which ask about the state of the work.
-    await _guard_run_holds_the_task(session, task, to_status, actor)
+    free_move = to_status in free_targets(from_status) and await is_free_mover(session, task, actor)
+    if not (free_move and to_status == "completed"):
+        await _guard_run_holds_the_task(session, task, to_status, actor)
 
     # The dependency gate, on the edges that *begin* work: `pending -> in_progress` and
     # `assigned -> in_progress`. Not `-> assigned` and not `-> rejected`: a whole wave can be routed
@@ -1133,16 +1170,29 @@ async def apply_transition(
         # transaction holds the write lock (`approved-work-merges-in-batches`, D3).
         if git_answers is None:
             git_answers, _ = await ask_approval_git_first(
-                session, task, actor, override_checks_reason=reason
+                session, task, actor, override_checks_reason=reason, own_work=free_move
             )
+        # An acceptance drive is approved only on a baseline that shows each check reached and
+        # failing (`evidence-review-sends-work-back-only-for-what-is-wrong-with-it`, FR-6, FR-7).
+        # Asked here, before the write lock, because it reads the document's file. Work closed as
+        # already built started nothing, so there is no pre-build code to have a baseline on.
+        from . import drive_baseline
+
+        is_drive = not closing_with and await drive_baseline.is_acceptance_drive(session, task)
         # The approval accepts the task's evidence in the same savepoint the gate reads it in
         # (design D1): the gate judges the state it will merge from, and a refusal for any other
         # reason -- a conflict, failing checks -- rolls the acceptances back with it, so nothing is
         # recorded as accepted by an approval that did not happen.
         async with session.begin_nested():
             decided = await _decide_evidence_with_verdict(
-                session, task, actor, "approved", verdict_reason
+                session, task, actor, "approved", verdict_reason, own_work=free_move
             )
+            if is_drive:
+                baseline_refusal = await drive_baseline.approval_refusal(
+                    session, task, is_operator=actor.is_operator
+                )
+                if baseline_refusal is not None:
+                    raise DriveBaselineRefusedError(baseline_refusal)
             with traces.answering_from(git_answers):
                 refusal, policy = await evaluate_approval(
                     session,
@@ -1202,6 +1252,11 @@ async def apply_transition(
             lead += "."
         note = f"{lead} {decided}" if lead else decided
 
+    # The builder is whoever holds the task as it completes, inside or outside a flow, and stays
+    # through the hand-off to a reviewer (`where-each-task-stands-is-visible-on-the-board`, FR-7).
+    # Completed again after a send-back, it becomes whoever holds it then.
+    if to_status == "completed" and task.assignee:
+        task.builder = task.assignee
     task.status = to_status
     transition = TaskTransition(
         id=f"ttr-{short_id()}",
@@ -1373,6 +1428,7 @@ async def _decide_evidence_with_verdict(
     to_status: str,
     verdict_reason: Optional[str],
     failing_pieces: Optional[Dict[str, str]] = None,
+    own_work: bool = False,
 ) -> Optional[str]:
     """The verdict on *task* decides the evidence recorded for it (vis-D4), piece by piece: a
     send-back rejects only *failing_pieces* and holds the rest. Returns the history's account of
@@ -1393,7 +1449,10 @@ async def _decide_evidence_with_verdict(
         # A Fast build has no reviewer (slice D, D4): its builder, lead or flow approving completed
         # work accepts the builder's own evidence, which a reviewer-less approval would otherwise
         # leave awaiting and refuse as "nobody has judged it".
-        own_work=bool(
+        # A loose task approved by hand has no reviewer either (`tasks-outside-a-flow-move-freely`,
+        # FR-4): whoever approves it accepts its builder's evidence.
+        own_work=own_work
+        or bool(
             to_status == "approved"
             and task.build_id
             and task.level == "fast"
@@ -1576,7 +1635,7 @@ async def hub_written_documents(session: AsyncSession, workspace, project_id: st
     holds no one's work but the Hub's. An operator's edit to the same file changes the hash and
     counts as theirs, as it should.
     """
-    from . import spec_documents, spec_lifecycle
+    from . import hub_writes, spec_documents, spec_lifecycle
     from .db.models import SpecDocument
 
     rows = (
@@ -1595,6 +1654,9 @@ async def hub_written_documents(session: AsyncSession, workspace, project_id: st
                 continue
             if content is not None and spec_lifecycle.digest(content) == content_digest:
                 written.add(path)
+        # Every other file the Hub writes into the checkout, by the digest of its write (F1086,
+        # F1167): `spec/index.json`, the journey, and the vault's `knowledge/` records.
+        written |= hub_writes.still_written(workspace.root)
         return written
 
     # The files are read off the loop (`blocking`, D1); the rows were read on it, above.
@@ -1663,6 +1725,7 @@ async def ask_approval_git_first(
     actor: Actor,
     *,
     override_checks_reason: Optional[str] = None,
+    own_work: bool = False,
 ):
     """`(answers, refusal)`: approval's gate asked before anything is written, with the evidence the
     verdict would accept read as accepted, every git answer kept for the transaction to read
@@ -1676,6 +1739,7 @@ async def ask_approval_git_first(
         task,
         actor=evidence_actor(actor),
         decision=requirement_evidence.ACCEPTED,
+        own_work=own_work,
     )
     token = task_integration.ASSUMED_ACCEPTED.set(frozenset(evidence.id for evidence, _ in pieces))
     try:

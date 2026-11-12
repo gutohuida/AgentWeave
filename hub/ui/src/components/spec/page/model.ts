@@ -395,11 +395,14 @@ export interface SpecListEntry {
    *  `the-spec-header-redesigned`): "Ready to approve", "2 amendments to review", "Ready to build",
    *  "Ready to fold". Null when it waits on nobody, or on an agent. */
   waiting?: string | null
+  /** A capability: how many open changes name it. */
+  waitingCount?: number
 }
 
 export type ListOrder = 'changed' | 'phase' | 'title' | 'roadmap' | 'attention'
 export type ListKindFilter = 'all' | 'change-spec' | 'roadmap' | 'capability'
-export type ListPhaseFilter = 'any' | 'writing' | 'approved' | 'archived'
+export type ListPhaseFilter = 'any' | 'unarchived' | 'writing' | 'approved' | 'archived'
+export const LIST_PHASE_FILTERS: readonly ListPhaseFilter[] = ['any', 'unarchived', 'writing', 'approved', 'archived']
 
 export interface ListPreferences {
   query: string
@@ -415,6 +418,7 @@ const PHASE_RANK: Record<ShownState, number> = { building: 0, ready: 1, writing:
 
 function matchesPhase(state: DocState, filter: ListPhaseFilter): boolean {
   if (filter === 'any') return true
+  if (filter === 'unarchived') return state !== 'archived'
   if (filter === 'writing') return state === 'writing' || state === 'ready'
   if (filter === 'approved') return state === 'approved' || state === 'building' || state === 'current'
   return state === 'archived'

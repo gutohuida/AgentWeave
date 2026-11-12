@@ -103,6 +103,7 @@ export function SpecDocList({
             maxWidth={150}
             options={[
               { value: 'any', label: 'Any phase' },
+              { value: 'unarchived', label: 'Not archived' },
               { value: 'writing', label: 'Writing' },
               { value: 'approved', label: 'Approved' },
               { value: 'archived', label: 'Archived' },
@@ -185,6 +186,11 @@ function Row({
       ) : null}
       <StateIcon state={e.shown} />
       <span className="aw-sp-list-name">{e.title}</span>
+      {e.kind === 'capability' && e.waitingCount !== undefined ? (
+        <span className="aw-sp-list-meta" data-testid="capability-waiting-count" data-path={e.path} title="Open changes naming this capability">
+          {e.waitingCount}
+        </span>
+      ) : null}
       {showWaiting && e.waiting ? (
         <span className="aw-sp-list-waiting">{e.waiting}</span>
       ) : roadmap && slices !== undefined ? (

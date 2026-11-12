@@ -1,7 +1,22 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { GeneralSection } from '@/components/settings/sections/GeneralSection'
+import { AgentBudget } from '@/components/settings/sections/BudgetsSection'
+import { GeneralSection as GeneralPart, type ProjectPart } from '@/components/settings/sections/GeneralSection'
+
+/** The sections General split into, all open at once: these tests are about the rows and how they
+ *  save, which the split does not change. Which section holds which row is checked on its own below. */
+const PARTS: ProjectPart[] = ['general', 'collaboration', 'permissions', 'checks', 'landing', 'checkpoints']
+function GeneralSection() {
+  return (
+    <>
+      {PARTS.map((part) => (
+        <GeneralPart key={part} part={part} />
+      ))}
+      <AgentBudget />
+    </>
+  )
+}
 import { describeThreshold } from '@/components/environment/describeThreshold'
 import { useConfigStore } from '@/store/configStore'
 import type { AgentSummary } from '@/api/agents'
@@ -45,7 +60,7 @@ function makeSettings(): {
   checkpoint_model: string | null
   checkpoint_auto_continue: boolean
   main_branch: string | null
-  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null; change_command?: string | null }> | null
+  checks: Array<{ name: string; command: string; timeout_seconds: number; paths?: string[]; fast?: boolean; phase?: 'review' | 'landing' | 'both'; report_path?: string | null; rerun_command?: string | null; disturbed_threshold?: number | null; change_command?: string | null }> | null
   checks_give_way?: boolean
 } {
   return {
@@ -164,14 +179,14 @@ describe('Project settings → General, applied on change', () => {
 
   it('says the project could not be read, rather than waiting on a skeleton for it', () => {
     projectsError = new Error('500')
-    render(<GeneralSection />)
+    render(<GeneralPart />)
     expect(screen.queryByLabelText('Loading project settings')).toBeNull()
     expect(screen.getByRole('alert')).toHaveTextContent("This project's settings could not be loaded.")
   })
 
   it('warns that the checkpoint runner menu is incomplete when the runners cannot be read', () => {
     runnersError = new Error('500')
-    render(<GeneralSection />)
+    render(<GeneralPart part="checkpoints" />)
     expect(screen.getByTestId('settings-runners-error')).toHaveTextContent("This project's runners could not be read.")
   })
 
@@ -385,6 +400,39 @@ describe('Project settings → General, applied on change', () => {
     expect(lastPatch()).toEqual({ checks: [{ name: 'unit', command: 'pytest --junitxml=report.xml', timeout_seconds: 900 }] })
   })
 
+  // `a-disturbed-check-run-is-not-a-pile-of-flaky-tests` FR-7 ac-threshold.
+  it('sets the disturbed threshold beside the report and re-run command, refusing less than 2', async () => {
+    const user = userEvent.setup()
+    settings = {
+      ...makeSettings(),
+      checks: [{ name: 'unit', command: 'pytest', timeout_seconds: 900, report_path: 'report.xml', rerun_command: 'python rerun.py {tests}' }],
+    }
+    render(<GeneralSection />)
+    expect(screen.getByTestId('project-check-report-0')).toHaveTextContent('disturbed at 3')
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    const dialog = await screen.findByRole('dialog')
+    const field = within(dialog).getByLabelText('Disturbed threshold')
+    expect(field).toHaveValue('')
+    await user.type(field, '1')
+    expect(within(dialog).getByRole('alert')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Save check' })).toBeDisabled()
+    await user.clear(field)
+    await user.type(field, '6')
+    await user.click(within(dialog).getByRole('button', { name: 'Save check' }))
+    expect(lastPatch().checks).toEqual([
+      { name: 'unit', command: 'pytest', timeout_seconds: 900, report_path: 'report.xml', rerun_command: 'python rerun.py {tests}', disturbed_threshold: 6 },
+    ])
+  })
+
+  it('has no threshold field for a check without a report and re-run command', async () => {
+    const user = userEvent.setup()
+    settings = { ...makeSettings(), checks: [{ name: 'unit', command: 'npm test', timeout_seconds: 900 }] }
+    render(<GeneralSection />)
+    await user.click(screen.getByRole('button', { name: 'Edit unit' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByLabelText('Disturbed threshold')).not.toBeInTheDocument()
+  })
+
   // FR-1 placeholder-required: said in the dialog before the save.
   it('refuses a re-run command without {tests} before the save', async () => {
     const user = userEvent.setup()
@@ -593,21 +641,29 @@ describe('Project settings → General, applied on change', () => {
     expect(update).toHaveBeenCalledTimes(1)
   })
 
-  it('groups its rows under headings, Collaboration first and Project last', () => {
-    render(<GeneralSection />)
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Collaboration', 'Reach', 'Integration', 'Checkpointing', 'Project', 'Delete project',
-    ])
+  it('holds each setting on the one section the operator expects, none on two', () => {
+    const rowsOf = (part: ProjectPart) => {
+      const { unmount } = render(<GeneralPart part={part} />)
+      const labels = [...document.querySelectorAll('.aw-settings-row-label')].map((n) => n.textContent ?? '')
+      unmount()
+      return labels
+    }
+    const has = (labels: string[], ...names: string[]) => names.every((name) => labels.some((label) => label.includes(name)))
+    expect(has(rowsOf('general'), 'Name', 'Folder')).toBe(true)
+    expect(has(rowsOf('collaboration'), 'Agents may start jobs', 'Hop budget', 'Deliveries per turn')).toBe(true)
+    expect(has(rowsOf('collaboration'), 'Agent budget')).toBe(false)
+    expect(has(rowsOf('permissions'), 'Default permissions')).toBe(true)
+    expect(has(rowsOf('checks'), 'Generated files')).toBe(true)
+    expect(has(rowsOf('landing'), 'Main branch')).toBe(true)
+    expect(has(rowsOf('landing'), 'Generated files')).toBe(false)
+    expect(has(rowsOf('general'), 'Hop budget')).toBe(false)
   })
 
-  it('leaves the token limit to Budgets: no field here, and a way there', () => {
-    const onNavigate = vi.fn()
-    render(<GeneralSection onNavigate={onNavigate} />)
+  it('leaves the token limit to Budgets: no field on any section', () => {
+    render(<GeneralSection />)
     expect(screen.queryByLabelText(/token budget/i)).toBeNull()
     commit('Hop budget', '9')
     expect(lastPatch()).toEqual({ hop_budget: 9 })
-    fireEvent.click(screen.getByRole('button', { name: 'Open Budgets' }))
-    expect(onNavigate).toHaveBeenCalledWith('budgets')
   })
 
   it('says agent budget caps agents an agent asks for, not agents running at once', () => {
@@ -815,7 +871,7 @@ describe('F197 a failed settings query', () => {
   })
 
   it('names the failure with a Retry instead of a skeleton that never ends, and shows no rows', () => {
-    render(<GeneralSection />)
+    render(<GeneralPart part="collaboration" />)
     expect(screen.getByRole('alert')).toHaveTextContent(/settings could not be loaded/i)
     expect(screen.getByRole('alert')).toHaveTextContent('settings route is down')
     expect(screen.queryByLabelText('Loading project settings')).not.toBeInTheDocument()

@@ -20,6 +20,7 @@ from . import (
     readable_ids,
     requirement_coverage,
     requirement_links,
+    spec_capability_links,
     spec_completeness,
     spec_digest,
     spec_documents,
@@ -28,6 +29,7 @@ from . import (
     spec_journey,
     spec_lifecycle,
     spec_naming,
+    spec_tags,
     traces,
 )
 from .db.models import (
@@ -63,6 +65,8 @@ class SaveResult:
     # Set by a fold only: the capability's warnings from before the fold, which `warnings` no
     # longer repeats, so the change is not reported for gaps it did not introduce (F754).
     standing_warnings: List[Dict[str, Any]] = field(default_factory=list)
+    # Set by a fold only: True when the capability is not one the change names (FR-7).
+    fold_target_not_named: Optional[bool] = None
 
 
 @dataclass
@@ -214,6 +218,18 @@ async def save_document(
             code="document_approved",
         )
 
+    # A named capability that is not a current capability of this project is refused before
+    # anything is written, naming the path (`a-change-names-the-capabilities-it-changes` FR-2).
+    if payload.capabilities is not None:
+        try:
+            await spec_capability_links.require_known(
+                session,
+                document.project_id,
+                spec_capability_links.named({"capabilities": payload.capabilities.model_dump()}),
+            )
+        except spec_capability_links.LinkRefusedError as exc:
+            raise SaveRefusedError(str(exc), code=exc.code, field_path=exc.field) from exc
+
     # Identity carries forward from whatever is on disk, so a key that already
     # holds an identifier keeps it. A file that has been replaced by hand simply
     # has no identity block, and every key is then new — which is why the
@@ -286,6 +302,12 @@ async def _apply_and_write(
     Shared by `save_document` and an accepted or applied amendment (`spec_amendments`), so every
     write gets identity minting, rendering, reindexing and completeness reporting the same way.
     """
+    if payload.tag is not None:
+        try:
+            await spec_tags.claim(session, document, payload.tag)
+        except spec_tags.TagTakenError as exc:
+            raise SaveRefusedError(str(exc), code="tag_taken", field_path="tag") from exc
+
     previous_map, high_water = spec_identity.read_identity(stored_before)
 
     keys = [requirement.key for requirement in payload.requirements]
@@ -420,6 +442,8 @@ async def _completeness_report(
             *spec_completeness.test_only_task_warnings(payload),
             *spec_completeness.reviewer_undeclared_warnings(payload),
             *spec_completeness.recommended_people_warnings(payload),
+            # `a-change-names-the-capabilities-it-changes` FR-3: told on save and on Check alike.
+            *capability_link_notes(payload),
         )
     ]
 
@@ -433,6 +457,7 @@ async def merge_document(
     *,
     actor: spec_lifecycle.Actor,
     note: str = "",
+    detail: Optional[Dict[str, Any]] = None,
 ) -> SaveResult:
     """Fold a finished change's content into a capability document, by explicit authored merge.
 
@@ -483,7 +508,7 @@ async def merge_document(
             capability_document,
             kind="merged",
             actor=actor,
-            detail={"change_document_id": source.id, "note": note},
+            detail={"change_document_id": source.id, "note": note, **(detail or {})},
         )
     return result
 
@@ -940,10 +965,22 @@ async def _fold(
             code="fold_key_collision",
         )
     standing = await _standing_warnings(session, workspace, capability)
+    # FR-7: a fold into a capability the change does not name is allowed, and its record says so.
+    off_link = not spec_capability_links.target_is_named(
+        spec_capability_links.named(_read(workspace, change)), capability
+    )
     result = await merge_document(
-        session, workspace, capability, [change], draft.payload, actor=actor, note=note
+        session,
+        workspace,
+        capability,
+        [change],
+        draft.payload,
+        actor=actor,
+        note=note,
+        detail={spec_capability_links.FOLD_TARGET_NOT_NAMED: off_link},
     )
     if isinstance(result, SaveResult):
+        result.fold_target_not_named = off_link
         result.standing_warnings = [w for w in result.warnings if _identity(w) in standing]
         result.warnings = [w for w in result.warnings if _identity(w) not in standing]
         result.warnings.extend(draft.warnings)
@@ -1359,7 +1396,19 @@ async def _unclaimed_slices(
 #: Findings that are told and never gate (F704, "warn, don't gate"): neither a refusal nor a gap the
 #: operator must approve over. A proposal returns them among its warnings; an approval records them
 #: as the phase event's `notes` and answers them as `approval_notes`.
-NOTE_CODES = frozenset({"roadmap_slice_unclaimed"})
+NOTE_CODES = frozenset({"roadmap_slice_unclaimed", spec_capability_links.CAPABILITY_UNNAMED})
+
+
+def capability_link_notes(payload: SpecPayload) -> List[spec_completeness.Finding]:
+    """`capability_unnamed` for a change naming no capability, existing or new: a note, so it is
+    told on save and at approval and never stops either (FR-3; approvals are scarce)."""
+    if payload.kind != "change-spec":
+        return []
+    link = payload.capabilities
+    if link is not None and (link.changes or link.creates):
+        return []
+    note = spec_capability_links.unnamed_note()
+    return [spec_completeness.Finding(note["code"], note["where"], note["message"])]
 
 
 @dataclass(frozen=True)
@@ -1528,6 +1577,7 @@ async def phase_findings(
         *_steps_skipped(workspace, document),
         *await _amendments_unreviewed(session, document),
         *await _vault_warnings(session, workspace, document),
+        *capability_link_notes(payload),
     ]
     refusals, gaps = spec_completeness.split(findings)
     return PhaseFindings(

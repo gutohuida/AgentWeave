@@ -65,6 +65,7 @@ from ...model_catalog import (
     undeclared_model_reason,
 )
 from ...output_recording import record_agent_output
+from ...project_setup import publish_setup_changed
 from ...reach import validated_grants
 from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...runner_adapters import get_adapter, resolve_access_axes
@@ -625,6 +626,56 @@ ROSTER_CONFIG_KEYS = (
 COPILOT_REVIEW_AGENTS = ("code-review", "security-review", "rubber-duck")
 
 
+async def _plain_runner_for(
+    session: AsyncSession, project_id: str, provider: Optional[str], model: Optional[str]
+) -> Runner:
+    """The project's plain runner for a provider and model: reused when there is one, else added to
+    the session (not committed). `model` None is the provider's own default. Raises 400 for a
+    provider or model the catalog does not declare."""
+    provider_entry = get_provider(provider)
+    model_entry = provider_entry.model(model) if provider_entry is not None and model else None
+    if provider_entry is None or (model and model_entry is None):
+        raise HTTPException(status_code=400, detail=undeclared_model_reason(provider, model))
+    existing_runner = await session.execute(
+        select(Runner).where(
+            Runner.project_id == project_id,
+            Runner.cli == provider,
+            Runner.model == model,
+        )
+        # Oldest first, and the rowid breaks a created_at tie (F177's order).
+        .order_by(Runner.created_at, literal_column("runners.rowid"))
+    )
+    # Only a plain runner is what the dialog promises (F600): one with flags or a model
+    # provider runs differently from "Claude Code, Haiku" -- it bound a permission-bypassing
+    # runner in the 2026-10-15 sweep. `None`, `[]` and a provider config of `None` are plain.
+    runner = next(
+        (
+            candidate
+            for candidate in existing_runner.scalars().all()
+            if not candidate.flags and not has_provider(candidate.provider_config)
+        ),
+        None,
+    )
+    if runner is None:
+        # An alias is named by what was chosen, not by its current target (design.md D1): a
+        # runner named for today's target would be a new F268 once the alias moves on.
+        if model_entry is None:
+            name_suffix = "default"
+        elif model_entry.id != model:
+            name_suffix = f"{model} (latest)"
+        else:
+            name_suffix = model_entry.label
+        runner = Runner(
+            id=f"runner-{short_id()}",
+            project_id=project_id,
+            name=f"{provider_entry.label} — {name_suffix}",
+            cli=provider,
+            model=model,
+        )
+        session.add(runner)
+    return runner
+
+
 @router.post("", response_model=OperatorAgentResponse, status_code=status.HTTP_201_CREATED)
 async def create_operator_agent(
     body: OperatorAgentCreate,
@@ -677,50 +728,10 @@ async def create_operator_agent(
         if runner is None or runner.project_id != project_id:
             raise HTTPException(status_code=404, detail=f"Runner '{body.runner_id}' not found")
     else:
-        # provider + model: atomic find-or-create (design.md). Reuses a matching runner
-        # already in this project rather than creating a duplicate; a runner created here
-        # is added to the session but not committed until the same commit as the agent
-        # below, so a failure anywhere before that commit leaves neither record behind.
-        provider_entry = get_provider(body.provider)
-        model_entry = provider_entry.model(body.model) if provider_entry is not None else None
-        if provider_entry is None or model_entry is None:
-            raise HTTPException(
-                status_code=400,
-                detail=undeclared_model_reason(body.provider, body.model),
-            )
-        existing_runner = await session.execute(
-            select(Runner).where(
-                Runner.project_id == project_id,
-                Runner.cli == body.provider,
-                Runner.model == body.model,
-            )
-            # Oldest first, and the rowid breaks a created_at tie (F177's order).
-            .order_by(Runner.created_at, literal_column("runners.rowid"))
-        )
-        # Only a plain runner is what the dialog promises (F600): one with flags or a model
-        # provider runs differently from "Claude Code, Haiku" -- it bound a permission-bypassing
-        # runner in the 2026-10-15 sweep. `None`, `[]` and a provider config of `None` are plain.
-        runner = next(
-            (
-                candidate
-                for candidate in existing_runner.scalars().all()
-                if not candidate.flags and not has_provider(candidate.provider_config)
-            ),
-            None,
-        )
-        if runner is None:
-            # An alias is named by what was chosen, not by its current target (design.md D1): a
-            # runner named for today's target would be a new F268 once the alias moves on.
-            is_alias = model_entry.id != body.model
-            name_suffix = f"{body.model} (latest)" if is_alias else model_entry.label
-            runner = Runner(
-                id=f"runner-{short_id()}",
-                project_id=project_id,
-                name=f"{provider_entry.label} — {name_suffix}",
-                cli=body.provider,
-                model=body.model,
-            )
-            session.add(runner)
+        # provider + model: atomic find-or-create (design.md). A runner created here is added to
+        # the session but not committed until the same commit as the agent below, so a failure
+        # anywhere before that commit leaves neither record behind.
+        runner = await _plain_runner_for(session, project_id, body.provider, body.model)
 
     if body.charter_id is not None:
         charter = await session.get(Charter, body.charter_id)
@@ -756,6 +767,7 @@ async def create_operator_agent(
     }
     await persist_event(session, project_id, "agent_created", payload, agent=agent.name)
     await sse_manager.broadcast(project_id, "agent_created", payload)
+    await publish_setup_changed(project_id)
     # After the broadcast, so nothing this does can stop the UI learning of the agent (D4 (a)).
     await write_copilot_home_after_commit(session, project_id, agent)
     return OperatorAgentResponse(
@@ -1268,7 +1280,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             args=(
                 "path, title, kind, summary, problem, design, lifecycle, scope, requirements, "
                 "acceptance_criteria, tasks, algorithms, evidence, open_questions, delivery, "
-                "slices, roadmap, already_built"
+                "slices, roadmap, already_built, capabilities, tag"
             ),
             method="POST",
             path="/spec/documents",
@@ -1297,13 +1309,17 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "change document specifies; it can be approved once that roadmap is. Each "
                 "entry in `tasks` lists the repo-relative paths it will edit in `files`, and "
                 "names sibling task keys in `depends_on`: chain two tasks only where they share "
-                "a path or one needs what another builds."
+                "a path or one needs what another builds. `capabilities` names what a change "
+                'changes: `{"changes": [<capability path>, ...], "creates": [{"title": ...}]}`; '
+                "a path that is not a current capability is refused `capability_unknown`, and "
+                "naming none draws the `capability_unnamed` warning."
             ),
             http_note=(
                 "This is the one operation whose request is not flat: everything after `path` — "
                 "`title`, `kind`, `summary`, `problem`, `design`, `lifecycle`, `scope`, "
                 "`requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, "
-                "`open_questions`, `delivery`, `slices`, `roadmap`, `already_built` — goes inside "
+                "`open_questions`, `delivery`, `slices`, `roadmap`, `already_built`, `capabilities` "
+                "— goes inside "
                 "the `document` "
                 "object, and a key you "
                 "have nothing for is left out rather than sent as null."
@@ -1415,15 +1431,18 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
         ),
         _Operation(
             tool="decide_evidence",
-            args="evidence_id, decision, reason",
+            args="evidence_id, decision, reason, command, output, commit, summary, covers",
             method="POST",
             path="/spec/evidence/{evidence_id}/decision",
-            fields=("decision", "reason"),
+            fields=("decision", "reason", "command", "output", "commit", "summary", "covers"),
             required=("decision",),
             text=(
                 "accept or reject somebody else's evidence; `decision` is `accepted` or "
                 "`rejected`. Only if the operator has granted you this, and never on evidence you "
-                "produced yourself."
+                "produced yourself. Reviewing a task, you may accept its evidence without the "
+                "grant by passing your own reproduction: `command`, `output` and `commit` (on the "
+                "task's branch, at or after the evidence's commit), and `summary`/`covers` to "
+                "correct the author's; approval then lands your commit."
             ),
         ),
         _Operation(
@@ -1469,7 +1488,8 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                     args=(
                         "path, op, reason, capability, requirements, retire, retire_criteria, "
                         "algorithms, retire_algorithms, criteria, title, area, fold_from, "
-                        "requirement, statement, code_wins, successor, roadmap, slice"
+                        "requirement, statement, code_wins, successor, roadmap, slice, changes, "
+                        "creates"
                     ),
                     method="POST",
                     path="/spec/documents/tidy",
@@ -1493,6 +1513,8 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                         "successor",
                         "roadmap",
                         "slice",
+                        "changes",
+                        "creates",
                     ),
                     required=("path", "op"),
                     text=(
@@ -1504,7 +1526,10 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                         "`area` and `fold_from`), `edit_capability` (`requirement` gets a new "
                         "`statement`, or `retire` true; `code_wins` `{cited}` when you change it "
                         "to match the code, naming the file you read), `supersede` (optional "
-                        "`successor`), `clear_superseded`, or `set_slice` (`roadmap`, `slice`). "
+                        "`successor`), `clear_superseded`, `set_slice` (`roadmap`, `slice`), or "
+                        "`set_capabilities` (`changes`, current capability paths, and `creates`, "
+                        "`[{title}]`; refused `change_folded` once folded). A `fold` with no "
+                        "`capability` folds into the one the change names. "
                         "Each act applies at once and is listed for the operator with your "
                         "`reason`, which is required. Refused with `code` `operators_act` for "
                         "approving, archiving, holding or deciding anything; `document_held` on a "
@@ -2840,7 +2865,8 @@ async def _render_hub_agent_context(
             "- When you review a task, your verdict decides the evidence recorded for it: "
             "approving accepts it, sending the task back rejects it, with your `notes` as the "
             "reason. Outside a verdict, `decide_evidence` will refuse you, so do not spend a turn "
-            "planning around it."
+            "planning around it -- except to accept a piece of the task you review with your own "
+            "reproduction (`command`, `output`, `commit`) on the task's current commit."
         )
         lines.append(
             "- `list_evidence` still works, and showing you the queue is not an invitation to "
@@ -3146,6 +3172,7 @@ async def request_agent(
     # and a failed event must not skip the start (F349, design D3a/D4).
     await persist_accepted_event(project_id, "agent_requested", payload, agent=source_run.agent)
     await sse_manager.broadcast(project_id, "agent_requested", payload)
+    await publish_setup_changed(project_id)
     await persist_accepted_event(project_id, "queue_entry_queued", payload, agent=body.name)
     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
 
@@ -3372,6 +3399,8 @@ _PATCH_AGENT_FIELDS = frozenset(
     {
         "description",
         "runner_id",
+        "provider",  # with "model": the runner for them is found or made
+        "model",
         "charter_id",
         "config",
         "default_permission_mode",
@@ -3419,6 +3448,8 @@ async def patch_agent(
     # of how it was declared.
     _unrestricted_fields = {
         "runner_id",
+        "provider",
+        "model",
         *GRANT_FIELDS,
         "charter_id",
         "description",
@@ -3458,6 +3489,18 @@ async def patch_agent(
     # A symmetric guard on this branch would contradict D3 — see the charter_id branch below,
     # which does guard, because charter binding is exactly what archive() releases.
     runner_newly_bound = False
+    if "provider" in body or "model" in body:
+        # Choosing a model directly: the Hub finds the project's runner for it, or makes the one.
+        if "runner_id" in body:
+            raise HTTPException(
+                status_code=400, detail="Give runner_id or provider and model, not both"
+            )
+        if "provider" not in body:
+            raise HTTPException(status_code=400, detail="provider is required with model")
+        chosen = await _plain_runner_for(session, project_id, body["provider"], body.get("model"))
+        body = {**body, "runner_id": chosen.id}
+        del body["provider"]
+        body.pop("model", None)
     if "runner_id" in body:
         runner_id = body["runner_id"]
         if runner_id is not None:
@@ -3547,6 +3590,10 @@ async def patch_agent(
     if "runner_id" in body or "charter_id" in body:
         # D4 (b): before the re-drain below, so a turn it starts finds the file current.
         await write_copilot_home_after_commit(session, project_id, agent_row)
+
+    if "runner_id" in body:
+        # Choosing a model can resolve, or raise, the agent's can-run set-up item.
+        await publish_setup_changed(project_id)
 
     if runner_newly_bound:
         # Binding a runner is the repair the refusal names, so it has to be a redrain site — the
@@ -3707,6 +3754,7 @@ async def archive_agent(
     }
     await persist_event(session, project_id, "agent_archived", event_payload, agent=agent_row.name)
     await sse_manager.broadcast(project_id, "agent_archived", event_payload)
+    await publish_setup_changed(project_id)
 
     response = {
         "name": agent_row.name,
@@ -3747,6 +3795,7 @@ async def unarchive_agent(
         session, project_id, "agent_unarchived", event_payload, agent=agent_row.name
     )
     await sse_manager.broadcast(project_id, "agent_unarchived", event_payload)
+    await publish_setup_changed(project_id)
 
     return {
         "name": agent_row.name,

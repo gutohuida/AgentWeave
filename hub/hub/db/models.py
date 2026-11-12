@@ -2578,6 +2578,10 @@ class SpecDocument(Base):
     acronym_chosen: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # The short tag a task card names this spec by (`spec_tags`, migration 0176): at most 24
+    # characters, unique within the project. Written by the author in a submission, else derived from
+    # the title the first time a board needs it. Null until one of the two has happened.
+    tag: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
     # Superseded and held are marks, not phases (`an-agent-the-operator-trusts-can-tidy-the-specs`,
     # D2, migration 0172): the phase machine and its operator gates stay as they are. A superseded
     # document keeps its phase and content and cannot be built; clearing the mark nulls all four.
@@ -3171,6 +3175,17 @@ class EvidenceReview(Base):
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    # A reviewer's own reproduction on an acceptance (`evidence-review-sends-work-back-only-for-
+    # what-is-wrong-with-it`, FR-1, FR-3): what it ran, the tail of what that printed, and the commit
+    # it ran on, which the evidence's footprint was re-anchored to from `anchored_from_commit`. Its
+    # corrections of the piece's summary and covers sit beside the author's, which the evidence row
+    # keeps as recorded. Null on every review that carried none.
+    reproduction_command: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reproduction_output: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reproduction_commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    anchored_from_commit: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    corrected_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    corrected_covers: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("sequence", name="pk_evidence_reviews"),
@@ -3678,3 +3693,21 @@ class MainCheckRun(Base):
     ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (Index("ix_main_check_runs_project", "project_id", "main_sha", "reason"),)
+
+
+class SetupDismissal(Base):
+    """A set-up item the operator dismissed for a project (`a-project-says-what-it-still-needs`,
+    FR-3, migration 0175).
+
+    Only the repository item can be dismissed (`project_setup.DISMISSABLE`); the route refuses any
+    other. A project with no row has nothing dismissed, which is how every project created before
+    this table reads. Showing the item again deletes the row.
+    """
+
+    __tablename__ = "setup_dismissals"
+
+    project_id: Mapped[str] = mapped_column(String(64), ForeignKey("projects.id"), nullable=False)
+    item: Mapped[str] = mapped_column(String(32), nullable=False)
+    dismissed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (PrimaryKeyConstraint("project_id", "item", name="pk_setup_dismissals"),)

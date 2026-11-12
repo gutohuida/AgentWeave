@@ -1,0 +1,23 @@
+{
+  "id": "fct-db8a1c189292",
+  "kind": "fact",
+  "claim": "record_evidence has a 16-character limit on covers.",
+  "citations": [
+    {
+      "source": "src-eb62b3d76e99",
+      "quote": "raise or document record_evidence's 16-character limit on covers",
+      "line_start": 18,
+      "line_end": 18
+    }
+  ],
+  "sources": [
+    "src-eb62b3d76e99"
+  ],
+  "visibility": "tracked",
+  "created_at": "2026-11-11T15:57:34.136131Z",
+  "holder": null,
+  "made_by": {
+    "job": "vault-distillation",
+    "model": "claude-opus-5-5"
+  }
+}

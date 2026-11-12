@@ -331,7 +331,7 @@ export function Sidebar({
                           className="aw-icon-button"
                           aria-label={`Configure ${project.name}`}
                           title="Project settings"
-                          onClick={() => onOpenEnvironment?.(project.id, 'settings')}
+                          onClick={() => onOpenEnvironment?.(project.id, 'general')}
                         >
                           <Icon name="settings" size={13} />
                         </button>
@@ -365,7 +365,7 @@ export function Sidebar({
                       onOpenAgent={onOpenAgent}
                       onOpenConversation={onOpenConversation}
                       onNewConversation={onNewConversation}
-                      onOpenAgentSettings={(id, agent) => onOpenAgentSettings?.(id, agent, 'identity')}
+                      onOpenAgentSettings={(id, agent) => onOpenAgentSettings?.(id, agent, 'agent')}
                       onAddAgent={onAddAgent}
                     />
                   )}

@@ -1,8 +1,9 @@
-import type { DragEventHandler } from 'react'
+import { useEffect, useState, type DragEventHandler } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
 import type { Task } from '@/api/tasks'
 import { cardStatus } from '@/lib/taskCardStatus'
+import { builderAndReviewer, formatStageAge, stageLabel } from '@/lib/taskStage'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatAgo, formatDateTime } from '@/lib/format'
 import '@/styles/board.css'
@@ -27,6 +28,17 @@ export interface CardMoveProps {
   onMoveByKeyboard: (direction: 'left' | 'right') => void
 }
 
+/** A clock that ticks while the board is open, so a card's time at stage advances without a reload. */
+function useMinuteClock(fixed?: Date): Date {
+  const [tick, setTick] = useState(() => new Date())
+  useEffect(() => {
+    if (fixed) return
+    const id = setInterval(() => setTick(new Date()), 30_000)
+    return () => clearInterval(id)
+  }, [fixed])
+  return fixed ?? tick
+}
+
 /** The board card, compact.
  *
  *  Today's card wrapped its title to four lines, gridded every requirement chip (nine on one
@@ -42,6 +54,8 @@ export function TaskCardCompact({
   colorIndex,
   tally,
   working,
+  specTag,
+  finished,
   now,
   selected,
   onOpen,
@@ -49,6 +63,7 @@ export function TaskCardCompact({
   startAgents,
   onStartWork,
   move,
+  select,
 }: {
   task: Task
   /** The assignee's palette index (from the roster), for the @name colour. */
@@ -56,6 +71,10 @@ export function TaskCardCompact({
   tally?: RequirementTally | null
   /** The assignee has a live run on this task. */
   working?: boolean
+  /** The short tag of the spec this task belongs to. */
+  specTag?: string
+  /** The task is on main or closed without landing. */
+  finished?: boolean
   now?: Date
   selected?: boolean
   onOpen: (taskId: string) => void
@@ -64,8 +83,12 @@ export function TaskCardCompact({
   startAgents?: string[]
   onStartWork?: (taskId: string, agent: string) => void
   move?: CardMoveProps
+  /** Present while the board is picking tasks to close together. */
+  select?: { checked: boolean; onToggle: () => void }
 }) {
   const status = cardStatus(task, working)
+  const people = builderAndReviewer(task)
+  const clock = useMinuteClock(now)
   const color = agentColorVars(colorIndex)
   return (
     <article
@@ -73,11 +96,22 @@ export function TaskCardCompact({
       data-task-id={task.id}
       data-selected={selected ? 'true' : 'false'}
       data-status-tone={status?.tone ?? 'none'}
+      data-finished={finished ? 'true' : 'false'}
+      data-on-main={task.stage === 'on_main' ? 'true' : 'false'}
       data-dragging={move?.dragging ? 'true' : 'false'}
       draggable={move ? true : undefined}
       onDragStart={move?.onDragStart}
       onDragEnd={move?.onDragEnd}
     >
+      {select ? (
+        <input
+          type="checkbox"
+          data-testid={`task-select-${task.id}`}
+          aria-label={`Select ${task.title}`}
+          checked={select.checked}
+          onChange={select.onToggle}
+        />
+      ) : null}
       <button
         type="button"
         data-slot="task-card"
@@ -95,12 +129,27 @@ export function TaskCardCompact({
         }}
       >
         <span className="aw-task-card-title">
+          {task.stage === 'on_main' ? (
+            <span className="aw-task-card-on-main" data-testid={`task-on-main-mark-${task.id}`} aria-hidden="true">
+              <Icon name="check" size={12} />{' '}
+            </span>
+          ) : null}
           {task.readable_id ? (
             <code className="aw-task-card-id" data-testid={`task-readable-id-${task.id}`}>{task.readable_id}</code>
           ) : null}{task.readable_id ? ' ' : ''}
           {task.title}
         </span>
         <span className="aw-task-card-meta">
+          {finished ? (
+            <span className="aw-task-card-spec" data-testid={`task-finished-mark-${task.id}`}>
+              finished
+            </span>
+          ) : null}
+          {specTag ? (
+            <span className="aw-task-card-spec" data-testid={`task-spec-tag-${task.id}`} title={`Spec: ${specTag}`}>
+              {specTag}
+            </span>
+          ) : null}
           {tally && tally.total > 0 ? (
             <span
               className="aw-task-card-reqs"
@@ -150,7 +199,36 @@ export function TaskCardCompact({
               builds @{task.builder} · by default
             </span>
           ) : null}
-          {task.waiting_to_land ? (
+          {task.stage ? (
+            <span
+              className="aw-task-card-stage"
+              data-testid={`task-stage-${task.id}`}
+              data-stage={task.stage}
+              title={task.stage_since ? `At this stage since ${formatDateTime(task.stage_since, clock)}` : undefined}
+            >
+              {stageLabel(task.stage)}
+              {task.stage_detail ? <span data-testid={`task-stage-detail-${task.id}`}> · {task.stage_detail}</span> : null}
+              {task.stage_since ? (
+                <span data-testid={`task-stage-age-${task.id}`}> · {formatStageAge(task.stage_since, clock)}</span>
+              ) : null}
+            </span>
+          ) : null}
+          {people.builder ? (
+            <span className="aw-task-card-age" data-testid={`task-built-by-${task.id}`}>
+              built by {people.builder}
+            </span>
+          ) : null}
+          {people.reviewer ? (
+            <span className="aw-task-card-age" data-testid={`task-reviewing-${task.id}`}>
+              reviewing: {people.reviewer}
+            </span>
+          ) : null}
+          {task.stage_waits_on ? (
+            <span className="aw-task-card-age" data-testid={`task-stage-waits-on-${task.id}`}>
+              waits on {task.stage_waits_on}
+            </span>
+          ) : null}
+          {task.waiting_to_land && !task.stage ? (
             <span
               className="aw-task-card-age"
               data-testid={`task-waiting-to-land-${task.id}`}

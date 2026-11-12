@@ -30,7 +30,13 @@ async def _setup(task_id, *, status="assigned", assignee="alpha", run_agent="bet
             )
         )
         session.add(
-            Run(id=f"run-{task_id}", project_id="proj-test", agent=run_agent, status="running")
+            Run(
+                id=f"run-{task_id}",
+                project_id="proj-test",
+                agent=run_agent,
+                status="running",
+                initiator="autonomous",
+            )
         )
         await session.commit()
 
@@ -129,6 +135,7 @@ async def test_a_reviewer_cannot_take_back_its_own_send_back(app):
         )
         session.add(
             Run(
+                initiator="autonomous",
                 id="run-f606",
                 project_id="proj-test",
                 agent="tester",

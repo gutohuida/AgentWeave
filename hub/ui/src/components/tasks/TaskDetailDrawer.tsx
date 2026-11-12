@@ -34,8 +34,10 @@ import { TaskIntegrationNote } from '@/components/tasks/TaskIntegrationNote'
 import { TaskStory } from '@/components/tasks/TaskStory'
 import { EvidenceLink } from '@/components/evidence/EvidenceLink'
 import { RowMenu } from '@/components/layout/RowMenu'
+import { CloseForm } from './LooseTaskActions'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
+import { builderAndReviewer } from '@/lib/taskStage'
 
 /**
  * What approving this task is about to write, said beside the control that does it (F9).
@@ -273,6 +275,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     !story.isError && (Array.isArray(story.data?.events) || story.fetchStatus === 'fetching')
   const panelRef = useRef<HTMLDivElement>(null)
   const open = task !== null
+  const people = task ? builderAndReviewer(task) : { builder: null, reviewer: null }
   const [refusal, setRefusal] = useState<string | null>(null)
   // Set when Land was refused by failing checks alone: the operator may land anyway, saying why.
   const [checksOverride, setChecksOverride] = useState(false)
@@ -280,6 +283,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const [refusalBody, setRefusalBody] = useState<GateBody | null>(null)
   // Open while the operator is choosing who reviews a completed task.
   const [pickingReviewer, setPickingReviewer] = useState(false)
+  // Which close form a loose task's action opened (`tasks-outside-a-flow-move-freely`, FR-10).
+  const [closing, setClosing] = useState<'done_elsewhere' | 'cancelled' | null>(null)
   const [overrideReason, setOverrideReason] = useState('')
   // F169: what the Hub reported instead of refusing when this task was approved. It arrives on the
   // approving response and nowhere else — a refetch answers `[]` — so it is held here for as long
@@ -694,6 +699,79 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   {landTask.isPending ? 'Landing…' : 'Land it'}
                 </button>
               )}
+              {/* A task in no flow moves by hand: the actions are what the moves route says the
+                  Hub will allow, as plain buttons rather than entries in the status menu. */}
+              {taskMoves?.loose && (
+                <span data-testid={`task-loose-actions-${task.id}`} className="contents">
+                  {task.status === 'completed' && moves.includes('approved') && (
+                    <button
+                      type="button"
+                      data-testid={`task-approve-${task.id}`}
+                      disabled={updateTask.isPending}
+                      className="text-[11px] px-2 py-0.5 rounded"
+                      style={{ border: '1px solid var(--border)' }}
+                      onClick={() => {
+                        setRefusal(null)
+                        setRefusalBody(null)
+                        updateTask.mutate(
+                          { id: task.id, status: 'approved' },
+                          {
+                            onSuccess: (updated) => setApprovalReport(updated.approval_report ?? []),
+                            onError: (error: unknown) =>
+                              setRefusal(readableApiError(error, 'The Hub refused this approval.')),
+                          },
+                        )
+                      }}
+                    >
+                      Approve
+                    </button>
+                  )}
+                  {(task.status === 'completed' || task.status === 'approved') &&
+                    moves.includes('revision_needed') && (
+                      <button
+                        type="button"
+                        data-testid={`task-send-back-${task.id}`}
+                        disabled={updateTask.isPending}
+                        className="text-[11px] px-2 py-0.5 rounded"
+                        style={{ border: '1px solid var(--border)' }}
+                        onClick={() => {
+                          setRefusal(null)
+                          updateTask.mutate(
+                            { id: task.id, status: 'revision_needed' },
+                            {
+                              onError: (error: unknown) =>
+                                setRefusal(readableApiError(error, 'The Hub refused this send-back.')),
+                            },
+                          )
+                        }}
+                      >
+                        Send back
+                      </button>
+                    )}
+                  {taskMoves.closes?.includes('done_elsewhere') && (
+                    <button
+                      type="button"
+                      data-testid={`task-close-done-elsewhere-${task.id}`}
+                      className="text-[11px] px-2 py-0.5 rounded"
+                      style={{ border: '1px solid var(--border)' }}
+                      onClick={() => setClosing('done_elsewhere')}
+                    >
+                      Close as done elsewhere
+                    </button>
+                  )}
+                  {taskMoves.closes?.includes('cancelled') && (
+                    <button
+                      type="button"
+                      data-testid={`task-cancel-${task.id}`}
+                      className="text-[11px] px-2 py-0.5 rounded"
+                      style={{ border: '1px solid var(--border)' }}
+                      onClick={() => setClosing('cancelled')}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </span>
+              )}
               {/* Beside Land, in the first viewport: what the landing is waiting for. */}
               {task.status === 'completed' && <LandWait taskId={task.id} />}
               {/* Approved work's way to main: queued, checking in its batch, held, landed or sent
@@ -801,6 +879,17 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
 
           {/* The build covering it (`a-build-has-a-driver-a-level-and-its-people`): the level its
               approval is governed at, the builder it was declared with, and who checks it. */}
+          {people.builder && (
+            <Field label="Built by">
+              <span data-testid={`task-built-by-${task.id}`}>built by {people.builder}</span>
+            </Field>
+          )}
+          {people.reviewer && (
+            <Field label="Reviewing">
+              <span data-testid={`task-reviewing-${task.id}`}>reviewing: {people.reviewer}</span>
+            </Field>
+          )}
+
           {task.build_id && (
             <Field label="Build">
               <span className="truncate block" data-testid={`task-build-${task.id}`}>
@@ -968,6 +1057,15 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
         )}
         {refusal && refusalBody && task.status === 'completed' && (
           <LandingRemedies taskId={task.id} body={refusalBody} />
+        )}
+        {closing && taskMoves?.closes?.includes(closing) && (
+          <CloseForm
+            key={closing}
+            taskIds={[task.id]}
+            outcomes={[closing]}
+            onDone={() => setClosing(null)}
+            onDismiss={() => setClosing(null)}
+          />
         )}
         {pickingReviewer && task.status === 'completed' && (
           <div

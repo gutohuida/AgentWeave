@@ -2,7 +2,7 @@
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Annotated, Any, Awaitable, Callable, Dict, List, Optional, Set, Tuple
+from typing import Annotated, Any, Awaitable, Callable, Dict, List, Literal, Optional, Set, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
@@ -14,12 +14,15 @@ from ... import (
     deletion,
     dependency_gate,
     loop_history,
+    loose_close,
     project_workspace,
     readable_ids,
     spec_identity,
     spec_lifecycle,
     spec_reading,
+    spec_tags,
     task_dependency_writer,
+    task_stage,
 )
 from ...agent_activity import latest_activity_by_agent
 from ...agent_roster import assignee_refusal
@@ -76,6 +79,7 @@ from ...task_transition_service import (
     guard_entry_status,
     history_for,
     hub_written_documents,
+    is_free_mover,
     retry_integration,
     run_fast_checks_before_completion,
 )
@@ -88,6 +92,7 @@ from ...task_transitions import (
     Actor,
     allowed_map_for,
     allowed_targets,
+    free_targets,
     operator,
 )
 from ...utils import persist_event, short_id
@@ -612,6 +617,7 @@ async def _attach_assignee_liveness(
     ever report.
     """
     await _attach_queue_state(session, responses, project_id)
+    await task_stage.attach_stages(session, responses, project_id=project_id)
     assignees = {response.assignee for response in responses if response.assignee}
     if not assignees:
         return responses
@@ -1288,35 +1294,48 @@ async def task_boards(
     """
     project_id, _ = project
     rows = await session.execute(
-        select(Task.spec_document_id, Task.status).where(Task.project_id == project_id)
+        select(Task.spec_document_id, Task.status, Task.created_at, Task.updated).where(
+            Task.project_id == project_id
+        )
     )
     totals: dict[Optional[str], int] = {}
     outstanding: dict[Optional[str], int] = {}
-    for spec_document_id, task_status in rows:
+    last_activity: dict[Optional[str], datetime] = {}
+    for spec_document_id, task_status, created_at, updated in rows:
         totals[spec_document_id] = totals.get(spec_document_id, 0) + 1
         if task_status not in TERMINAL_FOR_BINDING:
             outstanding[spec_document_id] = outstanding.get(spec_document_id, 0) + 1
+        # A task's activity is its creation or its last move, whichever is later.
+        moved = max(created_at, updated)
+        if spec_document_id not in last_activity or moved > last_activity[spec_document_id]:
+            last_activity[spec_document_id] = moved
 
     document_ids = [doc_id for doc_id in totals if doc_id is not None]
     titles: dict[str, str] = {}
+    tags: dict[str, str] = {}
     if document_ids:
         doc_rows = await session.execute(
             select(SpecDocument.id, SpecDocument.title).where(SpecDocument.id.in_(document_ids))
         )
         titles = dict(doc_rows.all())
+        tags = await spec_tags.ensure_tags(session, project_id)
+        await session.commit()
 
     boards = [
         {
             "spec_document_id": doc_id,
             "title": titles.get(doc_id) if doc_id is not None else None,
+            "tag": tags.get(doc_id) if doc_id is not None else None,
             "total": total,
             "outstanding": outstanding.get(doc_id, 0),
+            "last_activity": last_activity[doc_id].isoformat(),
         }
         for doc_id, total in totals.items()
     ]
-    # Documents first (creation order via id is arbitrary; sort by title for a stable picker),
-    # the "no document" board last — it is the overflow bucket D9 describes, not a project.
-    boards.sort(key=lambda board: (board["spec_document_id"] is None, board["title"] or ""))
+    # Documents first, the one whose tasks moved most recently on top, so the picker opens on what
+    # is being worked; the "no document" board last, as the overflow bucket D9 describes.
+    boards.sort(key=lambda board: board["last_activity"], reverse=True)
+    boards.sort(key=lambda board: board["spec_document_id"] is None)
     return {"boards": boards}
 
 
@@ -1833,7 +1852,7 @@ _SEND_BACK_STATUSES = ("revision_needed", "rejected")
 
 
 async def _failing_pieces_for(
-    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor
+    session: AsyncSession, task: Task, body: TaskUpdate, actor: Actor, free: bool = False
 ) -> Optional[Dict[str, str]]:
     """The evidence a send-back names as failing, as `{evidence_id: reason}`; None for any other move.
 
@@ -1873,7 +1892,10 @@ async def _failing_pieces_for(
     sending_back = (
         body.status in _SEND_BACK_STATUSES
         and body.status != task.status
-        and body.status in allowed_targets(task.status, actor.kind)
+        and (
+            body.status in allowed_targets(task.status, actor.kind)
+            or (free and body.status in free_targets(task.status))
+        )
     )
     if named and body.status not in _SEND_BACK_STATUSES:
         raise HTTPException(
@@ -1925,7 +1947,11 @@ async def _failing_pieces_for(
 
 
 def _send_back_reason(
-    task: Task, body: TaskUpdate, actor: Actor, failing_pieces: Optional[Dict[str, str]]
+    task: Task,
+    body: TaskUpdate,
+    actor: Actor,
+    failing_pieces: Optional[Dict[str, str]],
+    free: bool = False,
 ) -> Tuple[Optional[str], Optional[str]]:
     """Why this move sends *task* back: `(reason_class, sentence)`, or `(None, None)` for any other
     move (FR-8/FR-9). Asked after `_failing_pieces_for`, so the move is already known to be legal and
@@ -1939,7 +1965,10 @@ def _send_back_reason(
     if not (
         body.status == "revision_needed"
         and body.status != task.status
-        and body.status in allowed_targets(task.status, actor.kind)
+        and (
+            body.status in allowed_targets(task.status, actor.kind)
+            or (free and body.status in free_targets(task.status))
+        )
     ):
         return None, None
     named = (body.reason_class or "").strip() or None
@@ -1958,7 +1987,7 @@ def _send_back_reason(
     sentence = _verdict_text(body.notes)
     if not sentence and failing_pieces:
         sentence = " ".join(reason for reason in failing_pieces.values() if reason) or None
-    if actor.is_operator:
+    if actor.is_operator or free:
         return named, sentence
     if named is None:
         raise HTTPException(
@@ -2084,9 +2113,10 @@ async def update_task_for_actor(
             )
     # The verdict's failing pieces, resolved and refused before any write
     # (`each-piece-of-evidence-is-judged-on-its-own`).
-    failing_pieces = await _failing_pieces_for(session, task, body, actor)
+    free = await is_free_mover(session, task, actor)
+    failing_pieces = await _failing_pieces_for(session, task, body, actor, free)
     # Why it goes back, required of a reviewer (FR-9) and refused before any write.
-    reason_class, send_back_reason = _send_back_reason(task, body, actor, failing_pieces)
+    reason_class, send_back_reason = _send_back_reason(task, body, actor, failing_pieces, free)
     # Set only when this call performed a transition — `contract`'s report on approval reads off it
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
@@ -2280,7 +2310,11 @@ async def update_task_for_actor(
     if body.requirement_ids:
         try:
             named = await resolve_identifiers(
-                session, project_id, body.requirement_ids, document_path=body.spec_document
+                session,
+                project_id,
+                body.requirement_ids,
+                document_path=body.spec_document,
+                own_document_id=task.spec_document_id,
             )
         except LinkRefusedError as refusal:
             raise HTTPException(status_code=422, detail=str(refusal)) from refusal
@@ -2505,6 +2539,67 @@ class LandRequest(RequestModel):
     override_checks_reason: Optional[str] = Field(default=None, max_length=2000)
 
 
+class CloseTasksRequest(RequestModel):
+    """Close loose tasks without landing them here (`tasks-outside-a-flow-move-freely`, FR-7..FR-9)."""
+
+    tasks: List[str] = Field(min_length=1, max_length=200)
+    outcome: Literal["done_elsewhere", "cancelled"]
+    # Done elsewhere: the task whose work is on main, or a commit on it -- one of the two.
+    by_task: Optional[str] = None
+    commit: Optional[str] = None
+    # Cancelled: why, optionally.
+    reason: Optional[str] = Field(default=None, max_length=1000)
+
+
+@router.post("/close")
+async def close_tasks(
+    body: CloseTasksRequest,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Close one or several loose tasks, as done elsewhere or cancelled.
+
+    A task that cannot close (in a flow, already closed, a turn running on it) is named in
+    `refused` with its reason; the others still close. 409/422 when the request itself cannot be
+    answered: no main branch, a named task that is not on main (`task_not_on_main`), a commit that
+    is not (`commit_not_on_main`). Nothing changes on those.
+    """
+    project_id, _ = project
+    workspace = None
+    if body.outcome == "done_elsewhere":
+        try:
+            workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        except project_workspace.ProjectWorkspaceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": f"Project workspace is unavailable: {exc}",
+                    "code": "no_workspace",
+                },
+            ) from exc
+    try:
+        result = await loose_close.close_tasks(
+            session,
+            project_id,
+            body.tasks,
+            body.outcome,
+            by_task=body.by_task,
+            commit=body.commit,
+            reason=body.reason,
+            workspace=workspace,
+        )
+    except loose_close.CloseRefusedError as exc:
+        raise HTTPException(
+            status_code=exc.http_status, detail={"message": str(exc), "code": exc.code}
+        ) from exc
+    for entry in result["closed"]:
+        defer_broadcast(
+            session, project_id, "task_updated", {"id": entry["id"], "status": entry["status"]}
+        )
+    await session.commit()
+    return result
+
+
 @router.post("/{task_id}/land", response_model=TaskResponse)
 async def land_task(
     task_id: OperatorTaskId,
@@ -2697,6 +2792,9 @@ async def task_moves(
     actor = Actor(kind=ACTOR_OPERATOR)
     moves = []
     targets = set(allowed_targets(task.status, ACTOR_OPERATOR))
+    if task.loop_id is None:
+        # A loose task moves by hand: the free moves, each still put to the mover decision below.
+        targets |= set(free_targets(task.status))
     if task.status == "completed" and task.build_id:
         # A level's own edge (slice D): at Fast, completed work is approved without a review.
         targets.add("approved")
@@ -2710,7 +2808,17 @@ async def task_moves(
         reviewers = await _reviewers_for(session, task, actor)
         if reviewers and "under_review" not in moves:
             moves = sorted([*moves, "under_review"])
-    return {"task_id": task.id, "status": task.status, "moves": moves, "reviewers": reviewers}
+    closes = await loose_close.offered_outcomes(session, task)
+    return {
+        "task_id": task.id,
+        "status": task.status,
+        "moves": moves,
+        "reviewers": reviewers,
+        # The ways a loose task can be closed, by the same refusals the close route applies, so
+        # the drawer offers exactly what the Hub will do (`tasks-outside-a-flow-move-freely`, FR-10).
+        "loose": task.loop_id is None,
+        "closes": closes,
+    }
 
 
 async def _reviewers_for(session: AsyncSession, task: Task, actor: Actor) -> List[str]:

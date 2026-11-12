@@ -1,4 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { chooseMenuOption } from './support/menuSelect'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useConfigStore } from '@/store/configStore'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
@@ -13,6 +16,8 @@ let roster: AgentSummary[] = []
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   MIN_WAITING_SECONDS: 10,
   MAX_WAITING_SECONDS: 600,
@@ -34,9 +39,10 @@ vi.mock('@/api/modelCatalog', async (importOriginal) => {
 
 /** The project's saved threshold, which an agent with no override of its own inherits (D10). */
 /** `null` stands for a project settings read that failed. */
-let projectThreshold: { checkpoint_threshold_mode: 'percent' | 'tokens' | null; checkpoint_threshold_value: number | null } | null = {
-  checkpoint_threshold_mode: null,
-  checkpoint_threshold_value: null,
+let projectThreshold: { checkpoint_mode?: string; checkpoint_threshold_mode: 'percent' | 'tokens' | null; checkpoint_threshold_value: number | null } | null = {
+  checkpoint_mode: 'offered',
+  checkpoint_threshold_mode: 'percent',
+  checkpoint_threshold_value: 90,
 }
 
 vi.mock('@/api/projects', async (importOriginal) => {
@@ -96,7 +102,7 @@ describe('per-agent checkpoint policy', () => {
   it('opens the Checkpoints tab narrowed to this agent (FR-5)', () => {
     useConfigStore.setState({ selectedProjectId: 'proj-test' })
     window.history.replaceState(null, '', '/')
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     fireEvent.click(screen.getByTestId('agent-checkpoints-link'))
     const params = new URLSearchParams(window.location.search)
     expect(params.get('tab')).toBe('checkpoints')
@@ -104,48 +110,55 @@ describe('per-agent checkpoint policy', () => {
     expect(params.has('ckptConversation')).toBe(false)
   })
 
-  it('inherits the project by default rather than showing a value nobody set', () => {
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
-    expect(screen.getByLabelText('Automatic checkpointing for claude-1')).toHaveValue('')
-    expect(screen.getByLabelText('Checkpoint threshold for claude-1')).toHaveValue(null)
+  it('names the project’s mode when the agent has none of its own (ac-unset-shows-project)', () => {
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    expect(screen.getByRole('button', { name: 'Checkpoints for claude-1' })).toHaveTextContent('The project’s (Offer me one)')
+    expect(screen.getByLabelText('Checkpoint at')).toHaveValue('')
+    expect(screen.getByText(/The project’s: 90%/)).toBeInTheDocument()
   })
 
-  it('submits a token threshold in canonical units, entered in thousands', () => {
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Threshold unit for claude-1'), {
-      target: { value: 'tokens' },
-    })
-    const input = screen.getByLabelText('Checkpoint threshold for claude-1')
+  it('choosing Off writes once, and the reset hands the mode back to the project', async () => {
+    const user = userEvent.setup()
+    const view = render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    await chooseMenuOption(user, 'Checkpoints for claude-1', /^Off(?!er)/)
+    expect(modeMutate).toHaveBeenCalledTimes(1)
+    expect(modeMutate).toHaveBeenCalledWith({ agent: 'claude-1', mode: 'off' }, expect.any(Object))
+    view.unmount()
+
+    roster = [agent({ checkpoint_mode: 'off' })]
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    const row = screen.getByRole('button', { name: 'Checkpoints for claude-1' }).closest('.aw-settings-row') as HTMLElement
+    fireEvent.click(within(row).getByRole('button', { name: /^Reset to / }))
+    expect(modeMutate).toHaveBeenLastCalledWith({ agent: 'claude-1', mode: null }, expect.any(Object))
+    // Turning it off says nothing about the threshold, so nothing was submitted for it.
+    expect(thresholdMutate).not.toHaveBeenCalled()
+  })
+
+  it('submits a token threshold in canonical units, entered in thousands', async () => {
+    const user = userEvent.setup()
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    await user.click(screen.getByRole('radio', { name: 'K tokens' }))
+    const input = screen.getByLabelText('Checkpoint at')
     fireEvent.change(input, { target: { value: '120' } })
     fireEvent.blur(input)
 
-    expect(thresholdMutate).toHaveBeenCalledWith({
-      agent: 'claude-1', mode: 'tokens', value: 120_000, notes: null,
-    })
+    expect(thresholdMutate).toHaveBeenCalledTimes(1)
+    expect(thresholdMutate).toHaveBeenCalledWith({ agent: 'claude-1', mode: 'tokens', value: 120_000, notes: null }, expect.any(Object))
   })
 
   it('clears the whole override when the value is emptied, never half of it', () => {
     // An override that kept its mode while losing its value would be a number in a unit nobody
     // chose — the Hub refuses it, and the control must not be able to ask.
     roster = [agent({ checkpoint_threshold_mode: 'percent', checkpoint_threshold_value: 60 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
-    const input = screen.getByLabelText('Checkpoint threshold for claude-1')
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    const input = screen.getByLabelText('Checkpoint at')
     fireEvent.change(input, { target: { value: '' } })
     fireEvent.blur(input)
 
     expect(thresholdMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ value: null, notes: null }),
+      expect.objectContaining({ value: null, mode: null, notes: null }),
+      expect.any(Object),
     )
-  })
-
-  it('lets an agent opt out while still inheriting the threshold', () => {
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Automatic checkpointing for claude-1'), {
-      target: { value: 'off' },
-    })
-    expect(modeMutate).toHaveBeenCalledWith({ agent: 'claude-1', mode: 'off' })
-    // Turning it off says nothing about the threshold, so nothing was submitted for it.
-    expect(thresholdMutate).not.toHaveBeenCalled()
   })
 })
 
@@ -156,7 +169,7 @@ describe('per-agent access grants', () => {
   })
 
   it('shows both grants closed by default', () => {
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/)).not.toBeChecked()
     expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).not.toBeChecked()
     // Recall only reaches what a checkpoint it can read cites, so it waits for that grant.
@@ -166,7 +179,7 @@ describe('per-agent access grants', () => {
   it('grants each one separately', () => {
     // The whole reason there are two: a peer allowed to see what was concluded is not thereby
     // allowed to read everything that agent's tools ever printed.
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     fireEvent.click(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/))
 
     expect(grantMutate).toHaveBeenCalledWith(
@@ -178,7 +191,7 @@ describe('per-agent access grants', () => {
 
   it('reflects a grant that is already open', () => {
     roster = [agent({ can_read_checkpoints: true })]
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/)).toBeChecked()
     expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).not.toBeChecked()
     expect(screen.getByLabelText(/Recall what a checkpoint cites for claude-1/)).toBeEnabled()
@@ -186,7 +199,7 @@ describe('per-agent access grants', () => {
 
   it('closes recall with the read grant it depends on', () => {
     roster = [agent({ can_read_checkpoints: true, can_recall: true })]
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     fireEvent.click(screen.getByLabelText(/Read other agents’ checkpoints for claude-1/))
     expect(grantMutate).toHaveBeenCalledWith({ agent: 'claude-1', grant: 'can_read_checkpoints', enabled: false }, expect.anything())
     expect(grantMutate).toHaveBeenCalledWith({ agent: 'claude-1', grant: 'can_recall', enabled: false }, expect.anything())
@@ -195,7 +208,7 @@ describe('per-agent access grants', () => {
   it('states the read grant reaches every conversation, and does not claim a bound nothing sets', () => {
     // F235: the grant is all-or-nothing across the project. Nothing can restrict a checkpoint's
     // own visibility, so the hint must not suggest one exists.
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.getByText(/every conversation in this project/)).toBeInTheDocument()
     expect(screen.queryByText(/visibility/)).not.toBeInTheDocument()
   })
@@ -216,12 +229,12 @@ describe('evidence acceptance grant', () => {
   })
 
   it('is closed by default, because it is authority over what ships', () => {
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.getByLabelText(/Accept evidence for claude-1/)).not.toBeChecked()
   })
 
   it('is granted on its own, without touching the checkpoint grants', () => {
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     fireEvent.click(screen.getByLabelText(/Accept evidence for claude-1/))
     expect(grantMutate).toHaveBeenCalledWith(
       { agent: 'claude-1', grant: 'can_accept_evidence', enabled: true },
@@ -232,12 +245,12 @@ describe('evidence acceptance grant', () => {
 
   it('reflects a grant that is already open', () => {
     roster = [agent({ can_accept_evidence: true })]
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.getByLabelText(/Accept evidence for claude-1/)).toBeChecked()
   })
 
   it('says what it does not confer', () => {
-    render(<AgentSettingsPage agent="claude-1" section="access" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="permissions" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.getByText(/cannot accept its own/)).toBeInTheDocument()
   })
 })
@@ -257,39 +270,39 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
     thresholdMutate.mockReset()
     modeMutate.mockReset()
     grantMutate.mockReset()
-    projectThreshold = { checkpoint_threshold_mode: null, checkpoint_threshold_value: null }
+    projectThreshold = { checkpoint_mode: 'offered', checkpoint_threshold_mode: null, checkpoint_threshold_value: null }
   })
 
   it('says so when the inherited project threshold could not be read', () => {
     projectThreshold = null
     roster = [agent({ checkpoint_compaction_percent: 95 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
-    expect(screen.queryByText(/project's threshold could not be read/)).toBeInTheDocument()
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
+    expect(screen.queryByText(/project’s threshold could not be read/)).toBeInTheDocument()
   })
 
   it('an agent with no override is judged against the project threshold it inherits (task 6.3)', () => {
     projectThreshold = { checkpoint_threshold_mode: 'percent', checkpoint_threshold_value: 96 }
     roster = [agent({ checkpoint_compaction_percent: 95 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.queryByText(/threshold of 96% is lowered to 92%/)).toBeInTheDocument()
   })
 
   it('names the runner\'s own compaction point for a Copilot-bound agent with no configured threshold', () => {
     roster = [agent({ checkpoint_compaction_percent: 80 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.queryByText(/compacts at about 80%/)).toBeInTheDocument()
     expect(screen.queryByText(/fires by 77% at the latest/)).toBeInTheDocument()
   })
 
   it('shows no compaction-point line for an agent at the C=95 default', () => {
     roster = [agent({ checkpoint_compaction_percent: 95 })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.queryByText(/compacts at about/)).not.toBeInTheDocument()
   })
 
   it('shows no compaction-point line for an agent with no bound runner (null compaction percent)', () => {
     roster = [agent({ checkpoint_compaction_percent: null })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.queryByText(/compacts at about/)).not.toBeInTheDocument()
   })
 
@@ -299,7 +312,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'percent',
       checkpoint_threshold_value: 96,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.queryByText(/lowered to 92%/)).toBeInTheDocument()
     expect(screen.queryByText(/Claude compacts at about 95%/)).toBeInTheDocument()
   })
@@ -310,7 +323,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'percent',
       checkpoint_threshold_value: 92,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.queryByText(/lowered to 92%/)).not.toBeInTheDocument()
   })
 
@@ -320,7 +333,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'percent',
       checkpoint_threshold_value: 95,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.queryByText(/lowered to 92%/)).toBeInTheDocument()
   })
 
@@ -330,7 +343,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'tokens',
       checkpoint_threshold_value: 150_000,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(
       screen.queryByText(/fires at 150000 tokens or at 77% of its window/),
     ).toBeInTheDocument()
@@ -342,7 +355,7 @@ describe('checkpoint ceiling notices (task 1.18(b), design D10)', () => {
       checkpoint_threshold_mode: 'tokens',
       checkpoint_threshold_value: 150_000,
     })]
-    render(<AgentSettingsPage agent="claude-1" section="context" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+    render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     expect(screen.queryByText(/fires at 150000 tokens/)).not.toBeInTheDocument()
   })
 })

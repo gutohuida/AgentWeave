@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch'
 import { appWindowApi } from '@/hooks/useNotifications'
 import type { NotifyKind } from '@/lib/notify/classify'
 import { DEFAULT_NOTIFY_PREFS, loadNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@/lib/notify/prefs'
+import { WINDOWS_NOTIFY_DEFAULTS } from '@/lib/settingsChanged'
 import { playSound } from '@/lib/sound/player'
 
 const KINDS: Array<{ kind: NotifyKind; label: string; description: string }> = [
@@ -35,6 +36,7 @@ export function NotificationSettings() {
         label="Sound"
         description="Also the sound AgentWeave makes when it opens."
         changed={prefs.sound !== DEFAULT_NOTIFY_PREFS.sound}
+        origin={{ kind: 'changed', other: DEFAULT_NOTIFY_PREFS.sound ? 'On' : 'Off' }}
         onReset={() => change({ ...prefs, sound: DEFAULT_NOTIFY_PREFS.sound })}
         control={
           <Switch
@@ -50,6 +52,7 @@ export function NotificationSettings() {
         htmlFor="notify-volume"
         inactive={!prefs.sound}
         changed={prefs.volume !== DEFAULT_NOTIFY_PREFS.volume}
+        origin={{ kind: 'changed', other: `${Math.round(DEFAULT_NOTIFY_PREFS.volume * 100)}%` }}
         onReset={() => change({ ...prefs, volume: DEFAULT_NOTIFY_PREFS.volume })}
         control={
           <div className="flex items-center gap-2">
@@ -85,6 +88,7 @@ export function NotificationSettings() {
           label={label}
           description={description}
           changed={prefs.kinds[kind] !== DEFAULT_NOTIFY_PREFS.kinds[kind]}
+          origin={{ kind: 'changed', other: DEFAULT_NOTIFY_PREFS.kinds[kind] ? 'On' : 'Off' }}
           onReset={() => change({ ...prefs, kinds: { ...prefs.kinds, [kind]: DEFAULT_NOTIFY_PREFS.kinds[kind] } })}
           control={
             <Switch
@@ -100,7 +104,7 @@ export function NotificationSettings() {
   )
 }
 
-const WINDOWS_DEFAULTS: WindowsNotifyKinds = { ask: true, fail: true, done: false, reply: false }
+const WINDOWS_DEFAULTS: WindowsNotifyKinds = WINDOWS_NOTIFY_DEFAULTS
 
 const WINDOWS_KINDS: Array<{ kind: NotifyKind; label: string; description: string }> = [
   { kind: 'ask', label: 'Question', description: 'An agent asked you something, or needs a permission decided.' },
@@ -133,6 +137,7 @@ export function WindowsNotificationSettings() {
           description={description}
           inactive={!data}
           changed={kinds[kind] !== WINDOWS_DEFAULTS[kind]}
+          origin={{ kind: 'changed', other: WINDOWS_DEFAULTS[kind] ? 'On' : 'Off' }}
           onReset={() => change({ ...kinds, [kind]: WINDOWS_DEFAULTS[kind] })}
           control={
             <Switch

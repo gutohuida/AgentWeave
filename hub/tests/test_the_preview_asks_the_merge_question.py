@@ -87,7 +87,13 @@ async def test_once_resolved_the_preview_says_it_merges_cleanly(
 ):
     task, _ = await conflicted(app, auth_headers, builder, tmp_path)
     resolve_on_branch(tmp_path)
-    await accept_evidence(app, auth_headers, builder, summary="re-ran after resolving")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        summary="re-ran after resolving",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
     answer = await preview(app, auth_headers, task)
@@ -109,11 +115,17 @@ async def test_a_dirty_checkout_is_named_not_called_clean(
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     commit_on_branch(tmp_path, AGENT_BRANCH, "alpha.txt", "alpha\n")
-    await accept_evidence(app, auth_headers, builder, identifier="FR-1")
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        identifier="FR-1",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     tracked = git(tmp_path, "ls-files").stdout.split()[0]
     (tmp_path / tracked).write_text("the operator is mid-edit\n", encoding="utf-8")
-    task = await linked_task(app, auth_headers)
 
     answer = await preview(app, auth_headers, task)
 
@@ -135,9 +147,15 @@ async def test_a_checkout_on_another_branch_is_named_not_called_clean(
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     commit_on_branch(tmp_path, AGENT_BRANCH, "alpha.txt", "alpha\n")
-    await accept_evidence(app, auth_headers, builder, identifier="FR-1")
-    git(tmp_path, "checkout", "-q", "-b", "parked", "main")
     task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        identifier="FR-1",
+        task_id=task,
+    )
+    git(tmp_path, "checkout", "-q", "-b", "parked", "main")
 
     answer = await preview(app, auth_headers, task)
 
@@ -156,10 +174,16 @@ async def test_work_already_on_main_is_not_counted_as_merging(
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     commit_on_branch(tmp_path, AGENT_BRANCH, "alpha.txt", "alpha\n")
-    await accept_evidence(app, auth_headers, builder, identifier="FR-1")
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        identifier="FR-1",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     git(tmp_path, "merge", "-q", "--no-ff", "-m", "landed elsewhere", AGENT_BRANCH)
-    task = await linked_task(app, auth_headers)
 
     answer = await preview(app, auth_headers, task)
 
@@ -175,12 +199,24 @@ async def test_two_clean_targets_are_counted(app, auth_headers, builder, tmp_pat
     await make_document(app, auth_headers, builder, requirements=(ALPHA, BETA))
     await set_main_branch("main")
     commit_on_branch(tmp_path, AGENT_BRANCH, "alpha.txt", "alpha\n")
-    await accept_evidence(app, auth_headers, builder, identifier="FR-1")
+    task = await linked_task(app, auth_headers, requirements=("FR-1", "FR-2"))
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        identifier="FR-1",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     commit_on_branch(tmp_path, "agentweave/other", "beta.txt", "beta\n")
-    await accept_evidence(app, auth_headers, builder, identifier="FR-2")
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        identifier="FR-2",
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
-    task = await linked_task(app, auth_headers, requirements=("FR-1", "FR-2"))
 
     answer = await preview(app, auth_headers, task)
 

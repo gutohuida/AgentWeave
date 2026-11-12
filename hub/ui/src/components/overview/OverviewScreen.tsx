@@ -7,7 +7,7 @@ import { useQueueStatuses } from '@/api/queue'
 import { readableApiError } from '@/api/client'
 import { useAnswerQuestion, useDeclineQuestion, useQuestions } from '@/api/questions'
 import { useEndStall, useOpenStalls, type Stall } from '@/api/stalls'
-import { useKnownFailing } from '@/api/knownFailing'
+import { useClearStableFixTasks, useDisturbedRuns, useKnownFailing } from '@/api/knownFailing'
 import { describeMainNotice, useMarkMainNoticeSeen, useOpenMainNotices } from '@/api/mainNotices'
 import { useReopeningWarnings } from '@/api/reopeningWarnings'
 import { offerTitle, useDeclineNextSliceOffer, useNextSliceOffers, useTakeNextSliceOffer } from '@/api/nextSlice'
@@ -25,6 +25,7 @@ import { useTaskFilterStore } from '@/store/taskFilterStore'
 import { AgentPostureChips } from './AgentPostureChips'
 import { KnownFailingList } from './KnownFailingList'
 import { ReopeningWarnings } from './ReopeningWarnings'
+import { ProjectSetupList } from './ProjectSetupList'
 import { OverviewView, type AgentStripItem, type FinishedItem, type NeedItem, type RunningItem } from './OverviewView'
 
 /** The Hub's own agent for stalled work (`hub/hub/stalls.py`, `MENDER`). */
@@ -72,6 +73,8 @@ export function OverviewScreen({
   const { data: openStalls = [], error: stallsError, refetch: refetchStalls } = useOpenStalls()
   const endStall = useEndStall()
   const { data: knownFailing, error: knownFailingError, refetch: refetchKnownFailing } = useKnownFailing()
+  const { data: disturbedRuns = [] } = useDisturbedRuns()
+  const clearStable = useClearStableFixTasks()
   const { data: mainNotices = [], error: mainNoticesError, refetch: refetchMainNotices } = useOpenMainNotices()
   const markSeen = useMarkMainNoticeSeen()
   const { data: offers = [], error: offersError, refetch: refetchOffers } = useNextSliceOffers()
@@ -406,9 +409,21 @@ export function OverviewScreen({
       onOpenLedger={() => onNavigate('activity')}
       onOpenQuestions={() => onNavigate('questions')}
       onAddAgent={onAddAgent}
+      setup={<ProjectSetupList place="overview" onAddAgent={onAddAgent} />}
       knownFailing={
         // A Hub older than the list answers null: it has none to show, so no section.
-        knownFailing ? <KnownFailingList entries={knownFailing} onOpenTask={openTask} now={now} /> : null
+        knownFailing ? (
+          <KnownFailingList
+            entries={knownFailing}
+            disturbed={disturbedRuns}
+            onClear={() => clearStable.mutate()}
+            clearing={clearStable.isPending}
+            cleared={clearStable.data ?? null}
+            clearError={clearStable.error ? readableApiError(clearStable.error, 'The fix tasks could not be closed.') : null}
+            onOpenTask={openTask}
+            now={now}
+          />
+        ) : null
       }
       notice={
         reopenings.length > 0 || failures.some(([, error]) => error) || accounting?.budget.exhausted ? (

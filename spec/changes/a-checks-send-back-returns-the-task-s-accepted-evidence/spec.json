@@ -173,7 +173,7 @@
     ]
   },
   "hub": {
-    "phase": "approved",
+    "phase": "archived",
     "size": "small",
     "step": "build"
   },

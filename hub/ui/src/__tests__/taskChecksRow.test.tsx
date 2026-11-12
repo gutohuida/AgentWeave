@@ -240,3 +240,29 @@ describe('a check sized to the change says so, with its file count (CCROT FR-4)'
     expect(screen.queryByTestId('task-checks-sized-task-1')).toBeNull()
   })
 })
+
+describe('a disturbed run is shown on the check run (`a-disturbed-check-run-is-not-a-pile-of-flaky-tests` FR-2)', () => {
+  it('names the check, the run, the count and the first run output, and is not a failure', () => {
+    checks = {
+      configured: true,
+      running: false,
+      runs: [
+        run('passed', {
+          results: [
+            {
+              name: 'tests', exit_code: 0, timed_out: false, duration_seconds: 4, output_tail: 'rerun ok',
+              disturbed: { failed: 5, passed_on_rerun: 5, threshold: 3 },
+              flaky: { first: { output_tail: 'FAILED test_a: git timed out' } },
+            },
+          ],
+        }),
+      ],
+    }
+    render(<TaskChecksRow taskId="task-1" />)
+    expect(screen.getByText(/Checks passed/)).toBeInTheDocument()
+    const note = screen.getByTestId('task-checks-disturbed-task-1-tests')
+    expect(note).toHaveTextContent('tests · disturbed run: 5 tests failed and 5 passed when re-run')
+    expect(note).toHaveTextContent('run chk-passed')
+    expect(note).toHaveTextContent('FAILED test_a: git timed out')
+  })
+})

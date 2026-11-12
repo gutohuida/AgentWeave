@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0173"
+HEAD_REVISION = "0176"
 
 
 # ---------------------------------------------------------------------------
@@ -4934,6 +4934,7 @@ def _database_at_0121(tmp_path, name: str) -> tuple:
             "held_note",
         ):  # 0172
             conn.execute(f"ALTER TABLE spec_documents DROP COLUMN {column}")
+        conn.execute("ALTER TABLE spec_documents DROP COLUMN tag")  # 0176
         conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
         conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0121')")
         conn.commit()

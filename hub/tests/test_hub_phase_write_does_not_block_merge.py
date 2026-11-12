@@ -79,7 +79,8 @@ async def _committed_document_then_approved(app, auth_headers, builder, root):  
     git(root, "commit", "-q", "-m", "the operator commits the draft")
 
     commit_on_branch(root, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(app, auth_headers, builder, task_id=task)
     git(root, "checkout", "-q", "main")
 
     await _approve_document(app, auth_headers)
@@ -89,6 +90,7 @@ async def _committed_document_then_approved(app, auth_headers, builder, root):  
     ).stdout.strip(), (
         "the phase write did not dirty the committed document; the test no longer reproduces F515"
     )
+    return task
 
 
 async def _outcomes(app, auth_headers, task):
@@ -102,9 +104,7 @@ async def _outcomes(app, auth_headers, task):
 async def test_the_hubs_own_phase_write_does_not_block_a_merge(
     app, auth_headers, builder, tmp_path  # noqa: F811
 ):
-    await _committed_document_then_approved(app, auth_headers, builder, tmp_path)
-
-    task = await linked_task(app, auth_headers)
+    task = await _committed_document_then_approved(app, auth_headers, builder, tmp_path)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 
@@ -117,13 +117,12 @@ async def test_an_operator_edit_to_the_same_document_still_blocks(
     app, auth_headers, builder, tmp_path  # noqa: F811
 ):
     """Only the Hub's own bytes are exempt. The operator's edit to that file is their work."""
-    await _committed_document_then_approved(app, auth_headers, builder, tmp_path)
+    task = await _committed_document_then_approved(app, auth_headers, builder, tmp_path)
     doc = tmp_path / PATH
     doc.write_text(
         doc.read_text(encoding="utf-8") + "<!-- the operator's note -->\n", encoding="utf-8"
     )
 
-    task = await linked_task(app, auth_headers)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 

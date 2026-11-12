@@ -1,0 +1,281 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "operator",
+      "given": "the mock route with fixtures for every stage and close",
+      "how_to_check": "Operator reviews the mock",
+      "key": "ac-mock",
+      "requirement": "mock-first",
+      "then": "every stage and close appears on at least one card, and the story shows a long fixture history",
+      "when": "the operator opens it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a fixture task with every field filled, priority medium",
+      "how_to_check": "UI component test",
+      "key": "ac-content",
+      "requirement": "card-content",
+      "then": "only the listed items show, and no priority shows",
+      "when": "its card renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task waiting on a long question with a long held reason",
+      "how_to_check": "Browser drive measuring line count at default width",
+      "key": "ac-budget",
+      "requirement": "card-text-budget",
+      "then": "the text below the title takes at most two lines",
+      "when": "its card renders at default width"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with a description and criteria",
+      "how_to_check": "UI component test",
+      "key": "ac-drawer",
+      "requirement": "drawer-holds-rest",
+      "then": "the description and criteria appear only in the drawer",
+      "when": "the card and drawer render"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a completed task whose latest checks failed two of five",
+      "how_to_check": "UI component test plus a drive on :8010",
+      "key": "ac-checks",
+      "requirement": "failing-checks",
+      "then": "it shows a marker reading 2, and opening it names both checks",
+      "when": "the card renders"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a task with six consecutive runs and a landing",
+      "how_to_check": "UI component test fed the story route's real order",
+      "key": "ac-story",
+      "requirement": "story-timeline",
+      "then": "one folded entry for six runs, then the landing entry, each entry's label six words or fewer",
+      "when": "the story opens"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a card moving from checking to on main",
+      "how_to_check": "Browser drive with emulated prefers-reduced-motion",
+      "key": "ac-motion",
+      "requirement": "motion",
+      "then": "the animation ends within 300 ms; with reduced motion none runs",
+      "when": "it changes, once with motion allowed and once with reduced motion"
+    },
+    {
+      "checked_by": "operator",
+      "given": "the mock in light and dark themes",
+      "how_to_check": "Operator reviews the mock",
+      "key": "ac-identity",
+      "requirement": "identity",
+      "then": "it reads as AgentWeave",
+      "when": "the operator reviews it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "the board in both themes",
+      "how_to_check": "Browser drive with an axe contrast check and a greyscale screenshot",
+      "key": "ac-a11y",
+      "requirement": "not-colour-alone",
+      "then": "no contrast failures, and every stage is still distinguishable",
+      "when": "an automated contrast check runs and colour is removed (greyscale)"
+    }
+  ],
+  "algorithms": [],
+  "aw_identity": {
+    "digests": {
+      "FR-1": "21517a20ba8bd3842805db06bdf3b2c3ff041bc06a6e07104335f87e1c84ce17",
+      "FR-2": "bcbcaddee6cc86b8eb734dea25a00788cda09f515f07355c2c189a81830c08a9",
+      "FR-3": "413bf3abc3e5b802e30ae432c41d01391e3843d753d45479d98369a28c0c4312",
+      "FR-4": "4310c198dea2e42de0feb61f0e6c6e5a13cd2db1dfe456e5e4344c61bed7c30b",
+      "FR-5": "ccae6d514e78d483997e6bcbbb60854ab381e1588404997bbc4e2a1d6ae0a0a1",
+      "FR-6": "1cb536ee5cdfbb481700cdf373730b011f8f01b1d92cbf2112363257e13f5a8d",
+      "FR-7": "236b13062bcb86d94723241607b413db4e023a94b61eac1a963f83642feb7c64",
+      "FR-8": "352505f6861e92ee84aa47abb6906bcd29a82936191980edecb49e6843d013ba",
+      "FR-9": "2aaeed68b12fae90fb1e58bc2ef328a8668ef7a9999e315ccd2ea6a74860c8a7"
+    },
+    "high_water": 9,
+    "requirements": {
+      "card-content": "FR-2",
+      "card-text-budget": "FR-3",
+      "drawer-holds-rest": "FR-4",
+      "failing-checks": "FR-5",
+      "identity": "FR-8",
+      "mock-first": "FR-1",
+      "motion": "FR-7",
+      "not-colour-alone": "FR-9",
+      "story-timeline": "FR-6"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperSonnet2",
+    "builder": "DeveloperSonnet2",
+    "checker": "QA2",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "agent": "UI work: Sonnet is enough.",
+      "builder": "Same as agent.",
+      "checker": "QA2 runs the browser drives.",
+      "cron": "Five minutes keeps it moving.",
+      "mode": "Two tasks; the second waits on the operator's review of the first.",
+      "stop": "Stop once both tasks are done."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "",
+  "evidence": {
+    "checked": [],
+    "limits": []
+  },
+  "hub": {
+    "phase": "exploring",
+    "size": "small",
+    "step": "intake"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Which story entries are milestones that are never folded? Proposed: created, completed, approved, sent back, landed or did not land, closed.",
+      "resolved": false
+    }
+  ],
+  "problem": "Cards and especially the task story (TaskStory.tsx, sentences such as '<agent> is working') carry too much text, so it is hard to understand what is in a task. The operator asked for a redesign based on best UI/UX practice, with animation and finish, in AgentWeave's visual identity (brand/ in the repository is the identity kit).",
+  "requirements": [
+    {
+      "key": "mock-first",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-10-20: mocks are the real components fed fixtures, so applying one is wiring rather than redrawing.",
+      "statement": "The redesign is shown first as a mock built from the real board, card, drawer and story components fed fixtures. The mock covers every stage from slice glance and every close from slice loose-tasks. Nothing is wired to live data until the operator approves the mock."
+    },
+    {
+      "key": "card-content",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A card shows only: its title; its stage as a glyph and a word; time at stage; the waits-on line when waiting; builder and reviewer; its spec's short tag; a failing-checks marker; and priority only when critical."
+    },
+    {
+      "key": "card-text-budget",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Apart from its title, no card shows more than two lines of text at the board's default width."
+    },
+    {
+      "key": "drawer-holds-rest",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Description, branch, commits, requirements and acceptance criteria appear in the drawer and never on the card."
+    },
+    {
+      "key": "failing-checks",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task whose latest checks failed shows, before review, a marker on its card naming how many checks failed. Opening it lists them."
+    },
+    {
+      "key": "story-timeline",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "The story view shows a task's history as a timeline of entries, each a glyph, a label of at most six words, the actor and the time. Runs of four or more consecutive routine entries are folded into one that opens. Any entry can be expanded to its full text."
+    },
+    {
+      "key": "motion",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A card changing stage animates the change, finishing within 300 ms. With reduced motion requested by the system, no animation plays and the change still shows."
+    },
+    {
+      "key": "identity",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "Colours, type and glyphs come from AgentWeave's identity kit, in both light and dark themes."
+    },
+    {
+      "key": "not-colour-alone",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "No stage or marker is conveyed by colour alone. All card and story text meets WCAG AA contrast in both themes."
+    }
+  ],
+  "roadmap": {
+    "document": "spec/changes/tasks-rework-roadmap/spec.json",
+    "slice": "redesign"
+  },
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "The task card, the drawer's summary area and the story view",
+      "Motion and theming of those"
+    ],
+    "non_goals": [
+      "What a card's facts are and how they are computed (slices glance, loose-tasks and finding)",
+      "Other screens' cards",
+      "Changing the identity kit itself"
+    ]
+  },
+  "summary": "Cards and the story view are redesigned around visual state instead of prose, with motion and finish in AgentWeave's visual identity. The design is shown first as a mock built from the real components fed fixtures, and wired to live data once the operator approves it.",
+  "tasks": [
+    {
+      "builder": "DeveloperSonnet2",
+      "checker": "QA2",
+      "depends_on": [],
+      "description": "Build the redesigned card, drawer header and story timeline as real components fed fixtures in the mock, covering every stage and close, in light and dark themes. Stop for the operator's review.",
+      "files": [
+        "hub/ui/mock",
+        "hub/ui/src/components/tasks"
+      ],
+      "from": null,
+      "key": "mock",
+      "requirements": [
+        "mock-first",
+        "card-content",
+        "card-text-budget",
+        "drawer-holds-rest",
+        "failing-checks",
+        "story-timeline",
+        "motion",
+        "identity",
+        "not-colour-alone"
+      ],
+      "reviewer": null,
+      "title": "Redesign mock"
+    },
+    {
+      "builder": "DeveloperSonnet2",
+      "checker": "QA2",
+      "depends_on": [
+        "mock"
+      ],
+      "description": "Wire the approved card, drawer and story to live data, including the failing-checks marker, and drive the board on :8010.",
+      "files": [
+        "hub/ui/src/components/tasks",
+        "hub/ui/src/api/tasks.ts"
+      ],
+      "from": null,
+      "key": "wire",
+      "requirements": [
+        "card-content",
+        "failing-checks",
+        "story-timeline",
+        "motion"
+      ],
+      "reviewer": null,
+      "title": "Wire the approved design"
+    }
+  ],
+  "title": "Task card and story redesign"
+}

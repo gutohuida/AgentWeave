@@ -12,7 +12,9 @@ import {
 } from '@/components/layout/Sidebar'
 import { Toaster } from '@/components/ui/toast'
 import { openCommandPalette } from '@/lib/palette'
+import { settingDestination } from '@/lib/settingsIndex'
 import { OverviewScreen } from '@/components/overview/OverviewScreen'
+import { setupTitle } from '@/components/overview/setupItems'
 import { CommandPalette } from '@/components/palette/CommandPalette'
 import { ProjectManagerModal, type ProjectManagerMode } from '@/components/projects/ProjectManagerModal'
 import { useSpecDocuments } from '@/api/spec'
@@ -27,6 +29,7 @@ import {
   agentDestination,
   agentSettingsBackDestination,
   agentSettingsDestination,
+  resolveAgentSettingsSection,
   appSettingsDestination,
   destinationProjectId,
   environmentDestination,
@@ -311,7 +314,7 @@ export default function App() {
     if (value.startsWith('agent-settings:')) {
       const [, agentName, section] = value.split(':')
       navigateTo(agentSettingsDestination(
-        currentProjectId, agentName, section as Parameters<typeof agentSettingsDestination>[2],
+        currentProjectId, agentName, resolveAgentSettingsSection(section) ?? undefined,
       ))
       return
     }
@@ -442,6 +445,7 @@ export default function App() {
       <AgentSettingsPage
         agent={settingsDestination.agent}
         section={settingsDestination.section}
+        setting={settingsDestination.setting}
         onSelectSection={(section) =>
           navigateTo(agentSettingsDestination(settingsDestination.projectId, settingsDestination.agent, section))
         }
@@ -461,6 +465,7 @@ export default function App() {
     content = (
       <AppSettingsScreen
         section={appSettingsDest.section}
+        setting={appSettingsDest.setting}
         onSelectSection={(section) => navigateTo(appSettingsDestination(appSettingsDest.projectId, section))}
         onOpenSetup={() => setSetupOpen(true)}
         back={
@@ -605,9 +610,11 @@ export default function App() {
       projectContent = (
         <ProjectSettingsScreen
           section={destination.environmentSection}
+          setting={destination.setting}
           onSelectSection={(section) => navigateTo(environmentDestination(destination.projectId, section))}
           onNavigate={navigate}
           onOpenAppSettings={() => navigateTo(appSettingsDestination(destination.projectId))}
+          onAddAgent={() => setAgentCreateProjectId(destination.projectId)}
         />
       )
     }
@@ -677,6 +684,7 @@ export default function App() {
             // folder it initialises, so "create" never needed a separate entry point.
             onAddProject={() => setProjectManagerMode('open')}
             onOpenAppSettings={() => navigateTo(appSettingsDestination(currentProjectId || null))}
+            setupFor={(id) => (projects ?? []).find((p) => p.id === id)?.setup?.items.map(setupTitle) ?? []}
             appSettingsActive={destination.kind === 'app-settings'}
             compact={sidebarCollapsed}
             onCompactChange={setSidebarCollapsed}
@@ -712,7 +720,7 @@ export default function App() {
                 onAddProject={() => setProjectManagerMode('open')}
                 onOpenSetup={() => setSetupOpen(true)}
                 onOpenPalette={openCommandPalette}
-                onOpenSettings={() => navigateTo(environmentDestination(currentProject.id, 'settings'))}
+                onOpenSettings={() => navigateTo(environmentDestination(currentProject.id, 'general'))}
                 settingsActive={destination.kind === 'project' && destination.tab === 'environment'}
                 mode={mode === 'light' ? 'light' : 'dark'}
                 onToggleMode={toggleMode}
@@ -765,9 +773,12 @@ export default function App() {
           useTaskFilterStore.getState().setPendingOpenTaskId(taskId)
           navigateTo(projectDestination(currentProjectId, 'tasks'))
         }}
-        onOpenAppSettings={(section) => navigateTo(appSettingsDestination(currentProjectId || null, section))}
+        onOpenSetting={(entry, agent) => {
+          const target = settingDestination(entry, currentProjectId || null, agent)
+          if (target) navigateTo(target)
+        }}
         onOpenProjectSettings={
-          currentProject ? () => navigateTo(environmentDestination(currentProject.id, 'settings')) : undefined
+          currentProject ? () => navigateTo(environmentDestination(currentProject.id, 'general')) : undefined
         }
         onOpenAgentSettings={
           currentProject ? (agent) => navigateTo(agentSettingsDestination(currentProject.id, agent)) : undefined

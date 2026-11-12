@@ -107,12 +107,17 @@ async def resolve_identifiers(
     identifiers: Sequence[str],
     *,
     document_path: Optional[str] = None,
+    own_document_id: Optional[str] = None,
 ) -> List[SpecRequirement]:
     """Every named identifier, or a refusal naming the first that failed.
 
     Refusing the whole set rather than linking what resolved is deliberate: a
     task that silently serves two of the three requirements it named is a task
     whose author believes it serves three.
+
+    *own_document_id* is the document the task was built from (F1163, F513's rule): an
+    identifier more than one document declares resolves within it when no document was named.
+    Consulted only then, so an identifier that resolves today still resolves the same.
     """
     document = await _document_for_path(session, project_id, document_path)
     resolved: List[SpecRequirement] = []
@@ -131,6 +136,10 @@ async def resolve_identifiers(
             identifier,
             document_id=document.id if document is not None else None,
         )
+        if status == AMBIGUOUS and document is None and own_document_id:
+            row, status = await _requirement_by_identifier(
+                session, project_id, identifier, document_id=own_document_id
+            )
         if status == AMBIGUOUS:
             raise LinkRefusedError(
                 f"{identifier} is declared by more than one document in this project; "

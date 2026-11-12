@@ -408,3 +408,50 @@ async def test_a_reference_resolves_once_the_index_knows_about_it(
     assert response.json()["references"]["converted"] == 1
     assert len(await _links(task_id)) == 1
     assert await _references(task_id) == []
+
+
+@pytest.mark.asyncio
+async def test_an_update_resolves_within_the_tasks_own_document(
+    app, auth_headers, run_headers, tmp_path
+):
+    """F1163: two documents both declare FR-1, and the task was built from one of them. A reviewer's
+    `update_task(requirement_ids=["FR-1"])` with no `spec_document` was refused as ambiguous; the
+    task has already named its document (F513's rule for evidence, applied here)."""
+    await _document(app, auth_headers, run_headers, [ALPHA], path=PATH)
+    await _document(app, auth_headers, run_headers, [BETA], path=OTHER)
+    created = await _create_task(app, auth_headers)
+    task_id = created.json()["id"]
+    async with async_session_factory() as session:
+        other = (
+            (await session.execute(select(SpecDocument).where(SpecDocument.path == OTHER)))
+            .scalars()
+            .first()
+        )
+        task = await session.get(Task, task_id)
+        task.spec_document_id = other.id
+        await session.commit()
+
+    updated = await app.patch(
+        f"{TASKS}/{task_id}", json={"requirement_ids": ["FR-1"]}, headers=auth_headers
+    )
+
+    assert updated.status_code == 200, updated.text
+    [entry] = updated.json()["requirement_links"]
+    assert (entry["identifier"], entry["document_id"]) == ("FR-1", other.id)
+
+
+@pytest.mark.asyncio
+async def test_a_task_with_no_document_is_still_refused_as_ambiguous_on_update(
+    app, auth_headers, run_headers, tmp_path
+):
+    """The control: with neither a named document nor one of the task's own, FR-1 stays ambiguous."""
+    await _document(app, auth_headers, run_headers, [ALPHA], path=PATH)
+    await _document(app, auth_headers, run_headers, [BETA], path=OTHER)
+    task_id = (await _create_task(app, auth_headers)).json()["id"]
+
+    updated = await app.patch(
+        f"{TASKS}/{task_id}", json={"requirement_ids": ["FR-1"]}, headers=auth_headers
+    )
+
+    assert updated.status_code == 422
+    assert "more than one document" in updated.text

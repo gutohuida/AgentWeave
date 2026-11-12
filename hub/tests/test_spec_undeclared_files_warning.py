@@ -99,6 +99,7 @@ async def test_the_warning_never_blocks(app, planner):
 async def test_the_overlap_warning_is_unchanged(app, planner):
     body = await _submit(app, planner, _doc(("a", {"files": ["x.py"]}), ("b", {"files": ["x.py"]})))
     ignored = {"recommended_people", "criterion_without_check", "no_acceptance_drive"}  # F1124
+    ignored.add("capability_unnamed")  # a-change-names-the-capabilities-it-changes FR-3
     codes = [w["code"] for w in body["warnings"] if w["code"] not in ignored]
     assert codes == ["unordered_file_overlap"]
     assert body["blocking"] == []

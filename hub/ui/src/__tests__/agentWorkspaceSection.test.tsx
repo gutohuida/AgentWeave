@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
@@ -12,6 +13,8 @@ let roster: AgentSummary[] = []
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({ data: [], isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useBindAgentModel: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useProviderLaunchability: () => ({ data: undefined }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   MIN_WAITING_SECONDS: 10,
   MAX_WAITING_SECONDS: 600,
@@ -71,7 +74,7 @@ function renderWorkspace(data: AgentWorkspaceInfo | undefined, loading = false) 
   roster = [
     { name: 'codex-1', status: 'idle', message_count: 0, active_task_count: 0, lifecycle: 'open' },
   ]
-  return render(<AgentSettingsPage agent="codex-1" section="workspace" onSelectSection={vi.fn()} onBack={vi.fn()} />)
+  return render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="codex-1" section="workspace" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
 }
 
 describe('where an agent works on disk', () => {

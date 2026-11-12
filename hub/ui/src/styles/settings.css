@@ -138,7 +138,7 @@
   background: color-mix(in oklab, var(--red) 4%, transparent);
 }
 .aw-danger-title { font-size: 13.5px; font-weight: 600; }
-.aw-danger-desc { margin-top: 3px; max-width: 60ch; font-size: 12.5px; line-height: 1.45; color: var(--text-3); }
+.aw-danger-desc { margin-top: 3px; max-width: 60ch; min-width: 0; overflow-wrap: anywhere; font-size: 12.5px; line-height: 1.45; color: var(--text-3); }
 
 .aw-inline-warning { display: flex; align-items: center; gap: 6px; padding: 10px 0 2px; font-size: 12.5px; color: var(--amber); }
 .aw-empty-line { padding: 12px 0; font-size: 12.5px; color: var(--text-3); }
@@ -238,9 +238,9 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 .aw-settings-empty-title { margin-top: 12px; font-size: 13.5px; font-weight: 600; }
 .aw-settings-empty-desc { margin-top: 4px; max-width: 46ch; font-size: 12.5px; line-height: 1.5; color: var(--text-3); }
 .aw-kv { margin: 0; }
-.aw-kv-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.aw-kv-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
 .aw-kv-row dt { color: var(--text-2); }
-.aw-kv-row dd { margin: 0; color: var(--text); }
+.aw-kv-row dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--text); }
 
 /* A control with a one-line warning under it (no runner bound) */
 .aw-control-stack { display: flex; flex: 1; max-width: 280px; flex-direction: column; gap: 5px; min-width: 0; }
@@ -329,3 +329,53 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
 .aw-step-form { display: flex; flex-direction: column; gap: 4px; padding: 12px 0 4px; max-width: 640px; }
 .aw-range { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .aw-row-value { font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Searching settings, and landing on one (find-any-setting-and-see-where-its-value-comes-from) */
+.aw-settings-search { position: relative; margin: 0 0 10px; }
+.aw-settings-search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
+.aw-settings-search-input {
+  width: 100%; height: 30px; padding: 0 8px 0 27px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); font-size: 13px; color: var(--text);
+}
+.aw-settings-search-input::placeholder { color: var(--text-3); }
+.aw-settings-search-input:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+.aw-settings-search-results { padding: 20px 28px 40px; max-width: 760px; }
+.aw-settings-search-note { margin: 4px 0; font-size: 13px; color: var(--text-3); overflow-wrap: anywhere; }
+.aw-settings-search-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.aw-settings-search-item { border-bottom: 1px solid var(--border); }
+.aw-settings-search-open {
+  display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 9px 8px; border-radius: var(--radius-md); text-align: left;
+  transition: background-color var(--dur-fast) ease;
+}
+.aw-settings-search-open:hover:not(:disabled) { background: var(--row-hover); }
+.aw-settings-search-open:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-settings-search-label { font-size: 13.5px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
+.aw-settings-search-where { font-size: 11.5px; color: var(--text-3); }
+.aw-settings-search-desc { font-size: 12.5px; line-height: 1.45; color: var(--text-3); overflow-wrap: anywhere; }
+.aw-settings-search-agents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 0 8px 9px; }
+.aw-settings-search-agents-label { font-size: 11.5px; color: var(--text-3); }
+.aw-settings-search-agent {
+  max-width: 100%; padding: 2px 9px; border: 1px solid var(--border); border-radius: 999px;
+  font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; text-align: left;
+}
+.aw-settings-search-agent:hover { background: var(--row-hover); color: var(--text); }
+.aw-settings-search-agent:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ring); }
+/* The row a search landed on. */
+.aw-settings-row[data-highlighted="true"] {
+  background: color-mix(in oklab, var(--ring) 16%, transparent);
+  box-shadow: inset 0 0 0 2px var(--ring);
+  border-radius: var(--radius-md);
+}
+@media (max-width: 860px) { .aw-settings-search { flex: none; min-width: 180px; margin: 0 8px 0 0; } }
+
+/* Where a value comes from (Changed / Agent's own / From project), the agents holding their own,
+   and 'Changed only'. */
+.aw-settings-row-source { margin: 3px 0 0; font-size: 11.5px; color: var(--text-3); overflow-wrap: anywhere; }
+.aw-settings-row-source-mark { font-weight: 600; color: var(--text-2); }
+.aw-settings-row-overrides { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 4px 0 0; font-size: 11.5px; color: var(--text-3); }
+.aw-settings-row-override { padding: 0 6px; border: 1px solid var(--border-region); border-radius: var(--radius-md); font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; text-align: left; }
+.aw-settings-row-override:hover { background: var(--row-hover); color: var(--text); }
+.aw-settings-changed-only { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 0 8px; font-size: 12px; color: var(--text-3); cursor: pointer; }
+.aw-settings-changed-empty { padding: 24px 28px; font-size: 13px; color: var(--text-3); }
+.aw-settings-group:not(:has(.aw-settings-row)) { display: none; }

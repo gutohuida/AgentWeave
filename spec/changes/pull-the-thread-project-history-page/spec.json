@@ -183,10 +183,9 @@
     ]
   },
   "hub": {
-    "phase": "approved",
-    "rigor": "sketch",
+    "phase": "archived",
     "size": "large",
-    "step": "delivery"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "",

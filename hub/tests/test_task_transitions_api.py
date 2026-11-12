@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, TaskTransition
+from hub.db.models import Run, Task, TaskTransition
 
 pytestmark = pytest.mark.asyncio
 
@@ -31,6 +31,9 @@ async def _active_run(run_id: str, agent: str = "worker") -> dict[str, str]:
                 status="running",
                 turn_depth=0,
                 capability_token_hash=hash_run_token(token),
+                # Unattended: a run the operator started moves a loose task freely
+                # (`tasks-outside-a-flow-move-freely`), and these test the map's edges.
+                initiator="autonomous",
             )
         )
         await session.commit()
@@ -40,6 +43,14 @@ async def _active_run(run_id: str, agent: str = "worker") -> dict[str, str]:
 async def _create(app, auth_headers, title="A task", status="pending"):
     response = await app.post(TASKS, json={"title": title, "status": status}, headers=auth_headers)
     return response
+
+
+async def _into_a_flow(task_id):
+    """Put the task in a flow's queue: only loose tasks move freely, so the map's edges apply."""
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        task.loop_id = "loop-flow"
+        await session.commit()
 
 
 async def _patch(app, headers, task_id, status, *, agent_route=False, **fields):
@@ -145,6 +156,7 @@ async def test_the_operator_walks_the_lifecycle_and_the_history_names_them(app, 
 
 async def test_an_illegal_operator_move_is_a_409_naming_what_is_reachable(app, auth_headers):
     task_id = (await _create(app, auth_headers, "illegal operator move")).json()["id"]
+    await _into_a_flow(task_id)
     response = await _patch(app, auth_headers, task_id, "approved")
 
     assert response.status_code == 409, response.text
@@ -321,6 +333,7 @@ async def test_a_rejected_prerequisite_reads_differently_from_an_unmet_one_over_
 
 async def test_a_refusal_broadcasts_nothing_and_records_nothing(app, auth_headers, monkeypatch):
     task_id = (await _create(app, auth_headers, "no broadcast")).json()["id"]
+    await _into_a_flow(task_id)
 
     events = []
 

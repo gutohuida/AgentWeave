@@ -1,0 +1,351 @@
+{
+  "acceptance_criteria": [
+    {
+      "checked_by": "agent",
+      "given": "a flow task whose FR evidence was recorded at commit A, after which the task branch gained commit B (a master merge)",
+      "how_to_check": "acceptance drive on a scratch Hub (scripts/drive/), real Haiku turns: fails on master (lands A or is refused), passes after",
+      "key": "ac-reanchor-lands",
+      "requirement": "reviewer-reproduces-on-current-work",
+      "then": "the evidence's footprint names B and the landed work includes B's changes",
+      "when": "its reviewer accepts the evidence with a reproduction at B and approves"
+    },
+    {
+      "checked_by": "agent",
+      "given": "awaiting evidence at A on task T",
+      "how_to_check": "hub test over the decide route",
+      "key": "ac-foreign-commit-refused",
+      "requirement": "reproduction-commit-belongs-to-the-task",
+      "then": "the acceptance is refused with a code naming the commit, and the evidence stays awaiting",
+      "when": "the reviewer accepts with a reproduction at a commit not on T's branch, or before A"
+    },
+    {
+      "checked_by": "agent",
+      "given": "evidence accepted with a reviewer reproduction and a corrected summary",
+      "how_to_check": "hub test over list_evidence; drive screenshot of the evidence view",
+      "key": "ac-both-records-shown",
+      "requirement": "author-record-kept",
+      "then": "both the author's and the reviewer's command, output and summary are returned, each attributed",
+      "when": "list_evidence and the app's evidence view read it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a requirement whose evidence the operator rejected on task T",
+      "how_to_check": "hub test reproducing the F500 sequence",
+      "key": "ac-f500-refusals",
+      "requirement": "f500-stays-closed",
+      "then": "both are refused (reviewer_records_evidence stays), and the operator's rejection still blocks approval",
+      "when": "T's reviewer accepts other evidence for it with a reproduction, or records new evidence on T"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a requirement whose only evidence covers part of it",
+      "how_to_check": "hub test",
+      "key": "ac-missing-piece",
+      "requirement": "missing-demonstration-still-sends-back",
+      "then": "both are refused, and the refusal tells the reviewer to send the task back naming the piece",
+      "when": "the reviewer accepts it with covers corrected to full, or records evidence for the rest"
+    },
+    {
+      "checked_by": "agent",
+      "given": "an approved document whose first task is its acceptance drive",
+      "how_to_check": "hub test over the approve route",
+      "key": "ac-no-baseline-no-approval",
+      "requirement": "drive-baseline-required",
+      "then": "approval is refused with a code naming the missing baseline",
+      "when": "the drive task is approved with no accepted drive_baseline evidence"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a drive baseline listing one check that stopped at a 404 and one that passed on pre-build code",
+      "how_to_check": "acceptance drive on a scratch Hub with a deliberately broken drive",
+      "key": "ac-bad-baseline",
+      "requirement": "unreached-or-passing-check-blocks-the-drive",
+      "then": "the drive task goes to revision_needed with both checks named, and dependent tasks have not started",
+      "when": "the drive's reviewer reviews it"
+    },
+    {
+      "checked_by": "agent",
+      "given": "a build with one evidence-only send-back and one reviewer-verified acceptance",
+      "how_to_check": "hub test",
+      "key": "ac-reported",
+      "requirement": "evidence-only-send-backs-reported",
+      "then": "both numbers appear per task",
+      "when": "read_model_record and the build retrospective are read"
+    }
+  ],
+  "algorithms": [],
+  "already_built": {
+    "built": false,
+    "commits": [],
+    "note": ""
+  },
+  "aw_identity": {
+    "digests": {
+      "FR-1": "20b6987e7b0c7926e3db9a898c65383ff254b18fef0f766368eac62587b1272d",
+      "FR-2": "e1ca4ab47ddd8c2ef5ead82ad7a34a941e044a1d070d7d6e79fa4cd4d1ee1ac2",
+      "FR-3": "03bf3394d8c61f0eb30e6b315ec543d5839d8c5d5b3de4aec2a98f41efd787de",
+      "FR-4": "f43b73beee38f5db8cc788e41820fb540262ba2dbc9d3c94d8041496adba8e6b",
+      "FR-5": "2731448fffe9ab85161f02d967ed94365d6dec9e024d703d30b5fe07474758cf",
+      "FR-6": "2525c6e3b673aab1e149439434b026b3578f196fc09d08002a718823669a45e4",
+      "FR-7": "b4e5663434b2af11a5df156728d275e5f5d10e8d15b3122cd3605b20dd6410f4",
+      "FR-8": "08af6d6fc9dde18deb150c4b2baeb699fa7fec58cf11453b451f264d71882db8"
+    },
+    "high_water": 8,
+    "requirements": {
+      "author-record-kept": "FR-3",
+      "drive-baseline-required": "FR-6",
+      "evidence-only-send-backs-reported": "FR-8",
+      "f500-stays-closed": "FR-4",
+      "missing-demonstration-still-sends-back": "FR-5",
+      "reproduction-commit-belongs-to-the-task": "FR-2",
+      "reviewer-reproduces-on-current-work": "FR-1",
+      "unreached-or-passing-check-blocks-the-drive": "FR-7"
+    },
+    "retired": {}
+  },
+  "delivery": {
+    "agent": "DeveloperOpus",
+    "builder": "DeveloperOpus",
+    "checker": "QA",
+    "cron": "*/5 * * * *",
+    "mode": "flow",
+    "reasons": {
+      "builder": "This touches a trust rule and what lands, so Opus builds it (Tier 2 under the quota rule); Opus also had about a third of Sonnet's send-backs per task.",
+      "checker": "QA checks, and should re-run the F500 sequence itself; QA2 checks the last task so two reviewers see the change.",
+      "cron": "Every 5 minutes, the usual flow cadence.",
+      "mode": "Three chained tasks suit a flow that stops when its queue is empty.",
+      "stop": "Stop when the queue empties: nothing else is queued behind it."
+    },
+    "reviewer": null,
+    "stop_at": null,
+    "stop_when_queue_empties": true
+  },
+  "design": "D1 — A reviewer verifies; it does not author. A reviewer's acceptance may carry its own reproduction: the command it ran, the output, and the commit it ran on. The accepted row then names that commit as the work it vouches for. This is not a new awaiting row, so the F500 escape stays closed: no fresh row can lift a block the operator set. The author's original summary, command and output are kept beside the reviewer's. (Operator, 2026-11-10: yes.)\nD2 — The F500 guard is kept, on the requirement. Reviewer-verified acceptance is refused for a requirement whose evidence the operator has rejected on this task, and refused to the task's own author.\nD3 — A missing piece goes back to the builder. Where no recorded evidence demonstrates part of a requirement, the reviewer does not fill the gap, even when it has shown that part working itself. (Operator, 2026-11-10: 'it goes back'.)\nD4 — The Hub enforces the drive baseline. An acceptance-drive task's approval is refused without accepted drive_baseline evidence listing each check's outcome. The judgement that a check failed on its own assertion stays the reviewer's. (Operator, 2026-11-10: Hub-enforced.)",
+  "evidence": {
+    "checked": [
+      "226 rejected evidence rows (list_evidence review_state=rejected, 2026-11-10): 140 distinct reasons, 52 tasks, sorted by keyword pass then sampled by hand",
+      "read_model_record: Sonnet 151 send-backs / 105 tasks, 33 evidence-only; Opus 44 / 104, 1 evidence-only",
+      "requirement_evidence.py:116-136 (F500 guard), :1401-1410 (self_acceptance), :2350-2495 (drift scans accepted evidence only)",
+      "project_checks.py:1-30 (the Hub runs only operator-configured checks)",
+      "spec_completeness.py:362-421 (no_acceptance_drive is a task-order gap, not a failing-first proof)",
+      "task_transitions.py:173 (evidence-only is a label only)"
+    ],
+    "limits": [
+      "The defect / broken-check / paperwork split is approximate (keyword classification plus a sample of about 50 reasons read by hand)",
+      "Not yet verified that approval lands the evidence's commit rather than the branch tip in every path; the build must confirm it before relying on re-anchoring",
+      "Migration need for storing a reviewer's reproduction is unconfirmed"
+    ]
+  },
+  "hub": {
+    "builds": [
+      {
+        "budget_cap_usd": null,
+        "builder": "DeveloperOpus",
+        "builders": [
+          "DeveloperOpus"
+        ],
+        "checker": "QA",
+        "checkers": [],
+        "chosen_by": "operator",
+        "driver": "flow",
+        "ended_at": "2026-11-11T02:59:49.814255+00:00",
+        "id": "build-d61ec7a327e8",
+        "landing": "main",
+        "lead": null,
+        "level": "reviewed",
+        "pull_request": null,
+        "started_at": "2026-11-10T21:07:11.212551+00:00",
+        "state": "finished",
+        "stop_reason": null,
+        "tasks": {
+          "baseline-gate": {
+            "builder": "DeveloperOpus",
+            "checker": "QA2"
+          },
+          "drive": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          },
+          "reviewer-verifies": {
+            "builder": "DeveloperOpus",
+            "checker": "QA"
+          }
+        },
+        "window_end": null,
+        "window_start": null
+      }
+    ],
+    "phase": "approved",
+    "size": "large",
+    "step": "build"
+  },
+  "kind": "change-spec",
+  "lifecycle": "",
+  "open_questions": [
+    {
+      "question": "Should a reviewer be allowed to accept evidence with its own reproduction on the task's current commit?",
+      "resolved": true
+    },
+    {
+      "question": "May a reviewer record the missing piece of a requirement it demonstrated itself, or does the task go back to the builder?",
+      "resolved": true
+    },
+    {
+      "question": "Is the drive baseline Hub-enforced, or only a rule in the reviewer's instructions?",
+      "resolved": true
+    }
+  ],
+  "problem": "Measured 2026-11-10 on proj-d85a82bf4216: 226 rejected evidence rows carry 140 distinct reasons across 52 tasks. Sonnet builders took 1.44 send-backs per task (151 over 105), 33 of them classed evidence-only, against 0.42 per task for Opus. Three patterns make up the paperwork share.\n(1) Stale anchor. Evidence is recorded at commit A. The branch then merges master or gains a fix, the reviewer re-runs the command on the new tip and it passes, yet the reviewer still sends the task back with 'merge master and rerun', because accepted evidence decides what lands (flow tasks merge accepted evidence, not their branch tip). The reviewer may not record its own evidence (F500, requirement_evidence.py:116-136), and nothing in the Hub re-runs a command (project_checks.py:3: nothing an agent sends is ever executed).\n(2) Wording or citation. The demonstration exists and the reviewer watched it pass, but the summary does not name it, or covers says partial where it is full.\n(3) Unreachable or vacuous checks. Some acceptance drives stop at a 404 or 409 before their assertion, so they can never pass. Others pass against no-op code. Each is found only after the build, at review. spec_completeness.py:362-421 checks that the drive comes first in the task order, not that it fails for the right reason. Evidence kind is a free string (agent_actions.py:1798), so 'drive_baseline' and 'acceptance_drive_failing_first' are conventions, not checks.",
+  "requirements": [
+    {
+      "key": "reviewer-reproduces-on-current-work",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Today an evidence row recorded before the branch moved can only be fixed by sending the task back for the author to record it again: a full builder turn that changes no code.",
+      "statement": "A reviewer accepting awaiting evidence on the task it reviews may attach its own reproduction (command, output, commit). The accepted row then vouches for the reviewer's commit, and approving the task lands that commit's work, not the commit the author recorded at."
+    },
+    {
+      "key": "reproduction-commit-belongs-to-the-task",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Acceptance decides what lands; a reviewer must not be able to point a task at somebody else's work.",
+      "statement": "A reproduction commit must be on the task's own branch, and must be at or after the evidence's recorded commit. Otherwise the acceptance is refused with a code naming the commit."
+    },
+    {
+      "key": "author-record-kept",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "The operator reading the evidence must be able to tell what the builder claimed from what the reviewer saw.",
+      "statement": "When a reviewer accepts with a reproduction or corrects summary or covers, the evidence keeps the author's original summary, command, output and covers, and shows the reviewer's beside them, attributed to the reviewer and its run."
+    },
+    {
+      "key": "f500-stays-closed",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "F500: a reviewer's own fresh evidence once lifted the operator's rejection and let the reviewer approve over it.",
+      "statement": "Reviewer-verified acceptance is refused for a requirement where the operator has rejected evidence on this task, and is refused to the agent that authored the evidence. A reviewer still cannot record a new awaiting evidence row on the task it reviews."
+    },
+    {
+      "key": "missing-demonstration-still-sends-back",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Operator, 2026-11-10: a gap in what was demonstrated goes back to the builder.",
+      "statement": "Where no recorded evidence demonstrates part of a requirement, the reviewer cannot accept that evidence as covering the whole requirement, and cannot record the missing piece. It sends the task back naming the missing piece."
+    },
+    {
+      "key": "drive-baseline-required",
+      "modal": "MUST",
+      "party": null,
+      "rationale": null,
+      "statement": "A task that is a document's acceptance drive cannot be approved without accepted evidence of kind drive_baseline. That evidence lists, for each acceptance check the drive covers, whether the check was reached on the pre-build code and whether it failed at its own assertion. The refusal names the missing baseline."
+    },
+    {
+      "key": "unreached-or-passing-check-blocks-the-drive",
+      "modal": "MUST",
+      "party": null,
+      "rationale": "Of the rejected evidence on record, about a quarter were checks that could never pass, or passed against no-op code, and were found only after the whole build.",
+      "statement": "A drive baseline in which any covered check was not reached (it stopped at setup, a 404 or 409, or a crash), or passed on the pre-build code, is not accepted. The reviewer sends the drive task back naming each such check."
+    },
+    {
+      "key": "evidence-only-send-backs-reported",
+      "modal": "SHOULD",
+      "party": null,
+      "rationale": null,
+      "statement": "The model record and the build retrospective report evidence-only send-backs per task, and reviewer-verified acceptances per task, so the change's effect is visible against the 2026-11-10 baseline (Sonnet 33 evidence-only send-backs over 105 tasks)."
+    }
+  ],
+  "schema_version": 1,
+  "scope": {
+    "in_scope": [
+      "A reviewer accepting evidence with its own reproduction on the task's current commit, and that commit becoming what the evidence vouches for",
+      "A reviewer correcting an accepted row's summary and covers, kept beside the author's",
+      "Refusals that keep F500 closed",
+      "A Hub-enforced per-check baseline for the acceptance-drive task, and its review",
+      "Reporting evidence-only send-backs and reviewer-verified acceptances per task, so the effect can be measured"
+    ],
+    "non_goals": [
+      "The Hub executing any agent-supplied command: project checks remain the only thing the Hub runs",
+      "A reviewer recording the missing piece of a requirement: a gap goes back to the builder",
+      "Removing evidence review, or approving work without accepted evidence",
+      "Changing what the operator may do with evidence (accept, reject, reopen)",
+      "Fixing the model record counting a task under its reviewer's model (a pre-existing defect found while measuring; it goes to the backlog, not into this change)",
+      "Mechanically proving that a check failed for the right reason: that stays the reviewer's judgement"
+    ]
+  },
+  "summary": "Evidence review is the stage that catches work that passes its own tests but cannot fire. About half of the 140 distinct rejection reasons on record are real defects, and a quarter are checks that could never pass or passed without testing anything. The last fifth or so are paperwork: evidence recorded at a commit that has since moved, or a summary that cites too little. Each of those costs a full builder turn and a full review turn. After this change, a reviewer who can reproduce the demonstration accepts it as it stands on the current work. An acceptance drive cannot be approved until it is shown reaching each check and failing there, so 'this check can never pass' is caught before the build, not after it.",
+  "tasks": [
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "The drive must stage a branch that moves after evidence is recorded and reach the landing path; Opus has had a third of Sonnet's send-backs per task on this repo.",
+      "checker": "QA",
+      "checker_reason": "QA re-runs the drive on master itself and checks that each check fails at its own assertion, which is exactly the rule this change introduces.",
+      "depends_on": [],
+      "description": "Write the acceptance drive (scripts/drive/) covering ac-reanchor-lands and ac-bad-baseline on a scratch Hub with real Haiku turns, and record it failing on master with a per-check baseline.",
+      "files": [
+        "scripts/drive/"
+      ],
+      "from": null,
+      "key": "drive",
+      "requirements": [
+        "reviewer-reproduces-on-current-work",
+        "unreached-or-passing-check-blocks-the-drive"
+      ],
+      "reviewer": null,
+      "title": "Acceptance drive"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "It loosens a trust rule and changes which commit lands, likely with a migration: Tier 2 work, which the quota rule gives to Opus.",
+      "checker": "QA",
+      "checker_reason": "QA checked the drive, so it knows the staged scenario; it must also replay the F500 sequence against the new acceptance path.",
+      "depends_on": [
+        "drive"
+      ],
+      "description": "Let decide_evidence carry a reviewer reproduction (command, output, commit) and summary/covers corrections. Re-anchor the footprint, keep the author's record, enforce the commit, missing-piece and F500 refusals, and update the reviewer turn's instructions and the MCP tool description.",
+      "files": [
+        "hub/hub/requirement_evidence.py",
+        "hub/hub/api/v1/agent_actions.py",
+        "hub/hub/mcp_server.py",
+        "hub/hub/db/models.py",
+        "hub/hub/migrations/"
+      ],
+      "from": null,
+      "key": "reviewer-verifies",
+      "requirements": [
+        "reviewer-reproduces-on-current-work",
+        "reproduction-commit-belongs-to-the-task",
+        "author-record-kept",
+        "f500-stays-closed",
+        "missing-demonstration-still-sends-back"
+      ],
+      "reviewer": null,
+      "title": "Reviewer-verified acceptance"
+    },
+    {
+      "builder": "DeveloperOpus",
+      "builder_reason": "It shares mcp_server.py with the previous task and adds an approval gate every future build passes through, so the builder who wrote that task keeps the context.",
+      "checker": "QA2",
+      "checker_reason": "A second reviewer, so the change is not judged by one agent end to end; an approval gate is where a wrong refusal would stall every later build.",
+      "depends_on": [
+        "drive",
+        "reviewer-verifies"
+      ],
+      "description": "Refuse approval of an acceptance-drive task without accepted drive_baseline evidence. Give the drive's reviewer the per-check rule. Report evidence-only send-backs and reviewer-verified acceptances in the model record and the retrospective.",
+      "files": [
+        "hub/hub/task_transition_service.py",
+        "hub/hub/build_retrospective.py",
+        "hub/hub/mcp_server.py"
+      ],
+      "from": null,
+      "key": "baseline-gate",
+      "requirements": [
+        "drive-baseline-required",
+        "unreached-or-passing-check-blocks-the-drive",
+        "evidence-only-send-backs-reported"
+      ],
+      "reviewer": null,
+      "title": "Drive baseline gate"
+    }
+  ],
+  "title": "Evidence review sends work back only for what is wrong with it"
+}

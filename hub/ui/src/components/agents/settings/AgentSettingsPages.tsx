@@ -9,6 +9,8 @@ import type { ControlValue } from '@/api/modelCatalog'
 import type { ReachGrants } from '@/api/projects'
 import { CommittedInput } from '@/components/settings/CommittedInput'
 import { wholeNumber } from '@/components/settings/settingsOptions'
+import { Switch } from '@/components/ui/switch'
+import { MAX_WAITING_SECONDS, MIN_WAITING_SECONDS } from '@/api/runners'
 import { formatAgo } from '@/lib/format'
 import { AgentAccessGroups, AgentPermissionGroup, type AgentPatch } from './AgentSettingsSections'
 
@@ -66,6 +68,59 @@ function modelChoiceValue(choice: ModelChoice | null): string {
 
 function seconds(value: number | null | undefined, fallback: number): string {
   return String(value ?? fallback)
+}
+
+const COPILOT_REVIEW_AGENTS = ['code-review', 'security-review', 'rubber-duck'] as const
+
+/** What only a Copilot agent has: which of Copilot's built-in agents it consults before recording a
+ *  verdict, and whether its spawn loads the built-in GitHub server. Shown on Running for a Copilot
+ *  agent only: a setting that does nothing for another runner is not presented. */
+export function AgentCopilotGroup({
+  agent,
+  onReviewAgents,
+  onGithubMcp,
+}: {
+  agent: AgentSummary
+  onReviewAgents: (agents: string[], said: string) => void
+  onGithubMcp: (enabled: boolean, said: string) => void
+}) {
+  const stored = agent.config?.copilot_review_agents ?? []
+  return (
+    <SettingsGroup title="Copilot" description="Settings only a Copilot agent has.">
+      <SettingsRow
+        label="Review agents"
+        description="Copilot's own built-in agents this agent may consult before recording a review verdict. It does not see this repository's instructions, and their findings are not the verdict: the verdict is still recorded only by update_task. On a provider runner, Copilot's review agents may not run."
+        stacked
+        control={
+          <span className="flex flex-col gap-2">
+            {COPILOT_REVIEW_AGENTS.map((name) => (
+              <label key={name} className="flex items-center gap-2 text-sm">
+                <Switch
+                  aria-label={`Consult ${name} for ${agent.name}`}
+                  checked={stored.includes(name)}
+                  onCheckedChange={(on) =>
+                    onReviewAgents(on ? [...stored, name] : stored.filter((entry) => entry !== name), on ? `${agent.name} consults ${name}` : `${agent.name} no longer consults ${name}`)
+                  }
+                />
+                <span className="font-mono text-[12px]">{name}</span>
+              </label>
+            ))}
+          </span>
+        }
+      />
+      <SettingsRow
+        label="GitHub server"
+        description="Gives this agent Copilot's built-in GitHub tools, read-only. Copilot runs them without asking you, in every posture, Ask me included. Tools that write to GitHub can be added only on a runner with Full access, where they run without asking too. This setting does not govern the gh command, which a shell call runs and the Hub decides like any other command."
+        control={
+          <Switch
+            aria-label={`Enable the GitHub MCP server for ${agent.name}`}
+            checked={agent.config?.copilot_github_mcp === true}
+            onCheckedChange={(on) => onGithubMcp(on, on ? `${agent.name} has the GitHub server` : `${agent.name} no longer has the GitHub server`)}
+          />
+        }
+      />
+    </SettingsGroup>
+  )
 }
 
 export function AgentRunningSettings({
@@ -132,6 +187,7 @@ export function AgentRunningSettings({
           htmlFor="a-perm-wait"
           description="Under “Ask me”, how long it waits for you to allow or refuse an action. Running out refuses it."
           changed={agent.permission_timeout_seconds != null}
+          origin={{ kind: 'changed', other: `${permissionFallback}s` }}
           onReset={() => onChange({ permission_timeout_seconds: null }, `Permission wait back to ${permissionFallback}s`)}
           control={
             <CommittedInput
@@ -140,7 +196,7 @@ export function AgentRunningSettings({
               width={72}
               suffix="seconds"
               value={seconds(agent.permission_timeout_seconds, permissionFallback)}
-              validate={wholeNumber(10, 3600, 'seconds')}
+              validate={wholeNumber(MIN_WAITING_SECONDS, MAX_WAITING_SECONDS, 'seconds')}
               onCommit={(v) => onChange({ permission_timeout_seconds: Number(v) }, `Waits ${v}s for a permission decision`)}
             />
           }
@@ -150,6 +206,7 @@ export function AgentRunningSettings({
           htmlFor="a-question-wait"
           description="How long it waits for you to answer a question it asked. Longer than a permission decision: you have to read it and choose."
           changed={agent.question_timeout_seconds != null}
+          origin={{ kind: 'changed', other: `${questionFallback}s` }}
           onReset={() => onChange({ question_timeout_seconds: null }, `Question wait back to ${questionFallback}s`)}
           control={
             <CommittedInput
@@ -158,7 +215,7 @@ export function AgentRunningSettings({
               width={72}
               suffix="seconds"
               value={seconds(agent.question_timeout_seconds, questionFallback)}
-              validate={wholeNumber(10, 3600, 'seconds')}
+              validate={wholeNumber(MIN_WAITING_SECONDS, MAX_WAITING_SECONDS, 'seconds')}
               onCommit={(v) => onChange({ question_timeout_seconds: Number(v) }, `Waits ${v}s for an answer`)}
             />
           }
@@ -201,6 +258,7 @@ export function AgentCheckpointsSettings({
   agent,
   project,
   taken,
+  note,
   notices,
   onChange,
   onShowCheckpoints,
@@ -210,11 +268,19 @@ export function AgentCheckpointsSettings({
   project: { mode: CheckpointMode; at: string | null }
   /** How many checkpoints its conversations have produced. */
   taken?: number
+  /** Where the checkpoint actually fires when the runner compacts earlier than the point set. */
+  note?: React.ReactNode
   notices?: React.ReactNode
   onChange: (patch: Partial<Pick<AgentSummary, 'checkpoint_mode' | 'checkpoint_threshold_mode' | 'checkpoint_threshold_value'>>, said: string) => void
   onShowCheckpoints: () => void
 }) {
-  const unit = agent.checkpoint_threshold_mode ?? 'percent'
+  // The unit is kept here: with no point of its own the agent stores none, so the choice would
+  // otherwise snap back to percent the moment it was made.
+  const [chosenUnit, setChosenUnit] = React.useState<'percent' | 'tokens'>(agent.checkpoint_threshold_mode ?? 'percent')
+  React.useEffect(() => {
+    if (agent.checkpoint_threshold_mode) setChosenUnit(agent.checkpoint_threshold_mode)
+  }, [agent.checkpoint_threshold_mode])
+  const unit = chosenUnit
   const own = agent.checkpoint_threshold_value != null
   const entry = own ? String(unit === 'tokens' ? Math.round(agent.checkpoint_threshold_value! / 1000) : agent.checkpoint_threshold_value) : ''
   return (
@@ -225,6 +291,7 @@ export function AgentCheckpointsSettings({
           label="Checkpoints"
           description="Whether its conversations are checkpointed at all."
           changed={agent.checkpoint_mode != null}
+          origin={{ kind: agent.checkpoint_mode != null ? 'own' : 'project', other: MODE_WORDS[project.mode] }}
           onReset={() => onChange({ checkpoint_mode: null }, 'Checkpoints follow the project again')}
           control={
             <MenuSelect
@@ -246,6 +313,7 @@ export function AgentCheckpointsSettings({
           inactive={agent.checkpoint_mode === 'off'}
           description={own ? 'Its own point, in place of the project’s.' : `The project’s: ${project.at ?? 'the built-in point'}. Empty follows it.`}
           changed={own}
+          origin={{ kind: own ? 'own' : 'project', other: project.at ?? 'the built-in point' }}
           onReset={() => onChange({ checkpoint_threshold_mode: null, checkpoint_threshold_value: null }, 'Checkpoint point follows the project again')}
           control={
             <span className="flex items-center gap-1.5">
@@ -267,7 +335,11 @@ export function AgentCheckpointsSettings({
                 label="Threshold unit"
                 size="xs"
                 value={unit}
-                onChange={(next) => onChange({ checkpoint_threshold_mode: next, checkpoint_threshold_value: null }, `Checkpoint point cleared: enter it in ${next === 'percent' ? 'percent' : 'K tokens'}`)}
+                onChange={(next) => {
+                  setChosenUnit(next)
+                  // Only an own point has anything to clear; with none, the unit is just how the next is entered.
+                  if (own) onChange({ checkpoint_threshold_mode: next, checkpoint_threshold_value: null }, `Checkpoint point cleared: enter it in ${next === 'percent' ? 'percent' : 'K tokens'}`)
+                }}
                 options={[
                   { value: 'percent', label: '%' },
                   { value: 'tokens', label: 'K tokens' },
@@ -277,6 +349,7 @@ export function AgentCheckpointsSettings({
           }
         />
       </SettingsGroup>
+      {note ? <p className="aw-row-note">{note}</p> : null}
       <SettingsGroup title="Taken">
         <SettingsRow
           label="Its checkpoints"
@@ -299,6 +372,15 @@ export interface AgentSessionRow {
   last_active?: string
 }
 
+export interface AgentTaskCheckout {
+  task_id: string
+  title?: string | null
+  path: string
+  branch: string
+  provisioned: boolean
+  grandfathered?: boolean
+}
+
 export function AgentWorkspaceSettings({
   agent,
   workingDir,
@@ -306,6 +388,7 @@ export function AgentWorkspaceSettings({
   branch,
   provisioned,
   note,
+  taskCheckouts = [],
   sessions,
   now,
   onCopy,
@@ -317,6 +400,8 @@ export function AgentWorkspaceSettings({
   provisioned?: boolean
   /** Why it has no worktree of its own, when it has none. */
   note?: string | null
+  /** The checkouts of the tasks it is holding, each on its own branch. */
+  taskCheckouts?: AgentTaskCheckout[]
   sessions: AgentSessionRow[]
   now: Date
   onCopy: (text: string, said: string) => void
@@ -326,7 +411,7 @@ export function AgentWorkspaceSettings({
       <SettingsGroup title="Where it works">
         <SettingsRow
           label="Working directory"
-          description={<span className="aw-path">{workingDir}</span>}
+          description={<span className="aw-path" data-testid="agent-working-dir">{workingDir}</span>}
           control={
             <Button variant="outline" size="sm" onClick={() => onCopy(workingDir, 'Path copied')}>
               <Icon name="content_copy" size={13} /> Copy path
@@ -336,9 +421,11 @@ export function AgentWorkspaceSettings({
         <SettingsRow
           label="Its own checkout"
           description={
-            isolated
-              ? `On ${branch ?? 'its own branch'}, ${provisioned ? 'checked out and ready' : 'created the first time it runs'}. Its changes are merged deliberately.`
-              : (note ?? 'It shares the project checkout, so a second writer overwrites rather than conflicts.')
+            <span data-testid="agent-worktree">
+              {isolated
+                ? `Its own git worktree. On ${branch ?? 'its own branch'}, ${provisioned ? 'checked out and ready' : 'created the first time this agent runs'}. Its changes are merged deliberately.`
+                : `Shares the project checkout, so a second writer overwrites rather than conflicts.${note ? ` ${note}` : ''}`}
+            </span>
           }
           control={
             <span className="aw-state-chip" data-tone={isolated ? 'good' : undefined}>
@@ -348,11 +435,39 @@ export function AgentWorkspaceSettings({
           }
         />
       </SettingsGroup>
+      {taskCheckouts.length > 0 ? (
+        <SettingsGroup title="Task checkouts" description="Each task it is working has its own checkout on its own branch. Work is merged when the task is approved, and the checkout is released then; the branch is kept.">
+          <div data-testid="agent-task-checkouts">
+            {taskCheckouts.map((c) => (
+              <SettingsRow
+                key={c.task_id}
+                listItem
+                label={c.title || c.task_id}
+                description={
+                  <>
+                    <span className="aw-path" data-testid={`task-checkout-path-${c.task_id}`}>{c.path}</span>
+                    <span className="block">
+                      {c.branch}
+                      {' — '}
+                      {c.grandfathered
+                        ? "worked in this agent's own checkout, because this task started before per-task checkouts"
+                        : c.provisioned
+                          ? 'checked out and ready'
+                          : 'created the first time this task runs'}
+                    </span>
+                  </>
+                }
+              />
+            ))}
+          </div>
+        </SettingsGroup>
+      ) : null}
       <SettingsGroup title="Provider sessions" description="Diagnostic: the sessions each coding agent recorded, and where they ran. AgentWeave addresses conversations by its own id.">
         {sessions.length === 0 ? <p className="aw-row-note">No sessions yet.</p> : null}
         {sessions.map((s) => (
           <SettingsRow
             key={s.id}
+            listItem
             label={<span className="font-mono text-[12px]" title={s.id}>{s.id.length > 18 ? `${s.id.slice(0, 8)}…${s.id.slice(-6)}` : s.id}</span>}
             description={<span className="aw-path">{s.path}</span>}
             control={

@@ -38,4 +38,9 @@ describe('a built spec reads Building or Done (F1089)', () => {
       ['Archived', ['d']],
     ])
   })
+
+  it('Not archived keeps writing, approved, building and done, and hides archived', () => {
+    const groups = arrangeList(listEntries(specs, records), { ...DEFAULT_LIST_PREFERENCES, order: 'changed', phase: 'unarchived' })
+    expect(groups.flatMap((g) => g.entries.map((e) => e.path)).sort()).toEqual(['a', 'b', 'c', 'e'])
+  })
 })

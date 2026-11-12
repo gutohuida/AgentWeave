@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
 import { LoadingThread } from '@/components/common/LoadingThread'
+import { ChangedOnlyContext } from './settingsView'
 
 /** Settings layout. The old `.settings-row` was a flex row with `space-between`, so each label
  *  column took whatever width its own text and control left over: no two rows lined up, and a
@@ -9,6 +10,20 @@ import { LoadingThread } from '@/components/common/LoadingThread'
  *
  *  Save model: rows apply on change. A row whose value differs from its default shows a reset
  *  button in a reserved slot (so nothing shifts when it appears); the page confirms with a toast. */
+
+/** Where a row's value comes from, when it is not the default: `changed` (an app or project value;
+ *  `other` is the default), `own` (an agent's own; `other` is the project's value) or `project`
+ *  (an agent following the project; `other` is that value). */
+export interface SettingOrigin {
+  kind: 'changed' | 'own' | 'project'
+  other: string
+}
+
+const ORIGIN_WORDS: Record<SettingOrigin['kind'], [string, string]> = {
+  changed: ['Changed', 'default'],
+  own: ["Agent's own", 'project'],
+  project: ['From project', ''],
+}
 
 export function SettingsPage({
   icon,
@@ -75,6 +90,9 @@ export function SettingsRow({
   onReset,
   stacked,
   inactive,
+  listItem,
+  origin,
+  overrides,
   children,
 }: {
   label: React.ReactNode
@@ -89,23 +107,41 @@ export function SettingsRow({
   stacked?: boolean
   /** Greyed while the setting it depends on is off (still focusable, still readable). */
   inactive?: boolean
+  /** One entry of a list (a step, a checkpoint, a session), not a setting: search does not look for it. */
+  listItem?: boolean
+  /** Where the value comes from, and what it would otherwise be: shown under the label, and the
+   *  reset says what it returns to. */
+  origin?: SettingOrigin
+  /** Under a project setting: the agents holding their own value (`AgentOverrides`). */
+  overrides?: React.ReactNode
   /** Anything that belongs to the row below the label/control line (nested rows, a list). */
   children?: React.ReactNode
 }) {
   const Label = htmlFor ? 'label' : 'div'
+  const changedOnly = React.useContext(ChangedOnlyContext)
+  if (changedOnly && !listItem && !changed) return null
+  const resetWord = origin && origin.kind !== 'project' ? `Reset to ${origin.other}` : 'Reset to default'
   return (
-    <div className="aw-settings-row" data-stacked={stacked ? 'true' : 'false'} data-inactive={inactive ? 'true' : 'false'}>
+    <div className="aw-settings-row" data-stacked={stacked ? 'true' : 'false'} data-inactive={inactive ? 'true' : 'false'} {...(listItem ? { 'data-list-item': 'true' } : {})}>
       <div className="aw-settings-row-text">
         <Label className="aw-settings-row-label" {...(htmlFor ? { htmlFor } : {})}>
           {label}
         </Label>
         {description ? <p className="aw-settings-row-desc">{description}</p> : null}
+        {origin && (origin.kind !== 'changed' || changed) ? (
+          <p className="aw-settings-row-source" data-testid="setting-source" data-source={origin.kind}>
+            <span className="aw-settings-row-source-mark">{ORIGIN_WORDS[origin.kind][0]}</span>
+            {ORIGIN_WORDS[origin.kind][1] ? ` · ${ORIGIN_WORDS[origin.kind][1]}: ` : ' · '}
+            {origin.other}
+          </p>
+        ) : null}
+        {overrides}
       </div>
       {control !== undefined ? (
         <div className="aw-settings-row-control">
           <span className="aw-settings-reset-slot">
             {changed && onReset ? (
-              <button data-slot="icon-button" type="button" className="aw-icon-button" aria-label="Reset to default" title="Reset to default" onClick={onReset}>
+              <button data-slot="icon-button" type="button" className="aw-icon-button" aria-label={resetWord} title={resetWord} onClick={onReset}>
                 <Icon name="restart_alt" size={13} />
               </button>
             ) : null}

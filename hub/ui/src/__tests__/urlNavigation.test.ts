@@ -30,7 +30,7 @@ describe('phase 5 URL navigation contract', () => {
     })
 
     it('round-trips the environment tab with its section', () => {
-      const destination = environmentDestination('proj-1', 'runners')
+      const destination = environmentDestination('proj-1', 'spec-steps')
       expect(parseDestination(serializeDestination(destination))).toEqual(destination)
     })
 
@@ -50,7 +50,7 @@ describe('phase 5 URL navigation contract', () => {
     })
 
     it('round-trips an agent-settings destination on a named section', () => {
-      const destination = agentSettingsDestination('proj-1', 'claude', 'interaction')
+      const destination = agentSettingsDestination('proj-1', 'claude', 'running')
       expect(parseDestination(serializeDestination(destination))).toEqual(destination)
     })
 
@@ -85,9 +85,23 @@ describe('phase 5 URL navigation contract', () => {
       // The conversation branch claims any URL carrying an `agent`, so a settings link is only
       // a settings link if `settings` is tested first. Getting this backwards sends every
       // settings link to a chat, which is exactly the shape of bug that survives type-checking.
-      const parsed = parseDestination('?project=proj-1&agent=claude&settings=execution')
+      const parsed = parseDestination('?project=proj-1&agent=claude&settings=running')
       expect(isAgentSettingsDestination(parsed as WorkspaceDestination)).toBe(true)
-      expect(parsed).toEqual(agentSettingsDestination('proj-1', 'claude', 'execution'))
+      expect(parsed).toEqual(agentSettingsDestination('proj-1', 'claude', 'running'))
+    })
+
+    it.each([
+      ['identity', 'agent'],
+      ['charter', 'agent'],
+      ['execution', 'running'],
+      ['interaction', 'running'],
+      ['access', 'permissions'],
+      ['context', 'checkpoints'],
+    ] as const)('opens the successor of the retired agent section %s: %s', (old, successor) => {
+      // ac-old-links: a saved link must land on the section that holds what the old one held.
+      expect(parseDestination(`?project=proj-1&agent=claude&settings=${old}`)).toEqual(
+        agentSettingsDestination('proj-1', 'claude', successor),
+      )
     })
 
     it('defaults an unknown settings section to the first section', () => {
@@ -98,7 +112,7 @@ describe('phase 5 URL navigation contract', () => {
 
     it('ignores a settings parameter that names no agent', () => {
       // There is no such thing as configuring no agent, so this is not coerced into one.
-      expect(parseDestination('?project=proj-1&settings=execution')).toEqual(
+      expect(parseDestination('?project=proj-1&settings=running')).toEqual(
         projectDestination('proj-1'),
       )
     })
@@ -127,7 +141,7 @@ describe('phase 5 URL navigation contract', () => {
       // it the agent's most recent, since `resolveConversationSelection` already resolves null
       // that way.
       const back = agentSettingsBackDestination(
-        agentSettingsDestination('proj-1', 'claude', 'access'),
+        agentSettingsDestination('proj-1', 'claude', 'permissions'),
       )
       expect(back).toEqual(agentDestination('proj-1', 'claude'))
       expect(back.conversationId).toBeNull()
@@ -139,7 +153,7 @@ describe('phase 5 URL navigation contract', () => {
       // nothing on screen to say so (operator, 2026-08-20: "leaving a conversation detaches the
       // spec open").
       const back = agentSettingsBackDestination(
-        agentSettingsDestination('proj-1', 'claude', 'access'),
+        agentSettingsDestination('proj-1', 'claude', 'permissions'),
         'spec/capabilities/runner-registry/spec.json',
       )
       expect(back.document).toBe('spec/capabilities/runner-registry/spec.json')
@@ -157,7 +171,7 @@ describe('phase 5 URL navigation contract', () => {
     })
 
     it('survives resolution against the registered project collection', () => {
-      const requested = agentSettingsDestination('proj-1', 'claude', 'charter')
+      const requested = agentSettingsDestination('proj-1', 'claude', 'agent')
       expect(
         resolveDestination(requested, {
           availableProjectIds: ['proj-1'],

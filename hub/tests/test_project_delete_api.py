@@ -53,6 +53,7 @@ from hub.db.models import (
     Run,
     RunDivergence,
     Runner,
+    SetupDismissal,
     SpecDocument,
     SpecDocumentEvent,
     SpecDocumentMerge,
@@ -149,6 +150,8 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "known_failing_tests",
     "unlisted_test_failures",
     "main_check_runs",
+    # A dismissed set-up item (`a-project-says-what-it-still-needs`).
+    "setup_dismissals",
 ]
 
 
@@ -511,6 +514,7 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             error="",
         )
     )
+    session.add(SetupDismissal(project_id=project_id, item="repository"))
     session.add(
         TaskLanding(
             id=f"landing-{tag}",

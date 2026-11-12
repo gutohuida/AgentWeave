@@ -37,6 +37,7 @@ from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
 from .db.engine import SQLITE_BUSY_TIMEOUT_SECONDS, describe_journal, engine, init_db
+from .inherited_run_env import drop_inherited_run_environment
 from .provider_allowance import arm_held_queues
 from .run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
 from .run_task_binding import TaskBindingError
@@ -326,6 +327,19 @@ def _ui_staleness_warning() -> Optional[str]:
     return warning
 
 
+async def _ui_staleness_warning_off_loop() -> Optional[str]:
+    """`_ui_staleness_warning` for a caller on the event loop: a cached answer is read in place,
+    and an expired one is worked out on the blocking pool. Working it out runs git two or three
+    times and stats every UI source file, which on the loop held the whole Hub about 300 ms every
+    TTL for whoever polls `/health` (F1128)."""
+    from . import blocking
+
+    cached = _ui_staleness_cache
+    if cached is not None and cached[0] > time.monotonic():
+        return cached[1]
+    return await blocking.run(_ui_staleness_warning)
+
+
 def _reset_ui_staleness_cache() -> None:
     """Forget the cached answer. A test seam, and the only way to clear it deliberately."""
     global _ui_staleness_cache
@@ -590,6 +604,9 @@ async def log_journal_mode() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # F1160: a Hub started inside an agent's run must not hand that run's credential and address
+    # to its own runs -- dropped before anything below (the startup re-drain) can start one.
+    drop_inherited_run_environment()
     _log_database_before_opening()
     await init_db()
     await log_journal_mode()
@@ -639,7 +656,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Could not pin the tool server at start: %s", exc)
     for pruned in tool_server.PIN.prune_stale():
         logger.warning("Pruned stale tool server %s", pruned)
-    warning = _ui_staleness_warning()
+    warning = await _ui_staleness_warning_off_loop()
     if warning:
         logger.warning(warning)
     # Ended spans to each project's OTLP endpoint, when one is enabled (trace-1019, D4).
@@ -687,7 +704,15 @@ async def lifespan(app: FastAPI):
     from .checkpoint_fill import run_fill
 
     checkpoint_fill = asyncio.create_task(run_fill())
+    # From here on, a document write refreshes `spec/index.json` and stale hub blocks; never during
+    # start-up, so a restart rewrites no project's files on its own (F1157, F1158).
+    from . import spec_index_file
+
+    spec_index_file.enable()
     yield
+    spec_index_file.disable()
+    with contextlib.suppress(Exception):
+        await spec_index_file.settle()
     checkpoint_fill.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await checkpoint_fill
@@ -830,7 +855,7 @@ def create_app() -> FastAPI:
     @app.get("/health", include_in_schema=False)
     async def health():
         payload: Dict[str, Any] = {"status": "ok", "runtime": _runtime_kind()}
-        warning = _ui_staleness_warning()
+        warning = await _ui_staleness_warning_off_loop()
         if warning:
             payload["ui_stale"] = True
             payload["ui_stale_detail"] = warning

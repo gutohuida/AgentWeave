@@ -5281,6 +5281,8 @@ def submit_spec_document(
     slices: Optional[List[Dict[str, Any]]] = None,
     roadmap: Optional[Dict[str, Any]] = None,
     already_built: Optional[Dict[str, Any]] = None,
+    capabilities: Optional[Dict[str, Any]] = None,
+    tag: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Write a specification document. You supply structure; the Hub renders the document.
 
@@ -5386,6 +5388,17 @@ def submit_spec_document(
       `{"document": "<roadmap path>", "slice": "<slice key>"}`. Approving it is refused until that
       roadmap is approved and holds that slice. Include it in every later submission.
 
+    `tag` — a short name for the spec, at most 24 characters, that its task cards show on the
+      board. Unique in the project: a tag another spec holds is refused, naming that spec. Left out,
+      the Hub derives one from the title.
+
+    `capabilities` — on a change document, the capabilities it changes:
+      `{"changes": ["<capability path>", ...], "creates": [{"title": "<new capability>"}]}`.
+      Each path must be a current capability of this project (read the spec list or the index);
+      one that is not is refused `capability_unknown`. The change then waits on each named
+      capability's list until it is folded, and a fold starts from it. A change naming none draws
+      a `capability_unnamed` warning, never a refusal. Include it in every later submission.
+
     Returns the path, the phase, the identifier assigned to each requirement key, `blocking` —
     what would refuse its approval right now — `warnings`, which include what approval lists as
     missing (a criterion with no `how_to_check`/`checked_by`, a first task that is not the
@@ -5416,6 +5429,8 @@ def submit_spec_document(
         "slices": slices,
         "roadmap": roadmap,
         "already_built": already_built,
+        "capabilities": capabilities,
+        "tag": tag,
     }
     # Before anything is sent. These are annotated `Any` so that a wrong shape reaches this check
     # rather than being refused by the framework's own validator, whose message was the finding
@@ -5498,6 +5513,7 @@ def read_spec_document(
         "problem",
         "scope",
         "open_questions",
+        "waiting",
     ] = "requirements",
     identifiers: str = "",
 ) -> Dict[str, Any]:
@@ -5515,6 +5531,10 @@ def read_spec_document(
             `full` adds the design, declared tasks, algorithms, evidence and delivery (the flow,
             agent, reviewer and schedule) sections where they fit; read `delivery` before you submit
             a document back, because a submit without it removes it. A section's name (`design`, `problem`, …) reads that one section on its own.
+            `waiting`, on a capability, reads its `waiting_changes`: the changes naming it that
+            are not folded or archived, each `{path, title, phase, built, first_approved_at}`,
+            oldest approval first. A change's read always carries `capabilities` (what it names)
+            and `folded_into`.
         identifiers: Comma-separated requirement identifiers (`FR-3,FR-7`) to read only those.
             A requirement with no identifier is named by its key.
 
@@ -5587,7 +5607,12 @@ def record_evidence(
         summary: What you did and what it showed, in your own words. Anything that would let
             somebody else judge whether the requirement is met.
         kind: What sort of thing this is — `test_result`, `manual_observation`, and so on. Not a
-            closed list; use a word that describes it.
+            closed list; use a word that describes it. One kind is read by the Hub:
+            `drive_baseline`, which a document's acceptance-drive task needs accepted before it
+            is approved. Its output lists each check the drive covers, run on the pre-build
+            code, one line per check: `check <key>: reached=<yes|no>
+            failed_at_assertion=<yes|no> -- <detail>`. A check not reached, or not failing at
+            its own assertion, is not accepted.
         locator: Where the artifact lives, if it has one — a path, a command, a run id.
         document: Only needed when the same identifier exists in more than one document.
         task_id: The task this came out of, when there is one.
@@ -5705,6 +5730,8 @@ def tidy_spec_document(
     successor: str = "",
     roadmap: str = "",
     slice: str = "",  # noqa: A002 - the contract's name for a roadmap slice
+    changes: Optional[List[str]] = None,
+    creates: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Tidy the project's specification documents: the operator turned your spec-admin switch on.
 
@@ -5717,7 +5744,9 @@ def tidy_spec_document(
     Args:
         path: The document the act is on, e.g. `spec/changes/<name>/spec.json`.
         op: One of
-            `fold` — fold the approved change at `path` into `capability`, with the operator's
+            `fold` — fold the approved change at `path` into `capability` (left empty, the one
+              capability the change names; refused `capability_ambiguous` when it names several,
+              `capability_unnamed` when none), with the operator's
               fold choices: `requirements` (`[{key, as_key?, statement?, modal?, replaces?}]`,
               every one when omitted), `retire` (capability requirement keys it retires),
               `retire_criteria`, `algorithms` (`[{name, replaces?}]`), `retire_algorithms`,
@@ -5733,6 +5762,11 @@ def tidy_spec_document(
             `supersede` — mark the document superseded, naming its `successor` where there is one.
             `clear_superseded` — clear that mark; the document reads as it did before.
             `set_slice` — set or correct the change's roadmap slice: `roadmap` and `slice`.
+            `set_capabilities` — set the capabilities the change at `path` names, at any phase
+              until it is folded: `changes` (current capability paths) and `creates`
+              (`[{title}]`). Its requirements and approval are untouched. Refused
+              `change_folded` once folded, `capability_unknown` for a path that is not a current
+              capability of this project.
         reason: Why, in one sentence the operator reads in their tidy list. Required.
 
     Returns `{ok: true, act_id, act, path}`, or a refusal `{code, reason}`.
@@ -5756,6 +5790,8 @@ def tidy_spec_document(
         "successor": successor,
         "roadmap": roadmap,
         "slice": slice,
+        "changes": changes,
+        "creates": creates,
     }
     return _hub_request(
         "POST",
@@ -5887,6 +5923,8 @@ def read_model_record() -> Dict[str, Any]:
     millionths of a dollar, over priced turns only), with the tasks behind them. A task counts under
     the model that ran its build turns, not under the agent it was assigned to, since an agent can
     be rebound to another model. An unpriced turn is reported as unpriced, never as zero cost.
+    Each task also carries `evidence_only_send_backs` and `reviewer_verified_acceptances` (evidence
+    its reviewer accepted with its own reproduction), and each model the latter's total.
     Small samples are small: read `tasks_built` before trusting a ratio.
     """
     return _hub_request("GET", "/model-record")
@@ -5894,7 +5932,14 @@ def read_model_record() -> Dict[str, Any]:
 
 @_tool()
 def decide_evidence(
-    evidence_id: str, decision: EvidenceDecision, reason: str = ""
+    evidence_id: str,
+    decision: EvidenceDecision,
+    reason: str = "",
+    command: str = "",
+    output: str = "",
+    commit: str = "",
+    summary: str = "",
+    covers: str = "",
 ) -> Dict[str, Any]:
     """Accept or reject evidence somebody else recorded.
 
@@ -5917,19 +5962,45 @@ def decide_evidence(
     commit is about to be replaced, so the Hub refuses with `recording_run_live` (HTTP 409). Decide
     after the run has ended; the Hub sends you a note in this conversation when it does.
 
+    **Reviewing a task, you may accept its evidence with your own reproduction**, without the grant:
+    re-run the author's demonstration and pass `command`, `output` and `commit` (the commit you ran
+    it on; omitted, your checkout's HEAD). Use it when the task's branch has moved past the commit
+    the evidence names (a master merge, a fix) and the demonstration still passes there: the
+    evidence is re-anchored to your commit, and approving the task lands it. The commit must be on
+    the task's own branch and at or after the evidence's commit, or it is refused with
+    `reproduction_commit_off_branch` / `reproduction_commit_before_evidence`, and the evidence stays
+    awaiting. `summary` and `covers` correct the author's wording; the author's record is kept
+    beside yours. You verify, you do not author: a piece its author marked `partial` cannot be made
+    `full` (`missing_piece`), nothing is accepted for a requirement whose evidence the operator
+    rejected on this task (`operator_rejected_requirement`), and you cannot record evidence on the
+    task you review. A part nothing demonstrates goes back to the builder: send the task back with
+    `revision_needed`, naming the missing piece.
+
     Args:
         evidence_id: From `list_evidence`.
         decision: `accepted` or `rejected`.
         reason: Why. This is the durable record of the judgement, so say what you checked. Required
             for a rejection (the Hub refuses a blank one, 422): it is what the author reads to fix it.
+        command: Your reproduction: the command you ran, as you ran it. Acceptance only.
+        output: What it printed, as it came (its tail is kept).
+        commit: The commit you ran it on, on the task's own branch.
+        summary: Your correction of the author's summary, kept beside it.
+        covers: Your correction of `covers` (`full` or `partial`).
 
-    Returns the evidence `id` and its new `review_state`.
+    Returns the evidence `id` and its new `review_state`, with `author_record` and
+    `reviewer_record` side by side.
     """
-    return _hub_request(
-        "POST",
-        f"/spec/evidence/{evidence_id}/decision",
-        {"decision": decision, "reason": reason},
-    )
+    body: Dict[str, Any] = {"decision": decision, "reason": reason}
+    for name, value in (
+        ("command", command),
+        ("output", output),
+        ("commit", commit),
+        ("summary", summary),
+        ("covers", covers),
+    ):
+        if value:
+            body[name] = value
+    return _hub_request("POST", f"/spec/evidence/{evidence_id}/decision", body)
 
 
 def _announce_adapter_online() -> None:

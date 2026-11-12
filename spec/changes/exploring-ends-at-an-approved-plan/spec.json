@@ -155,10 +155,9 @@
     ]
   },
   "hub": {
-    "phase": "approved",
-    "rigor": "sketch",
+    "phase": "archived",
     "size": "large",
-    "step": "delivery"
+    "step": "build"
   },
   "kind": "change-spec",
   "lifecycle": "exploring -> approved -> archived (no proposed). A document is edited freely while exploring; Check reports readiness at any time without moving it. Approve names the content version the operator loaded. After approval the document changes only through amendments (roadmap slice D). Building is an action on an approved document, possibly repeated.",

@@ -33,7 +33,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import blocking, requirement_evidence, run_liveness, spec_lifecycle, task_transitions
-from .db.models import Project, RequirementEvidence, SpecRequirement, Task, TaskRequirementLink
+from .db.models import (
+    Project,
+    RequirementEvidence,
+    SpecRequirement,
+    Task,
+    TaskRequirementLink,
+    TaskTransition,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +84,43 @@ def short(sha: str) -> str:
     return sha[:12]
 
 
+CLOSING_NOTE = "Closed as already built at "
+
+
 def closing_note(commits: Sequence[str]) -> str:
-    return "Closed as already built at " + ", ".join(short(sha) for sha in commits)
+    return CLOSING_NOTE + ", ".join(short(sha) for sha in commits)
+
+
+async def was_closed_here(session: AsyncSession, task: Task) -> bool:
+    """Whether *task* was closed by this action: the operator moved it with the closing note, and
+    the operator recorded its `already_built` evidence, now accepted. The kind alone is not
+    enough -- any agent can record evidence of any kind on its own task."""
+    closed = (
+        await session.execute(
+            select(TaskTransition.id)
+            .where(
+                TaskTransition.task_id == task.id,
+                TaskTransition.actor_kind == "operator",
+                TaskTransition.note.like(CLOSING_NOTE + "%"),
+            )
+            .limit(1)
+        )
+    ).first()
+    if closed is None:
+        return False
+    built = (
+        await session.execute(
+            select(RequirementEvidence.id)
+            .where(
+                RequirementEvidence.task_id == task.id,
+                RequirementEvidence.kind == EVIDENCE_KIND,
+                RequirementEvidence.actor_kind == "operator",
+                RequirementEvidence.review_state == requirement_evidence.ACCEPTED,
+            )
+            .limit(1)
+        )
+    ).first()
+    return built is not None
 
 
 def _resolve_commits(root: Path, named: Sequence[str], main_branch: str) -> Dict[str, Any]:

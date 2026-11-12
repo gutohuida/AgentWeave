@@ -34,6 +34,7 @@ class _FakeSession:
         # that omits them would let a regression in that reporting pass unnoticed here.
         self.returncode = returncode
         self._stderr_tail = stderr_tail
+        self.lost = None
 
     async def request(self, method, params, timeout=30.0):
         self.sent_requests.append((method, params))
@@ -54,6 +55,9 @@ class _FakeSession:
     def is_running(self):
         return self._running
 
+    def output_lost(self):
+        return self.lost
+
     def stderr_tail(self, limit=2000):
         return self._stderr_tail
 
@@ -64,6 +68,10 @@ class _FakeSession:
             method=method,
             stderr_tail=self._stderr_tail,
         )
+
+    async def end_commands(self):
+        # Recorded among the requests, so a test can tell what a stop did first (F1162).
+        self.sent_requests.append(("<end_commands>", None))
 
     async def close(self, force=False):
         self._running = False
@@ -814,6 +822,42 @@ class TestRunTurnFailureModes:
         assert "ended" in outcome.error
 
     @pytest.mark.asyncio
+    async def test_lost_output_with_the_process_alive_fails_fast_not_after_full_timeout(
+        self, monkeypatch
+    ):
+        """A child the Hub can no longer hear must end the turn, not leave it shown as working."""
+        fake = _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[],
+        )
+        fake.lost = "the Hub stopped reading the app-server's output: ValueError()"
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await asyncio.wait_for(
+            run_turn(
+                cli="codex",
+                cwd="/workspace",
+                env=None,
+                prompt="hi",
+                model=None,
+                resume_thread_id=None,
+                yolo=False,
+                mcp_command=None,
+                on_event=_noop,
+                turn_timeout=120.0,
+            ),
+            timeout=10,
+        )
+
+        assert outcome.status == "failed"
+        assert "stopped reading" in outcome.error
+        assert fake.closed_with_force is not None
+
+    @pytest.mark.asyncio
     async def test_timeout_fails_and_closes_session(self, monkeypatch):
         fake = _FakeSession(
             responses={
@@ -875,6 +919,9 @@ class TestRunTurnInterrupt:
         assert outcome.status == "interrupted"
         assert "turn/interrupt" in [m for m, _ in fake.sent_requests]
         assert fake.closed_with_force is True
+        # F1162: the turn's commands are ended before the interrupt, while the tree is whole.
+        methods = [m for m, _ in fake.sent_requests]
+        assert methods.index("<end_commands>") < methods.index("turn/interrupt")
 
 
 class TestRunTurnReportsRefusals:

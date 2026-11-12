@@ -33,6 +33,11 @@ vi.mock('@/api/status', async (importOriginal) => ({
 vi.mock('@/api/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/projects')>()),
   useProjects: () => ({ data: [{ id: 'proj-a', name: 'Website' }] }),
+  useProjectSettings: () => ({ data: undefined }),
+}))
+vi.mock('@/api/traces', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/traces')>()),
+  useTraceSettings: () => ({ data: undefined }),
 }))
 vi.mock('@/api/runners', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/runners')>()),
@@ -66,7 +71,11 @@ describe('configuration surface presentation', () => {
     const nav = screen.getByRole('navigation', { name: 'Project settings' })
     expect(within(nav).getByText('Website')).toBeInTheDocument()
     expect(within(nav).getAllByRole('button').map((b) => b.textContent)).toEqual([
-      'General', 'Manager1 on', 'Runners2', 'Charters1', 'Instructions', 'Budgets', 'Quality', 'Worktrees', 'Diagnostics',
+      'Project', 'Collaboration', 'Permissions', 'Budgets', 'Instructions', 'Charters1', 'Checkpoints', 'Manager1 on',
+      'Checks', 'Landing', 'Worktrees', 'Spec steps', 'Traces', 'Diagnostics',
+    ])
+    expect([...nav.querySelectorAll('.aw-settings-nav-group')].map((g) => g.textContent)).toEqual([
+      'Project', 'Agents', 'Landing work', 'Specs and records',
     ])
     expect(within(nav).getByRole('button', { name: /Worktrees/ })).toHaveAttribute('aria-current', 'page')
     // The words the old rail used for the same place are gone.
@@ -74,8 +83,8 @@ describe('configuration surface presentation', () => {
     expect(screen.queryByText('Environment')).toBeNull()
     expect(screen.queryByText('Project configuration')).toBeNull()
 
-    await user.click(within(nav).getByRole('button', { name: /Runners/ }))
-    expect(onSelectSection).toHaveBeenCalledWith('runners')
+    await user.click(within(nav).getByRole('button', { name: /Landing/ }))
+    expect(onSelectSection).toHaveBeenCalledWith('landing')
   })
 
   it('frames an unconverted section as a labelled page, without the old eyebrow', () => {

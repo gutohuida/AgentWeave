@@ -63,8 +63,7 @@
     "limits": []
   },
   "hub": {
-    "phase": "proposed",
-    "rigor": "sketch",
+    "phase": "exploring",
     "size": null,
     "step": null
   },

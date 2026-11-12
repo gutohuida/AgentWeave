@@ -27575,9 +27575,15 @@ Neither repair needs a spec.
 
 ## F325 (A) — on Codex's default transport a run never receives its canonical context, so a bound charter reaches no Codex agent
 
-**Re-verified live 2026-11-11 (Architect, first real Codex drive):** still bites -- neither the planner's turn prompts nor its Codex session instructions contained its Spec Author charter, the team roster or the project instructions, though `.agentweave/context/planner.md` holds all three.
-**Status:** open. Filed 2026-09-12 by the day window's `D-7`, from research 2026-09-12 §3, and
-verified against the code at `34014e0` by reading. **Read, not run:** live reproduction is not
+**Status:** fixed 2026-11-11 (AW-80, task-ad1e7a89cff6, branch `agentweave/task/task-ad1e7a89cff6`) --
+the trigger hands the rendered context to `codex_appserver.run_turn` (`developer_instructions`); a
+new thread gets it as `thread/start`'s `developerInstructions`, and a resumed one as the leading
+block of `turn/start`'s input, because Codex 0.167.1 records no `developerInstructions` sent on
+`thread/resume` (driven against the binary: the rollout kept the first marker, not the second;
+`baseInstructions` is honoured on resume but replaces Codex's own). Test:
+`hub/tests/test_a_codex_app_server_run_receives_its_context.py`. Was: open. Filed 2026-09-12 by
+the day window's `D-7`, from research 2026-09-12 §3, and verified against the code at `34014e0` by
+reading. **Read, not run:** live reproduction is not
 possible, because Codex is undrivable (the plan was cancelled on 2026-08-29). No proposal.
 
 **The claim.** Every turn renders the canonical context: charter, operating profile, the tool
@@ -40918,7 +40924,7 @@ Repro: Architect submitted the document; the answer was `blocking: []`, `ready_t
 
 ## F1086 (B) -- the Hub's own knowledge-vault output dirties the project checkout and blocks its own landing
 
-**Status:** open 2026-10-29. Found by reading the ledger of `spdoc-a7d41f10be14` (Architect).
+**Status:** fixed 2026-11-12 (`4ac1ec8`, on `agentweave/DeveloperOpus`): integration does not count the Hub's own writes. `hub/hub/hub_writes.py` records the digest of every Hub write to `spec/index.json`, the journey, document files and `knowledge/`, and `hub_written_documents` exempts each file that still holds it (a hand edit stays dirty); a landing batch now asks the checkout question before its checks as well as after (`hub/tests/test_hub_writes_do_not_block_landing.py`). Opened 2026-10-29. Found by reading the ledger of `spdoc-a7d41f10be14` (Architect).
 **Source:** ledger
 **Theme:** Worktrees & integration
 **Ready:** yes
@@ -41312,7 +41318,7 @@ Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `
 
 ## F1128 (B) -- `/health` runs git on the event loop to compute the UI staleness warning, holding the whole Hub about 300 ms every 30 s
 
-**Status:** open
+**Status:** fixed 2026-11-10 (Tier 0). `/health` and the start-up log call `_ui_staleness_warning_off_loop` (`hub/hub/main.py`): a cached answer is read in place, an expired one is worked out on `blocking.run`. The slow-share tests' warm-up of the cache is removed. Test: `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_health_works_out_its_ui_staleness_warning_off_the_loop` (failed first: `slow_git` saw the staleness check's git on the loop's thread). Driven on a scratch Hub (:8023): an expired `/health` took 228-246 ms while a request sent 30 ms into it answered in 7 ms, three rounds.
 **Source:** found by driving: the lag probe added to `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2)
 **Theme:** Hub responsiveness
 **Ready:** yes
@@ -41322,7 +41328,7 @@ Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `
 
 ## F1131 (B) -- opening a project runs git on the event loop to detect its main branch, holding the whole Hub for one to three git processes
 
-**Status:** open
+**Status:** fixed 2026-11-10 (Tier 0). `_adopt_detected_main_branch` and `suggest_main_branch` (`hub/hub/api/v1/projects.py`) ask git through `blocking.run` (`_detected_main_branch`, `task_integration.detect_main_branch`, `is_repository`). Test: `hub/tests/test_project_open_adopts_main_branch.py::test_opening_and_suggesting_ask_git_off_the_loop` (failed first: `git rev-parse --is-inside-work-tree` and `--verify main` on `MainThread`). Driven on a scratch Hub (:8023): open of a fresh repository adopted `master`, the suggestion answered `master`/`master`/`is_repository: true`. Not re-run under `d1105_steady_under_load.py --load`.
 **Source:** found by driving: the lag probe in `hub/tests/test_a_slow_share_does_not_freeze_the_hub.py::test_a_slow_project_open_does_not_block_other_requests` under `scripts/drive/d1105_steady_under_load.py --load` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2; traced by QA2's review)
 **Theme:** Hub responsiveness
 **Ready:** yes
@@ -41332,7 +41338,7 @@ Both retrospectives of the night of 2026-11-03 (event_logs `evt-6c6d19e61f20`, `
 
 ## F1132 (B) -- a task view reads its spec documents on the event loop, so moving a task can hold the whole Hub on a busy disk
 
-**Status:** open
+**Status:** fixed 2026-11-10 (Tier 0). `spec_reading.payloads_for_documents` reads every document in one `blocking.run` (`_read_payloads`), and `slice_drafting.offer_for` reads its payload and the roadmap's slices the same way; `slice_claims` goes through the first. Test: `hub/tests/test_a_task_view_reads_its_documents_off_the_loop.py` (failed first: four `read_document` calls on the loop's thread across a task view, a listing and a move to `rejected`). Driven on a scratch Hub (:8023): a task view and a move answered 200.
 **Source:** found by driving: the lag probe in `hub/tests/test_approval_holds_no_write_lock_across_git.py::test_releasing_a_rejected_tasks_checkout_holds_no_write_lock` under `scripts/drive/d1105_steady_under_load.py --load` (spec `hub-tests-pass-on-a-busy-machine-and-the-migration-tests-take-less-time`, HTPBM-2)
 **Theme:** Hub responsiveness
 **Ready:** yes
@@ -41726,3 +41732,45 @@ AW-101 (`task-810f7f7f382b`) was approved at 19:23, and its checkout's directory
 **Also:** a Hub an agent starts inside its own checkout outlives the agent's turn. Three more `uvicorn hub.main:app` processes started between 18:58 and 19:04 are still listening on ports 63149, 65279 and 54469, and their parents are gone.
 
 **Repaired by hand:** Architect stopped PID 15664, removed the directory and pruned, then resent the message. CodexSol's turn `run-1522734a6958` started at 20:32 on a freshly created checkout.
+
+## F1157 (B) -- documents left in the retired `proposed` phase still say `proposed` on disk
+
+**Status:** fixed 2026-11-10 (Tier 0), with F1158's refresh: once the Hub is serving, any commit that changes a `SpecDocument` row re-renders every indexed document whose hub block (phase, step, size) disagrees with its row, records a `rerendered` event by `system`/`index`, and updates its `content_digest` (`hub/hub/spec_index_file.py`). No migration and nothing at start-up: the four files are put right by the first document write after the operator's next restart, or now by `POST /spec/reindex`, which already re-rendered stale blocks. Test: `hub/tests/test_the_index_follows_the_rows.py::test_a_documents_file_and_index_entry_take_the_phase_from_its_row` (fails with the refresh unhooked). Driven on a scratch Hub (:8023): a file set by hand to `proposed` read `exploring` after the next document was created. The second half (approving a built exploring document in one action) is a feature and is left out.
+**Source:** found by reading the files on master beside the operator's rows (Architect, 2026-11-10)
+**Theme:** Specification
+**Ready:** yes
+**Tier:** 0
+
+Four change documents (`agents-add-files-to-the-vault-by-path`, `an-operator-sets-how-far-an-agent-reaches`, `the-vault-names-who-read-an-entry`, `a-run-is-a-trace-you-can-export`) read `"phase": "proposed"` in their `spec.json` and in `spec/index.json`. The Hub's database row says `exploring`. Migration 0149 moved the rows but never re-rendered the files. **Expected:** a document's file and its index entry carry the phase from its row.
+
+## F1158 (B) -- `spec/index.json` is regenerated by only some writes
+
+**Status:** fixed 2026-11-10 (Tier 0). `hub/hub/spec_index_file.py`: a `before_flush` listener notes each project whose `SpecDocument` rows a session changes, and its root `after_commit` schedules one background refresh per project (never two at once; one asked for meanwhile runs once after). The refresh rebuilds the index from the rows with `spec_documents.build_index`, keeping the recorded home, parents and order, on `blocking.run`, and writes it only when it changed. A project with no index is given none (its home is the operator's). The lifespan enables it once the Hub is serving, so a restart rewrites nothing on its own. Tests: `hub/tests/test_the_index_follows_the_rows.py` (`test_a_document_the_hub_writes_is_in_the_index` fails with the refresh unhooked; `test_nothing_is_refreshed_before_the_hub_is_serving`; `test_a_project_with_no_index_is_given_none`). Driven on a scratch Hub (:8023): after a reindex filed two documents, creating a third put it in the index with no reindex.
+**Source:** found by reading `spec/index.json` before and after the spec tidy (Architect, 2026-11-10)
+**Theme:** Specification
+**Ready:** yes
+**Tier:** 0
+
+Before today's spec tidy `spec/index.json` listed 11 of the 62 approved change documents. A `create_capability` act then regenerated it, so it is correct now, but it drifts again between such writes. **Expected:** every document the Hub writes appears in the index, and the index is regenerated from the rows rather than appended to.
+
+## F1168 (A) -- accepting a sign-off can land unrelated work and reopen an already landed task
+
+**Status:** fixed 2026-11-11 (Tier 0, AW-101). Sign-offs capture no git footprint; taskless evidence supplies no merge target; task-bound evidence targets only its recording task, with commits checked against that task's branch when it exists. A failed legacy evidence landing leaves an approved task alone when its own branch is already on main. Regression tests: `hub/tests/test_accepting_a_signoff_never_lands_work.py`. Trial drive: `py -3.11 scripts/drive/f1168_signoff.py --port 8011` passed: conflicting recorder branch, signoff footprint null, operator accepted, task approved, task_landings before=0 after=0, foreign commit absent from main. Final targeted regression run: 70 passed (6 warnings). Temporary trial Hub :8011 stopped after verification; the retained external fixture is documented in AW-101 notes.
+**Source:** drive (Architect, operator's incident 2026-11-11)
+**Theme:** Task ledger
+**Ready:** yes
+**Tier:** 0
+
+At 16:36:29 the operator accepted slice 2's sign-off `ev-f9a096f042b2`, kind `operator_signoff`, no task, locator "Operator message to Architect". Its footprint `efp-ef14cbead9e7` carried unrelated commit `8223805` from `agentweave/Architect`. Twenty milliseconds later the Hub created evidence landing `land-5a8215484316` / batch `lbat-7103573b1192` for SASSW-2 (`task-e5c9147da336`), already approved the previous day and landed as `5921e0b`. The unrelated commit conflicted in this ledger, so the task became revision_needed / merge-needed despite having no own work left to land.
+
+Three seams caused this: `requirement_evidence.record` footprinted a message; `task_integration.tasks_awaiting_this_commit` selected every approved task sharing the requirement; `landing_queue._send_back` reopened already landed work after the foreign merge failed. Expected: evidence without a task or repository artifact merges nothing; accepting task evidence merges only its own work; a failed evidence landing does not reverse an approved, landed task. The original SASSW-2 incident is left for the mender after this fix lands.
+
+## F1170 (A) -- one Codex output line over 64 KiB deafens the Hub to the rest of the turn
+
+**Status:** fixed 2026-11-11 (Tier 0). `hub/hub/codex_appserver.py`: `_read_loop` read the app-server's stdout with `readline()`, whose 64 KiB limit raises `ValueError` and discards the line; nothing caught it, so the reader task ended silently while Codex kept working. `_read_line` now takes a line of any length with `readuntil`, reading an overrunning line in pieces; any other reader failure is logged and recorded as `output_lost()`, which `run_turn` checks beside `is_running()` and ends the turn `failed` with that sentence instead of waiting for the deadline. Tests: `test_codex_appserver_process.py::test_a_notification_longer_than_the_stream_limit_is_delivered_and_reading_goes_on` (fails on the old reader by timeout), `::test_a_reader_that_fails_while_the_child_lives_says_so`, `test_codex_appserver_run_turn.py::...::test_lost_output_with_the_process_alive_fails_fast_not_after_full_timeout`. Not driven live: the fix reaches `:8000` only on the operator's restart.
+**Source:** found by driving -- the operator saw CodexSol "working" with nothing happening (DeveloperOpus, 2026-11-11)
+**Theme:** Runners
+**Ready:** yes
+**Tier:** 0
+
+CodexSol's run `run-1522734a6958` on AW-101 recorded ten outputs, the last a shell call at 20:32:31 that printed a large file. Nothing after it reached the Hub, although `codex.exe` was alive and went on to send a message (20:33:10, through MCP, so it did arrive) and start a pytest run (20:38:34). The run stayed `running` with no events until its turn timeout. A message CodexSol had sent to Architect, tagged with AW-101, also stayed queued behind that run's hold on the task's checkout, so Architect looked stuck too. **Expected:** a large output never ends the reader, and a reader that ends while the child lives ends the turn with that reason.

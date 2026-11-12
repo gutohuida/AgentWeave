@@ -68,10 +68,15 @@ async def approved_task_with_work(app, auth_headers, builder, tmp_path, *, main_
         await set_main_branch(main_branch)
 
     work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     return task, work
 
@@ -201,11 +206,16 @@ async def test_setting_a_main_branch_leaves_a_dirty_checkout_skip_alone(
     await set_main_branch("main")
 
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "README.md").write_text("edited by the operator\n", encoding="utf-8")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
     assert (await integrations(app, auth_headers, task))[0]["outcome"] == "skipped"
 
@@ -243,9 +253,14 @@ async def test_apply_transition_still_integrates_through_the_public_function(
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
-    git(tmp_path, "checkout", "-q", "main")
     task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
+    git(tmp_path, "checkout", "-q", "main")
 
     kinds = []
     real = landing_queue.stage
@@ -321,10 +336,15 @@ async def test_the_read_and_retry_routes_both_carry_retryable(app, auth_headers,
     # Deliberately no main branch: an unretryable skip, and the one the UI used to special-case by
     # matching its sentence.
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 
@@ -351,11 +371,16 @@ async def test_a_dirty_checkout_skip_is_offered_a_retry(app, auth_headers, build
     await set_main_branch("main")
 
     commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
-    await accept_evidence(app, auth_headers, builder)
+    task = await linked_task(app, auth_headers)
+    await accept_evidence(
+        app,
+        auth_headers,
+        builder,
+        task_id=task,
+    )
     git(tmp_path, "checkout", "-q", "main")
     (tmp_path / "README.md").write_text("the operator is mid-edit\n", encoding="utf-8")
 
-    task = await linked_task(app, auth_headers)
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
 

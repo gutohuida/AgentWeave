@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { DEFAULT_LIST_PREFERENCES, type ListPreferences } from './model'
+import { DEFAULT_LIST_PREFERENCES, LIST_PHASE_FILTERS, type ListPreferences } from './model'
 
 /** The document list's filters and order, kept per project in this browser: reopening the tab (or
  *  the app) shows the list the way the operator left it. The search text is not kept. */
@@ -8,7 +8,9 @@ export function useListPreferences(projectId: string): [ListPreferences, (next: 
   const [prefs, setPrefs] = React.useState<ListPreferences>(() => {
     try {
       const stored = JSON.parse(window.localStorage.getItem(key) ?? 'null') as Partial<ListPreferences> | null
-      return { ...DEFAULT_LIST_PREFERENCES, ...(stored ?? {}), query: '' }
+      const prefs = { ...DEFAULT_LIST_PREFERENCES, ...(stored ?? {}), query: '' }
+      // A phase this build does not know (stored by another version) would hide everything.
+      return LIST_PHASE_FILTERS.includes(prefs.phase) ? prefs : { ...prefs, phase: DEFAULT_LIST_PREFERENCES.phase }
     } catch {
       return DEFAULT_LIST_PREFERENCES
     }

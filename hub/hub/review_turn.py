@@ -28,7 +28,7 @@ from typing import List, Optional, Set, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import blocking, requirement_evidence, traces, worktrees
+from . import blocking, drive_baseline, requirement_evidence, traces, worktrees
 from .db.models import Agent, Project, SpecDocument, Task
 from .project_workspace import ProjectWorkspaceError, resolve_project_workspace
 from .repo_hygiene import seed_repo_excludes
@@ -348,6 +348,7 @@ async def verdict_evidence_sentence(
         part
         for part in (
             await _dependencies_sentence(session, task),
+            await drive_baseline.review_sentence(session, task),
             await _other_requirements_sentence(session, task),
             _rejected_sentence(await rejected_identifiers(session, task)),
             _held_sentence(await held_identifiers(session, task)),
@@ -379,8 +380,18 @@ async def verdict_evidence_sentence(
             'own reason (`[{"piece": "FR-3", "reason": "..."}]`); every piece you do not name is '
             "held, not rejected, and its author records it again at the next commit. Judge what "
             "each piece claims as part of the review, and say in `notes` what you checked: your "
-            "notes are the reason recorded on each piece you approve or hold."
+            "notes are the reason recorded on each piece you approve or hold. "
+            "If the task's branch has moved past the commit a piece names (a master merge, a "
+            "fix), do not send it back to be recorded again: check out the branch's tip, re-run "
+            "the piece's demonstration, and accept it with your reproduction "
+            "(`decide_evidence(evidence_id, 'accepted', reason, command=..., output=..., "
+            "commit=...)`, `summary`/`covers` to correct the wording) before you approve; "
+            "approval then lands your commit. Where no recorded piece demonstrates part of a "
+            "requirement, that part goes back to its builder: send the task back naming it."
         )
+        moved = await _moved_tip_sentence(session, task, own)
+        if moved:
+            parts.append(moved)
     if foreign:
         foreign_ids = {row.task_id for row in foreign if row.task_id}
         readable = dict(
@@ -416,6 +427,35 @@ async def verdict_evidence_sentence(
             )
         parts.append(sentence)
     return " ".join(parts) if parts else None
+
+
+async def _moved_tip_sentence(session: AsyncSession, task: Task, own) -> Optional[str]:
+    """FR-1 of `evidence-review-sends-work-back-only-for-what-is-wrong-with-it`: the task's branch
+    tip, where it is past a commit this task's waiting evidence names. The review checkout is at the
+    evidence's commit, so without the tip named a reviewer reproduced there, and approval was then
+    refused for the newer commits no accepted piece names. None where nothing has moved."""
+    from . import project_workspace, task_integration
+
+    try:
+        root = (await project_workspace.resolve_project_workspace(session, task.project_id)).root
+        tip = await blocking.run(task_integration.task_branch_tip, root, task.id)
+    except Exception:  # noqa: BLE001 -- no tip read: the general sentence above still stands
+        return None
+    behind = [row for row in own if row.commit_sha and row.commit_sha != tip]
+    if not tip or not behind:
+        return None
+    ids = ", ".join(f"`{row.evidence_id}`" for row in behind)
+    return (
+        f"**This task's branch has moved past {ids}**: its tip is `{tip}`, and your checkout is "
+        "at the commit the evidence names. Approving lands only what accepted evidence names, so "
+        f"run `git checkout --detach {tip}` in your checkout, re-run each piece's demonstration "
+        "there, and judge what it prints against the requirement and its acceptance criteria, "
+        "not against the author's recorded output: the work has moved on, so the output may "
+        "differ. Where the requirement still holds, accept the piece with "
+        f"`decide_evidence(<id>, 'accepted', <what you checked>, command=..., output=..., "
+        f"commit='{tip}')`, correcting `summary` if it no longer describes the output, before "
+        "you approve. Where the requirement does not hold, send the task back naming the piece."
+    )
 
 
 async def _dependencies_sentence(session: AsyncSession, task: Task) -> Optional[str]:

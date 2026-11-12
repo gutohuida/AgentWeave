@@ -5,9 +5,11 @@ import { Segmented } from '@/components/ui/segmented'
 import type { AgentSummary } from '@/api/agents'
 import type { Task } from '@/api/tasks'
 import { agentColorVars } from '@/lib/agentColors'
+import { groupByStanding, isFinished } from '@/lib/taskStage'
 import { taskStatusTone } from '@/lib/taskStatusColors'
 import { BoardColumn, type ColumnDropState } from './BoardColumn'
 import { TaskCardCompact, type RequirementTally } from './TaskCardCompact'
+import { CloseForm } from './LooseTaskActions'
 import '@/styles/board.css'
 
 export type TasksView = 'board' | 'dependencies'
@@ -48,10 +50,13 @@ export function BoardView({
   agents,
   tallies,
   workingTaskIds,
+  specTags,
   view,
   onViewChange,
   folds,
   onFoldsChange,
+  showFinished = false,
+  onShowFinishedChange,
   selectedTaskId,
   onOpenTask,
   onRetryIntegration,
@@ -69,11 +74,16 @@ export function BoardView({
   tallies: Record<string, RequirementTally>
   /** Tasks whose assignee has a live run on them. */
   workingTaskIds: ReadonlySet<string>
+  /** Each spec's short tag by document id, shown on its tasks' cards. */
+  specTags?: ReadonlyMap<string, string>
   view: TasksView
   onViewChange: (view: TasksView) => void
   /** Column key → folded. Absent means "folded when empty". */
   folds: Record<string, boolean>
   onFoldsChange: (folds: Record<string, boolean>) => void
+  /** Whether finished tasks (on main, or closed without landing) are shown; the container remembers it. */
+  showFinished?: boolean
+  onShowFinishedChange?: (show: boolean) => void
   selectedTaskId?: string | null
   onOpenTask: (taskId: string) => void
   onRetryIntegration: (taskId: string) => void
@@ -92,12 +102,30 @@ export function BoardView({
 }) {
   const [agentFilter, setAgentFilter] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState('')
+  // Picking several tasks to close at once (`tasks-outside-a-flow-move-freely`, FR-9).
+  const [selecting, setSelecting] = React.useState(false)
+  const [picked, setPicked] = React.useState<ReadonlySet<string>>(new Set())
+  const togglePicked = (id: string) =>
+    setPicked((current) => {
+      const next = new Set(current)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
 
   const colorOf = React.useMemo(() => new Map(agents.map((a) => [a.name, a.color_index])), [agents])
+  const [revealed, setRevealed] = React.useState<'notOnMain' | 'working' | null>(null)
+  const standing = React.useMemo(() => groupByStanding(tasks), [tasks])
   const q = query.trim().toLowerCase()
+  const matchesQuery = (t: Task) =>
+    t.title.toLowerCase().includes(q) || t.id.includes(q) || (t.readable_id ?? '').toLowerCase().includes(q)
+  // Finished tasks stay off the board unless the switch is on; a search still reaches them.
   const visible = tasks.filter(
-    (t) => (!agentFilter || t.assignee === agentFilter) && (!q || t.title.toLowerCase().includes(q) || t.id.includes(q) || (t.readable_id ?? '').toLowerCase().includes(q)),
+    (t) =>
+      (!agentFilter || t.assignee === agentFilter) &&
+      (!q || matchesQuery(t)) &&
+      (showFinished || !isFinished(t) || Boolean(q)),
   )
+  const hiddenFinished = tasks.filter((t) => isFinished(t) && !visible.includes(t)).length
 
   return (
     <div className="aw-board">
@@ -141,6 +169,15 @@ export function BoardView({
             )
           })}
         </div>
+        <label className="aw-board-finished-switch">
+          <input
+            type="checkbox"
+            data-testid="board-show-finished"
+            checked={showFinished}
+            onChange={(e) => onShowFinishedChange?.(e.target.checked)}
+          />
+          Show finished
+        </label>
         <label className="aw-board-search">
           <Icon name="search" size={13} />
           <Input
@@ -152,9 +189,75 @@ export function BoardView({
             className="aw-board-search-input"
           />
         </label>
+        <button
+          type="button"
+          data-slot="filter-chip"
+          data-testid="board-select-toggle"
+          className="aw-filter-chip"
+          data-active={selecting ? 'true' : 'false'}
+          aria-pressed={selecting}
+          onClick={() => {
+            setSelecting(!selecting)
+            setPicked(new Set())
+          }}
+        >
+          Select
+        </button>
       </div>
 
+      {selecting && picked.size > 0 ? (
+        <div className="aw-board-notice" data-testid="board-close-bar">
+          <strong>{picked.size} selected</strong>
+          <CloseForm
+            taskIds={[...picked]}
+            outcomes={['done_elsewhere', 'cancelled']}
+            onDone={() => setPicked(new Set())}
+          />
+        </div>
+      ) : null}
+
       {notices}
+
+      {view === 'board' ? (
+        <div className="aw-board-standing" data-testid="board-standing">
+          <div className="aw-board-standing-counts">
+            {([
+              ['notOnMain', 'not yet on main'],
+              ['working', 'being worked on'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                className="aw-board-standing-count"
+                data-testid={`board-count-${key}`}
+                aria-expanded={revealed === key}
+                onClick={() => setRevealed(revealed === key ? null : key)}
+              >
+                <strong>{standing[key].length}</strong>
+                {label}
+              </button>
+            ))}
+          </div>
+          {revealed ? (
+            <ul className="aw-board-standing-list" data-testid={`board-list-${revealed}`}>
+              {standing[revealed].map((t) => (
+                <li key={t.id}>
+                  <button type="button" onClick={() => onOpenTask(t.id)}>
+                    {t.readable_id ? `${t.readable_id} ` : ''}
+                    {t.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      {view === 'board' && !showFinished ? (
+        <div className="aw-board-hidden-count" data-testid="board-hidden-finished">
+          {hiddenFinished} finished {hiddenFinished === 1 ? 'task is' : 'tasks are'} hidden
+        </div>
+      ) : null}
 
       {view === 'dependencies' ? (
         <div className="aw-board-scroll">{children}</div>
@@ -196,7 +299,10 @@ export function BoardView({
                       colorIndex={task.assignee ? colorOf.get(task.assignee) : null}
                       tally={tallies[task.id]}
                       working={workingTaskIds.has(task.id)}
+                      finished={isFinished(task)}
+                      specTag={task.spec_document_id ? specTags?.get(task.spec_document_id) : undefined}
                       selected={task.id === selectedTaskId}
+                      select={selecting ? { checked: picked.has(task.id), onToggle: () => togglePicked(task.id) } : undefined}
                       now={now}
                       onOpen={onOpenTask}
                       onRetryIntegration={onRetryIntegration}

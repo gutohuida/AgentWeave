@@ -1810,6 +1810,14 @@ class EvidenceRecord(RequestModel):
 class EvidenceDecision(RequestModel):
     decision: str = Field(max_length=16)
     reason: str = Field(default="", max_length=10000)
+    # A reviewer's own reproduction on an acceptance, and its corrections (`evidence-review-sends-
+    # work-back-only-for-what-is-wrong-with-it`, FR-1, FR-3). Open only to the run reviewing the
+    # evidence's task; the author's record is kept beside it.
+    command: Optional[str] = Field(default=None, max_length=10000)
+    output: Optional[str] = Field(default=None, max_length=200000)
+    commit: Optional[str] = Field(default=None, max_length=64)
+    summary: Optional[str] = Field(default=None, max_length=10000)
+    covers: Optional[str] = Field(default=None, max_length=16)
 
 
 async def _find_document(session, project_id: str, ref: str):
@@ -2072,6 +2080,13 @@ async def decide_evidence(
             decision=body.decision,
             reason=body.reason,
             actor=spec_lifecycle.Actor(kind="agent", name=actor.agent, run_id=actor.run_id),
+            reproduction=requirement_evidence.Reproduction(
+                command=body.command,
+                output=body.output,
+                commit=body.commit,
+                summary=body.summary,
+                covers=body.covers,
+            ),
         )
     except requirement_evidence.EvidenceRefusedError as exc:
         # 403 for the two capability refusals; the refusal itself overrides that where it is a
@@ -2158,6 +2173,7 @@ READ_INCLUDE_VALUES = (
     "problem",
     "scope",
     "open_questions",
+    "waiting",
 )
 _READ_SECTIONS = ("design", "tasks", "algorithms", "evidence", "lifecycle", "delivery")
 _READ_PREAMBLE = ("summary", "problem", "scope", "open_questions")
@@ -2307,6 +2323,18 @@ async def read_spec_document(
     for planned in ("slices", "roadmap"):
         if (payload or {}).get(planned):
             view[planned] = payload[planned]
+    # `a-change-names-the-capabilities-it-changes`: what a change names and where it was folded,
+    # and a capability's open changes (FR-6) -- the same list the operator's spec list shows.
+    from ... import spec_capability_links
+
+    if document.kind == "change-spec":
+        view["capabilities"] = spec_capability_links.named(payload)
+        view["folded_into"] = await spec_capability_links.folded_into(session, document)
+    elif document.kind == "capability" and include in ("waiting", "full"):
+        view["waiting_changes"] = await spec_capability_links.waiting_for(
+            session, workspace, actor.project_id, document.path
+        )
+        view["waiting_count"] = len(view["waiting_changes"])
     # F29. This route's own docstring, four paragraphs up, ends on "with no way for anyone to
     # detect divergence from what was approved" — and until now that was still true of the content
     # it serves. `spec_lifecycle.divergence` had one caller, on the save path, so a document edited
@@ -2348,6 +2376,11 @@ async def read_spec_document(
     elif include == "full":
         for extra in _READ_SECTIONS:
             view[extra] = (payload or {}).get(extra)
+    elif include == "waiting":
+        # The waiting list on its own, with the document's identity: no preamble, no requirements.
+        for name in _READ_PREAMBLE:
+            view.pop(name, None)
+        view.pop("requirements", None)
     if len(json.dumps(view)) <= spec_reading.READ_BUDGET_CHARS:
         return view
     # D7: too large for one tool result on any access path (the shell spills at 30,000), so the
@@ -2835,6 +2868,9 @@ class SpecTidyAct(RequestModel):
     # set_slice
     roadmap: Optional[str] = Field(default=None, max_length=255)
     slice: Optional[str] = Field(default=None, max_length=64)
+    # set_capabilities
+    changes: Optional[List[str]] = Field(default=None, max_length=64)
+    creates: Optional[List[Dict[str, Any]]] = Field(default=None, max_length=64)
 
 
 @router.post("/spec/documents/tidy")

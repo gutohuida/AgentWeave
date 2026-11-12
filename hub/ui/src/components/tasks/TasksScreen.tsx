@@ -29,6 +29,7 @@ import { TaskDetailDrawer } from './TaskDetailDrawer'
 import { LoadingThread } from '@/components/common/LoadingThread'
 
 const FOLDS_KEY = 'aw.boardFolds'
+const SHOW_FINISHED_KEY = 'aw.boardShowFinished'
 const MOVE_INSTRUCTIONS_ID = 'task-board-move-instructions'
 
 function loadFolds(projectId: string | null): Record<string, boolean> {
@@ -37,6 +38,15 @@ function loadFolds(projectId: string | null): Record<string, boolean> {
     return JSON.parse(localStorage.getItem(`${FOLDS_KEY}.${projectId}`) ?? '{}') as Record<string, boolean>
   } catch {
     return {}
+  }
+}
+
+function loadShowFinished(projectId: string | null): boolean {
+  if (!projectId) return false
+  try {
+    return localStorage.getItem(`${SHOW_FINISHED_KEY}.${projectId}`) === 'true'
+  } catch {
+    return false
   }
 }
 
@@ -109,6 +119,18 @@ export function TasksScreen({
   const [dragOverColumn, setDragOverColumn] = React.useState<string | null>(null)
   const [moveMessage, setMoveMessage] = React.useState('')
 
+  const [showFinished, setShowFinished] = React.useState<boolean>(() => loadShowFinished(projectId))
+  React.useEffect(() => setShowFinished(loadShowFinished(projectId)), [projectId])
+  const changeShowFinished = (next: boolean) => {
+    setShowFinished(next)
+    if (!projectId) return
+    try {
+      localStorage.setItem(`${SHOW_FINISHED_KEY}.${projectId}`, String(next))
+    } catch {
+      // Persistence is optional.
+    }
+  }
+
   React.useEffect(() => setFolds(loadFolds(projectId)), [projectId])
   const changeFolds = (next: Record<string, boolean>) => {
     setFolds(next)
@@ -148,10 +170,13 @@ export function TasksScreen({
         (board): ScopeSpec => ({
           id: board.spec_document_id!,
           title: board.title ?? specTitles.get(board.spec_document_id!) ?? board.spec_document_id!,
-          count: board.total,
+          tag: board.tag ?? board.title ?? board.spec_document_id!,
+          unfinished: board.outstanding,
+          lastActivity: board.last_activity ?? null,
         }),
       )
   }, [boardsData, specTitles])
+  const specTags = React.useMemo(() => new Map(pickerSpecs.map((spec) => [spec.id, spec.tag])), [pickerSpecs])
   const noSpecCount = (boardsData?.boards ?? []).find((board) => !board.spec_document_id)?.total ?? 0
   const scopeName =
     scope.kind === 'none' ? 'No spec' : scope.kind === 'building' ? 'Building' : scope.kind === 'spec'
@@ -382,10 +407,13 @@ export function TasksScreen({
           agents={agents}
           tallies={tallies}
           workingTaskIds={working}
+          specTags={specTags}
           view={view}
           onViewChange={setView}
           folds={folds}
           onFoldsChange={changeFolds}
+          showFinished={showFinished}
+          onShowFinishedChange={changeShowFinished}
           selectedTaskId={openTaskId}
           onOpenTask={setOpenTaskId}
           onRetryIntegration={onRetryIntegration}
