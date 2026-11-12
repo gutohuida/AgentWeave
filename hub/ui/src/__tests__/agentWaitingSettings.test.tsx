@@ -70,13 +70,13 @@ describe('per-agent waiting settings', () => {
   it('shows the built-in wait when nothing is set, with no reset offered', () => {
     renderInteraction(agent())
     expect(questionWait()).toHaveValue('240')
-    expect(within(questionRow()).queryByRole('button', { name: 'Reset to default' })).not.toBeInTheDocument()
+    expect(within(questionRow()).queryByRole('button', { name: /^Reset to / })).not.toBeInTheDocument()
   })
 
   it('shows a configured value, marked as changed', () => {
     renderInteraction(agent({ question_timeout_seconds: 300 }))
     expect(questionWait()).toHaveValue('300')
-    expect(within(questionRow()).getByRole('button', { name: 'Reset to default' })).toBeInTheDocument()
+    expect(within(questionRow()).getByRole('button', { name: /^Reset to / })).toBeInTheDocument()
   })
 
   it('saves once when the field is left, not on every keystroke, with no Save button', () => {
@@ -104,7 +104,7 @@ describe('per-agent waiting settings', () => {
 
   it('goes back to the default through the reset', () => {
     renderInteraction(agent({ question_timeout_seconds: 300 }))
-    fireEvent.click(within(questionRow()).getByRole('button', { name: 'Reset to default' }))
+    fireEvent.click(within(questionRow()).getByRole('button', { name: /^Reset to / }))
     expect(updateMutate).toHaveBeenCalledWith({ agent: 'codex-1', field: 'question_timeout_seconds', seconds: null }, WRITES)
   })
 

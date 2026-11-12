@@ -1,7 +1,9 @@
 import * as React from 'react'
 import { useCharters } from '@/api/charters'
 import { useManagerJobs } from '@/api/manager'
-import { useProjects } from '@/api/projects'
+import { useProjects, useProjectSettings } from '@/api/projects'
+import { useTraceSettings } from '@/api/traces'
+import { projectChangedSections } from '@/lib/settingsChanged'
 import type { EnvironmentSection } from '@/lib/navigation'
 import { useConfigStore } from '@/store/configStore'
 import { SettingsNavLayout } from './SettingsNavLayout'
@@ -67,6 +69,9 @@ export function ProjectSettingsScreen({
   const project = projects.find((item) => item.id === projectId)
   const { data: charters } = useCharters()
   const { data: jobs } = useManagerJobs()
+  const { data: stored } = useProjectSettings(projectId ?? null)
+  const { data: traces } = useTraceSettings()
+  const changed = React.useMemo(() => projectChangedSections(stored, traces), [stored, traces])
 
   const meta: Partial<Record<EnvironmentSection, React.ReactNode>> = {
     manager: jobs ? `${jobs.filter((job) => job.enabled).length} on` : undefined,
@@ -117,6 +122,7 @@ export function ProjectSettingsScreen({
         items={SECTIONS.map((item) => ({ ...item, meta: meta[item.id] }))}
         active={section}
         landing={setting}
+        changed={changed}
         onSelect={onSelectSection}
         footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
       >

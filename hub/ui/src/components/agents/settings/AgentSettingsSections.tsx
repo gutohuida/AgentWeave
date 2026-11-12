@@ -174,6 +174,14 @@ export function AgentIdentitySettings({
   )
 }
 
+/** The project's granted reach in a few words. */
+function describeGrants(grants: ReachGrants | null): string {
+  const folders = grants?.roots.length ?? 0
+  const hosts = grants?.hosts.length ?? 0
+  if (!folders && !hosts) return 'nothing beyond the workspace'
+  return [folders ? `${folders} folder${folders === 1 ? '' : 's'}` : '', hosts ? `${hosts} host${hosts === 1 ? '' : 's'}` : ''].filter(Boolean).join(', ')
+}
+
 type PermissionGroupProps = {
   agent: AgentSummary
   permissionModes: ControlValue[]
@@ -192,6 +200,7 @@ export function AgentPermissionGroup({ agent, permissionModes, permissionUnset, 
       <SettingsRow
         label="Default permissions"
         changed={Boolean(agent.default_permission_mode)}
+        origin={{ kind: agent.default_permission_mode ? 'own' : 'project', other: permissionUnset?.label ?? 'The project’s default' }}
         onReset={() => onChange({ default_permission_mode: null }, 'Default permissions follow the project again')}
         description="Also what scheduled runs and peer messages get, since they have no composer to choose in."
         control={
@@ -210,6 +219,7 @@ export function AgentPermissionGroup({ agent, permissionModes, permissionUnset, 
         label="Own granted reach"
         description="Folders and hosts beyond its workspace under Workspace only. Off: it has the project's grants."
         changed={ownGrants}
+        origin={{ kind: ownGrants ? 'own' : 'project', other: describeGrants(projectGrants) }}
         onReset={() => onChange({ reach_grants: null }, 'Granted reach follows the project again')}
         control={
           <Switch

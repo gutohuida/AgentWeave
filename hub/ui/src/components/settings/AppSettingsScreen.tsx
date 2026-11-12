@@ -7,6 +7,9 @@ import { SettingsGroup, SettingsPage, SettingsRow } from '@/components/ui/settin
 import { applyColorMode } from '@/lib/colorMode'
 import type { AppSettingsSection } from '@/lib/navigation'
 import { useConfigStore, type ModeId } from '@/store/configStore'
+import { useWindowsNotifyKinds } from '@/api/notifySettings'
+import { loadNotifyPrefs } from '@/lib/notify/prefs'
+import { appChangedSections } from '@/lib/settingsChanged'
 import { NotificationSettings, WindowsNotificationSettings } from './NotificationSettings'
 import { SettingsNavLayout } from './SettingsNavLayout'
 
@@ -42,6 +45,8 @@ export function AppSettingsScreen({
   /** The setting the location names, to land on. */
   setting?: string | null
 }) {
+  const { data: windowsKinds } = useWindowsNotifyKinds()
+  const changed = appChangedSections(loadNotifyPrefs(), windowsKinds)
   let body: React.ReactNode
   switch (section) {
     case 'notifications':
@@ -71,6 +76,7 @@ export function AppSettingsScreen({
         subtitle="Yours, on this Hub"
         back={back}
         landing={setting}
+        changed={changed}
         items={SECTIONS}
         active={section}
         onSelect={onSelectSection}

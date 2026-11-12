@@ -33,6 +33,11 @@ vi.mock('@/api/status', async (importOriginal) => ({
 vi.mock('@/api/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/projects')>()),
   useProjects: () => ({ data: [{ id: 'proj-a', name: 'Website' }] }),
+  useProjectSettings: () => ({ data: undefined }),
+}))
+vi.mock('@/api/traces', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/traces')>()),
+  useTraceSettings: () => ({ data: undefined }),
 }))
 vi.mock('@/api/runners', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/runners')>()),

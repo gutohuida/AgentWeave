@@ -26,6 +26,7 @@ import { SettingsNavLayout } from '@/components/settings/SettingsNavLayout'
 import { runnerCeilingNote } from '@/components/environment/describeThreshold'
 import { useAgentWorkspace } from '@/api/workspace'
 import { useCopy } from '@/hooks/useCopy'
+import { agentChangedSections } from '@/lib/settingsChanged'
 import { runnerModelPart } from '@/lib/runnerLabel'
 import { toast } from '@/lib/toast'
 import { AgentIdentitySettings, type AgentPatch } from './settings/AgentSettingsSections'
@@ -105,6 +106,7 @@ export function AgentSettingsPage({ agent, section, onSelectSection, onBack, onO
         active={section}
         agent={agent}
         landing={setting}
+        changed={agentChangedSections(summary)}
         onSelect={onSelectSection}
         footer={onOpenAppSettings ? { label: 'App settings', icon: 'settings', onClick: onOpenAppSettings } : undefined}
       >

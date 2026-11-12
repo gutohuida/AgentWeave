@@ -26,7 +26,7 @@ export const PROJECT_DEFAULTS: Pick<
   hop_budget: 6,
   turn_delivery_cap: 10,
   agent_budget: 8,
-  allow_agent_jobs: true,
+  allow_agent_jobs: false, // the Hub's column default; a new project starts with agent jobs off
   checkpoint_mode: 'offered',
   checkpoint_auto_continue: false,
   checks_give_way: false,

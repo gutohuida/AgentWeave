@@ -134,6 +134,7 @@ export function TracesSettings({
           htmlFor="trace-retention"
           description={`Older spans are deleted on their own. The Hub's default is ${settings.retention_days_default} days.`}
           changed={settings.retention_days_chosen}
+          origin={{ kind: 'changed', other: `${settings.retention_days_default} days` }}
           onReset={() => onChange({ retention_days: null }, `Traces kept for the default ${settings.retention_days_default} days`)}
           control={
             <CommittedInput
