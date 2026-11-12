@@ -182,7 +182,7 @@ export function TaskCardCompact({
               waits on {task.stage_waits_on}
             </span>
           ) : null}
-          {task.waiting_to_land ? (
+          {task.waiting_to_land && !task.stage ? (
             <span
               className="aw-task-card-age"
               data-testid={`task-waiting-to-land-${task.id}`}

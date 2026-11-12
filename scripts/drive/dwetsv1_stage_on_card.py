@@ -17,6 +17,7 @@ ac-live landing is the Hub's own: an approved task with a real branch lands on m
 
 import argparse
 import pathlib
+import re
 import tempfile
 import sys
 import time
@@ -158,8 +159,25 @@ def drive():
 
         texts = {k: stage_text(v) for k, v in t.items()}
         distinct = len({texts[k] for k in ("not_started", "working", "review", "under_review", "sent_back", "approved", "checking", "landed", "held", "notlanded", "asking")})
-        line("ac-every-stage", board, not (distinct == 11 and all(one(t[k]) == 1 for k in texts if k != "closed")),
-             f"{distinct}/11 distinct stage labels; sample={ {k: texts[k][:28] for k in ('working','checking','landed')} }")
+        # No other stage wording on a card: the old status line and the waiting-to-land chip must
+        # not restate (or contradict) the stage chip.
+        stage_words = re.compile(r"working on it|sent back for changes|waiting for a review|waiting on you|^waits on|waiting to land", re.I)
+
+        def extra_stage_wording(tid):
+            card = page.get_by_test_id(f"task-open-{tid}").locator("xpath=..")
+            found = []
+            for tag in ("task-card-status", "task-waiting-to-land"):
+                loc = card.locator(f"[data-testid='{tag}-{tid}']")
+                if loc.count() and (tag == "task-waiting-to-land" or stage_words.search(loc.first.inner_text())):
+                    found.append(f"{tag}={loc.first.inner_text()[:30]!r}")
+            return found
+
+        extras = {k: extra_stage_wording(v) for k, v in t.items() if k != "closed"}
+        doubled = {k: v for k, v in extras.items() if v}
+        line("ac-every-stage", board,
+             not (distinct == 11 and all(one(t[k]) == 1 for k in texts if k != "closed") and not doubled),
+             f"{distinct}/11 distinct stage labels; second stage wording on cards: {doubled or 'none'}; "
+             f"sample={ {k: texts[k][:28] for k in ('working','checking','landed')} }")
         line("ac-detail", board,
              not ("abcdef1" in texts["landed"] and "lint" in
                   (page.get_by_test_id(f"task-stage-waits-on-{t['held']}").inner_text()
@@ -183,12 +201,15 @@ def drive():
 
         # ac-time-advances: the 90-second-old card reads 1 min; two minutes later 3 min, no reload.
         first = age("fresh").strip(" ·")
+        # Reached = the card is on the board and the two minutes have passed; the assertion is the
+        # card's age text, so pre-build code (no age shown) reaches it and fails there.
+        on_board = page.get_by_test_id(f"task-open-{t['fresh']}").count() >= 1
         if ARGS.skip_wait:
-            line("ac-time-advances", board, True, "skipped (--skip-wait)")
+            line("ac-time-advances", board and on_board, True, "skipped (--skip-wait); no wait was run")
         else:
             time.sleep(125)
             second = age("fresh").strip(" ·")
-            line("ac-time-advances", board and first == "1 min", not (first == "1 min" and second == "3 min"),
+            line("ac-time-advances", board and on_board, not (first == "1 min" and second == "3 min"),
                  f"before={first!r} after two minutes, no reload={second!r}")
 
         # ac-live: approve a task with a real branch; its card must read On main within 5 s.

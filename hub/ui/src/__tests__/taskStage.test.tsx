@@ -65,3 +65,13 @@ describe('stage on the card', () => {
     expect(screen.queryByTestId('task-stage-waits-on-t1')).toBeNull()
   })
 })
+
+describe('a staged card shows one stage', () => {
+  it('the status line drops stage wording once the Hub reports a stage', async () => {
+    const { cardStatus } = await import('@/lib/taskCardStatus')
+    const base = { id: 't', title: 'T', status: 'revision_needed', assignee: 'D' } as never
+    expect(cardStatus(base, true)?.reason).toBe('revision')
+    expect(cardStatus({ ...(base as object), stage: 'sent_back' } as never, true)).toBeNull()
+    expect(cardStatus({ ...(base as object), status: 'under_review', stage: 'under_review' } as never)).toBeNull()
+  })
+})
