@@ -3,7 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { readableApiError } from '@/api/client'
+import { capabilityPathFor } from './page/model'
 import {
+  useCreateSpecDocument,
   useFoldDocument,
   useFoldDraft,
   useSpec,
@@ -54,6 +56,23 @@ export function FoldIntoCapabilityDialog({
     (d) => d.kind === 'capability' && d.phase === 'current',
   )
   const [into, setInto] = useState<string | null>(null)
+  // The capabilities this change names (`a-change-names-the-capabilities-it-changes` FR-7): exactly
+  // one existing opens as the target; several ask which; a new one is offered by its title.
+  const named = documents?.documents.find((d) => d.path === path)?.capabilities
+  const namedExisting = (named?.changes ?? []).filter((p) => capabilities.some((c) => c.path === p))
+  const createTitles = (named?.creates ?? [])
+    .map((c) => c.title)
+    .filter((t) => {
+      const target = capabilityPathFor(t)
+      return !!target && !capabilities.some((c) => c.path === target)
+    })
+  const offered = useRef(false)
+  useEffect(() => {
+    if (offered.current || !documents) return
+    offered.current = true
+    if (namedExisting.length === 1) setInto(namedExisting[0])
+  }, [documents, namedExisting])
+  const createCapability = useCreateSpecDocument()
   // The change's reconcile result rides the same `spec/<path>` read the document panel holds.
   const { data: spec, isError: specError } = useSpec(path)
   const draft = useFoldDraft(path, into)
@@ -107,6 +126,18 @@ export function FoldIntoCapabilityDialog({
 
   function update(from: string, change: Partial<Row>) {
     setRows((current) => current.map((row) => (row.from === from ? { ...row, ...change } : row)))
+  }
+
+  async function onCreateNamed(title: string) {
+    const target = capabilityPathFor(title)
+    if (!target) return
+    setError(null)
+    try {
+      const created = await createCapability.mutateAsync({ path: target, title, kind: 'capability' })
+      setInto(created.path)
+    } catch (refusal) {
+      setError(readableApiError(refusal, 'The Hub refused to create that capability.'))
+    }
   }
 
   async function onConfirm() {
@@ -164,7 +195,7 @@ export function FoldIntoCapabilityDialog({
         <label className="flex items-center gap-2">
           <span style={{ color: 'var(--text-2)' }}>Capability</span>
           <select
-            data-testid="fold-capability"
+            data-testid="fold-target"
             value={into ?? ''}
             onChange={(event) => setInto(event.target.value || null)}
             className="min-w-0 flex-1 rounded-[var(--radius-sm)] px-1.5 py-1"
@@ -178,6 +209,25 @@ export function FoldIntoCapabilityDialog({
             ))}
           </select>
         </label>
+
+        {namedExisting.length > 1 && !into && (
+          <p data-testid="fold-target-ask" style={{ color: 'var(--text-2)' }}>
+            This change names several capabilities: choose which one to fold into first.
+          </p>
+        )}
+        {createTitles.map((title) => (
+          <Button
+            key={title}
+            variant="ghost"
+            size="sm"
+            className="self-start"
+            data-testid="fold-create-named"
+            disabled={createCapability.isPending}
+            onClick={() => onCreateNamed(title)}
+          >
+            Create “{title}” and fold into it
+          </Button>
+        ))}
 
         {/* An empty picker after a failed read would read as "this project has no capabilities". */}
         {documentsError && (

@@ -256,6 +256,7 @@ export function listEntries(specs: SpecEntry[], records: SpecDocumentRecord[]): 
           ? { path: named.document, order: named.order ?? Number.MAX_SAFE_INTEGER }
           : null,
       waiting: waitingReason(record),
+      waitingCount: record?.waiting_count,
       building,
       untracked: !record && !entry.document_id,
     }

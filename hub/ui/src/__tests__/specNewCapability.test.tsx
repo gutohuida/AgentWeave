@@ -135,7 +135,7 @@ describe('New capability', () => {
         <FoldIntoCapabilityDialog path={CHANGE} title="Slice one" onClose={vi.fn()} />
       </QueryClientProvider>,
     )
-    await waitFor(() => expect(screen.getByTestId('fold-capability').querySelectorAll('option')).toHaveLength(1))
+    await waitFor(() => expect(screen.getByTestId('fold-target').querySelectorAll('option')).toHaveLength(1))
     await userEvent.click(screen.getByTestId('new-capability'))
     await userEvent.type(screen.getByTestId('new-capability-title'), 'Spec builds')
     await userEvent.click(screen.getByTestId('new-capability-confirm'))

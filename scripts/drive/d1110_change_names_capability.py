@@ -703,7 +703,7 @@ def drive(args, root, pid, root2, pid2):
             confirm = page.get_by_test_id("fold-confirm")
             if target != GAMMA:
                 # Today's dialog: pick gamma by hand so the steps after the fold still run.
-                pick = page.get_by_test_id("fold-capability")
+                pick = page.get_by_test_id("fold-target")
                 if pick.count():
                     pick.select_option(GAMMA)
             if base.poll(lambda: confirm.count() >= 1 and confirm.is_enabled(), 15):

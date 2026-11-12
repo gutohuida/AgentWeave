@@ -132,7 +132,7 @@ def main():
             check("the bar says the change is shipped but not in a capability",
                   state.get_attribute("data-state") == "ready", state.inner_text())
             page.locator('[data-testid="fold-open"]').click()
-            page.locator('[data-testid="fold-capability"]').select_option(CAPABILITY)
+            page.locator('[data-testid="fold-target"]').select_option(CAPABILITY)
             key = page.locator('[data-testid="fold-req-key-glow"]')
             key.wait_for(timeout=10000)
             check("the draft names the folded key", key.input_value() == FOLDED_KEY, key.input_value())

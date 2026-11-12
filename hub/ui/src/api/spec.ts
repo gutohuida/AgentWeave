@@ -889,7 +889,28 @@ export interface SpecDocumentRecord {
   superseded?: { at: string; by: string; reason: string; successor: string | null } | null
   /** Held by the operator: tidy acts on it are refused until released. */
   held?: { at: string; note: string | null } | null
+  /** A change: the capabilities it changes and those it will create by title
+   *  (`a-change-names-the-capabilities-it-changes`). */
+  capabilities?: CapabilityLink
+  /** A change: the capability its fold went into, or null (also for folds before the link existed). */
+  folded_into?: string | null
+  /** A capability: the open changes that name it, in the Hub's order. */
+  waiting_changes?: WaitingChange[]
+  waiting_count?: number
   updated_at: string
+}
+
+export interface CapabilityLink {
+  changes: string[]
+  creates: { title: string }[]
+}
+
+export interface WaitingChange {
+  path: string
+  title: string
+  phase: string
+  built: boolean
+  first_approved_at: string | null
 }
 
 export type SpecSize = 'fix' | 'small' | 'large'
@@ -1488,6 +1509,15 @@ export function useFoldDocument() {
         `/api/v1/projects/${projectId}/project/documents/${path}/fold`,
         body,
       ),
+  )
+}
+
+/** The operator setting which capabilities a change names, at any phase until it is folded. The
+ *  Hub changes that field alone, so an approved change stays approved (FR-4). */
+export function useSetCapabilities() {
+  return useCorpusMutation(
+    (projectId, { path, ...body }: { path: string; changes: string[]; creates: { title: string }[]; reason: string }) =>
+      putJson<SpecDocumentRecord>(`/api/v1/projects/${projectId}/project/documents/${path}/capabilities`, body),
   )
 }
 
