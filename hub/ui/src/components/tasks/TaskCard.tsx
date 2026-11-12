@@ -194,8 +194,8 @@ export function TaskCard({
 function Agent({ name, index, title, icon }: { name: string; index: number | null | undefined; title: string; icon?: string }) {
   const color = agentColorVars(index)
   return (
-    <span className="aw-tcard-agent" title={title} style={{ color: color.accent }}>
-      {icon ? <Icon name={icon} size={10} /> : <span className="aw-tcard-agent-dot" style={{ background: color.accent }} />}
+    <span className="aw-tcard-agent" title={title}>
+      {icon ? <Icon name={icon} size={10} style={{ color: color.accent }} /> : <span className="aw-tcard-agent-dot" style={{ background: color.accent }} />}
       {name}
     </span>
   )
