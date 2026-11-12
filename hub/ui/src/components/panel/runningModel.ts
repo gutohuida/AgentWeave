@@ -1,5 +1,5 @@
 import type { Job, LoopSummary } from '@/api/jobs'
-import type { SpecBuild } from '@/api/spec'
+import type { ProjectBuildRow } from '@/api/projectBuilds'
 import { describeCron, formatAgo, formatIn } from '@/lib/format'
 
 /** The side panel's Running tab (roadmap `a-side-panel-worth-keeping-open-…`, slice `activity-tab`):
@@ -39,6 +39,11 @@ export interface RunningItem {
   phase: RunningPhase
   /** What waits on the operator, in one sentence. Only on a `needs-you` row. */
   attention: { kind: 'question' | 'stall'; text: string } | null
+  /** What a row opens: the document a build builds, the loop's record, the job. */
+  documentId: string | null
+  loopId: string | null
+  /** For a question to answer: where it was asked, so Answer can go there. */
+  questionId: string | null
   /** The one line under the title saying what is happening, when nobody is working a task. */
   status: string
   workers: RunningWorker[]
@@ -48,18 +53,16 @@ export interface RunningItem {
   spentUsd: number | null
 }
 
-/** A build as the panel receives it: the Hub's record, the document it builds, and its loop. */
+/** A build as the panel receives it: the Hub's row for it, and its loop (from the loops list). */
 export interface RunningBuildInput {
-  build: SpecBuild
-  number: number
-  documentTitle: string
+  build: ProjectBuildRow
   loop: LoopSummary | null
   nextRun?: string | null
 }
 
 const DONE_STATUSES = new Set(['approved', 'rejected'])
 
-function progressOf(loop: LoopSummary | null): RunningItem['progress'] {
+function progressOfLoop(loop: LoopSummary | null): RunningItem['progress'] {
   if (!loop) return null
   const total = Object.values(loop.queue).reduce((n, v) => n + v, 0)
   if (total === 0) return null
@@ -81,13 +84,12 @@ function workersOf(loop: LoopSummary | null): RunningWorker[] {
     .map((t) => ({ agent: t.agent!, doing: doingOf(t.status, t.agent_capacity), task: t.title }))
 }
 
-function attentionOf(loop: LoopSummary | null): RunningItem['attention'] {
-  if (!loop) return null
-  if (loop.open_questions > 0) {
-    const text = loop.open_questions === 1 ? 'A question is waiting for your answer' : `${loop.open_questions} questions are waiting for your answer`
+function attentionOf(loop: LoopSummary | null, openQuestions = loop?.open_questions ?? 0): RunningItem['attention'] {
+  if (openQuestions > 0) {
+    const text = openQuestions === 1 ? 'A question is waiting for your answer' : `${openQuestions} questions are waiting for your answer`
     return { kind: 'question', text }
   }
-  if (loop.stall_reason) return { kind: 'stall', text: loop.stall_reason }
+  if (loop?.stall_reason) return { kind: 'stall', text: loop.stall_reason }
   return null
 }
 
@@ -114,9 +116,17 @@ function whenOf(phase: RunningPhase, now: Date, times: { started?: string | null
 export function buildItem(input: RunningBuildInput, now: Date): RunningItem {
   const { build, loop } = input
   const workers = workersOf(loop)
-  const attention = build.state === 'running' ? attentionOf(loop) : null
+  const attention = build.state === 'running' ? attentionOf(loop, build.open_questions) : null
   const phase: RunningPhase =
-    build.state === 'finished' ? 'finished' : build.state === 'stopped' ? 'stopped' : loop ? loopPhase(loop, attention, workers) : 'working'
+    build.state === 'finished'
+      ? 'finished'
+      : build.state === 'stopped'
+        ? 'stopped'
+        : attention
+          ? 'needs-you'
+          : loop
+            ? loopPhase(loop, attention, workers)
+            : 'working'
   const status =
     phase === 'stopped'
       ? build.stop_reason ?? 'Stopped before its tasks were done'
@@ -128,12 +138,15 @@ export function buildItem(input: RunningBuildInput, now: Date): RunningItem {
   return {
     id: build.id,
     kind: 'build',
-    title: input.documentTitle,
+    title: build.document_title,
+    documentId: build.document_id,
+    loopId: build.loop_id,
+    questionId: build.question?.id ?? null,
     phase,
     attention: phase === 'needs-you' ? attention : null,
     status,
     workers: phase === 'finished' || phase === 'stopped' ? [] : workers,
-    progress: progressOf(loop),
+    progress: build.tasks_total > 0 ? { done: build.tasks_done, total: build.tasks_total } : progressOfLoop(loop),
     when: whenOf(phase, now, { started: build.created_at, ended: build.stopped_at, next: input.nextRun }),
     spentUsd: build.spent_usd,
   }
@@ -147,11 +160,14 @@ export function loopItem(loop: LoopSummary, now: Date, times: { started?: string
     id: loop.id,
     kind: 'loop',
     title: loop.label,
+    documentId: null,
+    loopId: loop.id,
+    questionId: null,
     phase,
     attention: phase === 'needs-you' ? attention : null,
     status: phase === 'stopped' ? loop.stop_reason ?? 'Stopped before its queue was empty' : phase === 'finished' ? 'Its queue is empty' : phase === 'between' ? 'Waiting for its next firing' : '',
     workers: phase === 'finished' || phase === 'stopped' ? [] : workers,
-    progress: progressOf(loop),
+    progress: progressOfLoop(loop),
     when: whenOf(phase, now, { started: times.started, ended: loop.stopped_at, next: times.next }),
     spentUsd: null,
   }
@@ -168,6 +184,9 @@ export function jobItem(job: Job, now: Date): RunningItem {
     id: job.id,
     kind: 'job',
     title: job.name,
+    documentId: null,
+    loopId: null,
+    questionId: null,
     phase,
     attention: null,
     status: phase === 'paused' ? `${schedule}, paused` : schedule,
@@ -181,14 +200,21 @@ export function jobItem(job: Job, now: Date): RunningItem {
   }
 }
 
-/** Builds, loops that are not a build's, and jobs that are not a loop's: each piece of work once. */
-export function runningItems(input: { builds: RunningBuildInput[]; loops: LoopSummary[]; jobs: Job[]; now: Date }): RunningItem[] {
-  const buildLoops = new Set(input.builds.map((b) => b.build.loop_id).filter(Boolean))
+/** Builds, loops that are not a build's, and jobs that are not a loop's: each piece of work once.
+ *  A build's own loop (and that loop's job) supply its workers, stall and next firing. */
+export function runningItems(input: { builds: ProjectBuildRow[]; loops: LoopSummary[]; jobs: Job[]; now: Date }): RunningItem[] {
+  // A build can stop pointing at the loop that ran it (reopened build: old loop archived, new loop_id;
+  // finished build: loop_id null), so a flow loop is also a build's when its document has a build.
+  const buildLoops = new Set(input.builds.map((b) => b.loop_id).filter(Boolean))
+  const buildDocuments = new Set(input.builds.map((b) => b.document_id))
+  const loopById = new Map(input.loops.map((l) => [l.id, l]))
   const loopJobs = new Map(input.jobs.filter((j) => j.loop).map((j) => [j.loop!.id, j]))
   return [
-    ...input.builds.map((b) => buildItem(b, input.now)),
+    ...input.builds.map((b) =>
+      buildItem({ build: b, loop: (b.loop_id && loopById.get(b.loop_id)) || null, nextRun: b.loop_id ? loopJobs.get(b.loop_id)?.next_run : null }, input.now),
+    ),
     ...input.loops
-      .filter((l) => !buildLoops.has(l.id))
+      .filter((l) => !buildLoops.has(l.id) && !(l.spec_document_id && buildDocuments.has(l.spec_document_id)))
       .map((l) => loopItem(l, input.now, { started: loopJobs.get(l.id)?.created_at, next: loopJobs.get(l.id)?.next_run })),
     ...input.jobs.filter((j) => !j.loop).map((j) => jobItem(j, input.now)),
   ]

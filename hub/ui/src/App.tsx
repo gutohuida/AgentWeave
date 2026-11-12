@@ -427,6 +427,11 @@ export default function App() {
         onOpenTasks={(taskIds, specDocumentId) =>
           openTasksFor(destination.projectId, taskIds, specDocumentId)
         }
+        onOpenJobs={() => navigateTo(projectDestination(destination.projectId, 'jobs'))}
+        onOpenQuestions={() => {
+          setOverviewQuestionsOpen(true)
+          navigateTo(projectDestination(destination.projectId, 'overview'))
+        }}
       />
     ) : (
       // Not while the open roster is still loading: every agent is absent from `[]`, and the notice
