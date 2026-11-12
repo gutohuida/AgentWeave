@@ -174,3 +174,16 @@ async def test_closing_several_names_the_flow_task_and_closes_the_rest(app):
     assert [r["task"] for r in body["refused"]] == ["TST-3"]
     assert "flow" in body["refused"][0]["reason"]
     assert (await _stage(app, "tf"))["status"] == "pending"
+
+
+async def test_the_moves_route_offers_a_loose_task_every_action_and_a_flow_task_its_own(app):
+    """ac-offered: the answer the drawer is built from."""
+    await _setup(loose=("completed", {}), flow=("completed", {"loop_id": "loop-x"}))
+    base = "/api/v1/projects/proj-test/tasks"
+    loose = (await app.get(f"{base}/loose/moves", headers=HEADERS)).json()
+    flow = (await app.get(f"{base}/flow/moves", headers=HEADERS)).json()
+    assert loose["loose"] is True
+    assert {"approved", "revision_needed"} <= set(loose["moves"])
+    assert loose["closes"] == ["done_elsewhere", "cancelled"]
+    assert flow["loose"] is False
+    assert flow["closes"] == []

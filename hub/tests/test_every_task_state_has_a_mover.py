@@ -292,7 +292,7 @@ async def test_the_board_is_offered_exactly_the_moves_the_decision_allows(app, a
     author holds is not offered the move that keeps the author, and is offered the hand-off.
     """
     from hub.task_transition_service import decide_move
-    from hub.task_transitions import allowed_targets, operator
+    from hub.task_transitions import allowed_targets, free_targets, operator
 
     await _agents()
     for status, holder in itertools.product(NON_TERMINAL, HOLDERS):
@@ -304,7 +304,8 @@ async def test_the_board_is_offered_exactly_the_moves_the_decision_allows(app, a
         async with async_session_factory() as session:
             task = await session.get(Task, task_id)
             expected = []
-            for t in sorted(allowed_targets(status, "operator")):
+            # These tasks are in no flow, so they also take the free moves (FR-1).
+            for t in sorted(set(allowed_targets(status, "operator")) | set(free_targets(status))):
                 if (await decide_move(session, task, t, operator())).allowed:
                     expected.append(t)
             reviewers = []

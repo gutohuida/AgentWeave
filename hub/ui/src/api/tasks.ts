@@ -1102,6 +1102,38 @@ export interface TaskMoves {
   moves: string[]
   /** Open agents the operator may hand a completed task to for review, never its author. */
   reviewers?: string[]
+  /** The task is in no flow or loop, so it moves by hand. */
+  loose?: boolean
+  /** The closes the Hub will accept for this task now: `done_elsewhere`, `cancelled`. */
+  closes?: CloseOutcome[]
+}
+
+export type CloseOutcome = 'done_elsewhere' | 'cancelled'
+
+export interface CloseTasksResult {
+  outcome: CloseOutcome
+  commit: string | null
+  closed: { id: string; readable_id?: string | null; status: string }[]
+  /** A task that could not close, with the Hub's reason; the others closed anyway. */
+  refused: { task: string; reason: string; code: string }[]
+}
+
+/** Close loose tasks as done elsewhere (naming a task or a commit on main) or as cancelled. */
+export function useCloseTasks() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (body: {
+      tasks: string[]
+      outcome: CloseOutcome
+      by_task?: string
+      commit?: string
+      reason?: string
+    }) => postJson<CloseTasksResult>(`/api/v1/projects/${projectId}/tasks/close`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+    },
+  })
 }
 
 export function useTaskMoves(taskId: string | null) {

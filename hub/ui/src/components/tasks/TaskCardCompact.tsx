@@ -63,6 +63,7 @@ export function TaskCardCompact({
   startAgents,
   onStartWork,
   move,
+  select,
 }: {
   task: Task
   /** The assignee's palette index (from the roster), for the @name colour. */
@@ -82,6 +83,8 @@ export function TaskCardCompact({
   startAgents?: string[]
   onStartWork?: (taskId: string, agent: string) => void
   move?: CardMoveProps
+  /** Present while the board is picking tasks to close together. */
+  select?: { checked: boolean; onToggle: () => void }
 }) {
   const status = cardStatus(task, working)
   const people = builderAndReviewer(task)
@@ -100,6 +103,15 @@ export function TaskCardCompact({
       onDragStart={move?.onDragStart}
       onDragEnd={move?.onDragEnd}
     >
+      {select ? (
+        <input
+          type="checkbox"
+          data-testid={`task-select-${task.id}`}
+          aria-label={`Select ${task.title}`}
+          checked={select.checked}
+          onChange={select.onToggle}
+        />
+      ) : null}
       <button
         type="button"
         data-slot="task-card"
