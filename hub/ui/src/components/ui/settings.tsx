@@ -128,7 +128,7 @@ export function SettingsRow({
           {label}
         </Label>
         {description ? <p className="aw-settings-row-desc">{description}</p> : null}
-        {origin ? (
+        {origin && (origin.kind !== 'changed' || changed) ? (
           <p className="aw-settings-row-source" data-testid="setting-source" data-source={origin.kind}>
             <span className="aw-settings-row-source-mark">{ORIGIN_WORDS[origin.kind][0]}</span>
             {ORIGIN_WORDS[origin.kind][1] ? ` · ${ORIGIN_WORDS[origin.kind][1]}: ` : ' · '}

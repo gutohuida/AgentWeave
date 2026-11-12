@@ -322,6 +322,9 @@ def step_source_project(c: Ctx) -> None:
     text = c.source_of("Hop budget")
     expect("Changed" in text, f"hop budget reads {text!r}, not Changed")
     expect("6" in text, f"hop budget does not name the default (6): {text!r}")
+    marks = [t.strip() for t in c.page.locator('[data-testid="setting-source"]').all_inner_texts()]
+    changed = [m for m in marks if "Changed" in m]
+    expect(len(changed) == 1, f"only hop budget is changed, but the Collaboration marks read {marks}")
 
 
 def step_source_agent(c: Ctx) -> None:
