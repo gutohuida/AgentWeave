@@ -29,6 +29,7 @@ import { TaskDetailDrawer } from './TaskDetailDrawer'
 import { LoadingThread } from '@/components/common/LoadingThread'
 
 const FOLDS_KEY = 'aw.boardFolds'
+const SHOW_FINISHED_KEY = 'aw.boardShowFinished'
 const MOVE_INSTRUCTIONS_ID = 'task-board-move-instructions'
 
 function loadFolds(projectId: string | null): Record<string, boolean> {
@@ -37,6 +38,15 @@ function loadFolds(projectId: string | null): Record<string, boolean> {
     return JSON.parse(localStorage.getItem(`${FOLDS_KEY}.${projectId}`) ?? '{}') as Record<string, boolean>
   } catch {
     return {}
+  }
+}
+
+function loadShowFinished(projectId: string | null): boolean {
+  if (!projectId) return false
+  try {
+    return localStorage.getItem(`${SHOW_FINISHED_KEY}.${projectId}`) === 'true'
+  } catch {
+    return false
   }
 }
 
@@ -108,6 +118,18 @@ export function TasksScreen({
   const [draggedTaskId, setDraggedTaskId] = React.useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = React.useState<string | null>(null)
   const [moveMessage, setMoveMessage] = React.useState('')
+
+  const [showFinished, setShowFinished] = React.useState<boolean>(() => loadShowFinished(projectId))
+  React.useEffect(() => setShowFinished(loadShowFinished(projectId)), [projectId])
+  const changeShowFinished = (next: boolean) => {
+    setShowFinished(next)
+    if (!projectId) return
+    try {
+      localStorage.setItem(`${SHOW_FINISHED_KEY}.${projectId}`, String(next))
+    } catch {
+      // Persistence is optional.
+    }
+  }
 
   React.useEffect(() => setFolds(loadFolds(projectId)), [projectId])
   const changeFolds = (next: Record<string, boolean>) => {
@@ -390,6 +412,8 @@ export function TasksScreen({
           onViewChange={setView}
           folds={folds}
           onFoldsChange={changeFolds}
+          showFinished={showFinished}
+          onShowFinishedChange={changeShowFinished}
           selectedTaskId={openTaskId}
           onOpenTask={setOpenTaskId}
           onRetryIntegration={onRetryIntegration}

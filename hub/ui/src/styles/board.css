@@ -226,3 +226,6 @@ input.aw-board-search-input { height: 28px; padding: 0 10px 0 28px; font-size: 1
 .aw-board-standing-count strong { font-weight: 700; color: var(--text-1); margin-right: 4px; }
 .aw-board-standing-list { margin: 0; padding: 4px 16px 8px 32px; font-size: 12.5px; color: var(--text-2); }
 .aw-board-standing-list button { text-align: left; }
+
+.aw-board-finished-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; }
+.aw-board-hidden-count { padding: 2px 4px 6px; font-size: 12px; opacity: 0.7; }
