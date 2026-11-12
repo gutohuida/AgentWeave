@@ -309,7 +309,7 @@ export function ConversationView({
   // whether or not anything is attached yet. Section 5 adds the files tab beside it.
   const { data: workspacePaths = [], isLoading: workspacePathsLoading } = useWorkspacePaths()
   // The Running index tab: builds, loops and jobs in one list (`the-side-panel-s-running-tab`).
-  const { items: runningItems } = useRunningItems()
+  const { items: runningItems, loadFailed: runningLoadFailed } = useRunningItems()
   // Names a `loop:` tab already open (same key the list reads, so no second fetch).
   const { data: runningLoops = [] } = useLoops(true)
   // A build's document opens at its builds; the counter re-opens an already-open tab there again.
@@ -410,7 +410,7 @@ export function ConversationView({
         )
       }
       if (tab.id === 'running') {
-        return <RunningTabContainer items={runningItems} onOpen={openRunningItem} onAttend={attendRunningItem} />
+        return <RunningTabContainer items={runningItems} loadFailed={runningLoadFailed} onOpen={openRunningItem} onAttend={attendRunningItem} />
       }
       if (isLoopTabId(tab.id)) {
         return <LoopTab loopId={loopIdFromTab(tab.id)} onClose={() => closeTab(projectId, tab.id)} />

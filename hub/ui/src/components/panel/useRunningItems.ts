@@ -10,12 +10,12 @@ const CLOCK_MS = 30_000
 /** The items Running lists, from the Hub's three reads: builds, loops and jobs. Live: each read is a
  *  query the app's event-driven invalidation already refreshes (`useSSE`). Shared by the tab and by
  *  the launcher's count so the two cannot disagree. */
-export function useRunningItems(): { items: RunningItem[]; isLoading: boolean } {
-  const { data: builds = [], isLoading: buildsLoading } = useProjectBuilds()
+export function useRunningItems(): { items: RunningItem[]; isLoading: boolean; loadFailed: boolean } {
+  const { data: builds = [], isLoading: buildsLoading, error: buildsError } = useProjectBuilds()
   // Archived loops and jobs included: they are what Finished lists for plain work.
-  const { data: loops = [], isLoading: loopsLoading } = useLoops(true)
-  const { data: jobs = [], isLoading: jobsLoading } = useJobs()
-  const { data: archivedJobs = [] } = useArchivedJobs()
+  const { data: loops = [], isLoading: loopsLoading, error: loopsError } = useLoops(true)
+  const { data: jobs = [], isLoading: jobsLoading, error: jobsError } = useJobs()
+  const { data: archivedJobs = [], error: archivedError } = useArchivedJobs()
   const [now, setNow] = React.useState(() => new Date())
   React.useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), CLOCK_MS)
@@ -25,7 +25,8 @@ export function useRunningItems(): { items: RunningItem[]; isLoading: boolean } 
     () => runningItems({ builds, loops, jobs: [...jobs, ...archivedJobs.filter((a) => !jobs.some((j) => j.id === a.id))], now }),
     [builds, loops, jobs, archivedJobs, now],
   )
-  return { items, isLoading: buildsLoading || loopsLoading || jobsLoading }
+  const loadFailed = Boolean(buildsError || loopsError || jobsError || archivedError)
+  return { items, isLoading: buildsLoading || loopsLoading || jobsLoading, loadFailed }
 }
 
 /** What the launcher card counts: the items that need the operator or are working. */
