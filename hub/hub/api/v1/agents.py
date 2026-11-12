@@ -1280,7 +1280,7 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             args=(
                 "path, title, kind, summary, problem, design, lifecycle, scope, requirements, "
                 "acceptance_criteria, tasks, algorithms, evidence, open_questions, delivery, "
-                "slices, roadmap, already_built, capabilities"
+                "slices, roadmap, already_built, capabilities, tag"
             ),
             method="POST",
             path="/spec/documents",
