@@ -41680,7 +41680,7 @@ AW-81, AW-82 and AW-83 were built in AW-80's run (the Hub refused to let that ru
 
 ## F1167 (B) -- a spec document written through the Hub leaves the project checkout dirty, and the next landing is refused for it
 
-**Status:** open
+**Status:** fixed 2026-11-12 on branch `agentweave/DeveloperOpus` (4ac1ec8, with F1086): the Hub records a digest of each tracked file it writes (`hub/hub/hub_writes.py`, `.agentweave/hub-writes.json`), so its own unchanged writes to `spec/` and `knowledge/` no longer count as a dirty checkout, and a dirty checkout fails a batch before its checks run (`hub/tests/test_hub_writes_do_not_block_landing.py`). Not merged to master yet.
 **Found:** 2026-11-11, Architect, after the power outage, checking the PSWSN and FASSW builds on proj-d85a82bf4216
 **Tier:** 1
 
