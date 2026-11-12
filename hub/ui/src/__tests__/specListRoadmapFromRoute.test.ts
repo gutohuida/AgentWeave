@@ -42,3 +42,24 @@ describe('a slice is listed under the roadmap it names (FR-9)', () => {
     expect(a.waiting).toBe('1 amendment to review')
   })
 })
+
+describe('Not archived hides an archived slice under a live roadmap', () => {
+  const live = 'spec/changes/live/spec.json'
+  const gone = 'spec/changes/gone/spec.json'
+  const specs = [entry(ROADMAP, 'roadmap'), entry(live, 'change-spec'), { ...entry(gone, 'change-spec'), phase: 'archived' } as SpecEntry]
+  const records = [
+    record(ROADMAP, 'roadmap'),
+    record(live, 'change-spec', { roadmap: { document: ROADMAP, slice: 'live', order: 0 } }),
+    record(gone, 'change-spec', { phase: 'archived', display_phase: 'archived', roadmap: { document: ROADMAP, slice: 'gone', order: 1 } }),
+  ]
+
+  it('lists the roadmap with its live slice only', () => {
+    const groups = arrangeList(listEntries(specs, records), { ...DEFAULT_LIST_PREFERENCES, order: 'roadmap', phase: 'unarchived' })
+    expect(groups.map((g) => [g.roadmap?.path ?? g.label, g.entries.map((e) => e.path)])).toEqual([[ROADMAP, [live]]])
+  })
+
+  it('Any phase still shows both', () => {
+    const groups = arrangeList(listEntries(specs, records), { ...DEFAULT_LIST_PREFERENCES, order: 'roadmap' })
+    expect(groups.map((g) => [g.roadmap?.path ?? g.label, g.entries.map((e) => e.path)])).toEqual([[ROADMAP, [live, gone]]])
+  })
+})

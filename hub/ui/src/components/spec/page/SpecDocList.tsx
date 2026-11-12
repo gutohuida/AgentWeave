@@ -103,6 +103,7 @@ export function SpecDocList({
             maxWidth={150}
             options={[
               { value: 'any', label: 'Any phase' },
+              { value: 'unarchived', label: 'Not archived' },
               { value: 'writing', label: 'Writing' },
               { value: 'approved', label: 'Approved' },
               { value: 'archived', label: 'Archived' },
