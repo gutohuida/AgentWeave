@@ -1139,6 +1139,17 @@ async def _run_one_batch(
     if not chosen:
         await _end_batch(batch_id, "failed", error="nothing left to land")
         return True
+    # The checkout's half of landing, asked before the checks rather than only after them (F1086):
+    # a dirty checkout refused a batch half an hour of checks later. `_land_batch` asks again.
+    async with async_session_factory() as session:
+        hub_written = await _hub_written(session, project_id)
+        await session.commit()
+    obstacle = await blocking.run(
+        task_integration.checkout_obstacle, root, main_branch, hub_written
+    )
+    if obstacle is not None:
+        await _not_landed(batch_id, chosen, main_branch, obstacle)
+        return False
 
     chain = await blocking.run(
         build_chain,

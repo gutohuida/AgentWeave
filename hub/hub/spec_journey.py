@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import project_workspace
+from . import hub_writes, project_workspace
 from .db.models import SpecDocument
 from .spec_lifecycle import INTAKE_STEP, Actor, record_event
 from .spec_manifest import JOURNEY_PATH
@@ -263,6 +263,7 @@ def save(workspace: project_workspace.ProjectWorkspace, document: Any) -> Projec
         with contextlib.suppress(OSError):
             temporary.unlink()
         raise
+    hub_writes.record(workspace.root, JOURNEY_FILE, dump(steps).encode("utf-8"))
     return steps
 
 
