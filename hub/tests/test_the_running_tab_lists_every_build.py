@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Build, Loop, Question, SpecDocument, Task
+from hub.db.models import AIJob, Build, Loop, Question, Run, SpecDocument, Task
 
 P = "proj-test"
 URL = f"/api/v1/projects/{P}/project/builds"
@@ -165,6 +165,77 @@ async def test_every_build_is_listed_once_newest_first_with_its_context(app, aut
     assert (done["state"], early["state"]) == ("finished", "stopped")
     assert done["stopped_at"] is not None and early["stopped_at"] is not None
     assert early["stop_reason"] == "stopped by the operator"
+
+
+async def _seed_flow_build_with_tasks() -> None:
+    async with async_session_factory() as db:
+        db.add(_document("flow", "A flow build"))
+        await db.flush()
+        db.add(_build("flow", 1))
+        await db.flush()
+        db.add(
+            Task(
+                id="t-flow-1",
+                project_id=P,
+                title="one",
+                status="in_progress",
+                build_id="build-flow",
+            )
+        )
+        await db.flush()
+        db.add(Run(id="run-flow-1", project_id=P, agent="dev", task_id="t-flow-1"))
+        await db.flush()
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_question_parking_a_build_task_belongs_to_that_build(app, auth_headers):
+    await _seed_flow_build_with_tasks()
+    async with async_session_factory() as db:
+        db.add(
+            Question(
+                id="q-parked",
+                project_id=P,
+                from_agent="dev",
+                question="Parked?",
+                blocking=True,
+                blocked_task_id="t-flow-1",
+                created_at=NOW,
+            )
+        )
+        await db.commit()
+
+    response = await app.get(URL, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    (row,) = response.json()["builds"]
+    assert row["open_questions"] == 1
+    assert row["question"]["id"] == "q-parked"
+
+
+@pytest.mark.asyncio
+async def test_a_question_asked_by_a_build_tasks_run_belongs_to_that_build(app, auth_headers):
+    await _seed_flow_build_with_tasks()
+    async with async_session_factory() as db:
+        db.add(
+            Question(
+                id="q-run",
+                project_id=P,
+                from_agent="dev",
+                question="From the run?",
+                blocking=True,
+                created_by_run_id="run-flow-1",
+                created_at=NOW,
+            )
+        )
+        await db.commit()
+
+    response = await app.get(URL, headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    (row,) = response.json()["builds"]
+    assert row["open_questions"] == 1
+    assert row["question"]["id"] == "q-run"
 
 
 @pytest.mark.asyncio
