@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { OPEN_PALETTE_EVENT } from '@/lib/palette'
-import { Command } from 'cmdk'
+import { Command, defaultFilter } from 'cmdk'
 import * as Dialog from '@radix-ui/react-dialog'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
@@ -10,7 +10,10 @@ import type { Task } from '@/api/tasks'
 import { agentColorVars } from '@/lib/agentColors'
 import { useModalLayer } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
-import type { AppSettingsSection } from '@/lib/navigation'
+import { SCOPE_LABEL, searchSettings, type SettingEntry } from '@/lib/settingsIndex'
+
+/** What every per-setting item's cmdk value starts with. */
+const SETTING_VALUE = 'setting-'
 
 export interface CommandPaletteAgent {
   name: string
@@ -28,20 +31,14 @@ interface CommandPaletteProps {
   onOpenAgent: (agent: string) => void
   onOpenDocument: (path: string) => void
   onOpenTask: (taskId: string) => void
-  /** App settings (the operator's own); it works with no project open. */
-  onOpenAppSettings?: (section: AppSettingsSection) => void
+  /** A setting found by its words (any scope): open its scope and section and land on it. App
+   *  settings work with no project open; project and agent settings need one, and an agent setting
+   *  opens for `agent`. */
+  onOpenSetting?: (entry: SettingEntry, agent?: string) => void
   /** Without an open project there are no project or agent settings to offer. */
   onOpenProjectSettings?: () => void
   onOpenAgentSettings?: (agent: string) => void
 }
-
-/** What 'settings' is searched by: each page's own words, so 'sound', 'notif', 'dark' and 'hub'
- *  all find the page they mean. cmdk matches `value` and `keywords` together. */
-const APP_SETTINGS_ENTRIES: ReadonlyArray<{ section: AppSettingsSection; label: string; sub: string; keywords: string[] }> = [
-  { section: 'notifications', label: 'Sound and notifications', sub: 'App settings', keywords: ['sound', 'notifications', 'notify', 'volume', 'alerts', 'bell'] },
-  { section: 'appearance', label: 'Appearance', sub: 'App settings', keywords: ['theme', 'dark', 'light', 'mode'] },
-  { section: 'connection', label: 'Hub connection', sub: 'App settings', keywords: ['hub', 'address', 'key', 'url', 'server'] },
-]
 
 /**
  * Cmd+K / Ctrl+K quick navigation (D3). Reads data the app already loaded elsewhere — no fetch
@@ -62,7 +59,7 @@ export function CommandPalette({
   onOpenAgent,
   onOpenDocument,
   onOpenTask,
-  onOpenAppSettings,
+  onOpenSetting,
   onOpenProjectSettings,
   onOpenAgentSettings,
 }: CommandPaletteProps) {
@@ -136,6 +133,16 @@ export function CommandPalette({
     return <>{text.slice(0, index)}<mark>{text.slice(index, index + needle.length)}</mark>{text.slice(index + needle.length)}</>
   }
 
+  // Per-setting entries, by the same rule as the search on the settings screens. Agent settings
+  // need an agent to open for, and every project-scoped one a project.
+  const settingMatches = useMemo(
+    () =>
+      searchSettings(query)
+        .map((match) => match.entry)
+        .filter((entry) => entry.scope === 'app' || (onOpenProjectSettings && (entry.scope === 'project' || agents.length > 0))),
+    [query, onOpenProjectSettings, agents.length],
+  )
+
   const conversationRows = useMemo(
     () =>
       conversations.map((conversation) => {
@@ -164,6 +171,8 @@ export function CommandPalette({
       open={open}
       onOpenChange={setOpen}
       label="Command palette"
+      // The settings rule (`searchSettings`) decides which settings are listed, not cmdk's scoring.
+      filter={(value, search, keywords) => (value.startsWith(SETTING_VALUE) ? 1 : defaultFilter(value, search, keywords))}
       className="command-palette lifted-surface fixed left-1/2 top-[15vh] z-50 w-[min(560px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden"
       overlayClassName="command-palette-overlay fixed inset-0 z-50"
     >
@@ -252,23 +261,22 @@ export function CommandPalette({
           </Command.Group>
         )}
 
-        {(onOpenAppSettings || onOpenProjectSettings || (onOpenAgentSettings && agents.length > 0)) && (
+        {(onOpenSetting || onOpenProjectSettings || (onOpenAgentSettings && agents.length > 0)) && (
           <Command.Group heading="Settings">
-            {onOpenAppSettings
-              ? APP_SETTINGS_ENTRIES.map((entry) => (
+            {onOpenSetting
+              ? settingMatches.map((entry) => (
                   <Command.Item
-                    key={entry.section}
-                    value={`settings-app-${entry.section} ${entry.label}`}
-                    keywords={['settings', 'app settings', ...entry.keywords]}
+                    key={`${entry.scope}/${entry.section}/${entry.label}`}
+                    value={`${SETTING_VALUE}${entry.scope}-${entry.section}-${entry.label}`}
                     onSelect={() => {
-                      onOpenAppSettings(entry.section)
+                      onOpenSetting(entry, agents[0]?.name)
                       close()
                     }}
                   >
-                    <Icon name={entry.section === 'notifications' ? 'notifications' : entry.section === 'appearance' ? 'palette' : 'link'} size={14} className="palette-row-icon" style={{ color: 'var(--text-3)' }} />
+                    <Icon name="settings" size={14} className="palette-row-icon" style={{ color: 'var(--text-3)' }} />
                     <span className="palette-row-main">
                       <span className="palette-row-title">{highlight(entry.label)}</span>
-                      <span className="palette-row-sub">{entry.sub} · yours, on this Hub</span>
+                      <span className="palette-row-sub">{SCOPE_LABEL[entry.scope]} settings · {entry.sectionLabel}</span>
                     </span>
                   </Command.Item>
                 ))

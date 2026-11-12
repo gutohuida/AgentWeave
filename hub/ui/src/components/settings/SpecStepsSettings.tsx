@@ -144,6 +144,7 @@ export function SpecStepsSettings({
           return (
             <SettingsRow
               key={step.key}
+              listItem
               label={
                 <span className="aw-step-label">
                   <span className="aw-step-index">{index + 1}</span>

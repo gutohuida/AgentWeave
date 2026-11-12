@@ -1,5 +1,7 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
+import { landOnSetting } from './landOnSetting'
+import { SettingsSearchBox, SettingsSearchResults } from './SettingsSearch'
 import '@/styles/settings.css'
 
 /** Settings with their own section list, inside the content area (the app's rail stays put).
@@ -28,6 +30,8 @@ export function SettingsNavLayout<T extends string>({
   active,
   onSelect,
   footer,
+  agent,
+  landing,
   children,
 }: {
   title: string
@@ -40,8 +44,20 @@ export function SettingsNavLayout<T extends string>({
   /** A link that ends the section list, to settings of another scope (Project and agent settings
    *  point at App settings, where the operator's own settings live). */
   footer?: { label: string; icon: string; onClick: () => void }
+  /** The agent whose settings these are, when they are an agent's. */
+  agent?: string
+  /** The setting the location names (its row's label): scrolled to, highlighted and focused. */
+  landing?: string | null
   children: React.ReactNode
 }) {
+  const [query, setQuery] = React.useState('')
+  const [landed, setLanded] = React.useState(0)
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const searching = query.trim() !== ''
+  React.useEffect(() => {
+    if (!landing || searching || !scrollRef.current) return
+    return landOnSetting(scrollRef.current, landing)
+  }, [landing, active, agent, landed, searching])
   return (
     <div className="aw-settings-layout">
       <nav className="aw-settings-nav" aria-label={title}>
@@ -55,6 +71,7 @@ export function SettingsNavLayout<T extends string>({
           <span className="aw-settings-nav-title">{title}</span>
           {subtitle ? <span className="aw-settings-nav-sub">{subtitle}</span> : null}
         </div>
+        <SettingsSearchBox value={query} onChange={setQuery} />
         <ul className="aw-settings-nav-list">
           {items.map((item, index) => (
             <li key={item.id}>
@@ -81,7 +98,20 @@ export function SettingsNavLayout<T extends string>({
           </button>
         ) : null}
       </nav>
-      <div className="aw-settings-scroll">{children}</div>
+      <div className="aw-settings-scroll" ref={scrollRef}>
+        {searching ? (
+          <SettingsSearchResults
+            query={query}
+            agent={agent}
+            onChosen={() => {
+              setQuery('')
+              setLanded((n) => n + 1)
+            }}
+          />
+        ) : (
+          children
+        )}
+      </div>
     </div>
   )
 }
