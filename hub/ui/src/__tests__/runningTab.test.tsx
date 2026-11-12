@@ -111,6 +111,26 @@ describe('Running lists each piece of work once (FR-2)', () => {
     expect(rows()).toHaveLength(5)
   })
 
+  it('a build that no longer points at its loop (reopened, or loop_id null) does not list that loop again', () => {
+    const oldLoop = loop('old', { spec_document_id: 'spdoc-reopened', ending_state: 'stopped', archived_at: ago(5) })
+    const newLoop = loop('new', { spec_document_id: 'spdoc-reopened' })
+    const orphan = loop('orphan', { spec_document_id: 'spdoc-ended', ending_state: 'completed' })
+    const items = runningItems({
+      builds: [
+        build('reopened', { loop_id: newLoop.id }),
+        build('ended', { state: 'finished', stopped_at: ago(24), loop_id: null }),
+      ],
+      loops: [newLoop, oldLoop, orphan, loop('plain')],
+      jobs: [],
+      now: NOW,
+    })
+    expect(items.map((i) => [i.kind, i.title])).toEqual([
+      ['build', 'Document reopened'],
+      ['build', 'Document ended'],
+      ['loop', 'Loop plain'],
+    ])
+  })
+
   it('ac-ended-builds: a finished and a stopped-early build appear under Finished and Stopped early with when they ended', () => {
     const items = runningItems({
       builds: [

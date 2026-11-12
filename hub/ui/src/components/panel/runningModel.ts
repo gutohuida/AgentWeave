@@ -203,7 +203,10 @@ export function jobItem(job: Job, now: Date): RunningItem {
 /** Builds, loops that are not a build's, and jobs that are not a loop's: each piece of work once.
  *  A build's own loop (and that loop's job) supply its workers, stall and next firing. */
 export function runningItems(input: { builds: ProjectBuildRow[]; loops: LoopSummary[]; jobs: Job[]; now: Date }): RunningItem[] {
+  // A build can stop pointing at the loop that ran it (reopened build: old loop archived, new loop_id;
+  // finished build: loop_id null), so a flow loop is also a build's when its document has a build.
   const buildLoops = new Set(input.builds.map((b) => b.loop_id).filter(Boolean))
+  const buildDocuments = new Set(input.builds.map((b) => b.document_id))
   const loopById = new Map(input.loops.map((l) => [l.id, l]))
   const loopJobs = new Map(input.jobs.filter((j) => j.loop).map((j) => [j.loop!.id, j]))
   return [
@@ -211,7 +214,7 @@ export function runningItems(input: { builds: ProjectBuildRow[]; loops: LoopSumm
       buildItem({ build: b, loop: (b.loop_id && loopById.get(b.loop_id)) || null, nextRun: b.loop_id ? loopJobs.get(b.loop_id)?.next_run : null }, input.now),
     ),
     ...input.loops
-      .filter((l) => !buildLoops.has(l.id))
+      .filter((l) => !buildLoops.has(l.id) && !(l.spec_document_id && buildDocuments.has(l.spec_document_id)))
       .map((l) => loopItem(l, input.now, { started: loopJobs.get(l.id)?.created_at, next: loopJobs.get(l.id)?.next_run })),
     ...input.jobs.filter((j) => !j.loop).map((j) => jobItem(j, input.now)),
   ]
