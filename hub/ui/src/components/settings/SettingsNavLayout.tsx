@@ -1,5 +1,7 @@
 import * as React from 'react'
 import { Icon } from '@/components/common/Icon'
+import { Switch } from '@/components/ui/switch'
+import { ChangedOnlyContext } from '@/components/ui/settingsView'
 import { landOnSetting } from './landOnSetting'
 import { SettingsSearchBox, SettingsSearchResults } from './SettingsSearch'
 import '@/styles/settings.css'
@@ -32,6 +34,8 @@ export function SettingsNavLayout<T extends string>({
   footer,
   agent,
   landing,
+  changed,
+  changedUnavailable,
   children,
 }: {
   title: string
@@ -48,12 +52,19 @@ export function SettingsNavLayout<T extends string>({
   agent?: string
   /** The setting the location names (its row's label): scrolled to, highlighted and focused. */
   landing?: string | null
+  /** The sections holding a value that is not its default; given, the scope offers 'Changed only'. */
+  changed?: ReadonlySet<T>
+  /** The query that says which settings are changed failed: say so instead of offering a view that would lie. */
+  changedUnavailable?: boolean
   children: React.ReactNode
 }) {
   const [query, setQuery] = React.useState('')
   const [landed, setLanded] = React.useState(0)
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const searching = query.trim() !== ''
+  const [changedOnly, setChangedOnly] = React.useState(false)
+  const viewing = changedOnly && changed !== undefined
+  const shownItems = viewing ? items.filter((item) => changed.has(item.id)) : items
   React.useEffect(() => {
     if (!landing || searching || !scrollRef.current) return
     return landOnSetting(scrollRef.current, landing)
@@ -72,10 +83,20 @@ export function SettingsNavLayout<T extends string>({
           {subtitle ? <span className="aw-settings-nav-sub">{subtitle}</span> : null}
         </div>
         <SettingsSearchBox value={query} onChange={setQuery} />
+        {changed !== undefined ? (
+          <label className="aw-settings-changed-only">
+            <Switch size="sm" checked={changedOnly} onCheckedChange={setChangedOnly} aria-label="Changed only" data-testid="changed-only" />
+            Changed only
+          </label>
+        ) : changedUnavailable ? (
+          <p className="aw-settings-changed-empty" data-testid="changed-unavailable">
+            Changed only is unavailable: the settings could not be read.
+          </p>
+        ) : null}
         <ul className="aw-settings-nav-list">
-          {items.map((item, index) => (
+          {shownItems.map((item, index) => (
             <li key={item.id}>
-              {item.group && item.group !== items[index - 1]?.group ? <span className="aw-settings-nav-group">{item.group}</span> : null}
+              {item.group && item.group !== shownItems[index - 1]?.group ? <span className="aw-settings-nav-group">{item.group}</span> : null}
               <button
                 type="button"
                 data-slot="settings-nav-item"
@@ -108,8 +129,16 @@ export function SettingsNavLayout<T extends string>({
               setLanded((n) => n + 1)
             }}
           />
+        ) : viewing && changed.size === 0 ? (
+          <p className="aw-settings-changed-empty" data-testid="changed-empty">
+            Nothing is changed: every setting here holds its default.
+          </p>
+        ) : viewing && !changed.has(active) ? (
+          <p className="aw-settings-changed-empty" data-testid="changed-empty-section">
+            Nothing in this section is changed.
+          </p>
         ) : (
-          children
+          <ChangedOnlyContext.Provider value={viewing}>{children}</ChangedOnlyContext.Provider>
         )}
       </div>
     </div>

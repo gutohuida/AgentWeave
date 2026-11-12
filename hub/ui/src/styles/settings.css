@@ -368,3 +368,14 @@ button.aw-history-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px
   border-radius: var(--radius-md);
 }
 @media (max-width: 860px) { .aw-settings-search { flex: none; min-width: 180px; margin: 0 8px 0 0; } }
+
+/* Where a value comes from (Changed / Agent's own / From project), the agents holding their own,
+   and 'Changed only'. */
+.aw-settings-row-source { margin: 3px 0 0; font-size: 11.5px; color: var(--text-3); overflow-wrap: anywhere; }
+.aw-settings-row-source-mark { font-weight: 600; color: var(--text-2); }
+.aw-settings-row-overrides { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 4px 0 0; font-size: 11.5px; color: var(--text-3); }
+.aw-settings-row-override { padding: 0 6px; border: 1px solid var(--border-region); border-radius: var(--radius-md); font-size: 11.5px; color: var(--text-2); overflow-wrap: anywhere; text-align: left; }
+.aw-settings-row-override:hover { background: var(--row-hover); color: var(--text); }
+.aw-settings-changed-only { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding: 0 8px; font-size: 12px; color: var(--text-3); cursor: pointer; }
+.aw-settings-changed-empty { padding: 24px 28px; font-size: 13px; color: var(--text-3); }
+.aw-settings-group:not(:has(.aw-settings-row)) { display: none; }

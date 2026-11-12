@@ -128,7 +128,7 @@ describe('per-agent checkpoint policy', () => {
     roster = [agent({ checkpoint_mode: 'off' })]
     render(<QueryClientProvider client={new QueryClient()}><AgentSettingsPage agent="claude-1" section="checkpoints" onSelectSection={vi.fn()} onBack={vi.fn()} /></QueryClientProvider>)
     const row = screen.getByRole('button', { name: 'Checkpoints for claude-1' }).closest('.aw-settings-row') as HTMLElement
-    fireEvent.click(within(row).getByRole('button', { name: 'Reset to default' }))
+    fireEvent.click(within(row).getByRole('button', { name: /^Reset to / }))
     expect(modeMutate).toHaveBeenLastCalledWith({ agent: 'claude-1', mode: null }, expect.any(Object))
     // Turning it off says nothing about the threshold, so nothing was submitted for it.
     expect(thresholdMutate).not.toHaveBeenCalled()

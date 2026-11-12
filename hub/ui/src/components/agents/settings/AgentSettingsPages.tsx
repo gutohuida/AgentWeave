@@ -187,6 +187,7 @@ export function AgentRunningSettings({
           htmlFor="a-perm-wait"
           description="Under “Ask me”, how long it waits for you to allow or refuse an action. Running out refuses it."
           changed={agent.permission_timeout_seconds != null}
+          origin={{ kind: 'changed', other: `${permissionFallback}s` }}
           onReset={() => onChange({ permission_timeout_seconds: null }, `Permission wait back to ${permissionFallback}s`)}
           control={
             <CommittedInput
@@ -205,6 +206,7 @@ export function AgentRunningSettings({
           htmlFor="a-question-wait"
           description="How long it waits for you to answer a question it asked. Longer than a permission decision: you have to read it and choose."
           changed={agent.question_timeout_seconds != null}
+          origin={{ kind: 'changed', other: `${questionFallback}s` }}
           onReset={() => onChange({ question_timeout_seconds: null }, `Question wait back to ${questionFallback}s`)}
           control={
             <CommittedInput
@@ -289,6 +291,7 @@ export function AgentCheckpointsSettings({
           label="Checkpoints"
           description="Whether its conversations are checkpointed at all."
           changed={agent.checkpoint_mode != null}
+          origin={{ kind: agent.checkpoint_mode != null ? 'own' : 'project', other: MODE_WORDS[project.mode] }}
           onReset={() => onChange({ checkpoint_mode: null }, 'Checkpoints follow the project again')}
           control={
             <MenuSelect
@@ -310,6 +313,7 @@ export function AgentCheckpointsSettings({
           inactive={agent.checkpoint_mode === 'off'}
           description={own ? 'Its own point, in place of the project’s.' : `The project’s: ${project.at ?? 'the built-in point'}. Empty follows it.`}
           changed={own}
+          origin={{ kind: own ? 'own' : 'project', other: project.at ?? 'the built-in point' }}
           onReset={() => onChange({ checkpoint_threshold_mode: null, checkpoint_threshold_value: null }, 'Checkpoint point follows the project again')}
           control={
             <span className="flex items-center gap-1.5">

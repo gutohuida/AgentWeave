@@ -35,6 +35,7 @@ let projects: Array<typeof PROJECT> = [PROJECT]
 
 vi.mock('@/api/projects', () => ({
   useProjects: () => ({ data: projects, isLoading: false }),
+  useProjectSettings: () => ({ data: undefined }),
   fetchProjectSummaries: vi.fn(async () => projects),
   useOpenProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
   useCreateProject: () => ({ mutate: vi.fn(), reset: vi.fn(), error: null, isPending: false }),
@@ -43,6 +44,7 @@ vi.mock('@/api/projects', () => ({
   useRepositoryPreview: () => ({ data: undefined, error: null, refetch: vi.fn() }),
   useMakeRepository: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
 }))
+vi.mock('@/api/traces', () => ({ useTraceSettings: () => ({ data: undefined }) }))
 vi.mock('@/api/agents', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/agents')>()),
   useAgents: () => ({
