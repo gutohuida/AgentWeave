@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from hub import spec_tags
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Run, SpecDocument, Task
@@ -168,6 +167,8 @@ async def test_boards_lists_the_most_recently_active_spec_first(app, auth_header
 
 
 def test_derive_keeps_within_the_limit_and_yields_to_what_is_taken():
+    from hub import spec_tags
+
     title = "Find a spec's tasks without knowing its name"
     first = spec_tags.derive(title)
     assert len(first) <= spec_tags.MAX_LENGTH
