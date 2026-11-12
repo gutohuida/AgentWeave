@@ -37,3 +37,20 @@ export function formatStageAge(since: string | number | Date, now: Date = new Da
   const n = Math.floor(hours / 24)
   return `${n} ${n === 1 ? 'day' : 'days'}`
 }
+
+/** Stages of an approved task whose work is not on main yet (FR-13). */
+export const NOT_ON_MAIN_STAGES: ReadonlySet<string> = new Set([
+  'approved_waiting',
+  'checking',
+  'landing',
+  'landing_held',
+  'did_not_land',
+])
+
+/** The two board-level groups: approved but not yet on main, and being worked on. */
+export function groupByStanding<T extends { stage?: string | null }>(tasks: T[]): { notOnMain: T[]; working: T[] } {
+  return {
+    notOnMain: tasks.filter((t) => t.stage && NOT_ON_MAIN_STAGES.has(t.stage)),
+    working: tasks.filter((t) => t.stage === 'working'),
+  }
+}

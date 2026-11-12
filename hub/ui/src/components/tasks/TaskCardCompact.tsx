@@ -86,6 +86,7 @@ export function TaskCardCompact({
       data-task-id={task.id}
       data-selected={selected ? 'true' : 'false'}
       data-status-tone={status?.tone ?? 'none'}
+      data-on-main={task.stage === 'on_main' ? 'true' : 'false'}
       data-dragging={move?.dragging ? 'true' : 'false'}
       draggable={move ? true : undefined}
       onDragStart={move?.onDragStart}
@@ -108,6 +109,11 @@ export function TaskCardCompact({
         }}
       >
         <span className="aw-task-card-title">
+          {task.stage === 'on_main' ? (
+            <span className="aw-task-card-on-main" data-testid={`task-on-main-mark-${task.id}`} aria-hidden="true">
+              <Icon name="check" size={12} />{' '}
+            </span>
+          ) : null}
           {task.readable_id ? (
             <code className="aw-task-card-id" data-testid={`task-readable-id-${task.id}`}>{task.readable_id}</code>
           ) : null}{task.readable_id ? ' ' : ''}
