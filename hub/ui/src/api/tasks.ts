@@ -784,8 +784,12 @@ export function useTaskBoard(specDocumentId: string | null) {
 export interface TaskBoardSummary {
   spec_document_id: string | null
   title: string | null
+  /** The spec's short tag; null for the no-spec board. */
+  tag?: string | null
   total: number
   outstanding: number
+  /** When a task of this board was last created or moved (ISO). Boards come newest first. */
+  last_activity?: string
 }
 
 export function useTaskBoards() {

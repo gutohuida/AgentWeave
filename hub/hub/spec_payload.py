@@ -440,6 +440,13 @@ class SpecPayload(_Part):
     )
     kind: str = Field(description="One of: baseline, system-map, roadmap, change-spec, capability.")
     title: str = Field(description="The document's title.")
+    tag: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=24,
+        description="A short name (at most 24 characters, unique in the project) that task cards "
+        "show for this spec. Optional: without one the Hub derives it from the title.",
+    )
     summary: str = Field(default="", description="One paragraph: what this changes and why.")
     problem: str = Field(default="", description="What hurts today, who it affects, and why now.")
     scope: Scope = Field(default_factory=Scope)
@@ -843,7 +850,7 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     and a slice document carry them.
     """
     data = payload.model_dump(mode="json", by_alias=True)
-    for key in ("delivery", "roadmap", "already_built", "capabilities"):
+    for key in ("delivery", "roadmap", "already_built", "capabilities", "tag"):
         if data.get(key) is None:
             data.pop(key, None)
     # An unset tester (on by default, tester-amends D4) must not change the bytes of every stored

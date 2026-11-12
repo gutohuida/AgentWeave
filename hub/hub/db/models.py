@@ -2578,6 +2578,10 @@ class SpecDocument(Base):
     acronym_chosen: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # The short tag a task card names this spec by (`spec_tags`, migration 0176): at most 24
+    # characters, unique within the project. Written by the author in a submission, else derived from
+    # the title the first time a board needs it. Null until one of the two has happened.
+    tag: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
     # Superseded and held are marks, not phases (`an-agent-the-operator-trusts-can-tidy-the-specs`,
     # D2, migration 0172): the phase machine and its operator gates stay as they are. A superseded
     # document keeps its phase and content and cannot be built; clearing the mark nulls all four.
