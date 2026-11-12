@@ -16,6 +16,7 @@ from typing import Dict, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import loose_close
 from .db.models import Question, Run, Task, TaskLanding, TaskTransition
 
 NOT_STARTED = "not_started"
@@ -80,12 +81,24 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
 
     # When each task last entered its current status; later rows win.
     entered: Dict[Tuple[str, str], datetime] = {}
-    for task_id, to_status, at in await session.execute(
-        select(TaskTransition.task_id, TaskTransition.to_status, TaskTransition.created_at)
+    # Why a closed task was cancelled, from the note of the move that closed it.
+    cancelled: Dict[str, str] = {}
+    for task_id, to_status, at, note in await session.execute(
+        select(
+            TaskTransition.task_id,
+            TaskTransition.to_status,
+            TaskTransition.created_at,
+            TaskTransition.note,
+        )
         .where(TaskTransition.project_id == project_id, TaskTransition.task_id.in_(ids))
         .order_by(TaskTransition.sequence)
     ):
         entered[(task_id, to_status)] = at
+        if to_status == "rejected":
+            cancelled.pop(task_id, None)
+            why = loose_close.cancel_reason_of(note)
+            if why is not None:
+                cancelled[task_id] = why
 
     askers: Dict[str, str] = {}
     for question, run_task_id in await session.execute(
@@ -146,6 +159,7 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
                     detail = _one_line(landing.reason)
         elif r.status == "rejected":
             stage = CLOSED
+            detail = _one_line(cancelled.get(r.id))
         elif r.status == "revision_needed":
             stage = SENT_BACK
         elif r.status == "blocked" or r.awaiting_answer_reason:
