@@ -393,6 +393,13 @@ class TaskResponse(BaseModel):
     waiting_since: Optional[datetime] = None
     # Approved, and its work is still in the landing queue on its way to main.
     waiting_to_land: bool = False
+    # The one stage the task has really reached (`task_stage`), when it entered it, a detail (the
+    # short commit id at `on_main`, what a held landing waits on, why a landing did not happen) and
+    # what the task waits on (the asking agent, unfinished prerequisites, the held item).
+    stage: Optional[str] = None
+    stage_since: Optional[datetime] = None
+    stage_detail: Optional[str] = None
+    stage_waits_on: Optional[str] = None
     # Why nobody is handed this task: the cap or window of the finished build whose flow holds it.
     queue_held_reason: Optional[str] = None
     acceptance_criteria: Optional[Any] = None

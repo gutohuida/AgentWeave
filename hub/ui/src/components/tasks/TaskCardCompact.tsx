@@ -1,8 +1,9 @@
-import type { DragEventHandler } from 'react'
+import { useEffect, useState, type DragEventHandler } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
 import type { Task } from '@/api/tasks'
 import { cardStatus } from '@/lib/taskCardStatus'
+import { formatStageAge, stageLabel } from '@/lib/taskStage'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatAgo, formatDateTime } from '@/lib/format'
 import '@/styles/board.css'
@@ -25,6 +26,17 @@ export interface CardMoveProps {
   onDragStart: DragEventHandler<HTMLElement>
   onDragEnd: DragEventHandler<HTMLElement>
   onMoveByKeyboard: (direction: 'left' | 'right') => void
+}
+
+/** A clock that ticks while the board is open, so a card's time at stage advances without a reload. */
+function useMinuteClock(fixed?: Date): Date {
+  const [tick, setTick] = useState(() => new Date())
+  useEffect(() => {
+    if (fixed) return
+    const id = setInterval(() => setTick(new Date()), 30_000)
+    return () => clearInterval(id)
+  }, [fixed])
+  return fixed ?? tick
 }
 
 /** The board card, compact.
@@ -66,6 +78,7 @@ export function TaskCardCompact({
   move?: CardMoveProps
 }) {
   const status = cardStatus(task, working)
+  const clock = useMinuteClock(now)
   const color = agentColorVars(colorIndex)
   return (
     <article
@@ -148,6 +161,25 @@ export function TaskCardCompact({
               title={`Built by @${task.builder} (by default)`}
             >
               builds @{task.builder} · by default
+            </span>
+          ) : null}
+          {task.stage ? (
+            <span
+              className="aw-task-card-stage"
+              data-testid={`task-stage-${task.id}`}
+              data-stage={task.stage}
+              title={task.stage_since ? `At this stage since ${formatDateTime(task.stage_since, clock)}` : undefined}
+            >
+              {stageLabel(task.stage)}
+              {task.stage_detail ? <span data-testid={`task-stage-detail-${task.id}`}> · {task.stage_detail}</span> : null}
+              {task.stage_since ? (
+                <span data-testid={`task-stage-age-${task.id}`}> · {formatStageAge(task.stage_since, clock)}</span>
+              ) : null}
+            </span>
+          ) : null}
+          {task.stage_waits_on ? (
+            <span className="aw-task-card-age" data-testid={`task-stage-waits-on-${task.id}`}>
+              waits on {task.stage_waits_on}
             </span>
           ) : null}
           {task.waiting_to_land ? (
