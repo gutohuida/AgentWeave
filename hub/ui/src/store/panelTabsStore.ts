@@ -14,7 +14,7 @@ import { create } from 'zustand'
 
 /** The shape version carried *inside* the payload. Bump when `StoredProjects` changes, and add the
  *  matching step to `MIGRATIONS` in the same edit. */
-export const PANEL_TABS_VERSION = 1
+export const PANEL_TABS_VERSION = 2
 
 /** The key names the format *family*, the payload's `version` drives in-place migration. Two levels
  *  because they answer different questions: a wholly incompatible future shape can be written to a
@@ -28,17 +28,17 @@ export const PANEL_TABS_STORAGE_KEY = STORAGE_KEY
 // Index kinds take a fixed id, detail kinds a keyed one (design D3). The union is literal and
 // exhaustively type-checkable; kinds are never constructed at runtime from external input.
 
-export type IndexTabId = 'specs' | 'files' | 'loops'
+export type IndexTabId = 'specs' | 'files' | 'running'
 export type SpecTabId = `spec:${string}`
 export type FileTabId = `file:${string}`
 export type LoopTabId = `loop:${string}`
 export type TabId = IndexTabId | SpecTabId | FileTabId | LoopTabId
 
-export type TabKind = 'specs' | 'files' | 'loops' | 'spec' | 'file' | 'loop'
+export type TabKind = 'specs' | 'files' | 'running' | 'spec' | 'file' | 'loop'
 
 /** Derived from the id rather than stored beside it, so the two cannot disagree. */
 export function tabKind(id: TabId): TabKind {
-  if (id === 'specs' || id === 'files' || id === 'loops') return id
+  if (id === 'specs' || id === 'files' || id === 'running') return id
   if (id.startsWith('spec:')) return 'spec'
   if (id.startsWith('loop:')) return 'loop'
   return 'file'
@@ -89,7 +89,7 @@ export function isLoopTabId(id: TabId): id is LoopTabId {
 
 function isTabId(value: unknown): value is TabId {
   if (typeof value !== 'string') return false
-  if (value === 'specs' || value === 'files' || value === 'loops') return true
+  if (value === 'specs' || value === 'files' || value === 'running') return true
   if (value.startsWith('spec:')) return value.length > 'spec:'.length
   if (value.startsWith('file:')) return value.length > 'file:'.length
   if (value.startsWith('loop:')) return value.length > 'loop:'.length
@@ -121,11 +121,36 @@ type StoredProjects = Record<string, ProjectPanelState>
 
 // --- Persistence ------------------------------------------------------------------------------
 
-/** Each step upgrades exactly one version. There are no steps today because there is only
- *  version 1 — the chain exists so that adding the first one is an edit here and nowhere else.
- *  Retrofitting versioning after shipping is what forces a silent data loss, so it is written now
- *  while it costs nothing. */
-const MIGRATIONS: Record<number, (state: unknown) => unknown> = {}
+/** Each step upgrades exactly one version — the chain exists so that adding one is an edit here and
+ *  nowhere else. Retrofitting versioning after shipping is what forces a silent data loss.
+ *
+ *  1 → 2: the Loops index tab became Running (`the-side-panel-s-running-tab`). A stored `loops` tab
+ *  (and a stored active `loops`) is renamed in place, so it keeps its strip position and
+ *  visibility rather than vanishing or resurrecting the old view. */
+const MIGRATIONS: Record<number, (state: unknown) => unknown> = {
+  1: (state) => {
+    if (typeof state !== 'object' || state === null || Array.isArray(state)) return state
+    const rename = (id: unknown) => (id === 'loops' ? 'running' : id)
+    const out: Record<string, unknown> = {}
+    for (const [projectId, entry] of Object.entries(state as Record<string, unknown>)) {
+      if (typeof entry !== 'object' || entry === null) {
+        out[projectId] = entry
+        continue
+      }
+      const record = entry as Record<string, unknown>
+      out[projectId] = {
+        ...record,
+        tabs: Array.isArray(record.tabs)
+          ? record.tabs.map((tab) =>
+              typeof tab === 'object' && tab !== null ? { ...(tab as Record<string, unknown>), id: rename((tab as Record<string, unknown>).id) } : tab,
+            )
+          : record.tabs,
+        activeTabId: rename(record.activeTabId),
+      }
+    }
+    return out
+  },
+}
 
 /** Runs the migration chain from `fromVersion` up to current. A version with no step forward is
  *  discarded rather than guessed at: an unreadable tab configuration costs the operator a few

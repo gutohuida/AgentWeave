@@ -3,10 +3,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { SpecTree } from '@/components/spec/SpecTree'
-import { runningLoopCount } from '@/components/spec/loopCounts'
 import type { SpecInventory, SpecNode } from '@/components/spec/specNavigation'
 import { usePanelTabsStore, type TabId } from '@/store/panelTabsStore'
-import type { LoopSummary } from '@/api/loops'
 
 /**
  * The S3 `considered` mock's two additions over `restrained` on the side panel: the Loops launcher
@@ -16,47 +14,13 @@ import type { LoopSummary } from '@/api/loops'
 
 afterEach(cleanup)
 
-function makeLoop(overrides: Partial<LoopSummary> = {}): LoopSummary {
-  return {
-    id: 'loop-1',
-    label: 'Nightly pass',
-    purpose: null,
-    agent: 'worker',
-    ending_state: null,
-    stop_reason: null,
-    archived_at: null,
-    open_questions: 0,
-    queue: {},
-    ...overrides,
-  } as LoopSummary
-}
-
-describe('S3 — the Loops launcher reports what is running', () => {
-  it('counts only loops that are running and not archived', () => {
-    expect(
-      runningLoopCount([
-        // `firing_active` is what makes these two running. Having no `ending_state` is not
-        // enough — a loop that has never fired has no ending state either, and counting those
-        // put a green "running" badge on a project whose only loop was paused.
-        makeLoop({ id: 'a', firing_active: true }),
-        makeLoop({ id: 'b', firing_active: true }),
-        makeLoop({ id: 'c', ending_state: 'completed' }),
-        makeLoop({ id: 'd', ending_state: 'stopped' }),
-        // Archiving is a governance act on a loop that has stopped; counting one as running
-        // would be a contradiction the badge cannot explain.
-        makeLoop({ id: 'e', archived_at: '2026-08-20T00:00:00Z' }),
-        // Never fired, job paused — idle, not running.
-        makeLoop({ id: 'f', firing_active: false }),
-      ]),
-    ).toBe(2)
-  })
-
+describe('S3 — the Running launcher reports what is running', () => {
   it('badges the launcher card when a count is supplied, and shows nothing at zero', () => {
     usePanelTabsStore.setState({ projects: {} })
     const describeTab = (id: TabId): PanelTabDescriptor => ({ id, label: id, icon: 'article' })
     const tabs: PanelTabDescriptor[] = [
       { id: 'specs', label: 'Specs', icon: 'article' },
-      { id: 'loops', label: 'Loops', icon: 'sync', count: 3 },
+      { id: 'running', label: 'Running', icon: 'sync', count: 3 },
     ]
     render(
       <PanelShell
@@ -67,7 +31,7 @@ describe('S3 — the Loops launcher reports what is running', () => {
       />,
     )
 
-    expect(screen.getByTestId('panel-launch-badge-loops')).toHaveTextContent('3')
+    expect(screen.getByTestId('panel-launch-badge-running')).toHaveTextContent('3')
     // A badge is a reason to look; a panel with nothing waiting gets none rather than a "0".
     expect(screen.queryByTestId('panel-launch-badge-specs')).not.toBeInTheDocument()
   })

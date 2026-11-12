@@ -15,8 +15,11 @@ import { useWorkspaceWidth } from '@/components/layout/useWorkspaceWidth'
 import { FileTab } from '@/components/spec/FileTab'
 import { FilesIndexTab } from '@/components/spec/FilesIndexTab'
 import { LoopTab } from '@/components/spec/LoopTab'
-import { LoopsIndexTab } from '@/components/spec/LoopsIndexTab'
-import { runningLoopCount } from '@/components/spec/loopCounts'
+import { useLoops } from '@/api/loops'
+import { RunningTabContainer } from '@/components/panel/RunningTabContainer'
+import { runningCount, useRunningItems } from '@/components/panel/useRunningItems'
+import type { RunningItem } from '@/components/panel/runningModel'
+import { anchors } from '@/components/spec/page/model'
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { SpecPanelContainer } from '@/components/spec/page/SpecPanelContainer'
 import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
@@ -24,7 +27,6 @@ import { SpecIndexTab } from '@/components/spec/SpecIndexTab'
 import { fileIconFor } from '@/components/spec/fileIcons'
 import { buildInventory, resolveTabPath, tabKeyForNode } from '@/components/spec/specNavigation'
 import { useWorkspacePaths } from '@/api/workspace'
-import { useLoops } from '@/api/loops'
 import {
   CONVERSATION_DEFAULT_WIDTH,
   CONVERSATION_MIN_WIDTH,
@@ -83,6 +85,10 @@ interface ConversationViewProps {
   /** A spec tab's 'Show these on the board' / coverage task link: the host scopes the Tasks board
    *  and navigates there. */
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
+  /** Running's job row: the Jobs page. */
+  onOpenJobs?: () => void
+  /** Running's Answer: where the project's open questions can be answered. */
+  onOpenQuestions?: () => void
 }
 
 /**
@@ -106,6 +112,8 @@ export function ConversationView({
   onBackToProject,
   onOpenAgentSettings,
   onOpenTasks,
+  onOpenJobs,
+  onOpenQuestions,
 }: ConversationViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const measuredWidth = useWorkspaceWidth(containerRef)
@@ -300,46 +308,60 @@ export function ConversationView({
   // Section 3's first index tenant: the plus affordance can always offer the specs browser,
   // whether or not anything is attached yet. Section 5 adds the files tab beside it.
   const { data: workspacePaths = [], isLoading: workspacePathsLoading } = useWorkspacePaths()
-  // B5's `loops` index tenant (`2026-08-18-a-loop-writes-its-own-queue`). Fetched with
-  // `includeArchived=true` unconditionally — a superset — so `describePanelTab` can resolve a
-  // label for a `loop:` tab that is already open even while the index's own filter (task B5.4,
-  // state lives in `LoopsIndexTab`... no: kept here, see `includeArchivedLoops` below) is hiding
-  // it from the list view. One fetch, not two racing queries with different `include_archived`
-  // values for the same data.
-  const { data: allLoops = [], isLoading: loopsLoading } = useLoops(true)
-  const [includeArchivedLoops, setIncludeArchivedLoops] = useState(false)
-  const visibleLoops = useMemo(
-    () => (includeArchivedLoops ? allLoops : allLoops.filter((loop) => !loop.archived_at)),
-    [allLoops, includeArchivedLoops],
+  // The Running index tab: builds, loops and jobs in one list (`the-side-panel-s-running-tab`).
+  const { items: runningItems } = useRunningItems()
+  // Names a `loop:` tab already open (same key the list reads, so no second fetch).
+  const { data: runningLoops = [] } = useLoops(true)
+  // A build's document opens at its builds; the counter re-opens an already-open tab there again.
+  const [buildsRequest, setBuildsRequest] = useState<{ documentId: string; requestId: number } | null>(null)
+  const openRunningItem = useCallback(
+    (item: RunningItem) => {
+      if (item.kind === 'build' && item.documentId) {
+        setBuildsRequest((previous) => ({ documentId: item.documentId!, requestId: (previous?.requestId ?? 0) + 1 }))
+        openTab(projectId, specTabId(item.documentId))
+      } else if (item.kind === 'loop' && item.loopId) {
+        openTab(projectId, loopTabId(item.loopId))
+      } else if (item.kind === 'job') {
+        onOpenJobs?.()
+      }
+    },
+    [openTab, projectId, onOpenJobs],
+  )
+  const attendRunningItem = useCallback(
+    (item: RunningItem) => {
+      if (item.attention?.kind === 'question') onOpenQuestions?.()
+      else if (item.loopId) openTab(projectId, loopTabId(item.loopId))
+    },
+    [openTab, projectId, onOpenQuestions],
   )
   const availablePanelTabs: PanelTabDescriptor[] = useMemo(
     () => [
       { id: 'specs', label: 'Specs', icon: 'menu_book' },
       { id: 'files', label: 'Files', icon: 'folder_open' },
-      // The shell's launcher badge. Counted here rather than in the shell because the loops are
+      // The shell's launcher badge. Counted here rather than in the shell because the items are
       // already fetched here and the shell deliberately knows nothing about what a tab contains.
-      { id: 'loops', label: 'Loops', icon: 'sync', count: runningLoopCount(allLoops) },
+      { id: 'running', label: 'Running', icon: 'sync', count: runningCount(runningItems) },
     ],
-    [allLoops],
+    [runningItems],
   )
   const describePanelTab = useCallback(
     (id: TabId): PanelTabDescriptor => {
       if (id === 'specs') return { id, label: 'Specs', icon: 'menu_book' }
       if (id === 'files') return { id, label: 'Files', icon: 'folder_open' }
-      if (id === 'loops') return { id, label: 'Loops', icon: 'sync' }
+      if (id === 'running') return { id, label: 'Running', icon: 'sync' }
       if (isFileTabId(id)) {
         const path = filePath(id)
         return { id, label: path.slice(path.lastIndexOf('/') + 1), icon: fileIconFor(path) }
       }
       if (isLoopTabId(id)) {
-        const loop = allLoops.find((entry) => entry.id === loopIdFromTab(id))
+        const loop = runningLoops.find((entry) => entry.id === loopIdFromTab(id))
         return { id, label: loop?.label ?? loopIdFromTab(id), icon: 'sync' }
       }
       const path = isSpecTabId(id) ? resolveTabPath(inventory, specDocumentId(id)) : id
       const node = inventory.byPath.get(path)
       return { id, label: node?.title ?? path, icon: 'article' }
     },
-    [inventory, allLoops],
+    [inventory, runningLoops],
   )
 
   // The files tab's "Insert into composer" (task 5.4): a counter-keyed request the mounted
@@ -387,20 +409,8 @@ export function ConversationView({
           />
         )
       }
-      if (tab.id === 'loops') {
-        return (
-          <LoopsIndexTab
-            loops={visibleLoops}
-            isLoading={loopsLoading}
-            includeArchived={includeArchivedLoops}
-            onToggleIncludeArchived={setIncludeArchivedLoops}
-            currentLoopId={panelActiveTabId && isLoopTabId(panelActiveTabId) ? loopIdFromTab(panelActiveTabId) : null}
-            // B5.2: opening a drill-down does not close the index — no `filter` here the way
-            // `openTab`'s own `file:` rule closes `files` (design D8's one asymmetry). The index
-            // is a governance glance, not a launcher.
-            onSelect={(id) => openTab(projectId, loopTabId(id))}
-          />
-        )
+      if (tab.id === 'running') {
+        return <RunningTabContainer items={runningItems} onOpen={openRunningItem} onAttend={attendRunningItem} />
       }
       if (isLoopTabId(tab.id)) {
         return <LoopTab loopId={loopIdFromTab(tab.id)} onClose={() => closeTab(projectId, tab.id)} />
@@ -424,6 +434,7 @@ export function ConversationView({
           onClose={() => closeTab(projectId, tab.id)}
           onOpenLoop={(loop) => openTab(projectId, loopTabId(loop.id))}
           onOpenTasks={onOpenTasks}
+          initialAnchor={buildsRequest && specTabId(buildsRequest.documentId) === tab.id ? `${anchors.section('builds')}` : null}
         />
       )
     },
@@ -440,9 +451,10 @@ export function ConversationView({
       onOpenTasks,
       insertIntoComposer,
       panelActiveTabId,
-      visibleLoops,
-      loopsLoading,
-      includeArchivedLoops,
+      runningItems,
+      openRunningItem,
+      attendRunningItem,
+      buildsRequest,
     ],
   )
   const panel = shellVisible ? (
