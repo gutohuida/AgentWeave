@@ -56,6 +56,8 @@ async def test_the_operator_cancels_a_spec_linked_loose_task(app):
     """ac-spec-linked-loose"""
     async with async_session_factory() as session:
         task = await _task(session, "task-spec", "pending", spec_document_id="spdoc-x")
+        await apply_transition(session, task, "completed", operator())
+        assert task.status == "completed"
         await apply_transition(session, task, "rejected", operator())
         assert task.status == "rejected"
 
@@ -116,7 +118,7 @@ async def test_a_piloted_run_sends_work_back_to_its_builder(app):
         await _run(session, "run-dev", "D", "operator")
         await _run(session, "run-a", "A", "operator")
         task = await _task(session, "task-back", "in_progress", assignee="D")
-        await apply_transition(session, task, "completed", run_actor("run-dev", "D"))
+        await apply_transition(session, task, "completed", operator())
         await apply_transition(session, task, "revision_needed", run_actor("run-a", "A"))
         assert task.status == "revision_needed"
         assert task.assignee == "D"
@@ -127,4 +129,7 @@ async def test_moving_a_task_does_not_change_its_holder(app):
     async with async_session_factory() as session:
         task = await _task(session, "task-holder", "in_progress", assignee="D")
         await apply_transition(session, task, "completed", operator())
+        assert task.assignee == "D"
+        await apply_transition(session, task, "revision_needed", operator())
+        await apply_transition(session, task, "pending", operator())
         assert task.assignee == "D"
