@@ -45,6 +45,7 @@ from ... import (
     run_liveness,
     slice_drafting,
     spec_adoption,
+    spec_capability_links,
     spec_conversion,
     spec_documents,
     spec_index,
@@ -416,6 +417,22 @@ async def get_spec(
             payload["fold_state"] = fold_state
         payload["superseded"] = spec_lifecycle.superseded_view(document)
         payload["held"] = spec_lifecycle.held_view(document)
+        if document.kind in ("change-spec", "capability"):
+            _capability_fields(
+                payload,
+                document,
+                stored_payload,
+                (
+                    {
+                        path: await spec_capability_links.waiting_for(
+                            session, workspace, project_id, path
+                        )
+                    }
+                    if document.kind == "capability"
+                    else {}
+                ),
+                {document.id: await spec_capability_links.folded_into(session, document)},
+            )
         if document.kind == "capability" and document.phase == spec_lifecycle.ARCHIVED:
             payload["retired"] = await _retirement(session, document)
         # The roadmap slice this document specifies, so the app can offer "Draft the next slice"
@@ -628,7 +645,11 @@ class FoldCriterionRequest(RequestModel):
 class FoldRequest(RequestModel):
     """The operator folding an approved change into a capability document, then archiving it."""
 
-    into: str = Field(max_length=512, description="The capability document's path.")
+    # Left out, the fold goes into the one capability the change names
+    # (`a-change-names-the-capabilities-it-changes` FR-7), or is refused saying what to name.
+    into: Optional[str] = Field(
+        default=None, max_length=512, description="The capability document's path."
+    )
     # None folds every requirement verbatim under its drafted key.
     requirements: Optional[list[FoldItemRequest]] = Field(default=None, max_length=64)
     archive: bool = True
@@ -682,6 +703,22 @@ def _document_view(
         "held": spec_lifecycle.held_view(document),
         "updated_at": document.updated_at.isoformat(),
     }
+
+
+def _capability_fields(
+    view: Dict[str, Any],
+    document,
+    stored: Optional[Dict[str, Any]],
+    waiting: Dict[str, List[Dict[str, Any]]],
+    folded_to: Dict[str, str],
+) -> None:
+    """A change's named capabilities and where it was folded; a capability's waiting list."""
+    if document.kind == "change-spec":
+        view["capabilities"] = spec_capability_links.named(stored)
+        view["folded_into"] = folded_to.get(document.id)
+    elif document.kind == "capability":
+        view["waiting_changes"] = waiting.get(document.path, [])
+        view["waiting_count"] = len(view["waiting_changes"])
 
 
 async def _project_document_view(session: AsyncSession, project_id: str, document) -> dict:
@@ -827,8 +864,16 @@ async def list_documents(
             )
         ).scalars()
     )
+    # `a-change-names-the-capabilities-it-changes`: each capability's open changes (FR-5, FR-6),
+    # computed from the payloads read above, and where each folded change went (FR-8).
+    parsed = {path: spec_documents.parse_stored(text) for path, text in on_disk.items()}
+    waiting = await spec_capability_links.waiting_lists(session, workspace, project_id, parsed)
+    folded_to = await spec_capability_links.folded_into_by_id(
+        session, [d.id for d in documents if d.kind == "change-spec"]
+    )
     for document in documents:
         view = _document_view(document, steps, shown[document.id])
+        _capability_fields(view, document, parsed.get(document.path), waiting, folded_to)
         if document.id in overridden:
             view["approval_warnings_overridden"] = overridden[document.id]
         if document.id in amended:
@@ -1340,6 +1385,58 @@ async def link_roadmap_slice(
         "path": document.path,
         "roadmap": {"document": roadmap_path, "slice": body.slice},
         "changed": changed,
+    }
+
+
+class CapabilitiesLink(RequestModel):
+    """The capabilities a change changes, and those it creates by title, with why they changed."""
+
+    changes: List[Annotated[str, StringConstraints(min_length=1, max_length=255)]] = Field(
+        default_factory=list, max_length=64
+    )
+    creates: List[Dict[str, Any]] = Field(default_factory=list, max_length=64)
+    reason: str = Field(default="", max_length=2000)
+
+
+@router.put("/documents/{path:path}/capabilities")
+async def set_change_capabilities(
+    path: str,
+    body: CapabilitiesLink,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Set the capabilities a change names, at any phase, until it is folded or archived
+    (`a-change-names-the-capabilities-it-changes` FR-4). Changes that field and nothing else, so
+    an approved change stays approved with the same requirement digests. Refused 409
+    `change_folded` once folded, 422 `capability_unknown` naming a path that is not a current
+    capability of this project."""
+    project_id, _ = project
+    document = await _require_document(session, project_id, path)
+    workspace = await _workspace(session, project_id)
+    try:
+        outcome = await spec_capability_links.set_link(
+            session,
+            workspace,
+            document,
+            {"changes": body.changes, "creates": body.creates},
+            actor=_operator(),
+            reason=body.reason,
+        )
+    except spec_capability_links.LinkRefusedError as exc:
+        raise HTTPException(
+            status_code=exc.status,
+            detail={"message": str(exc), "code": exc.code, "field": exc.field},
+        ) from exc
+    await session.commit()
+    if outcome["changed"]:
+        await sse_manager.broadcast(
+            project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+        )
+    return {
+        **await _project_document_view(session, project_id, document),
+        "capabilities": outcome["capabilities"],
+        "folded_into": None,
+        "changed": outcome["changed"],
     }
 
 
@@ -5234,7 +5331,18 @@ async def fold_document(
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     change = await _require_document(session, project_id, path)
-    capability = await _require_document(session, project_id, body.into)
+    into = body.into
+    if not into:
+        try:
+            into = spec_capability_links.require_default_target(
+                spec_capability_links.named(_read_payload(workspace, change.path)), change.path
+            )
+        except spec_capability_links.LinkRefusedError as exc:
+            raise HTTPException(
+                status_code=exc.status,
+                detail={"message": str(exc), "code": exc.code, "field": "into"},
+            ) from exc
+    capability = await _require_document(session, project_id, into)
     items = (
         None
         if body.requirements is None
@@ -5279,6 +5387,8 @@ async def fold_document(
         blocking=result.blocking,
         warnings=result.warnings,
         standing_warnings=result.standing_warnings,
+        fold_target_not_named=bool(result.fold_target_not_named),
+        folded_into=await spec_capability_links.folded_into(session, change),
     )
     await session.commit()
     for document in (capability, change):
