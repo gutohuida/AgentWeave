@@ -150,7 +150,9 @@ async def test_already_built_work_is_approved_without_approve_anyway(app, auth_h
         headers=auth_headers,
     )
     assert journeyed.status_code == 200, journeyed.text
-    assert (await check(app, auth_headers))["warnings"] == []
+    # `capability_unnamed` is the one warning left: this change names no capability, which warns
+    # and never blocks (`a-change-names-the-capabilities-it-changes` FR-3), as the approval shows.
+    assert codes((await check(app, auth_headers))["warnings"]) == {"capability_unnamed"}
     approved = await phase(app, auth_headers, "approved")
     assert approved.status_code == 200, approved.text
     assert approved.json()["phase"] == "approved"

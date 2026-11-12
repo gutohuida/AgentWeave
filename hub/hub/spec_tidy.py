@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import builds, spec_documents, spec_lifecycle, spec_service
+from . import builds, spec_capability_links, spec_documents, spec_lifecycle, spec_service
 from .db.models import Agent, SpecDocument, Task
 from .project_workspace import ProjectWorkspace
 from .spec_manifest import ManifestDocument, SpecPathError, build_manifest, validate_spec_path
@@ -47,8 +47,17 @@ EDIT_CAPABILITY = "edit_capability"
 SUPERSEDE = "supersede"
 CLEAR_SUPERSEDED = "clear_superseded"
 SET_SLICE = "set_slice"
+SET_CAPABILITIES = "set_capabilities"
 
-OPS = (FOLD, CREATE_CAPABILITY, EDIT_CAPABILITY, SUPERSEDE, CLEAR_SUPERSEDED, SET_SLICE)
+OPS = (
+    FOLD,
+    CREATE_CAPABILITY,
+    EDIT_CAPABILITY,
+    SUPERSEDE,
+    CLEAR_SUPERSEDED,
+    SET_SLICE,
+    SET_CAPABILITIES,
+)
 
 #: The operator's acts, by the op an agent might name them with, and how a refusal names each.
 #: Refused `operators_act` whatever the agent's switch says (FR-12).
@@ -287,11 +296,23 @@ async def _fold(
     fields: Dict[str, Any],
 ) -> TidyResult:
     change = await _document(session, project_id, path, field="path")
-    capability = await _document(session, project_id, fields.get("capability"), field="capability")
+    named = fields.get("capability")
+    if not named:
+        # FR-7: with no capability named, the fold goes where the change says it changes.
+        try:
+            named = spec_capability_links.require_default_target(
+                spec_capability_links.named(spec_documents.read_payload(workspace, change.path)),
+                change.path,
+            )
+        except spec_capability_links.LinkRefusedError as exc:
+            raise TidyRefusedError(str(exc), code=exc.code, status=exc.status) from exc
+    capability = await _document(session, project_id, named, field="capability")
     items, options = _fold_options(fields)
     _refuse_held([change, capability])
     await _refuse_live(session, [change, capability])
-    await _apply_fold(session, workspace, change, capability, items, options, actor, reason)
+    off_link = await _apply_fold(
+        session, workspace, change, capability, items, options, actor, reason
+    )
     return await _record(
         session,
         change,
@@ -299,7 +320,10 @@ async def _fold(
         act=FOLD,
         reason=reason,
         touched=[capability, change],
-        detail={"capability": capability.path},
+        detail={
+            "capability": capability.path,
+            spec_capability_links.FOLD_TARGET_NOT_NAMED: off_link,
+        },
     )
 
 
@@ -312,10 +336,11 @@ async def _apply_fold(
     options: Dict[str, Any],
     actor: spec_lifecycle.Actor,
     reason: str,
-) -> None:
-    """The operator's fold with archive off, then the superseded mark naming the capability (D3)."""
+) -> bool:
+    """The operator's fold with archive off, then the superseded mark naming the capability (D3).
+    Answers whether the capability is one the change does not name (`fold_target_not_named`)."""
     try:
-        await spec_service.fold(
+        result, _ = await spec_service.fold(
             session,
             workspace,
             change,
@@ -333,6 +358,7 @@ async def _apply_fold(
     except spec_lifecycle.PhaseError as exc:
         raise TidyRefusedError(str(exc), code=exc.code) from exc
     spec_lifecycle.mark_superseded(change, actor=actor, reason=reason, successor=capability.path)
+    return bool(getattr(result, "fold_target_not_named", False))
 
 
 async def _create_capability(
@@ -380,8 +406,11 @@ async def _create_capability(
         await spec_service.save_document(
             session, workspace, capability, scaffold, actor=actor, via="create"
         )
+        off_link = None
         if change is not None:
-            await _apply_fold(session, workspace, change, capability, items, options, actor, reason)
+            off_link = await _apply_fold(
+                session, workspace, change, capability, items, options, actor, reason
+            )
     except BaseException as exc:
         # The rows roll back with the session; the file the scaffold wrote does not.
         try:
@@ -398,6 +427,7 @@ async def _create_capability(
     detail: Dict[str, Any] = {"capability": capability.path, "index": index}
     if change is not None:
         detail["fold_from"] = change.path
+        detail[spec_capability_links.FOLD_TARGET_NOT_NAMED] = off_link
     if area is not None:
         detail["area"] = area.path
     return await _record(
@@ -666,6 +696,52 @@ async def _set_slice(
     )
 
 
+async def _set_capabilities(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    project_id: str,
+    actor: spec_lifecycle.Actor,
+    path: str,
+    reason: str,
+    fields: Dict[str, Any],
+) -> TidyResult:
+    """Set the capabilities a change names (`a-change-names-the-capabilities-it-changes` FR-4).
+
+    Not refused for live work: the link is not content, so a change being built may be relinked
+    without touching what its build answers to. A held document is still the operator's.
+    """
+    document = await _document(session, project_id, path, field="path")
+    changes = _strings(fields, "changes")
+    creates = fields.get("creates") or []
+    if not isinstance(creates, list):
+        raise TidyRefusedError("`creates` is a list of {title}", code="field_invalid", status=422)
+    _refuse_held([document])
+    try:
+        outcome = await spec_capability_links.set_link(
+            session,
+            workspace,
+            document,
+            {"changes": changes, "creates": creates},
+            actor=actor,
+            reason=reason,
+        )
+    except spec_capability_links.LinkRefusedError as exc:
+        raise TidyRefusedError(str(exc), code=exc.code, status=exc.status) from exc
+    return await _record(
+        session,
+        document,
+        actor=actor,
+        act=SET_CAPABILITIES,
+        reason=reason,
+        touched=[document],
+        detail={
+            "capabilities": outcome["capabilities"],
+            "previous": outcome["previous"],
+            "changed": outcome["changed"],
+        },
+    )
+
+
 _HANDLERS = {
     FOLD: _fold,
     CREATE_CAPABILITY: _create_capability,
@@ -673,4 +749,5 @@ _HANDLERS = {
     SUPERSEDE: _supersede,
     CLEAR_SUPERSEDED: _clear_superseded,
     SET_SLICE: _set_slice,
+    SET_CAPABILITIES: _set_capabilities,
 }
