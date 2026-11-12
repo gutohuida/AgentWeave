@@ -1,0 +1,82 @@
+/* The side panel's Running tab (roadmap a-side-panel-worth-keeping-open, slice activity-tab). */
+
+.aw-run { display: flex; height: 100%; min-height: 0; flex-direction: column; background: var(--bg); }
+
+.aw-run-head { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
+.aw-run-summary { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); }
+.aw-run-filters { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+.aw-run-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 6px 8px 24px; }
+
+.aw-run-group { margin-top: 10px; }
+.aw-run-group-title {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 6px; padding: 0 6px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--text-3);
+}
+.aw-run-group[data-phase="needs-you"] .aw-run-group-title { color: var(--amber); }
+.aw-run-group-count {
+  padding: 0 6px; border-radius: 999px; background: var(--surface-2);
+  font-size: 11px; font-weight: 500; color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+
+.aw-run-list { display: flex; flex-direction: column; gap: 4px; list-style: none; margin: 0; padding: 0; }
+.aw-run-item {
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
+  overflow: hidden; transition: border-color var(--dur-fast) ease;
+}
+.aw-run-item:hover { border-color: var(--border-hi); }
+.aw-run-item[data-phase="needs-you"] { border-color: color-mix(in oklab, var(--amber) 45%, var(--border)); }
+.aw-run-item[data-phase="finished"], .aw-run-item[data-phase="stopped"], .aw-run-item[data-phase="paused"] { background: transparent; }
+
+.aw-run-row {
+  display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; width: 100%;
+  padding: 10px 10px 10px 8px; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer;
+}
+.aw-run-row:hover { background: color-mix(in srgb, var(--text) 2.5%, transparent); }
+.aw-run-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+
+.aw-run-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--border);
+}
+.aw-run-item[data-phase="working"] .aw-run-icon { color: var(--green); background: color-mix(in oklab, var(--green) 12%, var(--surface-2)); }
+.aw-run-item[data-phase="needs-you"] .aw-run-icon { color: var(--amber); background: color-mix(in oklab, var(--amber) 12%, var(--surface-2)); }
+
+.aw-run-main { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.aw-run-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.aw-run-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text); }
+.aw-run-item[data-phase="finished"] .aw-run-title, .aw-run-item[data-phase="stopped"] .aw-run-title, .aw-run-item[data-phase="paused"] .aw-run-title { color: var(--text-2); font-weight: 500; }
+.aw-run-when { flex: none; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+.aw-run-meta { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 11.5px; color: var(--text-3); }
+.aw-run-kind { flex: none; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px; font-size: 10.5px; font-weight: 500; }
+.aw-run-progress { display: inline-flex; min-width: 0; flex: 1; align-items: center; gap: 6px; max-width: 180px; }
+.aw-run-bar { display: block; height: 4px; min-width: 40px; flex: 1; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.aw-run-bar span { display: block; height: 100%; border-radius: inherit; background: var(--green); transition: width var(--dur-slow) var(--ease-out); }
+.aw-run-item[data-phase="stopped"] .aw-run-bar span { background: var(--text-3); }
+.aw-run-progress-label { flex: none; font-variant-numeric: tabular-nums; }
+.aw-run-spent { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.aw-run-workers { display: flex; flex-direction: column; gap: 2px; }
+.aw-run-worker { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.aw-run-worker-agent { flex: none; font-weight: 500; color: var(--text); }
+.aw-run-worker-doing { flex: none; color: var(--text-3); }
+.aw-run-worker-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.aw-run-more, .aw-run-status { font-size: 12px; color: var(--text-3); }
+
+.aw-run-attention {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 46px;
+  border-top: 1px solid color-mix(in oklab, var(--amber) 30%, var(--border));
+  background: color-mix(in oklab, var(--amber) 8%, transparent);
+  font-size: 12px; color: var(--text);
+}
+.aw-run-attention > svg { flex: none; color: var(--amber); }
+.aw-run-attention-text { min-width: 0; flex: 1; }
+
+.aw-run-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 48px 16px; text-align: center; font-size: 13px; color: var(--text-2); }
+.aw-run-empty p { margin: 0; }
+.aw-run-empty-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin-bottom: 6px;
+  border-radius: var(--radius-md); background: var(--surface-2); color: var(--text-3);
+}
+.aw-run-empty-hint { max-width: 34ch; font-size: 12px; color: var(--text-3); }

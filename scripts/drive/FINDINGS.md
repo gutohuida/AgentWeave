@@ -33647,7 +33647,7 @@ Fix: add `AW_QUESTION_TIMEOUT` to both lists (slice 1 moves them into one `CODEX
 
 ## F462 (B) — a specification turn on Codex app-server keeps its write tools
 
-**Status:** fixed (Tier 2, 2026-10-07, change `a-codex-app-server-spec-turn-keeps-no-write-tools`, `spdoc-4e84aebf7712`, operator approved). Two breaks, not one: `CodexAppServerTransport.run_turn` dropped the flag, **and** `trigger_agent_directly`'s `_execute_run` call never passed it, so the RPC executor always got `False` -- the dispatch-seam test caught the second after the transport fix alone went green. A spec turn's thread now starts `read-only` (`on-request`, or `untrusted` under Ask me; never `never`), its file changes and sandbox escapes are declined (Ask me still carries a command to the operator) and Full access grants no permissions, except the Hub's own call (`mcp_server._hub_own_call`: a calls-root `.json` file, one `aw-tool` invocation), which a shim-told spec turn needs to submit its document. Test: `test_a_codex_app_server_spec_turn_keeps_no_write_tools.py` (20 of 20 failed before). **Not driven:** Codex is undrivable here; what a real binary does with the policy is unobserved.
+**Status:** fixed (Tier 2, 2026-10-07, change `a-codex-app-server-spec-turn-keeps-no-write-tools`, `spdoc-4e84aebf7712`, operator approved). Two breaks, not one: `CodexAppServerTransport.run_turn` dropped the flag, **and** `trigger_agent_directly`'s `_execute_run` call never passed it, so the RPC executor always got `False` -- the dispatch-seam test caught the second after the transport fix alone went green. A spec turn's thread now starts `read-only` (`on-request`, or `untrusted` under Ask me; never `never`), its file changes and sandbox escapes are declined (Ask me still carries a command to the operator) and Full access grants no permissions, except the Hub's own call (`mcp_server._hub_own_call`: a calls-root `.json` file, one `aw-tool` invocation), which a shim-told spec turn needs to submit its document. Test: `test_a_codex_app_server_spec_turn_keeps_no_write_tools.py` (20 of 20 failed before). **Not driven:** Codex is undrivable here; what a real binary does with the policy is unobserved. **Driven 2026-11-11:** the policy holds (`read-only`), but a shim-told first turn never attempts the allowed write -- see F1161.
 Originally: open, filed 2026-09-28 from code (not driven). Found in `each-runner-cli-is-one-adapter` R2 (design D11) and confirmed by its Opus review.
 
 F4's rule — a turn triggered with a specification document open loses file-write tools, "regardless of phase, rigor or permission posture" — is applied by passing `restrict_spec_writes=bool(spec_document)` to `build_command` (`agent_trigger.py:1227`). For Codex app-server, the default Codex transport (`uses_app_server`, `agent_trigger.py:1210`), that argv is unused: the turn goes through `codex_appserver.run_turn`, which receives neither `restrict_spec_writes` nor the runner's flags (`codex_appserver.py` has no such parameter). So a Codex agent on a spec turn can write files; only `codex exec` honours the restriction (`runner_commands.py:336`).
@@ -41411,7 +41411,7 @@ On 2026-11-06 the first save of `spec/changes/a-trace-of-a-whole-conversation` (
 
 ## F1140 (B) -- a generated file that every branch rebuilds sends finished work back as merge-needed
 
-**Status:** open 2026-11-07. Seen four times in two builds.
+**Status:** built, not yet configured here (Architect, 2026-11-10). The product fix landed 2026-11-08 (`generated-files-are-rebuilt-when-work-lands-instead-of-sending-it-back`, `hub/hub/generated_files.py`): a project's Generated files setting names the paths and the command that rebuilds them. This repository has none set on the operator's Hub (`projects.generated_files` is NULL for proj-d85a82bf4216, read-only query), so its bundle conflicts still send work back. Closes once the bundle paths and rebuild command are set and a parallel UI build lands without a merge-needed send-back. First seen open 2026-11-07, four times in two builds.
 **Source:** found by reading the build retrospectives (Architect)
 **Theme:** Landing & merges
 **Ready:** needs a decision: a project setting naming generated paths and the command that regenerates them (product), or a repo-only rebuild step (this repository's settings)
@@ -41575,6 +41575,163 @@ In `hub/tests/test_gates_consult_the_known_failing_list.py`, the `SLOW` check's 
 **Tier:** 1
 
 One merged change fixed 16 auto-filed flaky-test tasks (AW-41..58) assigned to DeveloperOpus, and the Hub's full main check passed on it. Closing them was refused three ways. Another agent may not move them, since an agent claims only its own or nobody's tasks (403). Their assignee may move only one, because a run "finishes the task it took, and takes at most one" (403). And a pending task cannot go to completed directly (409). So closing N tasks costs N agent turns or N operator clicks. **Expected:** a flaky-test task (kind `flaky`, from a check) closes itself when its test passes on main, or the board lets the operator close a selection with one note.
+
+## F1156 (C) -- a task cannot wait for a task in another document, so two slices that share one file cannot be built side by side safely
+
+**Status:** open
+**Source:** found writing slice 5 of `settings-that-are-easy-to-find-and-match-the-app` while slice 2 was building (Architect, 2026-11-10)
+**Theme:** Dependencies x Spec documents
+**Ready:** needs a decision on how a task names a prerequisite outside its document
+**Tier:** 1
+
+Slice 5 (`a-project-says-what-it-still-needs`) has three chained tasks. The first two share no file with slice 2 (`settings-in-the-app-s-style-where-you-expect-them`), which was building. The third edits `ProjectSettingsScreen.tsx` and the committed UI bundle, both of which slice 2 rewrites, and links to a page slice 2's last task creates. Naming that task's id (`task-c621c88c5bc9`) in the third task's `depends_on` is refused: `depends_on_unresolved`, "names neither a task declared in this document nor an imported entry's key". `create_task` does accept an existing task id in `depends_on`, so the board can express the wait but a document cannot. The operator either waits for slice 2 to finish before building slice 5 at all, or builds now and stops the build by hand before its third task starts. **Expected:** a document task's `depends_on` may name a task on the board (or another document's task key), and the flow does not start it until that task is done.
+
+## F1157 (C) -- documents left in the retired `proposed` phase still say `proposed` on disk, and built work in them cannot be folded
+
+**Status:** open
+**Source:** found tidying the spec corpus (Architect, 2026-11-10)
+**Theme:** Spec documents x Lifecycle
+**Ready:** yes
+**Tier:** 0
+
+Four change documents (`agents-add-files-to-the-vault-by-path`, `an-operator-sets-how-far-an-agent-reaches`, `the-vault-names-who-read-an-entry`, `a-run-is-a-trace-you-can-export`) read `"phase": "proposed"` in their `spec.json` and in `spec/index.json`, while the Hub's row says `exploring` (`read_spec_document` on the first answers `phase: exploring`). The retirement of `proposed` (migration 0149) moved the rows but never re-rendered the files, so anyone reading the corpus from disk sees a phase that no longer exists. All four are fully built in code, so they sit unfolded until the operator approves an exploring document of finished work. **Expected:** the migration (or a one-off re-render) writes the files' phase from the rows; and an agent tidying the corpus can say "this exploring document is already built" in a way the operator approves in one action.
+
+## F1158 (C) -- `spec/index.json` lists only a fraction of the corpus's approved changes
+
+**Status:** open
+**Source:** found tidying the spec corpus (Architect, 2026-11-10)
+**Theme:** Spec corpus map
+**Ready:** yes
+**Tier:** 0
+
+Before the tidy, `spec/index.json` counted 11 approved change documents while `spec/changes/` held 62 (`kind: change-spec`, `hub.phase: approved`); 52 directories under `spec/` were also untracked in the main checkout, among them change documents a week old. After the tidy's `create_capability` acts the index was regenerated and now counts all 62, so the defect is that only some writes regenerate it, and between them the map reads as complete and is not. Overlaps the unwritten slice `the-map-is-real` of `the-specs-stay-true-and-easy-to-work-with`. **Expected:** every document the Hub writes is in the index, and the index is regenerated from the rows rather than appended to.
+
+## F1159 (C) -- `submit_spec_document` tells authors an unresolved question blocks the document; it only warns
+
+**Status:** open
+**Source:** found authoring `evidence-review-sends-work-back-only-for-what-is-wrong-with-it` (Architect, 2026-11-10)
+**Theme:** Spec documents x Tool descriptions
+**Ready:** yes
+**Tier:** 0
+
+The tool description (`hub/hub/mcp_server.py:5354`) says "An unresolved one blocks the document", but a submit with three unresolved questions answered `blocking: []`, `ready_to_approve: true`, and listed them only as `unresolved_question` warnings. The warning is the intended behaviour (`hub/hub/spec_payload.py:370`: "Approving with an unresolved question is allowed but warns"), so the description is what is wrong. An author who trusts it believes the document cannot be approved while a question is open, and may tell the operator so. **Expected:** the description says an unresolved question is a warning approval lists, not a block.
+
+## F1160 (B) -- a Hub started from inside an agent run sends every run it launches to the *parent* Hub, with a credential that Hub never issued
+
+**Status:** fixed 7b6701f on agentweave/task/task-ad1e7a89cff6 (DeveloperOpus, AW-80..83); held live with real Codex 0.167.1 in the Architect re-drive 2026-11-11; lands when AW-80 is approved
+**Source:** found driving Codex end to end (Architect, 2026-11-11, scratch Hub :8030)
+**Theme:** Runs x Hub identity
+**Ready:** yes
+**Tier:** 0
+
+An agent run's environment carries `HUB_URL` (its own Hub) and `AW_RUN_TOKEN`. A Hub started from that shell inherits both, and `trigger_agent` takes `HUB_URL` from `os.environ` ahead of its own bound address (`hub/hub/api/v1/agent_trigger.py:1992-1994`), so every run the child Hub launches is told the parent's address. Driven: the Architect's turn (a run of the operator's :8000 Hub) started a scratch Hub on :8030 via `e2e.py hub-up` (`.claude/skills/e2e-loop/e2e.py:178` copies `os.environ` unscrubbed); the first Codex turn's `aw-tool list_tasks` and `record_evidence` answered `{"ok": false, "error": {"kind": "rejected", "detail": "Invalid or inactive run credential", "status": 401}}`, and :8030's access log has no `agent-actions` request at all -- the calls went to **:8000**, which refused them (no write happened). Restarting :8030 with `HUB_URL`/`AW_*` unset fixed it at once (`list_tasks` over MCP, `plane_surface: mcp`). This bites exactly the dogfooding case: any agent that starts a Hub to drive it (QA, e2e) points that Hub's agents at the operator's real instance. Distinct from F526 (no `HUB_URL` at all). **Expected:** a Hub drops inherited run variables (`AW_RUN_TOKEN`, `AW_RUN_ID`, `AW_AGENT_IDENTITY`, …) at startup and refuses or warns on a `HUB_URL` whose port is not its own; `hub-up` scrubs them too.
+
+## F1161 (B) -- a Codex agent's first turn on a specification document cannot write it: told to write an arguments file and, in the same prompt, that it has no file-write tool
+
+**Status:** fixed 45f7ed8 + 7182363 on agentweave/task/task-ad1e7a89cff6 (DeveloperOpus, AW-80..83); held live with real Codex 0.167.1 in the Architect re-drive 2026-11-11; lands when AW-80 is approved
+**Source:** found driving Codex end to end (Architect, 2026-11-11)
+**Theme:** Spec documents x Codex
+**Ready:** yes
+**Tier:** 0
+
+An agent's first run is told the `aw-tool` call path, since no earlier run proved MCP `connected` (`launchability.described_access_path`, `hub/hub/launchability.py:317`). On a spec turn the Codex thread starts `read-only` (`codex_appserver._thread_policy`, F462), and the Hub means to accept the one arguments-file write when Codex asks. But the turn prompt Codex received says both "write the tool's arguments as one JSON object to a `.json` file inside `.agentweave/calls/` … with your file-writing tool" **and** "You have no file-write tool this turn" (read from the Codex rollout of the planner's first run, gpt-6-luna). The agent believed the second, never attempted the write, and ended: "I can't write the spec document in this turn: the workspace is read-only, and the required `aw-tool` call needs its arguments in a JSON file." Its second turn was told MCP and submitted the document at once. F462's fix note says "Not driven: Codex is undrivable here"; this is the first live observation. **Expected:** a shim-told spec turn is told plainly that the one `.agentweave/calls/*.json` write is allowed (or a spec turn on a runner with a connected server is told MCP even on the first run).
+
+## F1162 (B) -- Stop on a Codex run leaves the command the agent was running alive
+
+**Status:** fixed cc638df + 7182363 on agentweave/task/task-ad1e7a89cff6 (DeveloperOpus, AW-80..83); held live with real Codex 0.167.1 in the Architect re-drive 2026-11-11; lands when AW-80 is approved
+**Source:** found driving Codex end to end (Architect, 2026-11-11)
+**Theme:** Runs x Codex x Resilience
+**Ready:** yes
+**Tier:** 0
+
+A Codex turn running `py -3.11 -c "import time; [time.sleep(1) for i in range(150)]"` was stopped through `POST /agent/builder/stop` (200, `status: stopping`); the run row went `stopped`, exit 1. Twelve seconds later `py.exe` (pid 13976) and its `python.exe` child (30996) were still running, their PowerShell parent (32368) gone -- orphaned, and holding the agent's worktree as cwd; I killed them by hand. The Claude-side cousin is F987 (an `aw-tool ask_user` tree surviving Stop). **Expected:** Stop ends the run's whole process tree on Windows, including commands the app-server's shell spawned.
+
+## F1163 (C) -- `update_task` refuses `requirement_ids` on a task that already belongs to a document, as soon as a second document declares the same identifier
+
+**Status:** fixed cc638df on agentweave/task/task-ad1e7a89cff6 (DeveloperOpus, AW-80..83); held live with real Codex 0.167.1 in the Architect re-drive 2026-11-11; lands when AW-80 is approved
+**Source:** found driving Codex end to end (Architect, 2026-11-11)
+**Theme:** Tasks x Requirements
+**Ready:** yes
+**Tier:** 0
+
+With two approved change documents in a project (each has an `FR-1`), the Codex reviewer's `update_task` (`task_id`, `status: approved`, `requirement_ids: ["FR-1","FR-2"]`) on a task whose `spec_document_id` is set answered 422 "FR-1 is declared by more than one document in this project; name the document it belongs to". `hub/hub/api/v1/tasks.py:2282-2283` resolves with `document_path=body.spec_document` only, never the task's own document. The agent recovered by dropping `requirement_ids`. Every project with two documents hits this. **Expected:** with no `spec_document` in the body, identifiers resolve within the task's own document.
+
+## F1164 (D) -- Codex drive notes: expiry read as rejection, encoding, model adherence
+
+**Status:** open
+**Source:** found driving Codex end to end (Architect, 2026-11-11)
+**Theme:** Codex
+**Ready:** no
+**Tier:** 0
+
+(1) An "Ask me" card left unanswered went `expired` after ~2 min and the Codex agent said "approval for the write was rejected" -- it cannot tell an expiry from a denial. (2) The builder wrote `é` through Windows PowerShell 5.1 twice and corrupted the files' encoding before switching to `\u00e9` escapes; it recovered, but every non-ASCII edit on Windows costs turns. (3) Every Codex shell call prints the operator's PowerShell profile error ("Cannot dot-source this command because it was defined in a different language mode"). (4) gpt-6-luna skipped `set_spec_size` when asked, and the planner recorded uninvited "specification evidence" with no task, which stays `awaiting` with nothing that will ever decide it.
+
+**What held on this drive (Codex 0.167.1, gpt-6-luna; Claude Haiku 4.5 for the mixed team):** the catalog read from Codex's CLI cache; an undeclared Codex model refused naming the eight declared; launchability `runnable`; the MCP path (`list_tasks`, `rename_spec_document`, `submit_spec_document`, `record_evidence`, `submit_checkpoint_notes`, `update_task`, `ask_user`) and the `aw-tool` path (reviewer's first run, including a legible 422 and recovery); a flow with a Codex builder and Claude reviewer, and the reverse, each staged its review, accepted evidence and merged into `master` with tests green; `ask_user` blocked and resumed with the answer; an "Ask me" card carried Codex's reason and the Workspace-only verdict, and allow wrote the file. Not reached: Codex under Full access, Codex checkpoints/compaction, Codex as flow lead, budgets for Codex runs, the dashboard (bundle `ui_stale`).
+
+## F1165 (B) -- `submit_spec_document` answers `ready_to_approve: true` for a document with no requirements and four unresolved questions
+
+**Status:** open
+**Found:** 2026-11-11, Architect, drafting `find-any-setting-and-see-where-its-value-comes-from` on the trial Hub (proj-d85a82bf4216)
+**Tier:** 0
+
+The first submit carried problem, scope and evidence, no requirements, and four `open_questions` with `resolved: false`. The answer was `blocking: []`, `ready_to_approve: true`, with `no_requirements` and four `unresolved_question` entries only under `warnings`. The tool's own description says an unresolved question "blocks the document" and that `ready_to_approve` "is false while anything blocks or any such approval gap is present". Either the field or the description is wrong; an author (or a cheap model) reading the field would tell the operator an empty document is ready. Repro: create a change-spec, submit it with `open_questions: [{"question": "x", "resolved": false}]` and no requirements; read `ready_to_approve`.
+
+## F1166 (C) -- a hand-made task whose work landed with another task cannot be closed
+
+**Status:** open
+**Found:** 2026-11-11, Architect, closing AW-81/82/83 after AW-80 (477c655) landed their fixes
+**Tier:** 1
+
+AW-81, AW-82 and AW-83 were built in AW-80's run (the Hub refused to let that run move them: "a run takes at most one task"), so they stayed `pending` while their work merged with AW-80. `update_task(AW-81, status=approved)` answers 409 "From 'pending' the available transitions are: assigned, in_progress". The only way out is in_progress -> completed, which runs checks and stages a review of a task branch that holds nothing. A spec document has `already_built` for this; a hand-made task has no "done elsewhere, by <task/commit>" close. Expected: a task can be closed as landed by another task or commit, naming it, without a build or review.
+
+## F1167 (B) -- a spec document written through the Hub leaves the project checkout dirty, and the next landing is refused for it
+
+**Status:** fixed 2026-11-12 on branch `agentweave/DeveloperOpus` (4ac1ec8, with F1086): the Hub records a digest of each tracked file it writes (`hub/hub/hub_writes.py`, `.agentweave/hub-writes.json`), so its own unchanged writes to `spec/` and `knowledge/` no longer count as a dirty checkout, and a dirty checkout fails a batch before its checks run (`hub/tests/test_hub_writes_do_not_block_landing.py`). Not merged to master yet.
+**Found:** 2026-11-11, Architect, after the power outage, checking the PSWSN and FASSW builds on proj-d85a82bf4216
+**Tier:** 1
+
+`submit_spec_document` writes `spec/changes/<name>/spec.json` into the project's main checkout and leaves it uncommitted. The landing queue then refuses to integrate: PSWSN-1's batches `lbat-eb030e428212` (13:58) and `lbat-831e6ee6ae0f` (14:14) both failed with "the project's checkout has uncommitted changes to tracked files -- commit or stash them, then retry the integration". After `3608653 Commit spec and knowledge changes written by the Hub` cleared it, the Architect's next two submits (tasks-rework roadmap and slice glance) dirtied the checkout again while PSWSN-1's re-check was running. Expected: a write the Hub itself makes to a tracked file never blocks the Hub's own landing -- it is committed by the Hub when written, or the landing commits it first. Repro: approve a task, submit any spec document while its landing is queued, and read the batch's `error`.
+
+## F1168 (A) -- Accepting a sign-off tried to land the recording agent's unrelated branch onto main, then reopened a task that had already landed
+
+**Status:** open
+**Source:** found by the operator's own use (Architect, 2026-11-11)
+**Theme:** Evidence x Landing
+**Ready:** yes
+**Tier:** 0
+
+The operator accepted slice 2's sign-off `ev-f9a096f042b2` (kind `operator_signoff`, no `task_id`, locator "Operator message to Architect") at 16:36:29. Twenty milliseconds later the Hub created an `evidence` landing (`land-5a8215484316`, batch `lbat-7103573b1192`) for task SASSW-2 (`task-e5c9147da336`). That task had been approved at 22:29 the day before and had already landed as `5921e0b` at 00:38. The landing reported a conflict in `scripts/drive/FINDINGS.md` and moved the task from `approved` to `revision_needed` (`merge-needed`). As a result, the settings slice document reads "still building".
+
+Three defects, worst first:
+
+1. **A sign-off carries the recording agent's commit.** Its footprint `efp-ef14cbead9e7` names `8223805` on `agentweave/Architect`: the Architect's unrelated, unreviewed drive work (F1160-F1163 notes and e2e-loop skill edits). Evidence that has no artifact in the repository (an operator sign-off, whose locator is a message) should carry no git footprint.
+2. **Evidence with no task merges through any task.** `tasks_awaiting_this_commit` (`hub/hub/task_integration.py`, ~:985-1035) reads every approved task linked to the evidence's requirement that has not merged the footprint commit as "waiting" for it. So accepting it merges an arbitrary commit into main under SASSW-2's name. Only the conflict stopped unreviewed work reaching `master`.
+3. **A failed `evidence` landing reopens landed work.** A task whose own work is already on main (its `merged` integration `tint-7cb026cefb9a`; its branch has no commit beyond `master`) was sent back to `revision_needed`, although it had nothing left to land.
+
+**Expected:** accepting evidence lands only commits from the branch of the task the evidence belongs to. Evidence with no task, or with no repository artifact, merges nothing. A landing that cannot merge never moves a task whose own work has already landed.
+
+**Repro:** have an agent whose branch has commits that conflict with main record `operator_signoff` evidence for a requirement that an approved, landed task links. Accept the evidence as the operator, then read the task's status and its `task_landings` rows.
+
+**Repair after the fix:** the mender returns `task-e5c9147da336` to approved. Do not re-approve it before the fix lands, because the same waiting evidence would retry the same merge.
+
+## F1169 (B) -- A task checkout half-deleted by cleanup blocks every later turn on the task, and the agent reads as having work it can never start
+
+**Status:** open
+**Source:** found by the operator's own use (Architect, 2026-11-11)
+**Theme:** Worktrees x Inbound queue
+**Ready:** yes
+**Tier:** 0
+
+AW-101 (`task-810f7f7f382b`) was approved at 19:23, and its checkout's directory was modified at 19:23. After that the directory had no `.git` file and was not in `git worktree list`: 3678 of the branch's 5895 files were left, with nothing changed or untracked. An orphaned trial Hub (PID 15664, `uvicorn` on :8010, started 18:04 by CodexSol's timed-out first turn) had its working directory in the checkout's `hub/`, so Windows refused to delete it. The checks then sent the task back (19:44), and every message to CodexSol failed three times with "Could not prepare the checkout ... refusing existing path ... it is not the registered git worktree". The Hub then withdrew each one (`entry-894e25419459`). CodexSol showed as having work, but no turn could start, and nothing told the operator why. The refusal says "the next turn runs `git worktree prune` and provisions the checkout itself", but no turn ever ran.
+
+**Expected:**
+- Removing a checkout never leaves a half-deleted, unregistered directory. If a file is locked, the Hub keeps it registered, or it retries the removal before the next turn needs the path.
+- A turn that finds a stale directory containing nothing that isn't on the branch clears it and provisions a fresh checkout.
+- A refusal that needs a person reaches the operator as a stall, not as three silent withdrawals.
+
+**Also:** a Hub an agent starts inside its own checkout outlives the agent's turn. Three more `uvicorn hub.main:app` processes started between 18:58 and 19:04 are still listening on ports 63149, 65279 and 54469, and their parents are gone.
+
+**Repaired by hand:** Architect stopped PID 15664, removed the directory and pruned, then resent the message. CodexSol's turn `run-1522734a6958` started at 20:32 on a freshly created checkout.
 
 ## F1157 (B) -- documents left in the retired `proposed` phase still say `proposed` on disk
 

@@ -97,8 +97,13 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 // The "Serves" block lives in the drawer (F5, `design.md` D8) — opened the same way the operator
-// would, by clicking the card.
-async function renderExpanded(task: Task, onOpenRequirement?: (path: string, anchor: string) => void) {
+// would, by clicking the card. Since `task-card-and-story-redesign` it is the Work view's
+// Requirements section, so `view` says which view to open.
+async function renderExpanded(
+  task: Task,
+  onOpenRequirement?: (path: string, anchor: string) => void,
+  view: 'work' | 'details' = 'work',
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
     <QueryClientProvider client={client}>
@@ -106,6 +111,7 @@ async function renderExpanded(task: Task, onOpenRequirement?: (path: string, anc
     </QueryClientProvider>,
   )
   await userEvent.click(screen.getByTestId(`task-open-${task.id}`))
+  await userEvent.click(screen.getByTestId(`task-view-${view}-${task.id}`))
 }
 
 afterEach(() => {
@@ -134,7 +140,8 @@ describe('a card shows what it is checked against', () => {
     expect(screen.getByTestId('task-serves-task-1')).toBeTruthy()
     expect(within(screen.getByTestId('task-serves-task-1')).getByText('FR-1')).toBeTruthy()
     expect(screen.getByText(/It settles the account/)).toBeTruthy()
-    // The prose survives, relabelled so the two are not confused for each other.
+    // The prose survives in Details, relabelled so the two are not confused for each other.
+    await userEvent.click(screen.getByTestId('task-view-details-task-1'))
     expect(screen.getByText('Requirements (as written)')).toBeTruthy()
     expect(screen.getByText('must settle to the cent')).toBeTruthy()
   })
@@ -162,13 +169,15 @@ describe('a card shows what it is checked against', () => {
       makeTask({
         unresolved_requirements: [{ reference: 'FR-99', reason: 'no such requirement' }],
       }),
+      undefined,
+      'details',
     )
 
     expect(screen.getByText(/FR-99 — no such requirement/)).toBeTruthy()
   })
 
   it('renders no Serves block for a task that serves nothing', async () => {
-    await renderExpanded(makeTask({ requirements: ['just prose'] }))
+    await renderExpanded(makeTask({ requirements: ['just prose'] }), undefined, 'details')
 
     expect(screen.queryByTestId('task-serves-task-1')).toBeNull()
     expect(screen.getByText('Requirements (as written)')).toBeTruthy()

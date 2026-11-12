@@ -106,6 +106,7 @@ vi.mock('@/api/spec', () => ({
       ],
     },
   }),
+  useSpecCoverageMany: (paths: string[]) => paths.map(() => ({ data: undefined })),
 }))
 
 let pickerTasks: Task[] = []
@@ -322,7 +323,7 @@ describe('renaming a task (F125, the-operator-can-rename-a-task)', () => {
 })
 
 describe('F4 chips inside the drawer, resolved via requirement_links (6.3)', () => {
-  it('shows the full statement text, not just the identifier', () => {
+  it('shows the full statement text, not just the identifier', async () => {
     renderDrawer(
       makeTask({
         requirement_links: [
@@ -337,10 +338,11 @@ describe('F4 chips inside the drawer, resolved via requirement_links (6.3)', () 
       }),
       vi.fn(),
     )
+    await userEvent.click(screen.getByTestId('task-view-work-task-1'))
     expect(screen.getByText(/It settles the account to the cent/)).toBeInTheDocument()
   })
 
-  it('shows the rejection reason for a link with rejected evidence — never surfaced before this change', () => {
+  it('shows the rejection reason for a link with rejected evidence — never surfaced before this change', async () => {
     renderDrawer(
       makeTask({
         requirement_links: [
@@ -357,6 +359,7 @@ describe('F4 chips inside the drawer, resolved via requirement_links (6.3)', () 
       }),
       vi.fn(),
     )
+    await userEvent.click(screen.getByTestId('task-view-work-task-1'))
     expect(screen.getByText(/Off by one cent on the settlement total/)).toBeInTheDocument()
   })
 
@@ -397,7 +400,9 @@ describe('F4 chips inside the drawer, resolved via requirement_links (6.3)', () 
       vi.fn(),
       onOpenRequirement,
     )
-    await userEvent.click(screen.getByText(/It settles the account/))
+    await userEvent.click(screen.getByTestId('task-view-work-task-1'))
+    // The identifier is what opens the requirement in its document.
+    await userEvent.click(screen.getByRole('button', { name: 'FR-1' }))
     expect(onOpenRequirement).toHaveBeenCalledWith('spec/example.json', 'FR-1')
   })
 })
@@ -441,7 +446,7 @@ describe('no-clipping (design.md D8, tasks.md 6.5)', () => {
     expect(panel.style.overflow).not.toBe('hidden')
   })
 
-  it('renders every requirement chip and the full description, none dropped, at a representative narrow width', () => {
+  it('renders every requirement chip and the full description, none dropped, at a representative narrow width', async () => {
     // jsdom does not evaluate the panel's own responsive `width: min(480px, 100vw)` against
     // `window.innerWidth` (no real CSS layout engine), so this cannot prove the drawer visually
     // fits at 360px — only that the component renders the same content regardless of viewport,
@@ -452,10 +457,11 @@ describe('no-clipping (design.md D8, tasks.md 6.5)', () => {
       makeTask({ description: longDescription, requirement_links: threeRequirementLinks }),
       vi.fn(),
     )
+    expect(screen.getByText(longDescription.trim())).toBeInTheDocument()
+    await userEvent.click(screen.getByTestId('task-view-work-task-1'))
     for (const link of threeRequirementLinks) {
       expect(screen.getByText(new RegExp(link.statement))).toBeInTheDocument()
     }
-    expect(screen.getByText(longDescription.trim())).toBeInTheDocument()
   })
 })
 

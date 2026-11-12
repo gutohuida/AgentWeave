@@ -163,3 +163,35 @@ http://localhost:5199/mock.html#conversation-trace/conv-b7158addff32   # QA, 17 
 
 Approved by the operator on 2026-11-06 as it renders ("Perfect. Loved it."), including the author's choices: gaps over
 20 minutes fold, an unfolded turn's spans draw on its own scale, overlapping axis labels move to hover text.
+
+## The side panel's Running tab (mock, 2026-11-12)
+
+Roadmap `spec/changes/a-side-panel-worth-keeping-open-activity-changes-files-terminal-and-peers`,
+slice `activity-tab`. It replaces the panel's Loops tab, and is named Running because the project
+already has an Activity tab. The component is `src/components/panel/RunningTab.tsx`, with its pure
+rules (which group a build, loop or job falls in, what it says it is doing, the filters) in
+`runningModel.ts`; `src/styles/running-panel.css` styles it. It is drawn in the app's own
+`PanelShell`. Every state is hand-written in `mock/runningMock.ts` (`// mock state`), apart from the
+replica's two finished builds.
+
+```
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/running
+```
+
+Approved by the operator on 2026-11-12 as it renders.
+
+The roadmap's other tabs are mocked in the same shell (`mock/screens/SidePanel.tsx`, fed by the
+hand-written Terra checkout in `mock/panelMock.ts`): Changes (`ChangesTab`: the agent's last turn or
+its whole branch, as diffs), Files (`FilesTab`: the agent's worktree or the project root, its changes
+marked, "Changed only"), Terminal (`TerminalTab`: the app mounts the real terminal emulator where the
+mock shows a recording; `terminal-remote` is the state from another computer) and Watch (`WatchTab`:
+a peer's conversation through the app's own `AgentTimeline`, read-only). The panel store's ids for
+the new tabs are cast in the mock (`// mock state`) until the slices add them.
+
+```
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/changes
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/files
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/terminal
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/terminal-remote
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/watch
+```

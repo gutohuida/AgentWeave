@@ -1,14 +1,17 @@
+import type { SidePanelTab } from './screens/SidePanel'
 import type { AppSettingsSection, ProjectTab } from '@/lib/navigation'
 
 /** Where the mock is. Mirrors the app's own destinations (lib/navigation.ts) closely enough that a
  *  screen's navigation calls map one to one when it is wired in. */
 export type MockRoute =
   | { kind: 'tab'; tab: ProjectTab }
-  | { kind: 'conversation'; agent: string; conversationId: string | null; panel?: 'spec' | 'specs' }
+  | { kind: 'conversation'; agent: string; conversationId: string | null; panel?: 'spec' | 'specs' | SidePanelTab }
   | { kind: 'settings'; section: SettingsSection }
   | { kind: 'agent-settings'; agent: string; section: AgentSettingsSection }
   | { kind: 'app-settings'; section: AppSettingsSection }
   | { kind: 'gallery' }
+  /** The task card and story redesign (`task-card-and-story-redesign`). */
+  | { kind: 'task-redesign' }
   | { kind: 'thread' }
   /** The traces view: a fourth view inside Activity (operator, 2026-11-02). */
   | { kind: 'traces' }

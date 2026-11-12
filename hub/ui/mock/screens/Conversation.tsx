@@ -23,6 +23,7 @@ import architectChat from '../fixtures/chat_architect_9cdda4.json'
 import modelCatalog from '../fixtures/model_catalog.json'
 import type { ScreenProps } from '../routes'
 import { useSpecMock } from '../specMock'
+import { SidePanelMock } from './SidePanel'
 
 const CHATS: Record<string, ChatHistoryResponse> = {
   'conv-e3aba2c5956a': builderChat as unknown as ChatHistoryResponse,
@@ -74,7 +75,11 @@ export default function Conversation(props: ScreenProps) {
           <div className="flex h-full flex-none flex-col" style={{ width: CONVERSATION_DEFAULT_WIDTH, minWidth: CONVERSATION_MIN_WIDTH }}>
             <ConversationMock {...props} />
           </div>
-          <SpecPanelMock picking={panel === 'specs'} go={props.go} route={props.route} />
+          {panel !== 'spec' && panel !== 'specs' ? (
+            <SidePanelMock tab={panel} agent={props.route.kind === 'conversation' ? props.route.agent : 'Builder'} go={props.go} now={props.now} route={props.route} />
+          ) : (
+            <SpecPanelMock picking={panel === 'specs'} go={props.go} route={props.route} />
+          )}
         </div>
       ) : (
         <ConversationMock {...props} />

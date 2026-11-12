@@ -17,7 +17,7 @@ function parseHash(): MockRoute {
   const raw = decodeURIComponent(window.location.hash.replace(/^#/, '')).split('?')[0]!
   const [kind, a, b, c] = raw.split('/')
   if (kind === 'tab' && (PROJECT_TABS as readonly string[]).includes(a ?? '')) return { kind: 'tab', tab: a as ProjectTab }
-  if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c === 'spec' || c === 'specs' ? { panel: c } : {}) }
+  if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c && PANELS.has(c) ? { panel: c as NonNullable<Extract<MockRoute, { kind: 'conversation' }>['panel']> } : {}) }
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
   if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'running' }
   if (kind === 'app-settings') {
@@ -25,6 +25,7 @@ function parseHash(): MockRoute {
     return { kind: 'app-settings', section }
   }
   if (kind === 'gallery') return { kind: 'gallery' }
+  if (kind === 'task-redesign') return { kind: 'task-redesign' }
   if (kind === 'thread') return { kind: 'thread' }
   if (kind === 'traces') return { kind: 'traces' }
   if (kind === 'conversation-trace') return { kind: 'conversation-trace', conversationId: a || null }
@@ -45,6 +46,8 @@ function toHash(route: MockRoute): string {
       return `app-settings/${route.section}`
     case 'gallery':
       return 'gallery'
+    case 'task-redesign':
+      return 'task-redesign'
     case 'thread':
       return 'thread'
     case 'traces':
@@ -53,6 +56,8 @@ function toHash(route: MockRoute): string {
       return `conversation-trace/${route.conversationId ?? ''}`
   }
 }
+
+const PANELS = new Set(['spec', 'specs', 'running', 'changes', 'files', 'terminal', 'terminal-remote', 'watch'])
 
 export function MockApp() {
   const [route, setRoute] = React.useState<MockRoute>(parseHash)
@@ -178,7 +183,7 @@ function MockBar({
           </option>
         ))}
       </select>
-      {(route.kind === 'tab' && route.tab === 'spec') || (route.kind === 'conversation' && Boolean(route.panel)) ? (
+      {(route.kind === 'tab' && route.tab === 'spec') || (route.kind === 'conversation' && (route.panel === 'spec' || route.panel === 'specs')) ? (
         <SpecMockBar showLayout={route.kind === 'tab'} />
       ) : null}
       <button type="button" className="mock-bar-button" disabled={!hasBefore} data-on={before ? 'true' : 'false'} onClick={onBefore}>

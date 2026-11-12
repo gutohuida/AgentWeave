@@ -1,0 +1,79 @@
+/* The opened task's Work and Details views (`task-card-and-story-redesign`). Tokens from
+   index.css only; motion on the brand's --ease, stilled under reduced motion. */
+.aw-tview-empty { margin: 0; font-size: 12.5px; color: var(--text-3); }
+.aw-tview-sections { display: grid; gap: 20px; padding: 16px; animation: aw-tview-rise var(--dur-base) var(--ease); }
+.aw-tview-section > header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.aw-tview-section h3 { margin: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.aw-tview-aside { font-size: 11.5px; color: var(--text-2); }
+.aw-tview-mini {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px;
+  border-radius: var(--radius-sm); font-size: 11.5px; color: var(--text-2); border: 1px solid var(--border);
+}
+.aw-tview-mini:hover { background: var(--surface-2); color: var(--text); }
+.aw-tview-list {
+  list-style: none; margin: 0; padding: 0; display: grid;
+  border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden;
+}
+.aw-tview-list > li + li { border-top: 1px solid var(--border); }
+.aw-tview-req { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding: 10px 12px; --tone: var(--text-3); }
+.aw-tview-req[data-tone="done"] { --tone: var(--green); }
+.aw-tview-req[data-tone="info"] { --tone: var(--blue); }
+.aw-tview-req[data-tone="failed"] { --tone: var(--red); }
+.aw-tview-req > svg { color: var(--tone); margin-top: 1px; }
+.aw-tview-req-head { display: flex; align-items: center; gap: 8px; }
+.aw-tview-req-state { font-size: 11.5px; font-weight: 500; color: var(--tone); }
+.aw-tview-req-text {
+  margin: 3px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.aw-tview-req-why { margin: 4px 0 0; font-size: 12px; color: var(--red); }
+.aw-tview-criteria { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 12.5px; line-height: 1.45; color: var(--text); }
+.aw-tview-criteria li::marker { color: var(--text-3); }
+.aw-tview-check { --tone: var(--text-3); }
+.aw-tview-check[data-tone="done"] { --tone: var(--green); }
+.aw-tview-check[data-tone="failed"] { --tone: var(--red); }
+.aw-tview-check[data-tone="needs-you"] { --tone: var(--amber); }
+.aw-tview-check-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: 34px; padding: 0 12px;
+  text-align: left; font-size: 12.5px; color: var(--text);
+}
+.aw-tview-check-head:disabled { cursor: default; opacity: 1; }
+.aw-tview-check-head:not(:disabled):hover { background: var(--surface-2); }
+.aw-tview-check-head > svg:first-child { color: var(--tone); }
+.aw-tview-check-name { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
+.aw-tview-check-word { font-size: 11.5px; color: var(--tone); font-weight: 500; }
+.aw-tview-check-time { margin-left: auto; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aw-tview-output {
+  margin: 0; padding: 10px 12px; max-height: 220px; overflow: auto; background: var(--surface-2);
+  border-top: 1px solid var(--border); font-size: 11.5px; line-height: 1.5; color: var(--text-2); white-space: pre-wrap;
+  animation: aw-tview-rise var(--dur-base) var(--ease);
+}
+.aw-tview-landing { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12.5px; color: var(--text); }
+.aw-tview-prose { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text); white-space: pre-wrap; }
+.aw-tview-links { display: grid; gap: 12px; }
+.aw-tview-links-group { display: grid; gap: 4px; }
+.aw-tview-links-label { font-size: 11.5px; color: var(--text-2); }
+.aw-tview-link {
+  display: flex; align-items: center; gap: 8px; min-width: 0; height: 30px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 12.5px; color: var(--text); text-align: left;
+}
+.aw-tview-link:hover { background: var(--surface-2); }
+.aw-tview-link-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-tview-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
+.aw-tview-facts dt { font-size: 11px; color: var(--text-3); }
+.aw-tview-facts dd { margin: 2px 0 0; font-size: 12.5px; color: var(--text); overflow-wrap: anywhere; }
+.aw-tview-facts code { font-size: 11.5px; color: var(--text-2); }
+@keyframes aw-tview-rise { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .aw-tview-sections, .aw-tview-output { animation: none !important; }
+}
+.aw-tview-req-link { text-decoration: underline; text-decoration-color: var(--border-hi); text-underline-offset: 2px; }
+.aw-tview-req-link:hover { color: var(--text); text-decoration-color: currentColor; }
+/* Details: the facts grid and the linked-task rows. */
+.aw-tview-facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px 20px; }
+.aw-tview-deps { list-style: none; margin: 0; padding: 0; display: grid; border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.aw-tview-dep { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; font-size: 12.5px; color: var(--text); }
+.aw-tview-dep + .aw-tview-dep { border-top: 1px solid var(--border); }
+.aw-tview-dep > svg { color: var(--text-3); flex: none; }
+.aw-tview-dep-status { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.aw-tview-req-life { font-size: 11px; color: var(--text-3); }
