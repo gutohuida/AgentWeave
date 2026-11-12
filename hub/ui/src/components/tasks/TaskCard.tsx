@@ -74,6 +74,7 @@ export function TaskCard({
       ) : null}
       <button
         type="button"
+        data-slot="task-card"
         className="aw-tcard-main"
         data-testid={`task-open-${task.id}`}
         onClick={() => onOpen(task.id)}

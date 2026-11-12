@@ -14,7 +14,9 @@ export function StageThread({ stage, compact }: { stage: string | null | undefin
   const last = THREAD_KNOTS.length - 1
   // A stage still moving fills halfway toward the knot it is heading for, so work under way always
   // shows some thread; a stage that has arrived fills to its knot.
-  const fill = reached < 0 ? 0 : visual.moving ? Math.max(5, ((reached - 0.5) / last) * 100) : (reached / last) * 100
+  // A cut thread stops at the knot before the break.
+  const fill =
+    reached < 0 ? 0 : visual.cut ? ((reached - 1) / last) * 100 : visual.moving ? Math.max(5, ((reached - 0.5) / last) * 100) : (reached / last) * 100
   const style = { '--thread-tone': TONE_COLOR[visual.tone], '--thread-fill': `${fill}%` } as React.CSSProperties
   return (
     <div

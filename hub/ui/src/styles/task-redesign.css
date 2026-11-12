@@ -88,9 +88,7 @@
   width: var(--thread-fill); background: var(--thread-tone);
   transition: width var(--dur-slow) var(--ease), background-color var(--dur-base) var(--ease);
 }
-.aw-thread[data-cut="true"] .aw-thread-fill {
-  background: repeating-linear-gradient(90deg, var(--thread-tone) 0 6px, transparent 6px 9px);
-}
+/* A cut thread runs solid to the knot where it broke; that knot is drawn struck through. */
 .aw-thread-knot {
   position: absolute; top: 3px; width: 8px; height: 8px; margin-left: -4px; border-radius: 999px;
   background: var(--surface); border: 1.5px solid var(--border-hi);

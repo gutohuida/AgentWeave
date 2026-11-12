@@ -28,7 +28,7 @@ export function TaskTimeline({ events, now }: { events: StoryEvent[]; now?: Date
         ) : open.has(item.fold.id) ? (
           <React.Fragment key={item.fold.id}>
             <li className="aw-tl-row aw-tl-unfold">
-              <button type="button" className="aw-tl-fold-button" onClick={() => toggle(item.fold.id)}>
+              <button type="button" data-slot="timeline-fold" className="aw-tl-fold-button" onClick={() => toggle(item.fold.id)}>
                 <Icon name="unfold_less" size={12} />
                 Fold {item.fold.folded.length} routine steps
               </button>
@@ -42,7 +42,7 @@ export function TaskTimeline({ events, now }: { events: StoryEvent[]; now?: Date
             <span className="aw-tl-node" aria-hidden="true">
               <Icon name="more_horiz" size={12} />
             </span>
-            <button type="button" className="aw-tl-fold-button" aria-expanded={false} onClick={() => toggle(item.fold.id)}>
+            <button type="button" data-slot="timeline-fold" className="aw-tl-fold-button" aria-expanded={false} onClick={() => toggle(item.fold.id)}>
               {item.fold.folded.length} routine steps
               <span className="aw-tl-fold-who">{foldSummary(item.fold.folded)}</span>
             </button>
@@ -73,7 +73,7 @@ function Row({ entry, now, open, onToggle }: { entry: TimelineEntry; now?: Date;
       </span>
       <div className="aw-tl-body">
         {expandable ? (
-          <button type="button" className="aw-tl-head" aria-expanded={open} onClick={onToggle}>
+          <button type="button" data-slot="timeline-entry" className="aw-tl-head" aria-expanded={open} onClick={onToggle}>
             <Head entry={entry} now={now} />
             <Icon name={open ? 'expand_less' : 'expand_more'} size={12} className="aw-tl-chevron" />
           </button>

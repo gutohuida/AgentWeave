@@ -1,9 +1,9 @@
 import * as React from 'react'
-import type { StoryEvent, Task, TaskStory } from '@/api/tasks'
+import type { RequirementLink, StoryEvent, Task, TaskCheckRun, TaskStory } from '@/api/tasks'
 import { BoardColumn } from '@/components/tasks/BoardColumn'
 import { TaskCard } from '@/components/tasks/TaskCard'
-import { TaskSummaryHeader } from '@/components/tasks/TaskSummaryHeader'
-import { TaskTimeline } from '@/components/tasks/TaskTimeline'
+import { TaskSheet, type TaskSheetAction } from '@/components/tasks/TaskSheet'
+import { toast } from '@/lib/toast'
 import { Icon } from '@/components/common/Icon'
 import { STAGE_LABELS } from '@/lib/taskStage'
 import type { ScreenProps } from '../routes'
@@ -36,7 +36,7 @@ function make(now: Date, id: string, readable: string, title: string, status: st
     priority: 'medium',
     created_at: ago(now, 600),
     updated: ago(now, 5),
-    divergence_policy: 'notify',
+    divergence_policy: 'surface',
     has_open_divergence: false,
     ...fields,
   } as Task
@@ -60,6 +60,127 @@ function tasks(now: Date): MockTask[] {
     { specTag: 'TOFMF', task: make(now, 't14', 'TOFMF-5', 'Bulk close from the board', 'rejected', { stage: 'closed', stage_since: ago(now, 60), stage_detail: 'done by TOFMF-3', assignee: 'DeveloperSonnet2', builder: 'DeveloperSonnet2' }) },
     { specTag: 'FASSW', task: make(now, 't15', 'FASSW-4', 'Old settings page redirect', 'rejected', { stage: 'closed', stage_since: ago(now, 300), stage_detail: 'cancelled: not needed after FASSW-2', assignee: 'Developer', builder: 'Developer' }) },
   ]
+}
+
+// mock state: what the opened task shows. Each task gets a description, the requirements it serves
+// in a spread of evidence states, criteria, linked tasks and its latest check run.
+const STATEMENTS = [
+  'A card shows only its title, its stage as a glyph and a word, time at stage, what it waits on, builder and reviewer, its spec’s tag and a failing-checks marker.',
+  'Apart from its title, no card shows more than two lines of text at the board’s default width.',
+  'A task whose latest checks failed shows, before review, a marker on its card naming how many checks failed.',
+]
+
+function link(identifier: string, statement: string, state: string, rejected?: string): RequirementLink {
+  return {
+    identifier,
+    requirement_id: `req-${identifier}`,
+    document_id: 'spdoc-mock',
+    state,
+    statement,
+    modal: 'MUST',
+    has_rejected_evidence: Boolean(rejected),
+    latest_rejection_reason: rejected ?? null,
+  }
+}
+
+const VERIFIED_STAGES = ['approved_waiting', 'checking', 'landing', 'landing_held', 'did_not_land', 'on_main']
+
+function detailed(m: MockTask, all: MockTask[]): Task {
+  const t = m.task
+  const links =
+    t.stage === 'sent_back'
+      ? [
+          link('FR-1', STATEMENTS[0], 'verified'),
+          link('FR-2', STATEMENTS[1], 'rejected', 'The card wraps to three lines at 232px when the spec tag is long.'),
+          link('FR-3', STATEMENTS[2], 'in_progress'),
+        ]
+      : t.stage === 'under_review'
+        ? STATEMENTS.map((text, i) => link(`FR-${i + 1}`, text, 'evidence_awaiting_review'))
+        : VERIFIED_STAGES.includes(t.stage ?? '')
+          ? [link('FR-1', STATEMENTS[0], 'verified'), link('FR-2', STATEMENTS[1], 'verified')]
+          : [link('FR-1', STATEMENTS[0], 'in_progress'), link('FR-2', STATEMENTS[1], 'in_progress')]
+  const others = all.filter((o) => o.specTag === m.specTag && o.task.id !== t.id)
+  const ref = (o: MockTask) => ({ id: o.task.id, readable_id: o.task.readable_id, title: o.task.title, status: o.task.status })
+  return {
+    ...t,
+    description:
+      'Rework the card so it reads at a glance. Replace the status sentence with a glyph and a word, put builder and reviewer on one line, and move everything else into the opened task.\n\nKeep the drag and keyboard moves the board has today.',
+    acceptance_criteria: [
+      'With one task building, one in review and one on main, the operator tells all three apart without opening one.',
+      'At 232px no card shows a third line of text below its title.',
+    ],
+    requirement_links: links,
+    prerequisites: others.slice(0, 1).map(ref),
+    dependents: others.slice(1, 2).map(ref),
+    notes: t.stage === 'sent_back' ? 'QA2: lint fails on the new file, and two board tests expect the old status line.' : undefined,
+    assigner: 'Architect',
+    level: 'reviewed',
+  } as Task
+}
+
+const LINT_OUTPUT = [
+  'src/components/tasks/TaskCard.tsx',
+  "  42:7  error  'clock' is assigned a value but never used  @typescript-eslint/no-unused-vars",
+  '',
+  '1 problem (1 error, 0 warnings)',
+].join('\n')
+const TEST_OUTPUT = [
+  'FAILED src/__tests__/taskCardCompact.test.tsx > shows the status line',
+  '  Expected: "Waiting on you"',
+  '  Received: null',
+  '',
+  '1 failed, 213 passed',
+].join('\n')
+
+function checksOf(m: MockTask, now: Date): TaskCheckRun | null {
+  const stage = m.task.stage ?? ''
+  if (['not_started', 'working', 'waiting_for_answer', 'closed'].includes(stage)) return null
+  const failing = Boolean(m.failedChecks)
+  const result = (name: string, ok: boolean, seconds: number, extra: Partial<TaskCheckRun['results'][number]> = {}) => ({
+    name,
+    exit_code: ok ? 0 : 1,
+    timed_out: false,
+    duration_seconds: seconds,
+    output_tail: ok ? '' : name === 'lint' ? LINT_OUTPUT : TEST_OUTPUT,
+    ...extra,
+  })
+  return {
+    id: `run-${m.task.id}`,
+    state: failing ? 'failed' : stage === 'checking' ? 'running' : 'passed',
+    main_sha: 'd4c8a34',
+    target_shas: ['4a87eb2'],
+    merged_sha: null,
+    error: '',
+    started_at: ago(now, 30),
+    ended_at: stage === 'checking' ? null : ago(now, 12),
+    results: [
+      result('hub-tests', true, 812),
+      result('ui-tests', !failing, 96),
+      result('lint', !failing, 31),
+      result('types', true, 44),
+      result('browser-tests', !failing, 230, failing ? { preexisting: true } : {}),
+      result('docs', true, 0, { skipped: true }),
+    ],
+  }
+}
+
+const ACTION_WORDS: Record<TaskSheetAction, string> = {
+  start: 'Start work',
+  'open-conversation': 'Opens the agent’s conversation',
+  answer: 'Opens the question to answer',
+  'hand-to-reviewer': 'Pick a reviewer',
+  approve: 'Approve',
+  'send-back': 'Send back, naming what fails',
+  'retry-landing': 'Landing again',
+  reopen: 'Reopen',
+  move: 'Move to another status',
+  'close-done-elsewhere': 'Close as done elsewhere',
+  cancel: 'Cancel this task',
+  priority: 'Change priority',
+  'rerun-checks': 'Running the checks again',
+  rename: 'Rename',
+  'copy-id': 'Copied its id',
+  delete: 'Delete this task',
 }
 
 const COLUMNS: Array<{ key: string; label: string; statuses: string[]; tone: string | null }> = [
@@ -146,10 +267,17 @@ export default function TaskRedesign({ now }: ScreenProps) {
     }),
   }
   const selected = all.find((m) => m.task.id === selectedId) ?? all[6]
-  const story = React.useMemo(() => storyOf(now, selected.task), [now, selected.task])
+  const sheetTask = React.useMemo(() => detailed(selected, all), [selected, all])
+  const story = React.useMemo(() => {
+    // mock state: the summary's evidence counts follow the task's requirement states.
+    const base = storyOf(now, selected.task)
+    const links = sheetTask.requirement_links ?? []
+    const count = (state: string) => links.filter((l) => l.state === state).length
+    return { ...base, summary: { ...base.summary, evidence: { accepted: count('verified'), rejected: count('rejected'), awaiting: count('evidence_awaiting_review') } } }
+  }, [now, selected.task, sheetTask])
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: drawerOpen ? 'minmax(0, 1fr) 400px' : 'minmax(0, 1fr)', height: '100%', minHeight: 0 }}>
+    <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', height: '100%', minHeight: 0, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontSize: 12, color: 'var(--text-2)' }}>Motion:</span>
@@ -189,18 +317,24 @@ export default function TaskRedesign({ now }: ScreenProps) {
         </div>
       </div>
       {drawerOpen ? (
-      <aside style={{ borderLeft: '1px solid var(--border)', overflow: 'auto', background: 'var(--surface)' }} aria-label="Task drawer">
-        <button type="button" className="aw-icon-button" aria-label="Close the task" title="Close" style={{ float: 'right', margin: '10px 10px 0 0' }} onClick={() => setDrawerOpen(false)}>
-          <Icon name="close" size={14} />
-        </button>
-        <div style={{ padding: '14px 16px 0', display: 'grid', gap: 2 }}>
-          <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: 'var(--text-2)' }}>{selected.task.readable_id}</span>
-          <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600, lineHeight: 1.35 }}>{selected.task.title}</h2>
-        </div>
-        <TaskSummaryHeader task={selected.task} summary={story.summary} specTag={selected.specTag} failedChecks={selected.failedChecks} colorOf={colorOf} now={now} />
-        <div style={{ padding: '12px 16px 0', fontSize: 10.5, fontWeight: 500, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--text-3)' }}>Story</div>
-        <TaskTimeline key={selected.task.id} events={story.events} now={now} />
-      </aside>
+        <aside
+          className="aw-sheet-host"
+          style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 520, borderLeft: '1px solid var(--border)', overflow: 'auto', background: 'var(--surface)', boxShadow: '-12px 0 32px rgb(0 0 0 / .18)', zIndex: 5 }}
+          aria-label="Task drawer"
+        >
+          <TaskSheet
+            key={selected.task.id}
+            task={sheetTask}
+            story={story}
+            checks={checksOf(selected, now)}
+            specTag={selected.specTag}
+            colorOf={colorOf}
+            now={now}
+            onAction={(action: TaskSheetAction) => toast({ title: ACTION_WORDS[action], description: 'Mock: nothing changes.' })}
+            onOpenTask={open}
+            onClose={() => setDrawerOpen(false)}
+          />
+        </aside>
       ) : null}
     </div>
   )
