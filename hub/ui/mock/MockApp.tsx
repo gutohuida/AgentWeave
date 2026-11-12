@@ -17,7 +17,7 @@ function parseHash(): MockRoute {
   const raw = decodeURIComponent(window.location.hash.replace(/^#/, '')).split('?')[0]!
   const [kind, a, b, c] = raw.split('/')
   if (kind === 'tab' && (PROJECT_TABS as readonly string[]).includes(a ?? '')) return { kind: 'tab', tab: a as ProjectTab }
-  if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c === 'spec' || c === 'specs' || c === 'running' ? { panel: c } : {}) }
+  if (kind === 'conversation' && a) return { kind: 'conversation', agent: a, conversationId: b || null, ...(c && PANELS.has(c) ? { panel: c as NonNullable<Extract<MockRoute, { kind: 'conversation' }>['panel']> } : {}) }
   if (kind === 'settings') return { kind: 'settings', section: (a as never) || 'general' }
   if (kind === 'agent-settings' && a) return { kind: 'agent-settings', agent: a, section: (b as never) || 'running' }
   if (kind === 'app-settings') {
@@ -53,6 +53,8 @@ function toHash(route: MockRoute): string {
       return `conversation-trace/${route.conversationId ?? ''}`
   }
 }
+
+const PANELS = new Set(['spec', 'specs', 'running', 'changes', 'files', 'terminal', 'terminal-remote', 'watch'])
 
 export function MockApp() {
   const [route, setRoute] = React.useState<MockRoute>(parseHash)

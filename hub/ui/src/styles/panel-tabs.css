@@ -1,0 +1,106 @@
+/* The side panel's Changes, Files, Terminal and Watch tabs (roadmap a-side-panel-worth-keeping-open). */
+
+.aw-ptab { display: flex; height: 100%; min-height: 0; flex-direction: column; background: var(--bg); }
+.aw-ptab-head { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 10px; border-bottom: 1px solid var(--border); }
+.aw-ptab-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.aw-ptab-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.aw-ptab-branch {
+  display: inline-flex; min-width: 0; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border); font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; color: var(--text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.aw-ptab-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.aw-ptab-stat { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aw-ptab-stat .add, .aw-changes-stat .add { color: var(--green); }
+.aw-ptab-stat .del, .aw-changes-stat .del { color: var(--red); }
+.aw-ptab-count { padding: 0 6px; border-radius: 999px; background: var(--surface-2); font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.aw-ptab-scroll { min-height: 0; flex: 1; overflow-y: auto; padding: 10px 10px 24px; }
+.aw-ptab-note { margin: 0; padding: 12px 8px; font-size: 13px; color: var(--text-3); }
+
+.aw-ptab-search {
+  display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 4px 0 9px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text-3);
+}
+.aw-ptab-search:focus-within { border-color: var(--border-hi); box-shadow: 0 0 0 2px var(--ring); }
+.aw-ptab-search input { min-width: 0; flex: 1; border: 0; outline: none; background: transparent; font-size: 13px; color: var(--text); }
+
+.aw-ptab-empty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 48px 20px; text-align: center; font-size: 13px; color: var(--text-2); }
+.aw-ptab-empty p { margin: 0; }
+.aw-ptab-empty-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin-bottom: 6px;
+  border-radius: var(--radius-md); background: var(--surface-2); color: var(--text-3);
+}
+.aw-ptab-empty-hint { max-width: 40ch; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+
+/* Changes */
+.aw-changes-files { display: flex; flex-direction: column; gap: 1px; list-style: none; margin: 0 0 12px; padding: 0; }
+.aw-changes-file {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; padding: 5px 8px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 12.5px;
+}
+.aw-changes-file:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
+.aw-changes-file:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-changes-name { flex: none; font-weight: 500; }
+.aw-changes-dir { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--text-3); }
+.aw-changes-stat { display: inline-flex; flex: none; gap: 6px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.aw-changes-letter {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 4px;
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: 10px; font-weight: 700;
+  color: var(--amber); background: color-mix(in oklab, var(--amber) 14%, transparent);
+}
+.aw-changes-letter[data-status="A"] { color: var(--green); background: color-mix(in oklab, var(--green) 14%, transparent); }
+.aw-changes-letter[data-status="D"] { color: var(--red); background: color-mix(in oklab, var(--red) 14%, transparent); }
+
+/* Files */
+.aw-files-list { padding: 6px 6px 24px; }
+.aw-files-changed-only { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.aw-files-row {
+  display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; padding: 4px 8px; min-height: 26px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-2); text-align: left; cursor: pointer; font-size: 12.5px;
+}
+.aw-files-row:hover { background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); }
+.aw-files-row[data-active="true"] { background: var(--surface-2); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+.aw-files-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ring); }
+.aw-files-folder { color: var(--text-3); font-weight: 500; }
+.aw-files-chevron { display: inline-flex; transition: transform var(--dur-fast) var(--ease-out); }
+.aw-files-chevron[data-open="true"] { transform: rotate(90deg); }
+.aw-files-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-files-name[data-deleted="true"] { text-decoration: line-through; color: var(--text-3); }
+.aw-files-dir { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--text-3); }
+.aw-files-row .aw-changes-letter { margin-left: auto; }
+.aw-files-dot { width: 6px; height: 6px; margin-left: auto; border-radius: 999px; background: var(--amber); }
+
+/* The open file's header chip: which copy of the file this is. */
+.aw-file-where {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border); font-size: 11px; color: var(--text-3); white-space: nowrap;
+}
+
+/* Terminal */
+.aw-term-where { display: flex; min-width: 0; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-3); }
+.aw-term-shell { flex: none; color: var(--text-2); font-weight: 500; }
+.aw-term-dir { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); direction: rtl; text-align: left; }
+.aw-term-surface {
+  min-height: 0; flex: 1; margin: 10px; padding: 10px 12px; overflow: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--bg) 70%, black); color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; line-height: 1.55;
+}
+.aw-term-foot { margin: 0; padding: 0 14px 10px; font-size: 11.5px; color: var(--text-3); }
+
+/* Watch */
+.aw-watch-status { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); }
+.aw-watch-live { width: 7px; height: 7px; border-radius: 999px; background: var(--green); box-shadow: 0 0 0 3px color-mix(in oklab, var(--green) 25%, transparent); }
+.aw-watch-readonly {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--border); font-size: 11px; color: var(--text-3);
+}
+.aw-watch-body { padding: 0; }
+.aw-watch-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px 8px 14px;
+  border-top: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--text-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-files-chevron { transition: none; }
+}
