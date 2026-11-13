@@ -63,5 +63,10 @@ class Settings(BaseSettings):
     # empty means native local mode with no containment restriction.
     aw_workspace_root: str = ""
 
+    # Dashboard queries (`hub/hub/dashboard_query.py`): seconds before a query is stopped with
+    # `timeout`, and the most rows a result carries before it is cut and marked `truncated`.
+    aw_dashboard_query_timeout: int = 10
+    aw_dashboard_query_max_rows: int = 10000
+
 
 settings = Settings()
