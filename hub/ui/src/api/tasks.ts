@@ -537,6 +537,16 @@ export type StoryEvent =
   | { kind: 'workspace'; id: string; at: string | null; outcome: string; reason: string | null }
   /** The flow could not staff this task's review (F768); `reason` names the remedy. */
   | { kind: 'review_unstaffed'; id: string; at: string | null; reason: string | null }
+  /** Who the Hub put on a review it staffed outside a build; `declared` false means it picked them
+   *  because nobody was named (`a-hand-started-task-reaches-review-and-merge`, FR-3). */
+  | {
+      kind: 'review_staffed'
+      id: string
+      at: string | null
+      reviewer: string | null
+      declared: boolean
+      reason: string | null
+    }
 
 export interface TaskStory {
   task: { id: string; title: string; status: string }
@@ -1082,6 +1092,36 @@ export function useStartWorkOnTask() {
           agent,
           message: startWorkMessage(taskId, title),
           task_id: taskId,
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
+    },
+  })
+}
+
+/** The trigger message for "Review with <agent>", neutralised as `startWorkMessage` is. */
+export function reviewTaskMessage(taskId: string, title: string): string {
+  return `Review task ${taskId}: ${neutraliseFileMentions(title)}`
+}
+
+/**
+ * Start an agent's review turn on finished work (`review_task_id`), not a work turn: the Hub staffs
+ * the reviewer, moves the task to under_review, and the reviewer may decide its evidence and
+ * approve (`a-hand-started-task-reaches-review-and-merge`, FR-1).
+ */
+export function useStartReviewOfTask() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ taskId, agent, title }: { taskId: string; agent: string; title: string }) =>
+      postJson<{ run_id?: string; conversation_id: string }>(
+        `/api/v1/projects/${projectId}/agent/trigger`,
+        {
+          agent,
+          message: reviewTaskMessage(taskId, title),
+          review_task_id: taskId,
         },
       ),
     onSuccess: () => {

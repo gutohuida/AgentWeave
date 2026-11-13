@@ -21,6 +21,8 @@ vi.mock('@/api/runners', () => ({
     ],
   }),
 }))
+let hasNoWork: boolean | null = false
+vi.mock('@/api/firstRun', () => ({ useProjectHasNoWork: () => hasNoWork }))
 vi.mock('@/api/workspace', () => ({ useWorkspacePaths: () => ({ data: [] }) }))
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
@@ -456,5 +458,24 @@ describe('a refused first message (F108)', () => {
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('Could not start the conversation'),
     )
+  })
+})
+
+describe('suggestions fit the project (AW-128)', () => {
+  it('offers pick-up and review starters once the project has work', () => {
+    hasNoWork = false
+    renderSurface('claude')
+    expect(screen.getByText('Pick up the next task')).toBeInTheDocument()
+    expect(screen.queryByText('Describe a change you want')).not.toBeInTheDocument()
+  })
+
+  it('offers describe-a-change and explain-the-codebase in a project with no work', () => {
+    hasNoWork = true
+    renderSurface('claude')
+    expect(screen.getByText('Describe a change you want')).toBeInTheDocument()
+    expect(screen.getByText('Explain this codebase to me')).toBeInTheDocument()
+    expect(screen.queryByText('Pick up the next task')).not.toBeInTheDocument()
+    expect(screen.queryByText('Catch up on today')).not.toBeInTheDocument()
+    expect(screen.queryByText('Review the latest work')).not.toBeInTheDocument()
   })
 })

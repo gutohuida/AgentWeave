@@ -111,13 +111,11 @@ describe('SpecPhaseBar approval warnings', () => {
       'approval-warning-requirement_without_criterion',
       'approval-warning-steps_skipped',
     ])
-    const first = lines[0]
-    expect(first).toHaveTextContent('5')
-    expect(first).toHaveTextContent('requirements.alpha')
-    expect(first).toHaveTextContent('requirements.gamma')
-    expect(first).not.toHaveTextContent('requirements.delta')
-    expect(first).toHaveTextContent('2 more')
-    expect(lines[1]).toHaveTextContent('acceptance, tasks')
+    expect(lines[0]).toHaveTextContent('5 requirements have no acceptance criterion')
+    expect(lines[1]).toHaveTextContent('This spec skipped steps')
+    // AW-127: plain words — no snake_case code, no route.
+    expect(list.textContent).not.toMatch(/[a-z]+_[a-z_]+/)
+    expect(list.textContent).not.toMatch(/\/api\//)
   })
 
   it('Approve anyway resends the approval with approve_anyway and clears the list on success', async () => {
@@ -267,5 +265,43 @@ describe('SpecPhaseBar approval warnings', () => {
     expect(rule).toContain('flex-direction: column')
     expect(rule).toContain('flex-wrap: nowrap')
     expect(specHeaderCss).toMatch(/\[data-stack="true"\]\s*>\s*ul\s*\{[^}]*overflow-y:\s*auto/)
+  })
+})
+
+describe('plainGap recommended_people', () => {
+  const gap = (message: string) => [{ code: 'recommended_people', where: 'tasks', message }]
+  it('says a same-agent builder and checker is an error, not "no builder"', () => {
+    render(<GapLines gaps={gap("task 't1' has 'Dev' as both builder and checker, which cannot be carried out")} />)
+    const line = screen.getByTestId('approval-warning-recommended_people')
+    expect(line).toHaveTextContent('Task t1 names Dev as both builder and checker')
+    expect(line).not.toHaveTextContent('No builder or checker')
+  })
+  it('keeps each problem apart', () => {
+    render(<GapLines gaps={gap("task 't2' has no recommended builder; a checker with no reason")} />)
+    expect(screen.getByTestId('approval-warning-recommended_people')).toHaveTextContent(
+      'Task t2 names no builder, and names a checker without saying why.',
+    )
+  })
+})
+
+describe('Check findings are plain words too (AW-127)', () => {
+  it('the inline finding the Spec page shows has no code, no route and no snake_case field', async () => {
+    const { findingsOf } = await import('@/components/spec/page/adapt')
+    const hubSaid = [
+      {
+        code: 'steps_skipped',
+        where: 'step',
+        message:
+          "the document is at step 'intake'; this project's journey (size small) goes on to requirements-and-acceptance, tasks, build, which it never reached. If it already holds what those steps produce, record that: POST /api/v1/projects/p/project/documents/journey?path=x {\"step\": \"build\"} (the step control on its phase bar)",
+      },
+      { code: 'criterion_without_check', where: 'acceptance_criteria[0]', message: "'ac-1' has no how_to_check and no checked_by, so nobody is named to check it or how" },
+    ]
+    const found = findingsOf([], hubSaid, { requirements: [], tasks: [] } as never, null)
+    for (const f of found) {
+      expect(f.message).not.toMatch(/\/api\//)
+      expect(f.message).not.toMatch(/[a-z]+_[a-z_]+/)
+    }
+    expect(found[0].message).toContain('requirements-and-acceptance → tasks → build')
+    expect(found[1].message).toContain('ac-1')
   })
 })

@@ -553,6 +553,25 @@ function renderEvent(event: StoryEvent, index: number, fresh: boolean, runs: Run
           {event.reason ? <div className="aw-callout tone-amber">{event.reason}</div> : null}
         </TimelineItem>
       )
+    case 'review_staffed':
+      return (
+        <TimelineItem
+          key={event.id}
+          {...common}
+          tone="neutral"
+          icon="person_add"
+          head={
+            <span>
+              {event.declared
+                ? `${event.reviewer ?? 'An agent'} reviews it, as its named checker`
+                : `The Hub picked ${event.reviewer ?? 'an agent'} to review it: nobody was declared`}
+            </span>
+          }
+          meta={<Time value={event.at} />}
+        >
+          {event.reason ? <div>{event.reason}</div> : null}
+        </TimelineItem>
+      )
   }
 }
 
