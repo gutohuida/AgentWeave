@@ -9,7 +9,7 @@ const count = (n: number) => (n === 1 ? 'one' : String(n))
 
 /** The step a `steps_skipped` message says the journey goes on to, as the phase bar names it. */
 function stepsSkipped(group: SpecBlockingFinding[]): string {
-  const match = /goes on to ([a-z, ]+?),? which it never reached/.exec(group[0].message)
+  const match = /goes on to ([a-z, -]+?),? which it never reached/.exec(group[0].message)
   const steps = match ? match[1].split(',').map((step) => step.trim()).filter(Boolean) : []
   const skipped = steps.length ? steps.join(' → ') : 'the earlier steps'
   return (
@@ -18,10 +18,34 @@ function stepsSkipped(group: SpecBlockingFinding[]): string {
   )
 }
 
+/** One `recommended_people` message names a task and its problems, joined by "; ". */
+function recommendedPeople(group: SpecBlockingFinding[]): string {
+  const lines = group.map((gap) => {
+    const match = /^task '([^']*)' has (.*)$/.exec(gap.message)
+    if (!match) return gap.message
+    const problems = match[2].split('; ').map((problem) => {
+      if (problem === 'no recommended builder') return 'names no builder'
+      if (problem === 'a builder with no reason') return 'names a builder without saying why'
+      if (problem.startsWith('no recommended checker')) return 'names no checker and gives no reason for leaving it empty'
+      if (problem === 'a checker with no reason') return 'names a checker without saying why'
+      const both = /^'([^']*)' as both builder and checker/.exec(problem)
+      if (both) return `names ${both[1]} as both builder and checker, which cannot be carried out`
+      return problem
+    })
+    return `Task ${match[1]} ${problems.join(', and ')}.`
+  })
+  return lines.join(' ')
+}
+
 const WORDS: Record<string, (group: SpecBlockingFinding[]) => string> = {
-  criterion_without_check: (g) =>
-    `${count(g.length)} acceptance ${plural(g.length, 'criterion doesn’t', 'criteria don’t')} say how ` +
-    `${plural(g.length, 'it', 'they')} will be checked or who checks ${plural(g.length, 'it', 'them')}.`,
+  criterion_without_check: (g) => {
+    const keys = g.map((gap) => /^'([^']*)'/.exec(gap.message)?.[1]).filter(Boolean) as string[]
+    const named = keys.length ? ` (${keys.slice(0, 3).join(', ')}${keys.length > 3 ? ` and ${keys.length - 3} more` : ''})` : ''
+    return (
+      `${count(g.length)} acceptance ${plural(g.length, 'criterion doesn’t', 'criteria don’t')} say how ` +
+      `${plural(g.length, 'it', 'they')} will be checked or who checks ${plural(g.length, 'it', 'them')}${named}.`
+    )
+  },
   no_acceptance_drive: () =>
     'The first task should be the acceptance drive: the check that fails until the change works end to end, with every other task coming after it.',
   unresolved_question: (g) =>
@@ -41,6 +65,7 @@ const WORDS: Record<string, (group: SpecBlockingFinding[]) => string> = {
   },
   undeclared_task_files: (g) =>
     `${count(g.length)} ${plural(g.length, 'task doesn’t', 'tasks don’t')} say which files ${plural(g.length, 'it', 'they')} will edit, so overlaps can’t be seen.`,
+  capability_unnamed: () => 'This change doesn’t say which capabilities it changes or creates; naming them puts it on their waiting list. A change that touches none can leave this empty.',
   steps_skipped: stepsSkipped,
   amendments_unreviewed: (g) => g[0].message.replace(/^(\d+) amendments? not reviewed by the operator.*/, '$1 changes a tester made to this spec are waiting for your review.'),
   vault_warning: (g) =>
@@ -48,7 +73,7 @@ const WORDS: Record<string, (group: SpecBlockingFinding[]) => string> = {
   test_only_task: (g) =>
     `${count(g.length)} ${plural(g.length, 'task only writes', 'tasks only write')} tests, with nothing it checks.`,
   reviewer_undeclared: () => 'No reviewer is named, so any free agent will review the work.',
-  recommended_people: () => 'No builder or checker is recommended for the tasks.',
+  recommended_people: recommendedPeople,
 }
 
 /** `unknown_thing` → `Unknown thing`. */
@@ -71,7 +96,10 @@ function scrub(message: string): string {
 /** One sentence for a group of gaps sharing a code. Unknown codes fall back to their message. */
 export function plainGap(code: string, group: SpecBlockingFinding[]): string {
   const known = WORDS[code]
-  if (known) return known(group)
+  if (known) {
+    const said = known(group)
+    return said.charAt(0).toUpperCase() + said.slice(1)
+  }
   const message = scrub(group[0].message)
   return group.length > 1 ? `${humanize(code)} (${group.length}): ${message}` : `${humanize(code)}: ${message}`
 }
