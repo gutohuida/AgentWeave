@@ -1679,6 +1679,67 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="dashboard_query_reference",
+            args="",
+            method="GET",
+            path="/dashboards/query-reference",
+            fields=(),
+            required=(),
+            text=(
+                "everything a dashboard query can read: each table and column, its type and a "
+                "short meaning, generated from the running Hub, with the query rules and limits. "
+                "Every table holds only this project's rows."
+            ),
+        ),
+        _Operation(
+            tool="run_dashboard_query",
+            args="sql",
+            method="POST",
+            path="/dashboards/query",
+            fields=("sql",),
+            required=("sql",),
+            text=(
+                "run one read-only SQLite query (SELECT or WITH; `REGEXP` matches a regular "
+                "expression) over this project's data and get `{columns, rows, row_count, "
+                "truncated, elapsed_ms}`. Stopped after 10 s, cut at 10,000 rows; refused "
+                "`not_queryable` for credentials and this machine's paths, `read_only` for any "
+                "write. Check every panel's query here before saving a dashboard."
+            ),
+        ),
+        _Operation(
+            tool="save_dashboard",
+            args="name, description, panels, dashboard_id=''",
+            method="POST",
+            path="/dashboards",
+            fields=("name", "description", "panels", "dashboard_id"),
+            required=("name", "panels"),
+            text=(
+                "save a dashboard to this project under your name, for the operator's Dashboards "
+                "screen: a unique `name`, the question it answers in `description`, and `panels`, "
+                "each `{title, query, kind}` with kind one of `number`, `table`, `bar`, "
+                "`stacked_bar`, `line`. Saving does not run the queries, so a failing one shows "
+                "its error when opened. `dashboard_id` replaces that dashboard whole."
+            ),
+        ),
+        _Operation(
+            tool="list_dashboards",
+            args="",
+            method="GET",
+            path="/dashboards",
+            fields=(),
+            required=(),
+            text="this project's dashboards, newest first, with name, author and times.",
+        ),
+        _Operation(
+            tool="read_dashboard",
+            args="dashboard_id",
+            method="GET",
+            path="/dashboards/{dashboard_id}",
+            fields=(),
+            required=(),
+            text="one of this project's dashboards with its panels' titles, queries and kinds.",
+        ),
+        _Operation(
             tool="vault_add",
             args="paths, distil, visibility=None, type='document', dated=None",
             method="POST",
