@@ -51,6 +51,11 @@
 .aw-tcard-age { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
 .aw-tcard-age::before, .aw-tcard-waits::before { content: "·"; margin-right: 6px; color: var(--text-3); }
 .aw-tcard-waits { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
+/* A long waits-on keeps the line: the stage word steps aside visually (still read aloud) and the name sits right after the glyph. */
+.aw-tcard-word[data-yields="true"] { display: none; }
+.aw-tcard-waits[data-long="true"]::before { content: none; }
+.aw-tcard-waits[data-long="true"] { font-size: 10.5px; color: var(--text); }
+.aw-tcard-stage[data-long-waits="true"] { gap: 4px; }
 .aw-tcard-markers { display: inline-flex; gap: 4px; margin-left: auto; flex: none; }
 .aw-tcard-marker {
   display: inline-flex; align-items: center; gap: 2px; height: 18px; padding: 0 5px;
