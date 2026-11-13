@@ -1610,7 +1610,17 @@ async def check(
         payload = validate_payload(stored)
     except PayloadError as exc:
         raise SaveRefusedError(str(exc), code="payload_invalid", field_path=exc.field) from exc
-    return await _completeness_report(session, workspace, document, payload)
+    blocking, warnings = await _completeness_report(session, workspace, document, payload)
+    # AW-127: what Approve would list beyond a save's own report, so Check never says "ready" and
+    # Approve then lists gaps. Only a change document walks the journey; the others have none.
+    seen = {(w.get("code"), w.get("where")) for w in warnings}
+    extra = [
+        *_steps_skipped(workspace, document),
+        *await _amendments_unreviewed(session, document),
+        *await _vault_warnings(session, workspace, document),
+    ]
+    warnings.extend(f.to_dict() for f in extra if (f.code, f.where) not in seen)
+    return blocking, warnings
 
 
 async def rerender_phase(

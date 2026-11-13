@@ -46,3 +46,22 @@
 .aw-settings-setup { width: min(100%, 880px); margin-inline: auto; padding: 28px clamp(20px, 4vw, 40px) 0; }
 .aw-settings-setup + .aw-settings-page { padding-top: 20px; }
 .aw-settings-setup .aw-setup { margin-bottom: 0; }
+
+/* The first-run welcome (`FirstRunPanel`): the path as one row, the next step as a button. */
+.aw-firstrun { padding-bottom: 14px; }
+.aw-firstrun-path {
+  display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 8px 0 12px; padding: 0; list-style: none;
+  counter-reset: aw-firstrun; font-size: 12.5px; color: var(--text-3);
+}
+.aw-firstrun-path li { counter-increment: aw-firstrun; display: inline-flex; align-items: center; gap: 6px; }
+.aw-firstrun-path li::before {
+  content: counter(aw-firstrun); display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 999px; font-size: 11px; font-variant-numeric: tabular-nums;
+  background: color-mix(in oklab, var(--text-3) 16%, transparent);
+}
+.aw-firstrun-path li + li::after { content: none; }
+.aw-firstrun-path li:not(:last-child)::after { content: "›"; margin-left: 2px; color: var(--text-3); }
+.aw-firstrun-path li[data-state="next"] { color: var(--text); font-weight: 600; }
+.aw-firstrun-path li[data-state="next"]::before { background: var(--tone); color: var(--bg, #fff); }
+.aw-firstrun-path li[data-state="done"] { color: var(--text-2); }
+.aw-firstrun-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }

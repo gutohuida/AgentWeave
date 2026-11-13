@@ -4,6 +4,7 @@
  *  that turns what the Hub answers into what they draw: the document read, its coverage rows, its
  *  tasks, its builds and the figures behind them, and the document list. Pure functions, so each
  *  is tested against the shape the route returns. */
+import { plainGap } from '../gapWords'
 import type { BuildFigures } from '@/api/buildFigures'
 import type { CoverageEntry, SpecBlockingFinding, SpecBuild, SpecDocumentRecord, SpecEntry } from '@/api/spec'
 import type { Task } from '@/api/tasks'
@@ -344,7 +345,7 @@ export function findingsOf(
     id: `${severity}:${f.code}:${f.where}:${i}`,
     severity,
     target: findingTarget(f.where, doc, payload),
-    message: f.message,
+    message: plainGap(f.code, [f]),
   })
   return [...blocking.map(make('blocking')), ...warnings.map(make('warning'))]
 }

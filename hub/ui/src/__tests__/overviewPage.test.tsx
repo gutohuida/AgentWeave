@@ -41,6 +41,7 @@ vi.mock('@/api/agents', () => ({
   useAgents: () => ({ data: agents, isLoading: false }),
 }))
 vi.mock('@/components/overview/ProjectSetupList', () => ({ ProjectSetupList: () => null }))
+vi.mock('@/components/overview/ProjectFirstRun', () => ({ ProjectFirstRun: () => null }))
 vi.mock('@/api/questions', () => ({
   useQuestions: () => ({ data: [] }),
   useAnswerQuestion: () => ({ mutate: vi.fn() }),
