@@ -28,8 +28,8 @@ describe('the live board card (task-card-and-story-redesign)', () => {
     const { container } = render(<TaskCard task={task} specTag="TCSR" now={new Date('2026-11-12T21:20:00Z')} onOpen={() => {}} />)
     expect(screen.getByText('New card on the live board')).toBeInTheDocument()
     expect(screen.getByTestId('task-stage-task-1').querySelector('svg')).not.toBeNull()
-    expect(screen.getByText('20 min')).toBeInTheDocument()
-    expect(screen.getByText('asked by DeveloperSonnet2')).toBeInTheDocument()
+    expect(screen.queryByText('20 min')).toBeNull() // time at stage gives way to the waits-on line
+    expect(screen.getByText('by builder')).toBeInTheDocument() // the asker is the builder, already named below
     expect(screen.getByText('TCSR')).toBeInTheDocument()
     expect(container.textContent).not.toContain('long description')
     expect(container.textContent).not.toContain('ac-content')
@@ -46,6 +46,15 @@ describe('the live board card (task-card-and-story-redesign)', () => {
     const { rerender } = render(<TaskCard task={task} onOpen={() => {}} />)
     expect(screen.queryByTestId('task-failed-checks-task-1')).toBeNull()
     rerender(<TaskCard task={task} failedChecks={2} onOpen={() => {}} />)
+    expect(screen.getByTestId('task-failed-checks-task-1')).toHaveTextContent('2')
+  })
+
+  it('reads the count from the tasks route failed_checks, hiding it at zero or null', () => {
+    const { rerender } = render(<TaskCard task={{ ...task, failed_checks: null }} onOpen={() => {}} />)
+    expect(screen.queryByTestId('task-failed-checks-task-1')).toBeNull()
+    rerender(<TaskCard task={{ ...task, failed_checks: 0 }} onOpen={() => {}} />)
+    expect(screen.queryByTestId('task-failed-checks-task-1')).toBeNull()
+    rerender(<TaskCard task={{ ...task, failed_checks: 2 }} onOpen={() => {}} />)
     expect(screen.getByTestId('task-failed-checks-task-1')).toHaveTextContent('2')
   })
 })

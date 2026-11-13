@@ -618,6 +618,7 @@ async def _attach_assignee_liveness(
     """
     await _attach_queue_state(session, responses, project_id)
     await task_stage.attach_stages(session, responses, project_id=project_id)
+    await _attach_failed_checks(session, responses, project_id=project_id)
     assignees = {response.assignee for response in responses if response.assignee}
     if not assignees:
         return responses
@@ -653,6 +654,54 @@ async def _attach_assignee_liveness(
         if seen is not None:
             response.assignee_last_seen = seen
     return responses
+
+
+async def _attach_failed_checks(
+    session: AsyncSession, responses: List[TaskResponse], *, project_id: str
+) -> None:
+    """How many of each task's latest check run's checks failed, for the card's marker
+    (`task-card-and-story-redesign` FR-5); left null for a task whose checks never ran.
+
+    "Latest" is the run `GET /tasks/{id}/checks` lists first, which is the run the Work view names,
+    so the card's count and the rows it points at are the same checks. A failure on the known-failing
+    list is not counted: the Work view says it as "fails on main too", not as one of the work's.
+    One query for the page, the newest run per task picked by a window rather than read per card.
+    """
+    from ... import project_checks
+    from ...db.models import TaskCheckRun
+
+    task_ids = [response.id for response in responses]
+    if not task_ids:
+        return
+    newest = (
+        select(
+            TaskCheckRun.task_id,
+            TaskCheckRun.results,
+            func.row_number()
+            .over(
+                partition_by=TaskCheckRun.task_id,
+                order_by=(TaskCheckRun.started_at.desc(), TaskCheckRun.id.desc()),
+            )
+            .label("rank"),
+        )
+        .where(TaskCheckRun.project_id == project_id, TaskCheckRun.task_id.in_(task_ids))
+        .subquery()
+    )
+    rows = await session.execute(
+        select(newest.c.task_id, newest.c.results).where(newest.c.rank == 1)
+    )
+    failed = {
+        task_id: sum(
+            1
+            for result in results or []
+            if isinstance(result, dict)
+            and project_checks.failed(result)
+            and not project_checks.preexisting(result)
+        )
+        for task_id, results in rows
+    }
+    for response in responses:
+        response.failed_checks = failed.get(response.id)
 
 
 async def _tasks_with_open_divergence(

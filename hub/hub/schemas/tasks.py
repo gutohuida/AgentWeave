@@ -472,6 +472,10 @@ class TaskResponse(BaseModel):
     # older rows the migration never touched). The full history stays at
     # `GET /tasks/{id}/integrations`; this is only ever the newest row of it.
     latest_integration: Optional[TaskIntegrationSummary] = None
+    # How many of the latest check run's checks failed (not counting ones on the known-failing
+    # list), or null where no check has run on this task (`task-card-and-story-redesign` FR-5).
+    # Derived per request from `task_check_runs`, never stored.
+    failed_checks: Optional[int] = None
     # `TaskDependency` read from both ends (`task-dependencies` design D3, task 7.1). Never stored
     # here — derived per request from the join table, the same way `requirement_links` is derived
     # from `task_requirement_links` rather than kept as a second copy.

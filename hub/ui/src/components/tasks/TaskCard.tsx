@@ -39,7 +39,8 @@ export function TaskCard({
   colorOf?: (agent: string) => number | null | undefined
   /** The short tag of the spec this task belongs to. */
   specTag?: string
-  /** How many checks failed in the task's latest check run, before review; 0 or absent shows none. */
+  /** How many checks failed in the task's latest check run, before review; 0 or absent shows none.
+   *  Defaults to the task's own `failed_checks` from the tasks route; the mock passes it directly. */
   failedChecks?: number
   now?: Date
   selected?: boolean
@@ -71,6 +72,7 @@ export function TaskCard({
   // line (it stays in the stage tooltip).
   const askerIsBuilder = task.stage === 'waiting_for_answer' && Boolean(waitsOn) && waitsOn === builder
   const waitsText = waitsOn ? (askerIsBuilder ? 'by builder' : waitsWording(task.stage, waitsOn)) : null
+  const failed = failedChecks ?? task.failed_checks ?? null
   const stageTitle = [
     visual.word,
     task.stage_detail,
@@ -135,15 +137,15 @@ export function TaskCard({
             </span>
           ) : null}
           <span className="aw-tcard-markers">
-            {failedChecks && failedChecks > 0 ? (
+            {failed && failed > 0 ? (
               <span
                 className="aw-tcard-marker"
                 data-kind="checks"
                 data-testid={`task-failed-checks-${task.id}`}
-                title={`${failedChecks} ${failedChecks === 1 ? 'check' : 'checks'} failed on the latest run. Open the task to see which.`}
+                title={`${failed} ${failed === 1 ? 'check' : 'checks'} failed on the latest run. Open the task to see which.`}
               >
                 <Icon name="x" size={11} />
-                {failedChecks}
+                {failed}
               </span>
             ) : null}
             {task.priority === 'critical' ? (
