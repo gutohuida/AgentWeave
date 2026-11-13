@@ -63,6 +63,24 @@ class ParsedLine:
     # F1145: one model message's own usage, keyed by its message id (the CLI may repeat a message
     # across lines). Summed only for a turn whose runner never sent its final report.
     message_accounting: Optional[Tuple[str, AccountingSample]] = None
+    # The CLI said it is signed out (AW-126). Retrying the same input fails the same way.
+    auth_failure: bool = False
+
+
+#: What the operator reads when Claude Code is signed out, in place of Claude's own text.
+CLAUDE_SIGNED_OUT_MESSAGE = (
+    "Claude Code is not signed in. Run `claude` in a terminal and sign in, then send again."
+)
+
+
+def is_claude_signed_out_text(text: str) -> bool:
+    """Claude's own words for a signed-out CLI: "Not logged in · Please run /login".
+
+    Both halves are required, so a model that merely writes "not logged in" in a reply is not read
+    as the CLI refusing the turn.
+    """
+    stripped = text.strip()
+    return stripped.startswith("Not logged in") and "/login" in stripped
 
 
 #: Restated from `usage_accounting.SESSION_TOTAL_FIELDS` (a test asserts they agree): this module
@@ -307,14 +325,21 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
         message = data.get("message", {})
         content = message.get("content", data.get("content", []))
         events: List[RunEvent] = []
+        signed_out = False
         if isinstance(content, str):
-            if content.strip():
+            if is_claude_signed_out_text(content):
+                signed_out = True
+            elif content.strip():
                 events.append(text_event(content.strip()))
         else:
             for block in content:
                 if not isinstance(block, dict):
                     continue
                 block_type = block.get("type", "")
+                # The result line that follows says it once, plainly; this copy is dropped.
+                if block_type == "text" and is_claude_signed_out_text(block.get("text", "")):
+                    signed_out = True
+                    continue
                 if block_type == "thinking":
                     thinking = block.get("thinking", "").strip()
                     events.append(thinking_event(thinking) if thinking else hidden_thinking_event())
@@ -363,6 +388,7 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
             usage=usage_sample,
             session_id=session_id,
             message_accounting=message_accounting,
+            auth_failure=signed_out,
         )
 
     if msg_type == "user":
@@ -436,10 +462,13 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
             accounting.session_totals = {
                 name: getattr(totals, name) for name in _SESSION_TOTAL_FIELDS
             }
+        signed_out = False
         if data.get("is_error") is True or str(subtype).startswith("error"):
+            message_text = _claude_result_error_message(data, str(subtype))
+            signed_out = is_claude_signed_out_text(message_text)
             event = error_event(
-                code="claude_result_error",
-                message=_claude_result_error_message(data, str(subtype)),
+                code="claude_not_signed_in" if signed_out else "claude_result_error",
+                message=CLAUDE_SIGNED_OUT_MESSAGE if signed_out else message_text,
             )
         else:
             # The cost of a single turn is not what a reader of a conversation is there for, and
@@ -452,6 +481,7 @@ def parse_claude_line(line: str, *, source: str = "claude") -> ParsedLine:
             usage=usage_sample,
             accounting=accounting,
             session_id=session_id,
+            auth_failure=signed_out,
         )
 
     if msg_type == "system" and data.get("subtype") == "init":
