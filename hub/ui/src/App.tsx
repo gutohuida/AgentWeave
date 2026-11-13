@@ -60,6 +60,7 @@ import {
   ConversationView,
   EvidenceBrowser,
   JobsScreen,
+  DashboardsScreen,
   NewConversationSurface,
   ProjectSettingsScreen,
   QuestionsPanel,
@@ -601,6 +602,8 @@ export default function App() {
           }}
         />
       )
+    } else if (destination.tab === 'dashboards') {
+      projectContent = <DashboardsScreen />
     } else if (destination.tab === 'activity') {
       projectContent = (
         <ActivityScreen

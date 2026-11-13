@@ -9,6 +9,7 @@ const Overview = React.lazy(() => import('./Overview'))
 const Tasks = React.lazy(() => import('./Tasks'))
 const Spec = React.lazy(() => import('./Spec'))
 const Vault = React.lazy(() => import('./Vault'))
+const Dashboards = React.lazy(() => import('./Dashboards'))
 const Jobs = React.lazy(() => import('./Jobs'))
 const Activity = React.lazy(() => import('./Activity'))
 const Conversation = React.lazy(() => import('./Conversation'))
@@ -41,7 +42,7 @@ export function screenFor(route: MockRoute): ScreenComponent {
     case 'app-settings':
       return AppSettings
     case 'tab':
-      return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity, thread: Thread, checkpoints: Checkpoints }[route.tab]
+      return { overview: Overview, tasks: Tasks, spec: Spec, vault: Vault, jobs: Jobs, activity: Activity, dashboards: Dashboards, thread: Thread, checkpoints: Checkpoints }[route.tab]
   }
 }
 
@@ -56,6 +57,7 @@ export const SCREENS: Array<{ id: string; label: string; route: MockRoute }> = [
   { id: 'vault', label: 'Vault', route: { kind: 'tab', tab: 'vault' } },
   { id: 'jobs', label: 'Jobs', route: { kind: 'tab', tab: 'jobs' } },
   { id: 'activity', label: 'Activity', route: { kind: 'tab', tab: 'activity' } },
+  { id: 'dashboards', label: 'Dashboards', route: { kind: 'tab', tab: 'dashboards' } },
   { id: 'thread', label: 'Thread', route: { kind: 'thread' } },
   { id: 'traces', label: 'Traces', route: { kind: 'traces' } },
   { id: 'conversation-trace', label: 'Conversation · Its trace', route: { kind: 'conversation-trace', conversationId: null } },
