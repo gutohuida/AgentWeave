@@ -41804,3 +41804,13 @@ An author reading `ready_to_approve` told the operator the document was ready wh
 **Tier:** 0
 
 Authoring `spec/changes/a-hand-started-task-reaches-review-and-merge`, every task named a `builder` and `checker` and the save answered `recommended_people`: "task '<key>' has a builder with no reason; a checker with no reason". The tool's description says a task "may name its `builder` and its `checker`" and says nothing about reasons; `delivery` takes a `reasons` object, so the author tried `tasks[n].reasons` and the save was refused `unknown_field` ×5. The fields are `builder_reason` and `checker_reason` (`hub/hub/spec_completeness.py:638-642`), found only by reading the Hub. **Expected:** the tool's description names `builder_reason`/`checker_reason` beside `builder`/`checker`, and the `recommended_people` warning names the missing field. **Test:** the tool description contains both field names; a save with a builder and no `builder_reason` answers a warning that contains `builder_reason`. Mind the tool-surface snapshot test (`test_copilot_context_split`).
+
+## F1174 (A) -- a flow does not send finished work to its idle checker while the flow's own agent is busy
+
+**Status:** open
+**Source:** found by driving -- seen live on proj-d85a82bf4216 (Architect, 2026-11-13)
+**Theme:** Flows
+**Ready:** yes
+**Tier:** 0
+
+Flow `job-366f71dd731d` ("A hand-started task reaches review and merge", agent DeveloperOpus, `*/10`). HSTRR-3 (`task-8caa110bbe08`, checker QA) was sent back merge-needed by landing batch `lbat-656d960b3bd2`, re-merged by DeveloperOpus and completed again at 22:31:17. At 22:31:27 the flow fired (`job_runs` in_progress) and DeveloperOpus started HSTRR-6 (`task-ac3278f3e53d`, run started 22:31:37). From then on the 22:40 and 22:50 ticks wrote no `JobRun`; `last_run` stayed 22:31:27 and `next_run` moved to 23:00. QA had been idle since its run ended after 22:24:55, and HSTRR-3 sat at `completed` / `waiting_for_review` for 20+ minutes. This is the shape of F1171's busy-owner refusal (`scheduler._loop_flow_busy_refusal`), but F1171's fix only lets a firing proceed to resume an idle assignee's send-back. A review the flow owes an idle checker is still refused while the owner runs. QA is the assignee of approved-but-unlanded HSTRR-1/2/5, which may be what makes `_agents_a_loop_may_staff` count it as spoken for. Not traced. **Expected:** while the flow's agent is running, a firing still dispatches the review of a completed task to its declared checker (or rung-2 reviewer) when that agent is idle, and records a `JobRun`. **Test:** a flow whose agent has a running turn, one completed task whose checker is idle and holds only approved tasks; firing it starts the checker's review turn.
