@@ -326,6 +326,48 @@ describe('F768 — a completed task that waited for a reviewer says why', () => 
   })
 })
 
+describe('FR-3 — a reviewer the Hub picked says nobody was declared', () => {
+  it('names the picked reviewer and that nobody was declared', () => {
+    storyOverride.current = {
+      ...STORY,
+      events: [
+        ...STORY.events,
+        {
+          kind: 'review_staffed', id: 'ev-staffed', at: '2026-11-13T14:50:00Z',
+          reviewer: 'critic', declared: false,
+          reason: 'Nobody was declared to check T-1, so the Hub picked critic to review it.',
+        },
+      ],
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      const row = screen.getByTestId('story-event-ev-staffed')
+      expect(row.textContent).toContain('The Hub picked critic to review it: nobody was declared')
+      expect(row.textContent).toContain('Nobody was declared to check T-1')
+    } finally {
+      storyOverride.current = null
+    }
+  })
+
+  it('names a declared checker as named', () => {
+    storyOverride.current = {
+      ...STORY,
+      events: [
+        ...STORY.events,
+        { kind: 'review_staffed', id: 'ev-declared', at: '2026-11-13T14:50:00Z', reviewer: 'QA', declared: true, reason: null },
+      ],
+    }
+    try {
+      render(<TaskStory taskId="task-1" />)
+      const row = screen.getByTestId('story-event-ev-declared')
+      expect(row.textContent).toContain('QA reviews it, as its named checker')
+      expect(row.textContent).not.toContain('nobody was declared')
+    } finally {
+      storyOverride.current = null
+    }
+  })
+})
+
 describe('checks-wait-less — a skipped check is in the story, not left out (FR-8)', () => {
   it('names the skipped check on a passed run, and does not call it failing', () => {
     storyOverride.current = {

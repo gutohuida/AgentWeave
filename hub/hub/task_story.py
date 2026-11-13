@@ -50,6 +50,7 @@ KIND_ORDER = {
     "turn": 8,
     "workspace": 9,
     "review_unstaffed": 10,
+    "review_staffed": 11,
 }
 
 #: Event-log entries about a task's checkout that the story tells (F711). Only the failure: a
@@ -59,6 +60,10 @@ _WORKSPACE_EVENTS = {"task_worktree_release_failed": "release_failed"}
 #: The flow's refusal to staff this task's review (F768): the one record of why a completed task
 #: waited, with the sentence naming the remedy. It is not about the checkout, so it is its own kind.
 _REVIEW_UNSTAFFED = "review_unstaffed"
+
+#: Who the Hub put on a review it staffed outside a build, and whether anybody named them
+#: (`a-hand-started-task-reaches-review-and-merge`, FR-3): a picked reviewer says nobody was declared.
+_REVIEW_STAFFED = "review_staffed"
 
 
 def _iso(value: Optional[datetime]) -> Optional[str]:
@@ -141,7 +146,7 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
         session,
         select(EventLog).where(
             EventLog.project_id == task.project_id,
-            EventLog.event_type.in_([*_WORKSPACE_EVENTS, _REVIEW_UNSTAFFED]),
+            EventLog.event_type.in_([*_WORKSPACE_EVENTS, _REVIEW_UNSTAFFED, _REVIEW_STAFFED]),
             EventLog.data["task_id"].as_string() == task.id,
         ),
     )
@@ -344,6 +349,18 @@ async def story_for(session: AsyncSession, task: Task) -> Dict[str, Any]:
                     "kind": "review_unstaffed",
                     "id": row.id,
                     "at": _iso(row.timestamp),
+                    "reason": data.get("reason"),
+                }
+            )
+            continue
+        if row.event_type == _REVIEW_STAFFED:
+            events.append(
+                {
+                    "kind": "review_staffed",
+                    "id": row.id,
+                    "at": _iso(row.timestamp),
+                    "reviewer": data.get("reviewer"),
+                    "declared": bool(data.get("declared")),
                     "reason": data.get("reason"),
                 }
             )
