@@ -193,7 +193,7 @@ async def test_the_document_list_marks_a_running_build_and_its_progress(
 async def test_a_build_finishing_announces_the_document_so_the_page_stops_polling(
     app, auth_headers, author_headers, monkeypatch  # noqa: F811
 ):
-    """The last task of a Fast build approved: the build reads finished and `spec_updated` goes out
+    """The last task of a Fast build approved and landed: the build reads finished and `spec_updated` goes out
     for the document, so an open page reads it again instead of polling a finished build."""
     from hub import sse as sse_module
     from hub.task_transition_service import apply_transition
@@ -216,6 +216,11 @@ async def test_a_build_finishing_announces_the_document_so_the_page_stops_pollin
             for status in ("in_progress", "completed", "approved"):
                 await apply_transition(db, row, status, operator())
             await db.commit()
+    # It finishes once its work has landed (`work-is-done-when-it-has-landed-on-master-not-when-
+    # it-is-approved`), and the landing's end announces it.
+    from .test_a_finished_build_leaves_its_flow_working import _all_landed
+
+    await _all_landed()
 
     read = (await app.get(f"{BASE}/spec", params={"path": PATH}, headers=auth_headers)).json()
     assert read["builds"][0]["state"] == "finished"
