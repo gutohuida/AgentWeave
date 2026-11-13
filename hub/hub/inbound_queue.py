@@ -15,6 +15,7 @@ from .codex_appserver import DEFAULT_TURN_TIMEOUT_SECONDS, TURN_TIMEOUT_ERROR_KI
 from .conversations import get_conversation_by_id, set_provider_session
 from .db.models import InboundQueueEntry, Project, Run
 from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
+from .runner_parsing import CLAUDE_SIGNED_OUT_MESSAGE
 from .utils import short_id
 
 logger = logging.getLogger(__name__)
@@ -412,9 +413,16 @@ RESUME_RETRY_LIMIT = 2
 DELIVERY_ATTEMPT_LIMIT = 3
 
 
+#: `failure_kind` for a Claude Code CLI that is signed out (AW-126).
+CLAUDE_NOT_SIGNED_IN_KIND = "claude_not_signed_in"
+
+
 def unretryable_reason(failure_kind: Optional[str]) -> str:
     """Why an entry was withdrawn after one attempt (F489). A deadline cut names the limit and what
-    to do instead, since the same input sent again would do the same long work (F782)."""
+    to do instead, since the same input sent again would do the same long work (F782). A signed-out
+    CLI is told in one plain sentence (AW-126)."""
+    if failure_kind == CLAUDE_NOT_SIGNED_IN_KIND:
+        return CLAUDE_SIGNED_OUT_MESSAGE
     if failure_kind == TURN_TIMEOUT_ERROR_KIND:
         return (
             f"the turn hit the Hub's {int(DEFAULT_TURN_TIMEOUT_SECONDS)} s turn limit, and the same"
