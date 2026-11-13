@@ -65,6 +65,7 @@ export function BoardView({
   moves,
   startAgents,
   onStartWork,
+  onReviewTask,
   now,
   children,
 }: {
@@ -96,6 +97,8 @@ export function BoardView({
   /** Agents the card's Start work menu offers. */
   startAgents?: string[]
   onStartWork?: (taskId: string, agent: string) => void
+  /** Starts an agent's review turn on a completed task, from its card's menu. */
+  onReviewTask?: (taskId: string, agent: string) => void
   now?: Date
   /** The Dependencies view, rendered in place of the columns when `view` is dependencies. */
   children?: React.ReactNode
@@ -306,6 +309,7 @@ export function BoardView({
                       onRetryIntegration={onRetryIntegration}
                       startAgents={startAgents}
                       onStartWork={onStartWork}
+                      onReviewTask={onReviewTask}
                       move={
                         moves
                           ? {

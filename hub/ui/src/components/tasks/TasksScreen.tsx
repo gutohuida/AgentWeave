@@ -5,6 +5,7 @@ import { useSpecDocuments } from '@/api/spec'
 import {
   useAllowedTransitions,
   useRetryIntegration,
+  useStartReviewOfTask,
   useStartWorkOnTask,
   useTask,
   useTaskBoards,
@@ -110,6 +111,7 @@ export function TasksScreen({
   const { data: allowed, error: transitionsError } = useAllowedTransitions()
   const updateTask = useUpdateTask()
   const startWork = useStartWorkOnTask()
+  const startReview = useStartReviewOfTask()
   const retry = useRetryIntegration()
 
   const [view, setView] = React.useState<TasksView>('board')
@@ -284,6 +286,23 @@ export function TasksScreen({
     )
   }
 
+  const onReviewTask = (taskId: string, agent: string) => {
+    const task = allTasks.find((t) => t.id === taskId)
+    if (!task) return
+    startReview.mutate(
+      { taskId, agent, title: task.title },
+      {
+        onSuccess: () => toast({ title: `${agent} is reviewing it`, tone: 'success' }),
+        onError: (error: unknown) =>
+          toast({
+            title: `Could not start ${agent}'s review`,
+            description: readableApiError(error, 'The Hub could not start that review.'),
+            tone: 'error',
+          }),
+      },
+    )
+  }
+
   const onRetryIntegration = (taskId: string) => {
     retry.mutate(taskId, {
       onSuccess: (result) => {
@@ -431,6 +450,7 @@ export function TasksScreen({
           moves={moves}
           startAgents={agents.map((agent) => agent.name)}
           onStartWork={onStartWork}
+          onReviewTask={onReviewTask}
         >
           <DependencyListView
             tasks={tasks}
