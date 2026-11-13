@@ -10,14 +10,14 @@ to disagree with the rows it came from.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import loose_close
-from .db.models import Question, Run, Task, TaskLanding, TaskTransition
+from .db.models import EventLog, Question, Run, Task, TaskLanding, TaskTransition
 
 NOT_STARTED = "not_started"
 WORKING = "working"
@@ -42,6 +42,10 @@ _LANDING_STAGE = {
     "not_landed": DID_NOT_LAND,
     "sent_back": DID_NOT_LAND,
 }
+
+
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
 
 
 def _one_line(text: Optional[str], limit: int = 160) -> Optional[str]:
@@ -120,6 +124,21 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
             if candidate in ids:
                 askers.setdefault(candidate, question.from_agent)
 
+    # Why nobody reviews a completed task, where the Hub could not staff it (`review_unstaffed`,
+    # written by a flow or by `review_on_completion`): the newest reason per task, oldest first.
+    unstaffed: Dict[str, Tuple[datetime, Optional[str]]] = {}
+    for data, at in await session.execute(
+        select(EventLog.data, EventLog.timestamp)
+        .where(
+            EventLog.project_id == project_id,
+            EventLog.event_type == "review_unstaffed",
+            EventLog.data["task_id"].as_string().in_(ids),
+        )
+        .order_by(EventLog.timestamp)
+    ):
+        if isinstance(data, dict) and data.get("task_id") in ids:
+            unstaffed[data["task_id"]] = (at, data.get("reason"))
+
     held_on = {
         landing.waits_on
         for landing in landings.values()
@@ -167,6 +186,11 @@ async def attach_stages(session: AsyncSession, responses: list, *, project_id: s
             waits = askers.get(r.id)
         elif r.status == "completed":
             stage = WAITING_FOR_REVIEW
+            # Said since it entered `completed`, so a reason from an earlier round is not shown.
+            why = unstaffed.get(r.id)
+            entered_at = entered.get((r.id, "completed"))
+            if why is not None and (entered_at is None or _aware(why[0]) >= _aware(entered_at)):
+                detail = _one_line(why[1], limit=400)
         elif r.status == "under_review":
             stage = UNDER_REVIEW if r.id in running else WAITING_FOR_REVIEW
         elif r.id in running:

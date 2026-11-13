@@ -749,6 +749,7 @@ def _forget_module_level_background_state() -> None:
     import hub.landing_queue as _landing_queue
     import hub.project_checks as _project_checks
     import hub.pull_requests as _pull_requests
+    import hub.review_on_completion as _review_on_completion
 
     for registry in (
         _project_checks._inflight,
@@ -773,6 +774,8 @@ def _forget_module_level_background_state() -> None:
         _pull_requests._asking,
         _pull_requests._watching,
         _pull_requests._rewatch,
+        _review_on_completion._locks,
+        _review_on_completion._pending,
     ):
         registry.clear()
 
