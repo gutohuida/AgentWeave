@@ -537,6 +537,16 @@ export type StoryEvent =
   | { kind: 'workspace'; id: string; at: string | null; outcome: string; reason: string | null }
   /** The flow could not staff this task's review (F768); `reason` names the remedy. */
   | { kind: 'review_unstaffed'; id: string; at: string | null; reason: string | null }
+  /** Who the Hub put on a review it staffed outside a build; `declared` false means it picked them
+   *  because nobody was named (`a-hand-started-task-reaches-review-and-merge`, FR-3). */
+  | {
+      kind: 'review_staffed'
+      id: string
+      at: string | null
+      reviewer: string | null
+      declared: boolean
+      reason: string | null
+    }
 
 export interface TaskStory {
   task: { id: string; title: string; status: string }

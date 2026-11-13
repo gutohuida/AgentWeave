@@ -1546,9 +1546,16 @@ async def _after_decided(run_id: str) -> None:
         async with async_session_factory() as session:
             run = await session.get(TaskCheckRun, run_id)
             task = await session.get(Task, run.task_id) if run is not None else None
-            loop_id = task.loop_id if task is not None and task.status == "completed" else None
+            completed = task is not None and task.status == "completed"
+            loop_id = task.loop_id if completed else None
         if loop_id:
             flow_advance.request(loop_id)
+        if completed:
+            # Finished work no build reviews finds its reviewer here once its checks decide
+            # (`a-hand-started-task-reaches-review-and-merge`, FR-2); a build's own is left to it.
+            from . import review_on_completion
+
+            await review_on_completion.staff_review(run.project_id, run.task_id)
     except Exception:  # noqa: BLE001 -- the firing's tick and the stall sweep still look
         logger.warning("could not act on the decided check run %s", run_id, exc_info=True)
 
