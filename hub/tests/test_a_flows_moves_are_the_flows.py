@@ -13,10 +13,15 @@ from sqlalchemy import select
 from hub.api.v1.agent_trigger import trigger_agent_directly
 from hub.conversations import new_conversation
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Task, TaskTransition
+from hub.db.models import AIJob, Run, Task, TaskTransition
 from hub.inbound_queue import new_entry
 from hub.scheduler import JobScheduler
-from hub.task_transition_service import ORIGIN_ACTOR, ORIGIN_JOB, apply_transition
+from hub.task_transition_service import (
+    ORIGIN_ACTOR,
+    ORIGIN_JOB,
+    ORIGIN_RUNTIME,
+    apply_transition,
+)
 from hub.task_transitions import operator, run_actor
 
 from .review_evidence import record_review_evidence
@@ -191,6 +196,32 @@ async def test_a_delivery_with_the_operators_own_entry_is_the_operators(
         await _deliver_review(db, task.id, entries=entries)
     row = await _review_row(task.id)
     assert (row.origin, row.job_id) == (ORIGIN_ACTOR, None)
+
+
+@pytest.mark.usefixtures("no_agent_cli_spawn")
+@pytest.mark.parametrize("origin_type", ["job", "mender"])
+async def test_a_review_the_hub_handed_over_is_the_reviewers_run(
+    app, auth_headers, bind_runner, tmp_path, origin_type
+):
+    """HSTRR-6 — `mender.hand_to_review`, queued by `review_on_completion` (a `job` entry with no
+    job) or by the mender, is the Hub's own move: staged as the reviewer's run (`runtime`), never
+    as the operator. Fails before the fix: the row was `operator`, `actor`, no run."""
+    _init_repo(tmp_path)
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        _job, task = await _completed_review_task(db, f"hub-{origin_type}")
+        entry = _review_entry(task.id, origin_type=origin_type)
+        await _deliver_review(db, task.id, entries=[entry])
+    row = await _review_row(task.id)
+    assert (row.actor_kind, row.actor_agent, row.origin, row.job_id) == (
+        "run",
+        REVIEWER,
+        ORIGIN_RUNTIME,
+        None,
+    )
+    async with async_session_factory() as db:
+        run = await db.get(Run, row.run_id)
+    assert run is not None and run.agent == REVIEWER, "the row names the reviewer's actual run"
 
 
 @pytest.mark.usefixtures("no_agent_cli_spawn")

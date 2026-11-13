@@ -75,6 +75,7 @@ from .task_transitions import (
     WITH_REVIEWER_STATUSES,
     operator,
 )
+from .task_transitions import Actor as TransitionActor
 from .utils import persist_accepted_event, persist_event, short_id
 
 if TYPE_CHECKING:
@@ -986,8 +987,12 @@ async def enter_selected_task(
     is_review: bool,
     origin: str = ORIGIN_ACTOR,
     job_id: Optional[str] = None,
+    actor: Optional[TransitionActor] = None,
 ) -> None:
     """Move *task* into the status its selection implies, and record who holds it.
+
+    *actor* is who the move is recorded as: the operator unless a caller names the run the Hub is
+    acting as (`origin` `runtime`, the dispatch's own review of finished work -- HSTRR-6).
 
     **What dispatching a review does to a task, stated once.** Three callers: this module's
     `_do_fire_job` and `_stage_selection`, which stage a flow's own selection of ordinary work, and
@@ -1047,7 +1052,7 @@ async def enter_selected_task(
             pass
         elif task.status in REVIEWABLE_LOOP_TASK_STATUSES:
             await apply_transition(
-                session, task, "under_review", operator(), origin=origin, job_id=job_id
+                session, task, "under_review", actor or operator(), origin=origin, job_id=job_id
             )
     elif task.status == "pending":
         await apply_transition(session, task, "assigned", operator(), origin=origin, job_id=job_id)
