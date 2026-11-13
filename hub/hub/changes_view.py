@@ -10,6 +10,8 @@ is everything the branch has that the base does not (`base...branch`, the merge-
 
 from __future__ import annotations
 
+import contextvars
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
@@ -111,6 +113,14 @@ def _parse_numstat(raw: str) -> dict:
     return counts
 
 
+def parallel(*calls):
+    """Run independent blocking git reads at once (each is its own process), keeping the
+    caller's context so trace spans still attach. Results come back in call order."""
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        futures = [pool.submit(contextvars.copy_context().run, call) for call in calls]
+        return [f.result() for f in futures]
+
+
 def _diff_args(scope_args: List[str]) -> List[List[str]]:
     return [
         ["--name-status", "-M", "-z", *scope_args],
@@ -120,8 +130,11 @@ def _diff_args(scope_args: List[str]) -> List[List[str]]:
 
 def _files(repo_root: Path, command: List[str], scope_args: List[str]) -> List[ChangedFile]:
     names_args, counts_args = _diff_args(scope_args)
-    names = worktrees._run_git(repo_root, *command, *names_args)
-    counts = _parse_numstat(worktrees._run_git(repo_root, *command, *counts_args).stdout)
+    names, counts_out = parallel(
+        lambda: worktrees._run_git(repo_root, *command, *names_args),
+        lambda: worktrees._run_git(repo_root, *command, *counts_args),
+    )
+    counts = _parse_numstat(counts_out.stdout)
     files = _parse_name_status(names.stdout)
     for entry in files:
         entry.added, entry.removed, entry.binary = counts.get(entry.path, (0, 0, False))

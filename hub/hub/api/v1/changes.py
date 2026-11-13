@@ -157,11 +157,11 @@ def _read(
     if not changes_view.branch_exists(repo_root, branch):
         return None
     base = changes_view.resolve_base(repo_root, base_name)
-    turn = changes_view.turn_files(repo_root, sha) if sha else []
-    since = changes_view.branch_files(repo_root, base, branch) if base else []
-    working: List[str] = []
-    if checkout is not None:
-        working = changes_view.uncommitted_paths(checkout)
+    turn, since, working = changes_view.parallel(
+        lambda: changes_view.turn_files(repo_root, sha) if sha else [],
+        lambda: changes_view.branch_files(repo_root, base, branch) if base else [],
+        lambda: changes_view.uncommitted_paths(checkout) if checkout is not None else [],
+    )
     return base, turn, since, working
 
 
