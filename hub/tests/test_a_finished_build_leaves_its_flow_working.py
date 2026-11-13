@@ -1,6 +1,9 @@
 # ruff: noqa: F811 -- `author_headers` is a fixture imported to be requested by name
 """F1113: a build that finishes does not end a flow with work still in its queue.
 
+A build finishes once its tasks' work has landed (`work-is-done-when-it-has-landed-on-master-not-
+when-it-is-approved`), so each test lands it; what is left in the queue is the Hub's fix task.
+
 On 2026-10-31 approving the build's last task ended `loop-028328d41d99` while the Hub's fix task,
 which carries the loop and no build, was under review. Its reviewer sent it back and no firing ever
 briefed its builder again. The build may read as finished; the flow ends when its queue drains.
@@ -9,9 +12,9 @@ briefed its builder again. The build may read as finished; the flow ends when it
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import select, update
 
-from hub import landing_queue
+from hub import builds, landing_queue
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, Build, Loop, Task, TaskLanding
 from hub.scheduler import JobScheduler
@@ -57,6 +60,9 @@ async def _all_landed() -> None:
     async with async_session_factory() as db:
         await db.execute(update(TaskLanding).values(state="landed"))
         await db.commit()
+        landed = list((await db.execute(select(TaskLanding.task_id))).scalars())
+    # What a landing's end does once it lands: the build finishes when that was its last work.
+    await builds.finish_landed(landed)
 
 
 async def _built_with_a_fix_task(app, auth_headers, author_headers, bind_runner, **settings):
@@ -93,6 +99,7 @@ async def test_the_flow_works_its_fix_task_after_the_build_finishes(
 
     for task in (await _tasks_by_key()).values():
         await _close(task.id)
+    await _all_landed()
 
     (build,) = await _rows(Build)
     (loop,) = await _rows(Loop)
@@ -139,6 +146,7 @@ async def test_a_finished_builds_queue_still_waits_on_its_cap(
     await _built_with_a_fix_task(app, auth_headers, author_headers, bind_runner, driver="flow")
     for task in (await _tasks_by_key()).values():
         await _close(task.id)
+    await _all_landed()
     async with async_session_factory() as db:
         (build,) = await _rows(Build)
         row = await db.get(Build, build.id)

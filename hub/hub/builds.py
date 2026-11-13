@@ -182,6 +182,9 @@ async def project_rows(session: AsyncSession, project_id: str) -> List[Dict[str,
         ).all():
             loops[loop.id] = (loop, job)
 
+    # Done is approved and landed; an approved task not landed yet counts as landing (FR-4).
+    from . import landing_queue
+
     counts: Dict[str, Dict[str, int]] = {}
     for build_id, task_status, number in (
         await session.execute(
@@ -190,10 +193,38 @@ async def project_rows(session: AsyncSession, project_id: str) -> List[Dict[str,
             .group_by(Task.build_id, Task.status)
         )
     ).all():
-        entry = counts.setdefault(build_id, {"total": 0, "done": 0})
+        entry = counts.setdefault(build_id, {"total": 0, "done": 0, "landing": 0})
         entry["total"] += number
         if task_status == "approved":
             entry["done"] += number
+    # Each task on its way to main, or sent back by its landing, with that landing's state and
+    # reason (FR-6), in the order the build's tasks were created.
+    on_the_way: Dict[str, List[Dict[str, Any]]] = {}
+    states = await landing_queue.landing_states(session, Task.build_id.in_(build_ids))
+    if states:
+        for task in (
+            (
+                await session.execute(
+                    select(Task).where(Task.id.in_(list(states))).order_by(Task.created_at, Task.id)
+                )
+            )
+            .scalars()
+            .all()
+        ):
+            state, reason = states[task.id]
+            if task.status == "approved":
+                counts[task.build_id]["done"] -= 1
+                counts[task.build_id]["landing"] += 1
+            on_the_way.setdefault(task.build_id, []).append(
+                {
+                    "task_id": task.id,
+                    "display_id": task.display_id,
+                    "title": task.title,
+                    "status": task.status,
+                    "landing_state": state,
+                    "reason": reason[:500],
+                }
+            )
 
     # Which build each open question belongs to: the task it parked, a run bound to one of the
     # build's tasks, or the lead's build conversation.
@@ -246,7 +277,7 @@ async def project_rows(session: AsyncSession, project_id: str) -> List[Dict[str,
         pair = loops.get(build.loop_id or "")
         asked = questions.get(build.id, [])
         spent, _ = await spend(session, build)
-        progress = counts.get(build.id, {"total": 0, "done": 0})
+        progress = counts.get(build.id, {"total": 0, "done": 0, "landing": 0})
         rows.append(
             {
                 "id": build.id,
@@ -268,6 +299,8 @@ async def project_rows(session: AsyncSession, project_id: str) -> List[Dict[str,
                 ),
                 "tasks_total": progress["total"],
                 "tasks_done": progress["done"],
+                "tasks_landing": progress["landing"],
+                "landings": on_the_way.get(build.id, []),
                 "spent_usd": usd(spent),
                 "stop_reason": build.stop_reason,
                 "created_at": _iso(build.created_at),
@@ -1203,64 +1236,140 @@ async def notify_stopped(session: AsyncSession, build: Build, reason: str) -> No
         logger.warning("could not announce that build %s stopped", build.id, exc_info=True)
 
 
-async def finish_if_done(session: AsyncSession, task: Task) -> None:
-    """A build whose every task is approved or rejected has finished."""
-    if not task.build_id:
-        return
-    build = await session.get(Build, task.build_id)
-    if build is None or build.state != RUNNING:
-        return
+async def unfinished(session: AsyncSession, build: Build) -> bool:
+    """Whether *build* has a task that is not done or rejected: one still open, or one approved
+    whose work has not landed (`work-is-done-when-it-has-landed-on-master-not-when-it-is-approved`,
+    FR-3; `landing_queue.unlanded`)."""
+    from . import landing_queue
+
     open_count = (
         await session.execute(
             select(func.count())
             .select_from(Task)
-            .where(
-                Task.build_id == build.id,
-                Task.id != task.id,
-                Task.status.not_in(tuple(TERMINAL_STATUSES)),
-            )
+            .where(Task.build_id == build.id, Task.status.not_in(tuple(TERMINAL_STATUSES)))
         )
     ).scalar_one()
-    if open_count == 0:
-        build.state = FINISHED
-        build.stopped_at = datetime.now(timezone.utc)
-        _clear_warning(build)
-        defer_broadcast(session, build.project_id, "build_updated", {"id": build.id})
-        # The flow outlives the build while its queue holds work the build does not count: a fix
-        # task the Hub filed, or a landing that may send a task back (F1113). A later firing ends it.
-        if not await loop_has_open_work(session, build, closing=task.id):
-            await end_loop_of(session, build)
-        # The document shows it finished (`build-end-shown`).
-        await record_in_document(session, build.document_id)
-        # The page that shows this build reads it again and stops polling its figures.
-        document = await session.get(SpecDocument, build.document_id)
-        if document is not None:
-            defer_broadcast(session, build.project_id, "spec_updated", {"path": document.path})
+    if open_count:
+        return True
+    return bool(await landing_queue.unlanded(session, Task.build_id == build.id))
 
 
-async def loop_has_open_work(
-    session: AsyncSession, build: Build, closing: Optional[str] = None
-) -> bool:
-    """Whether *build*'s loop still has a task open, less the one *closing*, or a landing open:
-    the same "drained" a loop's own stop condition asks (F1080)."""
+async def finish_if_done(session: AsyncSession, task: Task) -> None:
+    """*task*'s build has finished once every one of its tasks is done or rejected: approved and
+    landed, not merely approved (FR-3). Asked when a task closes and when a landing ends
+    (`finish_landed`), so reaching done needs no step of its own (FR-2)."""
+    if not task.build_id:
+        return
+    build = await session.get(Build, task.build_id)
+    if build is not None:
+        await finish_build_if_done(session, build)
+
+
+async def finish_build_if_done(session: AsyncSession, build: Build) -> bool:
+    """Mark a running *build* finished when it has nothing unfinished (`unfinished`); `True` when
+    it did. A build with no task at all has not finished anything."""
+    if build.state != RUNNING or await unfinished(session, build):
+        return False
+    has_tasks = (
+        await session.execute(select(Task.id).where(Task.build_id == build.id).limit(1))
+    ).first()
+    if has_tasks is None:
+        return False
+    build.state = FINISHED
+    build.stopped_at = datetime.now(timezone.utc)
+    _clear_warning(build)
+    defer_broadcast(session, build.project_id, "build_updated", {"id": build.id})
+    # The flow outlives the build while its queue holds a task the build does not count: a fix
+    # task the Hub filed carries the loop and no build (F1113). A later firing ends it.
+    if not await loop_has_open_work(session, build):
+        await end_loop_of(session, build)
+    # The document shows it finished (`build-end-shown`).
+    await record_in_document(session, build.document_id)
+    # The page that shows this build reads it again and stops polling its figures.
+    document = await session.get(SpecDocument, build.document_id)
+    if document is not None:
+        defer_broadcast(session, build.project_id, "spec_updated", {"path": document.path})
+    return True
+
+
+async def finish_landed(task_ids: Iterable[str]) -> None:
+    """A landing ended for *task_ids*: each one's build finishes if that was its last work (FR-2:
+    the landing is the last step, and nothing else is asked of anyone). Its own transaction, after
+    the landing's; never raises, since the landing stands either way."""
+    from .db.engine import async_session_factory
+
+    ids = list(dict.fromkeys(task_ids))
+    if not ids:
+        return
+    try:
+        async with async_session_factory() as session:
+            tasks = (
+                (
+                    await session.execute(
+                        select(Task).where(Task.id.in_(ids), Task.build_id.is_not(None))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            seen: Set[str] = set()
+            for task in tasks:
+                if task.build_id in seen:
+                    continue
+                seen.add(task.build_id)
+                await finish_if_done(session, task)
+            await session.commit()
+    except Exception:  # noqa: BLE001
+        logger.warning("could not finish the builds of landed tasks %s", ids, exc_info=True)
+
+
+async def reopen_if_unfinished(session: AsyncSession, build: Build) -> bool:
+    """A build stored as finished under the old rule (every task approved) while an approved task
+    of it has not landed is running again (FR-8): it shows in Running, and finishes when that
+    landing lands. Its loop, if it ended, is left ended: a sent-back task is the operator's to
+    restart. `True` when it reopened."""
+    if build.state != FINISHED or not await unfinished(session, build):
+        return False
+    build.state = RUNNING
+    build.stopped_at = None
+    defer_broadcast(session, build.project_id, "build_updated", {"id": build.id})
+    await record_in_document(session, build.document_id)
+    return True
+
+
+async def reopen_unfinished(project_id: Optional[str] = None) -> int:
+    """`reopen_if_unfinished` for every finished build (of *project_id*, else every project): run
+    when the Hub starts, so builds finished before done meant landed are evaluated once."""
+    from .db.engine import async_session_factory
+
+    async with async_session_factory() as session:
+        query = select(Build).where(Build.state == FINISHED)
+        if project_id is not None:
+            query = query.where(Build.project_id == project_id)
+        reopened = 0
+        for build in (await session.execute(query)).scalars().all():
+            if await reopen_if_unfinished(session, build):
+                reopened += 1
+                logger.warning("build %s reopened: an approved task of it has not landed", build.id)
+        await session.commit()
+    return reopened
+
+
+async def loop_has_open_work(session: AsyncSession, build: Build) -> bool:
+    """Whether *build*'s loop still has a task open, or one approved and not landed: the same
+    "drained" a loop's own stop condition asks (F1080, FR-5)."""
     from . import landing_queue
-    from .scheduler import _approved_tasks_landing
 
     if not build.loop_id:
-        return False
-    loop = await session.get(Loop, build.loop_id)
-    if loop is None:
         return False
     query = (
         select(func.count())
         .select_from(Task)
-        .where(Task.loop_id == loop.id, Task.status.not_in(tuple(TERMINAL_STATUSES)))
+        .where(Task.loop_id == build.loop_id, Task.status.not_in(tuple(TERMINAL_STATUSES)))
     )
-    if closing is not None:
-        query = query.where(Task.id != closing)
     if (await session.execute(query)).scalar_one():
         return True
-    return bool(await _approved_tasks_landing(session, loop, landing_queue.OPEN))
+    return bool(await landing_queue.unlanded(session, Task.loop_id == build.loop_id))
 
 
 async def end_loop_of(session: AsyncSession, build: Build) -> Optional[AIJob]:
