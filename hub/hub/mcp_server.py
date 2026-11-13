@@ -959,6 +959,77 @@ def save_chapters(chapters: List[Dict[str, Any]], reason: str) -> Dict[str, Any]
     return _hub_request("POST", "/chapters", {"chapters": chapters, "reason": reason})
 
 
+#: Longer than the Hub's own limit on a dashboard query (`aw_dashboard_query_timeout`, 10 s by
+#: default), so a query stopped at that limit answers its `timeout` rather than this call timing out.
+DASHBOARD_QUERY_REQUEST_TIMEOUT_SECONDS = 60
+
+
+@_tool()
+def dashboard_query_reference() -> Dict[str, Any]:
+    """Everything a dashboard query can read: each table and column, its type and a short meaning,
+    generated from the running Hub, with the query rules in `notes` and the limits.
+
+    Every table holds only the current project's rows, so no project filter is needed. Read it
+    before writing a query with `run_dashboard_query`; the vault holds what the data means and its
+    traps.
+    """
+    return _hub_request("GET", "/dashboards/query-reference")
+
+
+@_tool()
+def run_dashboard_query(sql: str) -> Dict[str, Any]:
+    """Run one read-only SQLite query over the current project's data and see its result.
+
+    Answers `{columns, rows, row_count, truncated, elapsed_ms}`. Only SELECT and WITH (recursive
+    CTEs included) run; `text_column REGEXP 'pattern'` matches a regular expression. A query is
+    stopped after 10 s (`timeout`) and a result is cut at 10,000 rows (`truncated`). Refusals name
+    their `code`: `not_queryable` (credentials and this machine's paths), `read_only`, `timeout`,
+    `query_error`. **Check every panel's query here before you save a dashboard.**
+    """
+    return _hub_request(
+        "POST",
+        "/dashboards/query",
+        {"sql": sql},
+        timeout=DASHBOARD_QUERY_REQUEST_TIMEOUT_SECONDS,
+    )
+
+
+@_tool()
+def save_dashboard(
+    name: str, description: str, panels: List[Dict[str, Any]], dashboard_id: str = ""
+) -> Dict[str, Any]:
+    """Save a dashboard to the current project, under your name; the operator opens it from the
+    project's Dashboards screen, which runs its queries each time it is opened or refreshed.
+
+    `name` is unique in the project (409 `dashboard_name_taken`), `description` says the question
+    it answers, and `panels` is a list of `{"title", "query", "kind"}`, where `kind` is one of
+    `number`, `table`, `bar`, `stacked_bar`, `line` (anything else is refused
+    `invalid_chart_kind`). For bar, stacked bar and line the first column labels the points and
+    the numeric columns after it are drawn; a number shows the first numeric value. Saving does
+    not run the queries, so check each with `run_dashboard_query` first: a panel whose query fails
+    is saved and shows its error when opened. `dashboard_id` replaces that dashboard whole; keep
+    each panel's `id` from `read_dashboard` to keep it.
+    """
+    body: Dict[str, Any] = {"name": name, "description": description, "panels": panels}
+    if dashboard_id:
+        body["dashboard_id"] = dashboard_id
+    return _hub_request("POST", "/dashboards", body)
+
+
+@_tool()
+def list_dashboards() -> Dict[str, Any]:
+    """The current project's dashboards, most recently saved first: each with its `id`, `name`,
+    `description`, `author`, times and panel count. Read one with `read_dashboard`."""
+    return _hub_request("GET", "/dashboards")
+
+
+@_tool()
+def read_dashboard(dashboard_id: str) -> Dict[str, Any]:
+    """One dashboard of the current project with its panels (`id`, `title`, `query`, `kind`).
+    Another project's id answers not-found."""
+    return _hub_request("GET", f"/dashboards/{dashboard_id}")
+
+
 @_tool()
 def vault_replace_passage(entry_id: str, old: str, new: str) -> Dict[str, Any]:
     """Change a text source (`src-…`) by replacing one passage of its text.

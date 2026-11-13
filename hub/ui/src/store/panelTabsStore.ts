@@ -28,17 +28,17 @@ export const PANEL_TABS_STORAGE_KEY = STORAGE_KEY
 // Index kinds take a fixed id, detail kinds a keyed one (design D3). The union is literal and
 // exhaustively type-checkable; kinds are never constructed at runtime from external input.
 
-export type IndexTabId = 'specs' | 'files' | 'running'
+export type IndexTabId = 'specs' | 'files' | 'running' | 'changes'
 export type SpecTabId = `spec:${string}`
 export type FileTabId = `file:${string}`
 export type LoopTabId = `loop:${string}`
 export type TabId = IndexTabId | SpecTabId | FileTabId | LoopTabId
 
-export type TabKind = 'specs' | 'files' | 'running' | 'spec' | 'file' | 'loop'
+export type TabKind = 'specs' | 'files' | 'running' | 'changes' | 'spec' | 'file' | 'loop'
 
 /** Derived from the id rather than stored beside it, so the two cannot disagree. */
 export function tabKind(id: TabId): TabKind {
-  if (id === 'specs' || id === 'files' || id === 'running') return id
+  if (id === 'specs' || id === 'files' || id === 'running' || id === 'changes') return id
   if (id.startsWith('spec:')) return 'spec'
   if (id.startsWith('loop:')) return 'loop'
   return 'file'
@@ -89,7 +89,7 @@ export function isLoopTabId(id: TabId): id is LoopTabId {
 
 function isTabId(value: unknown): value is TabId {
   if (typeof value !== 'string') return false
-  if (value === 'specs' || value === 'files' || value === 'running') return true
+  if (value === 'specs' || value === 'files' || value === 'running' || value === 'changes') return true
   if (value.startsWith('spec:')) return value.length > 'spec:'.length
   if (value.startsWith('file:')) return value.length > 'file:'.length
   if (value.startsWith('loop:')) return value.length > 'loop:'.length
