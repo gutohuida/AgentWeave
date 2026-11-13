@@ -182,6 +182,10 @@ def file_patch(
     else:
         command = ["diff", "-M", f"{base}...{branch}", "--", path]
     text = worktrees._run_git(repo_root, *command).stdout
-    if "\nBinary files " in text or text.startswith("Binary files ") or "\nGIT binary patch" in text:
+    if (
+        "\nBinary files " in text
+        or text.startswith("Binary files ")
+        or "\nGIT binary patch" in text
+    ):
         return Patch(patch="", binary=True, truncated=False, total_lines=0)
     return _cut(text)

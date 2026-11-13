@@ -121,7 +121,12 @@ async def _resolve_target(
 ):
     """Returns (branch, task_row, state, message). `branch` is None when there is nothing to read."""
     if not worktrees.is_git_repo(repo_root):
-        return None, None, "no_checkout", "This project is not a git repository, so the agent has no checkout of its own."
+        return (
+            None,
+            None,
+            "no_checkout",
+            "This project is not a git repository, so the agent has no checkout of its own.",
+        )
     latest = runs[0] if runs else None
     task_id = _task_of(latest)
     if task_id is not None:
@@ -129,14 +134,25 @@ async def _resolve_target(
         return worktrees.task_branch_name(task_id), task or task_id, None, None
     config = await get_agent_config(project_id, conversation.agent, session)
     if not worktrees.is_writing_agent(config):
-        return None, None, "no_checkout", f"{conversation.agent} has no checkout of its own: it is read-only and works in the project directory."
+        return (
+            None,
+            None,
+            "no_checkout",
+            f"{conversation.agent} has no checkout of its own: it is read-only and works in the project directory.",
+        )
     try:
         return worktrees.branch_name(conversation.agent), None, None, None
     except ValueError:
         return None, None, "unreadable", f"{conversation.agent}'s branch cannot be read."
 
 
-def _read(repo_root: Path, branch: str, base_name: Optional[str], sha: Optional[str], checkout: Optional[Path]):
+def _read(
+    repo_root: Path,
+    branch: str,
+    base_name: Optional[str],
+    sha: Optional[str],
+    checkout: Optional[Path],
+):
     """All the blocking git reads for one answer, in one thread hop."""
     if not changes_view.branch_exists(repo_root, branch):
         return None

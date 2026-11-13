@@ -96,7 +96,9 @@ def by_path(files):
 
 @pytest.mark.asyncio
 async def test_ac_two_files_modified_and_added_with_counts(app, auth_headers, repo):
-    wt = add_branch(repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker")
+    wt = add_branch(
+        repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker"
+    )
     write(wt, "README.md", "one\ntwo\nthree\n")
     write(wt, "notes.txt", "alpha\nbeta\n")
     sha = commit(wt, "Auto-snapshot: worker's turn")
@@ -114,7 +116,9 @@ async def test_ac_two_files_modified_and_added_with_counts(app, auth_headers, re
 
 @pytest.mark.asyncio
 async def test_ac_switch_last_turn_vs_since_main_and_header(app, auth_headers, repo):
-    wt = add_branch(repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker")
+    wt = add_branch(
+        repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker"
+    )
     write(wt, "a.txt", "a\n")
     first = commit(wt, "Auto-snapshot: worker's turn")
     write(wt, "b.txt", "b\n")
@@ -133,7 +137,9 @@ async def test_ac_switch_last_turn_vs_since_main_and_header(app, auth_headers, r
 @pytest.mark.asyncio
 async def test_ac_task_branch_names_the_task(app, auth_headers, repo):
     task_id = "task-aaaaaaaaaaaa"
-    wt = add_branch(repo, f"agentweave/task/{task_id}", worktree=repo / ".agentweave" / "tasks" / task_id)
+    wt = add_branch(
+        repo, f"agentweave/task/{task_id}", worktree=repo / ".agentweave" / "tasks" / task_id
+    )
     write(wt, "feature.py", "x = 1\n")
     sha = commit(wt, "Auto-snapshot: worker's turn")
     await seed(runs=[("completed", sha, wt)], task=task_id)
@@ -148,7 +154,9 @@ async def test_ac_task_branch_names_the_task(app, auth_headers, repo):
 
 @pytest.mark.asyncio
 async def test_ac_working_now_while_running_then_under_last_turn(app, auth_headers, repo):
-    wt = add_branch(repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker")
+    wt = add_branch(
+        repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker"
+    )
     write(wt, "wip.txt", "partial\n")
     await seed(runs=[("running", None, wt)])
 
@@ -171,7 +179,9 @@ async def test_ac_working_now_while_running_then_under_last_turn(app, auth_heade
 
 @pytest.mark.asyncio
 async def test_ac_empty_nothing_changed(app, auth_headers, repo):
-    wt = add_branch(repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker")
+    wt = add_branch(
+        repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker"
+    )
     await seed(runs=[("completed", None, wt)])
 
     body = await get(app, auth_headers)
@@ -195,7 +205,9 @@ async def test_ac_empty_no_checkout_says_so_without_an_error(app, auth_headers, 
 
 @pytest.mark.asyncio
 async def test_ac_large_list_fast_binary_marked_and_big_diff_truncated(app, auth_headers, repo):
-    wt = add_branch(repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker")
+    wt = add_branch(
+        repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker"
+    )
     for i in range(198):
         write(wt, f"many/f{i:03}.txt", f"{i}\n")
     (wt / "blob.bin").write_bytes(bytes(range(256)) * 8)
