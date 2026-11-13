@@ -609,20 +609,71 @@ def turn(pid: str, message: str) -> Optional[str]:
     return run_id
 
 
+SHIM_CALL = re.compile(r"\baw-tool\s+([A-Za-z_]+)\s+['\"]?([^\s'\"]+\.json)")
+SHIM_SET_CONTENT = re.compile(
+    r"Set-Content\s+-Path\s+'([^']+\.json)'\s+-Value\s+'((?:[^']|'')*)'", re.IGNORECASE)
+
+
+def calls_file_key(path: str) -> Optional[str]:
+    """`.agentweave/calls/<file>` of a path, absolute or relative, whichever separators it uses."""
+    norm = path.replace("\\", "/").lower()
+    at = norm.rfind(".agentweave/calls/")
+    return norm[at:] if at >= 0 else None
+
+
+def shim_result(result: Any) -> Any:
+    """The call command prints `{"ok": true, "result": ...}`; answer what the tool itself returned."""
+    parsed = parsed_result(result)
+    if isinstance(parsed, dict) and parsed.get("ok") is True and "result" in parsed:
+        inner = parsed["result"]
+        return inner if isinstance(inner, str) else json.dumps(inner)
+    return result
+
+
 def tool_calls(run_id: Optional[str], tool: str) -> List[Dict[str, Any]]:
-    """The run's calls of *tool*, as its trace recorded them: through MCP or the call command."""
+    """The run's calls of *tool*, as its trace recorded them: through MCP or the call command.
+
+    A call through the call command is two spans: a write of the arguments to a file in
+    `.agentweave/calls/` (the file-writing tool, or `Set-Content` from the shell), then a shell
+    span running `aw-tool <tool> <file>`. Its arguments are that file's last content before the
+    call, and its result is the tool's own, out of the command's `{"ok", "result"}` envelope.
+    """
     if not run_id:
         return []
     calls = []
+    written: Dict[str, str] = {}
     for name, attributes in ro(
             "select name, attributes from trace_spans where run_id=? and operation='execute_tool' "
             "order by start_time", (run_id,)):
         attrs = json.loads(attributes or "{}")
         args = attrs.get("gen_ai.tool.call.arguments")
+        try:
+            args_obj = json.loads(args) if isinstance(args, str) else args
+        except ValueError:
+            args_obj = None
         args_text = args if isinstance(args, str) else json.dumps(args)
-        if tool in name or tool in (args_text or ""):
-            calls.append({"name": name, "arguments": args_text or "",
-                          "result": attrs.get("gen_ai.tool.call.result") or ""})
+        name = name.removeprefix("execute_tool ")
+        result = attrs.get("gen_ai.tool.call.result") or ""
+        if isinstance(args_obj, dict):
+            key = calls_file_key(str(args_obj.get("file_path") or ""))
+            if key and isinstance(args_obj.get("content"), str):
+                written[key] = args_obj["content"]
+                continue
+            command = str(args_obj.get("command") or "")
+            for path, value in SHIM_SET_CONTENT.findall(command):
+                if calls_file_key(path):
+                    written[calls_file_key(path)] = value.replace("''", "'")
+            shim = SHIM_CALL.search(command)
+            if shim:
+                if shim.group(1) != tool:
+                    continue
+                key = calls_file_key(shim.group(2))
+                calls.append({"name": f"aw-tool {tool}", "arguments": written.get(key or "", command),
+                              "result": shim_result(result)})
+                continue
+        # By name only: a ToolSearch loading the tool's schema names it in its arguments too.
+        if re.search(rf"(^|\s|__|[./]){re.escape(tool)}$", name):
+            calls.append({"name": name, "arguments": args_text or "", "result": result})
     return calls
 
 
