@@ -131,6 +131,8 @@ describe('a refused landing offers the action that clears it', () => {
     )
     const user = await openDrawer()
     await user.click(screen.getByTestId('task-land-task-1'))
+    // Land asks first (FR-4).
+    await user.click(screen.getByTestId('task-land-go-task-1'))
 
     const piece = await screen.findByTestId('task-landing-awaiting-piece-ev-7')
     expect(piece).toHaveTextContent('FR-11 at abcdef1')
@@ -150,6 +152,8 @@ describe('a refused landing offers the action that clears it', () => {
     )
     const user = await openDrawer()
     await user.click(screen.getByTestId('task-land-task-1'))
+    // Land asks first (FR-4).
+    await user.click(screen.getByTestId('task-land-go-task-1'))
     await user.click(await screen.findByTestId('task-landing-link-FR-11'))
     expect(link.mock.calls[0][0]).toEqual({ id: 'task-1', requirement_ids: ['FR-11'] })
   })
@@ -160,6 +164,8 @@ describe('a refused landing offers the action that clears it', () => {
     )
     const user = await openDrawer()
     await user.click(screen.getByTestId('task-land-task-1'))
+    // Land asks first (FR-4).
+    await user.click(screen.getByTestId('task-land-go-task-1'))
 
     expect(await screen.findByTestId('task-landing-waits-task-1')).toHaveTextContent(
       'Landing waits for the checks',
@@ -173,6 +179,8 @@ describe('a refused landing offers the action that clears it', () => {
     )
     const user = await openDrawer()
     await user.click(screen.getByTestId('task-land-task-1'))
+    // Land asks first (FR-4).
+    await user.click(screen.getByTestId('task-land-go-task-1'))
 
     const anyway = await screen.findByTestId('task-land-anyway-task-1')
     expect(anyway).toBeDisabled()
