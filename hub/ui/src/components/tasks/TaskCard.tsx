@@ -67,6 +67,11 @@ export function TaskCard({
   const canStart = Boolean(startAgents && startAgents.length > 0 && onStartWork)
   const age = task.stage_since ? formatStageAge(task.stage_since, clock) : null
   const waitsOn = task.stage_waits_on ?? null
+  // The builder asking is already named on the people line, so the stage line says "by builder"
+  // rather than repeating a long name; the stage word always stays. Time at stage gives way to a waits-on
+  // line (it stays in the stage tooltip).
+  const askerIsBuilder = task.stage === 'waiting_for_answer' && Boolean(waitsOn) && waitsOn === builder
+  const waitsText = waitsOn ? (askerIsBuilder ? 'by builder' : waitsWording(task.stage, waitsOn)) : null
   const failed = failedChecks ?? task.failed_checks ?? null
   const stageTitle = [
     visual.word,
@@ -125,8 +130,12 @@ export function TaskCard({
             <Icon name={visual.glyph} size={13} />
           </span>
           <span className="aw-tcard-word">{visual.word}</span>
-          {age && !(waitsOn && waitsOn.length > WAITS_KEEPS_AGE) ? <span className="aw-tcard-age">{age}</span> : null}
-          {waitsOn ? <span className="aw-tcard-waits">{waitsWording(task.stage, waitsOn)}</span> : null}
+          {age && !waitsOn ? <span className="aw-tcard-age">{age}</span> : null}
+          {waitsOn ? (
+            <span className="aw-tcard-waits" title={waitsWording(task.stage, waitsOn)}>
+              {waitsText}
+            </span>
+          ) : null}
           <span className="aw-tcard-markers">
             {failed && failed > 0 ? (
               <span
@@ -192,9 +201,6 @@ export function TaskCard({
     </article>
   )
 }
-
-// A long waits-on line takes the room time at stage would have used; the age stays in the stage tooltip.
-const WAITS_KEEPS_AGE = 16
 
 function Agent({ name, index, title, icon }: { name: string; index: number | null | undefined; title: string; icon?: string }) {
   const color = agentColorVars(index)
