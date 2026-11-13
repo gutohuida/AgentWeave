@@ -26,6 +26,8 @@ const OPERATOR_TRANSITIONS: Record<string, string[]> = {
 }
 
 const land = vi.fn()
+// What the task's story counts as awaiting; FR-4's confirm names it.
+let awaiting = 0
 
 vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
@@ -38,6 +40,19 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     useLandTask: () => ({ mutate: land, isPending: false }),
     // The drawer asks what approving would write; irrelevant here and it would otherwise fetch.
     useTaskIntegrationPreview: () => ({ data: null }),
+    useTaskStory: () => ({
+      data: {
+        task: { id: 'task-completed', title: 'A completed task', status: 'completed' },
+        summary: {
+          runs: 1, cost_usd: null, tokens: null, premium_requests: null, ai_nano_aiu: null,
+          evidence: { accepted: 0, rejected: 0, awaiting }, merged: [], overrides: 0,
+        },
+        events: [],
+      },
+      isLoading: false,
+      isError: false,
+      fetchStatus: 'idle',
+    }),
   }
 })
 
@@ -65,6 +80,9 @@ async function openDrawer(status: string) {
   )
   const user = userEvent.setup()
   await user.click(screen.getByTestId(`task-open-task-${status}`))
+  // The drawer opens on the story once it has loaded; Land is in Details.
+  const details = screen.queryByTestId(`task-view-details-task-${status}`)
+  if (details) await user.click(details)
   return user
 }
 
@@ -86,7 +104,14 @@ function liveTurnRefusal(): ApiError {
 
 beforeEach(() => {
   land.mockReset()
+  awaiting = 0
 })
+
+/** Press Land and confirm it: the landing now asks first (FR-4). */
+async function landConfirmed(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('task-land-task-completed'))
+  await user.click(screen.getByTestId('task-land-go-task-completed'))
+}
 
 afterEach(cleanup)
 
@@ -106,7 +131,7 @@ describe('the landing action', () => {
 
   it('issues one call rather than a status change', async () => {
     const user = await openDrawer('completed')
-    await user.click(screen.getByTestId('task-land-task-completed'))
+    await landConfirmed(user)
 
     expect(land).toHaveBeenCalledTimes(1)
     expect(land.mock.calls[0][0]).toEqual({ id: 'task-completed' })
@@ -115,7 +140,7 @@ describe('the landing action', () => {
   it("renders the Hub's refusal where a refused move renders", async () => {
     land.mockImplementation((_vars, options) => options.onError(liveTurnRefusal()))
     const user = await openDrawer('completed')
-    await user.click(screen.getByTestId('task-land-task-completed'))
+    await landConfirmed(user)
 
     await waitFor(() => {
       expect(screen.getByTestId('task-status-refusal-task-completed').textContent).toContain(
@@ -139,7 +164,7 @@ describe('the landing action', () => {
     )
     land.mockImplementationOnce((_vars, options) => options.onError(checksOnly))
     const user = await openDrawer('completed')
-    await user.click(screen.getByTestId('task-land-task-completed'))
+    await landConfirmed(user)
 
     const anyway = await screen.findByTestId('task-land-anyway-task-completed')
     expect(anyway).toBeDisabled()
@@ -152,7 +177,7 @@ describe('the landing action', () => {
   it('offers no override when something other than checks refuses it', async () => {
     land.mockImplementation((_vars, options) => options.onError(liveTurnRefusal()))
     const user = await openDrawer('completed')
-    await user.click(screen.getByTestId('task-land-task-completed'))
+    await landConfirmed(user)
     await screen.findByTestId('task-status-refusal-task-completed')
     expect(screen.queryByTestId('task-land-anyway-task-completed')).toBeNull()
   })
@@ -163,12 +188,55 @@ describe('the landing action', () => {
     // fallback instead — which is how a refusal that says exactly what to do becomes "refused".
     land.mockImplementation((_vars, options) => options.onError(liveTurnRefusal()))
     const user = await openDrawer('completed')
-    await user.click(screen.getByTestId('task-land-task-completed'))
+    await landConfirmed(user)
 
     await waitFor(() => {
       expect(screen.getByTestId('task-status-refusal-task-completed').textContent).not.toContain(
         'The Hub refused this landing.',
       )
     })
+  })
+})
+
+describe('the landing confirm (FR-4, ac-land-confirm)', () => {
+  it('asks first, saying it skips review and how many pieces are unreviewed', async () => {
+    awaiting = 4
+    const user = await openDrawer('completed')
+    await user.click(screen.getByTestId('task-land-task-completed'))
+
+    expect(land).not.toHaveBeenCalled()
+    const confirm = screen.getByTestId('task-land-confirm-task-completed')
+    expect(confirm.textContent).toContain('without a review')
+    expect(screen.getByTestId('task-land-unreviewed-task-completed').textContent).toBe(
+      '4 pieces of evidence are unreviewed.',
+    )
+  })
+
+  it('says nothing about unreviewed evidence when none is awaiting', async () => {
+    const user = await openDrawer('completed')
+    await user.click(screen.getByTestId('task-land-task-completed'))
+    expect(screen.getByTestId('task-land-confirm-task-completed').textContent).toContain('without a review')
+    expect(screen.queryByTestId('task-land-unreviewed-task-completed')).toBeNull()
+  })
+
+  it('Cancel changes nothing', async () => {
+    awaiting = 4
+    const user = await openDrawer('completed')
+    await user.click(screen.getByTestId('task-land-task-completed'))
+    await user.click(screen.getByTestId('task-land-cancel-task-completed'))
+
+    expect(land).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('task-land-confirm-task-completed')).toBeNull()
+    expect(screen.getByTestId('task-land-task-completed')).toBeTruthy()
+  })
+
+  it('Confirm lands it as today: one call, no confirm left open', async () => {
+    awaiting = 4
+    const user = await openDrawer('completed')
+    await landConfirmed(user)
+
+    expect(land).toHaveBeenCalledTimes(1)
+    expect(land.mock.calls[0][0]).toEqual({ id: 'task-completed' })
+    expect(screen.queryByTestId('task-land-confirm-task-completed')).toBeNull()
   })
 })

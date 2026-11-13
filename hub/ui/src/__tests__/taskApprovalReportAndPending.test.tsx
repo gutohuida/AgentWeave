@@ -92,6 +92,8 @@ describe('the approval advisory reaches the drawer that approved (F169)', () => 
     })
     const user = await openDrawer(makeTask('completed'))
     await user.click(screen.getByTestId('task-land-task-1'))
+    // Land asks first (FR-4).
+    await user.click(screen.getByTestId('task-land-go-task-1'))
 
     const report = screen.getByTestId('task-approval-report-task-1')
     expect(report).toHaveTextContent('Approved, with 2 things to know')
@@ -125,6 +127,8 @@ describe('the approval advisory reaches the drawer that approved (F169)', () => 
     const user = userEvent.setup()
     await user.click(screen.getByTestId('task-open-task-1'))
     await user.click(screen.getByTestId('task-land-task-1'))
+    // Land asks first (FR-4).
+    await user.click(screen.getByTestId('task-land-go-task-1'))
     expect(screen.getByTestId('task-approval-report-task-1')).toBeTruthy()
 
     rerender(
@@ -143,6 +147,8 @@ describe('the approval advisory reaches the drawer that approved (F169)', () => 
     })
     const user = await openDrawer(makeTask('completed'))
     await user.click(screen.getByTestId('task-land-task-1'))
+    // Land asks first (FR-4).
+    await user.click(screen.getByTestId('task-land-go-task-1'))
 
     expect(screen.queryByTestId('task-approval-report-task-1')).toBeNull()
   })
