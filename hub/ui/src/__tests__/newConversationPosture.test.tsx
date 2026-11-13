@@ -4,6 +4,7 @@ import type { AgentSummary } from '@/api/agents'
 import { NewConversationSurface } from '@/components/agents/NewConversationSurface'
 import { useConfigStore } from '@/store/configStore'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
+vi.mock('@/api/firstRun', () => ({ useProjectHasNoWork: () => false }))
 
 /**
  * The new-conversation surface is the second composer, and the one the first message is sent
