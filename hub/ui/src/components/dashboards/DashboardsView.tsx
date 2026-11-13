@@ -2,8 +2,9 @@ import * as React from 'react'
 import type { DashboardRun, DashboardSummary } from '@/api/dashboards'
 import { Icon } from '@/components/common/Icon'
 import { PanelChart } from './PanelChart'
+import { hubDate } from '@/lib/hubTime'
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—')
+const when = (iso: string | null) => (iso ? hubDate(iso).toLocaleString() : '—')
 
 export interface DashboardsViewProps {
   dashboards: DashboardSummary[]
@@ -97,7 +98,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
             {run && (
               <>
                 {' · '}
-                <span data-testid="fetched-at">Fetched {new Date(run.fetched_at).toLocaleTimeString()}</span>
+                <span data-testid="fetched-at">Fetched {hubDate(run.fetched_at).toLocaleTimeString()}</span>
               </>
             )}
           </p>

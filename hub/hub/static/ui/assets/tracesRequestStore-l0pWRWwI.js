@@ -1,0 +1,1 @@
+import{ad as a,cO as s,cn as o}from"./index-CtrGarCg.js";let n=0;const c=o(e=>({request:null,ask:t=>e({request:{...t,nonce:++n}}),clear:()=>e({request:null})}));function u(e,t){c.getState().ask(t),a(s(e,"activity"))}export{u as o,c as u};
