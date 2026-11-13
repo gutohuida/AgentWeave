@@ -343,6 +343,19 @@ def drive(args, home):
     report(base, root, task_id, seed)
 
 
+def evidence_commit(e):
+    """The commit a piece of evidence names, as GET /spec/evidence reports it.
+
+    The view has no top-level `commit`: a reviewer who re-anchored the piece names it in
+    `reviewer_record.commit`, otherwise the footprint's `commit_sha` is the one recorded.
+    """
+    reviewer = e.get("reviewer_record") or {}
+    if reviewer.get("commit"):
+        return reviewer["commit"]
+    footprint = e.get("footprint") or {}
+    return footprint.get("commit_sha") or (e.get("author_record") or {}).get("commit")
+
+
 def report(base, root, task_id, seed):
     _, task = api("GET", f"{base}/tasks/{task_id}")
     _, history = api("GET", f"{base}/tasks/{task_id}/transitions")
@@ -367,7 +380,7 @@ def report(base, root, task_id, seed):
         requirement = e.get("requirement")
         if isinstance(requirement, dict):
             requirement = requirement.get("identifier")
-        print(f"  {e.get('id')} {requirement} {e.get('review_state')} commit={e.get('commit')} "
+        print(f"  {e.get('id')} {requirement} {e.get('review_state')} commit={evidence_commit(e)} "
               f"by {(e.get('actor') or e.get('author_record'))}")
     print("--- git log --oneline main")
     print("  " + main_log.replace("\n", "\n  "))
@@ -383,12 +396,18 @@ def report(base, root, task_id, seed):
     awaiting = [e for e in evidence if e.get("review_state") == "awaiting"]
     check("c its evidence is accepted, none left awaiting", bool(accepted) and not awaiting,
           f"accepted={len(accepted)} awaiting={len(awaiting)} total={len(evidence)}")
-    commits = {e.get("commit") for e in accepted if e.get("commit")}
-    on_main = bool(commits) and all(
-        git(root, "merge-base", "--is-ancestor", c, "main").returncode == 0 for c in commits)
+    # The task's commit is the one its accepted evidence names; before any is accepted, the one its
+    # other live evidence names, so a run where nothing lands still reads a commit and fails on
+    # main not holding it rather than on there being nothing to look for.
+    live = accepted or [e for e in evidence if e.get("review_state") not in ("rejected", None)]
+    commits = {evidence_commit(e) for e in live if evidence_commit(e)}
+    placed = {c: git(root, "merge-base", "--is-ancestor", c, "main").returncode == 0 for c in commits}
+    on_main = bool(placed) and all(placed.values())
     head = git(root, "rev-parse", "main").stdout.strip()
     check("d its commit is on main, and main moved past the seed", on_main and head != seed,
-          f"evidence commits={sorted(commits)} main={head[:12]} seed={seed[:12]}")
+          f"evidence commits on main={ {c[:12]: ok for c, ok in sorted(placed.items())} } "
+          f"main={head[:12]} seed={seed[:12]}" if placed else
+          f"no evidence names a commit; main={head[:12]} seed={seed[:12]}")
 
 
 def main():
