@@ -1863,7 +1863,7 @@ async def _resolve_requirement(
             )
     if why == "ambiguous":
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail=(
                 f"{identifier} is declared by more than one document in this project. "
                 "Name the document it belongs to."
@@ -2430,7 +2430,7 @@ async def create_spec_document(
     kind = body.kind or "change-spec"
     if kind not in AGENT_CREATABLE_KINDS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={
                 "message": (
                     f"an agent may create a change-spec or a roadmap document, not {kind!r}; a "
@@ -2524,7 +2524,7 @@ async def rename_spec_document(
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 
@@ -2638,7 +2638,7 @@ async def advance_spec_step(
         )
     except spec_journey.JourneyError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code, "field": "to"},
         ) from exc
     await _write_journey(session, actor.project_id, document)
@@ -2685,7 +2685,7 @@ async def set_spec_size(
         )
     except spec_journey.JourneyError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code, "field": "size"},
         ) from exc
     await _write_journey(session, actor.project_id, document)
@@ -2998,7 +2998,7 @@ async def submit_spec_document(
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 

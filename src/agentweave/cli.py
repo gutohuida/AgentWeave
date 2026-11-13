@@ -174,6 +174,24 @@ def _hub_profile_serving_port(port: int) -> Optional[str]:
     return None
 
 
+def _hub_other_live_ports(checked_port: int) -> List[int]:
+    """Ports other than `checked_port` where a native Hub of this machine is alive (AW-129).
+
+    `doctor` with no `--port` examines the default port, which may be a different instance from
+    the one the reader runs; the PID files in the Hub folder say which others are up.
+    """
+    ports = set()
+    for path in HUB_DIR.glob("hub*.pid"):
+        match = re.match(r"^hub(?:-.+)?-(\d+)\.pid$", path.name)
+        if not match or int(match.group(1)) == checked_port:
+            continue
+        port = int(match.group(1))
+        profile = path.name[len("hub-") : -len(f"-{port}.pid")]
+        if _hub_pid_running(port=port, profile=profile or "default") is not None:
+            ports.add(port)
+    return sorted(ports)
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     """Run runtime readiness diagnostics."""
     import json as _json
@@ -194,6 +212,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     port = explicit_port or DEFAULT_HUB_PORT
     if profile == "default" and explicit_port:
         profile = _hub_profile_serving_port(port) or "default"
+    other_ports = [] if explicit_port else _hub_other_live_ports(port)
     results = collect_diagnostics(
         include_network=not getattr(args, "no_network", False),
         port=port,
@@ -204,6 +223,8 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         payload = {
             "summary": summarize(results),
             "results": [result.to_dict() for result in results],
+            "checked_port": port,
+            "other_hub_ports": other_ports,
         }
         print(_json.dumps(payload, indent=2))
     else:
@@ -215,6 +236,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         )
         print()
         print(format_results(results))
+        if other_ports:
+            listed = ", ".join(str(p) for p in other_ports)
+            print()
+            print(
+                f"Checked the Hub on port {port} (the default). Other Hubs are running on "
+                f"port {listed}; check one with `agentweave doctor --port <port>`."
+            )
 
     for result in results:
         _emit_diagnostic_log(result)
