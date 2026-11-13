@@ -132,7 +132,7 @@ files. Open the task to see its whole **story**:
 
 ```console
 $ git log --oneline main
-ab4099c Integrate approved work 747084df7cea
+ab4099c Integrate INV-1: Round tax half-up to the cent
 747084d Round tax half-up to the cent (FR-2)
 888d46d Initial invoicing service
 ```

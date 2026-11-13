@@ -19,6 +19,7 @@ import {
 } from '@/components/conversation/NewConversationIntro'
 import { agentColorVars } from '@/lib/agentColors'
 import { setComposerDraft } from '@/lib/composerDrafts'
+import { useProjectHasNoWork } from '@/api/firstRun'
 import { useConfigStore } from '@/store/configStore'
 
 /** Ways to start, offered under the intro. Picking one puts its message in the composer — not
@@ -27,6 +28,13 @@ const STARTERS: ConversationStarter[] = [
   { label: 'Pick up the next task', message: 'Look at the open tasks assigned to you and start on the most important one.', icon: 'task_alt' },
   { label: 'Catch up on today', message: 'Summarize what changed in the project today and what is still open.', icon: 'event_note' },
   { label: 'Review the latest work', message: 'Review the most recent merged change against its requirements and report anything missing.', icon: 'fact_check' },
+]
+
+/** What fits a project with no task and no specification: there is nothing to pick up, catch up on
+ *  or review yet (`useProjectHasNoWork`). */
+const EMPTY_PROJECT_STARTERS: ConversationStarter[] = [
+  { label: 'Describe a change you want', message: 'I want to change this project. Interview me about what I want, then write it up as a specification for me to approve.', icon: 'edit_note' },
+  { label: 'Explain this codebase to me', message: 'Explain how this codebase is laid out and what it does, so I know where a change would go.', icon: 'travel_explore' },
 ]
 
 interface NewConversationSurfaceProps {
@@ -79,6 +87,7 @@ export function NewConversationSurface({
    *  agent: retargeting is a change of recipient, and a half-written message survives it. */
   const [composerKey, setComposerKey] = useState(0)
   const { data: catalog } = useModelCatalog()
+  const hasNoWork = useProjectHasNoWork()
 
   const agentRow = roster.find((candidate) => candidate.name === agent)
   const runnerRow = runners.find((runner) => runner.id === agentRow?.runner_id)
@@ -231,7 +240,7 @@ export function NewConversationSurface({
             runnerLabel={runnerRow?.name ?? null}
             modelLabel={modelLabel}
             postureLabel={postureLabel}
-            starters={STARTERS}
+            starters={hasNoWork ? EMPTY_PROJECT_STARTERS : STARTERS}
             headlineTestId="new-conversation-headline"
             onPick={(message) => {
               if (!agent) return

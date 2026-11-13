@@ -797,9 +797,16 @@ async def land_by_merge(
                 hub_written = await _hub_written(session, task.project_id)
                 await session.commit()  # nothing staged: no transaction across the merge below
                 merge_root, branch = root, main_branch
+                label = " ".join(f"{task.display_id}: {task.title}".split())
                 results = await blocking.run_serialized(
                     lambda: [
-                        ti.integrate(merge_root, target, branch, hub_written=hub_written)
+                        ti.integrate(
+                            merge_root,
+                            target,
+                            branch,
+                            hub_written=hub_written,
+                            task_label=label,
+                        )
                         for target in targets
                     ]
                 )

@@ -43,8 +43,8 @@ becomes *stale*, and it never silently counts for the new statement.
 
 ## Start from the code: commits
 
-Every merge AgentWeave makes is an ordinary git commit on your main branch (*Integrate approved work
-747084df…*), made by `AgentWeave <agentweave@localhost>`. The commit it merges is the one the
+Every merge AgentWeave makes is an ordinary git commit on your main branch (*Integrate INV-1: Round tax half-up to the
+cent*; its body names the merged commit), made by `AgentWeave <agentweave@localhost>`. The commit it merges is the one the
 accepted evidence names. From a commit you can find the task, and from the task, everything above.
 
 ## What one turn did: traces
