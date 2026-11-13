@@ -43,6 +43,7 @@ from .thread import router as thread_router
 from .traces import router as traces_router
 from .vault import router as vault_router
 from .workspace import router as workspace_router
+from .changes import router as changes_router
 from .worktrees import router as worktrees_router
 
 v1_router = APIRouter(prefix="/api/v1")
@@ -77,6 +78,7 @@ project_resources_router.include_router(loops_router)
 project_resources_router.include_router(instructions_router)
 project_resources_router.include_router(spec_router)
 project_resources_router.include_router(logs_router)
+project_resources_router.include_router(changes_router)
 project_resources_router.include_router(worktrees_router)
 project_resources_router.include_router(inbound_queue_router)
 project_resources_router.include_router(queue_statuses_router)
