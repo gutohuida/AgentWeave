@@ -24,8 +24,10 @@ export function SpecPanelContainer(props: {
   recent?: string[]
   onNew?: () => void
   onClose?: () => void
+  /** Where the document opens: the Running tab opens a build's document at its builds. */
+  initialAnchor?: string | null
 }) {
-  return <PanelFor key={props.path} {...props} />
+  return <PanelFor key={`${props.path}|${props.initialAnchor ?? ''}`} {...props} />
 }
 
 function PanelFor(props: React.ComponentProps<typeof SpecPanelContainer>) {
@@ -34,6 +36,7 @@ function PanelFor(props: React.ComponentProps<typeof SpecPanelContainer>) {
     onOpenTasks: props.onOpenTasks,
     onOpenLoop: props.onOpenLoop,
     onDeleted: props.onDeleted ?? props.onClose,
+    initialAnchor: props.initialAnchor,
   }
   const result = useSpecSurface(props.path, host)
   const list = useSpecListData()

@@ -307,6 +307,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   // The Work view's checks: the latest run on the work approval would merge.
   const checksQuery = useTaskChecks(task?.id ?? '', task !== null)
   const latestChecks = checksQuery.data?.runs?.[0] ?? null
+  const earlierChecks = checksQuery.data?.runs?.slice(1) ?? []
   // A failed read is said as one, not shown as checks that have not run.
   const checksError = checksQuery.error ? (checksQuery.error instanceof Error ? checksQuery.error.message : String(checksQuery.error)) : null
   const rerunChecks = useRerunTaskChecks(task?.id ?? '')
@@ -623,6 +624,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             task={task}
             documentPathById={documentPathById}
             checks={latestChecks}
+            earlierChecks={earlierChecks}
             checksError={checksError}
             onRerunChecks={() => rerunChecks.mutate()}
             canOpenRequirement={(link) => Boolean(onOpenRequirement && documentPathById.get(link.document_id))}
@@ -1420,12 +1422,12 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               approval is governed at, the builder it was declared with, and who checks it. */}
           {people.builder && (
             <Field label="Built by">
-              <span data-testid={`task-built-by-${task.id}`}>built by {people.builder}</span>
+              <span data-testid={`task-built-by-${task.id}`}>{people.builder}</span>
             </Field>
           )}
           {people.reviewer && (
             <Field label="Reviewing">
-              <span data-testid={`task-reviewing-${task.id}`}>reviewing: {people.reviewer}</span>
+              <span data-testid={`task-reviewing-${task.id}`}>{people.reviewer}</span>
             </Field>
           )}
 

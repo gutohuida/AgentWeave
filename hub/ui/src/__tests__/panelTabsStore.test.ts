@@ -42,7 +42,7 @@ describe('panelTabsStore — tab identity', () => {
   it('derives kind from id for every kind in the union', () => {
     expect(tabKind('specs')).toBe('specs')
     expect(tabKind('files')).toBe('files')
-    expect(tabKind('loops')).toBe('loops')
+    expect(tabKind('running')).toBe('running')
     expect(tabKind(specTabId('doc-7'))).toBe('spec')
     expect(tabKind(fileTabId('src/main.py'))).toBe('file')
     expect(tabKind(loopTabId('loop-9'))).toBe('loop')
@@ -153,12 +153,12 @@ describe('panelTabsStore — open, close, activate, reorder', () => {
     expect(tabIds()).toEqual([fileTabId('src/a.ts'), 'files'])
   })
 
-  it('opening a loop drill-down does not close the loops index — a governance glance, not a launcher (task B5.2)', () => {
+  it('opening a loop drill-down does not close the running index — a governance glance, not a launcher (task B5.2)', () => {
     const store = usePanelTabsStore.getState()
-    store.openTab(P1, 'loops')
+    store.openTab(P1, 'running')
     store.openTab(P1, loopTabId('loop-1'))
 
-    expect(tabIds()).toEqual(['loops', loopTabId('loop-1')])
+    expect(tabIds()).toEqual(['running', loopTabId('loop-1')])
     expect(panel().activeTabId).toBe(loopTabId('loop-1'))
   })
 
@@ -311,6 +311,27 @@ describe('panelTabsStore — migration', () => {
     })
 
     expect(reloaded.selectProjectPanel(reloaded.usePanelTabsStore.getState(), P1).tabs).toEqual([])
+  })
+
+  it('restores a stored Loops tab as Running, in the same position and visibility (ac-restore)', async () => {
+    const reloaded = await loadFrom({
+      version: 1,
+      projects: {
+        [P1]: {
+          tabs: [
+            { id: 'specs', revealRequestId: 0 },
+            { id: 'loops', revealRequestId: 2 },
+            { id: 'files', revealRequestId: 0 },
+          ],
+          activeTabId: 'loops',
+          isOpen: true,
+        },
+      },
+    })
+    const restored = reloaded.selectProjectPanel(reloaded.usePanelTabsStore.getState(), P1)
+    expect(restored.tabs.map((tab) => tab.id)).toEqual(['specs', 'running', 'files'])
+    expect(restored.activeTabId).toBe('running')
+    expect(restored.isOpen).toBe(true)
   })
 
   it('discards state written by a newer version than this build understands', async () => {
