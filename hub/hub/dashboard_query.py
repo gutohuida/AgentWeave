@@ -49,7 +49,7 @@ from urllib.parse import quote
 import regex
 from sqlalchemy.dialects import sqlite as sqlite_dialect
 
-from hub import config
+from hub import config, data_notes
 from hub.db.models import Base
 
 #: Tables no query can read, and what each holds, for the refusal's message.
@@ -270,6 +270,7 @@ def query_reference() -> Dict[str, Any]:
             "Times are UTC text; julianday(end) - julianday(start) gives days between two.",
             f"A query is stopped after {timeout} s; a result is cut at {max_rows} rows "
             "and marked truncated.",
+            data_notes.GUIDANCE,
             "Credentials and this machine's paths are not queryable: "
             + ", ".join(sorted(_forbidden_names()))
             + ".",

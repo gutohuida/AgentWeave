@@ -1688,7 +1688,9 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             text=(
                 "everything a dashboard query can read: each table and column, its type and a "
                 "short meaning, generated from the running Hub, with the query rules and limits. "
-                "Every table holds only this project's rows."
+                "Every table holds only this project's rows. Read the vault note "
+                '`src-27723331ae1d` ("What the project\'s data means, and its traps") with '
+                "`vault_read` before writing a query, and add a trap you find with `vault_append`."
             ),
         ),
         _Operation(

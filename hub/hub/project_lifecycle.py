@@ -16,6 +16,7 @@ from sqlalchemy import Table, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from . import project_repository, readable_ids
+from .data_notes import seed_project as seed_data_notes
 from .db.models import RUNNER_CLIS, Base, Charter, DeletedProject, Project, Run, Runner
 from .project_workspace import (
     PROJECT_MARKER_PATH,
@@ -105,6 +106,7 @@ class ProjectLifecycleService:
             _observe(existing_by_path, canonical)
             await self.session.commit()
             seed_repo_excludes(canonical.path)
+            await seed_data_notes(self.session, existing_by_path.id, canonical.path)
             return existing_by_path
 
         marker = await asyncio.to_thread(_read_marker, canonical.path)
@@ -120,6 +122,7 @@ class ProjectLifecycleService:
                     _observe(marked_project, canonical)
                     await self.session.commit()
                     seed_repo_excludes(canonical.path)
+                    await seed_data_notes(self.session, marked_project.id, canonical.path)
                     # This is the spec's relocation scenario — "an unavailable project's marked
                     # directory is opened at a new path" — reached through open, not through the
                     # relocate route. Guarded on an actual move so an ordinary re-open does not
@@ -152,6 +155,7 @@ class ProjectLifecycleService:
                 _observe(project, canonical)
                 await self._write_marker_and_commit(project, canonical.path)
                 seed_repo_excludes(canonical.path)
+                await seed_data_notes(self.session, project.id, canonical.path)
                 logger.info(
                     "project_adopted project_id=%s path=%s",
                     project.id,
@@ -186,6 +190,7 @@ class ProjectLifecycleService:
         _observe(project, canonical)
         await self._write_marker_and_commit(project, canonical.path)
         seed_repo_excludes(canonical.path)
+        await seed_data_notes(self.session, project.id, canonical.path)
         return project
 
     async def create_new(self, directory: str | Path, *, name: Optional[str] = None) -> Project:
