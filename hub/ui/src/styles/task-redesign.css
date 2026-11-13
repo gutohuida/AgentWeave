@@ -18,8 +18,8 @@
 .aw-tcard:focus-within { border-color: var(--ring); box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring); }
 /* Work that needs the operator carries a quiet edge in its tone, so it is found by scanning. */
 .aw-tcard[data-tone="needs-you"], .aw-tcard[data-tone="failed"] { border-left: 2px solid var(--stage-tone); }
-.aw-tcard[data-stage="on_main"], .aw-tcard[data-stage="closed"] { opacity: .78; }
-.aw-tcard[data-stage="on_main"]:hover, .aw-tcard[data-stage="closed"]:hover { opacity: 1; }
+/* Finished work is quieter by its glyph and thread, not by opacity: dimming text drops it under AA contrast. */
+.aw-tcard[data-stage="on_main"] .aw-tcard-title, .aw-tcard[data-stage="closed"] .aw-tcard-title { color: var(--text-2); }
 
 .aw-tcard-select { position: absolute; top: 10px; right: 10px; z-index: 1; }
 .aw-tcard-main {
@@ -48,9 +48,9 @@
 }
 .aw-tcard-glyph[data-moving="true"] { animation: aw-tcard-stage-in var(--dur-base) var(--ease), aw-tcard-breathe 2.4s ease-in-out var(--dur-base) infinite; }
 .aw-tcard-word { font-weight: 600; color: var(--text); animation: aw-tcard-word-in var(--dur-base) var(--ease); }
-.aw-tcard-age { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.aw-tcard-age { color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
 .aw-tcard-age::before, .aw-tcard-waits::before { content: "·"; margin-right: 6px; color: var(--text-3); }
-.aw-tcard-waits { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
+.aw-tcard-waits { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-2); }
 .aw-tcard-markers { display: inline-flex; gap: 4px; margin-left: auto; flex: none; }
 .aw-tcard-marker {
   display: inline-flex; align-items: center; gap: 2px; height: 18px; padding: 0 5px;
@@ -59,19 +59,22 @@
 .aw-tcard-marker[data-kind="checks"] { color: var(--red); background: color-mix(in oklab, var(--red) 13%, transparent); }
 .aw-tcard-marker[data-kind="critical"] { color: var(--amber); background: color-mix(in oklab, var(--amber) 13%, transparent); }
 
-.aw-tcard-people { color: var(--text-3); }
+.aw-tcard-people { color: var(--text-2); gap: 2px; font-size: 11px; }
+.aw-tcard-actions { position: absolute; right: 6px; top: 4px; display: inline-flex; gap: 2px; z-index: 1; background: var(--surface); border-radius: var(--radius-md, 6px); }
+.aw-tcard[data-dragging="true"] { opacity: .5; }
 .aw-tcard-tag {
-  flex: none; max-width: 7.5em; overflow: hidden; text-overflow: ellipsis;
+  flex: 0 100 auto; min-width: 0; max-width: 7.5em; overflow: hidden; text-overflow: ellipsis;
   padding: 0 6px; height: 17px; line-height: 17px; border-radius: 4px;
   font-size: 10.5px; font-weight: 600; letter-spacing: .02em; color: var(--text-2);
   background: var(--surface-2); border: 1px solid var(--border);
 }
-.aw-tcard-agent { display: inline-flex; align-items: center; gap: 4px; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.aw-tcard-agent { display: inline-flex; align-items: center; gap: 3px; min-width: 11px; flex: 0 1 auto; font-weight: 500; color: var(--text); overflow: hidden; }
+.aw-tcard-agent-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The reviewer keeps its whole name; a long builder name gives way first. */
-.aw-tcard-arrow + .aw-tcard-agent { flex: none; }
+.aw-tcard-arrow + .aw-tcard-agent { flex: none; min-width: 0; }
 .aw-tcard-agent-dot { width: 6px; height: 6px; border-radius: 999px; flex: none; }
 .aw-tcard-arrow { color: var(--text-3); flex: none; }
-.aw-tcard-nobody { color: var(--text-3); font-style: italic; }
+.aw-tcard-nobody { color: var(--text-2); font-style: italic; }
 
 /* ── Thread ──────────────────────────────────────────────────────────── */
 .aw-thread { position: relative; --thread-h: 2px; }
@@ -86,7 +89,7 @@
 .aw-thread-line { right: 0; background: var(--border); }
 .aw-thread-fill {
   width: var(--thread-fill); background: var(--thread-tone);
-  transition: width var(--dur-slow) var(--ease), background-color var(--dur-base) var(--ease);
+  transition: width var(--dur-base) var(--ease), background-color var(--dur-base) var(--ease);
 }
 /* A cut thread runs solid to the knot where it broke; that knot is drawn struck through. */
 .aw-thread-knot {

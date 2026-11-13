@@ -8,7 +8,8 @@ import { agentColorVars } from '@/lib/agentColors'
 import { groupByStanding, isFinished } from '@/lib/taskStage'
 import { taskStatusTone } from '@/lib/taskStatusColors'
 import { BoardColumn, type ColumnDropState } from './BoardColumn'
-import { TaskCardCompact, type RequirementTally } from './TaskCardCompact'
+import { TaskCard } from './TaskCard'
+import type { RequirementTally } from './TaskCardCompact'
 import { CloseForm } from './LooseTaskActions'
 import '@/styles/board.css'
 
@@ -48,7 +49,6 @@ export const BOARD_COLUMNS = [
 export function BoardView({
   tasks,
   agents,
-  tallies,
   workingTaskIds,
   specTags,
   view,
@@ -70,8 +70,8 @@ export function BoardView({
 }: {
   tasks: Task[]
   agents: AgentSummary[]
-  /** Requirement tallies per task id. */
-  tallies: Record<string, RequirementTally>
+  /** Requirement tallies per task id. The card no longer shows them (FR-2); the opened task does. */
+  tallies?: Record<string, RequirementTally>
   /** Tasks whose assignee has a live run on them. */
   workingTaskIds: ReadonlySet<string>
   /** Each spec's short tag by document id, shown on its tasks' cards. */
@@ -293,14 +293,12 @@ export function BoardView({
                   }
                 >
                   {cards.map((task) => (
-                    <TaskCardCompact
+                    <TaskCard
                       key={task.id}
                       task={task}
-                      colorIndex={task.assignee ? colorOf.get(task.assignee) : null}
-                      tally={tallies[task.id]}
-                      working={workingTaskIds.has(task.id)}
-                      finished={isFinished(task)}
+                      colorOf={(name) => colorOf.get(name)}
                       specTag={task.spec_document_id ? specTags?.get(task.spec_document_id) : undefined}
+                      working={workingTaskIds.has(task.id)}
                       selected={task.id === selectedTaskId}
                       select={selecting ? { checked: picked.has(task.id), onToggle: () => togglePicked(task.id) } : undefined}
                       now={now}

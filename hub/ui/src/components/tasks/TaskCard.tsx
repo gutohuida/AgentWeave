@@ -3,7 +3,10 @@ import { Icon } from '@/components/common/Icon'
 import type { Task } from '@/api/tasks'
 import { agentColorVars } from '@/lib/agentColors'
 import { formatDateTime } from '@/lib/format'
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
+import { cardStatus } from '@/lib/taskCardStatus'
 import { builderAndReviewer, formatStageAge } from '@/lib/taskStage'
+import type { CardMoveProps } from './TaskCardCompact'
 import { TONE_COLOR, stageVisual, waitsWording } from '@/lib/taskStageVisual'
 import { StageThread } from './StageThread'
 import '@/styles/task-redesign.css'
@@ -23,7 +26,12 @@ export function TaskCard({
   failedChecks,
   now,
   selected,
+  working,
   onOpen,
+  onRetryIntegration,
+  startAgents,
+  onStartWork,
+  move,
   select,
 }: {
   task: Task
@@ -35,7 +43,15 @@ export function TaskCard({
   failedChecks?: number
   now?: Date
   selected?: boolean
+  /** The assignee has a live run on this task. */
+  working?: boolean
   onOpen: (taskId: string) => void
+  onRetryIntegration?: (taskId: string) => void
+  /** Agents that can be started on this task; the play menu is absent without them. */
+  startAgents?: string[]
+  onStartWork?: (taskId: string, agent: string) => void
+  /** Drag and keyboard moves between columns, supplied by a board that lets cards change status. */
+  move?: CardMoveProps
   /** Present while the board is picking tasks to close together. */
   select?: { checked: boolean; onToggle: () => void }
 }) {
@@ -43,7 +59,11 @@ export function TaskCard({
   const clock = now ?? new Date()
   const reviewed = builderAndReviewer(task)
   const builder = reviewed.builder ?? task.builder ?? task.assignee ?? null
-  const reviewer = reviewed.reviewer
+  // The reviewer is whoever holds the task during review, else the one its build names to check it,
+  // so a card names who will review it before review starts.
+  const reviewer = reviewed.reviewer ?? (task.checker && task.checker !== builder ? task.checker : null)
+  const retry = cardStatus(task, working)?.retry && onRetryIntegration ? onRetryIntegration : null
+  const canStart = Boolean(startAgents && startAgents.length > 0 && onStartWork)
   const age = task.stage_since ? formatStageAge(task.stage_since, clock) : null
   const waitsOn = task.stage_waits_on ?? null
   const stageTitle = [
@@ -56,17 +76,23 @@ export function TaskCard({
     .join(' · ')
   return (
     <article
-      className="aw-tcard"
+      className="aw-tcard aw-reveal-host"
       data-task-id={task.id}
       data-stage={task.stage ?? 'not_started'}
       data-tone={visual.tone}
       data-selected={selected ? 'true' : 'false'}
+      data-dragging={move?.dragging ? 'true' : 'false'}
+      data-actions={retry || canStart ? 'true' : 'false'}
+      draggable={move ? true : undefined}
+      onDragStart={move?.onDragStart}
+      onDragEnd={move?.onDragEnd}
       style={{ '--stage-tone': TONE_COLOR[visual.tone] } as React.CSSProperties}
     >
       {select ? (
         <input
           type="checkbox"
           className="aw-tcard-select"
+          data-testid={`task-select-${task.id}`}
           aria-label={`Select ${task.title}`}
           checked={select.checked}
           onChange={select.onToggle}
@@ -78,19 +104,26 @@ export function TaskCard({
         className="aw-tcard-main"
         data-testid={`task-open-${task.id}`}
         onClick={() => onOpen(task.id)}
-        aria-label={`${task.title}. ${stageTitle}`}
+        aria-label={`Open ${task.title}`}
+        aria-describedby={[`task-stage-text-${task.id}`, move?.instructionsId].filter(Boolean).join(' ')}
+        onKeyDown={(event) => {
+          if (move && event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+            event.preventDefault()
+            move.onMoveByKeyboard(event.key === 'ArrowLeft' ? 'left' : 'right')
+          }
+        }}
       >
         <span className="aw-tcard-title">
-          {task.readable_id ? <span className="aw-tcard-id">{task.readable_id}</span> : null}
+          {task.readable_id ? <span className="aw-tcard-id" data-testid={`task-readable-id-${task.id}`}>{task.readable_id}</span> : null}
           {task.title}
         </span>
 
-        <span className="aw-tcard-line aw-tcard-stage" title={stageTitle} data-testid={`task-stage-${task.id}`}>
+        <span id={`task-stage-text-${task.id}`} className="aw-tcard-line aw-tcard-stage" title={stageTitle} data-testid={`task-stage-${task.id}`}>
           <span key={task.stage ?? 'none'} className="aw-tcard-glyph" data-moving={visual.moving ? 'true' : 'false'}>
             <Icon name={visual.glyph} size={13} />
           </span>
           <span className="aw-tcard-word">{visual.word}</span>
-          {age ? <span className="aw-tcard-age">{age}</span> : null}
+          {age && !(waitsOn && waitsOn.length > WAITS_KEEPS_AGE) ? <span className="aw-tcard-age">{age}</span> : null}
           {waitsOn ? <span className="aw-tcard-waits">{waitsWording(task.stage, waitsOn)}</span> : null}
           <span className="aw-tcard-markers">
             {failedChecks && failedChecks > 0 ? (
@@ -127,17 +160,46 @@ export function TaskCard({
           ) : null}
         </span>
       </button>
+      {retry || canStart ? (
+        <span className="aw-tcard-actions">
+          {retry ? (
+            <button type="button" data-slot="icon-button" className="aw-icon-button" aria-label={`Retry landing ${task.title}`} title="Retry landing" onClick={() => retry(task.id)}>
+              <Icon name="restart_alt" size={13} />
+            </button>
+          ) : null}
+          {canStart ? (
+            <span className="aw-reveal">
+              <Menu>
+                <MenuTrigger data-slot="icon-button" className="aw-icon-button" aria-label={`Start work on ${task.title}`} title="Start an agent on this">
+                  <Icon name="play_arrow" size={13} />
+                </MenuTrigger>
+                <MenuContent align="end">
+                  <MenuLabel>Start work</MenuLabel>
+                  {startAgents!.map((name) => (
+                    <MenuItem key={name} icon="play_arrow" onSelect={() => onStartWork!(task.id, name)}>
+                      Start {name} on this
+                    </MenuItem>
+                  ))}
+                </MenuContent>
+              </Menu>
+            </span>
+          ) : null}
+        </span>
+      ) : null}
       <StageThread stage={task.stage} compact />
     </article>
   )
 }
 
+// A long waits-on line takes the room time at stage would have used; the age stays in the stage tooltip.
+const WAITS_KEEPS_AGE = 16
+
 function Agent({ name, index, title, icon }: { name: string; index: number | null | undefined; title: string; icon?: string }) {
   const color = agentColorVars(index)
   return (
-    <span className="aw-tcard-agent" title={title} style={{ color: color.accent }}>
-      {icon ? <Icon name={icon} size={10} /> : <span className="aw-tcard-agent-dot" style={{ background: color.accent }} />}
-      {name}
+    <span className="aw-tcard-agent" title={title}>
+      {icon ? <Icon name={icon} size={10} style={{ color: color.accent }} /> : <span className="aw-tcard-agent-dot" style={{ background: color.accent }} />}
+      <span className="aw-tcard-agent-name">{name}</span>
     </span>
   )
 }

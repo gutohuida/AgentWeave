@@ -126,14 +126,5 @@ describe('S2 — per-column empty states', () => {
   })
 })
 
-describe('S2 — a card says how its requirements stand', () => {
-  it('tallies verified over total, and marks a rejected one at rest', () => {
-    renderBoard()
-
-    const tally = screen.getByText('1/2 FR')
-    expect(tally).toHaveClass('aw-task-card-reqs')
-    expect(tally).toHaveAttribute('data-rejected', 'true')
-    expect(tally).toHaveAttribute('data-complete', 'false')
-    expect(tally).toHaveAttribute('title', '1 of 2 requirements verified, 1 rejected')
-  })
-})
+// The card no longer shows a requirement tally (task-card-and-story-redesign FR-2): requirements
+// are in the opened task's Work view.
