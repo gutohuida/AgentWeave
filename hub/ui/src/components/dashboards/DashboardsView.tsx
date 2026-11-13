@@ -51,6 +51,8 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
               <li key={d.id} style={{ borderTop: i ? '1px solid var(--border)' : undefined }}>
                 <button
                   type="button"
+                  data-testid="dashboard-row"
+                  data-dashboard-id={d.id}
                   onClick={() => onSelect(d.id)}
                   className="flex w-full items-baseline gap-3 px-4 py-3 text-left"
                   style={{ color: 'var(--text)' }}
@@ -79,7 +81,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6" data-testid="dashboard-open">
+    <div className="mx-auto max-w-4xl p-6" data-testid="dashboard-view" data-dashboard-id={selected.id}>
       <button type="button" onClick={() => onSelect(null)} className="mb-3 inline-flex items-center gap-1 text-xs" style={{ color: 'var(--text-2)' }}>
         <Icon name="arrow_back" size={13} /> All dashboards
       </button>
@@ -98,13 +100,14 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
             {run && (
               <>
                 {' · '}
-                <span data-testid="fetched-at">Fetched {hubDate(run.fetched_at).toLocaleTimeString()}</span>
+                <span data-testid="dashboard-fetched-at" data-fetched-at={hubDate(run.fetched_at).toISOString()}>Fetched {hubDate(run.fetched_at).toLocaleTimeString()}</span>
               </>
             )}
           </p>
         </div>
         <button
           type="button"
+          data-testid="dashboard-refresh"
           onClick={onRefresh}
           disabled={refreshing}
           className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs"
@@ -116,6 +119,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
           <span className="inline-flex items-center gap-2 text-xs">
             <button
               type="button"
+              data-testid="dashboard-delete-confirm"
               onClick={() => onDelete(selected)}
               className="rounded-md px-3 py-1.5"
               style={{ background: 'var(--destructive)', color: 'var(--destructive-fg)' }}
@@ -129,6 +133,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
         ) : (
           <button
             type="button"
+            data-testid="dashboard-delete"
             onClick={() => setConfirming(true)}
             className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs"
             style={{ border: '1px solid var(--border-hi)', color: 'var(--destructive)' }}
@@ -149,7 +154,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
       )}
       <div className="grid gap-4">
         {run?.panels.map((panel) => (
-          <section key={panel.id} data-testid="panel" className="rounded-lg p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <section key={panel.id} data-testid="dashboard-panel" data-panel-id={panel.id} data-kind={panel.kind} className="rounded-lg p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <h2 className="mb-3 text-sm font-medium" style={{ color: 'var(--text)' }}>
               {panel.title}
             </h2>

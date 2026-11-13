@@ -63,7 +63,7 @@ export function NumberChart({ panel }: { panel: PanelRun }) {
   const value = panel.rows[0]?.[column]
   return (
     <div data-testid="chart-number">
-      <div className="text-4xl font-semibold tabular-nums" style={{ color: 'var(--text)' }}>
+      <div data-testid="dashboard-number" className="text-4xl font-semibold tabular-nums" style={{ color: 'var(--text)' }}>
         {isNumber(value ?? null) ? formatNumber(value as number) : String(value ?? '—')}
       </div>
       <div className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
@@ -92,15 +92,22 @@ export function BarChart({ panel, stacked }: { panel: PanelRun; stacked: boolean
             <div className="flex flex-col gap-1">
               {stacked ? (
                 <div className="flex h-4 items-center">
-                  <div className="flex h-full overflow-hidden rounded-sm" style={{ width: `${(totals[i] / max) * 100}%` }}>
-                    {series.map((s) => (
-                      <div
-                        key={s.name}
-                        title={`${s.name}: ${formatNumber(s.values[i])}`}
-                        style={{ width: `${totals[i] ? (Math.max(0, s.values[i]) / totals[i]) * 100 : 0}%`, background: s.color }}
-                      />
-                    ))}
-                  </div>
+                  <svg role="img" aria-label={label} className="h-full" style={{ width: `${(totals[i] / max) * 100}%` }} height="100%">
+                    {series.map((s, k) => {
+                      const before = series.slice(0, k).reduce((sum, o) => sum + Math.max(0, o.values[i]), 0)
+                      return (
+                        <rect
+                          key={s.name}
+                          x={`${totals[i] ? (before / totals[i]) * 100 : 0}%`}
+                          width={`${totals[i] ? (Math.max(0, s.values[i]) / totals[i]) * 100 : 0}%`}
+                          height="100%"
+                          fill={s.color}
+                        >
+                          <title>{`${s.name}: ${formatNumber(s.values[i])}`}</title>
+                        </rect>
+                      )
+                    })}
+                  </svg>
                   <span className="ml-2 tabular-nums" style={{ color: 'var(--text-3)' }}>
                     {formatNumber(totals[i])}
                   </span>
@@ -108,11 +115,17 @@ export function BarChart({ panel, stacked }: { panel: PanelRun; stacked: boolean
               ) : (
                 series.map((s) => (
                   <div key={s.name} className="flex h-4 items-center">
-                    <div
-                      className="h-full rounded-sm"
-                      title={`${s.name}: ${formatNumber(s.values[i])}`}
-                      style={{ width: `${(Math.max(0, s.values[i]) / max) * 100}%`, minWidth: s.values[i] > 0 ? 2 : 0, background: s.color }}
-                    />
+                    <svg
+                      role="img"
+                      aria-label={`${label} · ${s.name}`}
+                      className="h-full"
+                      height="100%"
+                      style={{ width: `${(Math.max(0, s.values[i]) / max) * 100}%`, minWidth: s.values[i] > 0 ? 2 : 0 }}
+                    >
+                      <rect width="100%" height="100%" rx={2} fill={s.color}>
+                        <title>{`${s.name}: ${formatNumber(s.values[i])}`}</title>
+                      </rect>
+                    </svg>
                     <span className="ml-2 tabular-nums" style={{ color: 'var(--text-3)' }}>
                       {formatNumber(s.values[i])}
                     </span>
@@ -200,6 +213,7 @@ export function TableChart({ panel }: { panel: PanelRun }) {
               {row.map((cell, c) => (
                 <td
                   key={c}
+                  data-testid="dashboard-table-cell"
                   className={`px-3 py-1.5 align-top ${isNumber(cell) ? 'text-right tabular-nums' : ''}`}
                   style={{ color: cell === null ? 'var(--text-3)' : 'var(--text)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
                 >
@@ -220,7 +234,7 @@ export function PanelChart({ panel }: { panel: PanelRun }) {
     return (
       <div
         role="alert"
-        data-testid="panel-error"
+        data-testid="dashboard-panel-error"
         className="rounded-md px-3 py-2 text-xs"
         style={{ background: 'var(--error-cont)', color: 'var(--on-error-cont)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
       >
@@ -231,7 +245,7 @@ export function PanelChart({ panel }: { panel: PanelRun }) {
   if (panel.warning) {
     return (
       <div
-        data-testid="panel-warning"
+        data-testid="dashboard-panel-warning"
         className="rounded-md px-3 py-2 text-xs"
         style={{ background: 'color-mix(in srgb, var(--amber) 14%, transparent)', color: 'var(--amber)' }}
       >
@@ -252,7 +266,7 @@ export function PanelChart({ panel }: { panel: PanelRun }) {
       return <TableChart panel={panel} />
     default:
       return (
-        <div data-testid="panel-warning" className="text-xs" style={{ color: 'var(--amber)' }}>
+        <div data-testid="dashboard-panel-warning" className="text-xs" style={{ color: 'var(--amber)' }}>
           This panel names a chart kind the app does not draw: {panel.kind}.
         </div>
       )

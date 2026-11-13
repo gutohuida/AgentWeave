@@ -409,6 +409,15 @@ async def _loop_flow_busy_refusal(
         return LoopBusyRefusal(busy_reason, BUSY_EMPTY_QUEUE)
     if await _agents_a_loop_may_staff(session, loop, facts):
         return None
+    # **Or an idle assignee could resume this loop's own task** (F1171). The pool above is for
+    # fresh work, and it counts an agent holding a task in this loop as spoken for -- by this
+    # loop, for the very task this firing would resume, so a send-back to an idle builder waited
+    # for the job's agent to finish whatever it was doing. Flows only: a documentless loop's work
+    # is its one agent's, so its guard stays *busy, full stop* (design D3).
+    if loop.spec_document_id is not None and await _loop_task_an_idle_assignee_could_resume(
+        session, loop, facts
+    ):
+        return None
     # The same predicate `_agents_a_loop_may_staff` uses for its own empty answer.
     condition = BUSY_LOOP_SCOPE if loop.spec_document_id is None else BUSY_NO_FREE_AGENT
     return LoopBusyRefusal(busy_reason, condition)
@@ -1840,6 +1849,50 @@ async def _agents_a_loop_may_staff(
     withheld = await _agents_withheld_from_fresh_work(session, loop, facts)
     build = await facts.build_of_loop(loop)
     return [name for name in free if _pool_admits(name, withheld, build)]
+
+
+async def _loop_task_an_idle_assignee_could_resume(
+    session: AsyncSession, loop: Loop, facts: "Optional[FiringFacts]" = None
+) -> bool:
+    """Whether `decide_firing`'s resumption arm would brief somebody on one of *loop*'s tasks now
+    (F1171): an open, startable task of ordinary work whose assignee is idle and unattended on it.
+
+    "Idle" is `_agents_that_are_free`'s test with the assignee's holdings **in this loop** left
+    out: this loop's walk is what would move them, and the task it would move is one of them. A
+    holding another live loop or a queued turn will move still speaks for the agent, as it does
+    everywhere else. The task-level half mirrors the walk's own refusals -- a turn already on the
+    task, input for the pair refused or abandoned -- so the guard does not let through a firing
+    the walk would then select nothing for.
+    """
+    facts = facts or FiringFacts(session)
+    idle = {
+        record.name
+        for record in await _roster_availability(session, loop.project_id, facts)
+        if record.has_runner
+        and not record.running
+        and not record.held
+        and not any(h.reachable and h.loop_id != loop.id for h in record.holdings)
+    }
+    if not idle:
+        return False
+    held = await facts.running_tasks(loop.project_id)
+    attendance = await facts.attendance(loop.project_id)
+    for task in await facts.loop_candidates(loop):
+        agent = task.assignee
+        if (
+            agent not in idle
+            or task.status in REVIEWABLE_LOOP_TASK_STATUSES
+            or task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
+            or task.id in held
+            or attendance.attends(task.id, agent)
+            or attendance.refusal(task.id, agent) is not None
+            or attendance.abandonment(task.id, agent) is not None
+        ):
+            continue
+        startable, _refusal = await candidate_is_startable(session, task, facts)
+        if startable:
+            return True
+    return False
 
 
 def _builder_is_a_preference(task: Task, build: Any) -> bool:

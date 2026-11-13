@@ -53,9 +53,9 @@ describe('DashboardsView', () => {
       panel({ id: 'b', title: 'flat', kind: 'line', columns: ['l', 'v'], rows: [['x', 'y']], warning: 'needs a numeric column' }),
       panel({ id: 'c', title: 'ok', kind: 'number', columns: ['c'], rows: [[7]] }),
     ])
-    expect(screen.getByTestId('panel-error').textContent).toContain('no such column: nope')
-    expect(screen.getByTestId('panel-warning').textContent).toContain('needs a numeric column')
-    expect(screen.getByTestId('chart-number').textContent).toContain('7')
+    expect(screen.getByTestId('dashboard-panel-error').textContent).toContain('no such column: nope')
+    expect(screen.getByTestId('dashboard-panel-warning').textContent).toContain('needs a numeric column')
+    expect(screen.getByTestId('dashboard-number').textContent).toBe('7')
   })
 
   it('refreshes, and deletes only after confirming', () => {
@@ -68,6 +68,21 @@ describe('DashboardsView', () => {
     expect(onDelete).not.toHaveBeenCalled()
     fireEvent.click(screen.getByText('Delete dashboard'))
     expect(onDelete).toHaveBeenCalledWith(summary)
-    expect(screen.getByTestId('fetched-at')).toBeTruthy()
+    expect(screen.getByTestId('dashboard-fetched-at').getAttribute('data-fetched-at')).toMatch(/^\d{4}-\d\d-\d\dT/)
+    expect(screen.getByTestId('dashboard-view').getAttribute('data-dashboard-id')).toBe(summary.id)
+    expect(screen.getByTestId('dashboard-refresh')).toBeTruthy()
+  })
+
+  it('carries the acceptance drive ids: panels by kind, SVG bars, table cells', () => {
+    open([
+      panel({ id: 'c', title: 'b', kind: 'bar', columns: ['l', 'v'], rows: [['x', 1], ['y', 2]] }),
+      panel({ id: 'd', title: 's', kind: 'stacked_bar', columns: ['l', 'v', 'w'], rows: [['x', 1, 2]] }),
+      panel({ id: 'b', title: 't', kind: 'table', columns: ['c'], rows: [['v']] }),
+    ])
+    for (const kind of ['bar', 'stacked_bar']) {
+      const panel = document.querySelector(`[data-testid=dashboard-panel][data-kind=${kind}]`)
+      expect(panel?.querySelector('svg')).toBeTruthy()
+    }
+    expect(screen.getAllByTestId('dashboard-table-cell').length).toBeGreaterThan(0)
   })
 })

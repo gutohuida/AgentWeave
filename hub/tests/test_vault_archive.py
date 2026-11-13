@@ -194,6 +194,7 @@ def test_the_archive_routes_have_a_client() -> None:
     # whose page is AOTCT-4, which owes them back. 22 -> 23 2026-11-12: CNCC-2 (spdoc-f214c91aac0e)
     # added PUT /documents/{path}/capabilities, whose client CNCC-3 added: 23 -> 22.
     # 22 -> 23 2026-11-12: TOFMF-2 added POST /tasks/close, whose client is TOFMF-3.
+    # 23 -> 24 -> 23 2026-11-13: SPSCT-2 added the Changes routes, SPSCT-3 their tab client.
     # 23 -> 27 2026-11-13: AAADG-3 (spdoc-0d8c0e384a38) added the operator dashboards paths; their
     # screen is AAADG-4, which owes back the ones it reaches.
     assert len(orphans) <= 27, f"clientless routes grew past the ratchet: {len(orphans)}"
