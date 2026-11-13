@@ -41794,3 +41794,13 @@ The flow for "The side panel's Changes tab shows what the agent changed" (job `j
 **Tier:** 0
 
 An author reading `ready_to_approve` told the operator the document was ready while a decision was open. **Expected:** false while any non-deferred question is unresolved; resolving it flips it true.
+
+## F1173 (A) -- `submit_spec_document` warns "a builder with no reason" but never names the field that holds one
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-13
+**Theme:** Specs
+**Ready:** yes
+**Tier:** 0
+
+Authoring `spec/changes/a-hand-started-task-reaches-review-and-merge`, every task named a `builder` and `checker` and the save answered `recommended_people`: "task '<key>' has a builder with no reason; a checker with no reason". The tool's description says a task "may name its `builder` and its `checker`" and says nothing about reasons; `delivery` takes a `reasons` object, so the author tried `tasks[n].reasons` and the save was refused `unknown_field` ×5. The fields are `builder_reason` and `checker_reason` (`hub/hub/spec_completeness.py:638-642`), found only by reading the Hub. **Expected:** the tool's description names `builder_reason`/`checker_reason` beside `builder`/`checker`, and the `recommended_people` warning names the missing field. **Test:** the tool description contains both field names; a save with a builder and no `builder_reason` answers a warning that contains `builder_reason`. Mind the tool-surface snapshot test (`test_copilot_context_split`).
