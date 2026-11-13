@@ -123,7 +123,7 @@ export function TaskCard({
             <Icon name={visual.glyph} size={13} />
           </span>
           <span className="aw-tcard-word">{visual.word}</span>
-          {age ? <span className="aw-tcard-age">{age}</span> : null}
+          {age && !(waitsOn && waitsOn.length > WAITS_KEEPS_AGE) ? <span className="aw-tcard-age">{age}</span> : null}
           {waitsOn ? <span className="aw-tcard-waits">{waitsWording(task.stage, waitsOn)}</span> : null}
           <span className="aw-tcard-markers">
             {failedChecks && failedChecks > 0 ? (
@@ -191,12 +191,15 @@ export function TaskCard({
   )
 }
 
+// A long waits-on line takes the room time at stage would have used; the age stays in the stage tooltip.
+const WAITS_KEEPS_AGE = 16
+
 function Agent({ name, index, title, icon }: { name: string; index: number | null | undefined; title: string; icon?: string }) {
   const color = agentColorVars(index)
   return (
     <span className="aw-tcard-agent" title={title}>
       {icon ? <Icon name={icon} size={10} style={{ color: color.accent }} /> : <span className="aw-tcard-agent-dot" style={{ background: color.accent }} />}
-      {name}
+      <span className="aw-tcard-agent-name">{name}</span>
     </span>
   )
 }
