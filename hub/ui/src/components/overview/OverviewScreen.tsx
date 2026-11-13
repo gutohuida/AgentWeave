@@ -26,6 +26,7 @@ import { AgentPostureChips } from './AgentPostureChips'
 import { KnownFailingList } from './KnownFailingList'
 import { ReopeningWarnings } from './ReopeningWarnings'
 import { ProjectSetupList } from './ProjectSetupList'
+import { ProjectFirstRun } from './ProjectFirstRun'
 import { OverviewView, type AgentStripItem, type FinishedItem, type NeedItem, type RunningItem } from './OverviewView'
 
 /** The Hub's own agent for stalled work (`hub/hub/stalls.py`, `MENDER`). */
@@ -410,6 +411,7 @@ export function OverviewScreen({
       onOpenQuestions={() => onNavigate('questions')}
       onAddAgent={onAddAgent}
       setup={<ProjectSetupList place="overview" onAddAgent={onAddAgent} />}
+      firstRun={<ProjectFirstRun onAddAgent={onAddAgent} />}
       knownFailing={
         // A Hub older than the list answers null: it has none to show, so no section.
         knownFailing ? (
