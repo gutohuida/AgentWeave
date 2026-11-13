@@ -970,8 +970,9 @@ def dashboard_query_reference() -> Dict[str, Any]:
     generated from the running Hub, with the query rules in `notes` and the limits.
 
     Every table holds only the current project's rows, so no project filter is needed. Read it
-    before writing a query with `run_dashboard_query`; the vault holds what the data means and its
-    traps.
+    before writing a query with `run_dashboard_query`, and read the vault note `src-27723331ae1d`
+    ("What the project's data means, and its traps") with `vault_read`: where a straightforward
+    count gives the wrong answer. When you find another trap, add it with `vault_append`.
     """
     return _hub_request("GET", "/dashboards/query-reference")
 

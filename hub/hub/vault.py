@@ -1043,10 +1043,14 @@ def _store(
     extension: str,
     data: bytes,
     added_by: Optional[str] = None,
+    entry_id: Optional[str] = None,
+    stub: bool = True,
 ) -> Tuple[Dict[str, Any], str]:
     """Write a new source's body as `sources/<id>.<extension>`, then its metadata; answer the
-    metadata and where the body went. *added_by* is the agent that added it by path, if one did."""
-    entry_id = f"src-{secrets.token_hex(6)}"
+    metadata and where the body went. *added_by* is the agent that added it by path, if one did.
+    *entry_id* and *stub* are for a source the Hub seeds (`seed_source`): its fixed id, and no
+    stub of a private one under `knowledge/`."""
+    entry_id = entry_id or f"src-{secrets.token_hex(6)}"
     meta = {
         "id": entry_id,
         "name": name,
@@ -1068,7 +1072,7 @@ def _store(
     # leaves an unlisted file rather than a listed entry with no body.
     storage.write(body_root, f"{SOURCES}/{entry_id}.{extension}", data)
     storage.write(body_root, f"{SOURCES}/{entry_id}.json", _encode(meta))
-    if visibility == "private":
+    if visibility == "private" and stub:
         keys = ["id", "name", "type", "visibility", "created_at", "dated"]
         if media_type != TEXT_MEDIA_TYPE:
             keys.append("media_type")  # so a colleague's checkout can tell a scan from a note
@@ -1120,6 +1124,50 @@ def add_source(
         data=data,
         added_by=added_by,
     )
+    return _Record(meta, body_root).listed(content)
+
+
+def seed_source(
+    project_root: Path,
+    private_root: Path,
+    *,
+    entry_id: str,
+    name: str,
+    type: str,  # noqa: A002 -- the field's own name
+    content: str,
+    added_by: str,
+) -> Optional[Dict[str, Any]]:
+    """Write a text source the Hub seeds under the fixed *entry_id*, unless the project already
+    has one by that id, archived or not; answer it as the map lists it, or None when it was there.
+
+    It is private and leaves no stub under `knowledge/`, so seeding writes nothing into the
+    project's folder: opening a folder writes only the Hub's own, and a new project's first
+    commit stays clean. The id is the same in every project, so guidance can name it. Never
+    rewrites what is there: text agents have appended stays.
+    """
+    if not _ID_RE.match(entry_id):
+        raise VaultError(f"not a source id: {entry_id!r}")
+    relative = f"{SOURCES}/{entry_id}.json"
+    with _write_lock(project_root, entry_id):
+        if (
+            storage.read(str(private_root), relative) is not None
+            or storage.read(tracked_root(project_root), relative) is not None
+        ):
+            return None
+        meta, body_root = _store(
+            project_root,
+            private_root,
+            name=name,
+            type=type,
+            visibility="private",
+            dated=None,
+            media_type=TEXT_MEDIA_TYPE,
+            extension="md",
+            data=content.encode("utf-8"),
+            added_by=added_by,
+            entry_id=entry_id,
+            stub=False,
+        )
     return _Record(meta, body_root).listed(content)
 
 
