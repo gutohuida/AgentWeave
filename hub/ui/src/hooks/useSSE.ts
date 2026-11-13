@@ -57,6 +57,9 @@ const SSE_EVENT_TYPES = [
   'job_updated',
   'job_deleted',
   'job_fired',
+  // A dashboard was saved by an agent or deleted by the operator (`api/v1/dashboards.py`).
+  'dashboard_saved',
+  'dashboard_deleted',
   // A chapters version was committed (`hub/hub/chapters.py` save): the Thread page refreshes.
   'chapters_updated',
   'loop_stopped',
@@ -686,6 +689,10 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
           }
           break
         }
+        case 'dashboard_saved':
+        case 'dashboard_deleted':
+          inv({ queryKey: ['project', pid, 'dashboards'] })
+          break
         case 'job_created':
         case 'job_updated':
         case 'job_deleted':
