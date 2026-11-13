@@ -3,6 +3,8 @@ import type { ChatHistoryResponse } from '@/api/agentChat'
 import { conversationLabel } from '@/api/agentChat'
 import { AgentTimeline } from '@/components/agents/AgentTimeline'
 import { Icon } from '@/components/common/Icon'
+import type { DiffFile } from '@/components/common/DiffView'
+import { diffStat } from '@/lib/diffLines'
 import { ChangesTab } from '@/components/panel/ChangesTab'
 import { FilesTab } from '@/components/panel/FilesTab'
 import type { PanelLocation } from '@/components/panel/LocationSwitch'
@@ -105,7 +107,7 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
       )
     }
     if (id === ID.changes) {
-      return <ChangesTab agent={agent} branch={`agentweave/${agent}`} base={BASE_BRANCH} turn={TURN_CHANGES} wholeBranch={BRANCH_CHANGES} onOpenFile={openFile} />
+      return <MockChanges agent={agent} onOpenFile={openFile} />
     }
     if (id === ID.files) {
       return (
@@ -220,5 +222,31 @@ function MockShell({ fresh, dir }: { fresh: boolean; dir: string }) {
         </div>
       ))}
     </pre>
+  )
+}
+
+/** The real ChangesTab, fed the fixtures in the shape the Hub's route answers. */
+function MockChanges({ agent, onOpenFile }: { agent: string; onOpenFile: (path: string) => void }) {
+  const [scope, setScope] = React.useState<'turn' | 'branch'>('turn')
+  const [selected, setSelected] = React.useState<string | null>(null)
+  const info = (f: DiffFile) => {
+    const [added, removed] = diffStat(f.patch)
+    return { path: f.path, status: f.status, added, removed, binary: false }
+  }
+  const file = (scope === 'turn' ? TURN_CHANGES : BRANCH_CHANGES).find((f) => f.path === selected)
+  return (
+    <ChangesTab
+      agent={agent}
+      data={{ state: 'ok', agent, branch: `agentweave/${agent}`, base: BASE_BRANCH, turn: TURN_CHANGES.map(info), since_base: BRANCH_CHANGES.map(info), running: false, working_now: [] }}
+      scope={scope}
+      onScopeChange={(next) => {
+        setScope(next)
+        setSelected(null)
+      }}
+      selected={selected}
+      onSelect={setSelected}
+      patch={file ? { status: 'ready', patch: { path: file.path, patch: file.patch, binary: false, truncated: false, total_lines: file.patch.split('\n').length } } : null}
+      onOpenFile={onOpenFile}
+    />
   )
 }

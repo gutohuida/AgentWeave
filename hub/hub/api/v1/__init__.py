@@ -9,6 +9,7 @@ from .agent_chat import instance_conversations_router
 from .agent_chat import router as agent_chat_router
 from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
+from .changes import router as changes_router
 from .charters import router as charters_router
 from .checkpoints import router as checkpoints_router
 from .checks import checks_router
@@ -77,6 +78,7 @@ project_resources_router.include_router(loops_router)
 project_resources_router.include_router(instructions_router)
 project_resources_router.include_router(spec_router)
 project_resources_router.include_router(logs_router)
+project_resources_router.include_router(changes_router)
 project_resources_router.include_router(worktrees_router)
 project_resources_router.include_router(inbound_queue_router)
 project_resources_router.include_router(queue_statuses_router)
