@@ -111,13 +111,11 @@ describe('SpecPhaseBar approval warnings', () => {
       'approval-warning-requirement_without_criterion',
       'approval-warning-steps_skipped',
     ])
-    const first = lines[0]
-    expect(first).toHaveTextContent('5')
-    expect(first).toHaveTextContent('requirements.alpha')
-    expect(first).toHaveTextContent('requirements.gamma')
-    expect(first).not.toHaveTextContent('requirements.delta')
-    expect(first).toHaveTextContent('2 more')
-    expect(lines[1]).toHaveTextContent('acceptance, tasks')
+    expect(lines[0]).toHaveTextContent('5 requirements have no acceptance criterion')
+    expect(lines[1]).toHaveTextContent('This spec skipped steps')
+    // AW-127: plain words — no snake_case code, no route.
+    expect(list.textContent).not.toMatch(/[a-z]+_[a-z_]+/)
+    expect(list.textContent).not.toMatch(/\/api\//)
   })
 
   it('Approve anyway resends the approval with approve_anyway and clears the list on success', async () => {

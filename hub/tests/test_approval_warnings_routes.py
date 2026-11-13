@@ -352,3 +352,23 @@ async def test_check_and_approve_name_tasks_that_declare_no_files(
     detail = refused.json()["detail"]
     found = named([*detail["warnings"], *detail.get("notes", [])])
     assert found and "'t-one'" in found[0]["message"] and "'t-two'" in found[0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_check_lists_every_gap_approve_lists(
+    app, auth_headers, run_headers, tmp_path
+):  # noqa: F811
+    """AW-127: Check said "ready" over a document Approve then listed `steps_skipped` for."""
+    await _create(app, auth_headers)
+    _write(tmp_path, _steps(THREAT))
+    await _submit(app, run_headers, _document())
+    await _place(step="requirements", size="large")
+
+    checked = (await _check(app, auth_headers)).json()
+    refused = await _phase(app, auth_headers, "approved")
+
+    assert refused.status_code == 409, refused.text
+    approve_codes = {w["code"] for w in refused.json()["detail"]["warnings"]}
+    check_codes = {w["code"] for w in checked["warnings"]}
+    assert "steps_skipped" in approve_codes
+    assert approve_codes <= check_codes
