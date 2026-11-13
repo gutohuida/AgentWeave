@@ -209,3 +209,12 @@ hub/ui/mock/before/
 
 # The brand kit keeps its rasters (the rest of the repo ignores *.png).
 !brand/**/*.png
+
+# Internal working material, untracked 2026-11-13 before going public (operator's call): kept on
+# disk in the main checkout, out of the public repository. spec/ stays tracked as the record of
+# how AgentWeave is built; knowledge/ is the vault's own storage and is governed by each entry's
+# visibility, not by this file.
+spec-queue/
+design/
+.claude/autonomous/
+.claude/work-pc/
