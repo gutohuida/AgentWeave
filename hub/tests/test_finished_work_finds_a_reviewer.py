@@ -295,6 +295,40 @@ async def test_the_completing_turns_end_asks(
     staffed.assert_awaited_once_with("proj-test", TASK, ending_run_id="run-end")
 
 
+async def test_a_reviewer_busy_at_completion_is_asked_again_when_its_turn_ends(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """QA, 2026-11-13: the only other agent mid-turn at completion left the task `completed` for
+    good -- rung 3 said "no reviewer is free" and, outside a build, nothing asked again."""
+    await _finished_by_its_builder(
+        app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch, "critic"
+    )
+    async with async_session_factory() as db:
+        db.add(Run(id="run-c", project_id="proj-test", agent="critic", status="running"))
+        await db.commit()
+
+    reviewer, started = await _staff()
+    assert reviewer is None
+    started.assert_not_awaited()
+    shown = (await app.get(TASK_URL, headers=auth_headers)).json()
+    assert "no reviewer is free" in shown["stage_detail"]
+
+    # critic's unrelated turn ends: it is free, and the waiting task finds it.
+    async with async_session_factory() as db:
+        (await db.get(Run, "run-c")).status = "completed"
+        await db.commit()
+    with patch("hub.turn_scheduler.schedule_accepted", AsyncMock()) as started:
+        review_on_completion.after_run("proj-test", "run-c")
+        await review_on_completion.drain()
+
+    started.assert_awaited_once_with("proj-test", "critic")
+    [entry] = await _review_entries()
+    assert entry.agent == "critic" and entry.state == "queued"
+    await _dispatch("critic")
+    task = await _task()
+    assert (task.status, task.assignee) == ("under_review", "critic")
+
+
 async def test_a_decided_check_run_asks(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):

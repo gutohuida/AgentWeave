@@ -272,23 +272,48 @@ async def _hand_over(
     return reviewer
 
 
+async def _waiting_for_a_reviewer(session: AsyncSession, project_id: str) -> "list[str]":
+    """Completed tasks this path once could not staff (`review_unstaffed`), oldest first.
+
+    Rung 3 surfaces "no reviewer is free" while every other agent is mid-turn. In a build the
+    flow's next tick asks again; out of one nothing would, so any run's end -- an agent going
+    idle -- asks again for these. `staff_review` leaves a build's or a loop's tasks to them, and
+    `_surface` writes a reason only once, so asking a task nobody can yet review costs nothing."""
+    unstaffed = (
+        select(EventLog.data["task_id"].as_string())
+        .where(EventLog.project_id == project_id, EventLog.event_type == REVIEW_UNSTAFFED)
+        .scalar_subquery()
+    )
+    rows = await session.execute(
+        select(Task.id)
+        .where(Task.project_id == project_id, Task.status == "completed", Task.id.in_(unstaffed))
+        .order_by(Task.updated.asc(), Task.id.asc())
+    )
+    return [task_id for (task_id,) in rows.all()]
+
+
 async def _after_run(project_id: str, run_id: str) -> None:
     try:
         async with async_session_factory() as session:
             run = await session.get(Run, run_id)
             task_id = run.task_id if run is not None else None
+            waiting = await _waiting_for_a_reviewer(session, project_id)
     except Exception:  # noqa: BLE001
         logger.warning("could not read run %s to staff its task's review", run_id, exc_info=True)
         return
     if task_id:
         await staff_review(project_id, task_id, ending_run_id=run_id)
+    for other in waiting:
+        if other != task_id:
+            await staff_review(project_id, other, ending_run_id=run_id)
 
 
 _pending: "set[asyncio.Task[None]]" = set()
 
 
 def after_run(project_id: str, run_id: str) -> None:
-    """At a run's end, after its snapshot commit: review the completed task it was bound to.
+    """At a run's end, after its snapshot commit: review the completed task it was bound to, and
+    ask again for completed tasks that found no reviewer free -- the run's agent is free now.
 
     A project with no checks has nothing to decide, so this is where its finished work finds a
     reviewer; with checks it finds them waiting, and their decision asks again. Never raises.
