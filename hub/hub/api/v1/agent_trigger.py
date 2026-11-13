@@ -174,8 +174,10 @@ from ...sse import sse_manager
 from ...task_transition_service import (
     ORIGIN_ACTOR,
     ORIGIN_JOB,
+    ORIGIN_RUNTIME,
     TransitionRefusedError,
 )
+from ...task_transitions import operator, run_actor
 from ...usage_accounting import (
     project_budget_state,
     record_turn_usage,
@@ -789,6 +791,13 @@ async def _review_cause_from_entries(
     D-context): an operator entry among them means the operator asked (`actor`, as before);
     otherwise an entry a scheduled job queued means the job did. A divergence restaff, or a review
     named by the request alone, stays the operator's request -- a cause this change does not name.
+
+    **The Hub's own hand-off to a reviewer** (`mender.hand_to_review` queued by
+    `review_on_completion` -- a `job` entry with no job -- or by the mender) is recorded as
+    `runtime`, which the caller stages as the reviewer's own run: the Hub acts *as* that run, the
+    way it moves a task to `in_progress` when a run binds (HSTRR-6). It fell through to `actor`
+    before, staged as the operator, so a task's history said the operator had started a review
+    nobody asked for (two acceptance drives, 2026-11-13).
     """
     if not queue_entry_ids:
         return ORIGIN_ACTOR, None
@@ -808,6 +817,8 @@ async def _review_cause_from_entries(
     for origin_type, job_id in rows:
         if origin_type == "job" and job_id:
             return ORIGIN_JOB, job_id
+    if any(origin_type in ("job", "mender") for origin_type, _ in rows):
+        return ORIGIN_RUNTIME, None
     return ORIGIN_ACTOR, None
 
 
@@ -1335,6 +1346,10 @@ async def _trigger_agent_directly(
             # About what was asked: no repair to the environment makes this turn safe to start.
             request_level=True,
         )
+    # Minted before the review is staged, so a review the Hub started by itself is recorded as this
+    # run's move rather than the operator's (HSTRR-6). Only a string until the `Run` row is written
+    # below, and a refused dispatch rolls the staged transition back with everything else.
+    run_id = f"run-{short_id()}"
     review_context = None
     if review_task_id:
         if work_dir:
@@ -1422,6 +1437,9 @@ async def _trigger_agent_directly(
                 is_review=True,
                 origin=review_origin,
                 job_id=review_job_id,
+                # The Hub's own review is staged as the reviewer's run, whose id is already
+                # minted above; the operator's and a job's stay the operator's authority.
+                actor=(run_actor(run_id, agent) if review_origin == ORIGIN_RUNTIME else operator()),
             )
         except TransitionRefusedError as exc:
             # The guard's own sentence, not a restatement of it: it already names the remedy for
@@ -1948,7 +1966,6 @@ async def _trigger_agent_directly(
         # `run_turn`, from `RpcTurnRequest` — nobody downstream reads an unused `cmd` (design D6).
         cmd = []
 
-    run_id = f"run-{short_id()}"
     run_token = mint_run_token()
 
     # Task 4.1: identity is established here, once, by the Hub — never asserted by the

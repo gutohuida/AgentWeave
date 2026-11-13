@@ -27,6 +27,8 @@ PASS only if, at the end:
      operator: "Land it" is the operator's move and is never pressed here)
   c  the task has evidence, none of it left awaiting, and at least one piece accepted
   d  the accepted evidence's commit is on `main`, and `main` moved past the seed commit
+  e  every move to `under_review` is a run's or a job's, not the operator's own (HSTRR-6: the Hub
+     started the review, so the history must not say the operator did)
 
 It prints PASS/FAIL per check, then the task's status, its transitions, its evidence and
 `git log --oneline main`. Exit 0 on PASS, 1 on FAIL. On master (before the build) it is expected to
@@ -408,6 +410,14 @@ def report(base, root, task_id, seed):
           f"evidence commits on main={ {c[:12]: ok for c, ok in sorted(placed.items())} } "
           f"main={head[:12]} seed={seed[:12]}" if placed else
           f"no evidence names a commit; main={head[:12]} seed={seed[:12]}")
+    # HSTRR-6: the Hub started this review by itself, so the operator did not -- the move into
+    # review is the reviewer's run (or a job's), never `operator` with no cause of its own.
+    reviews = [t for t in transitions if t.get("to_status") == "under_review"]
+    check("e the review the Hub started is not attributed to the operator",
+          bool(reviews) and all(t.get("actor_kind") != "operator" or t.get("origin") != "actor"
+                                for t in reviews),
+          ", ".join(f"{t.get('actor_kind')}/{t.get('actor_agent')} origin={t.get('origin')}"
+                    for t in reviews) or "no move to under_review")
 
 
 def main():
