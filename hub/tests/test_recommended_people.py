@@ -13,9 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy import update
 
-from hub import landing_queue
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Build, Loop, Run, SpecDocument, Task, TaskLanding
+from hub.db.models import AIJob, Build, Loop, Run, SpecDocument, Task
 from hub.scheduler import JobScheduler, decide_firing
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import operator
@@ -32,6 +31,7 @@ from .test_a_build_has_a_driver_a_level_and_its_people import (
     _tasks_by_key,
     author_headers,  # noqa: F401 -- a fixture
 )
+from .test_a_finished_build_leaves_its_flow_working import _all_landed
 from .test_review_turn import _roster
 
 AGENT_TASKS = "/api/v1/agent-actions/tasks"
@@ -61,14 +61,13 @@ async def _finish(ago: timedelta = timedelta(hours=1)) -> None:
             for status in ("in_progress", "completed", "under_review", "approved"):
                 await apply_transition(db, row, status, operator())
             await db.commit()
-    await landing_queue.drain(P)
+    # The build finishes once its work has landed, and that ends its flow.
+    await _all_landed()
     async with async_session_factory() as db:
-        await db.execute(update(TaskLanding).values(state="landed"))
         await db.execute(update(Build).values(stopped_at=datetime.now(timezone.utc) - ago))
         await db.commit()
     (build,) = await _rows(Build)
     assert build.state == "finished"
-    # Its flow outlived its last approval for that landing; the next firing ends it, if drained.
     for loop in await _rows(Loop):
         await _fire(loop.job_id)
 
@@ -202,10 +201,7 @@ async def test_ac_reopen_a_finished_build_reopens_as_it_was(
         for status in ("in_progress", "completed", "under_review", "approved"):
             await apply_transition(db, row, status, operator())
         await db.commit()
-    await landing_queue.drain(P)
-    async with async_session_factory() as db:
-        await db.execute(update(TaskLanding).values(state="landed"))
-        await db.commit()
+    await _all_landed()
     assert (await _only_build()).state == "finished"
     assert await _shown(app, auth_headers) == "done"
 
@@ -281,6 +277,7 @@ async def test_ac_warning_clears_when_the_build_ends_and_when_dismissed(
         for status in ("in_progress", "completed", "under_review", "approved"):
             await apply_transition(db, row, status, operator())
         await db.commit()
+    await _all_landed()
     assert (await _only_build()).state == "finished"
     assert await _warnings(app, auth_headers) == []
 

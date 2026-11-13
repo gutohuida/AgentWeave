@@ -444,6 +444,11 @@ async def test_a_finished_build_ends_its_loop(app, auth_headers, author_headers,
             for status in ("in_progress", "completed", "approved"):
                 await apply_transition(db, row, status, operator())
             await db.commit()
+    # An approval's landing runs in the background: one still merging would write its own outcome
+    # over this update. The build finishes once its work has landed: the firing finds it so.
+    from hub import landing_queue
+
+    await landing_queue.drain(P)
     async with async_session_factory() as db:
         await db.execute(update(TaskLanding).values(state="landed"))
         await db.commit()
