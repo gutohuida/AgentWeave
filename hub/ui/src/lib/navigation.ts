@@ -23,7 +23,7 @@ export interface RailProject {
  *  is still how that is done. This is the other thing: a place to go when the specification is what
  *  you are working on rather than what you are working *beside* — the document and its navigation,
  *  no conversation (operator, 2026-08-10: "just to focus on spec"). */
-export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'spec', 'checkpoints', 'vault', 'jobs', 'activity'] as const
+export const PROJECT_TABS = ['overview', 'thread', 'tasks', 'spec', 'checkpoints', 'vault', 'jobs', 'activity', 'dashboards'] as const
 export type ProjectTab = (typeof PROJECT_TABS)[number]
 
 /** What each project tab is called on screen (the top bar). */
@@ -36,6 +36,7 @@ export const TAB_LABELS: Record<ProjectTab, string> = {
   vault: 'Vault',
   jobs: 'Jobs',
   activity: 'Activity',
+  dashboards: 'Dashboards',
 }
 
 /** Project settings' sections, in the order the side list shows them (grouped there). `general` is

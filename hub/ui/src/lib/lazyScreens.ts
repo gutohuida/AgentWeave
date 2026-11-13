@@ -49,6 +49,7 @@ export const ConversationView = screen(() => import('@/components/agents/Convers
 export const AgentCreateDialog = screen(() => import('@/components/agents/AgentCreateDialog'), 'AgentCreateDialog')
 export const NewConversationSurface = screen(() => import('@/components/agents/NewConversationSurface'), 'NewConversationSurface')
 export const JobsScreen = screen(() => import('@/components/jobs/JobsScreen'), 'JobsScreen')
+export const DashboardsScreen = screen(() => import('@/components/dashboards/DashboardsScreen'), 'DashboardsScreen')
 export const ActivityScreen = screen(() => import('@/components/activity/ActivityScreen'), 'ActivityScreen')
 export const ThreadScreen = screen(() => import('@/components/thread/ThreadScreen'), 'ThreadScreen')
 export const AppSettingsScreen = screen(() => import('@/components/settings/AppSettingsScreen'), 'AppSettingsScreen')
