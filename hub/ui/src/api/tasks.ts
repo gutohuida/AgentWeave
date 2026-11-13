@@ -121,6 +121,9 @@ export interface Task {
    *  response so the board can say "not merged" without a per-card fetch. Absent from an older Hub,
    *  and null for a task never approved. */
   latest_integration?: LatestIntegration | null
+  /** How many of the latest check run's checks failed, not counting ones on the known-failing list
+   *  (`task-card-and-story-redesign` FR-5). Null where no check has run; absent from an older Hub. */
+  failed_checks?: number | null
   /** Approved, and its work is still in the landing queue on its way to main. */
   waiting_to_land?: boolean
   /** Why nobody is handed this task: the cap or window of the finished build whose flow holds it. */
