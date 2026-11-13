@@ -158,9 +158,13 @@ async def _agent(name):
 
 @pytest.mark.asyncio
 async def test_check_reports_the_save_and_moves_nothing(app, auth_headers, author_headers):
-    """Check shows what the agent's save returned, the phase stays exploring, and the agent saves
-    again afterwards. On master there is no Check route (404): Propose was the only way to see
-    readiness, and it moved the document."""
+    """Check shows everything the agent's save returned, the phase stays exploring, and the agent
+    saves again afterwards. On master there is no Check route (404): Propose was the only way to see
+    readiness, and it moved the document.
+
+    AW-127 made Check include what only Approve used to list (`steps_skipped`,
+    `amendments_unreviewed`, `vault_warning`), so Check's warnings are the save's, in order, plus
+    at most those."""
     one_gap = _document(
         tasks=[
             {
@@ -179,7 +183,10 @@ async def test_check_reports_the_save_and_moves_nothing(app, auth_headers, autho
     assert checked.status_code == 200, checked.text
     body = checked.json()
     assert body["blocking"] == saved["blocking"]
-    assert body["warnings"] == saved["warnings"]
+    approve_only = {"steps_skipped", "amendments_unreviewed", "vault_warning"}
+    extra = [w for w in body["warnings"] if w not in saved["warnings"]]
+    assert {w["code"] for w in extra} <= approve_only
+    assert [w for w in body["warnings"] if w not in extra] == saved["warnings"]
     assert body["phase"] == "exploring"
     assert (await _document_row()).phase == "exploring"
     again = await _save(app, author_headers, _document())
