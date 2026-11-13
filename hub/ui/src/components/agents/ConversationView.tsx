@@ -14,6 +14,7 @@ import { PaneResizer } from '@/components/layout/PaneResizer'
 import { useWorkspaceWidth } from '@/components/layout/useWorkspaceWidth'
 import { FileTab } from '@/components/spec/FileTab'
 import { FilesIndexTab } from '@/components/spec/FilesIndexTab'
+import { ChangesTabContainer } from '@/components/panel/ChangesTabContainer'
 import { LoopTab } from '@/components/spec/LoopTab'
 import { useLoops } from '@/api/loops'
 import { RunningTabContainer } from '@/components/panel/RunningTabContainer'
@@ -338,6 +339,7 @@ export function ConversationView({
     () => [
       { id: 'specs', label: 'Specs', icon: 'menu_book' },
       { id: 'files', label: 'Files', icon: 'folder_open' },
+      { id: 'changes', label: 'Changes', icon: 'file_pen_line' },
       // The shell's launcher badge. Counted here rather than in the shell because the items are
       // already fetched here and the shell deliberately knows nothing about what a tab contains.
       { id: 'running', label: 'Running', icon: 'sync', count: runningCount(runningItems) },
@@ -348,6 +350,7 @@ export function ConversationView({
     (id: TabId): PanelTabDescriptor => {
       if (id === 'specs') return { id, label: 'Specs', icon: 'menu_book' }
       if (id === 'files') return { id, label: 'Files', icon: 'folder_open' }
+      if (id === 'changes') return { id, label: 'Changes', icon: 'file_pen_line' }
       if (id === 'running') return { id, label: 'Running', icon: 'sync' }
       if (isFileTabId(id)) {
         const path = filePath(id)
@@ -400,6 +403,15 @@ export function ConversationView({
           />
         )
       }
+      if (tab.id === 'changes') {
+        return (
+          <ChangesTabContainer
+            agent={agent.name}
+            conversationId={conversationId}
+            onOpenFile={(path) => openTab(projectId, fileTabId(path))}
+          />
+        )
+      }
       if (isFileTabId(tab.id)) {
         return (
           <FileTab
@@ -447,6 +459,8 @@ export function ConversationView({
       document,
       workspacePaths,
       workspacePathsLoading,
+      agent.name,
+      conversationId,
       openTab,
       onOpenTasks,
       insertIntoComposer,
