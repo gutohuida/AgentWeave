@@ -1,1 +1,0 @@
-import{ad as a,cP as o,co as s}from"./index-D8kyf_qp.js";let c=0;const n=s(e=>({request:null,ask:t=>e({request:{...t,nonce:++c}}),clear:()=>e({request:null})}));function u(e,t){n.getState().ask(t),a(o(e,"activity"))}export{u as o,n as u};
