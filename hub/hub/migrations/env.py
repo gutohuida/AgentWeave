@@ -1,6 +1,7 @@
 """Alembic migration environment — async SQLAlchemy."""
 
 import asyncio
+import warnings
 from logging.config import fileConfig
 
 import sqlalchemy as sa
@@ -10,6 +11,15 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from hub.config import settings
 from hub.db import sqlite_pragmas
 from hub.db.models import Base
+
+# AW-129: reflecting an expression-based index (ix_event_logs_context_*) makes SQLAlchemy warn from
+# inside migration 0081's `get_indexes`; the index is skipped on purpose and the warning is the
+# first thing a new user sees on first launch.
+warnings.filterwarnings(
+    "ignore",
+    message="Skipped unsupported reflection of expression-based index",
+    category=sa.exc.SAWarning,
+)
 
 config = context.config
 if config.config_file_name is not None:

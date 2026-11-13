@@ -248,7 +248,7 @@ def raise_workspace_http_error(exc: ProjectWorkspaceError) -> NoReturn:
     if isinstance(exc, (ProjectIdentityConflict, ProjectWorkspaceUnavailable)):
         status_code = status.HTTP_409_CONFLICT
     else:
-        status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+        status_code = 422
     raise HTTPException(
         status_code=status_code,
         detail={
