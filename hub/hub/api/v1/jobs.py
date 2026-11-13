@@ -170,7 +170,7 @@ async def _document_id_for(
         # The request accepts a path's length (255); the loop stores an id (64).
         if len(value) > 64:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=422,
                 detail=(
                     f"spec_document_id '{value[:80]}…' is neither a document id (at most 64 "
                     "characters) nor a path beginning 'spec/'"
@@ -186,7 +186,7 @@ async def _document_id_for(
     ).scalar_one_or_none()
     if document_id is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail=(
                 f"spec_document_id '{value}' names no specification document in this project; "
                 "give the document's id (spdoc-…) or the path of a document the Hub knows"
@@ -927,7 +927,7 @@ async def create_job(
             initial_task_bodies.append(TaskCreate(**item))
         except ValidationError as e:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=422,
                 detail=f"invalid initial_tasks[{index}] entry: {e}\nNothing was created.",
             ) from e
 

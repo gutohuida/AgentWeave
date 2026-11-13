@@ -385,7 +385,7 @@ async def get_spec(
     page = await spec_service.render_page(session, workspace, path, content, document)
     if page is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={
                 "message": f"{path} holds no readable spec payload",
                 "code": "payload_unreadable",
@@ -1319,9 +1319,7 @@ async def write_document_content(
             # A capability written outside a merge is refused for what the document is, not for a
             # malformed body.
             status_code=(
-                status.HTTP_409_CONFLICT
-                if exc.code == "capability_written_through_merge"
-                else status.HTTP_422_UNPROCESSABLE_ENTITY
+                status.HTTP_409_CONFLICT if exc.code == "capability_written_through_merge" else 422
             ),
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
@@ -1373,7 +1371,7 @@ async def link_roadmap_slice(
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
     await session.commit()
@@ -2130,7 +2128,7 @@ async def list_evidence(
     project_id, _ = project
     if review_state is not None and review_state not in _REVIEW_STATES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={
                 "message": f"review_state must be one of {', '.join(_REVIEW_STATES)}",
                 "code": "unknown_review_state",
@@ -3027,7 +3025,7 @@ async def reindex(
         # F702: refused before anything is rebuilt. Accepted, it rebuilt the requirements and then
         # answered "not written" with a diagnostic, for a home the caller simply mistyped.
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={
                 "message": describe_diagnostic("home_missing", chosen_home),
                 "code": "home_unknown",
@@ -3234,7 +3232,7 @@ async def arrange_document(
     revalidated, validation_diagnostics = load_manifest(dump_manifest(candidate))
     if revalidated is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={
                 # The first diagnostic's sentence, not only its code (F643).
                 "message": "this placement is not allowed: "
@@ -3389,12 +3387,12 @@ async def create_document(
 _ADOPTION_REFUSAL_STATUS = {
     "unsafe_document_path": status.HTTP_400_BAD_REQUEST,
     "document_exists": status.HTTP_409_CONFLICT,
-    "file_missing": status.HTTP_422_UNPROCESSABLE_ENTITY,
-    "file_unreadable": status.HTTP_422_UNPROCESSABLE_ENTITY,
-    "payload_absent": status.HTTP_422_UNPROCESSABLE_ENTITY,
-    "payload_unreadable": status.HTTP_422_UNPROCESSABLE_ENTITY,
-    "payload_identity_missing": status.HTTP_422_UNPROCESSABLE_ENTITY,
-    "payload_invalid": status.HTTP_422_UNPROCESSABLE_ENTITY,
+    "file_missing": 422,
+    "file_unreadable": 422,
+    "payload_absent": 422,
+    "payload_unreadable": 422,
+    "payload_identity_missing": 422,
+    "payload_invalid": 422,
 }
 
 
@@ -3424,9 +3422,7 @@ async def adopt_document(
     )
     if isinstance(outcome, spec_adoption.AdoptionRefusal):
         raise HTTPException(
-            status_code=_ADOPTION_REFUSAL_STATUS.get(
-                outcome.code, status.HTTP_422_UNPROCESSABLE_ENTITY
-            ),
+            status_code=_ADOPTION_REFUSAL_STATUS.get(outcome.code, 422),
             detail={"message": outcome.message, **outcome.to_dict()},
         )
     # The one write adoption leads to, and only for requirements the file names without an
@@ -3471,7 +3467,7 @@ async def set_journey(
     document = await _require_document(session, project_id, path)
     if body.step is None and body.size is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": "name a step, a size, or both", "code": "nothing_to_change"},
         )
     if not spec_journey.has_journey(document) or document.phase != spec_lifecycle.EXPLORING:
@@ -3496,7 +3492,7 @@ async def set_journey(
             )
     except spec_journey.JourneyError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
     # FR-10: the file's hub block carries the new step and size in the same request.
@@ -3555,7 +3551,7 @@ async def put_project_journey(
         steps = spec_journey.save(workspace, body.model_dump(exclude_unset=True))
     except spec_journey.JourneyError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
     except OSError as exc:
@@ -3617,7 +3613,7 @@ async def check_document(
         found_blocking, warnings = await spec_service.check(session, workspace, document)
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
     content = spec_documents.read_document(workspace, document.path)
@@ -3793,7 +3789,7 @@ async def _move_phase(
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
     except spec_lifecycle.PhaseError as exc:
@@ -3881,7 +3877,7 @@ async def _phase_response(
 
 def _unprocessable(code: str, message: str) -> HTTPException:
     return HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=422,
         detail={"code": code, "message": message},
     )
 
@@ -4354,7 +4350,7 @@ async def set_phase(
             else f"unknown phase {to!r}"
         )
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={
                 "message": f"{what}: to must be one of {', '.join(phases)}",
                 "code": "unknown_phase",
@@ -5197,7 +5193,7 @@ async def merge_document(
         )
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 
@@ -5384,7 +5380,7 @@ async def fold_document(
         raise _fold_refused(exc) from exc
     except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={"message": str(exc), "code": exc.code, "field": exc.field_path},
         ) from exc
 

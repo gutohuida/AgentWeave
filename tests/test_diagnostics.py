@@ -214,3 +214,23 @@ def test_agent_context_diagnostics_report_injection_and_staleness(tmp_path, monk
     assert by_id["agent_context_present"].data["injection"] == "--append-system-prompt-file"
     assert "agent_context_stale" in by_id
     assert "agent_context_incomplete" in by_id
+
+
+def test_doctor_names_other_running_hubs_when_no_port_given(tmp_path, monkeypatch, capsys):
+    """AW-129: doctor with no --port checks 8000; a Hub live on 8020 must be named, not ignored."""
+    import os
+
+    from agentweave import cli
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "HUB_DIR", tmp_path / "hubdir")
+    cli.HUB_DIR.mkdir()
+    (cli.HUB_DIR / "hub-8020.pid").write_text(f"{os.getpid()}\n8020\n")
+
+    cli.cmd_doctor(argparse.Namespace(json=True, no_network=True))
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["checked_port"] == 8000
+    assert payload["other_hub_ports"] == [8020]
+
+    cli.cmd_doctor(argparse.Namespace(json=False, no_network=True))
+    assert "doctor --port <port>" in capsys.readouterr().out

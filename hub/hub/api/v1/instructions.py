@@ -81,7 +81,7 @@ async def put_instructions(
     content = body.content
     if len(content) > MAX_INSTRUCTIONS_CHARS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail={
                 "code": "instructions_too_long",
                 "message": instructions_file.too_long_message(len(content)),
