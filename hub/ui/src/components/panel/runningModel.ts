@@ -1,5 +1,5 @@
 import type { Job, LoopSummary } from '@/api/jobs'
-import type { ProjectBuildRow } from '@/api/projectBuilds'
+import type { ProjectBuildLanding, ProjectBuildRow } from '@/api/projectBuilds'
 import { describeCron, formatAgo, formatIn } from '@/lib/format'
 
 /** The side panel's Running tab (roadmap `a-side-panel-worth-keeping-open-…`, slice `activity-tab`):
@@ -47,10 +47,51 @@ export interface RunningItem {
   /** The one line under the title saying what is happening, when nobody is working a task. */
   status: string
   workers: RunningWorker[]
-  progress: { done: number; total: number } | null
+  /** Done is approved and landed; `landing` counts approved tasks not landed yet (builds only). */
+  progress: { done: number; total: number; landing?: number } | null
+  /** A build's tasks on their way to main, or sent back by their landing, each with what its
+   *  landing is doing in words and the reason the landing gave (`running-shows-landing`). */
+  landings: RunningLanding[]
   /** The time that matters for this row's phase, already in words: "next in 4m", "started 2h ago". */
   when: string
   spentUsd: number | null
+}
+
+export interface RunningLanding {
+  taskId: string
+  displayId: string
+  title: string
+  state: string
+  /** The landing state in words: "waiting to land", "being checked", "sent back". */
+  word: string
+  /** The landing's reason, when it gave one: a hold's, or a send-back's. */
+  reason: string
+  /** Sent back or did not land: something to look at, not just wait for. */
+  failed: boolean
+}
+
+const LANDING_WORD: Record<string, string> = {
+  queued: 'waiting to land',
+  checking: 'being checked',
+  landing: 'landing',
+  held: 'held',
+  pushed: 'waiting for its pull request to merge',
+  not_landed: 'did not land',
+  sent_back: 'sent back',
+}
+
+const LANDING_FAILED: ReadonlySet<string> = new Set(['not_landed', 'sent_back'])
+
+function landingOf(row: ProjectBuildLanding): RunningLanding {
+  return {
+    taskId: row.task_id,
+    displayId: row.display_id,
+    title: row.title,
+    state: row.landing_state,
+    word: LANDING_WORD[row.landing_state] ?? row.landing_state.replace(/_/g, ' '),
+    reason: row.reason,
+    failed: LANDING_FAILED.has(row.landing_state),
+  }
 }
 
 /** A build as the panel receives it: the Hub's row for it, and its loop (from the loops list). */
@@ -113,6 +154,13 @@ function whenOf(phase: RunningPhase, now: Date, times: { started?: string | null
   return ''
 }
 
+/** A running build stays listed as running until it has finished (`running-shows-landing`): its loop
+ *  ending (a flow whose queue emptied, or a build reopened because an approved task had not landed)
+ *  does not end the build, so it sits between steps rather than among the finished. */
+function runningLoopPhase(phase: RunningPhase): RunningPhase {
+  return phase === 'finished' || phase === 'stopped' ? 'between' : phase
+}
+
 export function buildItem(input: RunningBuildInput, now: Date): RunningItem {
   const { build, loop } = input
   const workers = workersOf(loop)
@@ -125,16 +173,20 @@ export function buildItem(input: RunningBuildInput, now: Date): RunningItem {
         : attention
           ? 'needs-you'
           : loop
-            ? loopPhase(loop, attention, workers)
+            ? runningLoopPhase(loopPhase(loop, attention, workers))
             : 'working'
+  const landings = build.state === 'running' ? (build.landings ?? []).map(landingOf) : []
+  const landing = build.tasks_landing ?? 0
   const status =
     phase === 'stopped'
       ? build.stop_reason ?? 'Stopped before its tasks were done'
       : phase === 'finished'
         ? 'Every task done'
-        : phase === 'between'
-          ? 'Waiting for its next step'
-          : ''
+        : landing > 0 && workers.length === 0
+          ? `Waiting for ${landing === 1 ? 'a task' : `${landing} tasks`} to land`
+          : phase === 'between'
+            ? 'Waiting for its next step'
+            : ''
   return {
     id: build.id,
     kind: 'build',
@@ -146,7 +198,8 @@ export function buildItem(input: RunningBuildInput, now: Date): RunningItem {
     attention: phase === 'needs-you' ? attention : null,
     status,
     workers: phase === 'finished' || phase === 'stopped' ? [] : workers,
-    progress: build.tasks_total > 0 ? { done: build.tasks_done, total: build.tasks_total } : progressOfLoop(loop),
+    progress: build.tasks_total > 0 ? { done: build.tasks_done, total: build.tasks_total, landing } : progressOfLoop(loop),
+    landings,
     when: whenOf(phase, now, { started: build.created_at, ended: build.stopped_at, next: input.nextRun }),
     spentUsd: build.spent_usd,
   }
@@ -168,6 +221,7 @@ export function loopItem(loop: LoopSummary, now: Date, times: { started?: string
     status: phase === 'stopped' ? loop.stop_reason ?? 'Stopped before its queue was empty' : phase === 'finished' ? 'Its queue is empty' : phase === 'between' ? 'Waiting for its next firing' : '',
     workers: phase === 'finished' || phase === 'stopped' ? [] : workers,
     progress: progressOfLoop(loop),
+    landings: [],
     when: whenOf(phase, now, { started: times.started, ended: loop.stopped_at, next: times.next }),
     spentUsd: null,
   }
@@ -192,6 +246,7 @@ export function jobItem(job: Job, now: Date): RunningItem {
     status: phase === 'paused' ? `${schedule}, paused` : schedule,
     workers: running ? [{ agent: job.agent, doing: 'is running', task: 'this job' }] : [],
     progress: null,
+    landings: [],
     when:
       phase === 'paused' && job.last_run
         ? `last ran ${ago(job.last_run, now)}`

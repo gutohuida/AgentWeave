@@ -17,7 +17,14 @@ export interface ProjectBuildRow {
   loop_id: string | null
   loop: { id: string; name: string; enabled: boolean } | null
   tasks_total: number
+  /** Tasks done: approved and landed on main (or merged as a pull request, or approved in a build
+   *  that lands nowhere). An approved task not landed yet is not done. */
   tasks_done: number
+  /** Approved tasks whose work has not landed yet. */
+  tasks_landing: number
+  /** Each of the build's tasks on its way to main, or sent back by its landing, in the order the
+   *  build's tasks were created. */
+  landings: ProjectBuildLanding[]
   spent_usd: number | null
   stop_reason: string | null
   created_at: string | null
@@ -30,6 +37,19 @@ export interface ProjectBuildRow {
     conversation_id: string | null
     created_at: string | null
   } | null
+}
+
+/** One task of a build whose work is not on main yet, as `GET /project/builds` reports it. */
+export interface ProjectBuildLanding {
+  task_id: string
+  display_id: string
+  title: string
+  /** The task's status: `approved` while its landing runs; another once landing sent it back. */
+  status: string
+  /** Its latest landing's state: queued, checking, landing, held, pushed, not_landed, sent_back. */
+  landing_state: string
+  /** Why the landing is where it is (a send-back's or a hold's reason); may be empty. */
+  reason: string
 }
 
 export function useProjectBuilds() {

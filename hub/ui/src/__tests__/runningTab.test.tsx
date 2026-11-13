@@ -30,6 +30,8 @@ function build(key: string, overrides: Partial<ProjectBuildRow> = {}): ProjectBu
     loop: null,
     tasks_total: 0,
     tasks_done: 0,
+    tasks_landing: 0,
+    landings: [],
     spent_usd: null,
     stop_reason: null,
     created_at: ago(1),

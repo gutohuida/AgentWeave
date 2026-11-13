@@ -139,6 +139,8 @@ function seed(): void {
       loop: { id: 'loop-1', name: 'Ship loop', enabled: true },
       tasks_total: 3,
       tasks_done: 1,
+      tasks_landing: 0,
+      landings: [],
       spent_usd: 1.5,
       stop_reason: null,
       created_at: hoursAgo(1),

@@ -64,6 +64,16 @@
 .aw-run-worker-task { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .aw-run-more, .aw-run-status { font-size: 12px; color: var(--text-3); }
 
+.aw-run-landings { list-style: none; margin: 0; padding: 0 10px 7px 46px; display: flex; flex-direction: column; gap: 3px; }
+.aw-run-landing { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: 12px; color: var(--text-2); }
+.aw-run-landing > svg { flex: none; align-self: center; color: var(--blue); }
+.aw-run-landing[data-failed='true'] > svg { color: var(--red); }
+.aw-run-landing-id { font-family: var(--font-mono, ui-monospace, monospace); font-size: 11px; color: var(--text-3); }
+.aw-run-landing-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+.aw-run-landing-word { font-weight: 500; color: var(--text); }
+.aw-run-landing[data-failed='true'] .aw-run-landing-word { color: var(--red); }
+.aw-run-landing-reason { flex-basis: 100%; padding-left: 18px; color: var(--text-3); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
 .aw-run-attention {
   display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 46px;
   border-top: 1px solid color-mix(in oklab, var(--amber) 30%, var(--border));

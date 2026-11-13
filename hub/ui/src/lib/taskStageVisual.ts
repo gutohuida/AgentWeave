@@ -30,7 +30,8 @@ const VISUALS: Record<string, StageVisual> = {
   waiting_for_review: { glyph: 'hourglass', word: 'Ready for review', tone: 'idle', knot: 1 },
   under_review: { glyph: 'visibility', word: 'In review', tone: 'info', knot: 1, moving: true },
   sent_back: { glyph: 'restart_alt', word: 'Sent back', tone: 'needs-you', knot: 0 },
-  approved_waiting: { glyph: 'stamp', word: 'Approved', tone: 'info', knot: 2 },
+  // Approved is not done: the word names where its landing is, so it never reads as on main.
+  approved_waiting: { glyph: 'stamp', word: 'Waiting to land', tone: 'info', knot: 2 },
   checking: { glyph: 'fact_check', word: 'Checking', tone: 'info', knot: 3, moving: true },
   landing: { glyph: 'git_merge', word: 'Landing', tone: 'info', knot: 4, moving: true },
   on_main: { glyph: 'circle_check_big', word: 'On main', tone: 'done', knot: 4 },
