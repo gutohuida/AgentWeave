@@ -35,6 +35,7 @@
   background: color-mix(in srgb, var(--tone) 12%, transparent);
   animation: aw-pill-in var(--dur-base) var(--ease);
 }
+[data-mode="light"] .aw-pill { color: color-mix(in srgb, var(--tone) 65%, #000); }
 .aw-pill::before {
   content: "";
   width: 6px;
@@ -103,7 +104,7 @@
 .aw-tl-head strong { font-weight: 600; }
 .aw-tl-meta {
   font: 400 11px/1.5 var(--mono);
-  color: var(--text-3);
+  color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
 .aw-tl-aside {
@@ -290,7 +291,7 @@
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 .aw-story-value {
   font: 500 15px/1.2 var(--mono);
@@ -300,10 +301,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.aw-story-value small { font-size: 11px; color: var(--text-3); font-weight: 400; }
+.aw-story-value small { font-size: 11px; color: var(--text-2); font-weight: 400; }
 .aw-story-sub {
   font-size: 11px;
-  color: var(--text-3);
+  color: var(--text-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
