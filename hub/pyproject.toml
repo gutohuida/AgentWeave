@@ -35,6 +35,10 @@ dependencies = [
     # APScheduler 4 is a rewrite with a different API (AsyncScheduler, data stores); the Hub is
     # written against 3.x, so a 4.x needs a conscious port, not a silent resolve.
     "apscheduler>=3.10,<4",
+    # Dashboard queries' REGEXP (hub/hub/dashboard_query.py): unlike `re`, `regex` takes a
+    # per-match timeout and releases the GIL while it matches, so a backtracking pattern stops
+    # at the query's time limit instead of holding every thread, the event loop included.
+    "regex>=2022.1",
     "pywinpty>=2.0; sys_platform == 'win32'",
     "ptyprocess>=0.7; sys_platform != 'win32'",
 ]
