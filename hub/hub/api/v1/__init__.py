@@ -9,6 +9,7 @@ from .agent_chat import instance_conversations_router
 from .agent_chat import router as agent_chat_router
 from .agent_trigger import router as agent_trigger_router
 from .agents import router as agents_router
+from .changes import router as changes_router
 from .charters import router as charters_router
 from .checkpoints import router as checkpoints_router
 from .checks import checks_router
@@ -43,7 +44,6 @@ from .thread import router as thread_router
 from .traces import router as traces_router
 from .vault import router as vault_router
 from .workspace import router as workspace_router
-from .changes import router as changes_router
 from .worktrees import router as worktrees_router
 
 v1_router = APIRouter(prefix="/api/v1")
