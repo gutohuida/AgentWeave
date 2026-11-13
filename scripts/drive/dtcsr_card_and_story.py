@@ -19,7 +19,7 @@ only writes from inside (runs, check runs, questions, landings, integrations) ar
 models; the requirement document and its accepted evidence go through the operator's routes, so the
 Work view's evidence state comes from the real coverage read.
 
-    py -3.11 scripts/drive/dtcsr_card_and_story.py [--root PATH] [--theme dark|light|both]
+    py -3.11 scripts/drive/dtcsr_card_and_story.py [--root PATH] [--theme dark|light|both] [--port N]
 """
 
 import argparse
@@ -40,13 +40,16 @@ sys.path.insert(0, str(HERE))
 ap = argparse.ArgumentParser()
 ap.add_argument("--root", default=str(HERE.parents[1]))
 ap.add_argument("--theme", default="both", choices=("dark", "light", "both"))
+# Two agents driving at once each need their own Hub; a second Hub on a taken port fails to bind and
+# this drive would read the other agent's Hub (its code, not this checkout's).
+ap.add_argument("--port", type=int, default=8113)
 ARGS = ap.parse_args()
 ROOT = pathlib.Path(ARGS.root).resolve()
 
 import d1011_project_steps as d  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-d.PORT = 8113
+d.PORT = ARGS.port
 d.HUB = f"http://127.0.0.1:{d.PORT}"
 d.REPO = ROOT
 d.TMP = pathlib.Path(tempfile.gettempdir()) / "dtcsr" / time.strftime("%H%M%S")
@@ -535,6 +538,32 @@ def open_work(page, tid):
     return d.poll(lambda: page.get_by_test_id(f"task-serves-{tid}").count() >= 1, 10)
 
 
+def axe_contrast(page, axe, selector, card_ids=None):
+    """axe-core colour-contrast violations inside `selector`, or around the cards `card_ids`."""
+    if not page.evaluate("() => typeof window.axe !== 'undefined'"):
+        page.add_script_tag(content=axe)
+    return page.evaluate(
+        """async ([selector, ids]) => {
+             const include = selector
+               ? [...document.querySelectorAll(selector)]
+               : ids.map((id) => document.querySelector(`[data-testid="task-open-${id}"]`)?.parentElement).filter(Boolean)
+             if (!include.length) return null
+             const r = await axe.run({ include }, { runOnly: { type: 'rule', values: ['color-contrast'] } })
+             return r.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ') + ' :: ' + (n.any[0]?.message || '').slice(0, 120)))
+           }""", [selector, card_ids or []])
+
+
+def distinct_violations(found):
+    """One line per failing element kind (its last selector part and contrast), with a count."""
+    kinds = {}
+    for v in found or []:
+        target, _, message = v.partition(" :: ")
+        ratio = re.search(r"contrast of ([\d.]+) \(foreground color: (#\w+), background color: (#\w+)", message)
+        key = target.split(" > ")[-1].split(":nth")[0] + (" %s %s on %s" % ratio.groups() if ratio else "")
+        kinds[key] = kinds.get(key, 0) + 1
+    return [f"{k} x{n}" for k, n in kinds.items()]
+
+
 def board_checks(browser, pid, theme, t, stage_tasks, motion_tasks, failed_names, run_ids,
                  question_id, integration_id, axe):
     tag = f"[{theme}]"
@@ -578,6 +607,7 @@ def board_checks(browser, pid, theme, t, stage_tasks, motion_tasks, failed_names
 
     # ── ac-story (FR-6)
     reached = on_board(page, t["story"], 10) and open_task(page, t["story"])
+    story_violations = None
     heads, folds, fold_text, links_missing, unfolded = None, 0, "", [], {}
     if reached:
         d.poll(lambda: page.get_by_test_id(f"task-story-events-{t['story']}").count() >= 1, 15)
@@ -596,6 +626,8 @@ def board_checks(browser, pid, theme, t, stage_tasks, motion_tasks, failed_names
             for kind in ("trace", "conversation"):
                 if page.get_by_test_id(f"story-run-{kind}-{rid}").count() == 0:
                     links_missing.append(f"{kind}:{rid}")
+        # FR-9 covers story text too: axe colour-contrast on the open Story, fold opened.
+        story_violations = axe_contrast(page, axe, f'[data-testid="task-story-{t["story"]}"]')
         close_task(page)
         ok = folds == 1 and "6" in fold_text and all(unfolded.values()) and not long_labels \
             and not links_missing
@@ -641,14 +673,7 @@ def board_checks(browser, pid, theme, t, stage_tasks, motion_tasks, failed_names
     reached = all(on_board(page, tid, 10) for tid in stage_tasks.values())
     violations, sigs = None, {}
     if reached:
-        page.add_script_tag(content=axe)
-        result = page.evaluate(
-            """async (ids) => {
-                 const include = ids.map((id) => document.querySelector(`[data-testid="task-open-${id}"]`)?.parentElement).filter(Boolean)
-                 const r = await axe.run({ include }, { runOnly: { type: 'rule', values: ['color-contrast'] } })
-                 return r.violations.flatMap((v) => v.nodes.map((n) => n.target.join(' ') + ' :: ' + (n.any[0]?.message || '').slice(0, 120)))
-               }""", list(stage_tasks.values()))
-        violations = result
+        violations = axe_contrast(page, axe, None, list(stage_tasks.values()))
         page.add_style_tag(content="html { filter: grayscale(1) !important; }")
         page.wait_for_timeout(300)
         shot = d.TMP / f"board-greyscale-{theme}.png"
@@ -657,13 +682,16 @@ def board_checks(browser, pid, theme, t, stage_tasks, motion_tasks, failed_names
             sigs[stage] = page.evaluate(STAGE_SIGNATURE_JS, tid)
     glyphed = {k: bool(v and v["glyph"]) for k, v in sigs.items()}
     distinct = len({(v or {}).get("glyph", "") + "|" + (v or {}).get("word", "") for v in sigs.values()})
-    ok = violations == [] and all(glyphed.values()) and distinct == len(stage_tasks)
+    ok = (violations == [] and story_violations == [] and all(glyphed.values())
+          and distinct == len(stage_tasks))
     missing = [k for k, v in stage_tasks.items() if page.get_by_test_id(f"task-open-{v}").count() == 0] if not reached else []
     line(f"ac-a11y{tag}", reached, not ok,
          (f"stage cards not on the board: {missing}; " if missing else "") + f"axe color-contrast violations={len(violations) if violations is not None else None} "
-         f"{(violations or [])[:3]}; greyscale: {distinct}/{len(stage_tasks)} stages distinct by "
+         f"{(violations or [])[:3]}; open Story axe color-contrast violations="
+         f"{len(story_violations) if story_violations is not None else None} {distinct_violations(story_violations)}; greyscale: {distinct}/{len(stage_tasks)} stages distinct by "
          f"glyph and word, without a glyph={[k for k, v in glyphed.items() if not v]}; "
          f"screenshot {d.TMP / f'board-greyscale-{theme}.png'}")
+    filters_click_through(page, t, stage_tasks, tag)
     context.close()
 
     # ── ac-motion (FR-7): checking -> on main, live, with motion allowed and with reduced motion.
@@ -712,6 +740,34 @@ def board_checks(browser, pid, theme, t, stage_tasks, motion_tasks, failed_names
          f"motion allowed: {allowed}; reduced motion: {still} "
          "(want the stage line or thread animated, ending within 300 ms; nothing playing under "
          "reduced motion; the stage changed in both)")
+
+
+def filters_click_through(page, t, stage_tasks, tag):
+    """The operator's constraint for this change: click the agent chips and the spec picker once
+    with the new card in place. Printed as a note, not a check: no criterion of the document names it."""
+    visible = lambda tid: page.get_by_test_id(f"task-open-{tid}").count() >= 1  # noqa: E731
+    others = [tid for tid in stage_tasks.values() if tid != t["budget"]]
+    chips = page.get_by_role("group", name="Filter by agent")
+    chips.get_by_role("button", name=re.compile(BUILDER)).first.click()
+    only_builder = d.poll(lambda: visible(t["budget"]) and not any(visible(x) for x in others), 5)
+    chips.get_by_role("button", name="Everyone").first.click()
+    everyone = d.poll(lambda: all(visible(x) for x in stage_tasks.values()), 5)
+    page.get_by_test_id("board-scope").first.click()
+    options = page.locator("[data-testid^='board-scope-option-']")
+    keys = [options.nth(i).get_attribute("data-testid") for i in range(options.count())]
+    spec_key = next((k for k in keys if "spdoc-" in k), None)
+    only_spec = back = None
+    if spec_key:
+        page.get_by_test_id(spec_key).first.click()
+        only_spec = d.poll(lambda: visible(t["work"]) and not any(visible(x) for x in others), 5)
+        page.get_by_test_id("board-scope").first.click()
+        page.get_by_test_id(keys[0]).first.click()
+        back = d.poll(lambda: all(visible(x) for x in stage_tasks.values()), 5)
+    else:
+        page.keyboard.press("Escape")
+    print(f"note filters{tag}: builder chip shows only its task={only_builder}; Everyone restores "
+          f"all={everyone}; scope options={keys}; spec scope shows only its task={only_spec}; "
+          f"first option restores all={back}", flush=True)
 
 
 d.drive = drive
