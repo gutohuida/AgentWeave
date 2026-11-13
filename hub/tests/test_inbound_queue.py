@@ -757,3 +757,81 @@ async def test_a_deadline_cut_is_withdrawn_with_the_limit_named(app):
     assert f"{int(DEFAULT_TURN_TIMEOUT_SECONDS)} s" in row.abandoned_reason
     assert "background" in row.abandoned_reason
     assert "split" in row.abandoned_reason
+
+
+_SIGNED_OUT = "Not logged in · Please run /login"
+
+
+def test_a_signed_out_claude_is_one_plain_non_retryable_failure():
+    """AW-126: Claude's own signed-out output (an assistant line, then an error result) is
+    classified as an authentication failure, the duplicate text is dropped and the operator reads
+    one plain sentence naming the CLI and what to do."""
+    import json
+
+    from hub.runner_parsing import CLAUDE_SIGNED_OUT_MESSAGE, parse_claude_line
+
+    assistant = parse_claude_line(
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": _SIGNED_OUT}]},
+                "error": "authentication_failed",
+            }
+        )
+    )
+    result = parse_claude_line(
+        json.dumps(
+            {"type": "result", "subtype": "success", "is_error": True, "result": _SIGNED_OUT}
+        )
+    )
+    assert assistant.auth_failure and result.auth_failure
+    assert assistant.events == []
+    assert len(result.events) == 1
+    assert result.events[0].payload["message"] == CLAUDE_SIGNED_OUT_MESSAGE
+    assert "`claude`" in CLAUDE_SIGNED_OUT_MESSAGE and "sign in" in CLAUDE_SIGNED_OUT_MESSAGE
+    # A reply that merely mentions it is not the CLI refusing the turn.
+    said = parse_claude_line(
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "The user was not logged in."}]},
+            }
+        )
+    )
+    assert not said.auth_failure and len(said.events) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_signed_out_claude_entry_is_withdrawn_after_one_attempt(app):
+    from hub.inbound_queue import CLAUDE_NOT_SIGNED_IN_KIND
+    from hub.runner_parsing import CLAUDE_SIGNED_OUT_MESSAGE
+
+    async with async_session_factory() as db:
+        entry = new_entry(
+            project_id="proj-test",
+            agent="signed-out",
+            origin_type="operator",
+            content="hello",
+            hop_depth=0,
+        )
+        db.add(entry)
+        await db.commit()
+        run = Run(
+            id="run-so", project_id="proj-test", agent="signed-out", status="failed", turn_depth=0
+        )
+        await deliver_entries_with_run(
+            db, project_id="proj-test", agent="signed-out", entry_ids=[entry.id], run=run
+        )
+        returned = await return_run_entries(
+            db, run.id, retryable=False, failure_kind=CLAUDE_NOT_SIGNED_IN_KIND
+        )
+        await db.commit()
+    assert returned == []
+    async with async_session_factory() as db:
+        row = (
+            await db.execute(
+                select(InboundQueueEntry).where(InboundQueueEntry.agent == "signed-out")
+            )
+        ).scalar_one()
+    assert row.state == "withdrawn" and row.delivery_attempts == 1
+    assert row.abandoned_reason == CLAUDE_SIGNED_OUT_MESSAGE

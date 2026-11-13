@@ -83,6 +83,7 @@ from ...conversations import (
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner, Task
 from ...inbound_queue import (
+    CLAUDE_NOT_SIGNED_IN_KIND,
     QueueChangedError,
     abandoned_for_run,
     deliver_entries_with_run,
@@ -3508,6 +3509,8 @@ async def _execute_run(
         runner_version: Optional[str] = None
         # F697: the turn's last context reading, which estimates a stopped turn's interrupted call.
         last_context_tokens: Optional[int] = None
+        # AW-126: the CLI said it is signed out; the same input would fail the same way.
+        signed_out = False
         sequence = 0
         buffer = ""
         plane_event_stored = False
@@ -3550,7 +3553,7 @@ async def _execute_run(
 
         async def _flush_line(raw_line: str) -> None:
             nonlocal accounting_sample, binding_conflict, plane_event_stored, session_id, sequence
-            nonlocal runner_version, last_context_tokens
+            nonlocal runner_version, last_context_tokens, signed_out
             # ConPTY output is control-sequence-laden, not plain text (live-verified — see
             # pty_runner.strip_ansi_escapes's docstring) — every line needs stripping before
             # a JSON-parse attempt, not just the first (e.g. a trailing cursor-restore
@@ -3561,6 +3564,8 @@ async def _execute_run(
             parsed = transport.map_events(line, model=model)
             if parsed.runner_version:
                 runner_version = parsed.runner_version
+            if getattr(parsed, "auth_failure", False):
+                signed_out = True
             # Resolve session_id from *this* line before writing its own events, so the row
             # that establishes the session carries it too, not just subsequent rows. Once this run
             # is bound to the session a line names, binding it again writes nothing and was a
@@ -3873,7 +3878,13 @@ async def _execute_run(
             if refusal is None:
                 await finalize_job_run_for_conversation(db, conversation_id, final_status)
             returned = (
-                await return_run_entries(db, run_id, refusal=refusal)
+                await return_run_entries(
+                    db,
+                    run_id,
+                    refusal=refusal,
+                    retryable=False if signed_out else None,
+                    failure_kind=CLAUDE_NOT_SIGNED_IN_KIND if signed_out else None,
+                )
                 if final_status == "failed" and binding_conflict is None
                 else []
             )
