@@ -204,7 +204,19 @@ async def test_ac_empty_no_checkout_says_so_without_an_error(app, auth_headers, 
 
 
 @pytest.mark.asyncio
-async def test_ac_large_list_fast_binary_marked_and_big_diff_truncated(app, auth_headers, repo):
+async def test_ac_large_list_fast_binary_marked_and_big_diff_truncated(
+    app, auth_headers, repo, monkeypatch
+):
+    from hub import worktrees
+
+    spawns = []
+    real_run_git = worktrees._run_git
+
+    def counting_run_git(cwd, *args, **kwargs):
+        spawns.append(args[0])
+        return real_run_git(cwd, *args, **kwargs)
+
+    monkeypatch.setattr(worktrees, "_run_git", counting_run_git)
     wt = add_branch(
         repo, "agentweave/worker", worktree=repo / ".agentweave" / "worktrees" / "worker"
     )
@@ -215,7 +227,14 @@ async def test_ac_large_list_fast_binary_marked_and_big_diff_truncated(app, auth
     sha = commit(wt, "Auto-snapshot: worker's turn")
     await seed(runs=[("completed", sha, wt)])
 
-    started = time.monotonic()
+    spawns.clear()
+    body = await get(app, auth_headers)
+    assert len(body["turn"]) == 200
+    # Process spawns are what costs time on Windows under load, so the criterion is carried by
+    # their number, which must not grow with the file count: a branch listing, one diff per scope.
+    assert len(spawns) <= 4, spawns
+
+    started = time.monotonic()  # warmed: first-use import and process-cache costs are paid
     body = await get(app, auth_headers)
     elapsed = time.monotonic() - started
 
