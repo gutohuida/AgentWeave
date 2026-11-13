@@ -28,8 +28,8 @@ describe('the live board card (task-card-and-story-redesign)', () => {
     const { container } = render(<TaskCard task={task} specTag="TCSR" now={new Date('2026-11-12T21:20:00Z')} onOpen={() => {}} />)
     expect(screen.getByText('New card on the live board')).toBeInTheDocument()
     expect(screen.getByTestId('task-stage-task-1').querySelector('svg')).not.toBeNull()
-    expect(screen.getByText('20 min')).toBeInTheDocument()
-    expect(screen.getByText('asked by DeveloperSonnet2')).toBeInTheDocument()
+    expect(screen.queryByText('20 min')).toBeNull() // time at stage gives way to the waits-on line
+    expect(screen.getByText('by builder')).toBeInTheDocument() // the asker is the builder, already named below
     expect(screen.getByText('TCSR')).toBeInTheDocument()
     expect(container.textContent).not.toContain('long description')
     expect(container.textContent).not.toContain('ac-content')
