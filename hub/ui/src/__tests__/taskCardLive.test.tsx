@@ -48,4 +48,13 @@ describe('the live board card (task-card-and-story-redesign)', () => {
     rerender(<TaskCard task={task} failedChecks={2} onOpen={() => {}} />)
     expect(screen.getByTestId('task-failed-checks-task-1')).toHaveTextContent('2')
   })
+
+  it('reads the count from the tasks route failed_checks, hiding it at zero or null', () => {
+    const { rerender } = render(<TaskCard task={{ ...task, failed_checks: null }} onOpen={() => {}} />)
+    expect(screen.queryByTestId('task-failed-checks-task-1')).toBeNull()
+    rerender(<TaskCard task={{ ...task, failed_checks: 0 }} onOpen={() => {}} />)
+    expect(screen.queryByTestId('task-failed-checks-task-1')).toBeNull()
+    rerender(<TaskCard task={{ ...task, failed_checks: 2 }} onOpen={() => {}} />)
+    expect(screen.getByTestId('task-failed-checks-task-1')).toHaveTextContent('2')
+  })
 })
