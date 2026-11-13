@@ -118,12 +118,16 @@ function RunningRow({ item, colorIndexOf, onOpen, onAttend }: { item: RunningIte
           <span className="aw-run-meta">
             <span className="aw-run-kind">{KIND_LABEL[item.kind]}</span>
             {item.progress ? (
-              <span className="aw-run-progress" aria-label={`${item.progress.done} of ${item.progress.total} tasks done`}>
+              <span
+                className="aw-run-progress"
+                aria-label={`${item.progress.done} of ${item.progress.total} tasks done${item.progress.landing ? `, ${item.progress.landing} landing` : ''}`}
+              >
                 <span className="aw-run-bar">
                   <span style={{ width: `${(item.progress.done / item.progress.total) * 100}%` }} />
                 </span>
                 <span className="aw-run-progress-label">
                   {item.progress.done}/{item.progress.total} tasks
+                  {item.progress.landing ? ` · ${item.progress.landing} landing` : ''}
                 </span>
               </span>
             ) : null}
@@ -146,6 +150,26 @@ function RunningRow({ item, colorIndexOf, onOpen, onAttend }: { item: RunningIte
           ) : null}
         </span>
       </button>
+      {item.landings.length > 0 ? (
+        <ul className="aw-run-landings" aria-label="On the way to main">
+          {item.landings.map((landing) => (
+            <li
+              key={landing.taskId}
+              className="aw-run-landing"
+              data-testid={`running-landing-${landing.taskId}`}
+              data-state={landing.state}
+              data-failed={landing.failed ? 'true' : 'false'}
+              title={landing.reason || undefined}
+            >
+              <Icon name={landing.failed ? 'alert_triangle' : 'git_merge'} size={12} />
+              <span className="aw-run-landing-id">{landing.displayId}</span>
+              <span className="aw-run-landing-title">{landing.title}</span>
+              <span className="aw-run-landing-word">{landing.word}</span>
+              {landing.reason ? <span className="aw-run-landing-reason">{landing.reason}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {item.attention ? (
         <div className="aw-run-attention">
           <Icon name={item.attention.kind === 'question' ? 'help_circle' : 'alert_triangle'} size={14} />

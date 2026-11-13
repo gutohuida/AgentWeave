@@ -623,6 +623,9 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
               : ['project', pid, 'task'],
           })
           inv({ queryKey: ['project', pid, 'tasks'] })
+          // Running lists each approved task on its way to main with its landing's state, and a
+          // build stays there until its last landing lands (`running-shows-landing`).
+          if (event.type === 'task_landing_changed') inv({ queryKey: ['project', pid, 'builds'] })
           break
         }
         case 'run_started':
