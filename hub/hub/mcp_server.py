@@ -967,7 +967,9 @@ DASHBOARD_QUERY_REQUEST_TIMEOUT_SECONDS = 60
 @_tool()
 def dashboard_query_reference() -> Dict[str, Any]:
     """Everything a dashboard query can read: each table and column, its type and a short meaning,
-    generated from the running Hub, with the query rules in `notes` and the limits.
+    generated from the running Hub, with the query rules in `notes`, the known traps in `traps`
+    (where a straightforward count gives the wrong answer, and how to count instead) and the
+    limits, all before the tables.
 
     Every table holds only the current project's rows, so no project filter is needed. Read it
     before writing a query with `run_dashboard_query`, and read the vault note `src-27723331ae1d`

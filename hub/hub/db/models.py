@@ -983,6 +983,9 @@ class TaskTransition(Base):
     # today, but "no run" and "the operator" are different claims and only one of them is an
     # authorisation (D2).
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    # The run that made this move, not the run whose work it judges: a move to revision_needed or
+    # approved is the reviewer's run, so its model is the reviewer's. The builder's run is the one
+    # behind the task's latest move to completed.
     run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     # Which agent the run belonged to. Denormalised rather than joined through `runs`: this is an
     # integrity record and must answer "who approved this" on its own, without depending on a run
