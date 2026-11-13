@@ -366,6 +366,23 @@ async def test_without_checks_the_approval_answers_with_its_merge(app, auth_head
 
 
 @pytest.mark.asyncio
+async def test_the_merge_commit_on_main_names_the_task(app, auth_headers, tmp_path):
+    """AW-130: `git log --oneline main` reads `Integrate <display id>: <title>`, not only a sha."""
+    ids, works = await tasks_under_review(tmp_path, 1)
+
+    approved = await approve(app, auth_headers, ids[0])
+
+    assert approved.status_code == 200, approved.text
+    async with async_session_factory() as session:
+        task = await session.get(models.Task, ids[0])
+        label = f"{task.display_id}: {task.title}"
+    subject = git(tmp_path, "log", "-1", "--format=%s", "main").stdout.strip()
+    assert subject == f"Integrate {label}"
+    body = git(tmp_path, "log", "-1", "--format=%b", "main").stdout
+    assert f"Integrate approved work {works[0][:12]}" in body
+
+
+@pytest.mark.asyncio
 async def test_a_restart_mid_batch_loses_and_repeats_nothing(
     app, auth_headers, tmp_path, tmp_path_factory
 ):
