@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AgentWeave is now licensed under the Apache License 2.0** (previously MIT). Releases up to and
   including 2.1.0 remain available under MIT. Apache 2.0 stays permissive and adds an explicit
   patent grant and contribution terms. `NOTICE` names the project's copyright and acknowledgements.
+- **The starter charters are the seven software ones.** Underwriter and Underwriting Approver are no
+  longer seeded into new projects; projects that already have them keep them.
 
 ---
 ## [2.1.0] - 2026-11-02

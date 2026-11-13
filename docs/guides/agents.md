@@ -84,8 +84,7 @@ you could verify by running it."* It is injected verbatim into every turn. An ag
 charter still runs, and its context says it has none.
 
 Each new project is seeded once with starter charters: **Tech Lead, Developer, Code Reviewer,
-Verifier, Security Engineer, Guardian, Spec Author**, and two non-software examples of separated
-duties, **Underwriter** and **Underwriting Approver**. Edit them, delete them, or write your own
+Verifier, Security Engineer, Guardian, Spec Author**. Edit them, delete them, or write your own
 under **Project settings → Charters**. A charter an agent still holds cannot be deleted.
 
 ## Project instructions

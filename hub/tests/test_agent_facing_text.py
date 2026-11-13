@@ -129,28 +129,6 @@ def test_seeded_charter_names_no_aw_skill(charter):
     assert not found, f"{charter.name} names uninstalled skills: {sorted(set(found))}"
 
 
-def test_the_starter_set_demonstrates_a_non_software_separation_of_duties():
-    """Keyed to the manifest so that deleting the pair fails here, rather than silently
-    narrowing what the product claims to be for.
-
-    One capable model can perform every activity in a software workflow, which makes
-    charters look like topic labels. A separation of duties is what shows a charter
-    carrying a guarantee, so the starter set has to contain one.
-    """
-    manifest = _manifest()
-    pair = ("underwriter", "underwriting_approver")
-
-    for key in pair:
-        assert key in manifest, f"the starter set lost its non-software pair: {key} is missing"
-
-    for key in pair:
-        content = (CHARTER_DIR / f"{key}.md").read_text(encoding="utf-8").lower()
-        assert "you do not" in content or "may not" in content, (
-            f"{key}.md no longer states the step it may not perform, so the pair "
-            "documents a topic split rather than a control"
-        )
-
-
 class TestTurnPreamble:
     def test_mcp_branch_names_the_tools(self):
         notice = access_path_notice("mcp")
