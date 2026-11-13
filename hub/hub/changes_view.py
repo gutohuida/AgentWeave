@@ -42,59 +42,64 @@ class Patch:
     total_lines: int
 
 
-def branch_exists(repo_root: Path, branch: str) -> bool:
+def local_branches(repo_root: Path) -> set:
+    """Every local branch name, in one git process."""
     result = worktrees._run_git(
-        repo_root, "rev-parse", "--verify", "-q", f"refs/heads/{branch}", check=False
+        repo_root, "for-each-ref", "--format=%(refname:short)", "refs/heads", check=False
     )
-    return result.returncode == 0
+    if result.returncode != 0:
+        return set()
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
 
-def resolve_base(repo_root: Path, configured: Optional[str]) -> Optional[str]:
+def resolve_base(
+    repo_root: Path, configured: Optional[str], branches: Optional[set] = None
+) -> Optional[str]:
     """The branch the tab compares with: the project's accepted main branch, else a conventional
-    name that exists, else whatever the project's own checkout has out. None when none is found."""
+    name that exists, else whatever the project's own checkout has out. None when none is found.
+    Pass *branches* (from `local_branches`) to avoid a probe per candidate."""
+    if branches is None:
+        branches = local_branches(repo_root)
     candidates = [configured] if configured else []
     candidates += ["main", "master"]
     for name in candidates:
-        if name and branch_exists(repo_root, name):
+        if name and name in branches:
             return name
     head = worktrees._run_git(repo_root, "symbolic-ref", "--short", "-q", "HEAD", check=False)
     name = head.stdout.strip() if head.returncode == 0 else ""
     return name or None
 
 
-def _parse_name_status(raw: str) -> List[ChangedFile]:
+def _parse_raw_and_numstat(raw: str):
+    """Parse the output of one `git diff --raw --numstat -z`: the raw records (`:modes shas S`
+    then the path, or both paths for a rename) and the numstat records (`added<TAB>removed<TAB>path`,
+    the path empty for a rename with both names following). Fields are consumed record by record,
+    so a path that looks like either kind is never mistaken for one.
+    Returns (files in raw order, path -> (added, removed, binary))."""
     fields = raw.split("\0")
     files: List[ChangedFile] = []
-    i = 0
-    while i < len(fields):
-        code = fields[i]
-        if not code:
-            i += 1
-            continue
-        letter = code[0]
-        if letter in ("R", "C"):
-            if i + 2 >= len(fields):
-                break
-            files.append(ChangedFile(path=fields[i + 2], status="R", old_path=fields[i + 1]))
-            i += 3
-        else:
-            if i + 1 >= len(fields):
-                break
-            status = letter if letter in _STATUS_LETTERS else "M"
-            files.append(ChangedFile(path=fields[i + 1], status="M" if status == "T" else status))
-            i += 2
-    return files
-
-
-def _parse_numstat(raw: str) -> dict:
-    """path -> (added, removed, binary). Binary files print `-` for both counts."""
     counts: dict = {}
-    fields = raw.split("\0")
     i = 0
     while i < len(fields):
         entry = fields[i]
         if not entry:
             i += 1
+            continue
+        if entry.startswith(":"):
+            letter = entry.rsplit(" ", 1)[-1][:1]
+            if letter in ("R", "C"):
+                if i + 2 >= len(fields):
+                    break
+                files.append(ChangedFile(path=fields[i + 2], status="R", old_path=fields[i + 1]))
+                i += 3
+            else:
+                if i + 1 >= len(fields):
+                    break
+                status = letter if letter in _STATUS_LETTERS else "M"
+                files.append(
+                    ChangedFile(path=fields[i + 1], status="M" if status == "T" else status)
+                )
+                i += 2
             continue
         parts = entry.split("\t", 2)
         if len(parts) < 3:
@@ -110,7 +115,7 @@ def _parse_numstat(raw: str) -> dict:
             i += 1
         binary = added == "-" and removed == "-"
         counts[path] = (0 if binary else int(added), 0 if binary else int(removed), binary)
-    return counts
+    return files, counts
 
 
 def parallel(*calls):
@@ -121,21 +126,10 @@ def parallel(*calls):
         return [f.result() for f in futures]
 
 
-def _diff_args(scope_args: List[str]) -> List[List[str]]:
-    return [
-        ["--name-status", "-M", "-z", *scope_args],
-        ["--numstat", "-M", "-z", *scope_args],
-    ]
-
-
 def _files(repo_root: Path, command: List[str], scope_args: List[str]) -> List[ChangedFile]:
-    names_args, counts_args = _diff_args(scope_args)
-    names, counts_out = parallel(
-        lambda: worktrees._run_git(repo_root, *command, *names_args),
-        lambda: worktrees._run_git(repo_root, *command, *counts_args),
-    )
-    counts = _parse_numstat(counts_out.stdout)
-    files = _parse_name_status(names.stdout)
+    """One git process per scope, however many files: statuses and line counts together."""
+    out = worktrees._run_git(repo_root, *command, "--raw", "--numstat", "-M", "-z", *scope_args)
+    files, counts = _parse_raw_and_numstat(out.stdout)
     for entry in files:
         entry.added, entry.removed, entry.binary = counts.get(entry.path, (0, 0, False))
     return sorted(files, key=lambda f: f.path)

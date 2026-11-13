@@ -154,9 +154,10 @@ def _read(
     checkout: Optional[Path],
 ):
     """All the blocking git reads for one answer, in one thread hop."""
-    if not changes_view.branch_exists(repo_root, branch):
+    branches = changes_view.local_branches(repo_root)
+    if branch not in branches:
         return None
-    base = changes_view.resolve_base(repo_root, base_name)
+    base = changes_view.resolve_base(repo_root, base_name, branches)
     turn, since, working = changes_view.parallel(
         lambda: changes_view.turn_files(repo_root, sha) if sha else [],
         lambda: changes_view.branch_files(repo_root, base, branch) if base else [],
