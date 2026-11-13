@@ -335,8 +335,23 @@ def _identifiers(sql: str) -> Tuple[List[str], Set[str]]:
     return words, idents
 
 
+def check_queryable(sql: str) -> None:
+    """Refuse `sql` with `not_queryable` if it names a credential or a machine path, without
+    running it: what saving a dashboard checks (FR-9)."""
+    _check_names(_identifiers(sql)[1])
+
+
 def _check_text(sql: str) -> None:
     words, idents = _identifiers(sql)
+    _check_names(idents)
+    if words and words[0] in _WRITE_KEYWORDS:
+        raise QueryRefused(
+            "read_only",
+            f"{words[0].upper()} is refused: dashboard queries are read-only (SELECT or WITH).",
+        )
+
+
+def _check_names(idents: Set[str]) -> None:
     forbidden = _forbidden_names()
     named = sorted(name for name in idents if name in forbidden)
     if named:
@@ -349,11 +364,6 @@ def _check_text(sql: str) -> None:
     sources = sorted(name for name in idents if name.startswith(_SOURCE_PREFIX))
     if sources:
         raise QueryRefused("not_queryable", f"Not queryable: {', '.join(sources)}.")
-    if words and words[0] in _WRITE_KEYWORDS:
-        raise QueryRefused(
-            "read_only",
-            f"{words[0].upper()} is refused: dashboard queries are read-only (SELECT or WITH).",
-        )
 
 
 @functools.lru_cache(maxsize=512)

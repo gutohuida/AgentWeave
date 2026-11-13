@@ -3711,3 +3711,33 @@ class SetupDismissal(Base):
     dismissed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (PrimaryKeyConstraint("project_id", "item", name="pk_setup_dismissals"),)
+
+
+class Dashboard(Base):
+    """A dashboard an agent saved for a project (`ask-any-agent-for-a-dashboard-and-get-one-that-
+    stays`, FR-9, migration 0177).
+
+    Its panels are stored, never their results: opening it runs each panel's query
+    (`dashboard_query.run_query`). Scoped by `project_id`, so deleting the project sweeps it with
+    no code of its own (FR-13).
+    """
+
+    __tablename__ = "dashboards"
+
+    #: `dash-` and 12 hex characters.
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("projects.id"), nullable=False, index=True
+    )
+    #: Unique within the project.
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    #: The question the dashboard answers.
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    #: `[{"id": "pnl-…", "title", "query", "kind"}]`; kind is number, table, bar, stacked_bar or line.
+    panels: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    #: The agent that saved it, from its run credential, or `operator`.
+    author: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+
+    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_dashboards_project_name"),)

@@ -12,6 +12,8 @@ from .agents import router as agents_router
 from .charters import router as charters_router
 from .checkpoints import router as checkpoints_router
 from .checks import checks_router
+from .dashboards import agent_router as dashboards_agent_router
+from .dashboards import router as dashboards_router
 from .events import instance_router as instance_events_router
 from .events import router as events_router
 from .fs_browse import router as fs_browse_router
@@ -88,8 +90,10 @@ project_resources_router.include_router(manager_router)
 project_resources_router.include_router(stalls_router)
 project_resources_router.include_router(vault_router)
 project_resources_router.include_router(traces_router)
+project_resources_router.include_router(dashboards_router)
 v1_router.include_router(project_resources_router)
 
 v1_router.include_router(mender_router)
 v1_router.include_router(agent_actions_router)
+v1_router.include_router(dashboards_agent_router)
 v1_router.include_router(setup_router)
