@@ -1,6 +1,8 @@
 import { useEffect, useState, type DragEventHandler } from 'react'
 import { Icon } from '@/components/common/Icon'
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
+import { Menu, MenuContent, MenuTrigger } from '@/components/ui/menu'
+import { TaskStartMenuItems } from './TaskStartMenuItems'
+import { canOfferStart } from '@/lib/taskStartMenu'
 import type { Task } from '@/api/tasks'
 import { cardStatus } from '@/lib/taskCardStatus'
 import { builderAndReviewer, formatStageAge, stageLabel } from '@/lib/taskStage'
@@ -62,6 +64,7 @@ export function TaskCardCompact({
   onRetryIntegration,
   startAgents,
   onStartWork,
+  onReviewTask,
   move,
   select,
 }: {
@@ -82,6 +85,8 @@ export function TaskCardCompact({
   /** Agents that can be started on this task; the play menu is absent without them. */
   startAgents?: string[]
   onStartWork?: (taskId: string, agent: string) => void
+  /** Starts an agent's review turn on a `completed` task; its menu then offers "Review with". */
+  onReviewTask?: (taskId: string, agent: string) => void
   move?: CardMoveProps
   /** Present while the board is picking tasks to close together. */
   select?: { checked: boolean; onToggle: () => void }
@@ -265,24 +270,19 @@ export function TaskCardCompact({
           </span>
         </span>
       </button>
-      {startAgents && startAgents.length > 0 && onStartWork ? (
+      {canOfferStart(task, startAgents, onStartWork, onReviewTask) ? (
         <span className="aw-reveal aw-task-card-start">
           <Menu>
             <MenuTrigger
               data-slot="icon-button"
               className="aw-icon-button"
-              aria-label={`Start work on ${task.title}`}
-              title="Start an agent on this"
+              aria-label={`${task.status === 'completed' && onReviewTask ? 'Start review of' : 'Start work on'} ${task.title}`}
+              title={task.status === 'completed' && onReviewTask ? 'Start a review of this' : 'Start an agent on this'}
             >
               <Icon name="play_arrow" size={13} />
             </MenuTrigger>
             <MenuContent align="end">
-              <MenuLabel>Start work</MenuLabel>
-              {startAgents.map((name) => (
-                <MenuItem key={name} icon="play_arrow" onSelect={() => onStartWork(task.id, name)}>
-                  Start {name} on this
-                </MenuItem>
-              ))}
+              <TaskStartMenuItems task={task} startAgents={startAgents} onStartWork={onStartWork} onReviewTask={onReviewTask} />
             </MenuContent>
           </Menu>
         </span>

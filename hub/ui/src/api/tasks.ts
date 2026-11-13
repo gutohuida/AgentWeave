@@ -1091,6 +1091,36 @@ export function useStartWorkOnTask() {
   })
 }
 
+/** The trigger message for "Review with <agent>", neutralised as `startWorkMessage` is. */
+export function reviewTaskMessage(taskId: string, title: string): string {
+  return `Review task ${taskId}: ${neutraliseFileMentions(title)}`
+}
+
+/**
+ * Start an agent's review turn on finished work (`review_task_id`), not a work turn: the Hub staffs
+ * the reviewer, moves the task to under_review, and the reviewer may decide its evidence and
+ * approve (`a-hand-started-task-reaches-review-and-merge`, FR-1).
+ */
+export function useStartReviewOfTask() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ taskId, agent, title }: { taskId: string; agent: string; title: string }) =>
+      postJson<{ run_id?: string; conversation_id: string }>(
+        `/api/v1/projects/${projectId}/agent/trigger`,
+        {
+          agent,
+          message: reviewTaskMessage(taskId, title),
+          review_task_id: taskId,
+        },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'agents'] })
+    },
+  })
+}
+
 /** `{ from_status: [reachable...] }` for the operator, as the Hub declares it. */
 export type AllowedTransitions = Record<string, string[]>
 

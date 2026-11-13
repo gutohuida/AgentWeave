@@ -1,0 +1,1 @@
+import{u as r,j as a,ad as u,d3 as l}from"./index-CK3Iq6sT.js";function d({document:n,identifier:o,children:i="history",testId:s}){const e=r(t=>t.selectedProjectId);return e?a.jsx("button",{type:"button",className:"aw-link aw-link-inline","data-testid":s,onClick:t=>{t.stopPropagation(),u(l(e,n,o))},children:i}):null}export{d as R};
