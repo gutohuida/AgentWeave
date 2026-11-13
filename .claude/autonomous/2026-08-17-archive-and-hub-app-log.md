@@ -682,7 +682,7 @@ the task, archive the document), and `hub/hub/task_transitions.py` for the real 
 edge here since the operator is self-approving, which the machine explicitly permits — `design D9`).
 
 **What was done**, all via the live trial Hub API (port 8010), Bearer auth
-(`aw_live_58ab7d84a1bf7b34eb2d1b424875bacd` from `hub/.env`), targeting `proj-5e960453` only:
+(`aw_live_<redacted-trial-key>` from `hub/.env`), targeting `proj-5e960453` only:
 - Confirmed via `GET /project/spec/requirements?document=...` that
   `spec/changes/quiet-hours-for-agent-notifications/spec.html` (A2's fixture) already carries
   minted identifiers FR-1..FR-7, and via `GET /project/documents` that it is **already

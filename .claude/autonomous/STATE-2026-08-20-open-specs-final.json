@@ -23,7 +23,7 @@
     "pytest_hub": "MEASURED AT PREP, GREEN: `cd hub && py -3.11 -m pytest tests/ -q` -> 2582 passed, 84 skipped, 1 xpassed, 130 warnings in 554.09s (9m14s), exit 0. This is THE baseline — any red in a later run is this run's own until proven otherwise. Two notes: (a) 2582 vs handoff 0066's 2580, the difference being the concurrent session's commits from earlier today; (b) the 1 xpassed is INHERITED, an xfail-marked test that passed, present before this run started and not this run's to chase.",
     "pytest_hub_costs_9_minutes": "The full Hub suite takes 9m14s against a 15-minute firing interval. Do NOT open every iteration with it. Run targeted files while working (e.g. tests/test_agent_actions_*.py, tests/test_tool_surface_matches_server.py, tests/test_spec_documents_api.py) and the full suite at a SECTION boundary, started early in the turn rather than at the end.",
     "ruff_black_mypy": "NOT run at prep. Establish on first touch of a Python file.",
-    "hub_8010": "up, {\"status\":\"ok\",\"ui_stale\":true}, serving ~/.agentweave/hub/profiles/beta/agentweave.db, project proj-5e960453, credential aw_live_58ab7d84a1bf7b34eb2d1b424875bacd",
+    "hub_8010": "up, {\"status\":\"ok\",\"ui_stale\":true}, serving ~/.agentweave/hub/profiles/beta/agentweave.db, project proj-5e960453, credential aw_live_<redacted-trial-key>",
     "hub_8000": "up. The operator's real usage. Do not touch.",
     "ui_stale_is_inherited": "Both 8010 and 8000 report ui_stale:true at prep. hub/hub/static/ui was stamped 2026-08-20T14:14:54Z and hub/ui/src moved after. This is NOT caused by this run. S6 addresses it."
   },

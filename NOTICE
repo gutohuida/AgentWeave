@@ -1,0 +1,16 @@
+AgentWeave
+Copyright 2024-2026 gutohuida
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Releases up to and including 2.1.0 were published under the MIT License.
+
+Third-party marks
+-----------------
+The Anthropic (Claude) and OpenAI (Codex) logos drawn in the app's interface are
+trademarks of their respective owners, used only to identify which agent runner an
+agent uses. They are not covered by this project's license.
+
+Acknowledgements
+----------------
+Parts of the app's interface design (motion and spacing values, control styling)
+follow T3 Code (https://github.com/pingdotgg/t3code), which is MIT-licensed.

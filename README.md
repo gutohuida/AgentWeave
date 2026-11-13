@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://pypi.org/project/agentweave-ai/"><img src="https://badge.fury.io/py/agentweave-ai.svg" alt="PyPI version"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow.svg" alt="MIT License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0 License"></a>
   <a href="https://gutohuida.github.io/AgentWeave/"><img src="https://img.shields.io/badge/docs-gutohuida.github.io-1d6b6e" alt="Documentation"></a>
 </p>
 
@@ -70,7 +70,7 @@ requirement's history, the run's transcript and trace, and the reviewer's reason
 
 ## What's inside
 
-- **Specifications you approve**: drafted with an agent in conversation, with phases, rigor, coverage, drift and folding into current behaviour.
+- **Specifications you approve**: drafted with an agent in conversation, with phases, coverage, drift and folding into current behaviour.
 - **Isolated, reviewed work**: per-task worktrees, dependencies, evidence, quality checks, and approval as a merge.
 - **Agents with a charter**: Claude Code, Codex and Copilot agents, each with a runner, a model and a charter, and permission postures that decide what an agent may do before it asks you.
 - **You in the loop**: agents ask you questions and wait for the answer. Permission requests come to you as cards.
@@ -125,12 +125,29 @@ spec/             AgentWeave's own specifications, managed through AgentWeave
 docs/             the documentation site
 ```
 
+## Built with itself
+
+AgentWeave is developed with AgentWeave. Its specifications are in `spec/`, written and approved
+in the app, and many of its commits come from agents (Claude Code, Codex) building those
+specifications in their own worktrees, reviewed by other agents before they merge.
+
+## Community
+
+- **Questions and ideas:** [GitHub Discussions](https://github.com/gutohuida/AgentWeave/discussions)
+- **Bugs:** [GitHub Issues](https://github.com/gutohuida/AgentWeave/issues)
+- **Security problems:** report privately, see [SECURITY.md](SECURITY.md)
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md)
+
 ## Links
 
 [Documentation](https://gutohuida.github.io/AgentWeave/) ·
 [PyPI](https://pypi.org/project/agentweave-ai/) ·
 [Changelog](CHANGELOG.md) ·
 [Issues](https://github.com/gutohuida/AgentWeave/issues)
+
+## License
+
+[Apache License 2.0](LICENSE). Releases up to and including 2.1.0 were published under MIT.
 
 *Why the red thread? In Goethe's* Elective Affinities, *every rope of the Royal Navy is spun with a
 red thread, so any piece of it can be traced back to where it was made. Madder is the classic red

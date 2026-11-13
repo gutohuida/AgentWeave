@@ -1711,7 +1711,7 @@ TOOL: {"max_results": 2, "query": "select:<redacted>,<redacted>"}
 37  <redacted>  <- mcp__agentweave__submit_spec_document
 32  <redacted>  <- mcp__agentweave__record_evidence
 42  <redacted>  <- this_is_a_perfectly_ordinary_function_name
-40  <redacted>  <- aw_live_58ab7d84a1bf7b34eb2d1b424875bacd
+40  <redacted>  <- aw_live_<redacted-trial-key>
 ```
 
 The Hub mints those document slugs itself from the title the agent chose, and it names its own MCP
