@@ -577,6 +577,70 @@ async def open_landing(session: AsyncSession, task_id: str) -> Optional[TaskLand
     )
 
 
+#: Why a landing ended without moving main when there was nothing there to put: the task is done.
+#: Every other `not_landed` reason is work that did not reach main (`work-is-done-when-it-has-landed-
+#: on-master-not-when-it-is-approved`, FR-1).
+def _nothing_to_land() -> Tuple[str, ...]:
+    from .builds import LANDS_NOWHERE
+
+    ti = task_integration
+    return (ti.NOTHING_TO_MERGE, ti.NO_TASK_BRANCH, ti.NOT_A_REPOSITORY, LANDS_NOWHERE)
+
+
+def is_done(state: Optional[str], reason: Optional[str]) -> bool:
+    """Whether an approved task whose latest landing is *state* (None: it never had one) is done."""
+    if state is None or state == LANDED:
+        return True
+    return state == NOT_LANDED and (reason or "") in _nothing_to_land()
+
+
+async def _latest_landings(session: AsyncSession, *where: Any) -> Dict[str, Tuple[str, str]]:
+    """Each task matching *where* (conditions on `Task`), less those of a build that lands nowhere,
+    with its latest landing's state and reason; a task with no landing is left out."""
+    from .builds import LANDING_NOWHERE
+    from .db.models import Build
+
+    rows = await session.execute(
+        select(Task.id, TaskLanding.state, TaskLanding.reason)
+        .join(TaskLanding, TaskLanding.task_id == Task.id)
+        .outerjoin(Build, Build.id == Task.build_id)
+        .where((Build.landing.is_(None)) | (Build.landing != LANDING_NOWHERE), *where)
+        .order_by(TaskLanding.created_at, TaskLanding.id)
+    )
+    latest: Dict[str, Tuple[str, str]] = {}
+    for task_id, state, reason in rows.all():
+        latest[task_id] = (state, reason or "")
+    return latest
+
+
+async def unlanded(session: AsyncSession, *where: Any) -> Dict[str, Tuple[str, str]]:
+    """The approved tasks matching *where* (conditions on `Task`) that are not done yet, each with
+    its latest landing's state and reason (`work-is-done-when-it-has-landed-on-master-not-when-it-
+    is-approved`, FR-1, FR-9).
+
+    **Done is approved and landed.** An approved task is done once its latest landing has landed,
+    or ended with nothing there to land; one queued, being checked, held, pushed to a pull request
+    not merged yet (`pull_requests.PUSHED`), not landed or sent back is not. A task in a build that
+    lands nowhere is done at approval, and so is one that never had a landing (approved before the
+    landing queue existed). No new status and no new step: the landing's own row decides."""
+    latest = await _latest_landings(session, Task.status == "approved", *where)
+    return {task_id: entry for task_id, entry in latest.items() if not is_done(*entry)}
+
+
+async def landing_states(session: AsyncSession, *where: Any) -> Dict[str, Tuple[str, str]]:
+    """What the Running tab shows of each task matching *where* on its way to main (FR-6): the
+    approved ones not landed (`unlanded`), and those a landing sent back that have not been
+    approved again or rejected, each with its latest landing's state and reason. A landing
+    withdrawn because the operator sent the task back is not the landing's verdict, so not here."""
+    shown = await unlanded(session, *where)
+    for task_id, (state, reason) in (
+        await _latest_landings(session, Task.status.not_in(("approved", "rejected")), *where)
+    ).items():
+        if state == SENT_BACK and reason != WITHDRAWN:
+            shown[task_id] = (state, reason)
+    return shown
+
+
 async def _claim(landing_ids: Sequence[str], to_state: str, batch_id: Optional[str]) -> List[str]:
     """Move each still-queued landing to *to_state* (compare-and-set) and commit; the ids moved."""
     moved: List[str] = []
@@ -866,15 +930,21 @@ async def _refresh_reachability(project_id: str, root: Path) -> None:
 
 async def _announce(session: AsyncSession, landing_ids: Sequence[str]) -> None:
     """Tell the operator's app each landing's new state (`task_landing_changed`), and record the
-    ones they are notified of. Never raises."""
+    ones they are notified of. A landing that landed finishes its build when it was the build's
+    last work (`builds.finish_landed`): every writer of a landing's end passes through here, after
+    its commit. Never raises."""
+    from .builds import finish_landed
     from .sse import sse_manager
     from .utils import persist_event
 
+    ended: List[str] = []
     try:
         for landing_id in landing_ids:
             landing = await session.get(TaskLanding, landing_id)
             if landing is None:
                 continue
+            if landing.state in (LANDED, NOT_LANDED):
+                ended.append(landing.task_id)
             task = await session.get(Task, landing.task_id)
             payload = {
                 "task_id": landing.task_id,
@@ -895,6 +965,7 @@ async def _announce(session: AsyncSession, landing_ids: Sequence[str]) -> None:
                 )
     except Exception:  # noqa: BLE001
         logger.debug("landing broadcast failed", exc_info=True)
+    await finish_landed(ended)
 
 
 # --- releasing a finished task's checkout --------------------------------------------------------

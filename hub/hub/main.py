@@ -643,6 +643,14 @@ async def lifespan(app: FastAPI):
         await pull_requests.notice_at_startup()
     except Exception:  # noqa: BLE001 -- the next action asks again
         logger.warning("could not ask GitHub about open pull requests", exc_info=True)
+    # A build finished before done meant landed, whose approved work has not landed, runs again
+    # (`work-is-done-when-it-has-landed-on-master-not-when-it-is-approved`, FR-8).
+    from . import builds
+
+    try:
+        await builds.reopen_unfinished()
+    except Exception:  # noqa: BLE001 -- each build's next firing asks again
+        logger.warning("could not reopen builds whose work has not landed", exc_info=True)
     # Every project's vault holds the note on what its data means before any dashboard tool is
     # called, projects registered before it shipped included (`ask-any-agent-for-a-dashboard-and-
     # get-one-that-stays`, FR-8). Before the scheduler, so no turn starts ahead of it.
