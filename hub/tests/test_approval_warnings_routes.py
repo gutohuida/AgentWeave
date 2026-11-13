@@ -356,8 +356,8 @@ async def test_check_and_approve_name_tasks_that_declare_no_files(
 
 @pytest.mark.asyncio
 async def test_check_lists_every_gap_approve_lists(
-    app, auth_headers, run_headers, tmp_path
-):  # noqa: F811
+    app, auth_headers, run_headers, tmp_path  # noqa: F811
+):
     """AW-127: Check said "ready" over a document Approve then listed `steps_skipped` for."""
     await _create(app, auth_headers)
     _write(tmp_path, _steps(THREAT))
