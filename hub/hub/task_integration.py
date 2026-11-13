@@ -809,8 +809,25 @@ def checkout_obstacle(
     return None
 
 
+def merge_message(sha: str, task_label: Optional[str] = None) -> str:
+    """The merge commit's message: the task it lands when known (AW-130), then the sha it merges.
+
+    The subject is what `git log --oneline` shows in the user's history, so it names the task's
+    display id and title; the original `Integrate approved work <sha>` line stays as the body.
+    """
+    line = f"Integrate approved work {sha[:12]}"
+    if not task_label:
+        return line
+    return f"Integrate {task_label}\n\n{line}"
+
+
 def integrate(
-    root: Path, target: Target, main_branch: str, *, hub_written: Collection[str] = ()
+    root: Path,
+    target: Target,
+    main_branch: str,
+    *,
+    hub_written: Collection[str] = (),
+    task_label: Optional[str] = None,
 ) -> IntegrationResult:
     """Merge one commit into *main_branch*, locally.
 
@@ -864,7 +881,7 @@ def integrate(
         "merge",
         "--no-ff",
         "-m",
-        f"Integrate approved work {target.commit_sha[:12]}",
+        merge_message(target.commit_sha, task_label),
         target.commit_sha,
     )
     if result.returncode != 0:
