@@ -7,6 +7,7 @@ traps; text an agent appended survives the next start; the dashboard tools' guid
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -95,6 +96,50 @@ def test_an_archived_note_is_not_seeded_again(tmp_path) -> None:
     vault.archive_source(root, private, data_notes.NOTE_ID, actor=vault.OPERATOR)
     assert data_notes.seed(root, private) is None
     assert [e["id"] for e in vault.build_map(root, private)] == []
+
+
+def test_a_note_seeded_before_a_trap_gets_it_appended_and_keeps_agents_text(tmp_path) -> None:
+    """examples-guidance: the traps on attributing a send-back and averaging per task reach a
+    note seeded before they existed, after whatever agents appended, and only once."""
+    root, private = tmp_path / "project", tmp_path / "private"
+    root.mkdir()
+    older = data_notes.TRAPS[:2]
+    old_text = (
+        data_notes.NOTE_TEXT.split("### " + data_notes.TRAPS[2][0])[0] + "## Added by agents\n"
+    )
+    assert all(h not in old_text for h, _ in data_notes.TRAPS[2:]) and all(
+        h in old_text for h, _ in older
+    )
+    vault.seed_source(
+        root, private, entry_id=data_notes.NOTE_ID, name=data_notes.NOTE_NAME, type="note",
+        content=old_text, added_by="hub",
+    )  # fmt: skip
+    vault.append_text(
+        root, private, data_notes.NOTE_ID, text=APPENDED, actor=vault.agent_actor("A", "run-x")
+    )
+
+    assert data_notes.seed(root, private) is not None
+    text = vault.read_entry(root, private, data_notes.NOTE_ID, 0)["content"]
+    assert text.startswith(old_text + APPENDED), "what was there was rewritten"
+    for heading, _ in data_notes.TRAPS:
+        assert text.count(f"### {heading}") == 1, heading
+    assert "task_transitions.run_id" in text and "latest move to\n`completed`" in text
+    assert data_notes.seed(root, private) is None, "seeded twice"
+    assert not (root / vault.TRACKED_DIRECTORY / "sources" / f"{data_notes.NOTE_ID}.md").exists()
+
+
+def test_the_query_reference_carries_every_trap_before_the_tables() -> None:
+    """examples-guidance: a Haiku analyst read only the start of the 120,000-character answer
+    and never reached `notes`, then counted send-backs under the reviewer's model."""
+    reference = dashboard_query.query_reference()
+    assert reference["traps"] == [{"trap": h, "how": t} for h, t in data_notes.TRAPS]
+    order = list(reference)
+    assert order.index("notes") < order.index("traps") < order.index("tables")
+    text = json.dumps(reference)
+    assert text.index(data_notes.TRAPS[-1][0]) < text.index('"tables"')
+    transitions = next(t for t in reference["tables"] if t["name"] == "task_transitions")
+    run_id = next(c for c in transitions["columns"] if c["name"] == "run_id")
+    assert "reviewer" in run_id["meaning"] and "completed" in run_id["meaning"]
 
 
 def test_the_dashboard_tools_guidance_names_the_note() -> None:

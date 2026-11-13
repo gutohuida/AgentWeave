@@ -1171,6 +1171,42 @@ def seed_source(
     return _Record(meta, body_root).listed(content)
 
 
+def append_missing_sections(
+    project_root: Path,
+    private_root: Path,
+    entry_id: str,
+    sections: List[Tuple[str, str]],
+) -> Optional[Dict[str, Any]]:
+    """Append to a seeded text source each `(marker, text)` whose *marker* its text does not hold
+    yet, in order; answer it as the map lists it, or None when nothing was missing, or when it is
+    archived, a file, or not held on this machine. Only ever appends: what is there, agents'
+    additions included, stays as it is. Like the seeding itself it records no change and writes
+    nothing into the project's folder (a change is listed as the operator's or an agent's, and
+    this is neither)."""
+    with _write_lock(project_root, entry_id):
+        record = _records(project_root, private_root).get(entry_id)
+        if (
+            record is None
+            or record.archived
+            or record.text_root is None
+            or record.file_kind is not None
+        ):
+            return None
+        text = record.text() or ""
+        missing = [added for marker, added in sections if marker not in text]
+        if not missing:
+            return None
+        content = text + "".join(missing)
+        data = content.encode("utf-8")
+        before = record.version()
+        storage.write(record.text_root, f"{SOURCES}/{entry_id}.md", data)
+        changes: Dict[str, Any] = {"sha256": hashlib.sha256(data).hexdigest()}
+        if "distilled_version" not in record.meta and before is not None:
+            changes["distilled_version"] = before
+        _save_meta(record, changes)
+    return record.listed(content)
+
+
 def add_file(
     project_root: Path,
     private_root: Path,
