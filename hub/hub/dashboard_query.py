@@ -23,7 +23,10 @@ every write, schema change, attach and pragma with `read_only`. Recursive CTEs a
 and says `truncated`. The query runs on this module's own threads, never the event loop's and never
 the blocking pool git uses, and SQLite releases the GIL while it steps.
 
-`x REGEXP 'pattern'` matches Python's `re.search` against any text column (FR-5).
+`x REGEXP 'pattern'` searches any text column (FR-5) with the `regex` package (Python `re` syntax),
+not `re`: a single `re.search` cannot be interrupted and holds the GIL throughout, so one
+backtracking pattern would run past the time limit and stall the event loop with it. `regex` is
+given the time left before the query's deadline and releases the GIL while it matches.
 
 `query_reference()` is generated from the running models (FR-7): exactly the tables and columns
 the views expose, with each column's type and a meaning taken from the model's own comments.
@@ -43,6 +46,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, TypedDict
 from urllib.parse import quote
 
+import regex
 from sqlalchemy.dialects import sqlite as sqlite_dialect
 
 from hub import config
@@ -63,6 +67,7 @@ NOT_QUERYABLE_COLUMNS: Dict[Tuple[str, str], str] = {
     ("projects", "working_directory"): "the project directory is this machine's path",
     ("projects", "path_key"): "the project directory's key is this machine's path",
     ("inbound_queue_entries", "work_dir"): "a run's workspace is this machine's path",
+    ("vault_settings", "private_location"): "the private vault's folder is this machine's path",
 }
 
 #: Prefix of the per-query schema name the database file is attached under.
@@ -260,7 +265,7 @@ def query_reference() -> Dict[str, Any]:
             "Every table holds only the current project's rows; no project filter is needed.",
             "SQLite SQL, read-only: SELECT and WITH (recursive CTEs included). Writes, schema "
             "changes, ATTACH and PRAGMA are refused.",
-            "Regular expressions: `text_column REGEXP 'pattern'` (Python re.search syntax).",
+            "Regular expressions: `text_column REGEXP 'pattern'` (Python re syntax; a match counts as part of the query's time limit).",
             "JSON columns are text: read fields with json_extract(column, '$.field').",
             "Times are UTC text; julianday(end) - julianday(start) gives days between two.",
             f"A query is stopped after {timeout} s; a result is cut at {max_rows} rows "
@@ -352,8 +357,8 @@ def _check_text(sql: str) -> None:
 
 
 @functools.lru_cache(maxsize=512)
-def _compiled(pattern: str) -> "re.Pattern[str]":
-    return re.compile(pattern)
+def _compiled(pattern: str) -> "regex.Pattern[str]":
+    return regex.compile(pattern)
 
 
 def _cell(value: Any) -> Any:
@@ -375,6 +380,8 @@ def _run_sync(
     schema = _SOURCE_PREFIX + secrets.token_hex(8)
     refusal: List[QueryRefused] = []
     regex_error: List[str] = []
+    regex_timed_out: List[bool] = []
+    deadline = time.monotonic() + timeout
     conn = sqlite3.connect("file::memory:", uri=True, check_same_thread=False)
     try:
         uri = "file:" + quote(database_file.replace("\\", "/"), safe="/:") + "?mode=ro"
@@ -408,12 +415,20 @@ def _run_sync(
                 return None
             try:
                 compiled = _compiled(str(pattern))
-            except re.error as exc:
+            except regex.error as exc:
                 regex_error.append(f"invalid regular expression {pattern!r}: {exc}")
                 raise
             if isinstance(value, (bytes, bytearray)):
                 value = bytes(value).decode("utf-8", "replace")
-            return 1 if compiled.search(value if isinstance(value, str) else str(value)) else 0
+            text = value if isinstance(value, str) else str(value)
+            try:
+                found = compiled.search(
+                    text, timeout=max(deadline - time.monotonic(), 0.001), concurrent=True
+                )
+            except TimeoutError:
+                regex_timed_out.append(True)
+                raise
+            return 1 if found else 0
 
         conn.create_function("regexp", 2, regexp, deterministic=True)
 
@@ -451,7 +466,6 @@ def _run_sync(
             return refuse("read_only", "Refused: dashboard queries are read-only (SELECT or WITH).")
 
         conn.set_authorizer(authorize)
-        deadline = time.monotonic() + timeout
         conn.set_progress_handler(lambda: 1 if time.monotonic() > deadline else 0, _PROGRESS_STEPS)
 
         try:
@@ -462,7 +476,7 @@ def _run_sync(
             if refusal:
                 raise refusal[0] from None
             text = str(exc).replace(schema + ".", "")
-            if "interrupted" in text:
+            if "interrupted" in text or regex_timed_out:
                 raise QueryRefused(
                     "timeout", f"The query ran longer than {timeout:g} seconds and was stopped."
                 ) from None

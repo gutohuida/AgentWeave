@@ -25,6 +25,7 @@ from hub.db.models import (
     Task,
     TraceSettings,
     TraceSpan,
+    VaultSettings,
 )
 
 from ._loop_lag import STALL_LIMIT, LagProbe
@@ -57,6 +58,7 @@ async def _seed() -> None:
             db.add(
                 TraceSettings(project_id=pid, otlp_headers={"authorization": f"Bearer {SECRET}"})
             )
+            db.add(VaultSettings(project_id=pid, private_location=f"C:/{SECRET}/vault/{pid}"))
             for n, status in enumerate(statuses):
                 task_id = f"task-{pid[-4:]}{n:04d}"
                 db.add(
@@ -222,6 +224,7 @@ async def test_nothing_reaches_around_the_views(seeded, sql):
         ("workspace_dir", "select workspace_dir from runs"),
         ("workspace_fingerprints", "select * from workspace_fingerprints"),
         ("work_dir", "select work_dir from inbound_queue_entries"),
+        ("private_location", "select private_location from vault_settings"),
     ],
 )
 async def test_credentials_and_paths_are_refused_by_name(seeded, item, sql):
@@ -231,7 +234,7 @@ async def test_credentials_and_paths_are_refused_by_name(seeded, item, sql):
     assert SECRET not in refused.message
 
 
-@pytest.mark.parametrize("table", ["runs", "projects", "trace_settings"])
+@pytest.mark.parametrize("table", ["runs", "projects", "trace_settings", "vault_settings"])
 async def test_select_star_carries_no_credential_or_path(seeded, table):
     result = await run_query(A, f"select * from {table}")
     assert result["rows"]
@@ -242,6 +245,7 @@ async def test_select_star_carries_no_credential_or_path(seeded, table):
         "working_directory",
         "path_key",
         "otlp_headers",
+        "private_location",
     }
 
 
@@ -352,6 +356,24 @@ async def test_a_query_past_the_limit_is_stopped(seeded, monkeypatch):
     assert loop.time() - started < 10
 
 
+#: Catastrophic backtracking for Python's `re`: each extra `a` roughly doubles the search time.
+BACKTRACKING = (
+    "select count(*) from agent_outputs where (printf('%.40c', 'a') || '!') regexp '^(a|aa)+$'"
+)
+
+
+async def test_a_backtracking_regex_is_stopped_at_the_limit(seeded, monkeypatch):
+    # `re.search` is one uninterruptible C call: the progress handler never runs during it, so
+    # this answered a result after ~10 s (with a 1 s limit) before REGEXP was bounded.
+    monkeypatch.setattr(config.settings, "aw_dashboard_query_timeout", 1)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    refused = await _refused(BACKTRACKING)
+    assert refused.code == "timeout"
+    assert "longer than 1 seconds" in refused.message
+    assert loop.time() - started < 3
+
+
 async def test_a_result_over_the_cap_is_cut_and_says_so(seeded):
     result = await run_query(
         A,
@@ -438,4 +460,14 @@ async def test_the_loop_never_stalls_while_queries_run(seeded, monkeypatch):
             await slow
     assert stopped.value.code == "timeout"
     assert regex_result["rows"] == [[300000]]
+    assert probe.worst < STALL_LIMIT, f"the loop stalled {probe.worst * 1000:.0f} ms: {probe.why}"
+
+
+async def test_a_backtracking_regex_does_not_stall_the_loop(seeded, monkeypatch):
+    # `re.search` holds the GIL for its whole match, which stalled every thread, the loop included.
+    monkeypatch.setattr(config.settings, "aw_dashboard_query_timeout", 1)
+    async with LagProbe() as probe:
+        with pytest.raises(QueryRefused) as stopped:
+            await run_query(A, BACKTRACKING)
+    assert stopped.value.code == "timeout"
     assert probe.worst < STALL_LIMIT, f"the loop stalled {probe.worst * 1000:.0f} ms: {probe.why}"
