@@ -110,6 +110,7 @@ export function OverviewView({
   onOpenTasks,
   notice,
   setup,
+  firstRun,
   knownFailing,
   loading,
   onAddAgent,
@@ -144,6 +145,8 @@ export function OverviewView({
   notice?: React.ReactNode
   /** What the project still needs (`SetupList`), above everything else. */
   setup?: React.ReactNode
+  /** The first-run welcome (`FirstRunPanel`), below the set-up list while the project has no work. */
+  firstRun?: React.ReactNode
   /** The project's known-failing list (`KnownFailingList`), below what is running. */
   knownFailing?: React.ReactNode
   loading?: boolean
@@ -161,6 +164,7 @@ export function OverviewView({
   return (
     <div className="aw-overview">
       {setup}
+      {firstRun}
       {notice ? <div className="aw-overview-notice">{notice}</div> : null}
       <div className="aw-overview-summary">
         <p className="aw-overview-status">
