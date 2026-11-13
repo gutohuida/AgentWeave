@@ -49,6 +49,7 @@ from ... import (
     project_workspace,
     readable_ids,
     requirement_evidence,
+    review_on_completion,
     review_turn,
     run_liveness,
     run_secrets,
@@ -3898,6 +3899,9 @@ async def _execute_run(
             # (approval-runs-the-projects-checks). Never raises, so it sits beside the wake.
             if await project_checks.configured_for(db, project_id):
                 project_checks.after_run(project_id, run_id)
+            # Finished work no build reviews finds its reviewer (FR-2 of
+            # `a-hand-started-task-reaches-review-and-merge`). Never raises.
+            review_on_completion.after_run(project_id, run_id)
             # The wake, immediately after the commit and above anything else that can raise (D5).
             # Everything below shares this `try`, whose failure tail skips the rest, and a wake
             # placed below it would be lost to any exception there until the next restart. For
@@ -4947,6 +4951,9 @@ async def _execute_rpc_run(
             # (approval-runs-the-projects-checks). Never raises, so it sits beside the wake.
             if await project_checks.configured_for(db, project_id):
                 project_checks.after_run(project_id, run_id)
+            # Finished work no build reviews finds its reviewer (FR-2 of
+            # `a-hand-started-task-reaches-review-and-merge`). Never raises.
+            review_on_completion.after_run(project_id, run_id)
             # The wake, immediately after the commit, for the reason `_execute_run` gives.
             if held is not None:
                 arm_allowance_wake(project_id, agent, held.hold_until)
