@@ -56,7 +56,9 @@ def _ready_criteria():
 
 
 @pytest.mark.asyncio
-async def test_an_unresolved_question_is_not_ready_until_it_is_resolved(app, auth_headers, run_headers):
+async def test_an_unresolved_question_is_not_ready_until_it_is_resolved(
+    app, auth_headers, run_headers
+):
     """AW-125: the warning said `unresolved_question` while `ready_to_approve` said true."""
     await _create(app, auth_headers)
 
