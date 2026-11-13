@@ -41784,3 +41784,13 @@ CodexSol's run `run-1522734a6958` on AW-101 recorded ten outputs, the last a she
 **Tier:** 0
 
 The flow for "The side panel's Changes tab shows what the agent changed" (job `job-0a428a51b9c6`, loop `loop-261bebd8bca1`, job agent QA2) finished its build at 11:24:51. At 11:40 landing batch `lbat-5ce63f7cf809` sent SPSCT-2 back to `revision_needed`, assignee Developer, who was idle. QA2 was mid-review, and from 11:17 every tick was refused with no record: no `JobRun`, `last_run` stuck at 11:17. **Expected:** when the job's agent is busy and an open task in the loop is held by an idle assignee who could take it now, the firing proceeds and briefs that assignee; holdings in other loops, and agents really running or held, still refuse.
+
+## F1172 (A) -- a save says `ready_to_approve: true` while a question is open
+
+**Status:** fixed 2026-11-13 (Tier 0, AW-125). `hub/hub/spec_completeness.py`: `APPROVAL_GAP_CODES`, which `submit_spec_document`'s `ready_to_approve` (`agent_actions.py`) tests the warnings against, lacked `unresolved_question`, so a change with an open question answered `blocking: []`, `ready_to_approve: true` beside an `unresolved_question` warning. Approve allows an open question but warns, so it is a warning that stops "ready", not a refusal. Test: `hub/tests/test_a_save_says_what_approve_would_list.py::test_an_unresolved_question_is_not_ready_until_it_is_resolved` (failed before the fix at the submit route). Reaches `:8000` only on the operator's restart.
+**Source:** found by driving -- Architect, 2026-11-13, seen twice
+**Theme:** Specs
+**Ready:** yes
+**Tier:** 0
+
+An author reading `ready_to_approve` told the operator the document was ready while a decision was open. **Expected:** false while any non-deferred question is unresolved; resolving it flips it true.

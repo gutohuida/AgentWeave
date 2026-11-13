@@ -357,9 +357,13 @@ def split(findings: List[Finding]) -> Tuple[List[Finding], List[Finding]]:
     return refusals, [f for f in findings if f.code not in REFUSAL_CODES]
 
 
-#: The codes `approval_gaps` can return. An author is told them in the save result's `warnings`
-#: and `ready_to_approve` is false while one is present (F1124): Approve lists them.
-APPROVAL_GAP_CODES = frozenset({"criterion_without_check", "no_acceptance_drive"})
+#: The codes a save's `ready_to_approve` waits on. An author is told them in the save result's
+#: `warnings` and `ready_to_approve` is false while one is present (F1124): Approve lists them.
+#: `unresolved_question` comes from `check` (Approve allows it but warns, F1172), so an open
+#: question is a warning the author must not read as "ready".
+APPROVAL_GAP_CODES = frozenset(
+    {"criterion_without_check", "no_acceptance_drive", "unresolved_question"}
+)
 
 
 def approval_gaps(payload: SpecPayload) -> List[Finding]:
