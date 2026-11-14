@@ -64,6 +64,12 @@ DEFAULT_SIZE = (24, 80)  # rows, cols
 
 _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+_JOB_OBJECT_LIMIT_PRIORITY_CLASS = 0x20
+_NORMAL_PRIORITY_CLASS = 0x20
+#: Priority classes below normal (`GetPriorityClass`): idle and below-normal.
+_BELOW_NORMAL_CLASSES = (0x40, 0x4000)
+#: The processes ConPTY starts to host a pseudo-console, as children of the Hub.
+_CONSOLE_HOSTS = ("openconsole.exe", "conhost.exe")
 
 
 class LimitReachedError(Exception):
@@ -186,7 +192,13 @@ def _kill_on_close_job(pid: int) -> Any:
             wintypes.DWORD,
         ]
         info = _ExtendedLimits()
-        info.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        # An operator's shell answers at interactive priority whatever the Hub runs at: a Hub
+        # started below normal (a project check gives way, `project_checks.py`) would otherwise
+        # hand it on, and PowerShell under ConPTY then takes tens of seconds to answer a line.
+        info.BasicLimitInformation.LimitFlags = (
+            _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | _JOB_OBJECT_LIMIT_PRIORITY_CLASS
+        )
+        info.BasicLimitInformation.PriorityClass = _NORMAL_PRIORITY_CLASS
         if not kernel32.SetInformationJobObject(
             job._handle,
             _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
@@ -197,6 +209,65 @@ def _kill_on_close_job(pid: int) -> Any:
     except Exception:  # noqa: BLE001 - the job still ends the tree on close; Hub stop ends it too
         logger.debug("could not mark the shell's job kill-on-close", exc_info=True)
     return job
+
+
+def _raise_console_hosts() -> None:
+    """Raise this process's below-normal console hosts to normal priority. Windows only.
+
+    ConPTY starts the host drawing a shell's screen as a child of the Hub, not inside the shell's
+    job, so the job's priority limit does not reach it; a host left below normal starves the shell
+    it draws. Every host the Hub owns is an operator's shell's, so raising one is never wrong."""
+    try:
+        import ctypes
+        import os
+        from ctypes import wintypes
+
+        class _Entry(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", wintypes.DWORD),
+                ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.c_void_p),
+                ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", wintypes.DWORD),
+                ("szExeFile", ctypes.c_wchar * 260),
+            ]
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+        if not snapshot or snapshot == wintypes.HANDLE(-1).value:
+            return
+        hosts: List[int] = []
+        try:
+            entry = _Entry()
+            entry.dwSize = ctypes.sizeof(_Entry)
+            more = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+            while more:
+                if (
+                    entry.th32ParentProcessID == os.getpid()
+                    and entry.szExeFile.lower() in _CONSOLE_HOSTS
+                ):
+                    hosts.append(entry.th32ProcessID)
+                more = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+        finally:
+            kernel32.CloseHandle(snapshot)
+        for pid in hosts:
+            # PROCESS_SET_INFORMATION | PROCESS_QUERY_LIMITED_INFORMATION
+            handle = kernel32.OpenProcess(0x0200 | 0x1000, False, pid)
+            if not handle:
+                continue
+            try:
+                if kernel32.GetPriorityClass(handle) in _BELOW_NORMAL_CLASSES:
+                    kernel32.SetPriorityClass(handle, _NORMAL_PRIORITY_CLASS)
+            finally:
+                kernel32.CloseHandle(handle)
+    except Exception:  # noqa: BLE001 - the shell still works, only slower
+        logger.debug("could not raise the shells' console hosts", exc_info=True)
 
 
 def _end_wsl_processes(distribution: str, shell_id: str) -> None:
@@ -257,6 +328,7 @@ class Shell:
             "directory": self.directory,
             "running": self.running,
             "exit_code": self.exit_code,
+            "page": self.page,
             "created_at": self.created_at,
         }
 
@@ -281,6 +353,7 @@ class Shell:
         self._pty = PtySession.spawn(argv, cwd=str(self.path), env=env, dimensions=self.size)
         if IS_WINDOWS:
             self._job = _kill_on_close_job(self._pty.pid)
+            _raise_console_hosts()
         threading.Thread(target=self._read, name=f"terminal-{self.id}", daemon=True).start()
 
     def _read(self) -> None:
@@ -439,6 +512,18 @@ class Registry:
     ) -> Shell:
         """Start a shell, or raise `LimitReachedError` -- before any process exists."""
         async with self._guard():
+            # A page that has gone (its grace still running) has already lost its shells as far as
+            # the operator can tell: end them now so they neither count toward the limit nor
+            # outlive the reload that a fresh shell is opening after.
+            for gone in [
+                s
+                for s in self.for_conversation(project_id, conversation_id)
+                if s.page
+                and s.page != page
+                and s.page not in self._pages
+                and s.page in self._page_timers
+            ]:
+                await self.close(gone)
             open_now = [
                 s for s in self.for_conversation(project_id, conversation_id) if s is not replacing
             ]
