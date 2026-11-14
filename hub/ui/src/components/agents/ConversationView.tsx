@@ -38,6 +38,7 @@ import {
 import {
   fileLocation,
   fileTabId,
+  fileOwner,
   filePath,
   isFileTabId,
   isLoopTabId,
@@ -353,7 +354,8 @@ export function ConversationView({
       if (id === 'running') return { id, label: 'Running', icon: 'sync' }
       if (isFileTabId(id)) {
         const path = filePath(id)
-        const where = fileLocation(id) === 'worktree' ? 'worktree' : 'root'
+        const owner = fileOwner(id)
+        const where = fileLocation(id) === 'worktree' ? (owner ? `${owner.agent}'s worktree` : 'worktree') : 'root'
         return { id, label: `${path.slice(path.lastIndexOf('/') + 1)} · ${where}`, icon: fileIconFor(path) }
       }
       if (isLoopTabId(id)) {
@@ -380,6 +382,12 @@ export function ConversationView({
     setInsertPathRequest({ path, requestId: insertRequestCounter.current })
   }, [])
 
+  const ownerOf = useCallback(
+    (location: 'worktree' | 'root') =>
+      location === 'worktree' && conversationId ? { agent: agent.name, conversationId } : null,
+    [agent.name, conversationId],
+  )
+
   const renderPanelTabContent = useCallback(
     (tab: PanelTab) => {
       if (tab.id === 'specs') {
@@ -401,7 +409,7 @@ export function ConversationView({
             conversationId={conversationId}
             currentPath={panelActiveTabId && isFileTabId(panelActiveTabId) ? filePath(panelActiveTabId) : null}
             currentLocation={panelActiveTabId && isFileTabId(panelActiveTabId) ? fileLocation(panelActiveTabId) : null}
-            onOpen={(path, location) => openTab(projectId, fileTabId(path, location))}
+            onOpen={(path, location) => openTab(projectId, fileTabId(path, location, ownerOf(location)))}
           />
         )
       }
@@ -410,7 +418,7 @@ export function ConversationView({
           <ChangesTabContainer
             agent={agent.name}
             conversationId={conversationId}
-            onOpenFile={(path) => openTab(projectId, fileTabId(path, 'worktree'))}
+            onOpenFile={(path) => openTab(projectId, fileTabId(path, 'worktree', ownerOf('worktree')))}
           />
         )
       }
@@ -419,7 +427,7 @@ export function ConversationView({
           <FileTab
             path={filePath(tab.id)}
             location={fileLocation(tab.id)}
-            conversationId={conversationId}
+            conversationId={fileOwner(tab.id)?.conversationId ?? conversationId}
             onInsertIntoComposer={insertIntoComposer}
             onClose={() => closeTab(projectId, tab.id)}
           />
@@ -463,6 +471,7 @@ export function ConversationView({
       document,
       agent.name,
       conversationId,
+      ownerOf,
       openTab,
       onOpenTasks,
       insertIntoComposer,

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FilesTabContainer } from '@/components/panel/FilesTabContainer'
 import { useConversationFiles } from '@/api/workspace'
-import { fileLocation, fileTabId, filePath } from '@/store/panelTabsStore'
+import { fileLocation, fileOwner, fileTabId, filePath } from '@/store/panelTabsStore'
 
 vi.mock('@/api/workspace', () => ({ useConversationFiles: vi.fn() }))
 const mocked = vi.mocked(useConversationFiles)
@@ -60,5 +60,17 @@ describe('file tab ids carry the location', () => {
     expect(fileLocation(fileTabId('README.md'))).toBe('root')
     expect(filePath(fileTabId('worktree:x'))).toBe('worktree:x')
     expect(fileLocation(fileTabId('worktree:x'))).toBe('root')
+
+    // A worktree tab names whose checkout it is, so switching conversations cannot re-point it.
+    const maker = { agent: 'Maker', conversationId: 'conv-aaa' }
+    const tasker = { agent: 'Tasker', conversationId: 'conv-bbb' }
+    const idM = fileTabId('README.md', 'worktree', maker)
+    expect(idM).not.toBe(fileTabId('README.md', 'worktree', tasker))
+    expect(fileOwner(idM)).toEqual(maker)
+    expect(filePath(idM)).toBe('README.md')
+    expect(fileLocation(idM)).toBe('worktree')
+    expect(fileOwner(fileTabId('README.md'))).toBeNull()
+    expect(fileOwner(fileTabId('a:b.md', 'worktree', maker))).toEqual(maker)
+    expect(filePath(fileTabId('a:b.md', 'worktree', maker))).toBe('a:b.md')
   })
 })
