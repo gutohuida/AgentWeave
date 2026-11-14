@@ -688,6 +688,11 @@ class Drive:
                 code == 200 and panels and not bad,
                 f"run {code}; {len(panels)} panels; failing {bad}; queries "
                 + " | ".join(f"{x.get('kind')}: {x.get('query')}" for x in panels)[:1500])
+        if bad:  # the line above is cut short; keep every saved query whole beside the transcript
+            path = TMP / f"first-time-right-{which.split()[1]}-panels.txt"
+            path.write_text("\n\n".join(f"-- {x.get('kind')} {x.get('title')!r}: {x.get('error') or x.get('warning')}"
+                                          f"\n{x.get('query')}" for x in panels), encoding="utf-8")
+            p(f"  saved queries in full: {path}")
         # Not the criterion, which asks only that every panel draws: how well each reads, for the
         # guidance task (a line drawn newest first runs backwards; a stacked bar of one series
         # does not stack).
@@ -718,7 +723,7 @@ class Drive:
             api("DELETE", f"/projects/{self.a}/dashboards/{d['id']}")
 
     def keep_transcript(self, run_id: Optional[str], which: str, quiet: bool) -> None:
-        """Write the turn's whole output, tool calls and results included, to the scratch; for a
+        """Write the turn's replies and thinking (tool rows carry only the tool's name) to the scratch; for a
         turn that saved nothing (not *quiet*) also print every dashboard tool call with what it
         answered, so a miss can be told apart (never called, called and refused, or a call that
         never left the reply)."""

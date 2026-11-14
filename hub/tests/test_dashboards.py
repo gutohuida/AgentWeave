@@ -438,3 +438,21 @@ def test_the_tools_are_on_every_runners_surface():
         assert tool in mcp_server._CALLABLE_TOOLS and tool in HUB_MCP_TOOLS
         assert any(op.tool == tool for op in _operations())
     assert "delete_dashboard" not in mcp_server._CALLABLE_TOOLS
+
+
+@pytest.mark.asyncio
+async def test_the_reference_names_only_the_tables_asked_for(app, auth_headers):
+    """FR-9: the whole reference is over a hundred thousand characters, more than one MCP tool
+    result holds; `?tables=` answers the named tables in full and names any that is no table."""
+    headers = await _run_headers("run-dash-10", "Builder")
+    whole = (await app.get(f"{AA}/query-reference", headers=headers)).json()
+    named = (
+        await app.get(f"{AA}/query-reference?tables=runs,turn_usage,nope", headers=headers)
+    ).json()
+    assert [t["name"] for t in named["tables"]] == [
+        t["name"] for t in whole["tables"] if t["name"] in {"runs", "turn_usage"}
+    ]
+    assert named["tables"] == [t for t in whole["tables"] if t["name"] in {"runs", "turn_usage"}]
+    assert named["unknown_tables"] == ["nope"]
+    assert named["traps"] == whole["traps"] and named["notes"] == whole["notes"]
+    assert "unknown_tables" not in whole

@@ -1680,14 +1680,17 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
         ),
         _Operation(
             tool="dashboard_query_reference",
-            args="",
+            args="tables=None",
             method="GET",
             path="/dashboards/query-reference",
-            fields=(),
+            fields=("tables",),
             required=(),
             text=(
                 "everything a dashboard query can read: each table and column, its type and a "
                 "short meaning, generated from the running Hub, with the query rules and limits. "
+                "Without `tables` each table's columns are listed by name only, so it fits one "
+                "result; call it again naming the tables you will query in `tables` for their "
+                "columns' types and meanings. "
                 "Every table holds only this project's rows. Read the vault note "
                 '`src-27723331ae1d` ("What the project\'s data means, and its traps") with '
                 "`vault_read` before writing a query, and add a trap you find with `vault_append`."
@@ -1722,7 +1725,9 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "`bar`, `stacked_bar`, `line`. Choose the kind from the question: one figure, "
                 '`number`; a ranking or comparison, `bar`; a breakdown by two labels ("send-'
                 'backs per model by reason"), `stacked_bar`, never a table; change over time, '
-                "`line`; detail rows, `table`. The app draws it: write no chart code. A stacked "
+                "`line`; detail rows, `table`. The app draws and formats it: write no chart code "
+                "and load no charting skill. Every value column stays a number (rounded, "
+                "never `printf` or a currency sign joined on); put the unit in its alias. A stacked "
                 "bar's query pivots, one row per bar and "
                 "one numeric column per part: `group by` the first label only and give each "
                 "value of the second its own column, a sum of `<column> = '<value>'`. Shape the query "
@@ -1730,7 +1735,8 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "(`order by ... desc limit 15`), put time in ascending order for a line, and "
                 "alias columns to the readable names the legend and tooltip show. The data note "
                 "has a worked example of each kind. Saving does not run the queries, so a failing one "
-                "shows its error when opened. Saving is this call; nothing is saved until you make "
+                "shows its error when opened: save exactly the queries you ran, and run one again "
+                "if you changed it. Saving is this call; nothing is saved until you make "
                 "it: never write the panels out in your reply in its place. To change a saved "
                 "dashboard use `edit_dashboard`; "
                 "`dashboard_id` replaces that one whole; pass the `version` you read as "

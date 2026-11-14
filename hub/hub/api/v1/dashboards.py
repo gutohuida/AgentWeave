@@ -645,9 +645,16 @@ async def _query(project_id: str, sql: str) -> Dict[str, Any]:
 # -------------------------------------------------------------------------------- operator routes
 
 
+def _named_tables(tables: Optional[str]) -> Optional[List[str]]:
+    """`?tables=runs,tasks` as a list; absent, every table."""
+    return None if tables is None else tables.split(",")
+
+
 @router.get("/query-reference")
-async def operator_query_reference(project: Tuple[str, str] = Depends(get_project)):
-    return dashboard_query.query_reference()
+async def operator_query_reference(
+    tables: Optional[str] = None, project: Tuple[str, str] = Depends(get_project)
+):
+    return dashboard_query.query_reference(_named_tables(tables))
 
 
 @router.post("/query")
@@ -730,8 +737,10 @@ async def operator_delete_dashboard(
 
 
 @agent_router.get("/query-reference")
-async def agent_query_reference(actor: AgentActor = Depends(get_agent_actor)):
-    return dashboard_query.query_reference()
+async def agent_query_reference(
+    tables: Optional[str] = None, actor: AgentActor = Depends(get_agent_actor)
+):
+    return dashboard_query.query_reference(_named_tables(tables))
 
 
 @agent_router.post("/query")

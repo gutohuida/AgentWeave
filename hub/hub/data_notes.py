@@ -177,6 +177,9 @@ _EXAMPLES_INTRO = """One query per chart kind, each drawable as it stands. Bars 
 ranking orders by its value and keeps the top 15; a line orders by its time; every column is
 aliased to the name the legend and tooltip show. A breakdown by two labels ("X per A by B") is a
 stacked bar whose query pivots: one row per A, one `sum(<b> = '<value>')` column per value of B.
+Every value column stays a number, because the app formats it: round money
+(`round(sum(api_equivalent_usd_micros) / 1e6, 2) as "Cost (USD)"`) and never `printf` it or join a
+currency sign on, which makes it text that no chart can draw.
 """
 
 _ADDED_BY_AGENTS = "## Added by agents"

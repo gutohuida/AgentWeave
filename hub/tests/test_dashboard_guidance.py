@@ -70,6 +70,21 @@ async def test_ac_first_time_right_the_save_tool_says_to_pivot_and_to_save_by_ca
         assert "never a table" in flat, where
         assert "one numeric column per part" in flat and "<column> = '<value>'" in flat, where
         assert "Saving is this call; nothing is saved until you make it" in flat, where
+        assert "save exactly the queries you ran" in flat.lower(), where
+
+
+@pytest.mark.asyncio
+async def test_ac_first_time_right_the_guidance_keeps_values_numeric() -> None:
+    # FR-9: Haiku turns formatted cost with printf('$%.2f', ...), so the number and bar panels
+    # had no numeric column and warned on opening.
+    listed = {tool.name: tool for tool in await mcp.list_tools()}
+    described = [op.text for op in agent_routes._operations() if op.tool == "save_dashboard"]
+    for where, text in (("tools/list", listed["save_dashboard"].description or ""),
+                        ("agent context", described[0]),
+                        ("worked examples", data_notes._EXAMPLES_INTRO)):  # fmt: skip
+        flat = " ".join(text.split())
+        assert "stays a number" in flat, where
+        assert "printf" in flat, where
 
 
 def test_the_send_back_trap_shows_the_per_reason_breakdown_pivoted() -> None:
@@ -178,3 +193,30 @@ def test_a_claude_run_over_mcp_is_told_toolsearch_only_loads_a_tool() -> None:
     assert "`ToolSearch` only loads a schema and never runs a tool" in over_mcp
     over_shim = " ".join(agent_routes._tool_surface_lines(runner="claude", access_path="shim"))
     assert "ToolSearch" not in over_shim
+
+
+def test_the_reference_tool_fits_one_result_until_tables_are_named(monkeypatch) -> None:
+    # FR-9: every Haiku turn that read the whole reference had it spilled to a file it could not
+    # open, and one then guessed the schema and drew run counts for cost.
+    import json
+
+    from hub import dashboard_query, mcp_server
+
+    asked: List[Tuple[str, object]] = []
+
+    def hub_request(method, path, body=None, params=None, timeout=None):
+        asked.append((path, params))
+        names = (params or {}).get("tables")
+        return dashboard_query.query_reference(names.split(",") if names else None)
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub_request)
+    whole = dashboard_query.query_reference()
+    compact = mcp_server.dashboard_query_reference()
+    assert len(json.dumps(compact)) < 40_000 < len(json.dumps(whole))
+    assert compact["traps"] == whole["traps"]
+    runs = next(t for t in compact["tables"] if t["name"] == "runs")
+    assert "started_at" in runs["columns"] and "tables=[" in compact["tables_note"]
+    named = mcp_server.dashboard_query_reference(tables=["turn_usage"])
+    assert asked[-1] == ("/dashboards/query-reference", {"tables": "turn_usage"})
+    assert [t["name"] for t in named["tables"]] == ["turn_usage"]
+    assert named["tables"][0]["columns"][0].keys() >= {"name", "type", "meaning"}

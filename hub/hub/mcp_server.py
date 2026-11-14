@@ -965,18 +965,38 @@ DASHBOARD_QUERY_REQUEST_TIMEOUT_SECONDS = 60
 
 
 @_tool()
-def dashboard_query_reference() -> Dict[str, Any]:
+def dashboard_query_reference(tables: Optional[List[str]] = None) -> Dict[str, Any]:
     """Everything a dashboard query can read: each table and column, its type and a short meaning,
     generated from the running Hub, with the query rules in `notes`, the known traps in `traps`
     (where a straightforward count gives the wrong answer, and how to count instead) and the
     limits, all before the tables.
+
+    Without `tables`, every table is listed with its meaning and its columns' names only, so the
+    answer fits in one tool result (in full it is over a hundred thousand characters). Then call
+    again naming the tables you will query, `tables=["turn_usage", "runs"]`, for each of their
+    columns' type and meaning.
 
     Every table holds only the current project's rows, so no project filter is needed. Read it
     before writing a query with `run_dashboard_query`, and read the vault note `src-27723331ae1d`
     ("What the project's data means, and its traps") with `vault_read`: where a straightforward
     count gives the wrong answer. When you find another trap, add it with `vault_append`.
     """
-    return _hub_request("GET", "/dashboards/query-reference")
+    if tables:
+        return _hub_request(
+            "GET", "/dashboards/query-reference", params={"tables": ",".join(tables)}
+        )
+    reference = _hub_request("GET", "/dashboards/query-reference")
+    if isinstance(reference, dict) and isinstance(reference.get("tables"), list):
+        reference["tables"] = [
+            {**t, "columns": [c.get("name") for c in t.get("columns") or [] if isinstance(c, dict)]}
+            for t in reference["tables"]
+            if isinstance(t, dict)
+        ]
+        reference["tables_note"] = (
+            "Columns are listed by name only; call dashboard_query_reference again with "
+            "tables=[...] naming the tables you will query for each column's type and meaning."
+        )
+    return reference
 
 
 @_tool()
@@ -1021,8 +1041,14 @@ def save_dashboard(
     by two labels ("send-backs per model by reason", "runs per agent by status"): `stacked_bar`,
     never a table -- one bar per value of the first label, one stacked part per value of the
     second. Change over time ("runs per day"): `line`. Detail rows ("the latest failed runs"):
-    `table`. The app draws the chart and decides colours and motion: you choose only the kind and
-    the query, and write no chart code (no charting skill applies).
+    `table`. The app draws the chart and decides colours, number formats and motion: you choose
+    only the kind and the query, and write no chart code. Do not load a charting or data
+    visualisation skill for this: those are for drawing a chart yourself, and here the app does.
+
+    **Every value column stays a number.** The app formats the figures, so a query returns them
+    raw: `round(sum(api_equivalent_usd_micros) / 1e6, 2) as "Cost (USD)"`, never
+    `printf('$%.2f', ...)` or `'$' || ...`, which turn the value into text that a number, bar,
+    stacked bar or line cannot draw. Put the unit in the column's alias instead.
 
     **A stacked bar's query pivots: one row per bar, one numeric column per part.** A query that
     groups by both labels gives long rows (`model, reason, count`), which do not stack; keep the
@@ -1038,6 +1064,9 @@ def save_dashboard(
     Alias every column to the readable name the legend and tooltip will show (`as "Cost (USD)"`,
     not `sum(api_equivalent_usd_micros)`). The data note (`vault_read("src-27723331ae1d")`) has a
     worked example of each kind.
+
+    **Save exactly the queries you ran.** A query changed after it ran (to widen a filter, rename a
+    column or show other rows) is a query nobody checked: run the changed one again before saving.
 
     **Saving is this call; nothing is saved until you make it.** Once every query has run, call
     `save_dashboard` with all the panels at once. Do not write the panels out in your reply in its
