@@ -3,6 +3,7 @@ import type { DashboardRun, DashboardSummary } from '@/api/dashboards'
 import { Icon } from '@/components/common/Icon'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
 import { PanelChart } from './PanelChart'
+import { usePanelPresence } from './usePanelPresence'
 import { hubDate } from '@/lib/hubTime'
 
 const when = (iso: string | null) => (iso ? hubDate(iso).toLocaleString() : '—')
@@ -37,6 +38,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
   const [confirming, setConfirming] = React.useState(false)
   React.useEffect(() => setConfirming(false), [selectedId])
   const selected = dashboards.find((d) => d.id === selectedId) ?? null
+  const present = usePanelPresence(selectedId, run?.panels ?? null)
 
   if (!selected) {
     return (
@@ -105,7 +107,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
             </p>
           )}
           <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
-            By {selected.author} · saved {when(selected.updated_at)}
+            By {selected.author} · <span className="whitespace-nowrap">saved {when(selected.updated_at)}</span>
             {selected.edited_by && (
               <span data-testid="dashboard-edited-by" className="whitespace-nowrap">
                 {' · '}edited by {selected.edited_by} {when(selected.edited_at ?? null)}
@@ -190,14 +192,18 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
           {error}
         </div>
       )}
-      {!run && !error && (
-        <p className="text-sm" style={{ color: 'var(--text-3)' }}>
-          Running its queries…
-        </p>
-      )}
-      <div className="grid gap-4">
-        {run?.panels.map((panel) => (
-          <section key={panel.id} data-testid="dashboard-panel" data-panel-id={panel.id} data-kind={panel.kind} className="rounded-lg p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      {!run && !error && <PanelSkeletons count={selected.panel_count} />}
+      <div className={`aw-dash-panels grid gap-4${refreshing ? ' is-refreshing' : ''}`}>
+        {present.map(({ panel, state }, i) => (
+          <section
+            key={panel.id}
+            data-testid={state === 'leaving' ? 'dashboard-panel-leaving' : 'dashboard-panel'}
+            data-panel-id={panel.id}
+            data-kind={panel.kind}
+            data-state={state}
+            className={`aw-dash-panel rounded-lg p-4${state === 'new' ? ' is-new' : ''}${state === 'leaving' ? ' is-leaving' : ''}`}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', ['--i' as string]: i } as React.CSSProperties}
+          >
             <h2 className="mb-3 text-sm font-medium" style={{ color: 'var(--text)' }}>
               {panel.title}
             </h2>
@@ -210,6 +216,24 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
           </section>
         ))}
       </div>
+    </div>
+  )
+}
+
+/** Stand-ins shaped like panels while a dashboard's queries first run. */
+function PanelSkeletons({ count }: { count: number }) {
+  return (
+    <div className="grid gap-4" data-testid="dashboard-skeleton" aria-label="Running its queries" role="status">
+      {Array.from({ length: Math.max(1, Math.min(count, 4)) }, (_, i) => (
+        <div key={i} className="rounded-lg p-4" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <div className="aw-dash-skeleton mb-4 h-3.5 w-40" />
+          <div className="flex flex-col gap-2">
+            {[82, 64, 46, 30].map((w) => (
+              <div key={w} className="aw-dash-skeleton h-3" style={{ width: `${w}%` }} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

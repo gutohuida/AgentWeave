@@ -38,6 +38,19 @@ const SUMMARIES: DashboardSummary[] = [
   { id: 'dash-2', name: 'Review queue', description: '', author: 'operator', created_at: '2026-10-15T09:00:00Z', updated_at: '2026-10-15T09:00:00Z', panel_count: 2, version: 1, edited_by: null, edited_at: null, can_undo: false },
 ]
 
+/** A Refresh's new numbers: every numeric cell moved by up to ±35%, the same way each time. */
+function vary(p: PanelRun, generation: number): PanelRun {
+  if (p.kind === 'table' || p.error || p.warning) return p
+  const rows = p.rows.map((row, r) =>
+    row.map((cell, c) => {
+      if (typeof cell !== 'number') return cell
+      const wobble = Math.sin(generation * 12.9898 + r * 78.233 + c * 37.719) * 0.35
+      return Math.max(0, Math.round(cell * (1 + wobble) * 100) / 100)
+    }),
+  )
+  return { ...p, rows }
+}
+
 // mock state: the project's agents, as Ask to change offers them.
 const AGENTS = ['Architect', 'Developer', 'DeveloperOpus2', 'QA']
 
@@ -46,18 +59,41 @@ export default function Dashboards({ now }: ScreenProps) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [fetchedAt, setFetchedAt] = React.useState(now)
   const [withoutRunsPerDay, setWithoutRunsPerDay] = React.useState(false)
-  const panels = withoutRunsPerDay ? PANELS.filter((p) => p.id !== 'p4') : PANELS
-  const run: DashboardRun | null = selectedId
-    ? { id: selectedId, name: '', description: '', author: '', updated_at: null, fetched_at: fetchedAt.toISOString(), panels }
-    : null
+  // mock state: the queries "run" for a moment on opening (the skeleton) and on Refresh (the
+  // figures dim), and each Refresh returns slightly different numbers, so the values slide.
+  const [loading, setLoading] = React.useState(false)
+  const [refreshing, setRefreshing] = React.useState(false)
+  const [generation, setGeneration] = React.useState(0)
+  const panels = React.useMemo(() => {
+    const shown = withoutRunsPerDay ? PANELS.filter((p) => p.id !== 'p4') : PANELS
+    return generation ? shown.map((p) => vary(p, generation)) : shown
+  }, [withoutRunsPerDay, generation])
+  const run: DashboardRun | null =
+    selectedId && !loading
+      ? { id: selectedId, name: '', description: '', author: '', updated_at: null, fetched_at: fetchedAt.toISOString(), panels }
+      : null
+  const select = (id: string | null) => {
+    setSelectedId(id)
+    setGeneration(0)
+    if (!id) return
+    setLoading(true)
+    window.setTimeout(() => setLoading(false), 900)
+  }
   return (
     <DashboardsView
       dashboards={dashboards}
       selectedId={selectedId}
       run={run}
-      refreshing={false}
-      onSelect={setSelectedId}
-      onRefresh={() => setFetchedAt(new Date())}
+      refreshing={refreshing}
+      onSelect={select}
+      onRefresh={() => {
+        setRefreshing(true)
+        window.setTimeout(() => {
+          setRefreshing(false)
+          setGeneration((g) => g + 1)
+          setFetchedAt(new Date())
+        }, 600)
+      }}
       askAgents={AGENTS}
       onAskToChange={(d, agent) =>
         toast({ title: `Opens ${agent}'s new conversation`, description: `Composer, unsent: ${askToChangeLine(d)}`, tone: 'neutral' })

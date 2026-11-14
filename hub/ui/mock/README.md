@@ -210,3 +210,15 @@ http://localhost:5199/mock.html#tab/dashboards
 ```
 
 The answers it shows (Ask to change, one-step undo, stale edits refused) were approved by the operator on 2026-11-14; the render itself awaits their look.
+
+## Dashboards in motion (mock, 2026-11-14)
+
+Same route. Drawn without a charting library still (`PanelChart.tsx`), the motion is CSS in
+`src/styles/dashboards.css` on the app's `--ease`/`--dur-*` tokens: panels arrive staggered; bars
+grow, lines trace themselves, dots pop and the number counts up (drawn over the real figure, which
+the element always holds, so tests and drives never read a mid-count value); Refresh dims the
+figures and then slides bars, lines and dots to the new values; an edit's removed panel fades out
+where it was and an added one glows once (`usePanelPresence`); hovering a mark dims the rest and
+shows the app-styled tooltip; a skeleton stands in while the queries first run. All of it stops
+under `prefers-reduced-motion`. In the mock, opening takes 0.9 s, Refresh returns varied numbers,
+and Undo on "Where the spend goes" removes and re-adds "Runs per day".
