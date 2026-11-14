@@ -60,6 +60,7 @@ import argparse
 import json
 import os
 import pathlib
+import random
 import re
 import socket
 import subprocess
@@ -924,13 +925,23 @@ def check_interactive(page, state):
     joined = " | ".join(after_quit)
     quit_clean = (opened and "seq 1 400 | less" in joined and "(END)" not in joined
                   and not (after_quit and after_quit[-1].strip().startswith(":")))
-    ui_type(page, "tput cols")
-    page.wait_for_timeout(1000)
-    cols_before = re.findall(r"^\s*(\d{2,3})\s*$", surface_text(page), re.M)
     widened = "viewport"
     # The conversation/panel divider; the first separator on the page is the sidebar's, whose
-    # drag leaves the panel's width alone.
+    # drag leaves the panel's width alone. Earlier checks leave it wherever they left it, so it
+    # is first moved by keyboard to give the conversation room to shrink: the drag below then
+    # widens the panel whatever ran before.
     handle = page.get_by_role("separator", name="Resize conversation")
+    if handle.count():
+        handle.first.focus()
+        for _ in range(40):
+            now = handle.first.get_attribute("aria-valuenow")
+            if now and int(now) >= int(handle.first.get_attribute("aria-valuemin") or 0) + 300:
+                break
+            page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(1000)
+    cols_before = read_cols(page)
+    panel = page.get_by_test_id("document-pane")
+    width_before = panel.first.bounding_box()["width"] if panel.count() else 0
     if handle.count():
         box = handle.first.bounding_box()
         if box:
@@ -941,17 +952,33 @@ def check_interactive(page, state):
             widened = "dragged the panel's edge"
     else:
         page.set_viewport_size({"width": 1900, "height": 940})
-    page.wait_for_timeout(1500)
-    ui_type(page, "tput cols")
-    page.wait_for_timeout(1000)
-    cols_after = re.findall(r"^\s*(\d{2,3})\s*$", surface_text(page), re.M)
+    page.wait_for_timeout(3000)
+    width_after = panel.first.bounding_box()["width"] if panel.count() else 0
+    cols_after = read_cols(page)
     shot(page, "interactive")
     page.set_viewport_size({"width": 1440, "height": 940})
-    wider = bool(cols_before and cols_after) and int(cols_after[-1]) > int(cols_before[-1])
-    record("ac-interactive", True, opened and coloured and fills and quit_clean and wider,
+    grew = widened == "viewport" or width_after > width_before + 100
+    wider = cols_before is not None and cols_after is not None and cols_after > cols_before
+    record("ac-interactive", True, opened and coloured and fills and quit_clean and grew and wider,
            f"{what_is_there(page)}; Git Bash opened={opened}; red text drawn={coloured}; pager "
            f"filled ({len(rows)} rows, first {rows[0] if rows else ''!r})={fills}; quit cleanly={quit_clean}; "
-           f"cols {cols_before[-1:]} -> {cols_after[-1:]} after {widened}")
+           f"panel {width_before:.0f}px -> {width_after:.0f}px and cols {cols_before} -> {cols_after} "
+           f"after {widened}")
+
+
+def read_cols(page):
+    """The shell's own column count. The command prints it between markers its echo cannot
+    match, so a keystroke lost on the way in shows as None, not as an older reading."""
+    for _ in range(3):
+        mark = f"AWC{random.randint(1000, 9999)}"
+        ui_type(page, f"echo {mark}$(tput cols)W")
+        # A resize makes the console host repaint, which can hold the answer back a while.
+        for _ in range(16):
+            page.wait_for_timeout(500)
+            found = re.findall(mark + r"(\d{2,3})W", surface_text(page).replace("\n", ""))
+            if found:
+                return int(found[-1])
+    return None
 
 
 def check_keeps_running(page, state):
