@@ -6092,6 +6092,22 @@ def read_model_record() -> Dict[str, Any]:
 
 
 @_tool()
+def read_shells() -> Dict[str, Any]:
+    """Read the operator's shells in this conversation's Terminal tab: what they show now.
+
+    Answers `{"conversation_id", "shells": [...], "max_lines"}`; each shell carries its `name`
+    (the shell, e.g. `PowerShell 7` or a WSL distribution), `directory` (as the shell names it),
+    `location` (`worktree` or `root`), whether it is still `running`, its `exit_code` once it
+    ended, and `lines`: up to its last 500 lines of output, as plain text. Only this
+    conversation's shells are listed, and an empty list means the operator has none open.
+
+    This is read only: nothing here types into, starts or ends a shell. Run your own commands
+    with your own tools, under your own permission level.
+    """
+    return _hub_request("GET", "/terminal/shells")
+
+
+@_tool()
 def decide_evidence(
     evidence_id: str,
     decision: EvidenceDecision,

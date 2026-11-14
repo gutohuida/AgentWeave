@@ -50,6 +50,8 @@ IS_WINDOWS = sys.platform == "win32"
 LIMIT = 4
 #: Output lines kept per shell (FR-8).
 MAX_LINES = 5000
+#: The most an agent reads of one shell's output (FR-12).
+AGENT_READ_LINES = 500
 #: A bound on what is kept when a program writes without newlines (a progress bar redrawn by `\r`).
 MAX_CHARACTERS = 4 * 1024 * 1024
 #: How long a page may be gone before its shells end: a reload is a new page, so this only rides
@@ -256,6 +258,19 @@ class Shell:
             "running": self.running,
             "exit_code": self.exit_code,
             "created_at": self.created_at,
+        }
+
+    def agent_view(self) -> Dict[str, Any]:
+        """What the conversation's agent reads of this shell (FR-12): plain text, nothing it could
+        act on -- no id, since no agent route takes one."""
+        return {
+            "name": self.option.label,
+            "wsl": self.option.wsl,
+            "location": self.location,
+            "directory": self.directory,
+            "running": self.running,
+            "exit_code": self.exit_code,
+            "lines": self.buffer.lines(AGENT_READ_LINES),
         }
 
     # ------------------------------------------------------------------ the process

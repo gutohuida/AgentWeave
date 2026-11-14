@@ -9,6 +9,9 @@
     WS     /conversations/{C}/terminals/{T}/attach   live input, output and resize
     WS     /terminal/page?page=<id>             held by a page for as long as it is loaded
 
+    GET    /agent-actions/terminal/shells       the calling agent's conversation's shells, read
+                                                only (FR-12; the `read_shells` tool)
+
 Every route here is refused (403) in Docker mode, from anywhere but loopback, and -- for whatever
 starts, drives or ends a shell -- from any page but the app's own (`terminal.access`); the menu
 route alone answers instead with `unavailable` set, so the tab can say why. HTTP routes are signed
@@ -36,17 +39,23 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocketDisconnect
 
+from ...agent_auth import AgentActor, get_agent_actor
 from ...auth import _operator_from_credential, _verify_ticket, get_project
+from ...conversations import conversation_id_for_run
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Project
 from ...terminal import LIMIT, access, registry
 from ...terminal import shells as shell_detection
-from ...terminal.sessions import LimitReachedError, Shell
+from ...terminal.sessions import AGENT_READ_LINES, LimitReachedError, Shell
 from .workspace import _checkout_for
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["terminal"])
+#: The agent plane's one terminal route. Read only, and by design there is no other: an agent's own
+#: commands go through its permission level and are recorded on its run, and a keystroke, start or
+#: end in the operator's shell would bypass both (spec `a-terminal-in-the-side-panel`, FR-12).
+agent_router = APIRouter(prefix="/agent-actions/terminal", tags=["agent-actions"])
 
 Location = Literal["worktree", "root"]
 
@@ -335,3 +344,23 @@ async def page_presence(websocket: WebSocket, project_id: str):
         pass
     finally:
         registry.page_left(page)
+
+
+@agent_router.get("/shells")
+async def agent_read_shells(
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """The open shells of the conversation the calling run belongs to, with their last lines.
+
+    Scoped by the run's own conversation, never by a parameter: an agent cannot name another
+    conversation, so an agent of another conversation gets none of these shells. A run outside a
+    conversation has no shells to read.
+    """
+    conversation_id = await conversation_id_for_run(session, actor.run_id)
+    shells = registry.for_conversation(actor.project_id, conversation_id) if conversation_id else []
+    return {
+        "conversation_id": conversation_id,
+        "shells": [s.agent_view() for s in shells],
+        "max_lines": AGENT_READ_LINES,
+    }
