@@ -41824,3 +41824,13 @@ Flow `job-366f71dd731d` ("A hand-started task reaches review and merge", agent D
 **Tier:** 0
 
 Given "change the dashboard" with no name, the agent correctly called `ask_user` to ask which dashboard. Nobody answered (the drive does not answer), and within that one turn the agent issued 24 identical `ask_user` calls before the turn ended. Nothing was written, so FR-2 held, but each call is a paid round trip and the operator would see one question queued 24 times, or only the last. Not traced: whether each call returned a non-blocking "no answer yet" that read to the model like an invitation to ask again, or a timeout. **Expected:** a repeated identical `ask_user` from the same run while the first is unanswered returns the existing question (same id, still waiting) and tells the agent its turn should end, rather than queuing another. **Test:** one run calls `ask_user` twice with the same questions while unanswered; one question exists, and the second answer names the first's id.
+
+## F1176 (A) -- a task sent back to wait on a fix task is handed straight back to its holder, turn after turn
+
+**Status:** open
+**Source:** found by driving -- flow `job-8b56f822f90c` ("Change a dashboard by asking"), 2026-11-14 (QA2, CDA-4)
+**Theme:** Flows
+**Ready:** yes
+**Tier:** 1
+
+QA sent CDA-4 (`task-c4e700984c45`, the acceptance-drive task) back at 04:39:44, classed `flaky`. The send-back said to re-run only after the fix task CDA-5 (`task-3bb3828adf87`, created by QA's amendment at 04:39:25) had landed. CDA-4 has no `depends_on` link to CDA-5, so the flow treats it as ready work. The flow started QA2's turn on it every ~30 s. Between 04:39:57 and 04:45 there were seven `assigned -> in_progress -> assigned` cycles, each a whole paid Opus turn, and each could only confirm that CDA-5 was still `in_progress`. A sent-back task can only move to `in_progress` or `assigned`, and neither one parks it. Only the operator can set `depends_on`, and an agent cannot. **Expected:** a send-back (or an `amend_spec_document add_task` made during a review) that names a fix task makes the sent-back task wait on that task, and the flow does not staff it until the fix is approved. Alternatively, the holder can mark its task as waiting on a named task. **Test:** review a task, send it back with a fix task created by amendment, and fire the flow twice. The sent-back task's holder gets no turn until the fix task is approved, and then gets exactly one.
