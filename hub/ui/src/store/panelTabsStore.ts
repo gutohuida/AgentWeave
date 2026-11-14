@@ -52,8 +52,19 @@ export function specTabId(documentId: string): SpecTabId {
 }
 
 /** A file has no identity other than its path, so this is the one kind that can dangle. */
-export function fileTabId(relativePath: string): FileTabId {
+export function fileTabId(relativePath: string, location: FileLocation = 'root'): FileTabId {
+  // The project root keeps the bare form older persisted tabs already use; a root path that would
+  // read as a location prefix is written out in full so the two never collide.
+  if (location === 'worktree') return `file:worktree:${relativePath}`
+  if (relativePath.startsWith('worktree:') || relativePath.startsWith('root:')) return `file:root:${relativePath}`
   return `file:${relativePath}`
+}
+
+/** Where an open file was read from: the conversation agent's checkout, or the project root. */
+export type FileLocation = 'worktree' | 'root'
+
+export function fileLocation(id: FileTabId): FileLocation {
+  return id.startsWith('file:worktree:') ? 'worktree' : 'root'
 }
 
 /** A loop's tab is keyed by the `Loop` row's own id (design B4.3's `id`, distinct from the job
@@ -68,6 +79,8 @@ export function specDocumentId(id: SpecTabId): string {
 }
 
 export function filePath(id: FileTabId): string {
+  if (id.startsWith('file:worktree:')) return id.slice('file:worktree:'.length)
+  if (id.startsWith('file:root:')) return id.slice('file:root:'.length)
   return id.slice('file:'.length)
 }
 

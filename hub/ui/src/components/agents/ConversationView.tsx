@@ -13,7 +13,7 @@ import { Drawer } from '@/components/layout/Drawer'
 import { PaneResizer } from '@/components/layout/PaneResizer'
 import { useWorkspaceWidth } from '@/components/layout/useWorkspaceWidth'
 import { FileTab } from '@/components/spec/FileTab'
-import { FilesIndexTab } from '@/components/spec/FilesIndexTab'
+import { FilesTabContainer } from '@/components/panel/FilesTabContainer'
 import { ChangesTabContainer } from '@/components/panel/ChangesTabContainer'
 import { LoopTab } from '@/components/spec/LoopTab'
 import { useLoops } from '@/api/loops'
@@ -27,7 +27,6 @@ import { SpecDocumentPicker } from '@/components/spec/SpecDocumentPicker'
 import { SpecIndexTab } from '@/components/spec/SpecIndexTab'
 import { fileIconFor } from '@/components/spec/fileIcons'
 import { buildInventory, resolveTabPath, tabKeyForNode } from '@/components/spec/specNavigation'
-import { useWorkspacePaths } from '@/api/workspace'
 import {
   CONVERSATION_DEFAULT_WIDTH,
   CONVERSATION_MIN_WIDTH,
@@ -37,6 +36,7 @@ import {
   saveSpecPreferences,
 } from '@/components/spec/specPreferences'
 import {
+  fileLocation,
   fileTabId,
   filePath,
   isFileTabId,
@@ -308,7 +308,6 @@ export function ConversationView({
 
   // Section 3's first index tenant: the plus affordance can always offer the specs browser,
   // whether or not anything is attached yet. Section 5 adds the files tab beside it.
-  const { data: workspacePaths = [], isLoading: workspacePathsLoading } = useWorkspacePaths()
   // The Running index tab: builds, loops and jobs in one list (`the-side-panel-s-running-tab`).
   const { items: runningItems, loadFailed: runningLoadFailed } = useRunningItems()
   // Names a `loop:` tab already open (same key the list reads, so no second fetch).
@@ -354,7 +353,8 @@ export function ConversationView({
       if (id === 'running') return { id, label: 'Running', icon: 'sync' }
       if (isFileTabId(id)) {
         const path = filePath(id)
-        return { id, label: path.slice(path.lastIndexOf('/') + 1), icon: fileIconFor(path) }
+        const where = fileLocation(id) === 'worktree' ? 'worktree' : 'root'
+        return { id, label: `${path.slice(path.lastIndexOf('/') + 1)} · ${where}`, icon: fileIconFor(path) }
       }
       if (isLoopTabId(id)) {
         const loop = runningLoops.find((entry) => entry.id === loopIdFromTab(id))
@@ -395,11 +395,13 @@ export function ConversationView({
       }
       if (tab.id === 'files') {
         return (
-          <FilesIndexTab
-            paths={workspacePaths}
-            isLoading={workspacePathsLoading}
+          <FilesTabContainer
+            agent={agent.name}
+            projectId={projectId}
+            conversationId={conversationId}
             currentPath={panelActiveTabId && isFileTabId(panelActiveTabId) ? filePath(panelActiveTabId) : null}
-            onSelect={(path) => openTab(projectId, fileTabId(path))}
+            currentLocation={panelActiveTabId && isFileTabId(panelActiveTabId) ? fileLocation(panelActiveTabId) : null}
+            onOpen={(path, location) => openTab(projectId, fileTabId(path, location))}
           />
         )
       }
@@ -408,7 +410,7 @@ export function ConversationView({
           <ChangesTabContainer
             agent={agent.name}
             conversationId={conversationId}
-            onOpenFile={(path) => openTab(projectId, fileTabId(path))}
+            onOpenFile={(path) => openTab(projectId, fileTabId(path, 'worktree'))}
           />
         )
       }
@@ -416,6 +418,8 @@ export function ConversationView({
         return (
           <FileTab
             path={filePath(tab.id)}
+            location={fileLocation(tab.id)}
+            conversationId={conversationId}
             onInsertIntoComposer={insertIntoComposer}
             onClose={() => closeTab(projectId, tab.id)}
           />
@@ -457,8 +461,6 @@ export function ConversationView({
       recentPaths,
       closeTab,
       document,
-      workspacePaths,
-      workspacePathsLoading,
       agent.name,
       conversationId,
       openTab,
