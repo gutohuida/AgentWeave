@@ -255,6 +255,7 @@ class Shell:
             "directory": self.directory,
             "running": self.running,
             "exit_code": self.exit_code,
+            "page": self.page,
             "created_at": self.created_at,
         }
 

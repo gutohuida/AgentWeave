@@ -36,6 +36,8 @@ export interface ShellRecord {
   directory: string
   running: boolean
   exit_code: number | null
+  /** The page load that opened it; a reload is a new page, so an earlier one's shell is not this page's. */
+  page?: string | null
 }
 
 const base = (projectId: string, conversationId: string) =>
@@ -56,9 +58,11 @@ export function useShellMenu(conversationId: string | null) {
   })
 }
 
+/** This page load's shells in the conversation. A previous page's shell is still listed for the
+ *  Hub's few seconds of grace after a reload; adopting it would show a shell about to end (FR-9). */
 export async function listShells(projectId: string, conversationId: string): Promise<ShellRecord[]> {
   const body = await getJson<{ shells: ShellRecord[] }>(base(projectId, conversationId))
-  return body.shells
+  return body.shells.filter((shell) => !shell.page || shell.page === PAGE_ID)
 }
 
 export function openShell(
