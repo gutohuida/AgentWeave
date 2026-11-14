@@ -95,7 +95,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
   }
 
   return (
-    <div className="mx-auto max-w-4xl p-6" data-testid="dashboard-view" data-dashboard-id={selected.id}>
+    <div className="aw-dash-view mx-auto max-w-4xl p-6" data-testid="dashboard-view" data-dashboard-id={selected.id}>
       <button type="button" onClick={() => onSelect(null)} className="mb-3 inline-flex items-center gap-1 text-xs" style={{ color: 'var(--text-2)' }}>
         <Icon name="arrow_back" size={13} /> All dashboards
       </button>
