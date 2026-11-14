@@ -42,6 +42,7 @@ from .stats import router as stats_router
 from .status import instance_router as instance_work_router
 from .status import router as status_router
 from .tasks import router as tasks_router
+from .terminal import router as terminal_router
 from .thread import router as thread_router
 from .traces import router as traces_router
 from .vault import router as vault_router
@@ -93,6 +94,7 @@ project_resources_router.include_router(stalls_router)
 project_resources_router.include_router(vault_router)
 project_resources_router.include_router(traces_router)
 project_resources_router.include_router(dashboards_router)
+project_resources_router.include_router(terminal_router)
 v1_router.include_router(project_resources_router)
 
 v1_router.include_router(mender_router)

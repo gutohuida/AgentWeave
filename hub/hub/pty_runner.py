@@ -345,6 +345,10 @@ class PtySession:
     def terminate(self, force: bool = False) -> None:
         self._proc.terminate(force=force)
 
+    def resize(self, rows: int, cols: int) -> None:
+        """Tell the pseudo-terminal its new size (both backends: ``setwinsize(rows, cols)``)."""
+        self._proc.setwinsize(rows, cols)
+
 
 class PipeSession:
     """A non-interactive child process with hidden, redirected standard streams.
