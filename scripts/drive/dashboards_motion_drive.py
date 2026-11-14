@@ -10,7 +10,8 @@ line per check in the drive-baseline form the Hub reads:
 The motion is already on master (5a9d179), so its criteria (ac-draw-in, ac-values-move,
 ac-edit-visible, ac-tooltip, ac-skeleton, ac-reduced-motion) may pass on the first run. The
 guidance criteria (ac-guidance, ac-examples-draw) fail on today's master, their detail naming the
-missing guidance or examples; ac-first-time-right is a real Haiku turn and says what it built.
+missing guidance or examples; ac-first-time-right is three real Haiku turns (--turns), every one of
+which must build the five kinds cleanly, since a single turn on the pre-guidance code sometimes does.
 
 It starts its own Hub from this checkout on a free port with a throwaway database and bootstrap key
 (never :8000, never the shared trial :8010), with the real `claude` on PATH; the analyst agent is
@@ -20,7 +21,7 @@ Chromium through Playwright; the page's own timers sample the motion (a Python r
 slow for a 0.3 s sample), and a wrapper around `fetch` slows the run route where a criterion needs
 the queries to take a while.
 
-    py -3.11 scripts/drive/dashboards_motion_drive.py [--no-browser] [--only ac-draw-in ...]
+    py -3.11 scripts/drive/dashboards_motion_drive.py [--no-browser] [--only ac-draw-in ...] [--turns 3]
 
 Exit 0 only when every check passes. AW_DRIVE_KEEP=1 leaves the Hub running.
 
@@ -220,8 +221,9 @@ ORDER = ("ac-guidance", "ac-examples-draw", "ac-draw-in", "ac-skeleton", "ac-too
 
 
 class Drive:
-    def __init__(self, browser: bool, only: Optional[List[str]] = None) -> None:
+    def __init__(self, browser: bool, only: Optional[List[str]] = None, turns: int = 3) -> None:
         self.browser = browser
+        self.turns = turns
         self.only = only
         self.hub = dd.SubprocessHub()
         self.a = ""
@@ -498,6 +500,11 @@ class Drive:
                         "(k) => [...document.querySelectorAll(`[data-kind=${k}] .aw-dash-mark`)]"
                         ".map((e) => parseFloat(getComputedStyle(e).opacity))", kind)
 
+                marks = (page.locator("[data-kind=bar] .aw-dash-mark").count(),
+                         page.locator("[data-kind=line] .aw-dash-dot").count())
+                if not c.judge(f"{scheme}: the bars and the line's points are hoverable marks", marks == (4, 6),
+                               f"{marks[0]} bar marks (.aw-dash-mark), {marks[1]} line points (.aw-dash-dot); want 4 and 6"):
+                    return
                 page.locator("[data-kind=bar] .aw-dash-mark").nth(1).hover()
                 page.wait_for_timeout(400)
                 text = tip.first.inner_text() if tip.count() else None
@@ -648,10 +655,19 @@ class Drive:
     # -- FR-9
 
     def ac_first_time_right(self, c: Check) -> None:
+        # One green turn proves little: Haiku built all five kinds cleanly on some runs of the
+        # pre-guidance code and not on others. The criterion says *an agent produces* such a
+        # dashboard, so every one of TURNS independent turns must; each turn's dashboard is
+        # deleted after it is judged, so the next starts from the same project.
+        for n in range(1, self.turns + 1):
+            self.first_time_right_turn(c, f"turn {n} of {self.turns}")
+
+    def first_time_right_turn(self, c: Check, which: str) -> None:
         before = {d.get("id") for d in dashboards_list(self.a)[1]}
+        p(f"  -- {which}")
         t = ded.turn(self.a, ANALYST, ASK)
         new = [d for d in dashboards_list(self.a)[1] if d.get("id") not in before]
-        c.judge("the Haiku turn saved a dashboard", bool(t["run_id"]) and bool(new),
+        c.judge(f"{which}: the Haiku turn saved a dashboard", bool(t["run_id"]) and bool(new),
                 f"run {t['run_id']}; new dashboards {[d.get('name') for d in new]}; "
                 f"asked {t['questions']}; reply {t['reply'][-300:]!r}")
         if not new:
@@ -660,11 +676,12 @@ class Drive:
         code, out = api("GET", f"/projects/{self.a}/dashboards/{dash['id']}/run")
         panels = panels_of_run(out)
         kinds = sorted({x.get("kind") for x in panels})
-        c.judge("the saved dashboard has panels of the five kinds", set(KINDS) <= set(kinds),
-                f"{dash.get('name')!r}: kinds {kinds}")
+        c.judge(f"{which}: the saved dashboard has panels of the five kinds", set(KINDS) <= set(kinds),
+                f"{dash.get('name')!r}: kinds {kinds}; missing {sorted(set(KINDS) - set(kinds))}")
         bad = [(x.get("title"), x.get("kind"), (x.get("error") or {}).get("message") if isinstance(x.get("error"), dict)
                 else x.get("error"), x.get("warning")) for x in panels if x.get("error") or x.get("warning")]
-        c.judge("opening it shows no error and no drawing warning on any panel", code == 200 and panels and not bad,
+        c.judge(f"{which}: opening it shows no error and no drawing warning on any panel",
+                code == 200 and panels and not bad,
                 f"run {code}; {len(panels)} panels; failing {bad}; queries "
                 + " | ".join(f"{x.get('kind')}: {x.get('query')}" for x in panels)[:1500])
         # Not the criterion, which asks only that every panel draws: how well each reads, for the
@@ -690,9 +707,11 @@ class Drive:
                         page.get_by_test_id("dashboard-panel-warning").count(),
                         page.get_by_test_id("dashboard-panel").count())
 
-            errors, warnings, count = self.with_page(go, shot="first-time-right")
-            c.judge("on the screen no panel shows an error or a warning", count and not errors and not warnings,
-                    f"{count} panels, {errors} errors, {warnings} warnings")
+            errors, warnings, count = self.with_page(go, shot=f"first-time-right-{which.split()[1]}")
+            c.judge(f"{which}: on the screen no panel shows an error or a warning",
+                    count and not errors and not warnings, f"{count} panels, {errors} errors, {warnings} warnings")
+        for d in new:
+            api("DELETE", f"/projects/{self.a}/dashboards/{d['id']}")
 
     # -- order
 
@@ -713,10 +732,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--only", nargs="+", choices=ORDER, help="run only these checks")
+    ap.add_argument("--turns", type=int, default=3,
+                    help="ac-first-time-right's Haiku turns, every one of which must pass (default 3)")
     args = ap.parse_args()
     TMP.mkdir(parents=True, exist_ok=True)
     p(f"dashboards motion drive {STAMP}; scratch {TMP}")
-    Drive(browser=not args.no_browser, only=args.only).run()
+    Drive(browser=not args.no_browser, only=args.only, turns=max(1, args.turns)).run()
 
     p("\n== drive baseline")
     for key, check in CHECKS.items():
