@@ -112,7 +112,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
             {(run?.edited_by ?? selected.edited_by) && (
               <>
                 {' · '}
-                <span data-testid="dashboard-edited-by">
+                <span data-testid="dashboard-edited-by" data-edited-at={run?.edited_at ?? selected.edited_at ?? undefined}>
                   Edited by {run?.edited_by ?? selected.edited_by} {when(run?.edited_at ?? selected.edited_at ?? null)}
                 </span>
               </>

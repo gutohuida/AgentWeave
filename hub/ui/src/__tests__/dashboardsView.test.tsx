@@ -102,6 +102,7 @@ describe('DashboardsView', () => {
       run={{ ...run([]), edited_by: 'Developer', edited_at: '2026-11-14T08:15:00Z' }}
       onSelect={() => {}} onRefresh={() => {}} onDelete={() => {}} />)
     expect(screen.getByTestId('dashboard-edited-by').textContent).toContain('Edited by Developer')
+    expect(screen.getByTestId('dashboard-edited-by').getAttribute('data-edited-at')).toBe('2026-11-14T08:15:00Z')
     expect(screen.getByTestId('dashboard-edited-by').textContent).not.toContain('—')
   })
 
