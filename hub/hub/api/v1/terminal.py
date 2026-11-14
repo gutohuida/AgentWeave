@@ -32,13 +32,14 @@ from typing import Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocketDisconnect
 
 from ...auth import _operator_from_credential, _verify_ticket, get_project
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Project
+from ...schemas.common import RequestModel
 from ...terminal import LIMIT, access, registry
 from ...terminal import shells as shell_detection
 from ...terminal.sessions import LimitReachedError, Shell
@@ -51,7 +52,7 @@ router = APIRouter(tags=["terminal"])
 Location = Literal["worktree", "root"]
 
 
-class OpenShell(BaseModel):
+class OpenShell(RequestModel):
     shell: str = Field(..., max_length=200)
     location: Location = "root"
     #: The page load opening it: the shell ends when that page goes away (a reload ends it).
