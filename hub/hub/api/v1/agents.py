@@ -1652,6 +1652,20 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             ),
         ),
         _Operation(
+            tool="read_shells",
+            args="",
+            method="GET",
+            path="/terminal/shells",
+            fields=(),
+            required=(),
+            text=(
+                "the operator's shells in this conversation's Terminal tab: each one's name, "
+                "directory, whether it is still running (its exit code once it ended) and up to "
+                "its last 500 lines of output, as plain text. Read only: it cannot type into, "
+                "start or end a shell, and lists no other conversation's shells."
+            ),
+        ),
+        _Operation(
             tool="read_chapters",
             args="",
             method="GET",

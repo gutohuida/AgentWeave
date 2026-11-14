@@ -190,14 +190,13 @@ def test_the_archive_routes_have_a_client() -> None:
     orphans = {r["path"] for r in n10.clientless_routes(rows)}
     mine = {p for p in orphans if "/vault/sources/" in p or p.endswith("/vault/archived")}
     assert not mine, f"vault archive routes with no client: {sorted(mine)}"
-    # 19 -> 22 2026-11-09: AOTCT-2 added four paths (hold, archive-batch, tidy-acts, reviewed)
-    # whose page is AOTCT-4, which owes them back. 22 -> 23 2026-11-12: CNCC-2 (spdoc-f214c91aac0e)
-    # added PUT /documents/{path}/capabilities, whose client CNCC-3 added: 23 -> 22.
-    # 22 -> 23 2026-11-12: TOFMF-2 added POST /tasks/close, whose client is TOFMF-3.
-    # 23 -> 24 -> 23 2026-11-13: SPSCT-2 added the Changes routes, SPSCT-3 their tab client.
-    # 23 -> 27 2026-11-13: AAADG-3 (spdoc-0d8c0e384a38) added the operator dashboards paths; their
-    # screen is AAADG-4, which owes back the ones it reaches.
-    assert len(orphans) <= 27, f"clientless routes grew past the ratchet: {len(orphans)}"
+    # The count of all clientless routes is ratcheted once, in test_surface_ceilings.py
+    # (CLIENTLESS_ROUTE_CEILING); a second copy here drifted from it (27 against 30, then 35).
+    from .test_surface_ceilings import CLIENTLESS_ROUTE_CEILING
+
+    assert (
+        len(orphans) <= CLIENTLESS_ROUTE_CEILING
+    ), f"clientless routes grew past the ratchet: {len(orphans)}"
 
 
 def test_ui_client_reaches_archive_restore_and_archived_list() -> None:
