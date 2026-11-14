@@ -1,212 +1,70 @@
 # Contributing to AgentWeave
 
-Thank you for your interest in contributing to AgentWeave! This document provides guidelines for contributing.
+Thanks for your interest. Bug reports, questions and pull requests are all welcome.
 
----
+## Questions and ideas
 
-## 🚀 Quick Start
+Ask in [GitHub Discussions](https://github.com/gutohuida/AgentWeave/discussions). Answers there are
+public and searchable, so the next person with the same question finds them.
 
-1. **Fork the repository**
-2. **Clone your fork**
-   ```bash
-   git clone https://github.com/yourusername/agentweave.git
-   cd agentweave
-   ```
-3. **Install in development mode**
-   ```bash
-   pip install -e ".[dev]"
-   ```
-4. **Create a branch**
-   ```bash
-   git checkout -b feature/my-feature
-   ```
+## Reporting a bug
 
----
+Open an [issue](https://github.com/gutohuida/AgentWeave/issues/new/choose) and include:
 
-## 📋 Development Setup
+- your AgentWeave version (`agentweave --version`), Python version and operating system
+- which agent CLIs you use (Claude Code, Codex, GitHub Copilot) and their versions
+- what you did, what you expected, and what happened instead
+- any error output, and the Hub log if the app misbehaved
 
-### Prerequisites
+Security problems are not reported in issues: see [SECURITY.md](SECURITY.md).
 
-- Python 3.8+
-- Git
+## Development setup
 
-### Install Dependencies
+The full guide is [Development](https://gutohuida.github.io/AgentWeave/contributing/development/)
+in the docs. The short version, from a fork:
 
 ```bash
-pip install -e ".[dev]"
+git clone https://github.com/<you>/AgentWeave.git
+cd AgentWeave
+pip install -c constraints-dev.txt -e ./hub
+pip install -c constraints-dev.txt -e ".[dev,mcp]"
+cd hub/ui && npm install
 ```
 
-This installs:
-- `pytest` - Testing
-- `black` - Code formatting
-- `ruff` - Linting
-- `mypy` - Type checking
+Install the Hub first and always through `constraints-dev.txt`: it pins what CI resolves. Exercise
+the product in `testbed/`, never at the repository root, which would register the repository
+itself as a project.
 
----
+## Before you open a pull request
 
-## 🧪 Testing
-
-Run tests with:
+Run what CI runs:
 
 ```bash
-pytest
-```
-
-With coverage:
-
-```bash
-pytest --cov=agentweave
-```
-
----
-
-## 🎨 Code Style
-
-### Formatting
-
-We use `black` for code formatting:
-
-```bash
-black src/ tests/
-```
-
-### Linting
-
-We use `ruff` for linting:
-
-```bash
-ruff check src/ tests/
-```
-
-### Type Checking
-
-We use `mypy` for type checking:
-
-```bash
+ruff check src/ hub/ tests/
+black --check src/ hub/hub/ hub/tests/ tests/
 mypy src/
+pytest tests/ -q
+pytest hub/tests/ -q -n auto
+cd hub/ui && npm run lint && npm run test
 ```
 
-### Pre-commit
+Then:
 
-Run all checks:
+- add a test that fails without your change
+- update the docs if behaviour changed, and `CHANGELOG.md` under `[Unreleased]`
+- if you touched `hub/ui/src`, rebuild the committed bundle (`make ui`) and commit both
+- keep the pull request to one change, and say in its description what it fixes and how you
+  checked it
 
-```bash
-black src/ tests/
-ruff check src/ tests/
-mypy src/
-pytest
-```
+## How this repository is built
 
----
+AgentWeave is developed with AgentWeave. Its specifications live in `spec/`, written and approved
+through the app, and many commits come from agents working in their own worktrees. Larger changes
+start as a specification there; an issue or discussion first is the easiest way in.
 
-## 📝 Commit Messages
+## License
 
-Use clear, descriptive commit messages:
+By contributing you agree that your contribution is licensed under the
+[Apache License 2.0](LICENSE), as section 5 of that license states. There is no separate CLA.
 
-- ✅ `feat: add task priority levels`
-- ✅ `fix: handle missing session file`
-- ✅ `docs: update README with examples`
-- ✅ `refactor: simplify task creation`
-
----
-
-## 🐛 Reporting Bugs
-
-When reporting bugs, please include:
-
-1. **Python version**
-2. **Operating system**
-3. **Steps to reproduce**
-4. **Expected behavior**
-5. **Actual behavior**
-6. **Error messages** (if any)
-
----
-
-## 💡 Suggesting Features
-
-We welcome feature suggestions! Please:
-
-1. Check if the feature is already requested
-2. Describe the use case
-3. Explain why it would be useful
-4. Provide examples if possible
-
----
-
-## 🔀 Pull Request Process
-
-1. **Update documentation** if needed
-2. **Add tests** for new features
-3. **Ensure all tests pass**
-4. **Update CHANGELOG.md** if applicable
-5. **Submit PR** with clear description
-
-### PR Checklist
-
-- [ ] Tests pass
-- [ ] Code is formatted with black
-- [ ] Linting passes with ruff
-- [ ] Type checking passes with mypy
-- [ ] Documentation updated
-- [ ] CHANGELOG.md updated (if applicable)
-
----
-
-## 📁 Project Structure
-
-```
-agentweave/
-├── src/agentweave/          # Main package
-│   ├── __init__.py
-│   ├── cli.py               # CLI
-│   ├── session.py           # Session management
-│   ├── task.py              # Task management
-│   ├── messaging.py         # Messaging
-│   ├── constants.py         # Constants
-│   ├── utils.py             # Utilities
-│   └── templates/           # Templates
-├── tests/                   # Tests
-└── docs/                    # Documentation
-```
-
----
-
-## 🎯 Areas for Contribution
-
-### High Priority
-
-- [ ] Add more comprehensive tests
-- [ ] Improve error handling
-- [ ] Add more templates
-- [ ] Web dashboard for collaboration
-
-### Medium Priority
-
-- [ ] Slack/Discord integration
-- [ ] Desktop notifications
-- [ ] Additional agent profiles
-- [ ] Export to PDF/HTML
-
-### Low Priority
-
-- [ ] VS Code extension
-- [ ] More CLI commands
-- [ ] Plugin system
-
----
-
-## 📜 Code of Conduct
-
-Be respectful, inclusive, and constructive.
-
----
-
-## ❓ Questions?
-
-- **Issues:** [GitHub Issues](https://github.com/yourusername/agentweave/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/yourusername/agentweave/discussions)
-
----
-
-Thank you for contributing! 🎉
+Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).

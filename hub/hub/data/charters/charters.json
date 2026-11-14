@@ -7,8 +7,6 @@
     "verifier": {"name": "Verifier"},
     "security_engineer": {"name": "Security Engineer"},
     "guardian": {"name": "Guardian"},
-    "spec": {"name": "Spec Author"},
-    "underwriter": {"name": "Underwriter"},
-    "underwriting_approver": {"name": "Underwriting Approver"}
+    "spec": {"name": "Spec Author"}
   }
 }

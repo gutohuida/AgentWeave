@@ -1,5 +1,6 @@
 include README.md
 include LICENSE
+include NOTICE
 include pyproject.toml
 recursive-include src/agentweave/templates *
 recursive-include examples *.py *.sh *.bat *.md

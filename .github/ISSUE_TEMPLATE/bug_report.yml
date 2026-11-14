@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in AgentWeave does not work as documented.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. agentweave in a new project
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AgentWeave version
+      description: Output of `agentweave --version`.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Python version, and native or Docker.
+      placeholder: Windows 11, Python 3.12, native
+    validations:
+      required: true
+  - type: input
+    id: runners
+    attributes:
+      label: Agent CLIs
+      description: Which agent CLIs are involved, with their versions.
+      placeholder: Claude Code 2.x, Codex 0.x
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output or Hub log
+      description: Remove any keys or tokens before pasting.
+      render: text
