@@ -130,7 +130,6 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/agents/ComposerModelControls.tsx', 'useModelCatalog', 1, 'SUPPRESSED', '', 'the model controls do not render; the file states this intent for an undeclared provider (:167)'),
     ('components/agents/ConversationView.tsx', 'useSpecList', 1, 'MISREPORT', '', '`buildInventory(specList)` is empty (:119) and `specList={specList}` (:387) — the spec surface reads as having nothing in it'),
     ('components/agents/ConversationView.tsx', 'useAgentConversations', 1, 'BLANK', '', 'title lookup `?? null` (:114)'),
-    ('components/agents/ConversationView.tsx', 'useWorkspacePaths', 1, 'MISREPORT', 'PICKER', '`paths={workspacePaths}` (:344)'),
     ('components/agents/ConversationView.tsx', 'useLoops', 1, 'MISREPORT', '', '`runningLoopCount(allLoops)` renders a 0 count on the Loops tab (:299)'),
     ('components/agents/NewConversationSurface.tsx', 'useAgents', 1, 'MISREPORT', '', '`roster.map` (:171) is the agent list this surface exists to show'),
     ('components/agents/NewConversationSurface.tsx', 'useRunners', 1, 'BLANK', '', 'runner label lookup (:60)'),

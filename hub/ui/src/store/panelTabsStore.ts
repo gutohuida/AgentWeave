@@ -52,8 +52,42 @@ export function specTabId(documentId: string): SpecTabId {
 }
 
 /** A file has no identity other than its path, so this is the one kind that can dangle. */
-export function fileTabId(relativePath: string): FileTabId {
+export function fileTabId(
+  relativePath: string,
+  location: FileLocation = 'root',
+  owner: FileTabOwner | null = null,
+): FileTabId {
+  // The project root keeps the bare form older persisted tabs already use; a root path that would
+  // read as a location prefix is written out in full so the two never collide.
+  // A checkout belongs to one agent's conversation, so its tab carries that owner: panel tabs are kept
+  // per project, and a tab that only said "worktree" would re-point at whichever conversation is open.
+  if (location === 'worktree') {
+    return owner ? `file:worktree:${owner.agent}~${owner.conversationId}:${relativePath}` : `file:worktree:${relativePath}`
+  }
+  if (relativePath.startsWith('worktree:') || relativePath.startsWith('root:')) return `file:root:${relativePath}`
   return `file:${relativePath}`
+}
+
+/** Where an open file was read from: the conversation agent's checkout, or the project root. */
+export type FileLocation = 'worktree' | 'root'
+
+/** Whose checkout a worktree tab was opened from. */
+export interface FileTabOwner {
+  agent: string
+  conversationId: string
+}
+
+const WORKTREE_OWNER_RE = /^([A-Za-z0-9_-]{1,32})~([A-Za-z0-9_-]+):([\s\S]*)$/
+
+/** The agent and conversation a worktree tab belongs to; null for a root tab or a tab saved before owners. */
+export function fileOwner(id: FileTabId): FileTabOwner | null {
+  if (!id.startsWith('file:worktree:')) return null
+  const match = WORKTREE_OWNER_RE.exec(id.slice('file:worktree:'.length))
+  return match ? { agent: match[1], conversationId: match[2] } : null
+}
+
+export function fileLocation(id: FileTabId): FileLocation {
+  return id.startsWith('file:worktree:') ? 'worktree' : 'root'
 }
 
 /** A loop's tab is keyed by the `Loop` row's own id (design B4.3's `id`, distinct from the job
@@ -68,6 +102,12 @@ export function specDocumentId(id: SpecTabId): string {
 }
 
 export function filePath(id: FileTabId): string {
+  if (id.startsWith('file:worktree:')) {
+    const rest = id.slice('file:worktree:'.length)
+    const match = WORKTREE_OWNER_RE.exec(rest)
+    return match ? match[3] : rest
+  }
+  if (id.startsWith('file:root:')) return id.slice('file:root:'.length)
   return id.slice('file:'.length)
 }
 
