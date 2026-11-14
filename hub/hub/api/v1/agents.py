@@ -1721,8 +1721,10 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "and `panels`, each `{title, query, kind}` with kind one of `number`, `table`, "
                 "`bar`, `stacked_bar`, `line`. Saving does not run the queries, so a failing one "
                 "shows its error when opened. To change a saved dashboard use `edit_dashboard`; "
-                "`dashboard_id` replaces that one whole, refused as stale unless `base_version` "
-                "is its current version."
+                "`dashboard_id` replaces that one whole; pass the `version` you read as "
+                "`base_version`, and a dashboard changed since is refused as stale. A run whose "
+                "own question has no answer cannot save, edit or undo a dashboard (409 "
+                "`question_unanswered`)."
             ),
         ),
         _Operation(

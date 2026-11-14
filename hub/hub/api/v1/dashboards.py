@@ -20,6 +20,11 @@ records who made it in `edited_by` / `edited_at` (never from the body), and keep
 as the dashboard's one `DashboardVersion`, which undo restores as a new edit. A write naming an
 older version than the current one is refused `stale_version` with the current dashboard, never
 merged.
+
+An agent's run that asked the operator something and has no answer (declined, expired or still
+open) cannot save, edit or undo a dashboard: refused `question_unanswered` (FR-2). The agent asks
+which dashboard when the request is unclear, and a guess after an unanswered question edits the
+wrong one; the operator's answer reaches a later run, which can write.
 """
 
 from __future__ import annotations
@@ -39,7 +44,7 @@ from ... import dashboard_query
 from ...agent_auth import AgentActor, get_agent_actor
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Dashboard, DashboardVersion
+from ...db.models import Dashboard, DashboardVersion, Question
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import short_id
@@ -723,6 +728,29 @@ async def agent_run_query(body: QueryIn, actor: AgentActor = Depends(get_agent_a
     return await _query(actor.project_id, body.sql)
 
 
+async def _refuse_after_unanswered_question(session: AsyncSession, actor: AgentActor) -> None:
+    """Refuse a dashboard write from a run whose own question went without an answer (FR-2)."""
+    open_question = await session.scalar(
+        select(Question.id)
+        .where(
+            Question.project_id == actor.project_id,
+            Question.created_by_run_id == actor.run_id,
+            Question.answered.is_(False),
+        )
+        .limit(1)
+    )
+    if open_question is not None:
+        raise _refuse(
+            409,
+            "question_unanswered",
+            f"You asked the operator a question ({open_question}) this run and it has no answer "
+            "(declined, expired or still open), so no dashboard is saved, edited or undone: "
+            "guessing which dashboard was meant edits the wrong one. Nothing was changed. End "
+            "your turn saying what you need to know; the operator's answer reaches a later run.",
+            question_id=open_question,
+        )
+
+
 @agent_router.get("")
 async def agent_list_dashboards(
     actor: AgentActor = Depends(get_agent_actor),
@@ -739,6 +767,7 @@ async def agent_save_dashboard(
 ):
     """Save a new dashboard, or with `dashboard_id` replace that one whole (an edit, checked
     against `base_version` when given). The author, or the editor, is the run's agent."""
+    await _refuse_after_unanswered_question(session, actor)
     fields = DashboardIn(
         name=body.name,
         description=body.description,
@@ -769,6 +798,7 @@ async def agent_edit_dashboard(
     session: AsyncSession = Depends(get_session),
 ):
     """Edit a dashboard in place by operations, against the version the agent read."""
+    await _refuse_after_unanswered_question(session, actor)
     return await edit_dashboard(session, actor.project_id, dashboard_id, body, actor.agent)
 
 
@@ -778,6 +808,7 @@ async def agent_undo_dashboard(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
+    await _refuse_after_unanswered_question(session, actor)
     return await undo_dashboard(session, actor.project_id, dashboard_id, actor.agent)
 
 

@@ -1063,7 +1063,8 @@ def edit_dashboard(
     North" and "Team health South" -- or none does, or the request names none, do not pick one:
     ask the operator which (`ask_user`, or ask in your reply, naming the candidates), and call
     nothing that writes -- no edit, and never `save_dashboard` to make a second one. A question
-    declined or left unanswered is not permission to guess: end your turn without writing. Then
+    declined or left unanswered is not permission to guess: end your turn without writing (the
+    Hub refuses this run's dashboard writes after it, 409 `question_unanswered`). Then
     `read_dashboard` the one dashboard for its panels' ids and its `version`.
 
     `base_version` is the `version` you read. `operations` is applied in order, all or none:

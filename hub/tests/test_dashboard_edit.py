@@ -1,5 +1,5 @@
 """Editing a saved dashboard at the store and route seams (`change-a-dashboard-by-asking`, task
-`edit-store-and-tools`: FR-1, FR-3 to FR-9).
+`edit-store-and-tools`: FR-1 to FR-9).
 
 An agent edits through `PATCH /agent-actions/dashboards/{id}` with the version it read and a list of
 operations; a whole replace (`POST /agent-actions/dashboards` with `dashboard_id`, or the
@@ -321,6 +321,86 @@ async def test_an_agent_cannot_reach_another_projects_dashboard(app, auth_header
     async with async_session_factory() as db:
         row = await db.get(Dashboard, theirs["id"])
         assert (row.description, row.version) == ("", 1)
+
+
+async def _ask(app, headers) -> str:
+    asked = await app.post(
+        "/api/v1/agent-actions/questions",
+        headers=headers,
+        json={
+            "question": "Which team health dashboard?",
+            "header": "Which dashboard",
+            "options": [{"label": "North"}, {"label": "South"}],
+            "multi_select": False,
+            "blocking": True,
+        },
+    )
+    assert asked.status_code == 201, asked.text
+    return asked.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_a_run_whose_question_has_no_answer_writes_no_dashboard(app, auth_headers):
+    """ac-ambiguous (FR-2): the agent asked which dashboard and the operator declined, or did not
+    answer yet. Every dashboard write of that run is refused, nothing changes and nothing is
+    created; a later run, or the same run once answered, writes as before."""
+    writer = await _run_headers("run-amb-0", "Analyst")
+    north = await _save(app, writer, "Team health North", _four()[:2])
+    south = await _save(app, writer, "Team health South", _four()[:2])
+    await _edit(app, writer, south, [{"op": "rename", "name": "Team health South"}])
+    south = await _read(app, auth_headers, south["id"])
+    before = [await _read(app, auth_headers, d["id"]) for d in (north, south)]
+
+    headers = await _run_headers("run-amb-1", "Asker")
+    question = await _ask(app, headers)
+    for outcome in ("open", "declined"):
+        if outcome == "declined":
+            declined = await app.post(
+                f"/api/v1/projects/{P}/questions/{question}/decline", headers=auth_headers
+            )
+            assert declined.status_code == 200, declined.text
+        add = [{"op": "add_panel", "panel": {"title": "M", "query": COUNT, "kind": "number"}}]
+        attempts = [
+            await _edit(app, headers, north, add),
+            await app.post(f"{AA}/{south['id']}/undo", headers=headers),
+            await app.post(
+                AA,
+                json={"name": "Team health", "description": "", "panels": _four()[:1]},
+                headers=headers,
+            ),
+            await app.post(
+                AA,
+                json={
+                    "name": "Team health North",
+                    "panels": _four()[:1],
+                    "dashboard_id": north["id"],
+                    "base_version": north["version"],
+                },
+                headers=headers,
+            ),
+        ]
+        for refused in attempts:
+            assert refused.status_code == 409, (outcome, refused.text)
+            detail = refused.json()["detail"]
+            assert (detail["code"], detail["question_id"]) == ("question_unanswered", question)
+        assert [await _read(app, auth_headers, d["id"]) for d in (north, south)] == before
+        listed = (await app.get(OP, headers=auth_headers)).json()["dashboards"]
+        assert sorted(d["id"] for d in listed) == sorted([north["id"], south["id"]])
+        # Reading and running stay open: they are how the agent names the candidates.
+        assert (await app.get(f"{AA}/{north['id']}", headers=headers)).status_code == 200
+
+    answered_run = await _run_headers("run-amb-2", "Answered")
+    asked = await _ask(app, answered_run)
+    answered = await app.patch(
+        f"/api/v1/projects/{P}/questions/{asked}",
+        json={"answer": "North", "labels": ["North"]},
+        headers=auth_headers,
+    )
+    assert answered.status_code == 200, answered.text
+    edited = await _edit(app, answered_run, north, add)
+    assert edited.status_code == 200, edited.text
+    later = await _run_headers("run-amb-3", "Later")
+    assert (await app.post(f"{AA}/{south['id']}/undo", headers=later)).status_code == 200
 
 
 @pytest.mark.asyncio
