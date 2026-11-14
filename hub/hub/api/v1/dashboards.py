@@ -1,5 +1,6 @@
-"""A project's dashboards: query, save, list, read, run and delete (`ask-any-agent-for-a-
-dashboard-and-get-one-that-stays`, FR-1, FR-7, FR-9 to FR-13).
+"""A project's dashboards: query, save, list, read, run, edit, undo and delete (`ask-any-agent-
+for-a-dashboard-and-get-one-that-stays`, FR-1, FR-7, FR-9 to FR-13; `change-a-dashboard-by-
+asking`, FR-1 to FR-9).
 
 Two routers over one store. `router` is the operator's, under `/projects/{project_id}/dashboards`
 on the project credential; `agent_router` is the agents', under `/agent-actions/dashboards` on a
@@ -11,6 +12,14 @@ never queryable (`not_queryable`), but does not run the queries: a panel whose q
 and shows its error when the dashboard is run. Running answers every panel on its own, so one
 failing panel never fails the rest. The fixed paths (`query-reference`, `query`) are declared
 before `/{dashboard_id}` so neither is read as an id.
+
+An edit (`PATCH /agent-actions/dashboards/{id}`) names the version it read and a list of
+operations, applied whole or not at all and validated like a save. A whole replace of an existing
+dashboard is an edit too. Every edit, replace and undo raises the dashboard's `version` by one,
+records who made it in `edited_by` / `edited_at` (never from the body), and keeps what it replaced
+as the dashboard's one `DashboardVersion`, which undo restores as a new edit. A write naming an
+older version than the current one is refused `stale_version` with the current dashboard, never
+merged.
 """
 
 from __future__ import annotations
@@ -22,7 +31,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +39,7 @@ from ... import dashboard_query
 from ...agent_auth import AgentActor, get_agent_actor
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Dashboard
+from ...db.models import Dashboard, DashboardVersion
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import short_id
@@ -44,7 +53,20 @@ CHART_KINDS: Tuple[str, ...] = ("number", "table", "bar", "stacked_bar", "line")
 #: Who a dashboard the operator saved is recorded as.
 OPERATOR_AUTHOR = "operator"
 
+#: The most panels a dashboard holds.
+MAX_PANELS = 50
+
 _PANEL_ID_RE = re.compile(r"^pnl-[0-9a-f]{12}$")
+
+#: The operations an edit is made of (`change-a-dashboard-by-asking`, FR-4).
+OPERATIONS: Tuple[str, ...] = (
+    "add_panel",
+    "remove_panel",
+    "change_panel",
+    "move_panel",
+    "rename",
+    "set_description",
+)
 
 
 class PanelIn(RequestModel):
@@ -59,12 +81,21 @@ class PanelIn(RequestModel):
 class DashboardIn(RequestModel):
     name: str = Field(max_length=200)
     description: str = Field(default="", max_length=10_000)
-    panels: List[PanelIn] = Field(max_length=50)
+    panels: List[PanelIn] = Field(max_length=MAX_PANELS)
+    #: On a replace, the version it was made against; an older one is refused `stale_version`.
+    base_version: Optional[int] = None
 
 
 class AgentDashboardIn(DashboardIn):
     #: Replace this dashboard whole rather than save a new one.
     dashboard_id: str = Field(default="", max_length=64)
+
+
+class EditIn(RequestModel):
+    #: The `version` the edit was made against, as read.
+    base_version: int
+    #: Each `{"op": ...}`, checked one by one by `_apply` so a refusal names its index.
+    operations: List[Dict[str, Any]] = Field(min_length=1, max_length=100)
 
 
 class QueryIn(RequestModel):
@@ -77,6 +108,26 @@ def _refuse(status_code: int, code: str, message: str, **extra: Any) -> HTTPExce
     )
 
 
+def _panel_refusal(title: str, query: str, kind: str) -> Optional[Tuple[str, str]]:
+    """Why a panel cannot be saved, as `(reason, message)` with the message following "Panel n",
+    or None when it can. One check for a save and for an edit's operations (FR-8)."""
+    if not title:
+        return "invalid_panel", "has no title."
+    if not query.strip():
+        return "invalid_panel", "has no query."
+    if kind not in CHART_KINDS:
+        return (
+            "invalid_chart_kind",
+            f"({title}) names chart kind {kind!r}; a chart kind is one of "
+            f"{', '.join(CHART_KINDS)}.",
+        )
+    try:
+        dashboard_query.check_queryable(query)
+    except dashboard_query.QueryRefused as exc:
+        return exc.code, f"({title}): {exc.message}"
+    return None
+
+
 def _panels(panels: Sequence[PanelIn], kept: Sequence[Dict[str, Any]] = ()) -> List[Dict[str, Any]]:
     """The panels as stored, or a 422 naming the first that cannot be saved.
 
@@ -87,24 +138,10 @@ def _panels(panels: Sequence[PanelIn], kept: Sequence[Dict[str, Any]] = ()) -> L
     used: set = set()
     for index, panel in enumerate(panels):
         title = panel.title.strip()
-        if not title:
-            raise _refuse(422, "invalid_panel", f"Panel {index + 1} has no title.", panel=index)
-        if not panel.query.strip():
-            raise _refuse(422, "invalid_panel", f"Panel {index + 1} has no query.", panel=index)
-        if panel.kind not in CHART_KINDS:
-            raise _refuse(
-                422,
-                "invalid_chart_kind",
-                f"Panel {index + 1} ({title}) names chart kind {panel.kind!r}; a chart kind is one "
-                f"of {', '.join(CHART_KINDS)}.",
-                panel=index,
-            )
-        try:
-            dashboard_query.check_queryable(panel.query)
-        except dashboard_query.QueryRefused as exc:
-            raise _refuse(
-                422, exc.code, f"Panel {index + 1} ({title}): {exc.message}", panel=index
-            ) from exc
+        refusal = _panel_refusal(title, panel.query, panel.kind)
+        if refusal:
+            reason, message = refusal
+            raise _refuse(422, reason, f"Panel {index + 1} {message}", panel=index)
         pid = panel.id
         fresh = not pid or not _PANEL_ID_RE.match(pid) or pid in used
         if not fresh and kept and pid not in known:
@@ -123,20 +160,37 @@ def _name(raw: str) -> str:
     return name
 
 
-def _view(dashboard: Dashboard) -> Dict[str, Any]:
+def _iso(moment: Optional[datetime]) -> Optional[str]:
+    return moment.isoformat() if moment else None
+
+
+def _view(dashboard: Dashboard, can_undo: bool) -> Dict[str, Any]:
     return {
         "id": dashboard.id,
         "name": dashboard.name,
         "description": dashboard.description,
         "panels": list(dashboard.panels or []),
         "author": dashboard.author,
-        "created_at": dashboard.created_at.isoformat() if dashboard.created_at else None,
-        "updated_at": dashboard.updated_at.isoformat() if dashboard.updated_at else None,
+        "created_at": _iso(dashboard.created_at),
+        "updated_at": _iso(dashboard.updated_at),
+        "version": dashboard.version,
+        "edited_by": dashboard.edited_by,
+        "edited_at": _iso(dashboard.edited_at),
+        "can_undo": can_undo,
     }
 
 
-def _summary(dashboard: Dashboard) -> Dict[str, Any]:
-    view = _view(dashboard)
+async def _kept(session: AsyncSession, dashboard: Dashboard) -> Optional[DashboardVersion]:
+    kept = await session.get(DashboardVersion, dashboard.id)
+    return kept if kept is not None and kept.project_id == dashboard.project_id else None
+
+
+async def _read_view(session: AsyncSession, dashboard: Dashboard) -> Dict[str, Any]:
+    return _view(dashboard, await _kept(session, dashboard) is not None)
+
+
+def _summary(dashboard: Dashboard, can_undo: bool) -> Dict[str, Any]:
+    view = _view(dashboard, can_undo)
     view["panel_count"] = len(view.pop("panels"))
     return view
 
@@ -149,6 +203,12 @@ async def _get(session: AsyncSession, project_id: str, dashboard_id: str) -> Das
     return dashboard
 
 
+def _taken(name: str) -> HTTPException:
+    return _refuse(
+        409, "dashboard_name_taken", f"This project already has a dashboard named {name!r}."
+    )
+
+
 async def _name_taken(
     session: AsyncSession, project_id: str, name: str, other_than: Optional[str]
 ) -> None:
@@ -156,9 +216,7 @@ async def _name_taken(
     if other_than:
         query = query.where(Dashboard.id != other_than)
     if (await session.execute(query)).first() is not None:
-        raise _refuse(
-            409, "dashboard_name_taken", f"This project already has a dashboard named {name!r}."
-        )
+        raise _taken(name)
 
 
 async def _commit(session: AsyncSession, name: str) -> None:
@@ -166,9 +224,7 @@ async def _commit(session: AsyncSession, name: str) -> None:
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise _refuse(
-            409, "dashboard_name_taken", f"This project already has a dashboard named {name!r}."
-        ) from exc
+        raise _taken(name) from exc
 
 
 async def list_dashboards(session: AsyncSession, project_id: str) -> Dict[str, Any]:
@@ -183,7 +239,18 @@ async def list_dashboards(session: AsyncSession, project_id: str) -> Dict[str, A
         .scalars()
         .all()
     )
-    return {"dashboards": [_summary(d) for d in rows]}
+    kept = set(
+        (
+            await session.execute(
+                select(DashboardVersion.dashboard_id).where(
+                    DashboardVersion.project_id == project_id
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return {"dashboards": [_summary(d, d.id in kept) for d in rows]}
 
 
 async def create_dashboard(
@@ -202,32 +269,258 @@ async def create_dashboard(
         author=author[:32],
         created_at=now,
         updated_at=now,
+        version=1,
     )
     session.add(dashboard)
     await _commit(session, name)
     await sse_manager.broadcast(
         project_id, "dashboard_saved", {"id": dashboard.id, "name": dashboard.name}
     )
-    return _view(dashboard)
+    return _view(dashboard, False)
+
+
+async def _stale(session: AsyncSession, dashboard: Dashboard) -> HTTPException:
+    return _refuse(
+        409,
+        "stale_version",
+        f"The dashboard {dashboard.name!r} changed since you read it: it is now version "
+        f"{dashboard.version}. Nothing was changed; make your change again against the current "
+        "dashboard in `current`.",
+        current=await _read_view(session, dashboard),
+    )
+
+
+async def _check_base(
+    session: AsyncSession, dashboard: Dashboard, base_version: Optional[int]
+) -> None:
+    if base_version is not None and base_version != dashboard.version:
+        raise await _stale(session, dashboard)
+
+
+async def _write(
+    session: AsyncSession,
+    dashboard: Dashboard,
+    *,
+    name: str,
+    description: str,
+    panels: List[Dict[str, Any]],
+    editor: str,
+) -> Dict[str, Any]:
+    """Make `dashboard` this content at its next version, keeping what it replaces (FR-6).
+
+    The update is conditional on the version read, so of two writes from the same version only
+    the first lands and the second answers `stale_version` (FR-5)."""
+    project_id, dashboard_id, base = dashboard.project_id, dashboard.id, dashboard.version
+    replaced = {
+        "version": base,
+        "name": dashboard.name,
+        "description": dashboard.description,
+        "panels": list(dashboard.panels or []),
+        "edited_by": dashboard.edited_by,
+        "edited_at": dashboard.edited_at,
+    }
+    await _name_taken(session, project_id, name, dashboard_id)
+    now = datetime.now(timezone.utc)
+    try:
+        written = await session.execute(
+            update(Dashboard)
+            .where(Dashboard.id == dashboard_id, Dashboard.version == base)
+            .values(
+                name=name,
+                description=description,
+                panels=panels,
+                version=base + 1,
+                edited_by=editor[:32],
+                edited_at=now,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if written.rowcount != 1:
+            await session.rollback()
+            await session.refresh(dashboard)
+            raise await _stale(session, dashboard)
+        kept = await session.get(DashboardVersion, dashboard_id)
+        if kept is None:
+            session.add(
+                DashboardVersion(dashboard_id=dashboard_id, project_id=project_id, **replaced)
+            )
+        else:
+            kept.project_id = project_id
+            for field, value in replaced.items():
+                setattr(kept, field, value)
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise _taken(name) from exc
+    await session.refresh(dashboard)
+    await sse_manager.broadcast(
+        project_id,
+        "dashboard_edited",
+        {"id": dashboard.id, "name": dashboard.name, "version": dashboard.version},
+    )
+    return _view(dashboard, True)
 
 
 async def replace_dashboard(
-    session: AsyncSession, project_id: str, dashboard_id: str, body: DashboardIn, author: str
+    session: AsyncSession, project_id: str, dashboard_id: str, body: DashboardIn, editor: str
 ) -> Dict[str, Any]:
+    """Replace a dashboard whole. It is an edit: checked against `base_version` when given, and
+    it keeps what it replaced. The author stays who created it; `editor` becomes `edited_by`."""
     dashboard = await _get(session, project_id, dashboard_id)
+    await _check_base(session, dashboard, body.base_version)
     name = _name(body.name)
     panels = _panels(body.panels, kept=list(dashboard.panels or []))
-    await _name_taken(session, project_id, name, dashboard.id)
-    dashboard.name = name
-    dashboard.description = body.description
-    dashboard.panels = panels
-    dashboard.author = author[:32]
-    dashboard.updated_at = datetime.now(timezone.utc)
-    await _commit(session, name)
-    await sse_manager.broadcast(
-        project_id, "dashboard_saved", {"id": dashboard.id, "name": dashboard.name}
+    view = await _write(
+        session, dashboard, name=name, description=body.description, panels=panels, editor=editor
     )
-    return _view(dashboard)
+    await sse_manager.broadcast(
+        project_id, "dashboard_saved", {"id": view["id"], "name": view["name"]}
+    )
+    return view
+
+
+def _operation_refused(index: int, reason: str, message: str) -> HTTPException:
+    return _refuse(
+        422,
+        "operation_refused",
+        f"Operation {index} (counting from 0) was refused, so none was applied: {message}",
+        operation_index=index,
+        reason=reason,
+    )
+
+
+def _panel_at(panels: List[Dict[str, Any]], op: Dict[str, Any], index: int) -> int:
+    panel_id = op.get("panel_id")
+    for at, panel in enumerate(panels):
+        if panel.get("id") == panel_id:
+            return at
+    raise _operation_refused(
+        index,
+        "unknown_panel",
+        f"the dashboard has no panel {panel_id!r}; its panels are "
+        f"{', '.join(str(p.get('id')) for p in panels) or 'none'}.",
+    )
+
+
+def _position(op: Dict[str, Any], index: int, size: int, required: bool) -> int:
+    """Where a panel goes: an index from 0, clamped into the list; the end when null and allowed."""
+    raw = op.get("position")
+    if raw is None and not required:
+        return size
+    if not isinstance(raw, int) or isinstance(raw, bool):
+        raise _operation_refused(
+            index, "invalid_panel", f"position must be a whole number from 0, not {raw!r}."
+        )
+    return max(0, min(raw, size))
+
+
+def _text(op: Dict[str, Any], key: str, index: int, limit: int) -> str:
+    value = op.get(key)
+    if not isinstance(value, str):
+        raise _operation_refused(index, "invalid_panel", f"{key} must be text, not {value!r}.")
+    if len(value) > limit:
+        raise _operation_refused(
+            index, "invalid_panel", f"{key} is longer than {limit} characters."
+        )
+    return value
+
+
+_PANEL_LIMITS = (("title", 200), ("query", 100_000), ("kind", 64))
+
+
+def _checked_panel(panel: Dict[str, Any], index: int) -> Dict[str, Any]:
+    for key, limit in _PANEL_LIMITS:
+        _text(panel, key, index, limit)
+    title = panel["title"].strip()
+    refusal = _panel_refusal(title, panel["query"], panel["kind"])
+    if refusal:
+        reason, message = refusal
+        raise _operation_refused(index, reason, f"the panel {message}")
+    return {**panel, "title": title}
+
+
+def _apply(
+    dashboard: Dashboard, operations: Sequence[Dict[str, Any]]
+) -> Tuple[str, str, List[Dict[str, Any]]]:
+    """The dashboard's name, description and panels after `operations`, or the refusal of the
+    first that cannot apply. Nothing is written here, so a refusal leaves the dashboard as it was
+    (FR-4). A panel keeps its id; an added one gets a new id."""
+    name, description = dashboard.name, dashboard.description
+    panels = [dict(p) for p in dashboard.panels or []]
+    for index, op in enumerate(operations):
+        kind = op.get("op")
+        if kind == "add_panel":
+            panel = op.get("panel")
+            if not isinstance(panel, dict):
+                raise _operation_refused(
+                    index, "invalid_panel", "add_panel needs a panel {title, query, kind}."
+                )
+            if len(panels) >= MAX_PANELS:
+                raise _operation_refused(
+                    index, "invalid_panel", f"a dashboard holds at most {MAX_PANELS} panels."
+                )
+            checked = _checked_panel({key: panel.get(key) for key, _ in _PANEL_LIMITS}, index)
+            at = _position(op, index, len(panels), required=False)
+            panels.insert(at, {"id": f"pnl-{short_id()}", **checked})
+        elif kind == "remove_panel":
+            panels.pop(_panel_at(panels, op, index))
+        elif kind == "change_panel":
+            at = _panel_at(panels, op, index)
+            changed = {**panels[at]}
+            for key, limit in _PANEL_LIMITS:
+                if key in op:
+                    changed[key] = _text(op, key, index, limit)
+            panels[at] = _checked_panel(changed, index)
+        elif kind == "move_panel":
+            panel = panels.pop(_panel_at(panels, op, index))
+            panels.insert(_position(op, index, len(panels), required=True), panel)
+        elif kind == "rename":
+            name = _text(op, "name", index, 200).strip()
+            if not name:
+                raise _operation_refused(index, "invalid_dashboard", "a dashboard needs a name.")
+        elif kind == "set_description":
+            description = _text(op, "description", index, 10_000)
+        else:
+            raise _operation_refused(
+                index,
+                "unknown_operation",
+                f"{kind!r} is not an operation; one of {', '.join(OPERATIONS)}.",
+            )
+    return name, description, panels
+
+
+async def edit_dashboard(
+    session: AsyncSession, project_id: str, dashboard_id: str, body: EditIn, editor: str
+) -> Dict[str, Any]:
+    dashboard = await _get(session, project_id, dashboard_id)
+    await _check_base(session, dashboard, body.base_version)
+    name, description, panels = _apply(dashboard, body.operations)
+    return await _write(
+        session, dashboard, name=name, description=description, panels=panels, editor=editor
+    )
+
+
+async def undo_dashboard(
+    session: AsyncSession, project_id: str, dashboard_id: str, editor: str
+) -> Dict[str, Any]:
+    """Restore the kept version as a new edit, keeping what it replaces, so undo undoes itself."""
+    dashboard = await _get(session, project_id, dashboard_id)
+    kept = await _kept(session, dashboard)
+    if kept is None:
+        raise _refuse(
+            409,
+            "nothing_to_undo",
+            f"The dashboard {dashboard.name!r} has not been edited, so there is nothing to undo.",
+        )
+    return await _write(
+        session,
+        dashboard,
+        name=kept.name,
+        description=kept.description,
+        panels=list(kept.panels or []),
+        editor=editor,
+    )
 
 
 def _numeric(rows: Sequence[Sequence[Any]], index: int) -> bool:
@@ -297,18 +590,30 @@ async def _run_panel(project_id: str, panel: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+#: What a run answers of the dashboard beside its panels' results.
+_RUN_FIELDS = (
+    "id",
+    "name",
+    "description",
+    "author",
+    "updated_at",
+    "version",
+    "edited_by",
+    "edited_at",
+    "can_undo",
+)
+
+
 async def run_dashboard(
     session: AsyncSession, project_id: str, dashboard_id: str
 ) -> Dict[str, Any]:
+    """Run every panel of a saved dashboard: the operator's screen and an agent read the same
+    answer (`change-a-dashboard-by-asking`, FR-7)."""
     dashboard = await _get(session, project_id, dashboard_id)
-    view = _view(dashboard)
+    view = await _read_view(session, dashboard)
     panels = await asyncio.gather(*(_run_panel(project_id, p) for p in view["panels"]))
     return {
-        "id": view["id"],
-        "name": view["name"],
-        "description": view["description"],
-        "author": view["author"],
-        "updated_at": view["updated_at"],
+        **{key: view[key] for key in _RUN_FIELDS},
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "panels": list(panels),
     }
@@ -367,7 +672,16 @@ async def operator_read_dashboard(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
-    return _view(await _get(session, project[0], dashboard_id))
+    return await _read_view(session, await _get(session, project[0], dashboard_id))
+
+
+@router.post("/{dashboard_id}/undo")
+async def operator_undo_dashboard(
+    dashboard_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    return await undo_dashboard(session, project[0], dashboard_id, OPERATOR_AUTHOR)
 
 
 @router.get("/{dashboard_id}/run")
@@ -387,6 +701,10 @@ async def operator_delete_dashboard(
 ):
     dashboard = await _get(session, project[0], dashboard_id)
     payload = {"id": dashboard.id, "name": dashboard.name}
+    # Its kept earlier version goes with it (FR-9); the project sweep covers a project's delete.
+    kept = await _kept(session, dashboard)
+    if kept is not None:
+        await session.delete(kept)
     await session.delete(dashboard)
     await session.commit()
     await sse_manager.broadcast(project[0], "dashboard_deleted", payload)
@@ -419,9 +737,14 @@ async def agent_save_dashboard(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    """Save a new dashboard, or with `dashboard_id` replace that one whole. The author is the
-    run's agent."""
-    fields = DashboardIn(name=body.name, description=body.description, panels=body.panels)
+    """Save a new dashboard, or with `dashboard_id` replace that one whole (an edit, checked
+    against `base_version` when given). The author, or the editor, is the run's agent."""
+    fields = DashboardIn(
+        name=body.name,
+        description=body.description,
+        panels=body.panels,
+        base_version=body.base_version,
+    )
     if body.dashboard_id:
         return await replace_dashboard(
             session, actor.project_id, body.dashboard_id, fields, actor.agent
@@ -435,4 +758,33 @@ async def agent_read_dashboard(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
-    return _view(await _get(session, actor.project_id, dashboard_id))
+    return await _read_view(session, await _get(session, actor.project_id, dashboard_id))
+
+
+@agent_router.patch("/{dashboard_id}")
+async def agent_edit_dashboard(
+    dashboard_id: str,
+    body: EditIn,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Edit a dashboard in place by operations, against the version the agent read."""
+    return await edit_dashboard(session, actor.project_id, dashboard_id, body, actor.agent)
+
+
+@agent_router.post("/{dashboard_id}/undo")
+async def agent_undo_dashboard(
+    dashboard_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await undo_dashboard(session, actor.project_id, dashboard_id, actor.agent)
+
+
+@agent_router.get("/{dashboard_id}/run")
+async def agent_run_dashboard(
+    dashboard_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    return await run_dashboard(session, actor.project_id, dashboard_id)

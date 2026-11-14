@@ -1710,17 +1710,19 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
         ),
         _Operation(
             tool="save_dashboard",
-            args="name, description, panels, dashboard_id=''",
+            args="name, description, panels, dashboard_id='', base_version=None",
             method="POST",
             path="/dashboards",
-            fields=("name", "description", "panels", "dashboard_id"),
+            fields=("name", "description", "panels", "dashboard_id", "base_version"),
             required=("name", "panels"),
             text=(
-                "save a dashboard to this project under your name, for the operator's Dashboards "
-                "screen: a unique `name`, the question it answers in `description`, and `panels`, "
-                "each `{title, query, kind}` with kind one of `number`, `table`, `bar`, "
-                "`stacked_bar`, `line`. Saving does not run the queries, so a failing one shows "
-                "its error when opened. `dashboard_id` replaces that dashboard whole."
+                "save a new dashboard to this project under your name, for the operator's "
+                "Dashboards screen: a unique `name`, the question it answers in `description`, "
+                "and `panels`, each `{title, query, kind}` with kind one of `number`, `table`, "
+                "`bar`, `stacked_bar`, `line`. Saving does not run the queries, so a failing one "
+                "shows its error when opened. To change a saved dashboard use `edit_dashboard`; "
+                "`dashboard_id` replaces that one whole, refused as stale unless `base_version` "
+                "is its current version."
             ),
         ),
         _Operation(
@@ -1730,7 +1732,14 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             path="/dashboards",
             fields=(),
             required=(),
-            text="this project's dashboards, newest first, with name, author and times.",
+            text=(
+                "this project's dashboards, newest first, with name, author, `version` and "
+                "times. Asked to change one, edit only when exactly one name fits the request "
+                'or its `dash-` id is given; when two or more fit ("team health" fits "Team '
+                'health North" and "Team health South"), none does or none is named, ask '
+                "which, naming the candidates, and change nothing, also when that question is "
+                "declined or unanswered."
+            ),
         ),
         _Operation(
             tool="read_dashboard",
@@ -1739,7 +1748,58 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
             path="/dashboards/{dashboard_id}",
             fields=(),
             required=(),
-            text="one of this project's dashboards with its panels' titles, queries and kinds.",
+            text=(
+                "one of this project's dashboards with its panels' ids, titles, queries and "
+                "kinds, its `version` and who last edited it."
+            ),
+        ),
+        _Operation(
+            tool="edit_dashboard",
+            args="dashboard_id, base_version, operations",
+            method="PATCH",
+            path="/dashboards/{dashboard_id}",
+            fields=("base_version", "operations"),
+            required=("base_version", "operations"),
+            text=(
+                "change a saved dashboard in place when asked to: find it with `list_dashboards` "
+                "by the name or `dash-` id the request gives and edit only when exactly one "
+                "fits; when several fit, none does, or none is named, ask which and write nothing "
+                "(never save a second dashboard instead). `base_version` is the `version` you read; `operations` is a list of "
+                '`{"op": "add_panel", "panel": {title, query, kind}, "position": n|null}`, '
+                '`{"op": "remove_panel", "panel_id"}`, `{"op": "change_panel", "panel_id", '
+                'title?, query?, kind?}`, `{"op": "move_panel", "panel_id", "position"}`, '
+                '`{"op": "rename", "name"}`, `{"op": "set_description", "description"}`. '
+                "Applied all or none: 422 `operation_refused` names `operation_index` (from 0) "
+                "and `reason`; 409 `stale_version` returns the `current` dashboard to edit "
+                "again. What you did not mention stays as it was."
+            ),
+        ),
+        _Operation(
+            tool="undo_dashboard",
+            args="dashboard_id",
+            method="POST",
+            path="/dashboards/{dashboard_id}/undo",
+            fields=(),
+            required=(),
+            text=(
+                "restore a dashboard's previous version when asked to undo a change; the restore "
+                "is itself an edit, so undoing again restores what was undone. 409 "
+                "`nothing_to_undo` when it was never edited."
+            ),
+        ),
+        _Operation(
+            tool="run_dashboard",
+            args="dashboard_id",
+            method="GET",
+            path="/dashboards/{dashboard_id}/run",
+            fields=(),
+            required=(),
+            text=(
+                "run a saved dashboard as the operator's screen does: each panel's `columns` and "
+                "`rows`, or its `error`, and its drawing `warning`. To fix a broken panel, correct "
+                "its query from the error with `run_dashboard_query`, then `edit_dashboard` with "
+                "one `change_panel`."
+            ),
         ),
         _Operation(
             tool="vault_add",

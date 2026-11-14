@@ -3742,5 +3742,33 @@ class Dashboard(Base):
     author: Mapped[str] = mapped_column(String(32), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
+    #: Up by one on every edit, whole replace and undo (`change-a-dashboard-by-asking`, FR-5,
+    #: migration 0178); a write naming an older one is refused as stale.
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    #: Who last edited it, from the run credential, or `operator`; null until first edited.
+    edited_by: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (UniqueConstraint("project_id", "name", name="uq_dashboards_project_name"),)
+
+
+class DashboardVersion(Base):
+    """The one earlier version of a dashboard the Hub keeps, so one undo restores it
+    (`change-a-dashboard-by-asking`, FR-6, migration 0178).
+
+    Every edit, whole replace and undo overwrites it with what that write replaced. Deleting the
+    dashboard deletes it explicitly; `project_id` lets the project sweep reach it (FR-9).
+    """
+
+    __tablename__ = "dashboard_versions"
+
+    dashboard_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("projects.id"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    panels: Mapped[Any] = mapped_column(JSON, nullable=False, default=list)
+    edited_by: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    edited_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)

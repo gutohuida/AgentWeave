@@ -999,10 +999,14 @@ def run_dashboard_query(sql: str) -> Dict[str, Any]:
 
 @_tool()
 def save_dashboard(
-    name: str, description: str, panels: List[Dict[str, Any]], dashboard_id: str = ""
+    name: str,
+    description: str,
+    panels: List[Dict[str, Any]],
+    dashboard_id: str = "",
+    base_version: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Save a dashboard to the current project, under your name; the operator opens it from the
-    project's Dashboards screen, which runs its queries each time it is opened or refreshed.
+    """Save a new dashboard to the current project, under your name; the operator opens it from
+    the project's Dashboards screen, which runs its queries each time it is opened or refreshed.
 
     `name` is unique in the project (409 `dashboard_name_taken`), `description` says the question
     it answers, and `panels` is a list of `{"title", "query", "kind"}`, where `kind` is one of
@@ -1010,27 +1014,106 @@ def save_dashboard(
     `invalid_chart_kind`). For bar, stacked bar and line the first column labels the points and
     the numeric columns after it are drawn; a number shows the first numeric value. Saving does
     not run the queries, so check each with `run_dashboard_query` first: a panel whose query fails
-    is saved and shows its error when opened. `dashboard_id` replaces that dashboard whole; keep
-    each panel's `id` from `read_dashboard` to keep it.
+    is saved and shows its error when opened.
+
+    **To change a dashboard that already exists, use `edit_dashboard`**, which changes only what
+    you name. `dashboard_id` replaces that dashboard whole (keep each panel's `id` from
+    `read_dashboard` to keep it); pass the `version` you read as `base_version`, or a newer edit
+    may be overwritten -- with it, a dashboard changed since is refused 409 `stale_version`.
     """
     body: Dict[str, Any] = {"name": name, "description": description, "panels": panels}
     if dashboard_id:
         body["dashboard_id"] = dashboard_id
+    if base_version is not None:
+        body["base_version"] = base_version
     return _hub_request("POST", "/dashboards", body)
 
 
 @_tool()
 def list_dashboards() -> Dict[str, Any]:
     """The current project's dashboards, most recently saved first: each with its `id`, `name`,
-    `description`, `author`, times and panel count. Read one with `read_dashboard`."""
+    `description`, `author`, `version`, who last edited it, times and panel count. Read one with
+    `read_dashboard`.
+
+    Asked to change "the X dashboard", count the dashboards whose name fits X. Exactly one, or
+    the `dash-...` id the message gives: that is the one. Two or more that fit (asked for "team
+    health" with "Team health North" and "Team health South" listed), none, or no name at all:
+    ask the operator which, naming the candidates, and change nothing -- also when the question
+    is declined or goes unanswered: end your turn without writing rather than pick one."""
     return _hub_request("GET", "/dashboards")
 
 
 @_tool()
 def read_dashboard(dashboard_id: str) -> Dict[str, Any]:
-    """One dashboard of the current project with its panels (`id`, `title`, `query`, `kind`).
-    Another project's id answers not-found."""
+    """One dashboard of the current project with its panels (`id`, `title`, `query`, `kind`), its
+    `version`, `edited_by` / `edited_at` and `can_undo`. Another project's id answers not-found."""
     return _hub_request("GET", f"/dashboards/{dashboard_id}")
+
+
+@_tool()
+def edit_dashboard(
+    dashboard_id: str, base_version: int, operations: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Change a saved dashboard in place: only what the operations name changes.
+
+    **Find the dashboard first.** Call `list_dashboards` and pick the one the request names, by
+    its name or by the `dash-...` id in the operator's message (the Dashboards screen's Ask to
+    change writes `Change the dashboard "<name>" (<id>): `). Edit only when exactly one dashboard
+    fits. When several fit -- a request for "the team health dashboard" fits both "Team health
+    North" and "Team health South" -- or none does, or the request names none, do not pick one:
+    ask the operator which (`ask_user`, or ask in your reply, naming the candidates), and call
+    nothing that writes -- no edit, and never `save_dashboard` to make a second one. A question
+    declined or left unanswered is not permission to guess: end your turn without writing. Then
+    `read_dashboard` the one dashboard for its panels' ids and its `version`.
+
+    `base_version` is the `version` you read. `operations` is applied in order, all or none:
+    - `{"op": "add_panel", "panel": {"title", "query", "kind"}, "position": n or null}` (null
+      appends; positions count from 0)
+    - `{"op": "remove_panel", "panel_id": "pnl-..."}`
+    - `{"op": "change_panel", "panel_id": "pnl-...", "title"?, "query"?, "kind"?}` (only the keys
+      given change)
+    - `{"op": "move_panel", "panel_id": "pnl-...", "position": n}`
+    - `{"op": "rename", "name": "..."}`, `{"op": "set_description", "description": "..."}`
+
+    Queries are held to `run_dashboard_query`'s rules but not run, so check each new query there
+    first. A refusal changes nothing: 422 `operation_refused` names `operation_index` (from 0) and
+    `reason` (`invalid_chart_kind`, `not_queryable`, `invalid_panel`, `unknown_panel`); 409
+    `dashboard_name_taken` for a rename to a name in use; 409 `stale_version` when the dashboard
+    changed since you read it, with the `current` dashboard to make your change against. Answers
+    the dashboard at its new `version`, which the operator can undo in one step.
+    """
+    return _hub_request(
+        "PATCH",
+        f"/dashboards/{dashboard_id}",
+        {"base_version": base_version, "operations": operations},
+    )
+
+
+@_tool()
+def undo_dashboard(dashboard_id: str) -> Dict[str, Any]:
+    """Restore a dashboard's previous version, when the operator asks to undo a change to it.
+
+    The Hub keeps one earlier version; restoring it is itself an edit (the version goes up), so
+    undoing again brings back what was undone. 409 `nothing_to_undo` when it was never edited.
+    """
+    return _hub_request("POST", f"/dashboards/{dashboard_id}/undo")
+
+
+@_tool()
+def run_dashboard(dashboard_id: str) -> Dict[str, Any]:
+    """Run a saved dashboard and see what the operator's screen shows: for each panel its
+    `columns` and `rows`, or its `error` (`code`, `message`), and its drawing `warning` when the
+    result cannot be drawn as its chart kind.
+
+    To repair a broken panel when asked: read its error here, write a corrected query and check
+    it with `run_dashboard_query`, then `edit_dashboard` with one `change_panel` for that panel
+    only, and run the dashboard again to see it draw.
+    """
+    return _hub_request(
+        "GET",
+        f"/dashboards/{dashboard_id}/run",
+        timeout=DASHBOARD_QUERY_REQUEST_TIMEOUT_SECONDS,
+    )
 
 
 @_tool()
