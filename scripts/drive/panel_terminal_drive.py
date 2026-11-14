@@ -188,7 +188,27 @@ def shell_processes(hub_pid):
     """Shell-like processes under the Hub, as {pid: name}."""
     procs = processes()
     return {pid: procs[pid]["Name"] for pid in descendants(hub_pid, procs)
-            if (procs[pid]["Name"] or "").lower() in SHELL_NAMES}
+            if (procs[pid]["Name"] or "").lower() in SHELL_NAMES and not is_detection(procs[pid])}
+
+
+def is_detection(proc):
+    """The Hub's own `wsl.exe -l -q` style refresh (hub/hub/terminal/shells.py): not a terminal shell."""
+    if (proc["Name"] or "").lower() != "wsl.exe":
+        return False
+    args = (proc.get("CommandLine") or "").lower().split()[1:]
+    return bool(args) and all(a.startswith("-") for a in args) and not {"-e", "--exec", "-d", "--distribution"} & set(args)
+
+
+def settled_shells(hub_pid, quiet=3.0, limit=30):
+    """The shell processes once the tree has stopped changing (late children of earlier shells,
+    agent runs' tool calls), so a baseline is not taken mid-spawn."""
+    current, since, deadline = set(shell_processes(hub_pid)), time.time(), time.time() + limit
+    while time.time() < deadline and time.time() - since < quiet:
+        time.sleep(0.5)
+        nxt = set(shell_processes(hub_pid))
+        if nxt != current:
+            current, since = nxt, time.time()
+    return current
 
 
 def with_cmdline(marker):
@@ -592,7 +612,7 @@ def control_shell(state):
 def check_remote_refused(browser, state):
     hub_pid, lan = state["hub_pid"], lan_address()
     tid, control = control_shell(state)
-    baseline = set(shell_processes(hub_pid))
+    baseline = settled_shells(hub_pid)
     attempts = []
     if lan:
         lan_hub = f"http://{lan}:{d.PORT}"
@@ -675,7 +695,7 @@ def check_other_site_refused(browser, state):
     watch = None
     if tid:
         watch, _ = try_attach(state, tid)
-    baseline = set(shell_processes(hub_pid))
+    baseline = settled_shells(hub_pid)
     code_open, _ = open_shell(state, state["pwsh"], origin=FOREIGN_ORIGIN)
     code_null, _ = open_shell(state, state["pwsh"], origin="null")
     att, how = (try_attach(state, tid, origin=FOREIGN_ORIGIN) if tid else (None, "no control shell"))
