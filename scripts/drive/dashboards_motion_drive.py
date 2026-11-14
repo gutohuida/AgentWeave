@@ -42,7 +42,8 @@ Guidance (the guidance task):
                                      rules (row order, about 15 bars by taking the top, time in
                                      order for a line, aliases as the legend and tooltip names)
   The seeded data note (src-27723331ae1d) carries each worked example as a fenced ```sql block
-                                     whose first line is `-- kind: <kind>`, one per kind.
+                                     preceded by a `Kind: `<kind>`.` line (or whose first line is
+                                     `-- kind: <kind>`), one per kind.
 """
 
 from __future__ import annotations
@@ -634,8 +635,10 @@ class Drive:
         code, entry = api("GET", f"/projects/{self.a}/vault/entries/{NOTE_ID}")
         text = entry.get("content") or "" if isinstance(entry, dict) else ""
         examples: Dict[str, str] = {}
-        for block in re.findall(r"```sql\s*\n(.*?)```", text, re.S):
-            m = re.match(r"\s*--\s*kind:\s*([a-z_]+)", block)
+        # The build states each example's kind as a `Kind: `<kind>`.` line just above its fence
+        # (hub/hub/data_notes.py `_example`); a `-- kind: <kind>` first line inside it also counts.
+        for before, block in re.findall(r"([^\n]*)\n+```sql\s*\n(.*?)```", text, re.S):
+            m = re.match(r"\s*--\s*kind:\s*([a-z_]+)", block) or re.search(r"Kind:\s*`([a-z_]+)`", before)
             if m:
                 examples.setdefault(m.group(1), block.strip())
         lacking = [k for k in KINDS if k not in examples]
