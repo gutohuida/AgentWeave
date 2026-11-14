@@ -425,6 +425,18 @@ class Registry:
     ) -> Shell:
         """Start a shell, or raise `LimitReachedError` -- before any process exists."""
         async with self._guard():
+            # A page that has gone (its grace still running) has already lost its shells as far as
+            # the operator can tell: end them now so they neither count toward the limit nor
+            # outlive the reload that a fresh shell is opening after.
+            for gone in [
+                s
+                for s in self.for_conversation(project_id, conversation_id)
+                if s.page
+                and s.page != page
+                and s.page not in self._pages
+                and s.page in self._page_timers
+            ]:
+                await self.close(gone)
             open_now = [
                 s for s in self.for_conversation(project_id, conversation_id) if s is not replacing
             ]

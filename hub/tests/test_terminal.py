@@ -605,6 +605,43 @@ async def test_ac_ends_the_page_going_away_and_hub_stop(app, auth_headers, repo,
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(120)
+async def test_a_gone_pages_shells_do_not_count_toward_the_limit(
+    app, auth_headers, repo, monkeypatch
+):
+    """FR-9 at the cap: after a reload the fresh page's one shell opens even with 4 left behind."""
+    from hub.auth import _make_ticket
+    from hub.terminal import sessions
+
+    monkeypatch.setattr(sessions, "PAGE_GRACE_SECONDS", 30.0)
+    await seed()
+    presence = Socket(
+        app,
+        f"/api/v1/projects/{P}/terminal/page",
+        {"Host": HOST, "Origin": APP},
+        f"page=page-old&token={_make_ticket(P)[0]}",
+    )
+    assert await presence.handshake() == "websocket.accept"
+    old = []
+    for _ in range(sessions.LIMIT):
+        shell, sock, _port = await _shell_serving_a_port(
+            app, auth_headers, monkeypatch, page="page-old"
+        )
+        old.append((shell, sock))
+    await presence.close()  # the reload; the old page is in its grace
+    assert await _wait(lambda: "page-old" in registry._page_timers, 5)
+    fresh, fresh_sock, _ = await _shell_serving_a_port(
+        app, auth_headers, monkeypatch, page="page-new"
+    )
+    assert registry.get(fresh["id"]) is not None
+    assert all(registry.get(s["id"]) is None for s, _ in old), "the gone page's shells lingered"
+    await fresh_sock.close()
+    for _, sock in old:
+        await sock.close()
+    await registry.end_all()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(120)
 async def test_ac_ends_exit_shows_its_code_and_stays_listed(app, auth_headers, repo, monkeypatch):
     await seed()
     option, shell, sock = await _real_shell(app, auth_headers, monkeypatch)
