@@ -17,6 +17,7 @@ import { FilesTabContainer } from '@/components/panel/FilesTabContainer'
 import { ChangesTabContainer } from '@/components/panel/ChangesTabContainer'
 import { LoopTab } from '@/components/spec/LoopTab'
 import { useLoops } from '@/api/loops'
+import { TerminalTabContainer } from '@/components/panel/TerminalTabContainer'
 import { RunningTabContainer } from '@/components/panel/RunningTabContainer'
 import { runningCount, useRunningItems } from '@/components/panel/useRunningItems'
 import type { RunningItem } from '@/components/panel/runningModel'
@@ -342,6 +343,7 @@ export function ConversationView({
       { id: 'changes', label: 'Changes', icon: 'file_pen_line' },
       // The shell's launcher badge. Counted here rather than in the shell because the items are
       // already fetched here and the shell deliberately knows nothing about what a tab contains.
+      { id: 'terminal', label: 'Terminal', icon: 'terminal' },
       { id: 'running', label: 'Running', icon: 'sync', count: runningCount(runningItems) },
     ],
     [runningItems],
@@ -352,6 +354,7 @@ export function ConversationView({
       if (id === 'files') return { id, label: 'Files', icon: 'folder_open' }
       if (id === 'changes') return { id, label: 'Changes', icon: 'file_pen_line' }
       if (id === 'running') return { id, label: 'Running', icon: 'sync' }
+      if (id === 'terminal') return { id, label: 'Terminal', icon: 'terminal' }
       if (isFileTabId(id)) {
         const path = filePath(id)
         const owner = fileOwner(id)
@@ -380,6 +383,13 @@ export function ConversationView({
   const insertIntoComposer = useCallback((path: string) => {
     insertRequestCounter.current += 1
     setInsertPathRequest({ path, requestId: insertRequestCounter.current })
+  }, [])
+
+  const insertTextCounter = useRef(0)
+  const [insertTextRequest, setInsertTextRequest] = useState<{ text: string; requestId: number } | null>(null)
+  const sendToComposer = useCallback((text: string) => {
+    insertTextCounter.current += 1
+    setInsertTextRequest({ text, requestId: insertTextCounter.current })
   }, [])
 
   const ownerOf = useCallback(
@@ -433,6 +443,9 @@ export function ConversationView({
           />
         )
       }
+      if (tab.id === 'terminal') {
+        return <TerminalTabContainer agent={agent.name} projectId={projectId} conversationId={conversationId} onSendToComposer={sendToComposer} />
+      }
       if (tab.id === 'running') {
         return <RunningTabContainer items={runningItems} loadFailed={runningLoadFailed} onOpen={openRunningItem} onAttend={attendRunningItem} />
       }
@@ -475,6 +488,7 @@ export function ConversationView({
       openTab,
       onOpenTasks,
       insertIntoComposer,
+      sendToComposer,
       panelActiveTabId,
       runningItems,
       runningLoadFailed,
@@ -563,6 +577,7 @@ export function ConversationView({
       }}
       specBusy={createDocument.isPending}
       insertPathRequest={insertPathRequest}
+      insertTextRequest={insertTextRequest}
       onTogglePanel={() => {
         const opening = !shellIsOpen
         setShellOpen(projectId, opening)
