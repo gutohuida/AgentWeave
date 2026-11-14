@@ -94,7 +94,7 @@ card and choose **Start builder on this**, or tell `builder` in its conversation
 The builder works in the task's own worktree (`.agentweave/tasks/<task-id>`, on branch
 `agentweave/task/<task-id>`). It implements the change, runs the tests, commits, and **records
 evidence** against the requirement: the command, its output, and the commit. Then it moves the
-task to *completed*.
+task to *completed*. That is the last thing you had to start: the review starts by itself.
 
 <figure class="aw-shot" markdown>
 ![The task board with tasks in Pending, Completed and Approved](../assets/screenshots/tasks-board-light.webp#only-light)
@@ -106,9 +106,20 @@ not enough.
 
 ## 6. Review and merge
 
-Ask `reviewer` to review the task. A review turn gets a clean checkout of exactly the commit the
-evidence names. It runs the tests, decides the evidence, and
-either approves the task or sends it back with the reason. The builder cannot approve its own work.
+You do not need to ask for a review. Once the task is *completed* and the project's checks pass,
+the Hub starts a review turn by an agent other than the builder, and the task moves to
+*under review*. It picks the task's named checker if it has one; otherwise it chooses an idle
+agent other than the builder, which may be `planner` rather than `reviewer`, and the task's story
+says who was picked and that nobody was named. If
+the builder is the project's only agent, no review starts and the task says there is nobody else
+to review it.
+
+To choose the reviewer yourself, hover over a completed card and choose **Review with reviewer**.
+The menu lists every agent except the task's author.
+
+A review turn gets a clean checkout of exactly the commit the evidence names. The reviewer runs
+the tests, decides the evidence, and either approves the task or sends it back to the builder
+with the reason. The builder cannot approve its own work.
 
 **Approving merges.** The task's evidenced commit is merged into your main branch, locally, in the
 same step, and nothing is pushed. If the merge would conflict, approval is refused and names the
@@ -125,6 +136,11 @@ ab4099c Integrate INV-1: Round tax half-up to the cent
 747084d Round tax half-up to the cent (FR-2)
 888d46d Initial invoicing service
 ```
+
+!!! note "Land it is your override"
+    A completed task's drawer also offers **Land it**, which approves and merges the task without a
+    review. It asks you to confirm first, and says how many pieces of evidence nobody has
+    reviewed. Use it when you mean to skip the review, not as the normal way to merge.
 
 ## Where to go next
 

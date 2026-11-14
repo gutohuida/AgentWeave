@@ -360,6 +360,9 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   // What the last reassign started, or why it started nothing (F1114).
   const [nextTurn, setNextTurn] = useState<string | null>(null)
   const landTask = useLandTask()
+  // Open while the operator confirms a landing, which skips review (FR-4).
+  const [confirmingLand, setConfirmingLand] = useState(false)
+  const awaitingEvidence = story.data?.summary?.evidence?.awaiting ?? 0
   const deleteTask = useDeleteTask()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const cancelDeleteRef = useRef<HTMLButtonElement>(null)
@@ -396,6 +399,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     setTitleError(null)
     setPickedPrerequisite('')
     setDependencyRefusal(null)
+    setConfirmingLand(false)
   }, [task?.id])
 
   // The inline confirm takes the keyboard on Cancel, the safe side, like every other confirm (F825).
@@ -1223,18 +1227,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                     setRefusal(null)
                     setRefusalBody(null)
                     setChecksOverride(false)
-                    landTask.mutate(
-                      { id: task.id },
-                      {
-                        onSuccess: (landed) => setApprovalReport(landed.approval_report ?? []),
-                        onError: (error: unknown) => {
-                          const body = gateBodyOf(error)
-                          setRefusal(readableApiError(error, 'The Hub refused this landing.'))
-                          setRefusalBody(body)
-                          setChecksOverride(body ? overrideOffered(body) : false)
-                        },
-                      },
-                    )
+                    setConfirmingLand(true)
                   }}
                 >
                   {landTask.isPending ? 'Landing…' : 'Land it'}
@@ -1333,6 +1326,66 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                 Delete
               </button>
             </div>
+            {/* FR-4 (`a-hand-started-task-reaches-review-and-merge`): one click once merged
+                unreviewed work. The operator keeps the power, but knowingly — so Land asks first,
+                saying it skips review and how many pieces of evidence nobody has decided. Inline,
+                as the delete confirm is, so the drawer's own Escape and outside-click still work. */}
+            {confirmingLand && task.status === 'completed' && (
+              <div
+                data-testid={`task-land-confirm-${task.id}`}
+                className="mt-2 flex flex-wrap items-center gap-2 rounded px-2 py-1.5 text-[11px]"
+                style={{ background: 'var(--surface-2)', color: 'var(--text-2)' }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') return
+                  event.preventDefault()
+                  setConfirmingLand(false)
+                }}
+              >
+                <span className="flex-1">
+                  Land this task without a review? It is approved and merged as it stands; nobody
+                  checks it first.
+                  {awaitingEvidence > 0 && (
+                    <span data-testid={`task-land-unreviewed-${task.id}`} className="block mt-1">
+                      {awaitingEvidence === 1
+                        ? '1 piece of evidence is unreviewed.'
+                        : `${awaitingEvidence} pieces of evidence are unreviewed.`}
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  data-testid={`task-land-cancel-${task.id}`}
+                  className="px-2 py-0.5 rounded hover:bg-[var(--row-hover)]"
+                  onClick={() => setConfirmingLand(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  data-testid={`task-land-go-${task.id}`}
+                  className="px-2 py-0.5 rounded"
+                  style={{ color: 'var(--green)', border: '1px solid color-mix(in srgb, var(--green) 40%, transparent)' }}
+                  disabled={landTask.isPending}
+                  onClick={() => {
+                    setConfirmingLand(false)
+                    landTask.mutate(
+                      { id: task.id },
+                      {
+                        onSuccess: (landed) => setApprovalReport(landed.approval_report ?? []),
+                        onError: (error: unknown) => {
+                          const body = gateBodyOf(error)
+                          setRefusal(readableApiError(error, 'The Hub refused this landing.'))
+                          setRefusalBody(body)
+                          setChecksOverride(body ? overrideOffered(body) : false)
+                        },
+                      },
+                    )
+                  }}
+                >
+                  Land without review
+                </button>
+              </div>
+            )}
             {/* F629: Land approves a completed task, so what approving writes is said before
                 that press too, not only where `approved` is the next move. */}
             <ApprovalWritesNote
