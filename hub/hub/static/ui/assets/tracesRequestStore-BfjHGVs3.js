@@ -1,1 +1,0 @@
-import{ag as a,cS as s,cr as o}from"./index-C79ahbRn.js";let r=0;const c=o(e=>({request:null,ask:t=>e({request:{...t,nonce:++r}}),clear:()=>e({request:null})}));function u(e,t){c.getState().ask(t),a(s(e,"activity"))}export{u as o,c as u};
