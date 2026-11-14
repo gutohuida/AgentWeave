@@ -1016,6 +1016,20 @@ def save_dashboard(
     not run the queries, so check each with `run_dashboard_query` first: a panel whose query fails
     is saved and shows its error when opened.
 
+    **Choose the kind from the question.** One figure ("this week's cost", "open tasks"): `number`.
+    A ranking or comparison across labels ("cost per spec", "tasks per agent"): `bar`. Parts of a
+    whole across labels ("send-backs per model, by reason", with one numeric column per part):
+    `stacked_bar`. Change over time ("runs per day"): `line`. Detail rows ("the latest failed
+    runs"): `table`. The app decides colours and motion; you choose only the kind and the query.
+
+    **Shape the query so it reads well.** Order the rows as they should be drawn: bars are drawn
+    in the query's order, so `order by` the value (largest first) for a ranking. Keep a bar or
+    stacked bar chart to about 15 labels: take the top ones with `order by ... desc limit 15`.
+    Put time in order for a line: the first column is the date or day, `order by` it ascending.
+    Alias every column to the readable name the legend and tooltip will show (`as "Cost (USD)"`,
+    not `sum(api_equivalent_usd_micros)`). The data note (`vault_read("src-27723331ae1d")`) has a
+    worked example of each kind.
+
     **To change a dashboard that already exists, use `edit_dashboard`**, which changes only what
     you name. `dashboard_id` replaces that dashboard whole (keep each panel's `id` from
     `read_dashboard` to keep it); pass the `version` you read as `base_version`, or a newer edit
