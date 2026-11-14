@@ -310,7 +310,9 @@ async def test_replacing_keeps_the_dashboard_and_its_panel_ids(app, auth_headers
         headers=headers,
     )
     assert by_agent.status_code == 200, by_agent.text
-    assert by_agent.json()["author"] == "Builder"
+    # A replace is an edit (`change-a-dashboard-by-asking`): the author stays who created it.
+    assert by_agent.json()["author"] == "operator" and by_agent.json()["edited_by"] == "Builder"
+    assert by_agent.json()["version"] == 3
     assert by_agent.json()["created_at"] == saved["created_at"]
     listed = (await app.get(OP, headers=auth_headers)).json()["dashboards"]
     assert [(d["name"], d["panel_count"]) for d in listed] == [("V3", 1)]

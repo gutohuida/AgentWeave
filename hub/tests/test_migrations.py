@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0177"
+HEAD_REVISION = "0178"
 
 
 # ---------------------------------------------------------------------------
@@ -6138,3 +6138,33 @@ def test_migration_0150_lets_a_piece_be_held_and_downgrades_it_to_awaiting(tmp_p
         assert "'held'" not in _table_sql(conn, "requirement_evidence")
         with pytest.raises(sqlite3.IntegrityError):
             _review_row(conn, "evr-narrow", "ev-held", "held")
+
+
+def test_migration_0178_makes_existing_dashboards_version_1_and_rolls_back(tmp_path) -> None:
+    """`change-a-dashboard-by-asking`: a dashboard saved before 0178 becomes version 1, never
+    edited and with nothing kept; the downgrade drops only the edit history."""
+    db_file = tmp_path / "dashboard-edit.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _upgrade_to(db_url, "head")
+    _downgrade_to(db_url, "0177")
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(dashboards)")}
+        assert not {"version", "edited_by", "edited_at"} & columns
+        assert "dashboard_versions" not in {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        conn.execute(
+            "INSERT INTO dashboards (id, project_id, name, description, panels, author, "
+            "created_at, updated_at) VALUES ('dash-m', 'proj-m', 'Old', '', '[]', 'x', "
+            "'2026-11-13 00:00:00', '2026-11-13 00:00:00')"
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "0178")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT name, version, edited_by, edited_at FROM dashboards WHERE id = 'dash-m'"
+        ).fetchone() == ("Old", 1, None, None)
+        assert conn.execute("SELECT count(*) FROM dashboard_versions").fetchone() == (0,)
