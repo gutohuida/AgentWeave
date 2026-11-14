@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { fetchWithAuth, getJson } from './client'
+import { fetchWithAuth, getJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
 /** The chart kinds a panel can name (`hub/hub/api/v1/dashboards.py` CHART_KINDS, FR-10). */
@@ -15,6 +15,11 @@ export interface DashboardSummary {
   created_at: string | null
   updated_at: string | null
   panel_count: number
+  /** Who last edited it and when (FR-10); null until it is edited after being saved. */
+  edited_by?: string | null
+  edited_at?: string | null
+  /** True when the Hub holds an earlier version to restore (FR-6). */
+  can_undo?: boolean
 }
 
 export type CellValue = string | number | boolean | null
@@ -47,6 +52,9 @@ export interface DashboardRun {
   description: string
   author: string
   updated_at: string | null
+  edited_by?: string | null
+  edited_at?: string | null
+  can_undo?: boolean
   fetched_at: string
   panels: PanelRun[]
 }
@@ -83,6 +91,16 @@ export function useDeleteDashboard() {
     mutationFn: async (id: string) => {
       await fetchWithAuth(`${base(projectId)}/${id}`, { method: 'DELETE' })
     },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'dashboards'] }),
+  })
+}
+
+/** Restores the version the last edit replaced; the Hub answers the dashboard it is now. */
+export function useUndoDashboard() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (id: string) => postJson<DashboardSummary>(`${base(projectId)}/${id}/undo`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'dashboards'] }),
   })
 }

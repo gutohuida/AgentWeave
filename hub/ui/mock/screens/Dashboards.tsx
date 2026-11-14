@@ -30,7 +30,7 @@ const PANELS: PanelRun[] = [
 ]
 
 const SUMMARIES: DashboardSummary[] = [
-  { id: 'dash-1', name: 'Where the spend goes', description: 'Cost, send-backs and run volume.', author: 'Architect', created_at: '2026-10-16T09:00:00Z', updated_at: '2026-10-17T10:30:00Z', panel_count: PANELS.length },
+  { id: 'dash-1', name: 'Where the spend goes', description: 'Cost, send-backs and run volume.', author: 'Architect', created_at: '2026-10-16T09:00:00Z', updated_at: '2026-10-17T10:30:00Z', panel_count: PANELS.length, edited_by: 'Architect', edited_at: '2026-11-14T08:15:00Z', can_undo: true },
   { id: 'dash-2', name: 'Review queue', description: '', author: 'operator', created_at: '2026-10-15T09:00:00Z', updated_at: '2026-10-15T09:00:00Z', panel_count: 2 },
 ]
 
@@ -38,8 +38,9 @@ export default function Dashboards({ now }: ScreenProps) {
   const [dashboards, setDashboards] = React.useState(SUMMARIES)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [fetchedAt, setFetchedAt] = React.useState(now)
+  const [canUndo, setCanUndo] = React.useState(true)
   const run: DashboardRun | null = selectedId
-    ? { id: selectedId, name: '', description: '', author: '', updated_at: null, fetched_at: fetchedAt.toISOString(), panels: PANELS }
+    ? { id: selectedId, name: '', description: '', author: '', updated_at: null, edited_by: 'Architect', edited_at: '2026-11-14T08:15:00Z', can_undo: canUndo, fetched_at: fetchedAt.toISOString(), panels: PANELS }
     : null
   return (
     <DashboardsView
@@ -49,6 +50,12 @@ export default function Dashboards({ now }: ScreenProps) {
       refreshing={false}
       onSelect={setSelectedId}
       onRefresh={() => setFetchedAt(new Date())}
+      onUndo={(d) => {
+        setCanUndo(false)
+        toast({ title: `Restored the earlier version of ${d.name}`, tone: 'success' })
+      }}
+      agents={['Architect', 'Developer', 'QA']}
+      onAskToChange={(d, agent) => toast({ title: `Opened ${agent} with: Change the dashboard "${d.name}" (${d.id}): `, tone: 'success' })}
       onDelete={(d) => {
         setDashboards((all) => all.filter((x) => x.id !== d.id))
         setSelectedId(null)
