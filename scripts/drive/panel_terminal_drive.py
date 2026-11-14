@@ -555,6 +555,10 @@ def ui_type(page, text, enter=True):
     if not surface.count():
         return False
     surface.first.click()
+    # Run 231921 lost the first key typed right after a panel drag (`cho ...`); the Hub side loses
+    # none (test_a_keystroke_typed_just_after_a_resize_reaches_the_shell), so let the click's focus
+    # and any refit settle before the first key.
+    page.wait_for_timeout(150)
     page.keyboard.type(text, delay=5)
     if enter:
         page.keyboard.press("Enter")

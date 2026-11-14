@@ -759,3 +759,44 @@ async def test_ac_keeps_running_detached_and_replays_meanwhile(
     assert await again.read_until(lambda s: "tick-6" in s.text, 10), again.text[-1000:]
     assert registry.get(shell["id"]).running
     await again.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.skipif(not IS_WINDOWS, reason="ConPTY and MSYS readline are Windows")
+async def test_a_keystroke_typed_just_after_a_resize_reaches_the_shell(
+    app, auth_headers, repo, monkeypatch
+):
+    """Drive run 231921 lost the leading `e` of a command typed right after the panel was widened
+    (`cho ...: command not found`). Resize, then type at once: every character must arrive."""
+    option = next((o for o in shell_detection.detect(refresh=True) if o.id == "git-bash"), None)
+    if option is None:
+        pytest.skip("Git Bash is not installed")
+    await seed()
+    monkeypatch.setattr(shell_detection, "detect", lambda refresh=False: [option])
+    r = await open_shell(app, auth_headers, shell=option.id)
+    assert r.status_code == 201, r.text
+    from hub.auth import _make_ticket
+
+    sock = Socket(
+        app,
+        attach_path(r.json()["id"]),
+        {"Host": HOST, "Origin": APP},
+        f"token={_make_ticket(P)[0]}",
+    )
+    assert await sock.handshake() == "websocket.accept"
+    await asyncio.sleep(3.0)
+    lost = []
+    for round_no, (cols, delay) in enumerate(
+        [(100, 0), (140, 0.01), (90, 0.05), (160, 0), (120, 0.2)]
+    ):
+        await sock.send({"type": "resize", "cols": cols, "rows": 30})
+        if delay:
+            await asyncio.sleep(delay)
+        mark = f"AWR{round_no}"
+        await sock.send({"type": "input", "data": f"echo {mark}$((40+2))W\r"})
+        arrived = await sock.read_until(lambda s, m=mark: f"{m}42W" in s.text, 20)
+        if not arrived:
+            lost.append((cols, delay, sock.text[-300:]))
+    await sock.close()
+    assert not lost, lost
