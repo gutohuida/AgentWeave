@@ -14,6 +14,9 @@ interface FileTabProps {
    *  by hiding the button rather than crashing). */
   onInsertIntoComposer?: (path: string) => void
   onClose: () => void
+  /** Where the file is read from; the checkout needs the conversation whose agent owns it. */
+  location?: 'worktree' | 'root'
+  conversationId?: string | null
 }
 
 /**
@@ -22,13 +25,16 @@ interface FileTabProps {
  * (`useWorkspaceFile`), which already states binary and oversized refusals as the request's own
  * failure; this component's job is only to show whichever one comes back.
  */
-export function FileTab({ path, onInsertIntoComposer, onClose }: FileTabProps) {
-  const { data, isLoading, error } = useWorkspaceFile(path)
+export function FileTab({ path, onInsertIntoComposer, onClose, location = 'root', conversationId = null }: FileTabProps) {
+  const { data, isLoading, error } = useWorkspaceFile(path, conversationId, location)
 
   // Rendered into `FilePreview`'s header rather than a strip of this tab's own. The two strips
   // stacked, both naming the same file, in a panel that is always on screen.
   const tabActions = (
     <>
+      <span className="aw-ptab-count" data-testid="file-tab-location" title={path}>
+        {location === 'worktree' ? 'worktree' : 'project root'}
+      </span>
       {/* F409 D10: an unsafe path would type a live mention, so it gets no insert action. */}
       {onInsertIntoComposer && isSafeMentionValue(path) && (
         <Button

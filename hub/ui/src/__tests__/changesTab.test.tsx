@@ -174,6 +174,6 @@ describe('the Changes tab', () => {
     openChanges()
     fireEvent.click(screen.getByRole('button', { name: 'Open src/a.py in Files' }))
     const tabs = usePanelTabsStore.getState().projects[PROJECT_ID]!
-    expect(tabs.activeTabId).toBe('file:src/a.py')
+    expect(tabs.activeTabId).toBe('file:worktree:dev~conv-1:src/a.py')
   })
 })

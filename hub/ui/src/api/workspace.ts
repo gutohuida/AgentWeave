@@ -28,18 +28,52 @@ export interface WorkspaceFileResponse {
 /**
  * One file's content, for the panel shell's files tab (task 5.3, `2026-08-18-one-shell-three-panels`).
  * `enabled` is false while `path` is null so switching away from a file tab (or before one has
- * ever opened) issues no request.
+ * ever opened) issues no request. With `location: 'worktree'` the file is read from the
+ * conversation's agent checkout instead of the project root.
  */
-export function useWorkspaceFile(path: string | null) {
+export function useWorkspaceFile(path: string | null, conversationId?: string | null, location: FilesLocation = 'root') {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  const inCheckout = location === 'worktree' && !!conversationId
   return useQuery<WorkspaceFileResponse>({
-    queryKey: ['project', projectId, 'workspace', 'file', path],
+    queryKey: ['project', projectId, 'workspace', 'file', inCheckout ? conversationId : null, location, path],
     queryFn: () =>
       getJson<WorkspaceFileResponse>(
-        `/api/v1/projects/${projectId}/workspace/file?path=${encodeURIComponent(path as string)}`,
+        `/api/v1/projects/${projectId}/workspace/file?path=${encodeURIComponent(path as string)}` +
+          (inCheckout ? `&conversation_id=${encodeURIComponent(conversationId)}&location=worktree` : ''),
       ),
     enabled: isConfigured && !!projectId && !!path,
-    staleTime: 60_000,
+    // A checkout's file changes while the agent works; the turn's end invalidates it.
+    staleTime: inCheckout ? 0 : 60_000,
+  })
+}
+
+export type FilesLocation = 'worktree' | 'root'
+
+/** `GET /workspace/paths` for a conversation: which location, and why it is not the checkout. */
+export interface ConversationFiles {
+  location: FilesLocation
+  state: 'ok' | 'no_checkout'
+  /** Plain words for `no_checkout`; never an error code. */
+  message?: string | null
+  has_checkout: boolean
+  branch?: string | null
+  paths: string[]
+  /** Path -> A, M, D (or R) for what the branch changed since main; only for the checkout. */
+  changed: Record<string, string>
+}
+
+/** The Files tab's listing. `location` undefined lets the Hub pick: the checkout when there is one. */
+export function useConversationFiles(conversationId: string | null, location: FilesLocation | undefined) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<ConversationFiles>({
+    queryKey: ['project', projectId, 'workspace', 'listing', conversationId, location ?? 'default'],
+    queryFn: () =>
+      getJson<ConversationFiles>(
+        `/api/v1/projects/${projectId}/workspace/paths?conversation_id=${encodeURIComponent(conversationId as string)}` +
+          (location ? `&location=${location}` : ''),
+      ),
+    enabled: isConfigured && !!projectId && !!conversationId,
+    staleTime: 0,
   })
 }
 

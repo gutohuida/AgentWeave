@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import func, select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Dashboard, Project, Task
+from hub.db.models import Dashboard, InboundQueueEntry, Project, Task
 from hub.project_lifecycle import ProjectLifecycleService
 from hub.sse import sse_manager
 
@@ -47,6 +47,31 @@ def events(monkeypatch) -> List[Tuple[str, str, Any]]:
 
     monkeypatch.setattr(sse_manager, "publish", publish)
     return seen
+
+
+async def _writer(run_id: str, agent: str, request: str) -> dict:
+    """A live run whose delivered request is *request*: a dashboard write lands only on one the
+    request names (FR-2)."""
+    headers = await _run_headers(run_id, agent)
+    await _deliver(run_id, agent, request)
+    return headers
+
+
+async def _deliver(run_id: str, agent: str, content: str) -> None:
+    async with async_session_factory() as db:
+        db.add(
+            InboundQueueEntry(
+                id=f"entry-{run_id}-{abs(hash(content)) % 10**8}",
+                project_id=P,
+                agent=agent,
+                origin_type="operator",
+                content=content,
+                hop_depth=0,
+                state="delivered",
+                delivered_in_run_id=run_id,
+            )
+        )
+        await db.commit()
 
 
 async def _seed_tasks() -> None:
@@ -278,7 +303,7 @@ async def test_another_projects_dashboard_is_not_found(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_replacing_keeps_the_dashboard_and_its_panel_ids(app, auth_headers):
-    headers = await _run_headers("run-dash-7", "Builder")
+    headers = await _writer("run-dash-7", "Builder", "Replace the dashboard V2 whole.")
     saved = (
         await app.post(
             OP, json={"name": "V1", "description": "", "panels": _panels()}, headers=auth_headers
@@ -310,7 +335,9 @@ async def test_replacing_keeps_the_dashboard_and_its_panel_ids(app, auth_headers
         headers=headers,
     )
     assert by_agent.status_code == 200, by_agent.text
-    assert by_agent.json()["author"] == "Builder"
+    # A replace is an edit (`change-a-dashboard-by-asking`): the author stays who created it.
+    assert by_agent.json()["author"] == "operator" and by_agent.json()["edited_by"] == "Builder"
+    assert by_agent.json()["version"] == 3
     assert by_agent.json()["created_at"] == saved["created_at"]
     listed = (await app.get(OP, headers=auth_headers)).json()["dashboards"]
     assert [(d["name"], d["panel_count"]) for d in listed] == [("V3", 1)]

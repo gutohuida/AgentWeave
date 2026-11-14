@@ -32,6 +32,7 @@ from hub.db.models import (
     CheckpointNote,
     Conversation,
     Dashboard,
+    DashboardVersion,
     EventLog,
     EvidenceFootprint,
     EvidenceReview,
@@ -155,6 +156,8 @@ PROJECT_SCOPED_TABLE_NAMES = [
     "setup_dismissals",
     # A saved dashboard (`ask-any-agent-for-a-dashboard-and-get-one-that-stays`).
     "dashboards",
+    # A dashboard's one kept earlier version (`change-a-dashboard-by-asking`, FR-9).
+    "dashboard_versions",
 ]
 
 
@@ -526,6 +529,16 @@ async def _seed_full_project(session, project_id: str, tag: str) -> None:
             description="",
             panels=[],
             author="agent",
+        )
+    )
+    session.add(
+        DashboardVersion(
+            dashboard_id=f"dash-{tag}",
+            project_id=project_id,
+            version=1,
+            name="Dashboard",
+            description="",
+            panels=[],
         )
     )
     session.add(

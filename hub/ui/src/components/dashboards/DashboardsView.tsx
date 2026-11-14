@@ -1,7 +1,6 @@
 import * as React from 'react'
 import type { DashboardRun, DashboardSummary } from '@/api/dashboards'
 import { Icon } from '@/components/common/Icon'
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
 import { PanelChart } from './PanelChart'
 import { usePanelPresence } from './usePanelPresence'
 import { hubDate } from '@/lib/hubTime'
@@ -19,24 +18,28 @@ export interface DashboardsViewProps {
   onSelect: (id: string | null) => void
   onRefresh: () => void
   onDelete: (dashboard: DashboardSummary) => void
-  /** Restores the version the last edit replaced; offered only when the dashboard can_undo. */
+  /** Restores the version the last edit replaced. Offered only while the Hub holds one. */
   onUndo?: (dashboard: DashboardSummary) => void
-  /** The agents Ask to change offers; the control is hidden when there are none. */
-  askAgents?: string[]
-  /** Opens that agent's conversation with the dashboard named in its composer, unsent. */
+  undoing?: boolean
+  /** The agents Ask to change offers; the control is absent without `onAskToChange`. */
+  agents?: string[]
+  /** Set when the agent list failed to load, so an empty picker is not read as "no agents". */
+  agentsError?: string | null
   onAskToChange?: (dashboard: DashboardSummary, agent: string) => void
 }
-
-const outlineButton = 'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs'
 
 /**
  * The Dashboards tab (FR-11): the project's dashboards with name, author and date; opening one
  * shows its panels as the last run drew them, when that run was fetched, a Refresh button and, for
  * the operator, Delete. Props only, so the mock and the app render the same component.
  */
-export function DashboardsView({ dashboards, selectedId, run, refreshing, error, onSelect, onRefresh, onDelete, onUndo, askAgents = [], onAskToChange }: DashboardsViewProps) {
+export function DashboardsView({ dashboards, selectedId, run, refreshing, error, onSelect, onRefresh, onDelete, onUndo, undoing = false, agents = [], agentsError = null, onAskToChange }: DashboardsViewProps) {
   const [confirming, setConfirming] = React.useState(false)
-  React.useEffect(() => setConfirming(false), [selectedId])
+  const [asking, setAsking] = React.useState(false)
+  React.useEffect(() => {
+    setConfirming(false)
+    setAsking(false)
+  }, [selectedId])
   const selected = dashboards.find((d) => d.id === selectedId) ?? null
   const present = usePanelPresence(selectedId, run?.panels ?? null)
 
@@ -107,11 +110,14 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
             </p>
           )}
           <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
-            By {selected.author} · <span className="whitespace-nowrap">saved {when(selected.updated_at)}</span>
-            {selected.edited_by && (
-              <span data-testid="dashboard-edited-by" className="whitespace-nowrap">
-                {' · '}edited by {selected.edited_by} {when(selected.edited_at ?? null)}
-              </span>
+            By {selected.author} · saved {when(selected.updated_at)}
+            {(run?.edited_by ?? selected.edited_by) && (
+              <>
+                {' · '}
+                <span data-testid="dashboard-edited-by" data-edited-at={run?.edited_at ?? selected.edited_at ?? undefined}>
+                  Edited by {run?.edited_by ?? selected.edited_by} {when(run?.edited_at ?? selected.edited_at ?? null)}
+                </span>
+              </>
             )}
             {run && (
               <>
@@ -121,35 +127,6 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
             )}
           </p>
         </div>
-        {onAskToChange && askAgents.length > 0 && (
-          <Menu>
-            <MenuTrigger asChild>
-              <button type="button" data-testid="dashboard-ask-to-change" className={outlineButton} style={{ border: '1px solid var(--border-hi)', color: 'var(--text)' }}>
-                <Icon name="chat" size={13} /> Ask to change
-              </button>
-            </MenuTrigger>
-            <MenuContent>
-              <MenuLabel>Ask an agent to change it</MenuLabel>
-              {askAgents.map((agent) => (
-                <MenuItem key={agent} icon="smart_toy" data-testid="dashboard-ask-agent" onSelect={() => onAskToChange(selected, agent)}>
-                  {agent}
-                </MenuItem>
-              ))}
-            </MenuContent>
-          </Menu>
-        )}
-        {onUndo && selected.can_undo && (
-          <button
-            type="button"
-            data-testid="dashboard-undo"
-            onClick={() => onUndo(selected)}
-            title={selected.edited_by ? `Restore the version before ${selected.edited_by}'s edit` : 'Restore the previous version'}
-            className={outlineButton}
-            style={{ border: '1px solid var(--border-hi)', color: 'var(--text)' }}
-          >
-            <Icon name="undo" size={13} /> Undo
-          </button>
-        )}
         <button
           type="button"
           data-testid="dashboard-refresh"
@@ -160,6 +137,62 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
         >
           <Icon name="refresh" size={13} /> {refreshing ? 'Refreshing' : 'Refresh'}
         </button>
+        {onUndo && run?.can_undo && (
+          <button
+            type="button"
+            data-testid="dashboard-undo"
+            onClick={() => onUndo(selected)}
+            disabled={undoing}
+            className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs"
+            style={{ border: '1px solid var(--border-hi)', color: 'var(--text)', opacity: undoing ? 0.6 : 1 }}
+          >
+            <Icon name="restart_alt" size={13} /> Undo
+          </button>
+        )}
+        {onAskToChange && (
+          <span className="relative">
+            <button
+              type="button"
+              data-testid="dashboard-ask-to-change"
+              onClick={() => setAsking((open) => !open)}
+              aria-expanded={asking}
+              className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs"
+              style={{ border: '1px solid var(--border-hi)', color: 'var(--text)' }}
+            >
+              <Icon name="chat" size={13} /> Ask to change
+            </button>
+            {asking && (
+              <ul
+                data-testid="dashboard-ask-agents"
+                className="absolute right-0 z-10 mt-1 min-w-40 rounded-md py-1 text-xs"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border-hi)' }}
+              >
+                {agents.length === 0 && (
+                  <li className="px-3 py-1.5" style={{ color: 'var(--text-3)' }}>
+                    {agentsError ?? 'No agents in this project.'}
+                  </li>
+                )}
+                {agents.map((name) => (
+                  <li key={name}>
+                    <button
+                      type="button"
+                      data-testid="dashboard-ask-agent"
+                      data-agent={name}
+                      onClick={() => {
+                        setAsking(false)
+                        onAskToChange(selected, name)
+                      }}
+                      className="block w-full px-3 py-1.5 text-left"
+                      style={{ color: 'var(--text)' }}
+                    >
+                      {name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </span>
+        )}
         {confirming ? (
           <span className="inline-flex items-center gap-2 text-xs">
             <button
