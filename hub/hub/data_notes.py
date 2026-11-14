@@ -96,11 +96,75 @@ finished, so leave it out.""",
     ),
 )
 
+#: The worked examples, one per chart kind, as (kind, question, query). Each reads only `tasks` and
+#: `runs`, so it draws on any project that has tasks and runs (`dashboards-that-feel-alive-and-
+#: draw-right-the-first-time`, FR-8); a note seeded before they were known gets them appended.
+EXAMPLES: Tuple[Tuple[str, str, str], ...] = (
+    (
+        "number",
+        "One figure: how many runs this week",
+        """select count(*) as "Runs this week"
+from runs
+where started_at >= date('now', '-6 days')""",
+    ),
+    (
+        "bar",
+        "A ranking: tasks per agent, the top 15",
+        """select coalesce(assignee, '(unassigned)') as "Agent", count(*) as "Tasks"
+from tasks
+group by 1
+order by 2 desc
+limit 15""",
+    ),
+    (
+        "stacked_bar",
+        "Parts of a whole: each agent's runs, by outcome",
+        """select agent as "Agent",
+       sum(status = 'completed') as "Completed",
+       sum(status = 'failed') as "Failed",
+       sum(status not in ('completed', 'failed')) as "Other"
+from runs
+group by agent
+order by count(*) desc
+limit 15""",
+    ),
+    (
+        "line",
+        "Change over time: runs per day",
+        """select date(started_at) as "Day", count(*) as "Runs"
+from runs
+group by 1
+order by 1""",
+    ),
+    (
+        "table",
+        "Detail rows: the latest runs",
+        """select started_at as "Started", agent as "Agent", status as "Status", task_id as "Task"
+from runs
+order by started_at desc
+limit 20""",
+    ),
+)
+
+_EXAMPLES_HEADING = "## Worked examples"
+_EXAMPLES_INTRO = """One query per chart kind, each drawable as it stands. Bars are drawn in the query's order, so a
+ranking orders by its value and keeps the top 15; a line orders by its time; every column is
+aliased to the name the legend and tooltip show.
+"""
+
 _ADDED_BY_AGENTS = "## Added by agents"
 
 
 def _section(heading: str, text: str) -> str:
     return f"### {heading}\n\n{text}\n"
+
+
+def _example_heading(kind: str, question: str) -> str:
+    return f"Worked example ({kind}): {question}"
+
+
+def _example(kind: str, question: str, sql: str) -> str:
+    return _section(_example_heading(kind, question), f"Kind: `{kind}`.\n\n```sql\n{sql}\n```")
 
 
 NOTE_TEXT = f"""# {NOTE_NAME}
@@ -112,13 +176,19 @@ naming the tables and columns it concerns.
 
 ## Traps
 
-""" + "\n".join(_section(h, t) for h, t in TRAPS) + f"\n{_ADDED_BY_AGENTS}\n"
+""" + (
+    "\n".join(_section(h, t) for h, t in TRAPS)
+    + f"\n{_EXAMPLES_HEADING}\n\n{_EXAMPLES_INTRO}\n"
+    + "\n".join(_example(k, q, sql) for k, q, sql in EXAMPLES)
+    + f"\n{_ADDED_BY_AGENTS}\n"
+)
 
 
 def seed(project_root: Path, private_root: Path) -> Optional[Dict[str, Any]]:
     """Seed the note into the vault of *project_root*; None when it is already there and holds
-    every trap. A note seeded before a trap was known gets the missing traps appended after
-    whatever is there, agents' additions included; nothing in it is rewritten."""
+    every trap and worked example. A note seeded before a trap or an example was known gets the
+    missing ones appended after whatever is there, agents' additions included; nothing in it is
+    rewritten."""
     created = vault.seed_source(
         project_root,
         private_root,
@@ -134,7 +204,9 @@ def seed(project_root: Path, private_root: Path) -> Optional[Dict[str, Any]]:
         project_root,
         private_root,
         NOTE_ID,
-        [(f"### {h}", "\n" + _section(h, t)) for h, t in TRAPS],
+        [(f"### {h}", "\n" + _section(h, t)) for h, t in TRAPS]
+        + [(_EXAMPLES_HEADING, f"\n{_EXAMPLES_HEADING}\n\n{_EXAMPLES_INTRO}")]
+        + [(f"### {_example_heading(k, q)}", "\n" + _example(k, q, sql)) for k, q, sql in EXAMPLES],
     )
 
 
