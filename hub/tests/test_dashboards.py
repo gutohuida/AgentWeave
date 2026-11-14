@@ -456,3 +456,45 @@ async def test_the_reference_names_only_the_tables_asked_for(app, auth_headers):
     assert named["unknown_tables"] == ["nope"]
     assert named["traps"] == whole["traps"] and named["notes"] == whole["notes"]
     assert "unknown_tables" not in whole
+
+
+@pytest.mark.asyncio
+async def test_an_agents_save_and_edit_answer_with_the_panels_that_will_not_draw(app):
+    """`dashboards-that-feel-alive-and-draw-right-the-first-time` FR-9: a Haiku turn saved five
+    panels over guessed tables and learned nothing; the save runs its panels and names each that
+    errors or will not draw, inside the turn that saved it, and an edit that fixes them answers
+    with none."""
+    await _seed_tasks()
+    headers = await _writer("run-dash-11", "Builder", "Save the Problems dashboard and fix it.")
+    panels = _panels() + [{"title": "Not a bar", "query": "select 'a' as x", "kind": "bar"}]
+    saved = await app.post(
+        AA, json={"name": "Problems", "description": "", "panels": panels}, headers=headers
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    problems = body["panel_problems"]
+    assert [(p["title"], p["panel_id"]) for p in problems] == [
+        ("Broken", body["panels"][1]["id"]),
+        ("Not a bar", body["panels"][3]["id"]),
+    ]
+    assert "no_such_column" in problems[0]["error"]["message"] and problems[0]["warning"] is None
+    assert problems[1]["error"] is None and "label column" in problems[1]["warning"]
+    assert "edit_dashboard" in body["next_step"] and "change_panel" in body["next_step"]
+
+    edited = await app.patch(
+        f"{AA}/{body['id']}",
+        json={
+            "base_version": body["version"],
+            "operations": [
+                {
+                    "op": "change_panel",
+                    "panel_id": body["panels"][1]["id"],
+                    "query": COUNT_BY_STATUS,
+                },
+                {"op": "remove_panel", "panel_id": body["panels"][3]["id"]},
+            ],
+        },
+        headers=headers,
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["panel_problems"] == [] and "next_step" not in edited.json()

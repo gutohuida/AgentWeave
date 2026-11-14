@@ -135,7 +135,7 @@ where started_at >= date('now', '-6 days')""",
     ),
     (
         "bar",
-        "A ranking: tasks per agent, the top 15",
+        'A comparison, "X per Y" (cost per spec, tasks per agent): tasks per agent, the top 15',
         """select coalesce(assignee, '(unassigned)') as "Agent", count(*) as "Tasks"
 from tasks
 group by 1

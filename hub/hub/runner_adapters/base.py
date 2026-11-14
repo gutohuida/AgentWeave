@@ -305,6 +305,11 @@ class RunnerAdapter(ABC):
     # the conformance test that every `ADAPTERS` entry declares it.
     compaction_percent: ClassVar[Optional[int]]
 
+    def run_env(self, model: Optional[str]) -> Dict[str, str]:
+        """The variables a run of this runner on *model* gets unless its environment already
+        names them: `run_env_defaults`, plus whatever this runner needs for that model."""
+        return dict(self.run_env_defaults)
+
     @abstractmethod
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         """Is the binary present, and is the harness authorised? Must not raise."""

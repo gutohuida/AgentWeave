@@ -1032,17 +1032,20 @@ def save_dashboard(
     it answers, and `panels` is a list of `{"title", "query", "kind"}`, where `kind` is one of
     `number`, `table`, `bar`, `stacked_bar`, `line` (anything else is refused
     `invalid_chart_kind`). For bar, stacked bar and line the first column labels the points and
-    the numeric columns after it are drawn; a number shows the first numeric value. Saving does
-    not run the queries, so check each with `run_dashboard_query` first: a panel whose query fails
-    is saved and shows its error when opened.
+    the numeric columns after it are drawn; a number shows the first numeric value. Check each
+    query with `run_dashboard_query` first. The answer's `panel_problems` lists every saved panel
+    that will not draw, with its `error` or drawing `warning`: when it is not empty, follow its
+    `next_step` (`edit_dashboard` with a `change_panel` per broken panel) until it is.
 
     **Choose the kind from the question.** One figure ("this week's cost", "open tasks"): `number`.
-    A ranking or comparison across labels ("cost per spec", "tasks per agent"): `bar`. A breakdown
-    by two labels ("send-backs per model by reason", "runs per agent by status"): `stacked_bar`,
-    never a table -- one bar per value of the first label, one stacked part per value of the
-    second. Change over time ("runs per day"): `line`. Detail rows ("the latest failed runs"):
-    `table`. The app draws the chart and decides colours, number formats and motion: you choose
-    only the kind and the query, and write no chart code. Do not load a charting or data
+    A ranking or comparison, "X per Y" with one value per label ("cost per spec", "tasks per
+    agent"): `bar`, never a table, even when it reads as a breakdown. A breakdown by two labels,
+    "X per Y by Z" ("send-backs per model by reason", "runs per agent by status"): `stacked_bar`,
+    never a table -- one bar per Y, one stacked part per Z. Change over time, "X per day" ("runs
+    per day"): `line`, even though it says "per". Detail rows to read one by one ("the latest
+    failed runs"): `table`, the only question a table answers. The app draws the chart and
+    decides colours, number formats and motion: you choose only the kind and the query, and
+    write no chart code. Do not load a charting or data
     visualisation skill for this: those are for drawing a chart yourself, and here the app does.
 
     **Every value column stays a number.** The app formats the figures, so a query returns them
@@ -1136,9 +1139,9 @@ def edit_dashboard(
     - `{"op": "move_panel", "panel_id": "pnl-...", "position": n}`
     - `{"op": "rename", "name": "..."}`, `{"op": "set_description", "description": "..."}`
 
-    Queries are held to `run_dashboard_query`'s rules but not run, so check each new query there
-    first. A refusal changes nothing: 422 `operation_refused` names `operation_index` (from 0) and
-    `reason` (`invalid_chart_kind`, `not_queryable`, `invalid_panel`, `unknown_panel`); 409
+    Check each new query with `run_dashboard_query` first; the answer's `panel_problems` lists
+    every panel that still will not draw. A refusal changes nothing: 422 `operation_refused` names
+    `operation_index` (from 0) and `reason` (`invalid_chart_kind`, `not_queryable`, `invalid_panel`, `unknown_panel`); 409
     `dashboard_name_taken` for a rename to a name in use; 409 `stale_version` when the dashboard
     changed since you read it, with the `current` dashboard to make your change against. Answers
     the dashboard at its new `version`, which the operator can undo in one step.

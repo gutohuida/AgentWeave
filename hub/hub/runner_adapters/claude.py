@@ -133,6 +133,16 @@ class ClaudeAdapter(RunnerAdapter):
     # model is told the parameter is unsupported, and the run ends at its reply.
     run_env_defaults = {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
 
+    def run_env(self, model: Optional[str]) -> Dict[str, str]:
+        env = super().run_env(model)
+        # FR-9 of `dashboards-that-feel-alive-and-draw-right-the-first-time`: with the tools
+        # deferred, a Haiku turn called `ToolSearch` 51 times, never once the tool it loaded, then
+        # saved queries over guessed tables; the note above did not stop it. Haiku is given the
+        # tools themselves instead. Other models keep tool search, which saves their context.
+        if model and "haiku" in model.lower():
+            env["ENABLE_TOOL_SEARCH"] = "false"
+        return env
+
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:
         cli, present, reason = probe_binary(self.binary, config.get("cli"), agent)
         return LaunchVerdict(

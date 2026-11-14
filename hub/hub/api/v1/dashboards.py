@@ -905,6 +905,37 @@ async def _refuse_create_after_unnamed(session: AsyncSession, actor: AgentActor)
         )
 
 
+async def _with_panel_problems(project_id: str, saved: Dict[str, Any]) -> Dict[str, Any]:
+    """An agent's save answers with every panel that will not draw (FR-9, `first-time-right`).
+
+    The dashboard is saved either way (a broken panel is still a dashboard to repair); running
+    its panels here puts each query error and drawing warning in front of the agent inside the
+    turn that saved it, rather than first on the operator's screen. `panel_problems` is always
+    present, empty when every panel draws."""
+    runs = await asyncio.gather(*(_run_panel(project_id, p) for p in saved.get("panels") or []))
+    problems = [
+        {
+            "panel_id": run["id"],
+            "title": run["title"],
+            "kind": run["kind"],
+            "error": run["error"],
+            "warning": run["warning"],
+        }
+        for run in runs
+        if run["error"] or run["warning"]
+    ]
+    out = {**saved, "panel_problems": problems}
+    if problems:
+        out["next_step"] = (
+            f"Saved, but {len(problems)} panel(s) will not draw: their error or warning is in "
+            "`panel_problems`. For each, write a corrected query, run it with "
+            "`run_dashboard_query`, then call `edit_dashboard` on this dashboard's `id` with one "
+            "`change_panel` per broken panel and this answer's `version` as `base_version`. "
+            "Repeat until `panel_problems` is empty. Do not save a second dashboard."
+        )
+    return out
+
+
 @agent_router.get("")
 async def agent_list_dashboards(
     actor: AgentActor = Depends(get_agent_actor),
@@ -933,10 +964,12 @@ async def agent_save_dashboard(
         base_version=body.base_version,
     )
     if body.dashboard_id:
-        return await replace_dashboard(
+        saved = await replace_dashboard(
             session, actor.project_id, body.dashboard_id, fields, actor.agent
         )
-    return await create_dashboard(session, actor.project_id, fields, actor.agent)
+    else:
+        saved = await create_dashboard(session, actor.project_id, fields, actor.agent)
+    return await _with_panel_problems(actor.project_id, saved)
 
 
 @agent_router.get("/{dashboard_id}")
@@ -958,7 +991,8 @@ async def agent_edit_dashboard(
     """Edit a dashboard in place by operations, against the version the agent read."""
     await _refuse_after_unanswered_question(session, actor)
     await _refuse_unless_named(session, actor, dashboard_id)
-    return await edit_dashboard(session, actor.project_id, dashboard_id, body, actor.agent)
+    edited = await edit_dashboard(session, actor.project_id, dashboard_id, body, actor.agent)
+    return await _with_panel_problems(actor.project_id, edited)
 
 
 @agent_router.post("/{dashboard_id}/undo")
