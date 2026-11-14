@@ -36,7 +36,9 @@ changes this file, not the spec). Slice 1's routes, panels and tools as in dashb
   POST  /agent-actions/dashboards (save) and PUT /projects/{pid}/dashboards/{id} take base_version.
   Refusals: 409 stale_version {message, current: <view>}; 422 operation_refused {operation_index
         (zero-based), reason: invalid_chart_kind|not_queryable|invalid_panel|unknown_panel};
-        409 dashboard_name_taken; 404 dashboard_not_found for another project's dashboard.
+        409 dashboard_name_taken; 404 dashboard_not_found for another project's dashboard;
+        409 dashboard_not_named for an agent's write to a dashboard its run's request did not name
+        by id or whole name (CDA-5), so the drive's own agent-plane calls are delivered a request.
   Table `dashboard_versions` (dashboard_id primary key, project_id, ...): one kept version.
   Agent tools: edit_dashboard(dashboard_id, base_version, operations), undo_dashboard(dashboard_id),
         run_dashboard(dashboard_id); save_dashboard gains base_version.
@@ -59,6 +61,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -133,19 +136,27 @@ def contract_in_checkout() -> Dict[str, Any]:
 # ------------------------------------------------------------------------------- agent-plane calls
 
 
-def hold(pid: str, agent: str) -> Tuple[str, str]:
-    """A running run of *agent*, as the Hub tests seed one; answers its id and credential."""
+def hold(pid: str, agent: str, request: str = "") -> Tuple[str, str]:
+    """A running run of *agent*, as the Hub tests seed one, delivered *request* as its input;
+    answers its id and credential."""
     token = "aw_run_" + secrets.token_urlsafe(24)
     run_id = "run-dedit-" + secrets.token_hex(4)
     dd.rw([("insert into runs (id, project_id, agent, status, started_at, initiator, turn_depth, "
             "capability_token_hash) values (?, ?, ?, 'running', ?, 'operator', 0, ?)",
-            (run_id, pid, agent, dd.ts(now()), hashlib.sha256(token.encode()).hexdigest()))])
+            (run_id, pid, agent, dd.ts(now()), hashlib.sha256(token.encode()).hexdigest())),
+           ("insert into inbound_queue_entries (id, project_id, agent, origin_type, content, "
+            "arrived_at, hop_depth, state, delivered_in_run_id, delivered_at) "
+            "values (?, ?, ?, 'operator', ?, ?, 0, 'delivered', ?, ?)",
+            ("entry-" + secrets.token_hex(6), pid, agent, request, dd.ts(now()), run_id, dd.ts(now())))])
     return run_id, token
 
 
 def as_agent(pid: str, agent: str, method: str, path: str, body: Any = None) -> Tuple[int, Any]:
-    """One agent-plane call as *agent*, with a credential that lives for the call."""
-    run_id, token = hold(pid, agent)
+    """One agent-plane call as *agent*, with a credential that lives for the call. Its run was asked
+    to change the dashboard the call names, as Ask to change asks (a write to a dashboard the
+    request did not name is refused, FR-2)."""
+    named = re.findall(r"dash-[0-9a-f]{12}", path + json.dumps(body or {}))
+    run_id, token = hold(pid, agent, " ".join(f"Change the dashboard ({d})." for d in named))
     try:
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(
@@ -266,7 +277,16 @@ def asks_which(t: Dict[str, Any]) -> bool:
 
 
 def writes(run_id: Optional[str]) -> int:
-    return sum(len(tool_calls(run_id, n)) for n in ("edit_dashboard", "save_dashboard", "undo_dashboard"))
+    """The run's dashboard write calls, less those the Hub refused.
+
+    A refused call (the call command's `{"ok": false, ...}`, as the write guard after an
+    unanswered question answers) wrote nothing, and the criterion is that nothing changed; any
+    other call is counted, since a result with output around it cannot be read as a view.
+    """
+    def refused(call: Dict[str, Any]) -> bool:
+        return re.search(r'"ok":\s*false', str(call.get("result") or "")) is not None
+    return sum(not refused(c) for n in ("edit_dashboard", "save_dashboard", "undo_dashboard")
+               for c in tool_calls(run_id, n))
 
 
 # ------------------------------------------------------------------------------------------ queries
@@ -730,7 +750,6 @@ class Drive:
         try:
             self.setup()
             # Agent turns first, each agent's conversation knowing only what its own asks name.
-            run_check("ac-ambiguous", self.ac_ambiguous)
             run_check("ac-run-for-agent", self.ac_run_for_agent)
             run_check("ac-repair", self.ac_repair)
             run_check("ac-edit-in-place", self.ac_edit_in_place)
@@ -745,6 +764,9 @@ class Drive:
             run_check("ac-edit-boundary", self.ac_edit_boundary)
             run_check("ac-undo-survives-restart", self.ac_undo_survives_restart)
             run_check("ac-history-delete", self.ac_history_delete)
+            # Last: an agent that guesses instead of asking edits some dashboard, and a check run
+            # after it would read that edit as its own failure (ac-edit-in-place did, CDA-4).
+            run_check("ac-ambiguous", self.ac_ambiguous)
         finally:
             if os.environ.get("AW_DRIVE_KEEP"):
                 p(f"AW_DRIVE_KEEP: Hub left on {dd.HUB}, key {dd.KEY}, database {DB}")

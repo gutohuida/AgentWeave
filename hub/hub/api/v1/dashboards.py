@@ -21,10 +21,15 @@ as the dashboard's one `DashboardVersion`, which undo restores as a new edit. A 
 older version than the current one is refused `stale_version` with the current dashboard, never
 merged.
 
-An agent's run that asked the operator something and has no answer (declined, expired or still
-open) cannot save, edit or undo a dashboard: refused `question_unanswered` (FR-2). The agent asks
-which dashboard when the request is unclear, and a guess after an unanswered question edits the
-wrong one; the operator's answer reaches a later run, which can write.
+Which dashboard an agent writes is held by the Hub, not left to the model (FR-2). An agent's edit,
+replace or undo lands only on a dashboard its run's request named: by its `dash-` id, or by its
+whole name, case aside -- the request being what was delivered to the run and the answers to the
+questions the run asked. Otherwise it is refused `dashboard_not_named`, naming what the request did
+name: "the team health dashboard" names neither "Team health North" nor "Team health South". A run
+refused so cannot then save a new dashboard in its place, until a question it asks after is
+answered. And a run that asked the operator something with no answer (declined, expired or still
+open) cannot save, edit or undo a dashboard at all: refused `question_unanswered`; the operator's
+answer reaches a later run, which can write.
 """
 
 from __future__ import annotations
@@ -44,10 +49,16 @@ from ... import dashboard_query
 from ...agent_auth import AgentActor, get_agent_actor
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Dashboard, DashboardVersion, Question
+from ...db.models import (
+    Dashboard,
+    DashboardVersion,
+    EventLog,
+    InboundQueueEntry,
+    Question,
+)
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
-from ...utils import short_id
+from ...utils import persist_accepted_event, short_id
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 agent_router = APIRouter(prefix="/agent-actions/dashboards", tags=["agent-actions"])
@@ -751,6 +762,140 @@ async def _refuse_after_unanswered_question(session: AsyncSession, actor: AgentA
         )
 
 
+_DASHBOARD_ID_RE = re.compile(r"\bdash-[0-9a-f]{12}\b")
+
+#: The event a write to a dashboard the request did not name leaves, so the same run cannot then
+#: save a new dashboard in its place.
+UNNAMED_EVENT = "dashboard_write_unnamed"
+
+
+async def _request_of(session: AsyncSession, actor: AgentActor) -> str:
+    """What this run was asked: every input delivered to it, and the operator's answers to the
+    questions it asked (a blocking answer comes back inside the run, not as a delivery)."""
+    delivered = (
+        await session.execute(
+            select(InboundQueueEntry.content).where(
+                InboundQueueEntry.project_id == actor.project_id,
+                InboundQueueEntry.delivered_in_run_id == actor.run_id,
+            )
+        )
+    ).scalars()
+    answers = (
+        await session.execute(
+            select(Question.answer, Question.answer_labels).where(
+                Question.project_id == actor.project_id,
+                Question.created_by_run_id == actor.run_id,
+                Question.answered.is_(True),
+            )
+        )
+    ).all()
+    parts = list(delivered)
+    for answer, labels in answers:
+        parts.append(answer or "")
+        parts.extend(str(label) for label in labels or [])
+    return "\n".join(parts)
+
+
+def named_dashboards(text: str, dashboards: Sequence[Tuple[str, str]]) -> List[str]:
+    """The ids of the `(id, name)` dashboards *text* names: by id, or by the whole name as words,
+    case aside. A name met only inside a longer name that is also met ("Weekly" inside "Weekly
+    delivery") is not named by it."""
+    ids = set(_DASHBOARD_ID_RE.findall(text))
+    spans: Dict[str, List[Tuple[int, int]]] = {}
+    for dash_id, name in dashboards:
+        if not name.strip():
+            continue
+        pattern = re.compile(r"(?<!\w)" + re.escape(name.strip()) + r"(?!\w)", re.IGNORECASE)
+        found = [m.span() for m in pattern.finditer(text)]
+        if found:
+            spans[dash_id] = found
+    every = [(span, dash_id) for dash_id, found in spans.items() for span in found]
+
+    def inside_a_longer(dash_id: str, start: int, end: int) -> bool:
+        return any(
+            other != dash_id and o_start <= start and end <= o_end and o_end - o_start > end - start
+            for (o_start, o_end), other in every
+        )
+
+    for dash_id, found in spans.items():
+        if any(not inside_a_longer(dash_id, start, end) for start, end in found):
+            ids.add(dash_id)
+    return [dash_id for dash_id, _ in dashboards if dash_id in ids]
+
+
+async def _refuse_unless_named(session: AsyncSession, actor: AgentActor, dashboard_id: str) -> None:
+    """Refuse a write to a dashboard this run's request did not name (FR-2). A guess between two
+    dashboards, or at one the request never mentioned, cannot land however the agent decides."""
+    target = await _get(session, actor.project_id, dashboard_id)
+    rows = (
+        await session.execute(
+            select(Dashboard.id, Dashboard.name).where(Dashboard.project_id == actor.project_id)
+        )
+    ).all()
+    names = {row[0]: row[1] for row in rows}
+    named = named_dashboards(await _request_of(session, actor), list(names.items()))
+    if target.id in named:
+        return
+    said = (
+        "names " + ", ".join(f"{names[n]!r} ({n})" for n in named)
+        if named
+        else "names no dashboard by its id or its whole name"
+    )
+    await persist_accepted_event(
+        actor.project_id,
+        UNNAMED_EVENT,
+        {"run_id": actor.run_id, "dashboard_id": target.id, "named": named},
+        agent=actor.agent,
+    )
+    raise _refuse(
+        409,
+        "dashboard_not_named",
+        f"The request this run was given {said}, and not {target.name!r} ({target.id}), so it "
+        "is not changed: guessing which dashboard was meant edits the wrong one. Nothing was "
+        "changed, and no new dashboard may be saved in its place. Ask the operator which "
+        "dashboard they mean -- `ask_user` with the fitting dashboards' exact names as its "
+        "options -- or end your turn saying which ones fit.",
+        named=named,
+    )
+
+
+async def _refuse_create_after_unnamed(session: AsyncSession, actor: AgentActor) -> None:
+    """A run refused a write to a dashboard its request did not name saves no new one instead,
+    until a question it asked after is answered (FR-2: "creates nothing")."""
+    refused_at = await session.scalar(
+        select(EventLog.timestamp)
+        .where(
+            EventLog.project_id == actor.project_id,
+            EventLog.event_type == UNNAMED_EVENT,
+            EventLog.agent == actor.agent,
+            EventLog.data["run_id"].as_string() == actor.run_id,
+        )
+        .order_by(EventLog.timestamp.desc())
+        .limit(1)
+    )
+    if refused_at is None:
+        return
+    answered_since = await session.scalar(
+        select(Question.id)
+        .where(
+            Question.project_id == actor.project_id,
+            Question.created_by_run_id == actor.run_id,
+            Question.answered.is_(True),
+            Question.answered_at >= refused_at,
+        )
+        .limit(1)
+    )
+    if answered_since is None:
+        raise _refuse(
+            409,
+            "dashboard_not_named",
+            "This run was refused a change to a dashboard its request did not name, so it saves "
+            "no new dashboard in its place. Nothing was created. Ask the operator which dashboard "
+            "they mean, or end your turn saying which ones fit.",
+            named=[],
+        )
+
+
 @agent_router.get("")
 async def agent_list_dashboards(
     actor: AgentActor = Depends(get_agent_actor),
@@ -768,6 +913,10 @@ async def agent_save_dashboard(
     """Save a new dashboard, or with `dashboard_id` replace that one whole (an edit, checked
     against `base_version` when given). The author, or the editor, is the run's agent."""
     await _refuse_after_unanswered_question(session, actor)
+    if body.dashboard_id:
+        await _refuse_unless_named(session, actor, body.dashboard_id)
+    else:
+        await _refuse_create_after_unnamed(session, actor)
     fields = DashboardIn(
         name=body.name,
         description=body.description,
@@ -799,6 +948,7 @@ async def agent_edit_dashboard(
 ):
     """Edit a dashboard in place by operations, against the version the agent read."""
     await _refuse_after_unanswered_question(session, actor)
+    await _refuse_unless_named(session, actor, dashboard_id)
     return await edit_dashboard(session, actor.project_id, dashboard_id, body, actor.agent)
 
 
@@ -809,6 +959,7 @@ async def agent_undo_dashboard(
     session: AsyncSession = Depends(get_session),
 ):
     await _refuse_after_unanswered_question(session, actor)
+    await _refuse_unless_named(session, actor, dashboard_id)
     return await undo_dashboard(session, actor.project_id, dashboard_id, actor.agent)
 
 
