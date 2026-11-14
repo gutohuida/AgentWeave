@@ -677,6 +677,13 @@ def check_large_binary(page, state):
         switch_to(page, location)
         for name in ("big.txt", "blob.bin"):
             opened = open_row(page, name)
+            # The UI retries a failed read once after 1 s, so wait for a terminal
+            # state instead of trusting the fixed settle in open_row.
+            try:
+                page.locator("[data-testid=file-tab-error], [data-testid=file-tab-binary], "
+                             "[data-testid=file-tab-content]").first.wait_for(timeout=15000)
+            except Exception:
+                pass
             state_el = ("binary" if page.get_by_test_id("file-tab-binary").count() else
                         "error" if page.get_by_test_id("file-tab-error").count() else "content")
             text = panel_text(page).replace("worktree", "").replace("project root", "")
