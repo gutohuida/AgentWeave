@@ -22,6 +22,8 @@ export interface DashboardsViewProps {
   undoing?: boolean
   /** The agents Ask to change offers; the control is absent without `onAskToChange`. */
   agents?: string[]
+  /** Set when the agent list failed to load, so an empty picker is not read as "no agents". */
+  agentsError?: string | null
   onAskToChange?: (dashboard: DashboardSummary, agent: string) => void
 }
 
@@ -30,7 +32,7 @@ export interface DashboardsViewProps {
  * shows its panels as the last run drew them, when that run was fetched, a Refresh button and, for
  * the operator, Delete. Props only, so the mock and the app render the same component.
  */
-export function DashboardsView({ dashboards, selectedId, run, refreshing, error, onSelect, onRefresh, onDelete, onUndo, undoing = false, agents = [], onAskToChange }: DashboardsViewProps) {
+export function DashboardsView({ dashboards, selectedId, run, refreshing, error, onSelect, onRefresh, onDelete, onUndo, undoing = false, agents = [], agentsError = null, onAskToChange }: DashboardsViewProps) {
   const [confirming, setConfirming] = React.useState(false)
   const [asking, setAsking] = React.useState(false)
   React.useEffect(() => {
@@ -165,7 +167,7 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
               >
                 {agents.length === 0 && (
                   <li className="px-3 py-1.5" style={{ color: 'var(--text-3)' }}>
-                    No agents in this project.
+                    {agentsError ?? 'No agents in this project.'}
                   </li>
                 )}
                 {agents.map((name) => (
