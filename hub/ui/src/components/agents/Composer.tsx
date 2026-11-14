@@ -80,6 +80,8 @@ export interface ComposerProps {
    *  again rather than being swallowed as an unchanged prop (the same `revealRequestId` shape
    *  `panelTabsStore` already uses for "open this again"). `null` means nothing pending. */
   insertPathRequest?: { path: string; requestId: number } | null
+  /** The terminal tab's "Send to agent": text to append to the draft, unsent. Keyed like `insertPathRequest`. */
+  insertTextRequest?: { text: string; requestId: number } | null
 }
 
 /**
@@ -112,6 +114,7 @@ export function Composer({
   specBusy = false,
   specDocumentLabel = null,
   insertPathRequest = null,
+  insertTextRequest = null,
 }: ComposerProps) {
   const [text, setText] = useState(() => getComposerDraft(projectId, agent, conversationId))
   const [submitting, setSubmitting] = useState(false)
@@ -124,6 +127,7 @@ export function Composer({
   const pendingCursorRef = useRef<number | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastInsertedRequestId = useRef<number | null>(null)
+  const lastInsertedTextId = useRef<number | null>(null)
 
   const menuItems: ComposerTriggerMenuItem[] = trigger ? resolveTriggerResults(trigger, workspacePaths) : []
 
@@ -199,6 +203,14 @@ export function Composer({
     })
     textareaRef.current?.focus()
   }, [insertPathRequest])
+
+  useEffect(() => {
+    if (!insertTextRequest || insertTextRequest.requestId === lastInsertedTextId.current) return
+    lastInsertedTextId.current = insertTextRequest.requestId
+    const addition = insertTextRequest.text
+    setText((prev) => prev + (prev.length > 0 && !prev.endsWith(String.fromCharCode(10)) ? String.fromCharCode(10) : '') + addition)
+    textareaRef.current?.focus()
+  }, [insertTextRequest])
 
   // The composer's height follows its text, and it has to be an effect rather than an
   // `onInput` handler. `onInput` fires only for input the operator types, so every
