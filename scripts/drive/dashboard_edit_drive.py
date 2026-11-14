@@ -59,6 +59,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import secrets
 import sqlite3
 import subprocess
@@ -266,7 +267,16 @@ def asks_which(t: Dict[str, Any]) -> bool:
 
 
 def writes(run_id: Optional[str]) -> int:
-    return sum(len(tool_calls(run_id, n)) for n in ("edit_dashboard", "save_dashboard", "undo_dashboard"))
+    """The run's dashboard write calls, less those the Hub refused.
+
+    A refused call (the call command's `{"ok": false, ...}`, as the write guard after an
+    unanswered question answers) wrote nothing, and the criterion is that nothing changed; any
+    other call is counted, since a result with output around it cannot be read as a view.
+    """
+    def refused(call: Dict[str, Any]) -> bool:
+        return re.search(r'"ok":\s*false', str(call.get("result") or "")) is not None
+    return sum(not refused(c) for n in ("edit_dashboard", "save_dashboard", "undo_dashboard")
+               for c in tool_calls(run_id, n))
 
 
 # ------------------------------------------------------------------------------------------ queries
@@ -730,7 +740,6 @@ class Drive:
         try:
             self.setup()
             # Agent turns first, each agent's conversation knowing only what its own asks name.
-            run_check("ac-ambiguous", self.ac_ambiguous)
             run_check("ac-run-for-agent", self.ac_run_for_agent)
             run_check("ac-repair", self.ac_repair)
             run_check("ac-edit-in-place", self.ac_edit_in_place)
@@ -745,6 +754,9 @@ class Drive:
             run_check("ac-edit-boundary", self.ac_edit_boundary)
             run_check("ac-undo-survives-restart", self.ac_undo_survives_restart)
             run_check("ac-history-delete", self.ac_history_delete)
+            # Last: an agent that guesses instead of asking edits some dashboard, and a check run
+            # after it would read that edit as its own failure (ac-edit-in-place did, CDA-4).
+            run_check("ac-ambiguous", self.ac_ambiguous)
         finally:
             if os.environ.get("AW_DRIVE_KEEP"):
                 p(f"AW_DRIVE_KEEP: Hub left on {dd.HUB}, key {dd.KEY}, database {DB}")
