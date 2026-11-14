@@ -635,6 +635,8 @@ function applyInvalidation(queryClient: QueryClient, event: SSEEvent): void {
         case 'run_interrupted':
           // An open Changes tab follows the turn: what it committed, and what is still uncommitted.
           inv({ queryKey: ['project', pid, 'changes'] })
+          // The Files tab follows the same turn: files it created, and the changed marks.
+          if (event.type !== 'run_started') inv({ queryKey: ['project', pid, 'workspace'] })
           if (event.type !== 'run_started') {
             // A terminal run status is the moment a loop firing's own JobRun leaves
             // "in_progress" (design D13, task A4.3: `finalize_job_run_for_conversation` runs

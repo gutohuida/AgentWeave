@@ -14,6 +14,11 @@ export interface FilesTabProps {
   agent: string
   location: PanelLocation
   onLocationChange: (next: PanelLocation) => void
+  /** False for a read-only agent or one with no worktree yet: no switch, the root is shown. */
+  hasCheckout?: boolean
+  /** Which of those two cases it is, in plain words. */
+  note?: string | null
+  branch?: string | null
   paths: readonly string[]
   /** Files the agent changed on its branch, marked in its worktree's tree. Empty for the root. */
   changed: Readonly<Record<string, ChangeMark>>
@@ -25,7 +30,7 @@ const MARK_WORD: Record<ChangeMark, string> = { A: 'Added', M: 'Modified', D: 'D
 
 /** The side panel's Files tab: the agent's worktree or the project root, as a tree, with the
  *  agent's changes marked and a switch to see only those. */
-export function FilesTab({ agent, location, onLocationChange, paths, changed, currentPath, onOpen }: FilesTabProps) {
+export function FilesTab({ agent, location, onLocationChange, hasCheckout = true, note = null, branch = null, paths, changed, currentPath, onOpen }: FilesTabProps) {
   const [query, setQuery] = React.useState('')
   const [changedOnly, setChangedOnly] = React.useState(false)
   const [collapsed, setCollapsed] = React.useState<Record<string, boolean>>({})
@@ -72,7 +77,11 @@ export function FilesTab({ agent, location, onLocationChange, paths, changed, cu
     <div className="aw-ptab" data-testid="files-tab">
       <div className="aw-ptab-head">
         <div className="aw-ptab-controls">
-          <LocationSwitch agent={agent} value={location} onChange={onLocationChange} />
+          {hasCheckout ? (
+            <LocationSwitch agent={agent} value={location} onChange={onLocationChange} />
+          ) : (
+            <span className="aw-ptab-count" data-testid="files-location">Project root</span>
+          )}
           {location === 'worktree' && changeCount > 0 ? (
             <label className="aw-files-changed-only">
               <Switch checked={changedOnly} onCheckedChange={setChangedOnly} aria-label="Only files the agent changed" />
@@ -91,6 +100,12 @@ export function FilesTab({ agent, location, onLocationChange, paths, changed, cu
           ) : null}
         </div>
       </div>
+      {note ? <p className="aw-ptab-note" data-testid="files-note">{note}</p> : null}
+      {hasCheckout ? (
+        <p className="aw-ptab-note" data-testid="files-showing">
+          Showing {location === 'worktree' ? `${agent}’s worktree${branch ? ` (${branch})` : ''}` : 'the project root'}
+        </p>
+      ) : null}
       <div className="aw-ptab-scroll aw-files-list">
         {matches ? (
           matches.length === 0 ? (
