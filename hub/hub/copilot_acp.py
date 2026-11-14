@@ -241,6 +241,7 @@ HUB_MCP_TOOLS = frozenset(
         "read_checkpoint",
         "read_dashboard",
         "read_model_record",
+        "read_shells",
         "read_spec_document",
         "recall",
         "record_reconcile",
