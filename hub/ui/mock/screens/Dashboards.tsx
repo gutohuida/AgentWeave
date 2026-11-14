@@ -1,6 +1,7 @@
 import * as React from 'react'
 import type { DashboardRun, DashboardSummary, PanelRun } from '@/api/dashboards'
 import { DashboardsView } from '@/components/dashboards/DashboardsView'
+import { askToChangeLine } from '@/components/dashboards/askToChange'
 import { toast } from '@/lib/toast'
 import type { ScreenProps } from '../routes'
 
@@ -29,17 +30,25 @@ const PANELS: PanelRun[] = [
   panel({ id: 'p7', title: 'Specs over time', kind: 'line', columns: ['spec', 'state'], rows: [['A', 'approved'], ['B', 'exploring']], warning: 'A line chart needs a numeric column after the first (label) column; none of state is numeric.' }),
 ]
 
+// mock state (slice change-by-asking): dash-1 was edited by Developer, who added "Runs per day"
+// (p4), so Undo restores the version without it; restoring is itself an edit, so Undo then puts it
+// back. dash-2 was never edited and offers no Undo.
 const SUMMARIES: DashboardSummary[] = [
-  { id: 'dash-1', name: 'Where the spend goes', description: 'Cost, send-backs and run volume.', author: 'Architect', created_at: '2026-10-16T09:00:00Z', updated_at: '2026-10-17T10:30:00Z', panel_count: PANELS.length },
-  { id: 'dash-2', name: 'Review queue', description: '', author: 'operator', created_at: '2026-10-15T09:00:00Z', updated_at: '2026-10-15T09:00:00Z', panel_count: 2 },
+  { id: 'dash-1', name: 'Where the spend goes', description: 'Cost, send-backs and run volume.', author: 'Architect', created_at: '2026-10-16T09:00:00Z', updated_at: '2026-10-17T10:30:00Z', panel_count: PANELS.length, version: 3, edited_by: 'Developer', edited_at: '2026-10-17T10:30:00Z', can_undo: true },
+  { id: 'dash-2', name: 'Review queue', description: '', author: 'operator', created_at: '2026-10-15T09:00:00Z', updated_at: '2026-10-15T09:00:00Z', panel_count: 2, version: 1, edited_by: null, edited_at: null, can_undo: false },
 ]
+
+// mock state: the project's agents, as Ask to change offers them.
+const AGENTS = ['Architect', 'Developer', 'DeveloperOpus2', 'QA']
 
 export default function Dashboards({ now }: ScreenProps) {
   const [dashboards, setDashboards] = React.useState(SUMMARIES)
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [fetchedAt, setFetchedAt] = React.useState(now)
+  const [withoutRunsPerDay, setWithoutRunsPerDay] = React.useState(false)
+  const panels = withoutRunsPerDay ? PANELS.filter((p) => p.id !== 'p4') : PANELS
   const run: DashboardRun | null = selectedId
-    ? { id: selectedId, name: '', description: '', author: '', updated_at: null, fetched_at: fetchedAt.toISOString(), panels: PANELS }
+    ? { id: selectedId, name: '', description: '', author: '', updated_at: null, fetched_at: fetchedAt.toISOString(), panels }
     : null
   return (
     <DashboardsView
@@ -49,6 +58,16 @@ export default function Dashboards({ now }: ScreenProps) {
       refreshing={false}
       onSelect={setSelectedId}
       onRefresh={() => setFetchedAt(new Date())}
+      askAgents={AGENTS}
+      onAskToChange={(d, agent) =>
+        toast({ title: `Opens ${agent}'s new conversation`, description: `Composer, unsent: ${askToChangeLine(d)}`, tone: 'neutral' })
+      }
+      onUndo={(d) => {
+        const at = new Date().toISOString()
+        setWithoutRunsPerDay((v) => !v)
+        setDashboards((all) => all.map((x) => (x.id === d.id ? { ...x, version: (x.version ?? 1) + 1, edited_by: 'operator', edited_at: at, updated_at: at } : x)))
+        toast({ title: `Restored the previous version of ${d.name}`, tone: 'success' })
+      }}
       onDelete={(d) => {
         setDashboards((all) => all.filter((x) => x.id !== d.id))
         setSelectedId(null)

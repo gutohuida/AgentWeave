@@ -195,3 +195,18 @@ http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/termina
 http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/terminal-remote
 http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/watch
 ```
+
+## Dashboards: change by asking (mock, 2026-11-14)
+
+Spec `spec/changes/change-a-dashboard-by-asking`. `DashboardsView` gains three optional props the
+app wires once the slice's routes exist: the edited-by line (`edited_by`, `edited_at`), Undo (shown
+only when `can_undo`; restoring is itself an edit, so Undo again puts the edit back) and Ask to
+change (pick an agent; the app opens its new conversation with `askToChangeLine` in the composer
+through `lib/composerDrafts`, unsent; the mock shows that line in a toast). "Where the spend goes"
+was edited by Developer, who added "Runs per day"; "Review queue" was never edited.
+
+```
+http://localhost:5199/mock.html#tab/dashboards
+```
+
+The answers it shows (Ask to change, one-step undo, stale edits refused) were approved by the operator on 2026-11-14; the render itself awaits their look.

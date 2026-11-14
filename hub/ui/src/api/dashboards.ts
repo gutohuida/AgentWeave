@@ -15,6 +15,13 @@ export interface DashboardSummary {
   created_at: string | null
   updated_at: string | null
   panel_count: number
+  /** Slice change-by-asking: goes up on every edit, replace and undo. Absent before that slice. */
+  version?: number
+  /** Who made the last edit (an agent, or `operator` for an undo), and when; null until edited. */
+  edited_by?: string | null
+  edited_at?: string | null
+  /** The Hub keeps the version the last edit replaced, so one step restores it. */
+  can_undo?: boolean
 }
 
 export type CellValue = string | number | boolean | null

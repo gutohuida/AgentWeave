@@ -1,6 +1,7 @@
 import * as React from 'react'
 import type { DashboardRun, DashboardSummary } from '@/api/dashboards'
 import { Icon } from '@/components/common/Icon'
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from '@/components/ui/menu'
 import { PanelChart } from './PanelChart'
 import { hubDate } from '@/lib/hubTime'
 
@@ -17,14 +18,22 @@ export interface DashboardsViewProps {
   onSelect: (id: string | null) => void
   onRefresh: () => void
   onDelete: (dashboard: DashboardSummary) => void
+  /** Restores the version the last edit replaced; offered only when the dashboard can_undo. */
+  onUndo?: (dashboard: DashboardSummary) => void
+  /** The agents Ask to change offers; the control is hidden when there are none. */
+  askAgents?: string[]
+  /** Opens that agent's conversation with the dashboard named in its composer, unsent. */
+  onAskToChange?: (dashboard: DashboardSummary, agent: string) => void
 }
+
+const outlineButton = 'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs'
 
 /**
  * The Dashboards tab (FR-11): the project's dashboards with name, author and date; opening one
  * shows its panels as the last run drew them, when that run was fetched, a Refresh button and, for
  * the operator, Delete. Props only, so the mock and the app render the same component.
  */
-export function DashboardsView({ dashboards, selectedId, run, refreshing, error, onSelect, onRefresh, onDelete }: DashboardsViewProps) {
+export function DashboardsView({ dashboards, selectedId, run, refreshing, error, onSelect, onRefresh, onDelete, onUndo, askAgents = [], onAskToChange }: DashboardsViewProps) {
   const [confirming, setConfirming] = React.useState(false)
   React.useEffect(() => setConfirming(false), [selectedId])
   const selected = dashboards.find((d) => d.id === selectedId) ?? null
@@ -97,6 +106,11 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
           )}
           <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
             By {selected.author} · saved {when(selected.updated_at)}
+            {selected.edited_by && (
+              <span data-testid="dashboard-edited-by" className="whitespace-nowrap">
+                {' · '}edited by {selected.edited_by} {when(selected.edited_at ?? null)}
+              </span>
+            )}
             {run && (
               <>
                 {' · '}
@@ -105,6 +119,35 @@ export function DashboardsView({ dashboards, selectedId, run, refreshing, error,
             )}
           </p>
         </div>
+        {onAskToChange && askAgents.length > 0 && (
+          <Menu>
+            <MenuTrigger asChild>
+              <button type="button" data-testid="dashboard-ask-to-change" className={outlineButton} style={{ border: '1px solid var(--border-hi)', color: 'var(--text)' }}>
+                <Icon name="chat" size={13} /> Ask to change
+              </button>
+            </MenuTrigger>
+            <MenuContent>
+              <MenuLabel>Ask an agent to change it</MenuLabel>
+              {askAgents.map((agent) => (
+                <MenuItem key={agent} icon="smart_toy" data-testid="dashboard-ask-agent" onSelect={() => onAskToChange(selected, agent)}>
+                  {agent}
+                </MenuItem>
+              ))}
+            </MenuContent>
+          </Menu>
+        )}
+        {onUndo && selected.can_undo && (
+          <button
+            type="button"
+            data-testid="dashboard-undo"
+            onClick={() => onUndo(selected)}
+            title={selected.edited_by ? `Restore the version before ${selected.edited_by}'s edit` : 'Restore the previous version'}
+            className={outlineButton}
+            style={{ border: '1px solid var(--border-hi)', color: 'var(--text)' }}
+          >
+            <Icon name="undo" size={13} /> Undo
+          </button>
+        )}
         <button
           type="button"
           data-testid="dashboard-refresh"
