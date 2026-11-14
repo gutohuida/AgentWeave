@@ -10,13 +10,14 @@ import { FilesTab } from '@/components/panel/FilesTab'
 import type { PanelLocation } from '@/components/panel/LocationSwitch'
 import { RunningTab } from '@/components/panel/RunningTab'
 import { runningItems } from '@/components/panel/runningModel'
-import { TerminalTab } from '@/components/panel/TerminalTab'
+import { TerminalTab, type OpenShell, type ShellOption } from '@/components/panel/TerminalTab'
 import { WatchTab } from '@/components/panel/WatchTab'
 import { FilePreview } from '@/components/spec/FilePreview'
 import { PanelShell, type PanelTabDescriptor } from '@/components/spec/PanelShell'
 import { fileIconFor } from '@/components/spec/fileIcons'
 import { SPEC_DOC_MIN_WIDTH } from '@/components/spec/specPreferences'
 import { Button } from '@/components/ui/button'
+import { setComposerDraft } from '@/lib/composerDrafts'
 import { formatAgo } from '@/lib/format'
 import { toast } from '@/lib/toast'
 import { filePath, fileTabId, isFileTabId, usePanelTabsStore, type TabId } from '@/store/panelTabsStore'
@@ -38,7 +39,7 @@ import {
 import type { MockRoute, ScreenProps } from '../routes'
 import { RUNNING_BUILDS, RUNNING_JOBS, RUNNING_LOOPS } from '../runningMock'
 
-export type SidePanelTab = 'running' | 'changes' | 'files' | 'terminal' | 'terminal-remote' | 'watch'
+export type SidePanelTab = 'running' | 'changes' | 'files' | 'terminal' | 'terminal-full' | 'terminal-remote' | 'terminal-docker' | 'watch'
 
 const CHATS: Record<string, ChatHistoryResponse> = {
   'conv-e3aba2c5956a': builderChat as unknown as ChatHistoryResponse,
@@ -64,14 +65,13 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
   React.useEffect(() => {
     const store = usePanelTabsStore.getState()
     for (const key of ORDER) store.openTab(PROJECT_ID, ID[key])
-    store.activateTab(PROJECT_ID, ID[tab === 'terminal-remote' ? 'terminal' : tab])
+    store.activateTab(PROJECT_ID, ID[tab.startsWith('terminal') ? 'terminal' : (tab as 'running' | 'changes' | 'files' | 'watch')])
   }, [tab])
 
   const items = React.useMemo(() => runningItems({ builds: RUNNING_BUILDS, loops: RUNNING_LOOPS, jobs: RUNNING_JOBS, now }), [now])
   const live = items.filter((i) => i.phase === 'needs-you' || i.phase === 'working').length
   const [location, setLocation] = React.useState<PanelLocation>('worktree')
-  const [termLocation, setTermLocation] = React.useState<PanelLocation>('worktree')
-  const [shellRun, setShellRun] = React.useState(0)
+  const term = useMockShells(agent, tab === 'terminal-full')
   const peers = agents.filter((a) => a.name !== agent)
   const [peer, setPeer] = React.useState(() => (peers.find((p) => p.name === 'Builder') ?? peers[0])?.name ?? '')
   const peerConversations = conversations.filter((c) => c.agent === peer)
@@ -150,21 +150,28 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
       )
     }
     if (id === ID.terminal) {
-      const dir = termLocation === 'worktree' ? `${WORKTREE_DIR}${agent}` : ROOT_DIR
+      const active = term.shells.find((sh) => sh.id === term.activeId) ?? null
       return (
         <TerminalTab
           agent={agent}
-          location={termLocation}
-          onLocationChange={(next) => {
-            setTermLocation(next)
-            setShellRun((n) => n + 1)
+          unavailable={tab === 'terminal-remote' ? 'remote' : tab === 'terminal-docker' ? 'docker' : null}
+          shells={term.shells}
+          activeId={term.activeId}
+          onSelect={term.setActiveId}
+          onClose={term.close}
+          onRestart={term.restart}
+          options={SHELL_OPTIONS}
+          lastPick={term.lastPick}
+          onOpen={term.open}
+          onSendToAgent={(sid) => {
+            const sh = term.shells.find((x) => x.id === sid)
+            if (!sh) return
+            const screen = shellLines(sh, term.runs[sid] ?? 0).map(([t]) => t).join('\n')
+            setComposerDraft(PROJECT_ID, agent, null, `From ${sh.option.label} in ${sh.directory}:\n\n\`\`\`\n${screen}\n\`\`\`\n`)
+            toast({ title: `The screen is in your message to ${agent}`, description: 'Nothing is sent until you send it.' })
           }}
-          directory={dir}
-          shell="PowerShell"
-          available={tab !== 'terminal-remote'}
-          onRestart={() => setShellRun((n) => n + 1)}
         >
-          <MockShell key={shellRun} fresh={shellRun > 0} dir={dir} />
+          {active && <MockShell key={`${active.id}-${term.runs[active.id] ?? 0}`} lines={shellLines(active, term.runs[active.id] ?? 0)} />}
         </TerminalTab>
       )
     }
@@ -207,18 +214,106 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
   )
 }
 
+type Line = [string, 'prompt' | 'out' | 'ok' | 'err' | 'dim']
+
+// mock state: what the Hub would detect on this Windows machine (FR-4).
+const SHELL_OPTIONS: ShellOption[] = [
+  { id: 'pwsh', label: 'PowerShell 7', detail: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe' },
+  { id: 'powershell', label: 'Windows PowerShell', detail: 'Built into Windows' },
+  { id: 'cmd', label: 'Command Prompt', detail: 'Built into Windows' },
+  { id: 'gitbash', label: 'Git Bash', detail: 'C:\\Program Files\\Git\\bin\\bash.exe' },
+  { id: 'wsl-ubuntu', label: 'Ubuntu-24.04', detail: 'WSL · opens at the folder’s /mnt/c path', wsl: true },
+]
+const optionFor = (id: string): ShellOption => SHELL_OPTIONS.find((o) => o.id === id) ?? SHELL_OPTIONS[0]
+
+/** How each kind of shell names a Windows directory: WSL sees /mnt/c/..., Git Bash /c/... */
+function dirFor(option: ShellOption, location: PanelLocation, agent: string): string {
+  const win = location === 'worktree' ? `${WORKTREE_DIR}${agent}` : ROOT_DIR
+  const posix = win.slice(2).replace(/\\/g, '/')
+  if (option.wsl) return `/mnt/c${posix}`
+  if (option.id === 'gitbash') return `/c${posix}`
+  return win
+}
+
+/** The mock's open shells, held above the tab so they survive switching panel tabs (FR-8). */
+function useMockShells(agent: string, full: boolean) {
+  const make = React.useCallback(
+    (id: string, optionId: string, location: PanelLocation, exitCode: number | null = null): OpenShell => {
+      const option = optionFor(optionId)
+      return { id, option, location, directory: dirFor(option, location, agent), exitCode }
+    },
+    [agent],
+  )
+  const initial = React.useMemo(() => {
+    const base = [make('sh-1', 'pwsh', 'worktree'), make('sh-2', 'gitbash', 'root'), make('sh-3', 'wsl-ubuntu', 'worktree', 0)]
+    return full ? [...base, make('sh-4', 'cmd', 'root')] : base
+  }, [make, full])
+  const [shells, setShells] = React.useState<OpenShell[]>(initial)
+  const [activeId, setActiveId] = React.useState<string | null>('sh-1')
+  const [runs, setRuns] = React.useState<Record<string, number>>({})
+  const [lastPick, setLastPick] = React.useState<{ optionId: string; location: PanelLocation } | null>({ optionId: 'pwsh', location: 'worktree' })
+  const next = React.useRef(10)
+  React.useEffect(() => {
+    setShells(initial)
+    setActiveId('sh-1')
+  }, [initial])
+  return {
+    shells,
+    activeId,
+    setActiveId,
+    runs,
+    lastPick,
+    open: (optionId: string, location: PanelLocation) => {
+      const id = `sh-${next.current++}`
+      setShells((list) => [...list, make(id, optionId, location)])
+      setRuns((r) => ({ ...r, [id]: 1 }))
+      setActiveId(id)
+      setLastPick({ optionId, location })
+    },
+    close: (id: string) => {
+      const rest = shells.filter((x) => x.id !== id)
+      setShells(rest)
+      if (activeId === id) setActiveId(rest[rest.length - 1]?.id ?? null)
+    },
+    restart: (id: string) => {
+      setShells((list) => list.map((x) => (x.id === id ? { ...x, exitCode: null } : x)))
+      setRuns((r) => ({ ...r, [id]: (r[id] ?? 0) + 1 }))
+    },
+  }
+}
+
+/** A recording per shell; a new or restarted shell shows only its banner and prompt. */
+function shellLines(sh: OpenShell, run: number): Line[] {
+  const d = sh.directory
+  const kind = sh.option.wsl ? 'wsl' : sh.option.id
+  const prompt = kind === 'wsl' ? `huida@PC:${d}$ ` : kind === 'gitbash' ? '$ ' : kind === 'cmd' ? `${d}>` : `PS ${d}> `
+  const banner: Line[] =
+    kind === 'wsl'
+      ? [['Welcome to Ubuntu 24.04.1 LTS (GNU/Linux 5.15 microsoft-standard-WSL2)', 'dim']]
+      : kind === 'cmd'
+        ? [['Microsoft Windows [Version 10.0.26200]', 'dim']]
+        : kind === 'gitbash'
+          ? [[`huida@PC MINGW64 ${d}`, 'ok']]
+          : [[kind === 'pwsh' ? 'PowerShell 7.5.2' : 'Windows PowerShell', 'dim']]
+  const p = (cmd = ''): Line => [prompt + cmd, 'prompt']
+  if (run > 0) return [...banner, p()]
+  if (sh.id === 'sh-1') return TERMINAL_LINES.map(([t, tone]): Line => [t.replace(/C:\\Users\\huida\\Projects\\Terra\\\.agentweave\\worktrees\\Builder/g, d), tone])
+  if (sh.id === 'sh-2')
+    return [...banner, p('npm run dev'), ['', 'out'], ['> terra@0.4.0 dev', 'dim'], ['> vite', 'dim'], ['', 'out'], ['  VITE v6.2.0  ready in 412 ms', 'ok'], ['', 'out'], ['  ➜  Local:   http://localhost:5173/', 'out'], ['  ➜  press h + enter to show help', 'dim']]
+  if (sh.id === 'sh-3') return [...banner, p('make check'), ['ruff check . && pytest -q', 'dim'], ['........................................ [100%]', 'ok'], ['40 passed in 3.12s', 'ok'], p('exit'), ['logout', 'dim']]
+  return [...banner, p()]
+}
+
 const TONE: Record<string, string> = { prompt: 'var(--text)', out: 'var(--text-2)', ok: 'var(--green)', err: 'var(--red)', dim: 'var(--text-3)' }
 
-/** A recording standing in for the terminal emulator the app will mount. A restart, or a change of
- *  directory, shows a fresh shell. */
-function MockShell({ fresh, dir }: { fresh: boolean; dir: string }) {
-  const lines: typeof TERMINAL_LINES = fresh ? [['PowerShell 7.5.2', 'dim'], [`PS ${dir}> `, 'prompt']] : TERMINAL_LINES
+/** A recording standing in for the terminal emulator the app will mount. */
+function MockShell({ lines }: { lines: Line[] }) {
   return (
     <pre style={{ margin: 0, font: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
       {lines.map(([text, tone], i) => (
         <div key={i} style={{ color: TONE[tone] }}>
-          {text.replace(/C:\\Users\\huida\\Projects\\Terra\\\.agentweave\\worktrees\\Builder/g, dir) || ' '}
-          {i === lines.length - 1 ? <span className="aw-term-caret" style={{ display: 'inline-block', width: 7, height: 14, marginLeft: 1, verticalAlign: 'text-bottom', background: 'var(--text-2)' }} /> : null}
+          {text || ' '}
+          {i === lines.length - 1 && tone === 'prompt' ? <span className="aw-term-caret" style={{ display: 'inline-block', width: 7, height: 14, marginLeft: 1, verticalAlign: 'text-bottom', background: 'var(--text-2)' }} /> : null}
         </div>
       ))}
     </pre>

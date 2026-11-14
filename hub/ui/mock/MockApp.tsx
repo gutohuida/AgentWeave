@@ -57,7 +57,7 @@ function toHash(route: MockRoute): string {
   }
 }
 
-const PANELS = new Set(['spec', 'specs', 'running', 'changes', 'files', 'terminal', 'terminal-remote', 'watch'])
+const PANELS = new Set(['spec', 'specs', 'running', 'changes', 'files', 'terminal', 'terminal-full', 'terminal-remote', 'terminal-docker', 'watch'])
 
 export function MockApp() {
   const [route, setRoute] = React.useState<MockRoute>(parseHash)

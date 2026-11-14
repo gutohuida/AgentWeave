@@ -183,8 +183,11 @@ Approved by the operator on 2026-11-12 as it renders.
 The roadmap's other tabs are mocked in the same shell (`mock/screens/SidePanel.tsx`, fed by the
 hand-written Terra checkout in `mock/panelMock.ts`): Changes (`ChangesTab`: the agent's last turn or
 its whole branch, as diffs), Files (`FilesTab`: the agent's worktree or the project root, its changes
-marked, "Changed only"), Terminal (`TerminalTab`: the app mounts the real terminal emulator where the
-mock shows a recording; `terminal-remote` is the state from another computer) and Watch (`WatchTab`:
+marked, "Changed only"), Terminal (`TerminalTab`: up to four shells as tabs, + for where and which
+detected shell, WSL included, an ended shell with its exit code, Send to the agent; the app mounts the
+real terminal emulator where the mock shows a recording; `terminal-full` is at the limit of four,
+`terminal-remote` the state from another computer, `terminal-docker` Docker mode; spec
+`a-terminal-in-the-side-panel`, 2026-11-14) and Watch (`WatchTab`:
 a peer's conversation through the app's own `AgentTimeline`, read-only). The panel store's ids for
 the new tabs are cast in the mock (`// mock state`) until the slices add them.
 
@@ -192,7 +195,9 @@ the new tabs are cast in the mock (`// mock state`) until the slices add them.
 http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/changes
 http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/files
 http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/terminal
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/terminal-full
 http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/terminal-remote
+http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/terminal-docker
 http://localhost:5199/mock.html#conversation/Architect/conv-9cdda4865e0b/watch
 ```
 
