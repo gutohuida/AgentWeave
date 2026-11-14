@@ -1720,13 +1720,19 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "Dashboards screen: a unique `name`, the question it answers in `description`, "
                 "and `panels`, each `{title, query, kind}` with kind one of `number`, `table`, "
                 "`bar`, `stacked_bar`, `line`. Choose the kind from the question: one figure, "
-                "`number`; a ranking or comparison, `bar`; parts of a whole across labels, "
-                "`stacked_bar`; change over time, `line`; detail rows, `table`. Shape the query "
+                '`number`; a ranking or comparison, `bar`; a breakdown by two labels ("send-'
+                'backs per model by reason"), `stacked_bar`, never a table; change over time, '
+                "`line`; detail rows, `table`. The app draws it: write no chart code. A stacked "
+                "bar's query pivots, one row per bar and "
+                "one numeric column per part: `group by` the first label only and give each "
+                "value of the second its own column, a sum of `<column> = '<value>'`. Shape the query "
                 "to read well: order rows as they should be drawn, keep bars to about 15 labels "
                 "(`order by ... desc limit 15`), put time in ascending order for a line, and "
                 "alias columns to the readable names the legend and tooltip show. The data note "
                 "has a worked example of each kind. Saving does not run the queries, so a failing one "
-                "shows its error when opened. To change a saved dashboard use `edit_dashboard`; "
+                "shows its error when opened. Saving is this call; nothing is saved until you make "
+                "it: never write the panels out in your reply in its place. To change a saved "
+                "dashboard use `edit_dashboard`; "
                 "`dashboard_id` replaces that one whole; pass the `version` you read as "
                 "`base_version`, and a dashboard changed since is refused as stale. A run whose "
                 "own question has no answer cannot save, edit or undo a dashboard (409 "
@@ -2261,6 +2267,8 @@ def _tool_surface_lines(
     lines = ["## Your tools", "", preamble]
     if adapter is not None and adapter.host_tool_note:
         lines.append(adapter.host_tool_note)
+    if over_mcp and adapter is not None and adapter.deferred_tool_note:
+        lines.append(adapter.deferred_tool_note)
     lines.append("")
     for operation in _operations(can_admin_specs=can_admin_specs):
         lines.extend(render(operation))

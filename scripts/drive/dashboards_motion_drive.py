@@ -673,6 +673,7 @@ class Drive:
         c.judge(f"{which}: the Haiku turn saved a dashboard", bool(t["run_id"]) and bool(new),
                 f"run {t['run_id']}; new dashboards {[d.get('name') for d in new]}; "
                 f"asked {t['questions']}; reply {t['reply'][-300:]!r}")
+        self.keep_transcript(t["run_id"], which, quiet=bool(new))
         if not new:
             return
         dash = new[0]
@@ -715,6 +716,22 @@ class Drive:
                     count and not errors and not warnings, f"{count} panels, {errors} errors, {warnings} warnings")
         for d in new:
             api("DELETE", f"/projects/{self.a}/dashboards/{d['id']}")
+
+    def keep_transcript(self, run_id: Optional[str], which: str, quiet: bool) -> None:
+        """Write the turn's whole output, tool calls and results included, to the scratch; for a
+        turn that saved nothing (not *quiet*) also print every dashboard tool call with what it
+        answered, so a miss can be told apart (never called, called and refused, or a call that
+        never left the reply)."""
+        if not run_id:
+            return
+        rows = dd.ro("select kind, content from agent_outputs where run_id=? order by sequence", (run_id,))
+        path = TMP / f"first-time-right-{which.split()[1]}-{run_id}.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(f"--- {k}\n{c}" for k, c in rows), encoding="utf-8")
+        p(f"  whole output of {run_id} ({len(rows)} entries): {path}")
+        for k, c in [] if quiet else rows:
+            if k in ("tool_use", "tool_result") and c and "dashboard" in c:
+                p(f"  {k}: {c[:600]!r}")
 
     # -- order
 

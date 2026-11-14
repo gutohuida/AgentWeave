@@ -115,6 +115,14 @@ class ClaudeAdapter(RunnerAdapter):
         "Your host also has tools with similar names — `SendMessage` continues a subagent you "
         "started — which cannot reach AgentWeave agents or the operator."
     )
+    # FR-9 of `dashboards-that-feel-alive-and-draw-right-the-first-time`: Claude Code defers MCP
+    # tools behind `ToolSearch`, and a Haiku turn called it 21 times, never the tool it loaded.
+    deferred_tool_note = (
+        "Where these tools are listed as deferred, load every one you need with one `ToolSearch` "
+        "call (`select:mcp__agentweave__<name>,mcp__agentweave__<name>`), then call each tool by "
+        "its full name. `ToolSearch` only loads a schema and never runs a tool: once it has "
+        "returned a tool, do not search for it again -- call it."
+    )
     write_tool_kinds = CLAUDE_WRITE_TOOLS
     # `checkpoint_policy.py:24`'s comment: the value today's thresholds were chosen against.
     compaction_percent = 95

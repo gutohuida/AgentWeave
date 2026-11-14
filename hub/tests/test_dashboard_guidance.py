@@ -26,7 +26,7 @@ from hub.mcp_server import mcp
 QUESTIONS = {
     "number": "One figure",
     "bar": "A ranking or comparison",
-    "stacked_bar": "Parts of a whole",
+    "stacked_bar": "A breakdown by two labels",
     "line": "Change over time",
     "table": "Detail rows",
 }
@@ -56,6 +56,35 @@ async def test_ac_guidance_the_save_tool_says_which_kind_and_how_to_shape() -> N
     described = [op.text for op in agent_routes._operations() if op.tool == "save_dashboard"]
     assert described, "save_dashboard is missing from the agent context's tool list"
     _assert_guidance(described[0], "agent context save_dashboard")
+
+
+@pytest.mark.asyncio
+async def test_ac_first_time_right_the_save_tool_says_to_pivot_and_to_save_by_calling() -> None:
+    # FR-9: Haiku drew "send-backs per model by reason" as a long (model, reason, count) table,
+    # and some turns wrote the panels out and ended without calling the tool.
+    listed = {tool.name: tool for tool in await mcp.list_tools()}
+    described = [op.text for op in agent_routes._operations() if op.tool == "save_dashboard"]
+    for where, text in (("tools/list", listed["save_dashboard"].description or ""),
+                        ("agent context", described[0])):  # fmt: skip
+        flat = " ".join(text.split())
+        assert "never a table" in flat, where
+        assert "one numeric column per part" in flat and "<column> = '<value>'" in flat, where
+        assert "Saving is this call; nothing is saved until you make it" in flat, where
+
+
+def test_the_send_back_trap_shows_the_per_reason_breakdown_pivoted() -> None:
+    trap = dict(data_notes.TRAPS)["A send-back's run is the reviewer's, not the builder's"]
+    assert "`stacked_bar`" in trap
+    for reason in (
+        "defect",
+        "regression",
+        "broken-check",
+        "merge-needed",
+        "evidence-only",
+        "flaky",
+    ):
+        assert f"sum(s.reason_class = '{reason}')" in trap, reason
+    assert "group by b.model, s.reason_class" not in trap
 
 
 def _examples(note: str) -> List[Tuple[str, str]]:
@@ -141,3 +170,11 @@ def test_a_note_seeded_before_the_examples_gets_them_appended_once(tmp_path) -> 
         QUESTIONS
     )  # noqa: E501
     assert data_notes.seed(root, private) is None, "seeded twice"
+
+
+def test_a_claude_run_over_mcp_is_told_toolsearch_only_loads_a_tool() -> None:
+    # FR-9: a Haiku turn called ToolSearch 21 times and never the save tool it had loaded.
+    over_mcp = " ".join(agent_routes._tool_surface_lines(runner="claude", access_path="mcp"))
+    assert "`ToolSearch` only loads a schema and never runs a tool" in over_mcp
+    over_shim = " ".join(agent_routes._tool_surface_lines(runner="claude", access_path="shim"))
+    assert "ToolSearch" not in over_shim

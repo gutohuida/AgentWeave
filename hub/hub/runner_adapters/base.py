@@ -277,6 +277,8 @@ class RunnerAdapter(ABC):
     transport_sentinels: ClassVar[Tuple[str, ...]] = ()
     mcp_tool_prefix: ClassVar[Optional[str]] = None
     host_tool_note: ClassVar[Optional[str]] = None
+    # How the host loads a tool it lists as deferred, said only when the tools come over MCP.
+    deferred_tool_note: ClassVar[Optional[str]] = None
     mcp_env_names: ClassVar[Optional[Tuple[str, ...]]] = None
     write_tool_kinds: ClassVar[Mapping[str, str]]
     one_shot_takes_schema: ClassVar[bool] = False

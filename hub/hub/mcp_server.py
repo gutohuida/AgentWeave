@@ -1017,10 +1017,19 @@ def save_dashboard(
     is saved and shows its error when opened.
 
     **Choose the kind from the question.** One figure ("this week's cost", "open tasks"): `number`.
-    A ranking or comparison across labels ("cost per spec", "tasks per agent"): `bar`. Parts of a
-    whole across labels ("send-backs per model, by reason", with one numeric column per part):
-    `stacked_bar`. Change over time ("runs per day"): `line`. Detail rows ("the latest failed
-    runs"): `table`. The app decides colours and motion; you choose only the kind and the query.
+    A ranking or comparison across labels ("cost per spec", "tasks per agent"): `bar`. A breakdown
+    by two labels ("send-backs per model by reason", "runs per agent by status"): `stacked_bar`,
+    never a table -- one bar per value of the first label, one stacked part per value of the
+    second. Change over time ("runs per day"): `line`. Detail rows ("the latest failed runs"):
+    `table`. The app draws the chart and decides colours and motion: you choose only the kind and
+    the query, and write no chart code (no charting skill applies).
+
+    **A stacked bar's query pivots: one row per bar, one numeric column per part.** A query that
+    groups by both labels gives long rows (`model, reason, count`), which do not stack; keep the
+    first label in `group by` and turn each value of the second into its own column with
+    `sum(<column> = '<value>') as "<Value>"`, one per value (run a `select distinct` first to learn
+    them): `select model as "Model", sum(reason = 'defect') as "Defect", sum(reason = 'flaky') as
+    "Flaky" ... group by model`. Reshape the query this way rather than falling back to a table.
 
     **Shape the query so it reads well.** Order the rows as they should be drawn: bars are drawn
     in the query's order, so `order by` the value (largest first) for a ranking. Keep a bar or
@@ -1029,6 +1038,11 @@ def save_dashboard(
     Alias every column to the readable name the legend and tooltip will show (`as "Cost (USD)"`,
     not `sum(api_equivalent_usd_micros)`). The data note (`vault_read("src-27723331ae1d")`) has a
     worked example of each kind.
+
+    **Saving is this call; nothing is saved until you make it.** Once every query has run, call
+    `save_dashboard` with all the panels at once. Do not write the panels out in your reply in its
+    place, or say you are about to call it and stop: a dashboard you only described does not exist.
+    Your turn is done when this call has answered with the dashboard's `id`.
 
     **To change a dashboard that already exists, use `edit_dashboard`**, which changes only what
     you name. `dashboard_id` replaces that dashboard whole (keep each panel's `id` from
