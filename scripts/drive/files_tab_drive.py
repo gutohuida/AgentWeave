@@ -445,6 +445,22 @@ def find(page, text):
     return True
 
 
+def wait_tab_content(page, path):
+    """Waits for the opened tab to reach a terminal state, not for a fixed time.
+
+    The UI retries a failed read once after 1 s, so allow for that. A code file
+    is also given a moment to gain its highlight spans; a plain one never does.
+    """
+    done = ("[data-testid=file-tab-error], [data-testid=file-tab-binary], "
+            "[data-testid=file-preview-markdown], [data-testid=file-tab-content]")
+    try:
+        page.locator(done).first.wait_for(timeout=15000)
+        if not path.endswith(".md"):
+            page.locator("[data-testid=file-tab-content].hljs span[class^=hljs-]").first.wait_for(timeout=3000)
+    except Exception:
+        pass
+
+
 def open_row(page, path):
     """Opens `path` from the tree through find; True when a row was clicked."""
     if not find(page, path.rsplit("/", 1)[-1]):
@@ -453,7 +469,7 @@ def open_row(page, path):
     for i in range(rows.count()):
         if row_path(rows.nth(i)) == path:
             rows.nth(i).click()
-            page.wait_for_timeout(1500)
+            wait_tab_content(page, path)
             return True
     find(page, "")
     return False
