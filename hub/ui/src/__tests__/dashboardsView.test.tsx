@@ -85,4 +85,33 @@ describe('DashboardsView', () => {
     }
     expect(screen.getAllByTestId('dashboard-table-cell').length).toBeGreaterThan(0)
   })
+
+  it('offers Undo only when the run says there is a version to restore', () => {
+    const onUndo = vi.fn()
+    const { unmount } = open([], { onUndo })
+    expect(screen.queryByTestId('dashboard-undo')).toBeNull()
+    unmount()
+    render(<DashboardsView dashboards={[summary]} selectedId="d1" run={{ ...run([]), can_undo: true }} refreshing={false}
+      onSelect={() => {}} onRefresh={() => {}} onDelete={() => {}} onUndo={onUndo} />)
+    fireEvent.click(screen.getByTestId('dashboard-undo'))
+    expect(onUndo).toHaveBeenCalledWith(summary)
+  })
+
+  it('shows who last edited it and when', () => {
+    render(<DashboardsView dashboards={[summary]} selectedId="d1" refreshing={false}
+      run={{ ...run([]), edited_by: 'Developer', edited_at: '2026-11-14T08:15:00Z' }}
+      onSelect={() => {}} onRefresh={() => {}} onDelete={() => {}} />)
+    expect(screen.getByTestId('dashboard-edited-by').textContent).toContain('Edited by Developer')
+    expect(screen.getByTestId('dashboard-edited-by').getAttribute('data-edited-at')).toBe('2026-11-14T08:15:00Z')
+    expect(screen.getByTestId('dashboard-edited-by').textContent).not.toContain('—')
+  })
+
+  it('Ask to change picks an agent and reports it, and does nothing before that', () => {
+    const onAsk = vi.fn()
+    open([], { agents: ['Architect', 'QA'], onAskToChange: onAsk })
+    fireEvent.click(screen.getByTestId('dashboard-ask-to-change'))
+    expect(onAsk).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByText('QA'))
+    expect(onAsk).toHaveBeenCalledWith(summary, 'QA')
+  })
 })
