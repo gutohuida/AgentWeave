@@ -1766,7 +1766,9 @@ def _operations(*, can_admin_specs: bool = False) -> List[_Operation]:
                 "change a saved dashboard in place when asked to: find it with `list_dashboards` "
                 "by the name or `dash-` id the request gives and edit only when exactly one "
                 "fits; when several fit, none does, or none is named, ask which and write nothing "
-                "(never save a second dashboard instead). `base_version` is the `version` you read; `operations` is a list of "
+                "(never save a second dashboard instead). A dashboard your request did not name "
+                "by its `dash-` id or whole name is refused 409 `dashboard_not_named`. "
+                "`base_version` is the `version` you read; `operations` is a list of "
                 '`{"op": "add_panel", "panel": {title, query, kind}, "position": n|null}`, '
                 '`{"op": "remove_panel", "panel_id"}`, `{"op": "change_panel", "panel_id", '
                 'title?, query?, kind?}`, `{"op": "move_panel", "panel_id", "position"}`, '

@@ -377,8 +377,38 @@ def open_panel_tab(page, testid, name):
     return tab
 
 
+def wait_until(page, predicate, timeout=10000, step=150):
+    """Polls `predicate` until it holds or `timeout` ms pass; returns whether it held."""
+    waited = 0
+    while True:
+        try:
+            if predicate():
+                return True
+        except Exception:  # noqa: BLE001 -- the page may be mid-render; poll again
+            pass
+        if waited >= timeout:
+            return False
+        page.wait_for_timeout(step)
+        waited += step
+
+
+def settled(page, timeout=10000):
+    """Waits until the Files tab's row list has rows and stops changing between polls."""
+    last = [None]
+
+    def stable():
+        now = sorted(tree(page))
+        same = bool(now) and now == last[0]
+        last[0] = now
+        return same
+
+    return wait_until(page, stable, timeout)
+
+
 def open_files(page):
-    return open_panel_tab(page, "files-tab", "Files")
+    tab = open_panel_tab(page, "files-tab", "Files")
+    settled(page)
+    return tab
 
 
 def files_tab(page):
@@ -413,7 +443,8 @@ def switch_to(page, location):
     if not radio.count():
         return False
     radio.first.click()
-    page.wait_for_timeout(1200)
+    wait_until(page, lambda: radio.first.get_attribute("aria-checked") == "true")
+    settled(page)
     return True
 
 
@@ -438,11 +469,37 @@ def tree(page):
 
 def find(page, text):
     box = files_tab(page).get_by_label("Find a file")
-    if not box.count():
+    if not wait_until(page, lambda: box.count() > 0):
         return False
     box.first.fill(text)
-    page.wait_for_timeout(600)
+    wait_until(page, lambda: box.first.input_value() == text)
+    # the filtered list is read next; wait for it to stop changing (an empty one is a result too)
+    last = [None]
+
+    def stable():
+        now = sorted(tree(page))
+        same = now == last[0]
+        last[0] = now
+        return same
+
+    wait_until(page, stable)
     return True
+
+
+def wait_tab_content(page, path):
+    """Waits for the opened tab to reach a terminal state, not for a fixed time.
+
+    The UI retries a failed read once after 1 s, so allow for that. A code file
+    is also given a moment to gain its highlight spans; a plain one never does.
+    """
+    done = ("[data-testid=file-tab-error], [data-testid=file-tab-binary], "
+            "[data-testid=file-preview-markdown], [data-testid=file-tab-content]")
+    try:
+        page.locator(done).first.wait_for(timeout=15000)
+        if not path.endswith(".md"):
+            page.locator("[data-testid=file-tab-content].hljs span[class^=hljs-]").first.wait_for(timeout=3000)
+    except Exception:
+        pass
 
 
 def open_row(page, path):
@@ -453,7 +510,7 @@ def open_row(page, path):
     for i in range(rows.count()):
         if row_path(rows.nth(i)) == path:
             rows.nth(i).click()
-            page.wait_for_timeout(1500)
+            wait_tab_content(page, path)
             return True
     find(page, "")
     return False
@@ -546,6 +603,7 @@ def check_uncommitted(page, state):
     listed = {"new_untracked.txt": "new_untracked.txt" in now, NESTED: NESTED in now,
               "debug.log (ignored)": "debug.log" in now}
     found = find(page, "nested_wid")
+    wait_until(page, lambda: NESTED in tree(page))
     narrowed = set(tree(page))
     text = files_tab(page).inner_text() if files_tab(page).count() else ""
     folder = files_tab(page).locator('[data-slot=files-dir][aria-expanded="true"]')
@@ -563,15 +621,17 @@ def check_changed_only(page, state):
     switch_to(page, "worktree")
     toggle = files_tab(page).get_by_label("Only files the agent changed")
     turned = False
-    if toggle.count():
+    if wait_until(page, lambda: toggle.count() > 0):
         toggle.first.click()
-        page.wait_for_timeout(800)
+        # narrowed: every row left carries a mark, and the list has stopped changing
+        wait_until(page, lambda: bool(tree(page)) and all(v["mark"] for v in tree(page).values()))
+        settled(page)
         turned = True
     now = tree(page)
     shot(page, "changed-only")
     if turned:
         toggle.first.click()
-        page.wait_for_timeout(500)
+        wait_until(page, lambda: any(not v["mark"] for v in tree(page).values()))
     marks = {p: v["mark"] for p, v in now.items()}
     since = {f["path"]: f["status"][0] for f in changes_route(state["base"], state["conv"]["Maker"])
              .get("since_base", [])}

@@ -1064,8 +1064,11 @@ def edit_dashboard(
     ask the operator which (`ask_user`, or ask in your reply, naming the candidates), and call
     nothing that writes -- no edit, and never `save_dashboard` to make a second one. A question
     declined or left unanswered is not permission to guess: end your turn without writing (the
-    Hub refuses this run's dashboard writes after it, 409 `question_unanswered`). Then
-    `read_dashboard` the one dashboard for its panels' ids and its `version`.
+    Hub refuses this run's dashboard writes after it, 409 `question_unanswered`). The Hub also
+    refuses an edit, replace or undo of a dashboard your request did not name by its `dash-` id
+    or its whole name, 409 `dashboard_not_named` (an answer to your `ask_user` counts as part of
+    the request); after that refusal, ask which. Then `read_dashboard` the one dashboard for its
+    panels' ids and its `version`.
 
     `base_version` is the `version` you read. `operations` is applied in order, all or none:
     - `{"op": "add_panel", "panel": {"title", "query", "kind"}, "position": n or null}` (null
