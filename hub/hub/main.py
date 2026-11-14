@@ -749,6 +749,12 @@ async def lifespan(app: FastAPI):
     span_writer.cancel()
     with contextlib.suppress(asyncio.CancelledError, Exception):
         await span_writer
+    # The operator's shells, and everything they started (`a-terminal-in-the-side-panel`, FR-9). A
+    # Hub that never reaches this line still ends them: each shell's job is kill-on-close.
+    from .terminal import registry as terminal_registry
+
+    with contextlib.suppress(Exception):
+        await terminal_registry.end_all()
     await terminate_all_active_runs()
     await shutdown_scheduler()
     await _settle_background_runs()
