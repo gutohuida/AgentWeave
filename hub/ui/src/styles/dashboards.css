@@ -193,7 +193,9 @@
   .aw-dash-mark,
   .aw-dash-tip,
   .aw-dash-skeleton::after,
-  .aw-dash-chart {
+  .aw-dash-chart,
+  .aw-dash-view,
+  .aw-dash-view * {
     animation: none !important;
     transition: none !important;
   }
