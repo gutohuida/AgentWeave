@@ -759,3 +759,18 @@ async def test_ac_keeps_running_detached_and_replays_meanwhile(
     assert await again.read_until(lambda s: "tick-6" in s.text, 10), again.text[-1000:]
     assert registry.get(shell["id"]).running
     await again.close()
+
+
+def test_focus_reports_are_not_written_to_the_pty():
+    written = []
+
+    class _Pty:
+        def write(self, data):
+            written.append(data)
+
+    shell = Shell.__new__(Shell)
+    shell.running, shell._pty, shell.id = True, _Pty(), "t"
+    shell.write("\x1b[Iabc\x1b[O")
+    shell.write("\x1b[I")
+    shell.write("\x1b[A")  # an arrow key is not a focus report
+    assert written == ["abc", "\x1b[A"]
