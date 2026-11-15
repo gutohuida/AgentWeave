@@ -37,12 +37,34 @@ export interface WatchTabProps {
  *  2026-11-12: watch only; talking to the peer is one click away, in the main view). */
 export function WatchTab({ peers, peer, onPeerChange, conversations, conversationId, onConversationChange, onOpenConversation, children }: WatchTabProps) {
   const current = peers.find((p) => p.name === peer)
-  // A live view opens at the newest message, as the conversation itself does.
+  // A live view opens at the newest message and stays there while output arrives, as the
+  // conversation itself does; an operator who scrolled up to read is left where they are.
   const body = React.useRef<HTMLDivElement>(null)
+  const pinned = React.useRef(true)
   React.useLayoutEffect(() => {
     const el = body.current
+    pinned.current = true
     if (el) el.scrollTop = el.scrollHeight
   }, [peer, conversationId])
+  React.useEffect(() => {
+    const el = body.current
+    if (!el) return undefined
+    const follow = () => {
+      if (pinned.current) el.scrollTop = el.scrollHeight
+    }
+    const mutations = new MutationObserver(follow)
+    mutations.observe(el, { childList: true, subtree: true, characterData: true })
+    const sizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(follow)
+    sizes?.observe(el)
+    return () => {
+      mutations.disconnect()
+      sizes?.disconnect()
+    }
+  }, [])
+  const onScroll = () => {
+    const el = body.current
+    if (el) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+  }
   return (
     <div className="aw-ptab" data-testid="watch-tab">
       <div className="aw-ptab-head">
@@ -78,7 +100,7 @@ export function WatchTab({ peers, peer, onPeerChange, conversations, conversatio
           </span>
         </div>
       </div>
-      <div className="aw-ptab-scroll aw-watch-body" ref={body}>
+      <div className="aw-ptab-scroll aw-watch-body" ref={body} onScroll={onScroll}>
         {children}
       </div>
       <div className="aw-watch-foot">
