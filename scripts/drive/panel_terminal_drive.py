@@ -192,10 +192,14 @@ def shell_processes(hub_pid):
     real terminal spawn is seen through this same filter by control_shell, which is what shows a
     spawn from a refused request would still be reported."""
     procs = processes()
+    # `py -3.11 -m uvicorn` is a launcher whose python child is the Hub: the shells hang off that.
+    hub_pids = {hub_pid} | {pid for pid in descendants(hub_pid, procs)
+                            if "uvicorn" in (procs[pid].get("CommandLine") or "")
+                            and (procs[pid]["Name"] or "").lower() in ("py.exe", "python.exe")}
 
     def shell_lineage(pid):
         parent = procs[pid]["ParentProcessId"]
-        while parent != hub_pid:
+        while parent not in hub_pids:
             up = procs.get(parent)
             if up is None or (up["Name"] or "").lower() not in SHELL_NAMES or is_detection(up):
                 return False
