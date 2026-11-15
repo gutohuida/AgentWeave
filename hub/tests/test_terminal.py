@@ -768,7 +768,8 @@ async def test_a_keystroke_typed_just_after_a_resize_reaches_the_shell(
     app, auth_headers, repo, monkeypatch
 ):
     """Drive run 231921 lost the leading `e` of a command typed right after the panel was widened
-    (`cho ...: command not found`). Resize, then type at once: every character must arrive."""
+    (`cho ...: command not found`). Resize, then type at once, one input frame per character as
+    xterm's onData sends them: every character must arrive."""
     option = next((o for o in shell_detection.detect(refresh=True) if o.id == "git-bash"), None)
     if option is None:
         pytest.skip("Git Bash is not installed")
@@ -794,7 +795,10 @@ async def test_a_keystroke_typed_just_after_a_resize_reaches_the_shell(
         if delay:
             await asyncio.sleep(delay)
         mark = f"AWR{round_no}"
-        await sock.send({"type": "input", "data": f"echo {mark}$((40+2))W\r"})
+        # Clicking xterm focuses it, and it reports that to the shell (ESC [ I) before the first
+        # key; then one input frame per key, as xterm's onData sends them.
+        for ch in ["\x1b[I", *f"echo {mark}$((40+2))W\r"]:
+            await sock.send({"type": "input", "data": ch})
         arrived = await sock.read_until(lambda s, m=mark: f"{m}42W" in s.text, 20)
         if not arrived:
             lost.append((cols, delay, sock.text[-300:]))
