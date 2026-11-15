@@ -72,15 +72,37 @@ refusal, and the agent moves on.
 
 ## The side panel
 
-A conversation can open a panel beside it, one tab at a time. Its launchers are:
+A conversation can open a panel beside it, from **More conversation actions** in the conversation
+bar. The panel holds tabs; **+** adds one:
 
 - **Specs.** Browse specification documents. Opening one gives it a tab.
-- **Files.** The project's workspace tree. A file tab has **Insert into composer**, which adds an
-  `@path` mention.
-- **Loops.** Every loop in the project. Opening one gives it its own tab.
+- **Files.** The agent's own checkout, or the project root: a switch says which one you are
+  looking at. In the checkout, every file the agent changed since main is marked, and **Changed
+  only** narrows the tree to them. A file tab has **Insert into composer**, which adds an `@path`
+  mention.
+- **Changes.** What the agent changed, file by file, with added and removed line counts. Switch
+  between **Last turn** and **Since main**; select a file to see its diff. While the agent is
+  working, a line names the files it has changed but not yet committed.
+- **Terminal.** Shells on the Hub's computer, started in the agent's checkout or the project root:
+  PowerShell, Command Prompt, Git Bash or a WSL distribution on Windows, your login shell
+  elsewhere. Up to four per conversation, and they keep running while you are in another
+  conversation. You can send a selection of a shell's output into the composer. The terminal
+  opens only on the computer the Hub runs on, never from another machine and not in Docker mode.
+  The conversation's agent can read its shells' recent output, but cannot type into them.
+- **Watch.** Another agent's conversation, live and read-only. Pick the agent and, if it has
+  several, the conversation; the tab follows the agent into its next conversation until you pick
+  one by hand. A coloured mark says whether it is **working** (green, pulsing), **waiting for your
+  answer** (amber) or **idle**. **Talk to** makes that conversation the main view, keeping your
+  unsent draft.
+- **Running.** Every build, loop and job in the project, grouped by what needs you, what is
+  working, what is scheduled and what has finished. **Answer** takes you to a waiting question;
+  selecting a row opens the build, loop or job.
 
-Open tabs are remembered per project. An open specification document stays open as you move
-between agents and conversations.
+![A conversation with the Watch tab open, following another agent while it works](../assets/screenshots/side-panel-watch-light.webp#only-light)
+![A conversation with the Watch tab open, following another agent while it works](../assets/screenshots/side-panel-watch-dark.webp#only-dark)
+
+Open tabs, and the agent you are watching, are remembered per project. An open specification
+document stays open as you move between agents and conversations.
 
 ## Context and checkpoints
 

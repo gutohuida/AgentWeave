@@ -58,7 +58,14 @@ The Overview answers four questions at a glance:
 ## Conversations
 
 Opening an agent's conversation shows the timeline, the composer, and an optional side panel with
-specs, files and loops. That is where most of the work happens. See [Conversations](conversations.md).
+specs, files, the agent's changes, a terminal, another agent's conversation live, and everything
+running in the project. That is where most of the work happens. See
+[Conversations](conversations.md).
+
+## Dashboards
+
+The **Dashboards** tab holds charts any agent built from the project's own data when you asked it
+a question. See [Dashboards](dashboards.md).
 
 ## Project settings
 

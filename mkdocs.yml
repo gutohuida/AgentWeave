@@ -97,6 +97,7 @@ nav:
     - guides/specifications.md
     - guides/tasks-and-review.md
     - guides/jobs-loops-flows.md
+    - guides/dashboards.md
     - guides/knowledge-vault.md
     - guides/traceability.md
     - guides/docker.md
