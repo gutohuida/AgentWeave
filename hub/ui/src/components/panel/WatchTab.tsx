@@ -10,8 +10,11 @@ export interface WatchablePeer {
   colorIndex: number | null | undefined
   /** "working", "waiting for an answer", "idle" — what the peer is doing, in words. */
   state: string
-  working: boolean
+  /** Which of the three states it is, so the tab can colour and move the mark for each. */
+  tone: WatchTone
 }
+
+export type WatchTone = 'working' | 'waiting' | 'idle'
 
 export interface WatchableConversation {
   id: string
@@ -78,6 +81,7 @@ export function WatchTab({ peers, peer, onPeerChange, conversations, conversatio
               value: p.name,
               label: p.name,
               detail: p.state,
+              detailTone: p.tone,
               icon: <span className="aw-agent-dot" style={{ '--agent-accent': agentColorVars(p.colorIndex).accent } as React.CSSProperties} />,
             }))}
           />
@@ -91,8 +95,8 @@ export function WatchTab({ peers, peer, onPeerChange, conversations, conversatio
             />
           ) : null}
         </div>
-        <div className="aw-watch-status">
-          {current?.working ? <span className="aw-watch-live" aria-hidden="true" /> : null}
+        <div className="aw-watch-status" data-testid="watch-status" data-tone={current?.tone}>
+          {current ? <span className="aw-watch-live" data-testid="watch-mark" data-tone={current.tone} aria-hidden="true" /> : null}
           <span>{current ? `${current.name} is ${current.state}` : ''}</span>
           <span className="aw-watch-readonly">
             <Icon name="visibility" size={12} />

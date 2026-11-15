@@ -181,7 +181,7 @@ export function SidePanelMock({ tab, agent, go, now, route }: { tab: SidePanelTa
         <WatchTab
           peers={peers.map((p) => {
             const state = agentAttention(p.name)
-            return { name: p.name, colorIndex: p.color_index, working: state === 'running', state: state === 'running' ? 'working' : state === 'waiting' ? 'waiting for an answer' : 'idle' }
+            return { name: p.name, colorIndex: p.color_index, tone: state === 'running' ? 'working' : state === 'waiting' ? 'waiting' : 'idle', state: state === 'running' ? 'working' : state === 'waiting' ? 'waiting for an answer' : 'idle' }
           })}
           peer={peer}
           onPeerChange={setPeer}

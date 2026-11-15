@@ -63,6 +63,8 @@ export interface SelectOption<T extends string> {
   label: string
   /** A second line, muted: what choosing it means. */
   detail?: string
+  /** A state marker for the detail line (`data-tone`), which stylesheets may colour. */
+  detailTone?: string
   /** Leading mark (an icon name, or a node such as a ProviderMark). */
   icon?: React.ReactNode
   /** Listed, but not choosable (a provider whose CLI is not installed); `detail` says why. */
@@ -121,7 +123,7 @@ export function MenuSelect<T extends string>({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{option.label}</span>
-                  {option.detail ? <span className="aw-menu-item-detail">{option.detail}</span> : null}
+                  {option.detail ? <span className="aw-menu-item-detail" data-tone={option.detailTone}>{option.detail}</span> : null}
                 </span>
                 <DropdownMenu.ItemIndicator className="aw-menu-check">
                   <Icon name="check" size={14} />

@@ -55,7 +55,8 @@ export function WatchTabContainer({ projectId, mainConversationId, onOpenConvers
   const { agent, conversations, conversation } = resolveWatch(choice, agents, conversationList?.conversations ?? [])
   const peers = agents.map((a) => {
     const state = watchState(a, questions)
-    return { name: a.name, colorIndex: a.color_index, state, working: state === 'working' }
+    const tone = state === 'working' ? 'working' : state === 'idle' ? 'idle' : 'waiting'
+    return { name: a.name, colorIndex: a.color_index, state, tone } as const
   })
   const inMainView = !!conversation && conversation.id === mainConversationId
 

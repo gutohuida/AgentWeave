@@ -143,7 +143,23 @@
 
 /* Watch */
 .aw-watch-status { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-2); }
-.aw-watch-live { width: 7px; height: 7px; border-radius: 999px; background: var(--green); box-shadow: 0 0 0 3px color-mix(in oklab, var(--green) 25%, transparent); }
+/* The mark and the status text share one colour per state (--tone); the mark pulses with the
+   app's aw-live ring: working at 1.6s, waiting slower and distinct at 2.8s, idle still. */
+.aw-watch-status[data-tone="working"] { --tone: var(--green); }
+.aw-watch-status[data-tone="waiting"] { --tone: var(--amber); }
+.aw-watch-status[data-tone="idle"] { --tone: var(--text-3); }
+.aw-watch-status[data-tone] > span:nth-child(2) { color: var(--tone); }
+.aw-watch-live { width: 7px; height: 7px; flex: none; border-radius: 999px; }
+.aw-watch-live[data-tone="working"] { background: var(--green); color: var(--green); animation: aw-live 1.6s ease-in-out infinite; }
+.aw-watch-live[data-tone="waiting"] { background: var(--amber); color: var(--amber); animation: aw-watch-wait 2.8s ease-in-out infinite; }
+.aw-watch-live[data-tone="idle"] { background: var(--text-3); color: var(--text-3); animation: none; }
+@keyframes aw-watch-wait {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--amber) 55%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--amber) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aw-watch-live { animation: none !important; }
+}
 .aw-watch-readonly {
   display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 1px 7px; border-radius: 999px;
   border: 1px solid var(--border); font-size: 11px; color: var(--text-3);
