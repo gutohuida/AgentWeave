@@ -510,3 +510,17 @@ describe('panelTabsStore — the two restore rules (design D5)', () => {
     expect(restored.isOpen).toBe(true)
   })
 })
+
+describe('the Watch tab id', () => {
+  it('opens, persists and survives a version-2 payload migrating to current', () => {
+    usePanelTabsStore.getState().openTab(P1, 'watch')
+    expect(tabIds()).toContain('watch')
+    expect(tabKind('watch')).toBe('watch')
+    const migrated = migratePanelTabs(
+      { [P1]: { tabs: [{ id: 'terminal', revealRequestId: 0 }, { id: 'watch', revealRequestId: 2 }], activeTabId: 'watch', isOpen: true } },
+      2,
+    )
+    expect(migrated[P1].tabs.map((t) => t.id)).toEqual(['terminal', 'watch'])
+    expect(migrated[P1].activeTabId).toBe('watch')
+  })
+})

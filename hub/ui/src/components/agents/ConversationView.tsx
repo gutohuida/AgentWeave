@@ -18,6 +18,7 @@ import { ChangesTabContainer } from '@/components/panel/ChangesTabContainer'
 import { LoopTab } from '@/components/spec/LoopTab'
 import { useLoops } from '@/api/loops'
 import { TerminalTabContainer } from '@/components/panel/TerminalTabContainer'
+import { WatchTabContainer } from '@/components/panel/WatchTabContainer'
 import { RunningTabContainer } from '@/components/panel/RunningTabContainer'
 import { runningCount, useRunningItems } from '@/components/panel/useRunningItems'
 import type { RunningItem } from '@/components/panel/runningModel'
@@ -92,6 +93,8 @@ interface ConversationViewProps {
   onOpenJobs?: () => void
   /** Running's Answer: where the project's open questions can be answered. */
   onOpenQuestions?: () => void
+  /** The Watch tab's Talk to: another agent's (or this agent's) conversation becomes the main view. */
+  onOpenAgentConversation?: (agent: string, conversationId: string) => void
 }
 
 /**
@@ -117,6 +120,7 @@ export function ConversationView({
   onOpenTasks,
   onOpenJobs,
   onOpenQuestions,
+  onOpenAgentConversation,
 }: ConversationViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const measuredWidth = useWorkspaceWidth(containerRef)
@@ -344,6 +348,7 @@ export function ConversationView({
       // The shell's launcher badge. Counted here rather than in the shell because the items are
       // already fetched here and the shell deliberately knows nothing about what a tab contains.
       { id: 'terminal', label: 'Terminal', icon: 'terminal' },
+      { id: 'watch', label: 'Watch', icon: 'visibility' },
       { id: 'running', label: 'Running', icon: 'sync', count: runningCount(runningItems) },
     ],
     [runningItems],
@@ -355,6 +360,7 @@ export function ConversationView({
       if (id === 'changes') return { id, label: 'Changes', icon: 'file_pen_line' }
       if (id === 'running') return { id, label: 'Running', icon: 'sync' }
       if (id === 'terminal') return { id, label: 'Terminal', icon: 'terminal' }
+      if (id === 'watch') return { id, label: 'Watch', icon: 'visibility' }
       if (isFileTabId(id)) {
         const path = filePath(id)
         const owner = fileOwner(id)
@@ -446,6 +452,19 @@ export function ConversationView({
       if (tab.id === 'terminal') {
         return <TerminalTabContainer agent={agent.name} projectId={projectId} conversationId={conversationId} onSendToComposer={sendToComposer} />
       }
+      if (tab.id === 'watch') {
+        return (
+          <WatchTabContainer
+            projectId={projectId}
+            mainConversationId={conversationId}
+            onOpenConversation={(watchedAgent, watchedConversation) =>
+              onOpenAgentConversation
+                ? onOpenAgentConversation(watchedAgent, watchedConversation)
+                : onSelectConversation(watchedConversation)
+            }
+          />
+        )
+      }
       if (tab.id === 'running') {
         return <RunningTabContainer items={runningItems} loadFailed={runningLoadFailed} onOpen={openRunningItem} onAttend={attendRunningItem} />
       }
@@ -495,6 +514,8 @@ export function ConversationView({
       openRunningItem,
       attendRunningItem,
       buildsRequest,
+      onOpenAgentConversation,
+      onSelectConversation,
     ],
   )
   const panel = shellVisible ? (
