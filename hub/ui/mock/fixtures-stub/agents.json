@@ -1,0 +1,1 @@
+[{"name":"Builder","status":"working","runner_id":"r1","role":"builder","color_index":0},{"name":"Architect","status":"idle","runner_id":"r1","role":"architect","color_index":1},{"name":"QA1","status":"idle","runner_id":"r1","role":"qa","color_index":2}]

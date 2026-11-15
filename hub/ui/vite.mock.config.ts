@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import './mock/ensureFixtures.mjs'
 
 // The UI mock: the real components and tokens rendered against fixture data from the Terra replica,
 // with no Hub. Builds to dist-mock/ and never touches hub/hub/static/ui (the bundle :8000 serves).

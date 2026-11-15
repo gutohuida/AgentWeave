@@ -52,7 +52,7 @@ const CHATS: Record<string, ChatHistoryResponse> = {
 const ID: Record<'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'watch', TabId> = {
   specs: 'specs',
   files: 'files',
-  running: 'loops',
+  running: 'running',
   changes: 'changes' as TabId,
   terminal: 'terminal' as TabId,
   watch: 'watch' as TabId,
