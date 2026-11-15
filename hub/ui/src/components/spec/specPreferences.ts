@@ -71,6 +71,7 @@ export function minWidthForTabKind(kind: TabKind | null): number {
     case 'running':
     case 'changes':
     case 'terminal':
+    case 'watch':
     case null:
       return SPEC_DOC_MIN_WIDTH
   }
