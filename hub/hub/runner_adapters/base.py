@@ -277,6 +277,8 @@ class RunnerAdapter(ABC):
     transport_sentinels: ClassVar[Tuple[str, ...]] = ()
     mcp_tool_prefix: ClassVar[Optional[str]] = None
     host_tool_note: ClassVar[Optional[str]] = None
+    # How the host loads a tool it lists as deferred, said only when the tools come over MCP.
+    deferred_tool_note: ClassVar[Optional[str]] = None
     mcp_env_names: ClassVar[Optional[Tuple[str, ...]]] = None
     write_tool_kinds: ClassVar[Mapping[str, str]]
     one_shot_takes_schema: ClassVar[bool] = False
@@ -302,6 +304,11 @@ class RunnerAdapter(ABC):
     # (`a-copilot-run-shows-its-credits` D9). No base default: an adapter that omits it fails
     # the conformance test that every `ADAPTERS` entry declares it.
     compaction_percent: ClassVar[Optional[int]]
+
+    def run_env(self, model: Optional[str]) -> Dict[str, str]:
+        """The variables a run of this runner on *model* gets unless its environment already
+        names them: `run_env_defaults`, plus whatever this runner needs for that model."""
+        return dict(self.run_env_defaults)
 
     @abstractmethod
     def launchability(self, agent: str, config: Mapping[str, Any]) -> LaunchVerdict:

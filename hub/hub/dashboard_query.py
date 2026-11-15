@@ -255,14 +255,17 @@ def _reference_tables() -> Tuple[Dict[str, Any], ...]:
     return tuple(out)
 
 
-def query_reference() -> Dict[str, Any]:
-    """Everything a dashboard query can reach, generated from the running models.
+def query_reference(tables: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    """Everything a dashboard query can reach, generated from the running models; with *tables*,
+    only the tables named (a name that is no table is listed in `unknown_tables`).
 
     The rules and the data note's traps come before the tables, in that order: the tables run to
     over a hundred thousand characters, and an agent whose tool result is cut, or that reads only
     the start of it, must still have read how to count before the columns."""
     timeout = config.settings.aw_dashboard_query_timeout
     max_rows = config.settings.aw_dashboard_query_max_rows
+    wanted = None if tables is None else {name.strip() for name in tables if name.strip()}
+    known = {t["name"] for t in _reference_tables()}
     return {
         "notes": [
             "Every table holds only the current project's rows; no project filter is needed.",
@@ -280,7 +283,12 @@ def query_reference() -> Dict[str, Any]:
         ],
         "traps": [{"trap": heading, "how": text} for heading, text in data_notes.TRAPS],
         "limits": {"timeout_seconds": timeout, "max_rows": max_rows},
-        "tables": [dict(t) for t in _reference_tables()],
+        "tables": [dict(t) for t in _reference_tables() if wanted is None or t["name"] in wanted],
+        **(
+            {"unknown_tables": sorted(wanted - known)}
+            if wanted is not None and wanted - known
+            else {}
+        ),
     }
 
 

@@ -76,9 +76,35 @@ with built as (  -- one row per task: the model of its latest move to completed
   where tt.to_status = 'completed'
     and tt.sequence = (select max(l.sequence) from task_transitions l
                        where l.task_id = tt.task_id and l.to_status = 'completed'))
-select b.model, count(*) as send_backs
+select b.model as "Model", count(*) as "Send-backs"
 from task_transitions s join built b on b.task_id = s.task_id
 where s.to_status = 'revision_needed' group by b.model
+```
+
+Send-backs per model *by reason* is a `stacked_bar`: keep `group by b.model` and give each reason
+(`task_transitions.reason_class`: `defect`, `regression`, `broken-check`, `merge-needed`,
+`evidence-only`, `flaky`; empty on older moves) its own column, rather than grouping by the reason
+too, which gives long rows that do not stack:
+
+```sql
+with built as (  -- as above
+  select tt.task_id, u.model
+  from task_transitions tt join turn_usage u on u.run_id = tt.run_id
+  where tt.to_status = 'completed'
+    and tt.sequence = (select max(l.sequence) from task_transitions l
+                       where l.task_id = tt.task_id and l.to_status = 'completed'))
+select b.model as "Model",
+       sum(s.reason_class = 'defect') as "Defect",
+       sum(s.reason_class = 'regression') as "Regression",
+       sum(s.reason_class = 'broken-check') as "Broken check",
+       sum(s.reason_class = 'merge-needed') as "Merge needed",
+       sum(s.reason_class = 'evidence-only') as "Evidence only",
+       sum(s.reason_class = 'flaky') as "Flaky",
+       sum(s.reason_class is null) as "No reason"
+from task_transitions s join built b on b.task_id = s.task_id
+where s.to_status = 'revision_needed'
+group by b.model
+order by count(*) desc
 ```
 
 A run's model is in `turn_usage.model` (`runs` has none); `task_transitions.sequence` orders a
@@ -109,7 +135,7 @@ where started_at >= date('now', '-6 days')""",
     ),
     (
         "bar",
-        "A ranking: tasks per agent, the top 15",
+        'A comparison, "X per Y" (cost per spec, tasks per agent): tasks per agent, the top 15',
         """select coalesce(assignee, '(unassigned)') as "Agent", count(*) as "Tasks"
 from tasks
 group by 1
@@ -118,7 +144,7 @@ limit 15""",
     ),
     (
         "stacked_bar",
-        "Parts of a whole: each agent's runs, by outcome",
+        "A breakdown by two labels: runs per agent by status, one column per status",
         """select agent as "Agent",
        sum(status = 'completed') as "Completed",
        sum(status = 'failed') as "Failed",
@@ -149,7 +175,11 @@ limit 20""",
 _EXAMPLES_HEADING = "## Worked examples"
 _EXAMPLES_INTRO = """One query per chart kind, each drawable as it stands. Bars are drawn in the query's order, so a
 ranking orders by its value and keeps the top 15; a line orders by its time; every column is
-aliased to the name the legend and tooltip show.
+aliased to the name the legend and tooltip show. A breakdown by two labels ("X per A by B") is a
+stacked bar whose query pivots: one row per A, one `sum(<b> = '<value>')` column per value of B.
+Every value column stays a number, because the app formats it: round money
+(`round(sum(api_equivalent_usd_micros) / 1e6, 2) as "Cost (USD)"`) and never `printf` it or join a
+currency sign on, which makes it text that no chart can draw.
 """
 
 _ADDED_BY_AGENTS = "## Added by agents"

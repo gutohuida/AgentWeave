@@ -1988,8 +1988,9 @@ async def _trigger_agent_directly(
         env[REACH_GRANTS_ENV] = granted
     else:
         env.pop(REACH_GRANTS_ENV, None)
-    # The runner's own defaults (F677: Claude's background tasks off). An agent's `env_vars` win.
-    for name, value in adapter.run_env_defaults.items():
+    # The runner's own defaults (F677: Claude's background tasks off; FR-9: Haiku's tool search
+    # off). An agent's `env_vars` win.
+    for name, value in adapter.run_env(model).items():
         env.setdefault(name, value)
     # The call command, first on the run's `PATH` whatever its surface (D5).
     prepend_run_path(env, launcher_dir)
