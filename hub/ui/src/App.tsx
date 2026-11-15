@@ -420,6 +420,9 @@ export default function App() {
             )
           }
         }}
+        onOpenAgentConversation={(agent, conversationId) =>
+          navigateTo(agentDestination(destination.projectId, agent, conversationId, destination.document))
+        }
         onOpenDocument={(path) => navigateTo(withDocument(conversationDestination, path))}
         onBackToProject={() => navigateTo(projectDestination(destination.projectId))}
         onOpenAgentSettings={() =>

@@ -14,7 +14,7 @@ import { create } from 'zustand'
 
 /** The shape version carried *inside* the payload. Bump when `StoredProjects` changes, and add the
  *  matching step to `MIGRATIONS` in the same edit. */
-export const PANEL_TABS_VERSION = 2
+export const PANEL_TABS_VERSION = 3
 
 /** The key names the format *family*, the payload's `version` drives in-place migration. Two levels
  *  because they answer different questions: a wholly incompatible future shape can be written to a
@@ -28,17 +28,17 @@ export const PANEL_TABS_STORAGE_KEY = STORAGE_KEY
 // Index kinds take a fixed id, detail kinds a keyed one (design D3). The union is literal and
 // exhaustively type-checkable; kinds are never constructed at runtime from external input.
 
-export type IndexTabId = 'specs' | 'files' | 'running' | 'changes' | 'terminal'
+export type IndexTabId = 'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'watch'
 export type SpecTabId = `spec:${string}`
 export type FileTabId = `file:${string}`
 export type LoopTabId = `loop:${string}`
 export type TabId = IndexTabId | SpecTabId | FileTabId | LoopTabId
 
-export type TabKind = 'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'spec' | 'file' | 'loop'
+export type TabKind = 'specs' | 'files' | 'running' | 'changes' | 'terminal' | 'watch' | 'spec' | 'file' | 'loop'
 
 /** Derived from the id rather than stored beside it, so the two cannot disagree. */
 export function tabKind(id: TabId): TabKind {
-  if (id === 'specs' || id === 'files' || id === 'running' || id === 'changes' || id === 'terminal') return id
+  if (id === 'specs' || id === 'files' || id === 'running' || id === 'changes' || id === 'terminal' || id === 'watch') return id
   if (id.startsWith('spec:')) return 'spec'
   if (id.startsWith('loop:')) return 'loop'
   return 'file'
@@ -129,7 +129,7 @@ export function isLoopTabId(id: TabId): id is LoopTabId {
 
 function isTabId(value: unknown): value is TabId {
   if (typeof value !== 'string') return false
-  if (value === 'specs' || value === 'files' || value === 'running' || value === 'changes' || value === 'terminal') return true
+  if (value === 'specs' || value === 'files' || value === 'running' || value === 'changes' || value === 'terminal' || value === 'watch') return true
   if (value.startsWith('spec:')) return value.length > 'spec:'.length
   if (value.startsWith('file:')) return value.length > 'file:'.length
   if (value.startsWith('loop:')) return value.length > 'loop:'.length
@@ -190,6 +190,9 @@ const MIGRATIONS: Record<number, (state: unknown) => unknown> = {
     }
     return out
   },
+  // 2 → 3: the Watch index tab joined the ids (`the-side-panel-s-watch-tab-...`). Nothing stored
+  // changes shape; the step exists so a version-2 payload is read, not discarded, by this build.
+  2: (state) => state,
 }
 
 /** Runs the migration chain from `fromVersion` up to current. A version with no step forward is
