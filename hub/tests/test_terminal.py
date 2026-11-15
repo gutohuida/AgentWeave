@@ -774,3 +774,47 @@ def test_focus_reports_are_not_written_to_the_pty():
     shell.write("\x1b[I")
     shell.write("\x1b[A")  # an arrow key is not a focus report
     assert written == ["abc", "\x1b[A"]
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.skipif(not IS_WINDOWS, reason="ConPTY and MSYS readline are Windows")
+async def test_a_keystroke_typed_just_after_a_resize_reaches_the_shell(
+    app, auth_headers, repo, monkeypatch
+):
+    """Drive run 231921 lost the leading `e` of a command typed right after the panel was widened
+    (`cho ...: command not found`). Resize, then type at once, one input frame per character as
+    xterm's onData sends them: every character must arrive."""
+    option = next((o for o in shell_detection.detect(refresh=True) if o.id == "git-bash"), None)
+    if option is None:
+        pytest.skip("Git Bash is not installed")
+    await seed()
+    monkeypatch.setattr(shell_detection, "detect", lambda refresh=False: [option])
+    r = await open_shell(app, auth_headers, shell=option.id)
+    assert r.status_code == 201, r.text
+    from hub.auth import _make_ticket
+
+    sock = Socket(
+        app,
+        attach_path(r.json()["id"]),
+        {"Host": HOST, "Origin": APP},
+        f"token={_make_ticket(P)[0]}",
+    )
+    assert await sock.handshake() == "websocket.accept"
+    await asyncio.sleep(3.0)
+    lost = []
+    for round_no, (cols, delay) in enumerate(
+        [(100, 0), (140, 0.01), (90, 0.05), (160, 0), (120, 0.2)]
+    ):
+        await sock.send({"type": "resize", "cols": cols, "rows": 30})
+        if delay:
+            await asyncio.sleep(delay)
+        mark = f"AWR{round_no}"
+        # Clicking xterm focuses it, and it reports that to the shell (ESC [ I) before the first
+        # key; then one input frame per key, as xterm's onData sends them.
+        for ch in ["\x1b[I", *f"echo {mark}$((40+2))W\r"]:
+            await sock.send({"type": "input", "data": ch})
+        arrived = await sock.read_until(lambda s, m=mark: f"{m}42W" in s.text, 20)
+        if not arrived:
+            lost.append((cols, delay, sock.text[-300:]))
+    await sock.close()
+    assert not lost, lost

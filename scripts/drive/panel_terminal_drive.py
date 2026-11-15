@@ -590,6 +590,15 @@ def new_page(browser, state, hub=None, pid=None):
     page.add_init_script(
         f"sessionStorage.setItem('agentweave-session', JSON.stringify({{apiKey: {d.KEY!r}, hubUrl: {(hub or d.HUB)!r}}}));"
         f"localStorage.setItem('agentweave-selected-project', {(pid or state['pid'])!r});")
+    # What the browser itself saw and sent, so a key lost on the way to the shell can be placed on
+    # one side of the socket: window.__keys are keydowns, window.__sent the terminal's input frames.
+    page.add_init_script(
+        "window.__keys = []; window.__sent = [];"
+        "addEventListener('keydown', e => window.__keys.push(e.key), true);"
+        "const send = WebSocket.prototype.send;"
+        "WebSocket.prototype.send = function (m) {"
+        "  try { const j = JSON.parse(m); if (j.type === 'input') window.__sent.push(j.data); } catch (e) {}"
+        "  return send.call(this, m); };")
     return page
 
 
@@ -939,7 +948,7 @@ def check_interactive(page, state):
                 break
             page.keyboard.press("ArrowRight")
         page.wait_for_timeout(1000)
-    cols_before = read_cols(page)
+    cols_before, attempts_before = read_cols(page)
     panel = page.get_by_test_id("document-pane")
     width_before = panel.first.bounding_box()["width"] if panel.count() else 0
     if handle.count():
@@ -954,31 +963,46 @@ def check_interactive(page, state):
         page.set_viewport_size({"width": 1900, "height": 940})
     page.wait_for_timeout(3000)
     width_after = panel.first.bounding_box()["width"] if panel.count() else 0
-    cols_after = read_cols(page)
+    cols_after, attempts_after = read_cols(page)
     shot(page, "interactive")
     page.set_viewport_size({"width": 1440, "height": 940})
     grew = widened == "viewport" or width_after > width_before + 100
     wider = cols_before is not None and cols_after is not None and cols_after > cols_before
+    # Run 231921 lost the leading `e` of the first command typed after the drag (`cho ...`) and the
+    # retry hid it. Kept apart from ac-interactive, whose then-clauses it does not change.
+    intact = attempts_before == 1 and attempts_after == 1
     record("ac-interactive", True, opened and coloured and fills and quit_clean and grew and wider,
            f"{what_is_there(page)}; Git Bash opened={opened}; red text drawn={coloured}; pager "
            f"filled ({len(rows)} rows, first {rows[0] if rows else ''!r})={fills}; quit cleanly={quit_clean}; "
            f"panel {width_before:.0f}px -> {width_after:.0f}px and cols {cols_before} -> {cols_after} "
            f"after {widened}")
+    record("ac-interactive-first-key", True, intact,
+           f"the first command typed after the terminal was focused arrived whole on attempt "
+           f"{attempts_before}, and the first typed after the resize on attempt {attempts_after}; "
+           f"F1177: Git Bash/ConPTY drops its first character in about one run in four, with every key "
+           f"sent by the browser and written to the pty by the Hub (TSP-6), so a retry is a failure here")
 
 
 def read_cols(page):
     """The shell's own column count. The command prints it between markers its echo cannot
-    match, so a keystroke lost on the way in shows as None, not as an older reading."""
-    for _ in range(3):
+    match, so a keystroke lost on the way in shows as None, not as an older reading. Returns
+    (columns, attempt that answered); more than one attempt means a command was garbled."""
+    for attempt in range(1, 4):
         mark = f"AWC{random.randint(1000, 9999)}"
-        ui_type(page, f"echo {mark}$(tput cols)W")
+        typed = f"echo {mark}$(tput cols)W"
+        page.evaluate("window.__keys = []; window.__sent = []")
+        ui_type(page, typed)
+        seen = page.evaluate("[window.__keys.join(''), window.__sent.join('')]")
+        if attempt > 1 or seen[1].rstrip("\r") != typed:
+            print(f"  read_cols attempt {attempt}: typed {typed!r}, keydowns {seen[0]!r}, "
+                  f"frames sent {seen[1]!r}")
         # A resize makes the console host repaint, which can hold the answer back a while.
         for _ in range(16):
             page.wait_for_timeout(500)
             found = re.findall(mark + r"(\d{2,3})W", surface_text(page).replace("\n", ""))
             if found:
-                return int(found[-1])
-    return None
+                return int(found[-1]), attempt
+    return None, 0
 
 
 def check_keeps_running(page, state):
@@ -1331,7 +1355,7 @@ def ends_by_hub_stop(state, hub_proc, kinds):
 # --------------------------------------------------------------------------- main
 
 ORDER = ("ac-remote-refused", "ac-other-site-refused", "ac-docker", "ac-detected", "ac-where",
-         "ac-cap", "ac-interactive", "ac-keeps-running", "ac-send", "ac-env", "ac-agent-reads",
+         "ac-cap", "ac-interactive", "ac-interactive-first-key", "ac-keeps-running", "ac-send", "ac-env", "ac-agent-reads",
          "ac-ends")
 
 
