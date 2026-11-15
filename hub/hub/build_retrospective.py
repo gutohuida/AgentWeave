@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field
-from sqlalchemy import event, or_, select
+from sqlalchemy import event, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -1672,6 +1672,53 @@ _run_end_timers: Dict[str, "asyncio.Task[None]"] = {}
 #: How long a firing waits for its approving run to end before it fires anyway: a run that dies
 #: without its end being recorded (a `dead_run` stall) must not hold the build's review forever.
 RUN_END_WAIT_SECONDS = 15 * 60.0
+
+
+async def document_done(session: AsyncSession, project_id: str, document_id: str) -> bool:
+    """Whether every task of the document is rejected or done: approved, and landed or ended with
+    nothing to land (`landing_queue.unlanded`). A build that lands nowhere is done at approval."""
+    from . import landing_queue
+
+    open_count = await session.scalar(
+        select(func.count())
+        .select_from(Task)
+        .where(
+            Task.project_id == project_id,
+            Task.spec_document_id == document_id,
+            Task.status.notin_(("approved", "rejected")),
+        )
+    )
+    if open_count:
+        return False
+    return not await landing_queue.unlanded(
+        session, Task.project_id == project_id, Task.spec_document_id == document_id
+    )
+
+
+async def fire_if_document_done(
+    session: AsyncSession, task: Task, run_id: Optional[str] = None
+) -> None:
+    """Fire for *task*'s document when all its work is done (`document_done`): called when a task
+    is approved (a build that lands nowhere is done then) and when a landing ends. The duplicate
+    guard (`_reviewed_automatically`) keeps a build to one firing."""
+    if not task.spec_document_id or not await document_done(
+        session, task.project_id, task.spec_document_id
+    ):
+        return
+    if run_id is None:
+        # A landing's end has no run of its own: wait for the one that approved the work last.
+        run_id = await session.scalar(
+            select(TaskTransition.run_id)
+            .join(Task, Task.id == TaskTransition.task_id)
+            .where(
+                Task.project_id == task.project_id,
+                Task.spec_document_id == task.spec_document_id,
+                TaskTransition.to_status == "approved",
+            )
+            .order_by(TaskTransition.sequence.desc())
+            .limit(1)
+        )
+    fire_after_commit(session, task, run_id)
 
 
 def fire_after_commit(session: AsyncSession, task: Task, run_id: Optional[str] = None) -> None:

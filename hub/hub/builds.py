@@ -1303,18 +1303,17 @@ async def finish_landed(task_ids: Iterable[str]) -> None:
         return
     try:
         async with async_session_factory() as session:
-            tasks = (
-                (
-                    await session.execute(
-                        select(Task).where(Task.id.in_(ids), Task.build_id.is_not(None))
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            tasks = (await session.execute(select(Task).where(Task.id.in_(ids)))).scalars().all()
+            from . import build_retrospective
+
             seen: Set[str] = set()
+            documents: Set[str] = set()
             for task in tasks:
-                if task.build_id in seen:
+                # The document's retrospective fires once its last landing has landed.
+                if task.spec_document_id and task.spec_document_id not in documents:
+                    documents.add(task.spec_document_id)
+                    await build_retrospective.fire_if_document_done(session, task)
+                if not task.build_id or task.build_id in seen:
                     continue
                 seen.add(task.build_id)
                 await finish_if_done(session, task)

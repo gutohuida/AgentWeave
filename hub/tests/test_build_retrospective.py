@@ -11,10 +11,10 @@ import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from hub import build_retrospective as br
-from hub import distillation, manager, vault
+from hub import builds, distillation, landing_queue, manager, vault
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     AgentOutput,
@@ -31,6 +31,7 @@ from hub.db.models import (
     Stall,
     Task,
     TaskCheckRun,
+    TaskLanding,
     TaskTransition,
     TurnUsage,
 )
@@ -164,6 +165,19 @@ async def _approve(app, auth_headers, task_id):
         f"{BASE}/tasks/{task_id}", json={"status": "approved"}, headers=auth_headers
     )
     assert moved.status_code == 200, moved.text
+    await _land(task_id)
+
+
+async def _land(task_id):
+    """End the task's landing as landed: the retrospective fires once the landing has (a project
+    here has no main branch, so the real landing ends not landed)."""
+    await landing_queue.drain(P)
+    async with async_session_factory() as session:
+        await session.execute(
+            update(TaskLanding).where(TaskLanding.task_id == task_id).values(state="landed")
+        )
+        await session.commit()
+    await builds.finish_landed([task_id])
 
 
 async def _firings():
@@ -1046,3 +1060,112 @@ async def test_a_rolled_back_approval_fires_nothing(app, auth_headers, worker):
         br.fire_after_commit(session, task)
         await session.rollback()
     assert await _firings() == [] and fake.calls == []
+
+
+# ---------------------------------------------------------------------------
+# The trigger is the end of a landing, not the approval
+# (spec-page-remembers-readable-task-threads-retrospective-after-landing, FR-8..FR-11)
+# ---------------------------------------------------------------------------
+
+
+async def _approved_only(app, auth_headers, task_id):
+    """Approve, and let the background landing end without landing: not done yet."""
+    moved = await app.patch(
+        f"{BASE}/tasks/{task_id}", json={"status": "approved"}, headers=auth_headers
+    )
+    assert moved.status_code == 200, moved.text
+    await landing_queue.drain(P)
+
+
+@pytest.mark.asyncio
+async def test_ac_retro_waits_for_the_queued_landing(app, auth_headers, worker):
+    fake = worker()
+    await _configure(app, auth_headers)
+    await _seed(_document(), _task("t1"), _task("t2"))
+
+    await _approve(app, auth_headers, "t1")
+    await _approved_only(app, auth_headers, "t2")
+    assert await _firings() == [] and fake.calls == []
+
+    await _land("t2")
+    (firing,) = await _firings()
+    assert firing["trigger"] == br.LAST_TASK_APPROVED and len(fake.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_ac_retro_sent_back_landing_holds_it_until_reapproved_and_landed(
+    app, auth_headers, worker
+):
+    fake = worker()
+    await _configure(app, auth_headers)
+    await _seed(_document(), _task("t1"), _task("t2"))
+    await _approve(app, auth_headers, "t1")
+    await _approved_only(app, auth_headers, "t2")
+
+    # t2's landing is sent back: the task leaves approved, and the landing ends.
+    async with async_session_factory() as session:
+        (await session.get(Task, "t2")).status = "revision_needed"
+        await session.execute(
+            update(TaskLanding).where(TaskLanding.task_id == "t2").values(state="sent_back")
+        )
+        await session.commit()
+    await builds.finish_landed(["t1", "t2"])
+    assert await _firings() == [] and fake.calls == []
+
+    await _back_to_review("t2")
+    await _approved_only(app, auth_headers, "t2")
+    await builds.finish_landed(["t2"])
+    assert await _firings() == []
+
+    await _land("t2")
+    assert len(await _firings()) == 1 and len(fake.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_ac_retro_once_per_build_and_again_after_a_new_task_lands(app, auth_headers, worker):
+    fake = worker()
+    await _configure(app, auth_headers)
+    await _seed(_document(), _task("t1"))
+    await _approve(app, auth_headers, "t1")
+    assert len(await _firings()) == 1
+
+    await builds.finish_landed(["t1"])  # another landing ends for the same build
+    assert len(await _firings()) == 1 and len(fake.calls) == 1
+
+    later = _task("t2")
+    later.created_at = datetime.now(timezone.utc) + timedelta(seconds=1)
+    await _seed(later)
+    await _approve(app, auth_headers, "t2")
+    firings = await _firings()
+    assert len(firings) == 2 and len(fake.calls) == 2
+    assert firings[0]["subject"]["task"] == "t2"
+
+
+@pytest.mark.asyncio
+async def test_ac_retro_nolanding_fires_at_the_last_approval(app, auth_headers, worker):
+    fake = worker()
+    await _configure(app, auth_headers)
+    await _seed(
+        _document(),
+        Build(
+            id="build-nowhere",
+            project_id=P,
+            document_id=DOC,
+            state="running",
+            driver="flow",
+            level="fast",
+            landing="nowhere",
+        ),
+        _task("t1", build_id="build-nowhere"),
+        _task("t2", build_id="build-nowhere"),
+    )
+    await _approved_only(app, auth_headers, "t1")
+    assert await _firings() == []
+    await _approved_only(app, auth_headers, "t2")
+
+    assert len(await _firings()) == 1 and len(fake.calls) == 1
+    async with async_session_factory() as session:
+        landed = (
+            await session.execute(select(TaskLanding).where(TaskLanding.state == "landed"))
+        ).all()
+    assert landed == []
