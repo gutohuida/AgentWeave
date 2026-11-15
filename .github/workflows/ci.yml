@@ -258,3 +258,58 @@ jobs:
       with:
         name: dist
         path: dist/
+
+  # What a new user gets from `pip install agentweave-ai`: both wheels built from this commit,
+  # installed into an empty venv with the *published* dependency ranges (no constraints-dev.txt,
+  # deliberately -- a loose range that resolves to a breaking release is exactly what this catches),
+  # then the CLI runs and the Hub starts, migrates a fresh database and serves its UI.
+  clean-install:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Build both wheels
+      run: |
+        python -m pip install --upgrade pip build
+        python -m build --wheel --outdir dist/ .
+        python -m build --wheel --outdir dist/ hub/
+
+    - name: Install into an empty venv
+      run: |
+        python -m venv "$RUNNER_TEMP/clean"
+        if [ -d "$RUNNER_TEMP/clean/Scripts" ]; then BIN="$RUNNER_TEMP/clean/Scripts"; else BIN="$RUNNER_TEMP/clean/bin"; fi
+        echo "$BIN" >> "$GITHUB_PATH"
+        "$BIN/python" -m pip install --upgrade pip
+        "$BIN/python" -m pip install dist/agentweave_hub-*.whl dist/agentweave_ai-*.whl
+
+    - name: The CLI runs
+      run: |
+        agentweave --version
+        agentweave --help > /dev/null
+
+    - name: The Hub starts on a fresh database and serves the UI
+      env:
+        AW_PORT: "8765"
+      run: |
+        export DATABASE_URL="sqlite+aiosqlite:///$(python -c "import pathlib,os; print(pathlib.Path(os.environ['RUNNER_TEMP'], 'clean.db').as_posix())")"
+        agentweave-hub > "$RUNNER_TEMP/hub.log" 2>&1 &
+        for i in $(seq 1 60); do
+          if curl -fsS http://127.0.0.1:8765/health > "$RUNNER_TEMP/health.json" 2>/dev/null; then break; fi
+          sleep 2
+        done
+        cat "$RUNNER_TEMP/health.json" || { cat "$RUNNER_TEMP/hub.log"; exit 1; }
+        grep -q '"status":"ok"' "$RUNNER_TEMP/health.json" || { cat "$RUNNER_TEMP/hub.log"; exit 1; }
+        curl -fsS http://127.0.0.1:8765/ | grep -qi "<html" || { echo "the UI bundle is not served"; cat "$RUNNER_TEMP/hub.log"; exit 1; }

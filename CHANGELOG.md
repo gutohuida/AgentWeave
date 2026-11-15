@@ -8,6 +8,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 ## [Unreleased]
 
+---
+## [2.2.0] - 2026-11-15
+
+A conversation you can work from: a side panel that shows what is running, what the agent changed,
+its files, a terminal and any other agent live; dashboards any agent builds from the project's own
+data; builds that land as pull requests; and checks that understand any test runner and give way
+to the person using the machine.
+
+### Added
+
+- **The conversation side panel.** Beside any conversation, tabs you open and close per project:
+  - **Running** — the project's builds, loops and jobs, and what is waiting on you.
+  - **Changes** — what the agent changed in its worktree, file by file.
+  - **Files** — browse the agent's worktree or the project root.
+  - **Terminal** — up to four local shells per conversation, kept alive as you switch
+    conversations. Operator-only; nothing is exposed beyond this machine, and agents can only read
+    them (`read_shells`).
+  - **Watch** — another agent's conversation (or another of this agent's) streaming live and
+    read-only, with whether it is working, idle or waiting for your answer, each in its own colour
+    and motion. It follows the agent into its next conversation until you pick one by hand,
+    remembers your choice per project, and opens the conversation in the main view in one click.
+- **Dashboards.** Ask any agent for a view of the project's data and it writes the queries, checks
+  their results and saves a dashboard drawn in the app's own chart kinds and colours. Dashboards
+  are listed on their own screen, refresh on demand, and animate as they draw. Ask an agent to
+  change one and it edits that dashboard in place: an edit on top of a newer one is refused, and
+  one step undoes the last edit. Agents read a generated reference of what can be queried, plus a
+  vault note on what the data means and where a plain count gives the wrong answer (`0177`,
+  `0178`).
+- **Builds can land as one pull request** on GitHub instead of merging into `main`. The PR opens as
+  a draft at the first approved task and carries the spec, its requirements and the accepted
+  evidence. A project can make the PR's CI its full check (`0168`–`0170`).
+- **Checks understand any test runner.** A check can name the JUnit XML report it writes and a
+  command that reruns named tests, so failing tests are read from the report rather than from
+  pytest's console. A second command can run only the tests for the files a task changed.
+- **Known failures are on a list,** each with an owner fix task, so they are not re-argued on every
+  task. A check run that fails many tests that all pass on rerun counts as one disturbed run, not
+  as a pile of flaky tests (`0166`).
+- **Checks know their phase and can give way to you:** each check runs before review, at landing
+  or both, and a project can let the long checks run at low priority while you use the machine.
+  Quick checks stay at normal priority. The build card shows where check time went (`0161`,
+  `0164`).
+- **Generated files are rebuilt when work lands** instead of sending it back for a clash in them
+  alone (`0171`).
+- **Traces and checkpoints you can find.** Traces get their own view with filters, grouping and
+  stats, and one trace can cover a whole conversation. A Checkpoints tab lists every checkpoint
+  with a title and summary, and any checkpoint can start a new conversation with any agent
+  (`0163`, `0165`).
+- **AgentWeave is its own app on Windows,** with its own name and icon in the taskbar, a pin that
+  reopens it, and Windows notifications for what calls you.
+- **Find any setting** by name or by what it does, from the settings screens or the command
+  palette, and see whether it holds its default, a project value or an agent's own value.
+- **A project says what it still needs** on Overview, in the rail and in settings, each item opening
+  the action that resolves it (`0175`).
+- **A new project starts as a git repository** whose first commit holds an `AGENTS.md`, and an
+  existing folder can be made one in one action (`0173`).
+- **A trusted agent can tidy the specs:** fold built changes into capabilities, create and edit
+  capabilities, and mark documents superseded, each act listed for you with its reason (`0172`).
+  A change names the capabilities it changes while it is being written.
+- **Every spec has a short tag** shown on its task cards (`0176`).
+
 ### Changed
 
 - **AgentWeave is now licensed under the Apache License 2.0** (previously MIT). Releases up to and
@@ -15,6 +75,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   patent grant and contribution terms. `NOTICE` names the project's copyright and acknowledgements.
 - **The starter charters are the seven software ones.** Underwriter and Underwriting Approver are no
   longer seeded into new projects; projects that already have them keep them.
+- **The board shows where each task really stands,** all the way to "on main": how long it has been
+  there, what it waits on, who built it and who reviews it. Finished tasks leave the default board,
+  and the spec filter lists the most recently active specs first. Cards and the story view are
+  redesigned around visual state.
+- **Work is done when it has landed on `main`,** not when it is approved.
+- **Tasks outside a flow move freely:** approve without a reviewer, send straight back, close as
+  done by another task or commit, or cancel, one at a time or several at once.
+- **Settings are reorganised** so each sits where its name says, every row holds long values
+  without breaking, and every setting except Instructions saves on change.
+- **The spec header and the Build dialog are redesigned,** and the header shrinks to one line once
+  you scroll.
+- **The "Hub may override checks" setting is removed** (`0167`): known failures are handled by the
+  known-failing list instead.
+
+### Fixed
+
+- **Evidence review sends work back only for what is wrong with it.** A reviewer who can reproduce
+  the demonstration accepts it on the current work, instead of a full round trip for evidence
+  recorded at a commit that has since moved (`0174`).
+- **A hand-started task reaches review and merge** like a flow's.
+- **A check run still going when `main` moves finishes and counts** instead of being restarted; a
+  run that never judged the work is recorded as such (`0162`).
+
+### Upgrading
+
+- Upgrading runs migrations `0161` through `0178` on first start. None rewrites existing rows;
+  `0167` drops a setting. Back up the database with SQLite's
+  backup API first, as always.
 
 ---
 ## [2.1.0] - 2026-11-02

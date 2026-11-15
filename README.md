@@ -74,6 +74,8 @@ requirement's history, the run's transcript and trace, and the reviewer's reason
 - **Isolated, reviewed work**: per-task worktrees, dependencies, evidence, quality checks, and approval as a merge.
 - **Agents with a charter**: Claude Code, Codex and Copilot agents, each with a runner, a model and a charter, and permission postures that decide what an agent may do before it asks you.
 - **You in the loop**: agents ask you questions and wait for the answer. Permission requests come to you as cards.
+- **A side panel for every conversation**: what is running and waiting on you, what the agent changed, its files, a local terminal, and any other agent's conversation streaming live.
+- **Dashboards by asking**: any agent turns a question about your project's data into a saved dashboard, and changes it in place when you ask.
 - **Jobs, loops and flows**: scheduled work with a purpose and a stop condition. Flows build an approved specification task by task, each reviewed by a different agent.
 - **Knowledge vault**: transcripts, rules, decisions and documents your agents read, with facts that cite their sources.
 - **Traceability**: task stories, requirement stories, per-turn traces (exportable over OTLP), and a spend ledger.

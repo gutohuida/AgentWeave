@@ -41850,3 +41850,13 @@ The first command typed after dragging the panel wider arrives as `cho AWC...$(t
 **What does not explain it.** Passing attempts also begin with `ESC[I` (xterm's focus-in report, which our product forwards), and no run with that report filtered out has been recorded, so whether it is involved is untested; a 150 ms settle wait before typing made no measurable difference. Failing attempt 1 carried `ESC[I`, the passing retry did not, in both traced failures; with 2 failures that is a lead, not a cause.
 
 **Effect.** An operator typing straight after a resize may lose the first key of that command. Nothing is lost at the Hub. There are no terminal user docs to carry the note yet; the check's wording and this entry are the record.
+
+## F1178 (C) -- a request to change "the dashboard" is refused when the project has only one
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-15, editing `dash-f7d42cf52dac` ("AgentWeave build health") on the operator's "Add the panel"
+**Theme:** Dashboards
+**Ready:** yes
+**Tier:** 0
+
+The project had exactly one dashboard. The operator asked "Add the panel" (a cost-per-agent panel, discussed the turn before), and `edit_dashboard` was refused 409 `dashboard_not_named` because the request named the dashboard by neither id nor whole name. The agent then had to put an `ask_user` with one real option ("AgentWeave build health") and "Don't change it" before the edit went through. The guard exists so that "team health" never edits the wrong one of "Team health North" and "Team health South", but with a single dashboard there is no wrong one to pick. **Expected:** when the project has exactly one dashboard, a request that names none is taken to mean it. Two or more dashboards keep today's refusal. **Test:** in a project with one dashboard, a run whose request names no dashboard edits it and returns version 2; add a second dashboard, and the same request is refused `dashboard_not_named`.
