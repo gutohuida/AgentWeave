@@ -19,16 +19,23 @@ export interface WatchTabContainerProps {
 
 /** The watched conversation, drawn by the app's own timeline with none of its controls. */
 function WatchedTimeline({ agentName, conversationId }: { agentName: string; conversationId: string }) {
-  const { data: agents = [] } = useAgents()
-  const chat = useAgentChatHistory(agentName, conversationId)
+  const { data: agents = [], error: agentsError } = useAgents()
+  const { data: chatData, error: chatError } = useAgentChatHistory(agentName, conversationId)
   const agent = agents.find((a) => a.name === agentName)
-  if (!agent || !chat.data) return <p className="aw-ptab-note">Loading conversation</p>
+  if (agentsError || chatError) {
+    return (
+      <p className="aw-ptab-note" data-testid="watch-load-error">
+        Could not load this conversation: {((chatError ?? agentsError) as Error).message}
+      </p>
+    )
+  }
+  if (!agent || !chatData) return <p className="aw-ptab-note">Loading conversation</p>
   return (
     <AgentTimeline
       agent={agent}
-      entries={chat.data.entries}
+      entries={chatData.entries}
       roster={agents}
-      runs={chat.data.runs}
+      runs={chatData.runs}
       isRunning={false}
       foldAllSignal={0}
     />
@@ -37,9 +44,10 @@ function WatchedTimeline({ agentName, conversationId }: { agentName: string; con
 
 /** The Watch tab fed from the app's own data: nothing here reaches a Hub route that did not exist. */
 export function WatchTabContainer({ projectId, mainConversationId, onOpenConversation }: WatchTabContainerProps) {
-  const { data: agents = [], isLoading: agentsLoading } = useAgents()
-  const { data: conversationList } = useProjectConversations(projectId)
-  const { data: questions = [] } = useQuestions(false)
+  const { data: agents = [], isLoading: agentsLoading, error: agentsError } = useAgents()
+  const { data: conversationList, error: conversationsError } = useProjectConversations(projectId)
+  const { data: questions = [], error: questionsError } = useQuestions(false)
+  const loadError = agentsError ?? conversationsError ?? questionsError
   const choice = useWatchChoiceStore((state) => selectWatchChoice(state, projectId))
   const chooseAgent = useWatchChoiceStore((state) => state.chooseAgent)
   const pickConversation = useWatchChoiceStore((state) => state.pickConversation)
@@ -65,7 +73,11 @@ export function WatchTabContainer({ projectId, mainConversationId, onOpenConvers
       onConversationChange={(id) => pickConversation(projectId, id)}
       onOpenConversation={() => agent && conversation && onOpenConversation(agent.name, conversation.id)}
     >
-      {!agent ? (
+      {loadError ? (
+        <p className="aw-ptab-note" data-testid="watch-load-error">
+          Could not load the Watch tab: {(loadError as Error).message}
+        </p>
+      ) : !agent ? (
         agentsLoading ? null : (
           <p className="aw-ptab-note" data-testid="watch-choose-agent">
             Choose an agent to watch.
