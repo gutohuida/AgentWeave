@@ -94,6 +94,8 @@ interface AgentOutputPanelProps {
   /** Forwarded to `Composer` verbatim — see its prop of the same name (task 5.4,
    *  `2026-08-18-one-shell-three-panels`). */
   insertPathRequest?: { path: string; requestId: number } | null
+  /** Forwarded to `Composer`: the terminal tab's text to append to the draft. */
+  insertTextRequest?: { text: string; requestId: number } | null
   /** Opens or hides the panel shell independently of any attached document (task B5,
    *  `2026-08-18-a-loop-writes-its-own-queue`) — the only way to reach a document-free tenant
    *  like the `loops` index from a bare conversation. Omitted, no toggle renders — every caller
@@ -195,6 +197,7 @@ export function AgentOutputPanel({
   onOpenExistingSpec,
   specBusy = false,
   insertPathRequest = null,
+  insertTextRequest = null,
   onTogglePanel,
   panelOpen = false,
 }: AgentOutputPanelProps) {
@@ -1452,6 +1455,7 @@ export function AgentOutputPanel({
           specBusy,
           specDocumentLabel,
           insertPathRequest,
+          insertTextRequest,
         }}
       >
           <BannerStack banners={banners} />

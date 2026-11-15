@@ -281,3 +281,16 @@ describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-p
     expect(screen.getByRole('textbox')).toHaveValue('@src/a.ts @src/a.ts ')
   })
 })
+
+describe('Composer — insertTextRequest (the terminal tab\'s Send to agent)', () => {
+  it('appends the text to the draft, on its own line, and does not send it', () => {
+    const { view, props } = renderComposer({ insertTextRequest: null })
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'look at this' } })
+
+    view.rerender(<Composer {...props} insertTextRequest={{ text: 'Terminal output:\nok', requestId: 1 }} />)
+    expect(screen.getByRole('textbox')).toHaveValue('look at this\nTerminal output:\nok')
+
+    view.rerender(<Composer {...props} insertTextRequest={{ text: 'Terminal output:\nok', requestId: 1 }} />)
+    expect(screen.getByRole('textbox')).toHaveValue('look at this\nTerminal output:\nok')
+  })
+})

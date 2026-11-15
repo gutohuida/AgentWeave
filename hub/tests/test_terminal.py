@@ -514,6 +514,88 @@ async def test_ac_env_a_real_shell_has_path_and_none_of_the_hubs(
     await sock.close()
 
 
+@pytest.mark.asyncio
+@pytest.mark.timeout(120)
+@pytest.mark.skipif(not IS_WINDOWS, reason="priority classes and ConPTY are Windows")
+async def test_a_shell_answers_at_normal_priority_under_a_hub_that_gives_way(
+    app, auth_headers, repo, monkeypatch
+):
+    """A check runs the suite below normal (`project_checks.py`, give-way); ConPTY's console host
+    and PowerShell inherited it and took ~28 s to answer a line, failing every real-shell test."""
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.GetPriorityClass.argtypes = [ctypes.c_void_p]
+    kernel32.SetPriorityClass.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    normal, below = 0x20, 0x4000
+
+    def priority(pid: int) -> int:
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        try:
+            return kernel32.GetPriorityClass(handle)
+        finally:
+            kernel32.CloseHandle(handle)
+
+    me = kernel32.GetCurrentProcess()
+    before = kernel32.GetPriorityClass(me)
+    assert kernel32.SetPriorityClass(me, below)
+    try:
+        await seed()
+        option, shell, sock = await _real_shell(app, auth_headers, monkeypatch)
+        assert priority(registry.get(shell["id"])._pty.pid) == normal, "the shell gave way"
+        hosts = [
+            pid
+            for pid, parent, name in _processes()
+            if parent == os.getpid() and name.lower() in ("openconsole.exe", "conhost.exe")
+        ]
+        assert hosts and all(priority(pid) == normal for pid in hosts), "its console host gave way"
+        started = time.monotonic()
+        await sock.send({"type": "input", "data": _say(option, "'PRIORITY-' + 'OK'")})
+        assert await sock.read_until(lambda s: "PRIORITY-OK" in s.text, 20), sock.text[-2000:]
+        assert time.monotonic() - started < 20
+        await sock.close()
+    finally:
+        kernel32.SetPriorityClass(me, before)
+
+
+def _processes() -> list:
+    """(pid, parent pid, executable) for every process. Windows only."""
+    import ctypes
+    from ctypes import wintypes
+
+    class _Entry(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_void_p),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", ctypes.c_wchar * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)
+    rows = []
+    try:
+        entry = _Entry()
+        entry.dwSize = ctypes.sizeof(_Entry)
+        more = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while more:
+            rows.append((entry.th32ProcessID, entry.th32ParentProcessID, entry.szExeFile))
+            more = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return rows
+
+
 # --------------------------------------------------------------------------- FR-9
 
 
@@ -601,6 +683,43 @@ async def test_ac_ends_the_page_going_away_and_hub_stop(app, auth_headers, repo,
     assert registry.all() == []
     await sock.close()
     await sock2.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(120)
+async def test_a_gone_pages_shells_do_not_count_toward_the_limit(
+    app, auth_headers, repo, monkeypatch
+):
+    """FR-9 at the cap: after a reload the fresh page's one shell opens even with 4 left behind."""
+    from hub.auth import _make_ticket
+    from hub.terminal import sessions
+
+    monkeypatch.setattr(sessions, "PAGE_GRACE_SECONDS", 30.0)
+    await seed()
+    presence = Socket(
+        app,
+        f"/api/v1/projects/{P}/terminal/page",
+        {"Host": HOST, "Origin": APP},
+        f"page=page-old&token={_make_ticket(P)[0]}",
+    )
+    assert await presence.handshake() == "websocket.accept"
+    old = []
+    for _ in range(sessions.LIMIT):
+        shell, sock, _port = await _shell_serving_a_port(
+            app, auth_headers, monkeypatch, page="page-old"
+        )
+        old.append((shell, sock))
+    await presence.close()  # the reload; the old page is in its grace
+    assert await _wait(lambda: "page-old" in registry._page_timers, 5)
+    fresh, fresh_sock, _ = await _shell_serving_a_port(
+        app, auth_headers, monkeypatch, page="page-new"
+    )
+    assert registry.get(fresh["id"]) is not None
+    assert all(registry.get(s["id"]) is None for s, _ in old), "the gone page's shells lingered"
+    await fresh_sock.close()
+    for _, sock in old:
+        await sock.close()
+    await registry.end_all()
 
 
 @pytest.mark.asyncio

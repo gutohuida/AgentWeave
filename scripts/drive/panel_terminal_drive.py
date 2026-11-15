@@ -37,7 +37,8 @@ not the behaviour):
            client -> {"type": "input", "data": s} | {"type": "resize", "cols", "rows"};
            server -> output as text/bytes, or JSON {"type": "output", "data"} / {"type": "exit",
            "code"}. The drive sends both the Authorization header and the `token` query.
-  GET    /api/v1/agent-actions/terminals   (run credential) -> [{name, directory, running, lines}]
+  GET    /api/v1/agent-actions/terminal/shells   (run credential, scoped by the run's own
+           conversation) -> {conversation_id, shells: [{name, directory, running, lines}], max_lines}
 
 The page contract (the mock's TerminalTab, hub/ui/src/components/panel/TerminalTab.tsx): the tab
 `[data-testid=terminal-tab]` (opened by `panel-tab-terminal` / `panel-launch-terminal` / the "Add a
@@ -59,6 +60,7 @@ import argparse
 import json
 import os
 import pathlib
+import random
 import re
 import socket
 import subprocess
@@ -517,6 +519,21 @@ def open_conversation(page, state, agent, hub=None, reload=False):
     page.wait_for_timeout(1500)
 
 
+def switch_conversation(page, state, agent):
+    """Move to `agent`'s conversation inside the app, as the operator does from the rail. A
+    `page.goto` is a page load, and a page load ends that page's shells (FR-9)."""
+    row = page.get_by_test_id(f"rail-conversation-{state['conv'][agent]}")
+    if not row.count():
+        page.get_by_test_id(f"rail-agent-{state['pid']}-{agent}").first.click()
+        page.wait_for_timeout(600)
+        row = page.get_by_test_id(f"rail-conversation-{state['conv'][agent]}")
+    if row.count():
+        row.first.click()
+    d.poll(lambda: state["conv"][agent] in page.url, 10, every=0.3)
+    page.get_by_test_id("conversation-pane").wait_for(timeout=20000)
+    page.wait_for_timeout(1500)
+
+
 def open_terminal(page):
     if not page.get_by_test_id("panel-shell").count():
         more = page.get_by_role("button", name="More conversation actions")
@@ -864,7 +881,8 @@ def check_where(page, state):
         ui_type(page, "pwd")
         page.wait_for_timeout(2000)
         screen = surface_text(page)
-        prints = bool(shown) and shown.rstrip("/\\") in screen
+        # A long path wraps across the emulator's rows; read it with the row breaks taken out.
+        prints = bool(shown) and shown.rstrip("/\\") in screen.replace("\n", "")
         expect_ok = True
         if name == "wsl-worktree":
             expect_ok = shown.startswith("/mnt/") and shown.endswith("/.agentweave/worktrees/Maker")
@@ -909,12 +927,15 @@ def check_cap(page, state):
     code5, out5 = open_shell(state, state["pwsh"])
     time.sleep(2)
     after = shell_processes(state["hub_pid"])
-    open_conversation(page, state, "Maker", reload=False)
+    # Away and back inside the app, so the tab lists the shells the routes opened; a page load
+    # would end the tab's own shell.
+    switch_conversation(page, state, "Reader")
+    switch_conversation(page, state, "Maker")
     open_terminal(page)
     limit_shown = "Limit of 4 reached" in tab_text(page)
     shot(page, "cap")
     names_limit = re.search(r"\b4\b|four", json.dumps(out5), re.I) is not None
-    ok = len(shells) == LIMIT and code5 in (409, 429, 400, 403) and names_limit and set(after) == set(before) and limit_shown
+    ok = len(shells) == LIMIT and code5 in (409, 429, 400, 403) and names_limit and not (set(after) - set(before)) and limit_shown
     record("ac-cap", True, ok,
            f"{what_is_there(page)}; open shells {len(shells)} (list {code}); fifth: {code5} "
            f"{str(out5)[:120]!r}; shell processes {len(before)} -> {len(after)}; tab shows the limit={limit_shown}")
@@ -944,11 +965,23 @@ def check_interactive(page, state):
     joined = " | ".join(after_quit)
     quit_clean = (opened and "seq 1 400 | less" in joined and "(END)" not in joined
                   and not (after_quit and after_quit[-1].strip().startswith(":")))
-    ui_type(page, "tput cols")
-    page.wait_for_timeout(1000)
-    cols_before = re.findall(r"^\s*(\d{2,3})\s*$", surface_text(page), re.M)
     widened = "viewport"
-    handle = page.locator("[data-testid=panel-resize], [role=separator]")
+    # The conversation/panel divider; the first separator on the page is the sidebar's, whose
+    # drag leaves the panel's width alone. Earlier checks leave it wherever they left it, so it
+    # is first moved by keyboard to give the conversation room to shrink: the drag below then
+    # widens the panel whatever ran before.
+    handle = page.get_by_role("separator", name="Resize conversation")
+    if handle.count():
+        handle.first.focus()
+        for _ in range(40):
+            now = handle.first.get_attribute("aria-valuenow")
+            if now and int(now) >= int(handle.first.get_attribute("aria-valuemin") or 0) + 300:
+                break
+            page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(1000)
+    cols_before = read_cols(page)
+    panel = page.get_by_test_id("document-pane")
+    width_before = panel.first.bounding_box()["width"] if panel.count() else 0
     if handle.count():
         box = handle.first.bounding_box()
         if box:
@@ -959,17 +992,33 @@ def check_interactive(page, state):
             widened = "dragged the panel's edge"
     else:
         page.set_viewport_size({"width": 1900, "height": 940})
-    page.wait_for_timeout(1500)
-    ui_type(page, "tput cols")
-    page.wait_for_timeout(1000)
-    cols_after = re.findall(r"^\s*(\d{2,3})\s*$", surface_text(page), re.M)
+    page.wait_for_timeout(3000)
+    width_after = panel.first.bounding_box()["width"] if panel.count() else 0
+    cols_after = read_cols(page)
     shot(page, "interactive")
     page.set_viewport_size({"width": 1440, "height": 940})
-    wider = bool(cols_before and cols_after) and int(cols_after[-1]) > int(cols_before[-1])
-    record("ac-interactive", True, opened and coloured and fills and quit_clean and wider,
+    grew = widened == "viewport" or width_after > width_before + 100
+    wider = cols_before is not None and cols_after is not None and cols_after > cols_before
+    record("ac-interactive", True, opened and coloured and fills and quit_clean and grew and wider,
            f"{what_is_there(page)}; Git Bash opened={opened}; red text drawn={coloured}; pager "
            f"filled ({len(rows)} rows, first {rows[0] if rows else ''!r})={fills}; quit cleanly={quit_clean}; "
-           f"cols {cols_before[-1:]} -> {cols_after[-1:]} after {widened}")
+           f"panel {width_before:.0f}px -> {width_after:.0f}px and cols {cols_before} -> {cols_after} "
+           f"after {widened}")
+
+
+def read_cols(page):
+    """The shell's own column count. The command prints it between markers its echo cannot
+    match, so a keystroke lost on the way in shows as None, not as an older reading."""
+    for _ in range(3):
+        mark = f"AWC{random.randint(1000, 9999)}"
+        ui_type(page, f"echo {mark}$(tput cols)W")
+        # A resize makes the console host repaint, which can hold the answer back a while.
+        for _ in range(16):
+            page.wait_for_timeout(500)
+            found = re.findall(mark + r"(\d{2,3})W", surface_text(page).replace("\n", ""))
+            if found:
+                return int(found[-1])
+    return None
 
 
 def check_keeps_running(page, state):
@@ -980,10 +1029,15 @@ def check_keeps_running(page, state):
     ui_type(page, "1..90 | % { \"tick $_\"; Start-Sleep 1 }")
     page.wait_for_timeout(4000)
     first = re.findall(r"tick (\d+)", surface_text(page))
-    open_conversation(page, state, "Reader")
+    # Earlier checks' shells are open here too, and the tab shows its first shell on return: the
+    # operator picks the ticking one again, as this does.
+    ticking = shell_tabs(page).count() - 1
+    switch_conversation(page, state, "Reader")
     time.sleep(20)
-    open_conversation(page, state, "Maker")
+    switch_conversation(page, state, "Maker")
     open_terminal(page)
+    if shell_tabs(page).count() > ticking >= 0:
+        shell_tabs(page).nth(ticking).locator(".aw-term-shelltab-main").click()
     page.wait_for_timeout(1500)
     shown = [int(n) for n in re.findall(r"tick (\d+)", surface_text(page))]
     start = int(first[-1]) if first else 0
@@ -1018,8 +1072,10 @@ def check_send(page, state):
     two = rows.filter(has_text=re.compile(r"^AWSEND-TWO"))
     selected = False
     if one.count() and two.count():
-        one.first.click(click_count=3)
-        two.first.click(modifiers=["Shift"])
+        # xterm's .xterm-screen layer takes the pointer above its rows by design: click at the
+        # rows' coordinates, which is where the operator's mouse goes.
+        one.first.click(click_count=3, force=True)
+        two.first.click(modifiers=["Shift"], force=True)
         selected = True
     button = page.get_by_role("button", name=re.compile(r"^Send to Maker"))
     first = second = ""
@@ -1055,6 +1111,7 @@ def env_listing(state, shell, command, location="root"):
         return code, None, f"attach failed: {str(exc)[:100]}"
     time.sleep(2)
     att.send(command)
+    # The marker is split in the command, so its echo cannot end the wait before the output.
     att.wait_for(r"ENV-END", 20)
     text = att.text
     att.close()
@@ -1072,18 +1129,35 @@ def env_verdict(text):
 
 def check_env(state):
     code, text, how = env_listing(state, state["pwsh"],
-                                  "Get-ChildItem env: | % { 'ENV:' + $_.Name + '=' + $_.Value }; 'ENV-END'")
+                                  "Get-ChildItem env: | % { 'ENV:' + $_.Name + '=' + $_.Value }; 'ENV-' + 'END'")
     ok_pw, said_pw = env_verdict(text)
     parts = [f"PowerShell: {how}; {said_pw}"]
     ok = ok_pw and text is not None
     if state["wsl"]:
-        code, text, how = env_listing(state, state["wsl_id"], "env | sed 's/^/ENV:/'; echo ENV-END")
+        code, text, how = env_listing(state, state["wsl_id"], "env | sed 's/^/ENV:/'; echo ENV-''END")
         ok_wsl, said_wsl = env_verdict(text)
         ok = ok and ok_wsl and text is not None
         parts.append(f"WSL {state['wsl']}: {how}; {said_wsl}")
     else:
         parts.append("no WSL distribution: WSL case not run")
     record("ac-env", True, ok, "; ".join(parts))
+
+
+def as_agent_in(pid, agent, conversation, method, path, body=None):
+    """`d.as_agent`, with the held run inside `conversation`: the agent plane scopes the read tool
+    by the calling run's own conversation, as a real turn's run is."""
+    import sqlite3
+    run_id, token = d.hold(pid, agent)
+    con = sqlite3.connect(d.DB.as_posix(), timeout=30)
+    try:
+        con.execute("update runs set conversation_id=? where id=?", (conversation, run_id))
+        con.commit()
+    finally:
+        con.close()
+    try:
+        return call(method, "/agent-actions" + path, body, key=token)
+    finally:
+        d.release(run_id)
 
 
 def check_agent_reads(page, state):
@@ -1103,17 +1177,32 @@ def check_agent_reads(page, state):
         att.send("'AWREAD-ENDED'; exit 0")
         time.sleep(3)
         att.close()
-    route_code, rows = d.as_agent(state["pid"], "Maker", "GET", "/terminals?" + urllib.parse.urlencode({"conversation_id": conv}))
+    route_code, rows = as_agent_in(state["pid"], "Maker", conv, "GET", "/terminal/shells")
     if isinstance(rows, dict):
         rows = rows.get("shells") or []
     if not isinstance(rows, list):
         rows = []
     lines = [r.get("lines") or [] for r in rows]
-    bounded = bool(lines) and all(len(x) <= 500 for x in lines) and any("AWREAD-700" in "\n".join(x) for x in lines) \
-        and not any(re.search(r"AWREAD-100\b", "\n".join(x)) for x in lines)
-    other_code, other_rows = d.as_agent(state["pid"], "Other", "GET", "/terminals?" + urllib.parse.urlencode({"conversation_id": conv}))
+    lines = [x.splitlines() if isinstance(x, str) else x for x in lines]
+    joined = ["\n".join(x) for x in lines]
+    bounded = (bool(lines) and all(len(x) <= 500 for x in lines) and any("AWREAD-700" in j for j in joined)
+               and not any(re.search(r"AWREAD-100\b", j) for j in joined))
+    fields = bool(rows) and all({"name", "directory", "running"} <= set(r) for r in rows)
+    # Earlier checks' page shells are in this conversation too: find this check's two by output.
+    live_row = [r for r, j in zip(rows, joined) if "AWREAD-700" in j]
+    ended_row = [r for r, j in zip(rows, joined) if "AWREAD-ENDED" in j and "AWREAD-700" not in j]
+    states = sorted(bool(r.get("running")) for r in live_row[:1] + ended_row[:1])
+    # Other's run is in its own conversation; the route takes no conversation parameter, and one
+    # naming Maker's is ignored.
+    other_code, other_rows = as_agent_in(state["pid"], "Other", other, "GET", "/terminal/shells?"
+                                         + urllib.parse.urlencode({"conversation_id": conv}))
     other_sees = "AWREAD" in json.dumps(other_rows)
-    input_code, _ = d.as_agent(state["pid"], "Maker", "POST", f"/terminals/{live}/input", {"data": "echo AWTYPED\r"})
+    # No write on the agent plane: input, a new shell, an end -- each must not succeed.
+    writes = [as_agent_in(state["pid"], "Maker", conv, m, p, b)[0] for m, p, b in (
+        ("POST", f"/terminal/shells/{live}/input", {"data": "echo AWTYPED\r"}),
+        ("POST", "/terminal/shells", {"shell": state["pwsh"]}),
+        ("DELETE", f"/terminal/shells/{live}", None))]
+    input_code = max(writes) if all(c not in (200, 201, 202, 204) for c in writes) else 200
     _, reply = run_turn(d.DB, state["pid"], state["base"], "Maker", READ_TURN, conv)
     _, other_reply = run_turn(d.DB, state["pid"], state["base"], "Other", READ_TURN, other)
     _, shells = list_shells(state)
@@ -1123,14 +1212,19 @@ def check_agent_reads(page, state):
     foot = page.locator(".aw-term-foot").first.inner_text() if page.locator(".aw-term-foot").count() else ""
     shot(page, "agent-reads")
     ok = (code1 in (200, 201) and code2 in (200, 201) and route_code == 200 and bounded
+          and fields and states == [False, True]
           and not other_sees and input_code not in (200, 201, 202, 204) and not typed
-          and "AWREAD-700" in reply and "AWREAD-ENDED" in reply and "AWREAD" not in other_reply
+          and "AWREAD-700" in reply and "AWREAD-ENDED" in reply
+          # Other may restate the prompt's word AWREAD while saying NONE; a shell's line is the leak.
+          and not re.search(r"AWREAD-(\d+|ENDED)", other_reply)
           and "Maker can read these" in foot)
     record("ac-agent-reads", True, ok,
            f"{what_is_there(page)}; shells opened {code1}/{code2}; agent route {route_code}: "
-           f"{len(rows)} shells, at most 500 lines each and the last ones={bounded}; Other sees Maker's "
-           f"shells={other_sees}; agent input {input_code}, reached the shell={typed}; Maker's reply "
-           f"{reply[:120]!r}; Other's reply {other_reply[:80]!r}; footer {foot!r}")
+           f"{len(rows)} shells {[(r.get('name'), r.get('directory'), r.get('running'), len(x)) for r, x in zip(rows, lines)]}, "
+           f"name/directory/running present={fields}, one running one ended={states == [False, True]}, "
+           f"at most 500 lines each and the last ones={bounded}; Other ({other_code}) sees Maker's "
+           f"shells={other_sees}; agent writes {writes}, reached the shell={typed}; Maker's reply "
+           f"{reply[-300:]!r}; Other's reply {other_reply[-160:]!r}; footer {foot!r}")
     for tid in (live, ended):
         if tid:
             close_shell(state, tid)
@@ -1200,30 +1294,18 @@ def ends_by(state, kind, how):
             close_shell(state, s.get("id"))
 
 
-def ends_by_reload(page, state):
+def ends_by_reload(page, state, kinds):
+    # Earlier checks open shells through the routes, with no page; a reload rightly leaves those
+    # alone, so they are closed first and the baseline is taken before the page opens its own.
+    _, stray = list_shells(state)
+    for s in stray:
+        close_shell(state, s.get("id"))
+    d.poll(lambda: not list_shells(state)[1], 10)
+    baseline = set(shell_processes(state["hub_pid"]))
     open_conversation(page, state, "Maker")
     open_terminal(page)
-    port = free_port()
-    if not shell_tabs(page).count():
-        ui_open(page, r"Windows PowerShell|PowerShell", "root")
-    page.wait_for_timeout(2500)
-    typed = ui_type(page, server_command("powershell", port))
-    up = d.poll(lambda: child_alive("powershell", port, None), 30)
-    _, before = list_shells(state)
-    earlier = {s.get("id") for s in before}
-    shells_before = set(shell_processes(state["hub_pid"]))
-    open_conversation(page, state, "Maker", reload=True)
-    cleared = up and gone(state, "powershell", port, shells_before)
-    open_terminal(page)
-    page.wait_for_timeout(3000)
-    _, after = list_shells(state)
-    fresh = len(after) == 1 and not ({s.get("id") for s in after} & earlier)
-    tabs = shell_tabs(page).count()
-    shot(page, "after-reload")
-    ok = typed and up and cleared and fresh and tabs == 1
-    ends_parts.append(("reload", ok, f"{what_is_there(page)}; child listening on {port}={up}; after "
-                       f"reload shell, child and port gone={cleared}; shells listed {len(after)} "
-                       f"(none earlier={fresh}), tabs {tabs}"))
+    for kind in kinds:
+        reload_case(page, state, kind, baseline)
     # typing exit shows it ended, with its exit code
     ui_type(page, "exit 3")
     shown = d.poll(lambda: "Ended with exit code 3" in tab_text(page).replace("\n", " "), 15)
@@ -1231,6 +1313,38 @@ def ends_by_reload(page, state):
     shot(page, "exit")
     ends_parts.append(("exit", shown and again, f"after `exit 3` the tab shows 'Ended with exit code 3'={shown}, "
                        f"'Open it again'={again}"))
+
+
+def reload_case(page, state, kind, baseline):
+    """A child listening on a port in the page's `kind` shell; reload; the page's shells, the
+    child and the port are gone, and the tab shows one fresh shell and none of the earlier ones."""
+    port = free_port()
+    if kind == "wsl":
+        ui_open(page, re.escape(state["wsl"]), "root")
+    elif not shell_tabs(page).count():
+        ui_open(page, r"Windows PowerShell|PowerShell", "root")
+    page.wait_for_timeout(2500 if kind != "wsl" else 6000)
+    typed = ui_type(page, server_command(kind, port))
+    up = d.poll(lambda: child_alive(kind, port, state["wsl"]), 30)
+    _, before = list_shells(state)
+    earlier = {s.get("id") for s in before}
+    shells_before = set(shell_processes(state["hub_pid"])) - baseline
+    open_conversation(page, state, "Maker", reload=True)
+    cleared = up and gone(state, kind, port, shells_before)
+    if not cleared:
+        left = sorted(set(shell_processes(state["hub_pid"])) & shells_before)
+        print(f"  reload ({kind}): child={child_alive(kind, port, state['wsl'])} port={port_open(port)} "
+              f"page's shell processes left={left}", flush=True)
+    open_terminal(page)
+    page.wait_for_timeout(3000)
+    _, after = list_shells(state)
+    fresh = len(after) == 1 and not ({s.get("id") for s in after} & earlier)
+    tabs = shell_tabs(page).count()
+    shot(page, f"after-reload-{kind}")
+    ok = typed and up and cleared and fresh and tabs == 1
+    ends_parts.append((f"reload ({kind})", ok, f"{what_is_there(page)}; earlier shells {len(earlier)}; "
+                       f"child listening on {port}={up}; after reload shell, child and port gone={cleared}; "
+                       f"shells listed {len(after)} (none earlier={fresh}), tabs {tabs}"))
 
 
 def ends_by_hub_stop(state, hub_proc, kinds):
@@ -1304,9 +1418,14 @@ def main():
     parser.add_argument("--no-wsl", action="store_true", help="skip the WSL cases")
     parser.add_argument("--self-test", action="store_true",
                         help="check only that shell_processes reports a real spawn and ignores unrelated children")
+    parser.add_argument("--only", default="", help="comma-separated check keys to run (iteration)")
     args = parser.parse_args()
     if args.self_test:
         sys.exit(0 if self_test_shell_filter() else 1)
+    only = {k.strip() for k in args.only.split(",") if k.strip()}
+
+    def wanted(key):
+        return not only or key in only
     for port in (d.PORT, DOCKER_PORT):
         if call("GET", "/projects", hub=f"http://127.0.0.1:{port}")[0] != 0:
             sys.exit(f"REFUSING: something already answers on :{port}; this drive starts its own "
@@ -1321,29 +1440,44 @@ def main():
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             page = new_page(browser, state)
-            guarded("ac-remote-refused", check_remote_refused, browser, state)
-            guarded("ac-other-site-refused", check_other_site_refused, browser, state)
-            guarded("ac-docker", check_docker, browser, state)
-            guarded("ac-detected", check_detected, page, state, distros)
-            guarded("ac-where", check_where, page, state)
-            guarded("ac-cap", check_cap, page, state)
-            guarded("ac-interactive", check_interactive, page, state)
-            guarded("ac-keeps-running", check_keeps_running, page, state)
-            guarded("ac-send", check_send, page, state)
-            guarded("ac-env", check_env, state)
-            guarded("ac-agent-reads", check_agent_reads, page, state)
+            if wanted("ac-remote-refused"):
+                guarded("ac-remote-refused", check_remote_refused, browser, state)
+            if wanted("ac-other-site-refused"):
+                guarded("ac-other-site-refused", check_other_site_refused, browser, state)
+            if wanted("ac-docker"):
+                guarded("ac-docker", check_docker, browser, state)
+            if wanted("ac-detected"):
+                guarded("ac-detected", check_detected, page, state, distros)
+            if wanted("ac-where"):
+                guarded("ac-where", check_where, page, state)
+            if wanted("ac-cap"):
+                guarded("ac-cap", check_cap, page, state)
+            if wanted("ac-interactive"):
+                guarded("ac-interactive", check_interactive, page, state)
+            if wanted("ac-keeps-running"):
+                guarded("ac-keeps-running", check_keeps_running, page, state)
+            if wanted("ac-send"):
+                guarded("ac-send", check_send, page, state)
+            if wanted("ac-env"):
+                guarded("ac-env", check_env, state)
+            if wanted("ac-agent-reads"):
+                guarded("ac-agent-reads", check_agent_reads, page, state)
             kinds = ["powershell"] + (["wsl"] if wsl else [])
             try:
+                if not wanted("ac-ends"):
+                    raise StopIteration
                 for kind in kinds:
                     ends_by(state, kind, "close")
                 ends_by(state, "powershell", "restart")
-                ends_by_reload(page, state)
+                ends_by_reload(page, state, kinds)
                 browser.close()
                 ends_by_hub_stop(state, hub, kinds)
-                ok = all(o for _, o, _ in ends_parts) and len(ends_parts) >= 4 + 2 * len(kinds) - 1
+                ok = all(o for _, o, _ in ends_parts) and len(ends_parts) >= 3 * len(kinds) + 2
                 record("ac-ends", True, ok, "; ".join(f"{n}: {'ok' if o else 'FAILED'} ({t})"
                                                       for n, o, t in ends_parts)
                        + ("" if wsl else "; no WSL distribution: WSL cases not run"))
+            except StopIteration:
+                pass
             except Exception as exc:  # noqa: BLE001
                 print(f"BROKE ac-ends: {exc}", flush=True)
                 checks.setdefault("ac-ends", (False, False, f"broke before its assertion: {str(exc)[:200]}"))
@@ -1357,6 +1491,8 @@ def main():
     print("\n== drive_baseline")
     failed = False
     for key in ORDER:
+        if not wanted(key):
+            continue
         reached, failed_here, detail = checks.get(key, (False, False, setup_error or "not run"))
         failed = failed or failed_here or not reached
         print(f"check {key}: reached={'yes' if reached else 'no'} "

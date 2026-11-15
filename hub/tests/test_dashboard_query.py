@@ -440,14 +440,22 @@ def test_the_reference_takes_meanings_from_the_models_comments():
 
 
 async def test_the_loop_never_stalls_while_queries_run(seeded, monkeypatch):
+    unbounded = (
+        "with recursive c(x) as (select 1 union all select x + 1 from c) select count(*) from c"
+    )
+    # Only the unbounded query is meant to hit the limit: the regex scan gets a generous one of
+    # its own, so a slow or loaded machine cannot turn its 300k matches into a timeout.
     monkeypatch.setattr(config.settings, "aw_dashboard_query_timeout", 2)
-    async with LagProbe() as probe:
-        slow = asyncio.create_task(
-            run_query(
-                A,
-                "with recursive c(x) as (select 1 union all select x + 1 from c) select count(*) from c",
-            )
+    run_sync = dashboard_query._run_sync
+
+    def _run_sync(database_file, project_id, sql, timeout, max_rows):
+        return run_sync(
+            database_file, project_id, sql, timeout if sql == unbounded else 120.0, max_rows
         )
+
+    monkeypatch.setattr(dashboard_query, "_run_sync", _run_sync)
+    async with LagProbe() as probe:
+        slow = asyncio.create_task(run_query(A, unbounded))
         regex = asyncio.create_task(
             run_query(
                 A,

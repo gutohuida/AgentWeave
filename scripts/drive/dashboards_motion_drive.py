@@ -42,7 +42,8 @@ Guidance (the guidance task):
                                      rules (row order, about 15 bars by taking the top, time in
                                      order for a line, aliases as the legend and tooltip names)
   The seeded data note (src-27723331ae1d) carries each worked example as a fenced ```sql block
-                                     whose first line is `-- kind: <kind>`, one per kind.
+                                     preceded by a `Kind: `<kind>`.` line (or whose first line is
+                                     `-- kind: <kind>`), one per kind.
 """
 
 from __future__ import annotations
@@ -634,8 +635,10 @@ class Drive:
         code, entry = api("GET", f"/projects/{self.a}/vault/entries/{NOTE_ID}")
         text = entry.get("content") or "" if isinstance(entry, dict) else ""
         examples: Dict[str, str] = {}
-        for block in re.findall(r"```sql\s*\n(.*?)```", text, re.S):
-            m = re.match(r"\s*--\s*kind:\s*([a-z_]+)", block)
+        # The build states each example's kind as a `Kind: `<kind>`.` line just above its fence
+        # (hub/hub/data_notes.py `_example`); a `-- kind: <kind>` first line inside it also counts.
+        for before, block in re.findall(r"([^\n]*)\n+```sql\s*\n(.*?)```", text, re.S):
+            m = re.match(r"\s*--\s*kind:\s*([a-z_]+)", block) or re.search(r"Kind:\s*`([a-z_]+)`", before)
             if m:
                 examples.setdefault(m.group(1), block.strip())
         lacking = [k for k in KINDS if k not in examples]
@@ -670,6 +673,7 @@ class Drive:
         c.judge(f"{which}: the Haiku turn saved a dashboard", bool(t["run_id"]) and bool(new),
                 f"run {t['run_id']}; new dashboards {[d.get('name') for d in new]}; "
                 f"asked {t['questions']}; reply {t['reply'][-300:]!r}")
+        self.keep_transcript(t["run_id"], which, quiet=bool(new))
         if not new:
             return
         dash = new[0]
@@ -684,6 +688,11 @@ class Drive:
                 code == 200 and panels and not bad,
                 f"run {code}; {len(panels)} panels; failing {bad}; queries "
                 + " | ".join(f"{x.get('kind')}: {x.get('query')}" for x in panels)[:1500])
+        if bad:  # the line above is cut short; keep every saved query whole beside the transcript
+            path = TMP / f"first-time-right-{which.split()[1]}-panels.txt"
+            path.write_text("\n\n".join(f"-- {x.get('kind')} {x.get('title')!r}: {x.get('error') or x.get('warning')}"
+                                          f"\n{x.get('query')}" for x in panels), encoding="utf-8")
+            p(f"  saved queries in full: {path}")
         # Not the criterion, which asks only that every panel draws: how well each reads, for the
         # guidance task (a line drawn newest first runs backwards; a stacked bar of one series
         # does not stack).
@@ -712,6 +721,22 @@ class Drive:
                     count and not errors and not warnings, f"{count} panels, {errors} errors, {warnings} warnings")
         for d in new:
             api("DELETE", f"/projects/{self.a}/dashboards/{d['id']}")
+
+    def keep_transcript(self, run_id: Optional[str], which: str, quiet: bool) -> None:
+        """Write the turn's replies and thinking (tool rows carry only the tool's name) to the scratch; for a
+        turn that saved nothing (not *quiet*) also print every dashboard tool call with what it
+        answered, so a miss can be told apart (never called, called and refused, or a call that
+        never left the reply)."""
+        if not run_id:
+            return
+        rows = dd.ro("select kind, content from agent_outputs where run_id=? order by sequence", (run_id,))
+        path = TMP / f"first-time-right-{which.split()[1]}-{run_id}.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(f"--- {k}\n{c}" for k, c in rows), encoding="utf-8")
+        p(f"  whole output of {run_id} ({len(rows)} entries): {path}")
+        for k, c in [] if quiet else rows:
+            if k in ("tool_use", "tool_result") and c and "dashboard" in c:
+                p(f"  {k}: {c[:600]!r}")
 
     # -- order
 
