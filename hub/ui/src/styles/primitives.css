@@ -146,6 +146,9 @@
 .aw-menu-item[data-destructive="true"] { color: var(--red); }
 .aw-menu-item-icon { display: inline-flex; width: 16px; flex: none; justify-content: center; color: var(--text-2); }
 .aw-menu-item[data-destructive="true"] .aw-menu-item-icon { color: var(--red); }
+.aw-menu-item-detail[data-tone="working"] { color: var(--green); }
+.aw-menu-item-detail[data-tone="waiting"] { color: var(--amber); }
+.aw-menu-item-detail[data-tone="idle"] { color: var(--text-3); }
 .aw-menu-item-detail { display: block; margin-top: 1px; font-size: 11.5px; line-height: 1.35; color: var(--text-3); white-space: normal; }
 .aw-menu-check { display: inline-flex; color: var(--text); flex: none; }
 .aw-menu-label { padding: 6px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }

@@ -3,7 +3,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { WatchTab } from '@/components/panel/WatchTab'
 
 const props = {
-  peers: [{ name: 'B', colorIndex: 1, state: 'working', working: true }],
+  peers: [{ name: 'B', colorIndex: 1, state: 'working', tone: 'working' as const }],
   peer: 'B',
   onPeerChange: () => {},
   conversations: [{ id: 'c3', title: 'C3', when: 'now' }],
