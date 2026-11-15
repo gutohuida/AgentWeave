@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { EmptyState } from '@/components/common/EmptyState'
 import { LoadingThread } from '@/components/common/LoadingThread'
 import { toast } from '@/lib/toast'
+import { useConfigStore } from '@/store/configStore'
 import { useProjectEvidence, useSpecDocumentRename, useSpecEvents } from '@/api/spec'
 import type { LoopSummary } from '@/api/loops'
 import { SpecDocList } from './page/SpecDocList'
@@ -10,6 +11,7 @@ import { SpecWorkspace } from './page/SpecWorkspace'
 import { useSpecListData, useSpecSurface } from './page/useSpecSurface'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
 import { SpecListFooter } from './SpecListFooter'
+import { forgetDocument, readLastDocument, rememberDocument } from './lastDocument'
 import { buildInventory, resolveSelection } from './specNavigation'
 import '@/styles/spec-header.css'
 
@@ -46,14 +48,51 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
   useSpecDocumentRename(openDocument, onOpenDocument)
   const inventory = useMemo(() => buildInventory(list.specList), [list.specList])
 
-  /* Arriving with no document named opens the manifest home, then the first readable current one.
-   * Written back with `replace`: resolving "the specification" to a document is not a navigation. */
+  const projectId = useConfigStore((s) => s.selectedProjectId) ?? ''
+  /* The operator asked for the list (or the remembered document is gone): a bare Spec tab stays on it. */
+  const [listMode, setListMode] = useState(false)
   useEffect(() => {
-    if (openDocument || children) return
+    if (openDocument) setListMode(false)
+  }, [openDocument])
+
+  /* The document open is the one the Spec tab reopens, whether it was picked or a link named it. Only
+   * a document the project holds is remembered: a mangled or stale link must not displace a good one. */
+  useEffect(() => {
+    if (!projectId || !openDocument || list.loading) return
+    const node = inventory.byPath.get(openDocument)
+    if (node && !node.missing) rememberDocument(projectId, openDocument)
+  }, [projectId, openDocument, list.loading, inventory])
+
+  /* Arriving with no document named opens the one last opened here; with none remembered, the
+   * manifest home, then the first readable current one. A remembered document that is gone is
+   * forgotten and the list is shown. Written back with `replace`: resolving "the specification" to
+   * a document is not a navigation. */
+  useEffect(() => {
+    if (openDocument || children || listMode) return
     if (inventory.nodes.length === 0) return
+    const last = projectId ? readLastDocument(projectId) : undefined
+    if (last === '') {
+      setListMode(true)
+      return
+    }
+    if (last !== undefined) {
+      const node = inventory.byPath.get(last)
+      if (node && !node.missing) {
+        onOpenDocument(last)
+      } else {
+        forgetDocument(projectId)
+        setListMode(true)
+      }
+      return
+    }
     const resolved = resolveSelection(inventory, null, list.specList?.home)
     if (resolved) onOpenDocument(resolved)
-  }, [openDocument, children, inventory, list.specList?.home, onOpenDocument])
+  }, [openDocument, children, listMode, projectId, inventory, list.specList?.home, onOpenDocument])
+
+  const showList = useCallback(() => {
+    setListMode(true)
+    onOpenDocument(null)
+  }, [onOpenDocument])
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const searchOriginRef = useRef<HTMLElement | null>(null)
@@ -112,6 +151,15 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
         <EmptyState icon="article" title="No specification yet" description="Open a conversation and ask an agent to write one; the composer's Spec pill opens it beside the chat." />
       </div>
     )
+  } else if (listMode && !openDocument) {
+    main = (
+      <div className="aw-sp" data-layout="column">
+        {column(null)}
+        <div className="aw-sp-main">
+          <EmptyState icon="article" title="Pick a document" description="Choose one from the list, or press Ctrl/Cmd+Shift+K to search." />
+        </div>
+      </div>
+    )
   } else if (!list.loading && !openDocument && resolveSelection(inventory, null, list.specList?.home) === null) {
     main = (
       <div className="aw-sp-empty-page">
@@ -119,7 +167,7 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
       </div>
     )
   } else if (openDocument) {
-    main = <OpenDocument key={`${openDocument}:${anchor ?? ''}`} path={openDocument} anchor={anchor ?? null} column={column(openDocument)} footer={footer} onOpenDocument={onOpenDocument} onOpenTasks={onOpenTasks} onOpenLoop={onOpenLoop} />
+    main = <OpenDocument key={`${openDocument}:${anchor ?? ''}`} path={openDocument} anchor={anchor ?? null} column={column(openDocument)} footer={footer} onShowList={showList} onOpenDocument={onOpenDocument} onOpenTasks={onOpenTasks} onOpenLoop={onOpenLoop} />
   } else {
     main = <LoadingThread label="Loading specification" minHeight={240} />
   }
@@ -144,6 +192,7 @@ function OpenDocument({
   anchor,
   column,
   footer,
+  onShowList,
   onOpenDocument,
   onOpenTasks,
   onOpenLoop,
@@ -152,6 +201,7 @@ function OpenDocument({
   anchor: string | null
   column: ReactNode
   footer: ReactNode
+  onShowList: () => void
   onOpenDocument: (path: string | null) => void
   onOpenTasks?: (taskIds: string[], specDocumentId?: string) => void
   onOpenLoop?: (loop: LoopSummary) => void
@@ -165,7 +215,7 @@ function OpenDocument({
     initialAnchor: anchor,
   })
   if (result.status === 'ready') {
-    return <SpecWorkspace {...result.surface} entries={list.entries} listPrefs={list.prefs} onListPrefsChange={list.setPrefs} onNew={() => toast(NEW_CHANGE_HINT)} layout="column" listFooter={footer} />
+    return <SpecWorkspace {...result.surface} entries={list.entries} listPrefs={list.prefs} onListPrefsChange={list.setPrefs} onNew={() => toast(NEW_CHANGE_HINT)} layout="column" listFooter={footer} onShowList={onShowList} />
   }
   return (
     <div className="aw-sp" data-layout="column">
