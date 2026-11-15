@@ -41860,3 +41860,23 @@ The first command typed after dragging the panel wider arrives as `cho AWC...$(t
 **Tier:** 0
 
 The project had exactly one dashboard. The operator asked "Add the panel" (a cost-per-agent panel, discussed the turn before), and `edit_dashboard` was refused 409 `dashboard_not_named` because the request named the dashboard by neither id nor whole name. The agent then had to put an `ask_user` with one real option ("AgentWeave build health") and "Don't change it" before the edit went through. The guard exists so that "team health" never edits the wrong one of "Team health North" and "Team health South", but with a single dashboard there is no wrong one to pick. **Expected:** when the project has exactly one dashboard, a request that names none is taken to mean it. Two or more dashboards keep today's refusal. **Test:** in a project with one dashboard, a run whose request names no dashboard edits it and returns version 2; add a second dashboard, and the same request is refused `dashboard_not_named`.
+
+## F1179 (B) -- with the side panel open, the conversation header overflows its column and the conversation is cut off on the left
+
+**Status:** open
+**Source:** found by driving -- Architect, 2026-11-15, taking the 2.2.0 screenshots on `:8000` (headless Chromium, 1440x900, light and dark)
+**Theme:** Side panel
+**Ready:** yes
+**Tier:** 0
+
+Open DeveloperOpus's conversation (on task-ef2c024ea80c, "Shell task finished; awaiting QA review on TSP-2") at a 1440px-wide window and open the Changes tab from the conversation's "More conversation actions" menu. The conversation column becomes 480px wide, but the header's right-hand group (`.aw-convbar-end`: context meter, Checkpoint, the more button) is 329px and does not shrink, so the more button ends at 527px, past the column. The column (`flex flex-col h-full overflow-hidden`) is then scrolled 47px sideways (`scrollLeft 47`, `scrollWidth 527`, `clientWidth 480`), and everything in it, header and messages alike, is cut off on the left: the agent's name reads "eveloperOpus". Developer's conversation, measured the same way, does not overflow. Same result in both themes. **Expected:** the header fits the column at any width the panel leaves it: the title truncates first, and the meter shortens or wraps, so nothing in the column can be scrolled sideways. **Test:** with the panel open and the column at 480px, the column's `scrollWidth` equals its `clientWidth` for a conversation with a long title, and clicking the more button leaves `scrollLeft` at 0.
+
+## F1180 (B) -- a spec's "What this document has to tell you" box is cut off when the spec is open in the side panel
+
+**Status:** open
+**Source:** reported by the operator, 2026-11-15; reproduced by Architect on `:8000` (headless Chromium, 1440x900)
+**Theme:** Side panel
+**Ready:** yes
+**Tier:** 0
+
+Open a conversation, open the side panel's Specs tab, open a spec that has messages (here "Dashboards load with the brand's thread instead of a shimmer"), and click the message count in its header (`spec-notice-count`). The box (`.aw-notice-pop`, `hub/ui/src/styles/spec-notices.css:39`) is `position: absolute; right: 0; width: 520px; max-width: calc(100vw - 32px)`: it hangs leftwards from the badge and is capped only by the window. In the panel it spans x=635-1155 while the panel's scroll area (`min-h-0 flex-1 overflow-auto`) starts at x=730, so its left 95px, the start of each message and its expand control, are clipped. Same family as F1179: a spec page or conversation drawn in the narrower column the panel leaves. **Expected:** the box always lies inside the column that holds the spec: it shrinks to that column's width, or opens from the badge's left edge when there is no room to its left, so every message reads whole at any panel width. **Test:** with the spec in the side panel at its narrowest width, the box's left edge is at or right of its scroll container's left edge, and the same holds on the full-width Spec page.
