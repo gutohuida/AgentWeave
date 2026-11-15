@@ -27,7 +27,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import re
 import secrets
 import subprocess
 import sys
@@ -71,9 +70,6 @@ _NORMAL_PRIORITY_CLASS = 0x20
 _BELOW_NORMAL_CLASSES = (0x40, 0x4000)
 #: The processes ConPTY starts to host a pseudo-console, as children of the Hub.
 _CONSOLE_HOSTS = ("openconsole.exe", "conhost.exe")
-
-
-_FOCUS_REPORT = re.compile(r"\[[IO]")
 
 
 class LimitReachedError(Exception):
@@ -417,10 +413,11 @@ class Shell:
             queue.put_nowait(frame)
 
     def write(self, data: str) -> None:
-        # xterm answers DECSET 1004 (which ConPTY requests) with ESC[I / ESC[O; Git Bash
-        # intermittently loses the key typed just after one (F1177), and nothing here
-        # needs focus state, so they are not forwarded.
-        data = _FOCUS_REPORT.sub("", data)
+        # F1177 (known limitation): Git Bash under ConPTY intermittently loses the first key typed
+        # after focus returns. Every key is sent and written here in order (TSP-6). Dropping xterm's
+        # ESC[I/ESC[O focus reports (DECSET 1004) before this write did NOT stop it (TSP-8: 2 of 6
+        # drive runs still lost the key, the ~1-in-4 baseline), so they are forwarded: filtering
+        # would only cost vim/tmux their focus events (autoread, pane focus) for no gain.
         if self.running and self._pty is not None and data:
             try:
                 self._pty.write(data)

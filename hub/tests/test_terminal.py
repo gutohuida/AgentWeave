@@ -761,20 +761,6 @@ async def test_ac_keeps_running_detached_and_replays_meanwhile(
     await again.close()
 
 
-def test_focus_reports_are_not_written_to_the_pty():
-    written = []
-
-    class _Pty:
-        def write(self, data):
-            written.append(data)
-
-    shell = Shell.__new__(Shell)
-    shell.running, shell._pty, shell.id = True, _Pty(), "t"
-    shell.write("\x1b[Iabc\x1b[O")
-    shell.write("\x1b[I")
-    shell.write("\x1b[A")  # an arrow key is not a focus report
-    assert written == ["abc", "\x1b[A"]
-
 @pytest.mark.asyncio
 @pytest.mark.timeout(180)
 @pytest.mark.skipif(not IS_WINDOWS, reason="ConPTY and MSYS readline are Windows")
