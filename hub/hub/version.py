@@ -42,4 +42,8 @@ def install_kind() -> str:
         return "checkout"
     if (info.get("dir_info") or {}).get("editable"):
         return "editable"
+    # PEP 610: `archive_info` is a built archive (a release wheel or sdist); `dir_info` and
+    # `vcs_info` are a local directory or a VCS checkout.
+    if "archive_info" in info:
+        return "pip"
     return "checkout" if "url" in info else "pip"

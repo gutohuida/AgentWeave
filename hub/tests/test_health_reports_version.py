@@ -31,6 +31,8 @@ def _dist(direct_url):
         (None, "pip"),
         (json.dumps({"url": "file:///x", "dir_info": {"editable": True}}), "editable"),
         (json.dumps({"url": "file:///x", "dir_info": {}}), "checkout"),
+        (json.dumps({"url": "file:///x.whl", "archive_info": {"hashes": {}}}), "pip"),
+        (json.dumps({"url": "git+https://x", "vcs_info": {"vcs": "git"}}), "checkout"),
         ("not json", "checkout"),
     ],
 )
