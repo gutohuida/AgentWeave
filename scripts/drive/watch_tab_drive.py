@@ -321,6 +321,25 @@ def watch(page, agent, key=None):
     return ""
 
 
+NEWEST_IN_VIEW_JS = """(body) => {
+  let el = body;
+  while (el.lastElementChild) el = el.lastElementChild;
+  if (el === body) return [false, 'the body has no entries'];
+  const r = el.getBoundingClientRect(), b = body.getBoundingClientRect();
+  const inside = r.top >= b.top - 1 && r.bottom <= b.bottom + 1;
+  return [inside, `newest entry ${Math.round(r.top)}..${Math.round(r.bottom)}, body ${Math.round(b.top)}..${Math.round(b.bottom)}`];
+}"""
+
+
+def newest_in_view(page):
+    """Whether the newest entry's box lies inside the Watch body's visible rect (not DOM text)."""
+    body = watch_tab(page).locator(".aw-watch-body")
+    if not body.count():
+        return False, "no .aw-watch-body"
+    ok, where = body.first.evaluate(NEWEST_IN_VIEW_JS)
+    return bool(ok), where
+
+
 def composer(page):
     return page.get_by_test_id("conversation-pane").locator("textarea")
 
@@ -393,10 +412,14 @@ def check_streams_live(page, t, d, state):
     buttons = [b.inner_text() or (b.get_attribute("aria-label") or "") for b in tab.get_by_role("button").all()]
     bad = forbidden_controls(buttons)
     d.poll(lambda: not is_live(run_status()), t.TURN_WAIT, every=1)
-    ok = not earlier and seen_live and boxes == 0 and not bad
+    page.wait_for_timeout(1500)
+    in_view, where = newest_in_view(page)
+    shot(page, t, "streams-live-after")
+    ok = not earlier and seen_live and boxes == 0 and not bad and in_view
     record(key, True, ok, f"PARIS before the turn={earlier}; PARIS drawn while the run was live={seen_live} "
                           f"(run status then {status_then}); text boxes in the tab={boxes}; "
-                          f"forbidden controls={bad}; buttons={buttons[:8]}")
+                          f"forbidden controls={bad}; buttons={buttons[:8]}; "
+                          f"newest entry inside the visible body={in_view} ({where})")
 
 
 def check_state_shown(page, t, d, state):
