@@ -1272,10 +1272,41 @@ def guarded(key, fn, *args):
         checks.setdefault(key, (False, False, f"broke before its assertion: {str(exc)[:200]}"))
 
 
+def self_test_shell_filter():
+    """Criterion: a real spawn is still reported, unrelated children are not. This process plays
+    the Hub: a shell it starts directly is counted; the same shell under an agent-like process,
+    and a bare `wsl.exe -l -q` detection (with its console host), are not."""
+    me, sleeper = os.getpid(), ["-NoProfile", "-Command", "Start-Sleep 25"]
+    kids = []
+    try:
+        kids.append(subprocess.Popen(["powershell.exe"] + sleeper))  # a terminal spawn
+        agent = subprocess.Popen([sys.executable, "-c", "import subprocess,time;"
+                                  "subprocess.Popen(['powershell.exe','-NoProfile','-Command','Start-Sleep 25']);"
+                                  "time.sleep(25)"])  # an agent run's tool call
+        kids.append(agent)
+        time.sleep(4)
+        seen = shell_processes(me)
+        procs = processes()
+        direct, via_agent = kids[0].pid, {p for p in descendants(agent.pid, procs)}
+        counted = set(seen)
+        ok = (direct in counted or bool(descendants(direct, procs) & counted)) and not (via_agent & counted)
+        print(f"self-test: spawned shell counted={direct in counted}; agent-run shells counted="
+              f"{sorted(via_agent & counted)}; seen={seen}")
+        print("self-test:", "PASS" if ok else "FAIL")
+        return ok
+    finally:
+        for k in kids:
+            k.kill()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-wsl", action="store_true", help="skip the WSL cases")
+    parser.add_argument("--self-test", action="store_true",
+                        help="check only that shell_processes reports a real spawn and ignores unrelated children")
     args = parser.parse_args()
+    if args.self_test:
+        sys.exit(0 if self_test_shell_filter() else 1)
     for port in (d.PORT, DOCKER_PORT):
         if call("GET", "/projects", hub=f"http://127.0.0.1:{port}")[0] != 0:
             sys.exit(f"REFUSING: something already answers on :{port}; this drive starts its own "
