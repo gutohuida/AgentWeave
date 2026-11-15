@@ -1,6 +1,5 @@
 import type { Job, LoopSummary } from '@/api/jobs'
-import type { SpecBuild } from '@/api/spec'
-import type { RunningBuildInput } from '@/components/panel/runningModel'
+import type { ProjectBuildRow } from '@/api/projectBuilds'
 import { jobs as fixtureJobs, PROJECT_ID } from './fixtures'
 
 // mock state: the replica's two loops are both finished builds, so the Running tab's other states
@@ -25,25 +24,27 @@ function loop(id: string, label: string, over: Partial<LoopSummary>): LoopSummar
   }
 }
 
-function build(id: string, over: Partial<SpecBuild>): SpecBuild {
+function build(id: string, title: string, over: Partial<ProjectBuildRow>): ProjectBuildRow {
   return {
     id,
+    document_id: `spdoc-${id}`,
+    document_title: title,
     state: 'running',
     driver: 'flow',
     level: 'reviewed',
-    builders: ['Builder'],
-    reviewers: ['QA1'],
     lead: null,
-    budget_cap_usd: null,
-    spent_usd: null,
-    unpriced_turns: 0,
-    window_start: null,
-    window_end: null,
-    landing: 'main',
     loop_id: null,
+    loop: null,
+    tasks_total: 0,
+    tasks_done: 0,
+    tasks_landing: 0,
+    landings: [],
+    spent_usd: null,
     stop_reason: null,
     created_at: null,
     stopped_at: null,
+    open_questions: 0,
+    question: null,
     ...over,
   }
 }
@@ -71,40 +72,31 @@ const stopped = loop('loop-mock-export', 'Export the ledger as CSV', {
   stopped_at: '2026-10-16T18:40:00Z',
 })
 
-export const RUNNING_BUILDS: RunningBuildInput[] = [
-  {
-    number: 2,
-    documentTitle: 'Terra agent control center',
-    build: build('build-mock-terra', { loop_id: working.id, created_at: '2026-10-17T09:55:00Z', spent_usd: 4.2, builders: ['Builder'], reviewers: ['QA1', 'QA2'] }),
-    loop: working,
-  },
-  {
-    number: 1,
-    documentTitle: 'Cairn interactive setup and skill selection',
-    build: build('build-mock-cairn-setup', { loop_id: asking.id, created_at: '2026-10-17T11:20:00Z', spent_usd: 1.35 }),
-    loop: asking,
-  },
-  {
-    number: 1,
-    documentTitle: 'Export the ledger as CSV',
-    build: build('build-mock-export', { state: 'stopped', loop_id: stopped.id, created_at: '2026-10-16T14:00:00Z', stopped_at: stopped.stopped_at, stop_reason: stopped.stop_reason, spent_usd: 5 }),
-    loop: stopped,
-  },
+export const RUNNING_BUILDS: ProjectBuildRow[] = [
+  build('build-mock-terra', 'Terra agent control center', { loop_id: working.id, created_at: '2026-10-17T09:55:00Z', spent_usd: 4.2, tasks_total: 7, tasks_done: 3 }),
+  build('build-mock-cairn-setup', 'Cairn interactive setup and skill selection', { loop_id: asking.id, created_at: '2026-10-17T11:20:00Z', spent_usd: 1.35, tasks_total: 5, tasks_done: 1, open_questions: 1 }),
+  build('build-mock-export', 'Export the ledger as CSV', {
+    state: 'stopped',
+    loop_id: stopped.id,
+    created_at: '2026-10-16T14:00:00Z',
+    stopped_at: stopped.stopped_at,
+    stop_reason: stopped.stop_reason,
+    spent_usd: 5,
+    tasks_total: 4,
+    tasks_done: 2,
+  }),
   // The replica's own finished builds, from its recorded loops.
   ...fixtureJobs
     .filter((j) => j.loop)
-    .map((j, i) => ({
-      number: 1,
-      documentTitle: j.loop!.label,
-      build: build(`build-mock-done-${i}`, {
-        state: 'finished' as const,
+    .map((j, i) =>
+      build(`build-mock-done-${i}`, j.loop!.label, {
+        state: 'finished',
         loop_id: j.loop!.id,
         created_at: j.created_at,
         stopped_at: j.loop!.stopped_at ?? j.last_run ?? null,
         spent_usd: i === 0 ? 3.1 : 6.45,
       }),
-      loop: j.loop!,
-    })),
+    ),
 ]
 
 export const RUNNING_LOOPS: LoopSummary[] = [

@@ -400,12 +400,6 @@ const DEFAULT_CHOICE: StartBuildChoice = {
   budget: 25,
   window: 'now',
   landsOn: 'main',
-  caught: [
-    { check: 'hub-tests', test: 'tests/test_a.py::test_lag', kind: 'flaky', origin: 'caught', changed_by_build: false, found_on: 'task-a', found_on_status: 'approved', fix_task: { id: 'task-fix', title: 'Fix a flaky test', status: 'revision_needed', open: true } },
-    { check: 'hub-tests', test: 'tests/test_b.py::test_own', kind: 'fails on this work', origin: 'introduced', changed_by_build: false, found_on: 'task-b', found_on_status: 'approved', fix_task: null },
-  ],
-  openFixTasks: ['task-fix'],
-  fixHeldReason: 'the build has spent $5.00 of its $5.00 cap; raise the cap to resume',
   branch: 'build/cairn-handoff',
 }
 
